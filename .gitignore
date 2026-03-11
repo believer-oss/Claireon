@@ -1,0 +1,21 @@
+# Unreal Engine build artifacts
+Intermediate/
+**/Binaries/
+!**/Binaries/ThirdParty/
+!**/Binaries/ThirdParty/**
+DerivedDataCache/
+Saved/
+
+# IDE
+.vs/
+.vscode/
+*.sln
+*.vcxproj*
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+Thumbs.db
+.DS_Store

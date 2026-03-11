@@ -1,0 +1,38 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "2.0.0",
+	"FriendlyName": "Claireon MCP",
+	"Description": "Model Context Protocol server for Unreal Editor automation",
+	"Category": "Editor",
+	"CreatedBy": "The Claireon Contributors",
+	"EnabledByDefault": true,
+	"CanContainContent": true,
+	"IsBetaVersion": true,
+	"Installed": false,
+	"Plugins": [
+		{ "Name": "PythonScriptPlugin", "Enabled": true },
+		{ "Name": "ModularGameplay", "Enabled": true },
+		{ "Name": "GameplayAbilities", "Enabled": true },
+		{ "Name": "StateTree", "Enabled": true },
+		{ "Name": "Niagara", "Enabled": true },
+		{ "Name": "Untested", "Enabled": true, "Optional": true },
+		{ "Name": "BlueprintAssist", "Enabled": true, "Optional": true },
+		{ "Name": "PCG", "Enabled": true }
+	],
+	"Modules": [
+		{
+			"Name": "Claireon",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		}
+	],
+	"PythonRequirements": [
+		{
+			"Platform": "Win64",
+			"Requirements": [
+				"model2vec==0.7.0 --hash=sha256:f7a6ebf1b9ca384ba1158c4ecc9a2d450407f63526c0a26e268711071e280c27"
+			]
+		}
+	]
+}
