@@ -55,6 +55,7 @@ public class Claireon : ModuleRules
 			// State Tree editing tools dependencies
 			"StateTreeModule",       // UStateTree, FStateTreeStateHandle, node base classes
 			"StateTreeEditorModule", // UStateTreeEditorData, UStateTreeState, FStateTreeCompiler
+			"PropertyBindingUtils",  // FPropertyBindingPath, FPropertyBindingBindableStructDescriptor (UE 5.7 compatibility)
 
 			// Blueprint editor library (RemoveUnusedNodes, RemoveUnusedVariables)
 			"BlueprintEditorLibrary",
