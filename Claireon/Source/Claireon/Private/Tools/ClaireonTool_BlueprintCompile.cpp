@@ -149,8 +149,8 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintCompile::Execute(const TSharedP
 			UBlueprintEditorLibrary::RemoveUnusedNodes(Blueprint);
 		}
 
-		// Compile
-		EBlueprintCompileOptions CompileOptions = EBlueprintCompileOptions::None;
+		// Compile with BatchCompile to suppress modal error dialogs
+		EBlueprintCompileOptions CompileOptions = EBlueprintCompileOptions::BatchCompile;
 		FKismetEditorUtilities::CompileBlueprint(Blueprint, CompileOptions);
 
 		double ElapsedMs = (FPlatformTime::Seconds() - StartTime) * 1000.0;
