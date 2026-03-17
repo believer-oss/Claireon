@@ -61,7 +61,7 @@ TSharedPtr<FJsonObject> ClaireonTool_SearchTools::GetInputSchema() const
 	DetailProp->SetStringField(TEXT("description"),
 		TEXT("Description detail level. 'brief' = one-line summary, "
 			"'standard' = concise description (default), "
-			"'full' = extended docs with examples and workflows."));
+			"'full' = extended docs with examples, workflows, and input_schema for each tool."));
 	DetailProp->SetStringField(TEXT("default"), TEXT("standard"));
 	TArray<TSharedPtr<FJsonValue>> DetailEnum;
 	DetailEnum.Add(MakeShared<FJsonValueString>(TEXT("brief")));
@@ -453,6 +453,21 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 			ToolObj->SetStringField(TEXT("name"), Entry->Name);
 			ToolObj->SetStringField(TEXT("description"), Entry->Description);
 			ToolObj->SetStringField(TEXT("signature"), Entry->TypeSignature);
+
+			// Include full input schema when detail=full
+			if (Detail == TEXT("full"))
+			{
+				const TSharedPtr<IClaireonTool>* FoundTool = ToolsMap.Find(Entry->Name);
+				if (FoundTool && FoundTool->IsValid())
+				{
+					TSharedPtr<FJsonObject> InputSchema = (*FoundTool)->GetInputSchema();
+					if (InputSchema.IsValid())
+					{
+						ToolObj->SetObjectField(TEXT("input_schema"), InputSchema);
+					}
+				}
+			}
+
 			ToolsArr.Add(MakeShared<FJsonValueObject>(ToolObj));
 		}
 		CatObj->SetArrayField(TEXT("tools"), ToolsArr);
