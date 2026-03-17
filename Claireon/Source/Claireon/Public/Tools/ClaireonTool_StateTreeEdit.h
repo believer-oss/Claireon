@@ -98,6 +98,7 @@ private:
 	FToolResult Operation_AddGlobalTask(const FString& SessionId, FStateTreeEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_RemoveGlobalTask(const FString& SessionId, FStateTreeEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_AddBinding(const FString& SessionId, FStateTreeEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
+	FToolResult Operation_AddPropertyFunction(const FString& SessionId, FStateTreeEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_RemoveBinding(const FString& SessionId, FStateTreeEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_SetNodeProperty(const FString& SessionId, FStateTreeEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_Compile(const FString& SessionId, FStateTreeEditToolData* Data, const TSharedPtr<FJsonObject>& Params);

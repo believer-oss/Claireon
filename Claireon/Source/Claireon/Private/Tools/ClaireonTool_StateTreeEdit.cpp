@@ -13,6 +13,7 @@
 #include "StateTreeTypes.h"
 #include "StateTreePropertyBindings.h"
 #include "StateTreeEditorPropertyBindings.h"
+#include "StateTreePropertyFunctionBase.h"
 #include "StateTreeCompilerLog.h"
 #include "StateTreeEditingSubsystem.h"
 #include "GameplayTagContainer.h"
@@ -185,7 +186,7 @@ FString ClaireonTool_StateTreeEdit::GetFullDescription() const
 				"Node operations: add_task, remove_task, add_enter_condition, remove_enter_condition, add_consideration, remove_consideration\n"
 				"Global operations: add_evaluator, remove_evaluator, add_global_task, remove_global_task\n"
 				"Transition operations: add_transition, remove_transition, modify_transition, add_transition_condition, remove_transition_condition\n"
-				"Binding operations: add_binding, remove_binding\n"
+				"Binding operations: add_binding, add_property_function, remove_binding\n"
 				"Property operations: set_node_property\n"
 				"Build operations: compile, save");
 }
@@ -229,6 +230,7 @@ TSharedPtr<FJsonObject> ClaireonTool_StateTreeEdit::GetInputSchema() const
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("add_global_task")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("remove_global_task")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("add_binding")));
+	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("add_property_function")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("remove_binding")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("set_node_property")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("compile")));
@@ -364,6 +366,8 @@ FToolResult ClaireonTool_StateTreeEdit::Execute(const TSharedPtr<FJsonObject>& A
 		return Operation_RemoveGlobalTask(SessionId, Data, Params);
 	if (Operation == TEXT("add_binding"))
 		return Operation_AddBinding(SessionId, Data, Params);
+	if (Operation == TEXT("add_property_function"))
+		return Operation_AddPropertyFunction(SessionId, Data, Params);
 	if (Operation == TEXT("remove_binding"))
 		return Operation_RemoveBinding(SessionId, Data, Params);
 	if (Operation == TEXT("set_node_property"))
@@ -1563,6 +1567,127 @@ FToolResult ClaireonTool_StateTreeEdit::Operation_AddBinding(const FString& Sess
 	Data->LastOperationStatus = FString::Printf(TEXT("add_binding â Bound %s â %s"), *SourceProperty, *TargetProperty);
 #else
 	Data->LastOperationStatus = TEXT("add_binding â Not available in non-editor builds");
+#endif
+
+	return BuildStateResponse(SessionId, Data);
+}
+
+FToolResult ClaireonTool_StateTreeEdit::Operation_AddPropertyFunction(const FString& SessionId, FStateTreeEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+{
+	FString Error;
+	UStateTreeEditorData* EditorData = GetEditorDataFromSession(Data, Error);
+	if (!EditorData)
+		return MakeErrorResult(Error);
+
+	// Required: struct type name of the property function
+	FString StructName;
+	if (!Params->TryGetStringField(TEXT("struct_name"), StructName))
+		return MakeErrorResult(TEXT("Missing required parameter: struct_name"));
+
+	// Required: target node and property to bind the function's output to
+	FGuid TargetNodeId;
+	if (!ParseGuidParam(Params, TEXT("target_node_id"), TargetNodeId, Error))
+		return MakeErrorResult(Error);
+
+	FString TargetProperty;
+	if (!Params->TryGetStringField(TEXT("target_property"), TargetProperty))
+		return MakeErrorResult(TEXT("Missing required parameter: target_property"));
+
+	// Optional: source property path within the property function's instance data (output property)
+	// If omitted, uses the single output property if one exists.
+	FString SourceProperty;
+	Params->TryGetStringField(TEXT("source_property"), SourceProperty);
+
+#if WITH_EDITORONLY_DATA
+	// Resolve the struct
+	UScriptStruct* NodeStruct = ClaireonStateTreeHelpers::ResolveNodeStruct(StructName, Error);
+	if (!NodeStruct)
+		return MakeErrorResult(Error);
+
+	// Verify it's a property function
+	if (!NodeStruct->IsChildOf(FStateTreePropertyFunctionBase::StaticStruct()))
+	{
+		return MakeErrorResult(FString::Printf(TEXT("'%s' is not a property function (must derive from FStateTreePropertyFunctionBase)"), *StructName));
+	}
+
+	// Build target path
+	FStateTreePropertyPath TargetPath(TargetNodeId);
+	TargetPath.FromString(TargetProperty);
+
+	// Build source path segments
+	TArray<FStateTreePropertyPathSegment> SourceSegments;
+	if (!SourceProperty.IsEmpty())
+	{
+		FStateTreePropertyPath TempPath;
+		TempPath.FromString(SourceProperty);
+		SourceSegments = TempPath.GetSegments();
+	}
+	else
+	{
+		// Auto-detect single output property from the property function's instance data type
+		FInstancedStruct TempInstance;
+		TempInstance.InitializeAs(NodeStruct);
+		const FStateTreePropertyFunctionBase& TempFunction = TempInstance.Get<FStateTreePropertyFunctionBase>();
+		if (const UStruct* InstanceType = Cast<const UStruct>(TempFunction.GetInstanceDataType()))
+		{
+			for (TFieldIterator<FProperty> It(InstanceType); It; ++It)
+			{
+				if (It->HasMetaData(TEXT("Category")) && It->GetMetaData(TEXT("Category")) == TEXT("Output"))
+				{
+					SourceSegments.Add(FStateTreePropertyPathSegment(It->GetFName()));
+					break;
+				}
+			}
+		}
+		if (SourceSegments.IsEmpty())
+		{
+			return MakeErrorResult(TEXT("Could not auto-detect output property. Specify source_property explicitly."));
+		}
+	}
+
+	FScopedTransaction Transaction(FText::FromString(TEXT("MCP: Add Property Function Binding")));
+	Data->StateTree->Modify();
+
+	FStateTreePropertyPath ResultSourcePath = EditorData->EditorBindings.AddFunctionPropertyBinding(NodeStruct, SourceSegments, TargetPath);
+
+	// Set parameter properties if provided
+	const TSharedPtr<FJsonObject>* PropertiesObj = nullptr;
+	if (Params->TryGetObjectField(TEXT("properties"), PropertiesObj) && PropertiesObj)
+	{
+		// Find the newly created binding to access the property function node
+		for (FStateTreePropertyPathBinding& Binding : EditorData->EditorBindings.GetMutableBindings())
+		{
+			if (Binding.GetTargetPath() == TargetPath)
+			{
+				FStructView PropertyFunctionNodeView = Binding.GetMutablePropertyFunctionNode();
+				if (PropertyFunctionNodeView.IsValid())
+				{
+					FStateTreeEditorNode& EditorNode = PropertyFunctionNodeView.Get<FStateTreeEditorNode>();
+					if (EditorNode.Instance.IsValid())
+					{
+						for (const auto& Pair : (*PropertiesObj)->Values)
+						{
+							FString PropValue;
+							if (Pair.Value->TryGetString(PropValue))
+							{
+								ClaireonStateTreeHelpers::SetNodeProperty(EditorNode, Pair.Key, PropValue, true, Error);
+								if (!Error.IsEmpty())
+								{
+									UE_LOG(LogClaireon, Warning, TEXT("AddPropertyFunction: Failed to set property '%s': %s"), *Pair.Key, *Error);
+									Error.Empty();
+								}
+							}
+						}
+					}
+				}
+				break;
+			}
+		}
+	}
+
+	Data->LastOperationStatus = FString::Printf(TEXT("add_property_function → Added %s → %s.%s"), *StructName, *TargetNodeId.ToString(), *TargetProperty);
+#else
+	Data->LastOperationStatus = TEXT("add_property_function → Not available in non-editor builds");
 #endif
 
 	return BuildStateResponse(SessionId, Data);
