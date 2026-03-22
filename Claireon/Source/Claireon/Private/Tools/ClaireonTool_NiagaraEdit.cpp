@@ -1683,6 +1683,30 @@ FToolResult ClaireonTool_NiagaraEdit::Operation_SetModuleInput(const FString& Se
 	{
 		UEdGraphPin& OverridePin = FNiagaraStackGraphUtilities::GetOrCreateStackFunctionInputOverridePin(*ModuleNode, AliasedHandle, TypeDef, ScriptVarId, FGuid());
 
+		// Check if there's already a DI node linked to this pin.
+		// If so, modify its data directly instead of creating a new node.
+		// Creating a new node after BreakAllPinLinks leaves the old node orphaned
+		// in the graph, which confuses the compiler's parameter map traversal for
+		// the Interpolated Spawn Script and silently breaks the emitter in game.
+		UNiagaraDataInterface* ExistingDI = nullptr;
+		if (OverridePin.LinkedTo.Num() == 1)
+		{
+			UEdGraphNode* LinkedNode = OverridePin.LinkedTo[0]->GetOwningNode();
+			if (UNiagaraNodeInput* InputNode = Cast<UNiagaraNodeInput>(LinkedNode))
+			{
+				// GetDataInterface() is not exported, so access the DataInterface property via reflection
+				FProperty* DIProp = FindFProperty<FProperty>(UNiagaraNodeInput::StaticClass(), TEXT("DataInterface"));
+				if (DIProp)
+				{
+					UObject* const* DIPtr = DIProp->ContainerPtrToValuePtr<UObject*>(InputNode);
+					if (DIPtr)
+					{
+						ExistingDI = Cast<UNiagaraDataInterface>(*DIPtr);
+					}
+				}
+			}
+		}
+
 		if (Value.StartsWith(TEXT("[")))
 		{
 			// Float curve: JSON array of {"time": X, "value": Y}
@@ -1693,8 +1717,8 @@ FToolResult ClaireonTool_NiagaraEdit::Operation_SetModuleInput(const FString& Se
 				return MakeErrorResult(TEXT("Failed to parse float curve JSON array. Expected: [{\"time\": 0.0, \"value\": 1.0}, ...]"));
 			}
 
-			UNiagaraDataInterfaceCurve* CurveDI = NewObject<UNiagaraDataInterfaceCurve>(GetTransientPackage());
-			FRichCurve& Curve = CurveDI->Curve;
+			// Build the curve data
+			FRichCurve NewCurve;
 			for (const TSharedPtr<FJsonValue>& KeyVal : KeyArray)
 			{
 				const TSharedPtr<FJsonObject>& KeyObj = KeyVal->AsObject();
@@ -1702,17 +1726,28 @@ FToolResult ClaireonTool_NiagaraEdit::Operation_SetModuleInput(const FString& Se
 				{
 					double Time = KeyObj->GetNumberField(TEXT("time"));
 					double Val = KeyObj->GetNumberField(TEXT("value"));
-					Curve.AddKey(static_cast<float>(Time), static_cast<float>(Val));
+					NewCurve.AddKey(static_cast<float>(Time), static_cast<float>(Val));
 				}
 			}
 
-			UNiagaraDataInterface* OutDI = nullptr;
-			FNiagaraStackGraphUtilities::SetDataInterfaceValueForFunctionInput(OverridePin, UNiagaraDataInterfaceCurve::StaticClass(), InputName, OutDI, ScriptVarId);
-			if (OutDI)
+			// If there's already a curve DI linked, modify it directly
+			if (UNiagaraDataInterfaceCurve* ExistingCurve = Cast<UNiagaraDataInterfaceCurve>(ExistingDI))
 			{
+				ExistingCurve->Modify();
+				ExistingCurve->Curve = NewCurve;
+			}
+			else
+			{
+				// No existing DI — break any links and create a new one
+				if (OverridePin.LinkedTo.Num() > 0)
+				{
+					OverridePin.BreakAllPinLinks();
+				}
+				UNiagaraDataInterface* OutDI = nullptr;
+				FNiagaraStackGraphUtilities::SetDataInterfaceValueForFunctionInput(OverridePin, UNiagaraDataInterfaceCurve::StaticClass(), InputName, OutDI, ScriptVarId);
 				if (UNiagaraDataInterfaceCurve* TargetCurve = Cast<UNiagaraDataInterfaceCurve>(OutDI))
 				{
-					TargetCurve->Curve = Curve;
+					TargetCurve->Curve = NewCurve;
 				}
 			}
 		}
@@ -1726,10 +1761,9 @@ FToolResult ClaireonTool_NiagaraEdit::Operation_SetModuleInput(const FString& Se
 				return MakeErrorResult(TEXT("Failed to parse color curve JSON. Expected: {\"r\": [{\"time\": 0, \"value\": 1}, ...], \"g\": [...], \"b\": [...], \"a\": [...]}"));
 			}
 
-			UNiagaraDataInterfaceColorCurve* ColorCurveDI = NewObject<UNiagaraDataInterfaceColorCurve>(GetTransientPackage());
-
 			auto PopulateChannel = [&](const FString& ChannelName, FRichCurve& OutCurve)
 			{
+				OutCurve.Reset();
 				const TArray<TSharedPtr<FJsonValue>>* ChannelArray = nullptr;
 				if (ColorObj->TryGetArrayField(ChannelName, ChannelArray))
 				{
@@ -1746,21 +1780,30 @@ FToolResult ClaireonTool_NiagaraEdit::Operation_SetModuleInput(const FString& Se
 				}
 			};
 
-			PopulateChannel(TEXT("r"), ColorCurveDI->RedCurve);
-			PopulateChannel(TEXT("g"), ColorCurveDI->GreenCurve);
-			PopulateChannel(TEXT("b"), ColorCurveDI->BlueCurve);
-			PopulateChannel(TEXT("a"), ColorCurveDI->AlphaCurve);
-
-			UNiagaraDataInterface* OutDI = nullptr;
-			FNiagaraStackGraphUtilities::SetDataInterfaceValueForFunctionInput(OverridePin, UNiagaraDataInterfaceColorCurve::StaticClass(), InputName, OutDI, ScriptVarId);
-			if (OutDI)
+			// If there's already a color curve DI linked, modify it directly
+			if (UNiagaraDataInterfaceColorCurve* ExistingColorCurve = Cast<UNiagaraDataInterfaceColorCurve>(ExistingDI))
 			{
+				ExistingColorCurve->Modify();
+				PopulateChannel(TEXT("r"), ExistingColorCurve->RedCurve);
+				PopulateChannel(TEXT("g"), ExistingColorCurve->GreenCurve);
+				PopulateChannel(TEXT("b"), ExistingColorCurve->BlueCurve);
+				PopulateChannel(TEXT("a"), ExistingColorCurve->AlphaCurve);
+			}
+			else
+			{
+				// No existing DI — break any links and create a new one
+				if (OverridePin.LinkedTo.Num() > 0)
+				{
+					OverridePin.BreakAllPinLinks();
+				}
+				UNiagaraDataInterface* OutDI = nullptr;
+				FNiagaraStackGraphUtilities::SetDataInterfaceValueForFunctionInput(OverridePin, UNiagaraDataInterfaceColorCurve::StaticClass(), InputName, OutDI, ScriptVarId);
 				if (UNiagaraDataInterfaceColorCurve* TargetColorCurve = Cast<UNiagaraDataInterfaceColorCurve>(OutDI))
 				{
-					TargetColorCurve->RedCurve = ColorCurveDI->RedCurve;
-					TargetColorCurve->GreenCurve = ColorCurveDI->GreenCurve;
-					TargetColorCurve->BlueCurve = ColorCurveDI->BlueCurve;
-					TargetColorCurve->AlphaCurve = ColorCurveDI->AlphaCurve;
+					PopulateChannel(TEXT("r"), TargetColorCurve->RedCurve);
+					PopulateChannel(TEXT("g"), TargetColorCurve->GreenCurve);
+					PopulateChannel(TEXT("b"), TargetColorCurve->BlueCurve);
+					PopulateChannel(TEXT("a"), TargetColorCurve->AlphaCurve);
 				}
 			}
 		}
