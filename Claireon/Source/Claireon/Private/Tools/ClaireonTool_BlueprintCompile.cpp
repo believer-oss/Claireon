@@ -10,6 +10,7 @@
 #include "BlueprintEditorLibrary.h"
 #include "Engine/Blueprint.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "UObject/SoftObjectPath.h"
 
 FString ClaireonTool_BlueprintCompile::GetName() const
 {
@@ -23,7 +24,9 @@ FString ClaireonTool_BlueprintCompile::GetCategory() const
 
 FString ClaireonTool_BlueprintCompile::GetDescription() const
 {
-	return TEXT("Batch compile Blueprints in a content path with error and warning reporting. Useful for detecting compilation issues after code changes.");
+	return TEXT("Compile Blueprints by asset path or content folder. Each entry in paths is auto-detected: "
+		"a path that resolves to a Blueprint asset is compiled directly; a path that matches a content "
+		"folder compiles all Blueprints under it recursively. Defaults to /Game (everything) when paths is omitted.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_BlueprintCompile::GetInputSchema() const
@@ -33,12 +36,18 @@ TSharedPtr<FJsonObject> ClaireonTool_BlueprintCompile::GetInputSchema() const
 
 	TSharedPtr<FJsonObject> Properties = MakeShared<FJsonObject>();
 
-	// contentPath - optional
-	TSharedPtr<FJsonObject> ContentPathProp = MakeShared<FJsonObject>();
-	ContentPathProp->SetStringField(TEXT("type"), TEXT("string"));
-	ContentPathProp->SetStringField(TEXT("description"),
-		TEXT("Unreal content path to compile Blueprints under (default: /Game). E.g. /Game/Characters"));
-	Properties->SetObjectField(TEXT("contentPath"), ContentPathProp);
+	// paths - optional array, each entry is either a Blueprint asset or a content folder
+	TSharedPtr<FJsonObject> PathsProp = MakeShared<FJsonObject>();
+	PathsProp->SetStringField(TEXT("type"), TEXT("array"));
+	PathsProp->SetStringField(TEXT("description"),
+		TEXT("Blueprint asset paths or content folder paths to compile. "
+			 "Each entry is auto-detected: \"/Game/Characters/BP_Hero\" compiles one Blueprint; "
+			 "\"/Game/Characters\" compiles all Blueprints under that folder recursively. "
+			 "Defaults to [\"/Game\"] when omitted."));
+	TSharedPtr<FJsonObject> PathsItems = MakeShared<FJsonObject>();
+	PathsItems->SetStringField(TEXT("type"), TEXT("string"));
+	PathsProp->SetObjectField(TEXT("items"), PathsItems);
+	Properties->SetObjectField(TEXT("paths"), PathsProp);
 
 	// failOnWarnings - optional
 	TSharedPtr<FJsonObject> FailOnWarningsProp = MakeShared<FJsonObject>();
@@ -61,15 +70,159 @@ TSharedPtr<FJsonObject> ClaireonTool_BlueprintCompile::GetInputSchema() const
 	return Schema;
 }
 
-IClaireonTool::FToolResult ClaireonTool_BlueprintCompile::Execute(const TSharedPtr<FJsonObject>& Arguments)
+// Helper: compile a single Blueprint and return a per-asset result object.
+static TSharedPtr<FJsonObject> CompileOneBlueprint(
+	const FString& BlueprintPath,
+	bool bRemoveUnused,
+	bool bFailOnWarnings,
+	int32& OutSucceeded,
+	int32& OutFailed)
 {
-	// Parse arguments
-	FString ContentPath = TEXT("/Game");
-	if (Arguments->HasField(TEXT("contentPath")))
+	double StartTime = FPlatformTime::Seconds();
+
+	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
+	if (!Blueprint)
 	{
-		ContentPath = Arguments->GetStringField(TEXT("contentPath"));
+		OutFailed++;
+
+		TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+		ResultObj->SetStringField(TEXT("blueprint_path"), BlueprintPath);
+		ResultObj->SetStringField(TEXT("status"), TEXT("failed"));
+		TArray<TSharedPtr<FJsonValue>> Errors;
+		Errors.Add(MakeShared<FJsonValueString>(TEXT("Failed to load Blueprint")));
+		ResultObj->SetArrayField(TEXT("errors"), Errors);
+		ResultObj->SetArrayField(TEXT("warnings"), TArray<TSharedPtr<FJsonValue>>());
+		ResultObj->SetNumberField(TEXT("compile_time_ms"), 0.0);
+		return ResultObj;
 	}
 
+	// Optionally remove unused variables / nodes
+	int32 RemovedVariables = 0;
+	if (bRemoveUnused)
+	{
+		const int32 VariablesBefore = Blueprint->NewVariables.Num();
+		UBlueprintEditorLibrary::RemoveUnusedVariables(Blueprint);
+		RemovedVariables = VariablesBefore - Blueprint->NewVariables.Num();
+		UBlueprintEditorLibrary::RemoveUnusedNodes(Blueprint);
+	}
+
+	// Compile with BatchCompile to suppress modal error dialogs that would
+	// deadlock the game thread when called from the MCP HTTP handler
+	EBlueprintCompileOptions CompileOptions = EBlueprintCompileOptions::BatchCompile;
+	FKismetEditorUtilities::CompileBlueprint(Blueprint, CompileOptions);
+
+	double ElapsedMs = (FPlatformTime::Seconds() - StartTime) * 1000.0;
+
+	bool bCompileSucceeded = (Blueprint->Status != BS_Error);
+	if (bFailOnWarnings && Blueprint->Status == BS_UpToDateWithWarnings)
+	{
+		bCompileSucceeded = false;
+	}
+
+	if (bCompileSucceeded)
+	{
+		OutSucceeded++;
+	}
+	else
+	{
+		OutFailed++;
+	}
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetStringField(TEXT("blueprint_path"), BlueprintPath);
+	ResultObj->SetStringField(TEXT("status"), bCompileSucceeded ? TEXT("succeeded") : TEXT("failed"));
+	ResultObj->SetArrayField(TEXT("errors"), TArray<TSharedPtr<FJsonValue>>());
+	ResultObj->SetArrayField(TEXT("warnings"), TArray<TSharedPtr<FJsonValue>>());
+	ResultObj->SetNumberField(TEXT("compile_time_ms"), ElapsedMs);
+
+	if (bRemoveUnused && RemovedVariables > 0)
+	{
+		ResultObj->SetNumberField(TEXT("removed_variables"), RemovedVariables);
+	}
+
+	return ResultObj;
+}
+
+// Normalize a user-supplied path into a /Game/... content path.
+// Accepts: "/Game/Foo/BP_Bar", "Game/Foo/BP_Bar", "Content/Foo/BP_Bar",
+//          "D:/proj/Content/Foo/BP_Bar", or relative "Foo/BP_Bar" (treated as /Game/Foo/BP_Bar).
+static FString NormalizeToContentPath(const FString& InPath)
+{
+	FString Path = InPath;
+	Path.TrimStartAndEndInline();
+	FPaths::NormalizeDirectoryName(Path);
+
+	// Already a content path
+	if (Path.StartsWith(TEXT("/Game/")) || Path == TEXT("/Game"))
+	{
+		return Path;
+	}
+
+	// Strip leading slash for easier matching
+	if (Path.StartsWith(TEXT("/")))
+	{
+		// Could be /Engine, /Script, etc. — pass through as-is
+		return Path;
+	}
+
+	// Absolute filesystem path — find "Content/" and map to /Game/
+	int32 ContentIdx = Path.Find(TEXT("Content/"), ESearchCase::IgnoreCase);
+	if (ContentIdx != INDEX_NONE)
+	{
+		FString Remainder = Path.Mid(ContentIdx + 8); // skip "Content/"
+		return TEXT("/Game/") + Remainder;
+	}
+	// Also handle "Content" at the very end (folder path)
+	if (Path.EndsWith(TEXT("Content"), ESearchCase::IgnoreCase))
+	{
+		return TEXT("/Game");
+	}
+
+	// "Game/Foo/Bar" without leading slash
+	if (Path.StartsWith(TEXT("Game/"), ESearchCase::IgnoreCase))
+	{
+		return TEXT("/") + Path;
+	}
+
+	// Bare relative path — assume relative to /Game/
+	return TEXT("/Game/") + Path;
+}
+
+static bool IsBlueprintAssetClass(const FString& ClassName)
+{
+	return ClassName == TEXT("Blueprint")
+		|| ClassName == TEXT("AnimBlueprint")
+		|| ClassName == TEXT("WidgetBlueprint");
+}
+
+// Resolve a single path entry: if it's a loadable Blueprint, return it directly;
+// if it's a folder, expand to all Blueprints under it.
+static void ResolvePath(const FString& Path, IAssetRegistry& AssetRegistry, TArray<FString>& OutBlueprintPaths)
+{
+	// First, try to load as a direct Blueprint asset
+	FAssetData AssetData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(Path));
+	if (AssetData.IsValid() && IsBlueprintAssetClass(AssetData.AssetClassPath.GetAssetName().ToString()))
+	{
+		OutBlueprintPaths.Add(AssetData.GetObjectPathString());
+		return;
+	}
+
+	// Not a direct asset — treat as a folder and scan recursively
+	TArray<FAssetData> AssetList;
+	AssetRegistry.GetAssetsByPath(FName(*Path), AssetList, /*bRecursive=*/true);
+
+	for (const FAssetData& Asset : AssetList)
+	{
+		if (IsBlueprintAssetClass(Asset.AssetClassPath.GetAssetName().ToString()))
+		{
+			OutBlueprintPaths.Add(Asset.GetObjectPathString());
+		}
+	}
+}
+
+IClaireonTool::FToolResult ClaireonTool_BlueprintCompile::Execute(const TSharedPtr<FJsonObject>& Arguments)
+{
+	// Parse options
 	bool bFailOnWarnings = false;
 	if (Arguments->HasField(TEXT("failOnWarnings")))
 	{
@@ -82,128 +235,68 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintCompile::Execute(const TSharedP
 		bRemoveUnused = Arguments->GetBoolField(TEXT("remove_unused"));
 	}
 
-	// Gather all Blueprint assets under the content path
-	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-
-	TArray<FAssetData> AssetList;
-	AssetRegistry.GetAssetsByPath(FName(*ContentPath), AssetList, /*bRecursive=*/true);
-
-	// Filter to Blueprints only
-	TArray<FAssetData> BlueprintAssets;
-	for (const FAssetData& Asset : AssetList)
+	// Collect input paths (default: ["/Game"])
+	TArray<FString> InputPaths;
+	if (Arguments->HasField(TEXT("paths")))
 	{
-		FString ClassName = Asset.AssetClassPath.GetAssetName().ToString();
-		if (ClassName == TEXT("Blueprint") || ClassName == TEXT("AnimBlueprint") || ClassName == TEXT("WidgetBlueprint"))
+		const TArray<TSharedPtr<FJsonValue>>& PathsArray = Arguments->GetArrayField(TEXT("paths"));
+		for (const TSharedPtr<FJsonValue>& Val : PathsArray)
 		{
-			BlueprintAssets.Add(Asset);
+			FString Normalized = NormalizeToContentPath(Val->AsString());
+			if (!Normalized.IsEmpty())
+			{
+				InputPaths.Add(Normalized);
+			}
 		}
 	}
+	if (InputPaths.Num() == 0)
+	{
+		InputPaths.Add(TEXT("/Game"));
+	}
 
-	if (BlueprintAssets.Num() == 0)
+	// Resolve each input path to concrete Blueprint asset paths
+	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+
+	TArray<FString> BlueprintPaths;
+	for (const FString& Path : InputPaths)
+	{
+		ResolvePath(Path, AssetRegistry, BlueprintPaths);
+	}
+
+	FString SourceDescription = FString::Join(InputPaths, TEXT(", "));
+
+	if (BlueprintPaths.Num() == 0)
 	{
 		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 		Data->SetNumberField(TEXT("total"), 0);
 		Data->SetNumberField(TEXT("succeeded"), 0);
 		Data->SetNumberField(TEXT("failed"), 0);
 		Data->SetArrayField(TEXT("results"), TArray<TSharedPtr<FJsonValue>>());
-		Data->SetStringField(TEXT("content_path"), ContentPath);
-		return MakeSuccessResult(Data, FString::Printf(TEXT("No blueprints found under %s"), *ContentPath));
+		Data->SetStringField(TEXT("source"), SourceDescription);
+		return MakeSuccessResult(Data, FString::Printf(TEXT("No blueprints found for: %s"), *SourceDescription));
 	}
 
-	// Compile each Blueprint and collect results
+	// Compile each Blueprint
 	TArray<TSharedPtr<FJsonValue>> ResultsArray;
 	int32 NumSucceeded = 0;
 	int32 NumFailed = 0;
 
-	for (const FAssetData& Asset : BlueprintAssets)
+	for (const FString& Path : BlueprintPaths)
 	{
-		FString BlueprintPath = Asset.GetObjectPathString();
-		double StartTime = FPlatformTime::Seconds();
-
-		// Load the Blueprint
-		UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-		if (!Blueprint)
-		{
-			NumFailed++;
-
-			TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
-			ResultObj->SetStringField(TEXT("blueprint_path"), BlueprintPath);
-			ResultObj->SetStringField(TEXT("status"), TEXT("failed"));
-			TArray<TSharedPtr<FJsonValue>> Errors;
-			Errors.Add(MakeShared<FJsonValueString>(TEXT("Failed to load Blueprint")));
-			ResultObj->SetArrayField(TEXT("errors"), Errors);
-			ResultObj->SetArrayField(TEXT("warnings"), TArray<TSharedPtr<FJsonValue>>());
-			ResultObj->SetNumberField(TEXT("compile_time_ms"), 0.0);
-			ResultsArray.Add(MakeShared<FJsonValueObject>(ResultObj));
-			continue;
-		}
-
-		// Optionally remove unused variables
-		int32 RemovedVariables = 0;
-		if (bRemoveUnused)
-		{
-			const int32 VariablesBefore = Blueprint->NewVariables.Num();
-			UBlueprintEditorLibrary::RemoveUnusedVariables(Blueprint);
-			RemovedVariables = VariablesBefore - Blueprint->NewVariables.Num();
-			// RemoveUnusedNodes returns void — node removal is best-effort
-			UBlueprintEditorLibrary::RemoveUnusedNodes(Blueprint);
-		}
-
-		// Compile with BatchCompile to suppress modal error dialogs
-		EBlueprintCompileOptions CompileOptions = EBlueprintCompileOptions::BatchCompile;
-		FKismetEditorUtilities::CompileBlueprint(Blueprint, CompileOptions);
-
-		double ElapsedMs = (FPlatformTime::Seconds() - StartTime) * 1000.0;
-
-		// Determine success/failure based on Blueprint status
-		// Compiler error messages are surfaced through the Blueprint's status flag;
-		// granular per-message extraction requires hooking FKismetEditorUtilities callbacks
-		// which is out of scope for this structured-output port.
-		TArray<TSharedPtr<FJsonValue>> ErrorsArray;
-		TArray<TSharedPtr<FJsonValue>> WarningsArray;
-
-		bool bCompileSucceeded = (Blueprint->Status != BS_Error);
-
-		// Treat blueprints with warnings as failed if bFailOnWarnings
-		FString StatusStr;
-		if (!bCompileSucceeded)
-		{
-			NumFailed++;
-			StatusStr = TEXT("failed");
-		}
-		else
-		{
-			NumSucceeded++;
-			StatusStr = TEXT("succeeded");
-		}
-
-		TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
-		ResultObj->SetStringField(TEXT("blueprint_path"), BlueprintPath);
-		ResultObj->SetStringField(TEXT("status"), StatusStr);
-		ResultObj->SetArrayField(TEXT("errors"), ErrorsArray);
-		ResultObj->SetArrayField(TEXT("warnings"), WarningsArray);
-		ResultObj->SetNumberField(TEXT("compile_time_ms"), ElapsedMs);
-
-		if (bRemoveUnused && RemovedVariables > 0)
-		{
-			ResultObj->SetNumberField(TEXT("removed_variables"), RemovedVariables);
-		}
-
-		ResultsArray.Add(MakeShared<FJsonValueObject>(ResultObj));
+		TSharedPtr<FJsonObject> Result = CompileOneBlueprint(Path, bRemoveUnused, bFailOnWarnings, NumSucceeded, NumFailed);
+		ResultsArray.Add(MakeShared<FJsonValueObject>(Result));
 	}
 
-	// Build result data
-	int32 Total = BlueprintAssets.Num();
+	int32 Total = BlueprintPaths.Num();
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
-	Data->SetStringField(TEXT("content_path"), ContentPath);
+	Data->SetStringField(TEXT("source"), SourceDescription);
 	Data->SetNumberField(TEXT("total"), Total);
 	Data->SetNumberField(TEXT("succeeded"), NumSucceeded);
 	Data->SetNumberField(TEXT("failed"), NumFailed);
 	Data->SetArrayField(TEXT("results"), ResultsArray);
 
-	// Summary
 	FString Summary = FString::Printf(
-		TEXT("Compiled %d blueprints: %d succeeded, %d failed"),
+		TEXT("Compiled %d blueprint(s): %d succeeded, %d failed"),
 		Total,
 		NumSucceeded,
 		NumFailed);
