@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_PIEStop.h"
+#include "ClaireonBridge.h"
 #include "ClaireonLog.h"
 #include "ClaireonPIEManager.h"
 
@@ -11,12 +12,13 @@
 
 FString ClaireonTool_PIEStop::GetName() const
 {
-	return TEXT("pie_stop");
+	return TEXT("pie_stop_async");
 }
 
 FString ClaireonTool_PIEStop::GetDescription() const
 {
-	return TEXT("Stop the current Play In Editor (PIE) session");
+	return TEXT("Stop the current Play In Editor (PIE) session. "
+		"The PIE stop is deferred until after the current script finishes.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PIEStop::GetInputSchema() const
@@ -44,19 +46,32 @@ IClaireonTool::FToolResult ClaireonTool_PIEStop::Execute(const TSharedPtr<FJsonO
 		return MakeErrorResult(TEXT("No active PIE session to stop"));
 	}
 
-	// Compute duration before stopping
 	double DurationSeconds = (FDateTime::UtcNow() - Session->StartTime).GetTotalSeconds();
 
-	// Restore CPU throttling
-	PIEManager.RestoreThrottleCPU();
-
-	// Request PIE stop
-	GEditor->RequestEndPlayMap();
+	FClaireonBridge::EnqueueDeferredAction({
+		EClaireonDeferredActionType::PIEStop,
+		FString()  // no payload needed
+	});
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
-	Data->SetStringField(TEXT("status"), TEXT("stopped"));
+	Data->SetStringField(TEXT("status"), TEXT("deferred"));
+	Data->SetStringField(TEXT("action"), TEXT("pie_stop"));
 	Data->SetNumberField(TEXT("duration_seconds"), DurationSeconds);
 
-	FString Summary = FString::Printf(TEXT("PIE stopped after %.1fs"), DurationSeconds);
+	FString Summary = FString::Printf(TEXT("PIE stop queued (ran %.1fs) — executes after script completes"), DurationSeconds);
 	return MakeSuccessResult(Data, Summary);
+}
+
+void ClaireonTool_PIEStop::ExecuteDeferredPIEStop()
+{
+	if (!GEditor)
+	{
+		return;
+	}
+
+	FClaireonPIEManager& PIEManager = FClaireonPIEManager::Get();
+	PIEManager.RestoreThrottleCPU();
+	GEditor->RequestEndPlayMap();
+
+	UE_LOG(LogClaireon, Log, TEXT("ExecuteDeferredPIEStop: PIE stop requested"));
 }

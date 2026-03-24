@@ -13,4 +13,7 @@ public:
 	virtual FString GetCategory() const override;
 	virtual TSharedPtr<FJsonObject> GetInputSchema() const override;
 	virtual FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;
+
+	/** Execute the deferred map load (called from the post-execution hook). */
+	static void ExecuteDeferredLoadMap(const FString& MapPath);
 };

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_LiveCodingReload.h"
+#include "ClaireonBridge.h"
 #include "ClaireonLog.h"
 
 #include "Dom/JsonObject.h"
@@ -16,7 +17,7 @@
 
 FString ClaireonTool_LiveCodingReload::GetName() const
 {
-	return TEXT("live_coding_reload");
+	return TEXT("live_coding_reload_async");
 }
 
 FString ClaireonTool_LiveCodingReload::GetCategory() const
@@ -26,7 +27,8 @@ FString ClaireonTool_LiveCodingReload::GetCategory() const
 
 FString ClaireonTool_LiveCodingReload::GetDescription() const
 {
-	return TEXT("Trigger a Live Coding reload for .cpp changes. Blocks if header files have changed (requires full rebuild).");
+	return TEXT("Trigger a Live Coding reload for .cpp changes. The reload is deferred until "
+		"after the current script finishes. Blocks if header files have changed (requires full rebuild).");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_LiveCodingReload::GetInputSchema() const
@@ -92,15 +94,15 @@ IClaireonTool::FToolResult ClaireonTool_LiveCodingReload::Execute(const TSharedP
 			*HeaderList));
 	}
 
-	const FDateTime StartTime = FDateTime::Now();
-
-	ELiveCodingCompileResult Result;
-	bool bStarted = LiveCoding->Compile(ELiveCodingCompileFlags::WaitForCompletion, &Result);
-
-	const int32 DurationMs = FMath::RoundToInt((FDateTime::Now() - StartTime).GetTotalMilliseconds());
+	// Enqueue — does NOT execute yet
+	FClaireonBridge::EnqueueDeferredAction({
+		EClaireonDeferredActionType::LiveCodingReload,
+		bForce ? TEXT("force") : TEXT("")
+	});
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
-	Data->SetNumberField(TEXT("duration_ms"), DurationMs);
+	Data->SetStringField(TEXT("status"), TEXT("deferred"));
+	Data->SetStringField(TEXT("action"), TEXT("live_coding_reload"));
 
 	TArray<TSharedPtr<FJsonValue>> WarningsArr;
 	if (!ChangedHeaders.IsEmpty() && bForce)
@@ -109,41 +111,25 @@ IClaireonTool::FToolResult ClaireonTool_LiveCodingReload::Execute(const TSharedP
 	}
 	Data->SetArrayField(TEXT("warnings"), WarningsArr);
 
-	FString Summary;
-	switch (Result)
+	FString Summary = TEXT("Live Coding reload queued — executes after script completes");
+	return MakeSuccessResult(Data, Summary);
+#endif
+}
+
+void ClaireonTool_LiveCodingReload::ExecuteDeferredLiveCodingReload(const FString& Payload)
+{
+#if PLATFORM_WINDOWS
+	ILiveCodingModule* LiveCoding = FModuleManager::GetModulePtr<ILiveCodingModule>(LIVE_CODING_MODULE_NAME);
+	if (!LiveCoding || !LiveCoding->IsEnabledForSession() || LiveCoding->IsCompiling())
 	{
-	case ELiveCodingCompileResult::Success:
-		Data->SetStringField(TEXT("status"), TEXT("success"));
-		Summary = FString::Printf(TEXT("Live Coding reload completed successfully (%dms)"), DurationMs);
-		return MakeSuccessResult(Data, Summary);
-
-	case ELiveCodingCompileResult::NoChanges:
-		Data->SetStringField(TEXT("status"), TEXT("no_changes"));
-		Summary = TEXT("No changes detected — nothing to reload");
-		return MakeSuccessResult(Data, Summary);
-
-	case ELiveCodingCompileResult::Failure:
-		Data->SetStringField(TEXT("status"), TEXT("failed"));
-		return MakeErrorResult(FString::Printf(TEXT("Live Coding compile failed (%dms). Check the Output Log for details."), DurationMs));
-
-	case ELiveCodingCompileResult::Cancelled:
-		Data->SetStringField(TEXT("status"), TEXT("cancelled"));
-		return MakeErrorResult(TEXT("Live Coding compile was cancelled."));
-
-	case ELiveCodingCompileResult::CompileStillActive:
-		return MakeErrorResult(TEXT("A Live Coding compile is already in progress."));
-
-	case ELiveCodingCompileResult::NotStarted:
-		return MakeErrorResult(TEXT("Live Coding could not start the compile. Ensure Live Coding is enabled and the console is running."));
-
-	case ELiveCodingCompileResult::InProgress:
-		Data->SetStringField(TEXT("status"), TEXT("in_progress"));
-		Summary = TEXT("Live Coding compile started (not waiting for completion)");
-		return MakeSuccessResult(Data, Summary);
-
-	default:
-		return MakeErrorResult(FString::Printf(TEXT("Unexpected Live Coding result: %d"), static_cast<int32>(Result)));
+		UE_LOG(LogClaireon, Warning, TEXT("ExecuteDeferredLiveCodingReload: Live Coding not available or already compiling"));
+		return;
 	}
+
+	ELiveCodingCompileResult Result;
+	LiveCoding->Compile(ELiveCodingCompileFlags::WaitForCompletion, &Result);
+
+	UE_LOG(LogClaireon, Log, TEXT("ExecuteDeferredLiveCodingReload: result=%d"), static_cast<int32>(Result));
 #endif
 }
 

@@ -17,6 +17,10 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
+#include "Tools/ClaireonTool_MapOpen.h"
+#include "Tools/ClaireonTool_PIEStart.h"
+#include "Tools/ClaireonTool_PIEStop.h"
+#include "Tools/ClaireonTool_LiveCodingReload.h"
 
 // CPython C API headers for timeout enforcement
 THIRD_PARTY_INCLUDES_START
@@ -367,7 +371,33 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	const double StartTimeSeconds = FPlatformTime::Seconds();
 	const bool bPythonSuccess = IPythonScriptPlugin::Get()->ExecPythonCommandEx(PythonCommand);
 	const double DurationMs = (FPlatformTime::Seconds() - StartTimeSeconds) * 1000.0;
-	const bool bTimedOut = false; // Watchdog timer not yet implemented — timeout_seconds is advisory only
+	const bool bTimedOut = false; // TODO: re-add watchdog timer with proper GIL handling
+
+	// Step 7b: Dispatch any deferred world-transition actions.
+	// The barrier runs inside each deferred action's lambda (right before the
+	// world transition), not here — no reason to purge Python state early.
+	if (FClaireonBridge::HasDeferredActions())
+	{
+		TArray<FClaireonDeferredAction> Actions = FClaireonBridge::DrainDeferredActions();
+		for (const FClaireonDeferredAction& Action : Actions)
+		{
+			switch (Action.Type)
+			{
+			case EClaireonDeferredActionType::LoadMap:
+				ClaireonTool_MapOpen::ExecuteDeferredLoadMap(Action.Payload);
+				break;
+			case EClaireonDeferredActionType::PIEStart:
+				ClaireonTool_PIEStart::ExecuteDeferredPIEStart(Action.Payload);
+				break;
+			case EClaireonDeferredActionType::PIEStop:
+				ClaireonTool_PIEStop::ExecuteDeferredPIEStop();
+				break;
+			case EClaireonDeferredActionType::LiveCodingReload:
+				ClaireonTool_LiveCodingReload::ExecuteDeferredLiveCodingReload(Action.Payload);
+				break;
+			}
+		}
+	}
 
 	// Step 8: Capture logs
 	FString Logs = FToolResult::BuildLogString(PythonCommand.LogOutput);

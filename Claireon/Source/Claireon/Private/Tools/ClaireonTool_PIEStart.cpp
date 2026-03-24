@@ -2,12 +2,16 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_PIEStart.h"
+#include "ClaireonBridge.h"
 #include "ClaireonLog.h"
 #include "ClaireonPIEManager.h"
 #include "ClaireonSettings.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Serialization/JsonWriter.h"
+#include "Serialization/JsonSerializer.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
 #include "Editor.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
@@ -15,12 +19,13 @@
 
 FString ClaireonTool_PIEStart::GetName() const
 {
-	return TEXT("pie_start");
+	return TEXT("pie_start_async");
 }
 
 FString ClaireonTool_PIEStart::GetDescription() const
 {
-	return TEXT("Start a Play In Editor (PIE) session, optionally loading a map first");
+	return TEXT("Start a Play In Editor (PIE) session, optionally loading a map first. "
+		"The PIE start is deferred until after the current script finishes.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PIEStart::GetInputSchema() const
@@ -81,23 +86,15 @@ IClaireonTool::FToolResult ClaireonTool_PIEStart::Execute(const TSharedPtr<FJson
 	FClaireonPIEManager& PIEManager = FClaireonPIEManager::Get();
 	if (PIEManager.GetActiveSession() != nullptr)
 	{
-		return MakeErrorResult(TEXT("A PIE session is already active. Stop it first with pie_stop."));
+		return MakeErrorResult(TEXT("A PIE session is already active. Stop it first with pie_stop_async."));
 	}
 
-	// Optional: load a map first
-	FString MapPath;
-	if (Arguments->TryGetStringField(TEXT("mapPath"), MapPath) && !MapPath.IsEmpty())
-	{
-		FEditorFileUtils::LoadMap(MapPath);
-	}
-
-	// Determine net mode
+	// Determine net mode (validate now, execute later)
 	FString NetModeStr;
 	Arguments->TryGetStringField(TEXT("netMode"), NetModeStr);
 
 	const TSet<FString>& DisabledModes = UClaireonSettings::Get()->DisabledPIENetModes;
 
-	// Block disabled net modes
 	if (!NetModeStr.IsEmpty() && DisabledModes.Contains(NetModeStr))
 	{
 		return MakeErrorResult(FString::Printf(
@@ -105,6 +102,73 @@ IClaireonTool::FToolResult ClaireonTool_PIEStart::Execute(const TSharedPtr<FJson
 			*NetModeStr));
 	}
 
+	// Resolve default net mode if not specified
+	if (NetModeStr.IsEmpty())
+	{
+		if (!DisabledModes.Contains(TEXT("Client"))) { NetModeStr = TEXT("Client"); }
+		else if (!DisabledModes.Contains(TEXT("Standalone"))) { NetModeStr = TEXT("Standalone"); }
+		else if (!DisabledModes.Contains(TEXT("ListenServer"))) { NetModeStr = TEXT("ListenServer"); }
+		else { return MakeErrorResult(TEXT("All PIE net modes are disabled in MCP settings.")); }
+	}
+
+	FString MapPath;
+	Arguments->TryGetStringField(TEXT("mapPath"), MapPath);
+
+	// Serialize validated args as JSON payload for deferred execution
+	TSharedPtr<FJsonObject> PayloadObj = MakeShared<FJsonObject>();
+	PayloadObj->SetStringField(TEXT("netMode"), NetModeStr);
+	if (!MapPath.IsEmpty())
+	{
+		PayloadObj->SetStringField(TEXT("mapPath"), MapPath);
+	}
+	FString PayloadJson;
+	TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+		TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&PayloadJson);
+	FJsonSerializer::Serialize(PayloadObj.ToSharedRef(), Writer);
+	Writer->Close();
+
+	FClaireonBridge::EnqueueDeferredAction({
+		EClaireonDeferredActionType::PIEStart,
+		PayloadJson
+	});
+
+	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+	Data->SetStringField(TEXT("status"), TEXT("deferred"));
+	Data->SetStringField(TEXT("action"), TEXT("pie_start"));
+	Data->SetStringField(TEXT("net_mode"), NetModeStr);
+
+	FString Summary = FString::Printf(TEXT("PIE start queued (net mode: %s) — executes after script completes"), *NetModeStr);
+	return MakeSuccessResult(Data, Summary);
+}
+
+void ClaireonTool_PIEStart::ExecuteDeferredPIEStart(const FString& Payload)
+{
+	if (!GEditor)
+	{
+		return;
+	}
+
+	// Parse payload
+	TSharedPtr<FJsonObject> PayloadObj;
+	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Payload);
+	if (!FJsonSerializer::Deserialize(Reader, PayloadObj) || !PayloadObj.IsValid())
+	{
+		UE_LOG(LogClaireon, Error, TEXT("ExecuteDeferredPIEStart: Failed to parse payload"));
+		return;
+	}
+
+	FString MapPath;
+	PayloadObj->TryGetStringField(TEXT("mapPath"), MapPath);
+	FString NetModeStr;
+	PayloadObj->TryGetStringField(TEXT("netMode"), NetModeStr);
+
+	// Optional: load a map first
+	if (!MapPath.IsEmpty())
+	{
+		FEditorFileUtils::LoadMap(MapPath);
+	}
+
+	// Configure net mode
 	ULevelEditorPlaySettings* PlaySettings = GetMutableDefault<ULevelEditorPlaySettings>();
 	if (NetModeStr == TEXT("Standalone"))
 	{
@@ -114,68 +178,33 @@ IClaireonTool::FToolResult ClaireonTool_PIEStart::Execute(const TSharedPtr<FJson
 	{
 		PlaySettings->SetPlayNetMode(EPlayNetMode::PIE_ListenServer);
 	}
-	else if (NetModeStr == TEXT("DedicatedServer"))
-	{
-		PlaySettings->SetPlayNetMode(EPlayNetMode::PIE_Client);
-	}
-	else if (NetModeStr == TEXT("Client"))
-	{
-		PlaySettings->SetPlayNetMode(EPlayNetMode::PIE_Client);
-	}
 	else
 	{
-		// Default: use first non-disabled mode, preferring Client
-		if (!DisabledModes.Contains(TEXT("Client")))
-		{
-			PlaySettings->SetPlayNetMode(EPlayNetMode::PIE_Client);
-			NetModeStr = TEXT("Client");
-		}
-		else if (!DisabledModes.Contains(TEXT("Standalone")))
-		{
-			PlaySettings->SetPlayNetMode(EPlayNetMode::PIE_Standalone);
-			NetModeStr = TEXT("Standalone");
-		}
-		else if (!DisabledModes.Contains(TEXT("ListenServer")))
-		{
-			PlaySettings->SetPlayNetMode(EPlayNetMode::PIE_ListenServer);
-			NetModeStr = TEXT("ListenServer");
-		}
-		else
-		{
-			return MakeErrorResult(TEXT("All PIE net modes are disabled in MCP settings."));
-		}
+		PlaySettings->SetPlayNetMode(EPlayNetMode::PIE_Client);
 	}
 
-	// Determine the current map path before starting PIE
+	// Determine map path for session registration
 	FString CurrentMapPath;
 	UWorld* EditorWorld = GEditor->GetEditorWorldContext().World();
 	if (EditorWorld)
 	{
 		CurrentMapPath = EditorWorld->GetPathName();
-		// Use the map path provided, or fall back to the current map
 		if (!MapPath.IsEmpty())
 		{
 			CurrentMapPath = MapPath;
 		}
 	}
 
-	// Generate session ID and register before starting PIE
+	// Generate session ID and register
+	FClaireonPIEManager& PIEManager = FClaireonPIEManager::Get();
 	FString SessionId = PIEManager.GenerateSessionId();
 	PIEManager.OnPIEStarted(SessionId, CurrentMapPath, NetModeStr);
-
-	// Disable CPU throttling so PIE runs at full speed
 	PIEManager.DisableThrottleCPU();
 
 	// Start PIE
 	FRequestPlaySessionParams Params;
 	GEditor->RequestPlaySession(Params);
 
-	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
-	Data->SetStringField(TEXT("session_id"), SessionId);
-	Data->SetStringField(TEXT("map"), CurrentMapPath);
-	Data->SetStringField(TEXT("net_mode"), NetModeStr);
-	Data->SetStringField(TEXT("status"), TEXT("starting"));
-
-	FString Summary = FString::Printf(TEXT("PIE started on %s (net mode: %s)"), *CurrentMapPath, *NetModeStr);
-	return MakeSuccessResult(Data, Summary);
+	UE_LOG(LogClaireon, Log, TEXT("ExecuteDeferredPIEStart: Started PIE session %s on %s (%s)"),
+		*SessionId, *CurrentMapPath, *NetModeStr);
 }

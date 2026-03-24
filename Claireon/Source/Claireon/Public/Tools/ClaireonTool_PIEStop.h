@@ -13,4 +13,7 @@ public:
 	virtual TSharedPtr<FJsonObject> GetInputSchema() const override;
 	virtual FString GetCategory() const override { return TEXT("pie"); }
 	virtual FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;
+
+	/** Execute the deferred PIE stop (called from the post-execution hook). */
+	static void ExecuteDeferredPIEStop();
 };

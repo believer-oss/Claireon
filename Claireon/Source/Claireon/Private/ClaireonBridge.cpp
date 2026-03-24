@@ -19,12 +19,14 @@ THIRD_PARTY_INCLUDES_END
 #include "Serialization/JsonWriter.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 #include "IPythonScriptPlugin.h"
+#include "UObject/UObjectGlobals.h"
 
 // Static member initialization
 bool FClaireonBridge::bIsRegistered = false;
 FString FClaireonBridge::GLastExecuteResult;
 FClaireonServer* FClaireonBridge::GServerInstance = nullptr;
 TAtomic<int32> FClaireonBridge::GToolCallCount(0);
+TArray<FClaireonDeferredAction> FClaireonBridge::GDeferredActions;
 
 // PyMethodDef structs (static storage — CPython holds pointers to these)
 static PyMethodDef MCPCallDef = {
@@ -304,4 +306,94 @@ PyObject* FClaireonBridge::MCPSetResult(PyObject* /*Self*/, PyObject* Args)
 
 	GLastExecuteResult = UTF8_TO_TCHAR(ResultJsonUtf8);
 	Py_RETURN_NONE;
+}
+
+// --- Deferred world-transition actions ---
+
+void FClaireonBridge::EnqueueDeferredAction(FClaireonDeferredAction Action)
+{
+	UE_LOG(LogClaireon, Log, TEXT("[MCP Bridge] Enqueued deferred action type=%d payload=%s"),
+		static_cast<int32>(Action.Type), *Action.Payload);
+	GDeferredActions.Add(MoveTemp(Action));
+}
+
+bool FClaireonBridge::HasDeferredActions()
+{
+	return GDeferredActions.Num() > 0;
+}
+
+TArray<FClaireonDeferredAction> FClaireonBridge::DrainDeferredActions()
+{
+	TArray<FClaireonDeferredAction> Actions = MoveTemp(GDeferredActions);
+	GDeferredActions.Empty();
+	return Actions;
+}
+
+void FClaireonBridge::RunWorldTransitionBarrier()
+{
+	UE_LOG(LogClaireon, Log, TEXT("[MCP Bridge] Running world-transition barrier"));
+
+	if (IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get())
+	{
+		FPythonCommandEx PurgeCommand;
+		PurgeCommand.Command = TEXT(
+			"import gc, sys, unreal\n"
+			"\n"
+			"# Build a set of dict ids that belong to infrastructure and must\n"
+			"# never be modified: module dicts, type/class dicts, builtins.\n"
+			"_protected = set()\n"
+			"\n"
+			"# Protect every loaded module's __dict__  (unreal, sys, json, mcp_*, etc.)\n"
+			"for _mod in sys.modules.values():\n"
+			"    if hasattr(_mod, '__dict__'):\n"
+			"        _protected.add(id(vars(_mod)))\n"
+			"\n"
+			"# Protect __dict__ of every type/class reachable from the unreal module\n"
+			"# (e.g. unreal.Actor, unreal.Object, unreal.EditorAssetLibrary, ...)\n"
+			"for _name in dir(unreal):\n"
+			"    try:\n"
+			"        _attr = getattr(unreal, _name)\n"
+			"    except Exception:\n"
+			"        continue\n"
+			"    if isinstance(_attr, type) and hasattr(_attr, '__dict__'):\n"
+			"        _protected.add(id(vars(_attr)))\n"
+			"        # Also protect bases (MRO) so inherited class dicts are safe\n"
+			"        for _base in type.mro(_attr):\n"
+			"            if hasattr(_base, '__dict__'):\n"
+			"                _protected.add(id(vars(_base)))\n"
+			"\n"
+			"# Protect builtins\n"
+			"import builtins as _builtins\n"
+			"_protected.add(id(vars(_builtins)))\n"
+			"_protected.add(id(vars(type)))\n"
+			"_protected.add(id(vars(object)))\n"
+			"\n"
+			"# Walk all tracked objects; only null unreal.Object refs in\n"
+			"# unprotected dicts (orphaned execution namespaces, user containers).\n"
+			"_nulled = 0\n"
+			"for _obj in gc.get_objects():\n"
+			"    if isinstance(_obj, dict) and id(_obj) not in _protected:\n"
+			"        for _k, _v in list(_obj.items()):\n"
+			"            if isinstance(_v, unreal.Object):\n"
+			"                _obj[_k] = None\n"
+			"                _nulled += 1\n"
+			"            elif isinstance(_v, (list, tuple)):\n"
+			"                if _v and isinstance(_v[0], unreal.Object):\n"
+			"                    _obj[_k] = None\n"
+			"                    _nulled += 1\n"
+			"\n"
+			"gc.collect()\n"
+			"gc.collect()\n"
+			"gc.collect()\n"
+			"del _protected, _nulled\n"
+		);
+		PurgeCommand.ExecutionMode = EPythonCommandExecutionMode::ExecuteStatement;
+		PurgeCommand.Flags = EPythonCommandFlags::Unattended;
+		PythonPlugin->ExecPythonCommandEx(PurgeCommand);
+	}
+
+	// Unreal GC pass to finalize objects Python just released
+	CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
+
+	UE_LOG(LogClaireon, Log, TEXT("[MCP Bridge] World-transition barrier complete"));
 }

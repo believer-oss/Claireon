@@ -14,6 +14,9 @@ public:
 	virtual TSharedPtr<FJsonObject> GetInputSchema() const override;
 	virtual FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;
 
+	/** Execute the deferred Live Coding reload (called from the post-execution hook). */
+	static void ExecuteDeferredLiveCodingReload(const FString& Payload);
+
 private:
 	/** Runs git diff to detect header file changes. Returns true if any .h/.hpp/.inl files changed. */
 	bool DetectHeaderChanges(TArray<FString>& OutChangedHeaders) const;
