@@ -143,38 +143,108 @@ IClaireonTool::FToolResult ClaireonTool_TraceGetTopScopes::Execute(const TShared
 		TraceServices::FAnalysisSessionReadScope ReadScope(*Session->AnalysisSession);
 		const TraceServices::ITimingProfilerProvider* TimingProvider = Session->GetTimingProvider();
 		const TraceServices::IThreadProvider* ThreadProvider = Session->GetThreadProvider();
+		const TraceServices::IFrameProvider* FrameProvider = Session->GetFrameProvider();
 
 		if (TimingProvider && ThreadProvider)
 		{
-			// Enumerate threads and aggregate per-thread scope data
-			ThreadProvider->EnumerateThreads([&](const TraceServices::FThreadInfo& ThreadInfo) -> bool
+			// Determine time range
+			double IntervalStart = 0.0;
+			double IntervalEnd = Session->AnalysisSession->GetDurationSeconds();
+
+			double StartTimeSec = 0.0, EndTimeSec = 0.0;
+			bool bHasStartTime = Arguments->TryGetNumberField(TEXT("startTime"), StartTimeSec);
+			bool bHasEndTime = Arguments->TryGetNumberField(TEXT("endTime"), EndTimeSec);
+			if (bHasStartTime) IntervalStart = StartTimeSec;
+			if (bHasEndTime) IntervalEnd = EndTimeSec;
+
+			// Frame params override time params
+			int32 StartFrame = -1, EndFrame = -1;
+			Arguments->TryGetNumberField(TEXT("startFrame"), StartFrame);
+			Arguments->TryGetNumberField(TEXT("endFrame"), EndFrame);
+			if (FrameProvider && StartFrame >= 0)
 			{
-				// Apply thread filter
-				if (!ThreadFilter.IsEmpty())
-				{
-					const FString ThreadName(ThreadInfo.Name ? ThreadInfo.Name : TEXT(""));
-					if (!ThreadName.Contains(ThreadFilter, ESearchCase::IgnoreCase))
-					{
-						return true; // continue
-					}
-				}
+				const TraceServices::FFrame* Frame = FrameProvider->GetFrame(TraceFrameType_Game, StartFrame);
+				if (Frame) IntervalStart = Frame->StartTime;
+			}
+			if (FrameProvider && EndFrame >= 0)
+			{
+				const TraceServices::FFrame* Frame = FrameProvider->GetFrame(TraceFrameType_Game, EndFrame);
+				if (Frame) IntervalEnd = Frame->EndTime;
+			}
 
-				// Skip GPU threads unless explicitly requested
-				if (!bIncludeGpu)
+			// Build thread ID -> name map for optional filtering
+			TMap<uint32, FString> ThreadNames;
+			if (!ThreadFilter.IsEmpty())
+			{
+				ThreadProvider->EnumerateThreads([&](const TraceServices::FThreadInfo& ThreadInfo)
 				{
-					const FString ThreadName(ThreadInfo.Name ? ThreadInfo.Name : TEXT(""));
-					if (ThreadName.Contains(TEXT("GPU"), ESearchCase::IgnoreCase))
-					{
-						return true;
-					}
-				}
+					ThreadNames.Add(ThreadInfo.Id, FString(ThreadInfo.Name ? ThreadInfo.Name : TEXT("")));
+				});
+			}
 
-				return true; // continue enumeration
-			});
+			// Run aggregation over the time range
+			TraceServices::FCreateAggreationParams Params;
+			Params.IntervalStart = IntervalStart;
+			Params.IntervalEnd = IntervalEnd;
+			Params.IncludeGpu = bIncludeGpu;
+
+			if (!ThreadFilter.IsEmpty())
+			{
+				Params.CpuThreadFilter = [ThreadNames, ThreadFilter](uint32 ThreadId) -> bool
+				{
+					const FString* Name = ThreadNames.Find(ThreadId);
+					if (!Name) return false;
+					return Name->Contains(ThreadFilter, ESearchCase::IgnoreCase);
+				};
+			}
+			else
+			{
+				Params.CpuThreadFilter = [](uint32) -> bool { return true; };
+			}
+
+			TraceServices::ITable<TraceServices::FTimingProfilerAggregatedStats>* AggTable = TimingProvider->CreateAggregation(Params);
+			if (AggTable)
+			{
+				TraceServices::ITableReader<TraceServices::FTimingProfilerAggregatedStats>* Reader = AggTable->CreateReader();
+				if (Reader)
+				{
+					while (Reader->IsValid())
+					{
+						const TraceServices::FTimingProfilerAggregatedStats* Row = Reader->GetCurrentRow();
+						if (Row && Row->Timer && Row->Timer->Name && Row->InstanceCount > 0)
+						{
+							FScopeEntry Entry;
+							Entry.Name = Row->Timer->Name;
+							Entry.TotalMs = Row->TotalInclusiveTime * 1000.0;
+							Entry.AvgMs = Row->AverageInclusiveTime * 1000.0;
+							Entry.CallCount = Row->InstanceCount;
+							Scopes.Add(Entry);
+						}
+						Reader->NextRow();
+					}
+					delete Reader;
+				}
+				delete AggTable;
+			}
 		}
 	}
 
-	// Build output (scopes may be empty if provider not available)
+	// Sort
+	if (SortBy == TEXT("count"))
+	{
+		Scopes.Sort([](const FScopeEntry& A, const FScopeEntry& B) { return A.CallCount > B.CallCount; });
+	}
+	else // totalInclusive / total_time (default)
+	{
+		Scopes.Sort([](const FScopeEntry& A, const FScopeEntry& B) { return A.TotalMs > B.TotalMs; });
+	}
+
+	if (Scopes.Num() > MaxResults)
+	{
+		Scopes.SetNum(MaxResults);
+	}
+
+	// Build output
 	TArray<TSharedPtr<FJsonValue>> ScopesArray;
 	for (const FScopeEntry& Scope : Scopes)
 	{

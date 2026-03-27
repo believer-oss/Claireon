@@ -24,7 +24,7 @@ struct FMCPSession
 	FString AssetPath;
 	FDateTime CreatedTime;
 	FDateTime LastAccessTime;
-	double TimeoutMinutes = 30.0;
+	double TimeoutMinutes = 60.0;
 
 	bool IsExpired() const
 	{
@@ -78,10 +78,10 @@ public:
 	 * Open a new session or reuse an existing one for the same tool on the same asset.
 	 * @param AssetPath Asset path (will be canonicalized internally)
 	 * @param ToolName Tool identifier, must follow "editor.<type>.edit" convention
-	 * @param TimeoutMinutes Session timeout (default 30 minutes)
+	 * @param TimeoutMinutes Session timeout (default 60 minutes)
 	 * @return Result with session ID and optional blocking session info
 	 */
-	FMCPOpenSessionResult OpenSession(const FString& AssetPath, const FString& ToolName, double TimeoutMinutes = 30.0);
+	FMCPOpenSessionResult OpenSession(const FString& AssetPath, const FString& ToolName, double TimeoutMinutes = 60.0);
 
 	/**
 	 * Find an active session by ID. Returns nullptr if not found or expired.

@@ -94,33 +94,123 @@ IClaireonTool::FToolResult ClaireonTool_TraceGetScopeDetails::Execute(const TSha
 	}
 	Session->Touch();
 
-	int32 StartFrame = 0;
-	int32 EndFrame = INT32_MAX;
+	int32 StartFrame = -1;
+	int32 EndFrame = -1;
 	int32 MaxResults = 200;
 	Arguments->TryGetNumberField(TEXT("startFrame"), StartFrame);
 	Arguments->TryGetNumberField(TEXT("endFrame"), EndFrame);
 	Arguments->TryGetNumberField(TEXT("maxResults"), MaxResults);
 
-	// Accumulate scope occurrence data
+	// Aggregated stats for scopes matching the name
+	struct FMatchedScope
+	{
+		FString Name;
+		double TotalMs = 0.0;
+		double AvgMs = 0.0;
+		double MaxMs = 0.0;
+		uint64 CallCount = 0;
+	};
+	TArray<FMatchedScope> Matches;
+
+	if (Session->AnalysisSession.IsValid())
+	{
+		TraceServices::FAnalysisSessionReadScope ReadScope(*Session->AnalysisSession);
+		const TraceServices::ITimingProfilerProvider* TimingProvider = Session->GetTimingProvider();
+		const TraceServices::IFrameProvider* FrameProvider = Session->GetFrameProvider();
+
+		if (TimingProvider)
+		{
+			// Determine time range
+			double IntervalStart = 0.0;
+			double IntervalEnd = Session->AnalysisSession->GetDurationSeconds();
+
+			if (FrameProvider && StartFrame >= 0)
+			{
+				const TraceServices::FFrame* Frame = FrameProvider->GetFrame(TraceFrameType_Game, StartFrame);
+				if (Frame) IntervalStart = Frame->StartTime;
+			}
+			if (FrameProvider && EndFrame >= 0)
+			{
+				const TraceServices::FFrame* Frame = FrameProvider->GetFrame(TraceFrameType_Game, EndFrame);
+				if (Frame) IntervalEnd = Frame->EndTime;
+			}
+
+			TraceServices::FCreateAggreationParams Params;
+			Params.IntervalStart = IntervalStart;
+			Params.IntervalEnd = IntervalEnd;
+			Params.IncludeGpu = false;
+			Params.CpuThreadFilter = [](uint32) -> bool { return true; };
+
+			TraceServices::ITable<TraceServices::FTimingProfilerAggregatedStats>* AggTable = TimingProvider->CreateAggregation(Params);
+			if (AggTable)
+			{
+				TraceServices::ITableReader<TraceServices::FTimingProfilerAggregatedStats>* Reader = AggTable->CreateReader();
+				if (Reader)
+				{
+					while (Reader->IsValid())
+					{
+						const TraceServices::FTimingProfilerAggregatedStats* Row = Reader->GetCurrentRow();
+						if (Row && Row->Timer && Row->Timer->Name && Row->InstanceCount > 0)
+						{
+							const FString TimerName(Row->Timer->Name);
+							if (TimerName.Contains(ScopeName, ESearchCase::IgnoreCase))
+							{
+								FMatchedScope Entry;
+								Entry.Name = TimerName;
+								Entry.TotalMs = Row->TotalInclusiveTime * 1000.0;
+								Entry.AvgMs = Row->AverageInclusiveTime * 1000.0;
+								Entry.MaxMs = Row->MaxInclusiveTime * 1000.0;
+								Entry.CallCount = Row->InstanceCount;
+								Matches.Add(Entry);
+							}
+						}
+						Reader->NextRow();
+					}
+					delete Reader;
+				}
+				delete AggTable;
+			}
+		}
+	}
+
+	Matches.Sort([](const FMatchedScope& A, const FMatchedScope& B) { return A.TotalMs > B.TotalMs; });
+	if (Matches.Num() > MaxResults) Matches.SetNum(MaxResults);
+
+	// Aggregate totals across all matches for the summary
 	double TotalMs = 0.0;
 	double AvgMs = 0.0;
 	uint64 CallCount = 0;
+	for (const FMatchedScope& M : Matches)
+	{
+		TotalMs += M.TotalMs;
+		CallCount += M.CallCount;
+	}
+	AvgMs = CallCount > 0 ? TotalMs / (double)CallCount : 0.0;
 
-	// Build result data
+	TArray<TSharedPtr<FJsonValue>> MatchesArray;
+	for (const FMatchedScope& M : Matches)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("name"), M.Name);
+		Obj->SetNumberField(TEXT("total_ms"), M.TotalMs);
+		Obj->SetNumberField(TEXT("avg_ms"), M.AvgMs);
+		Obj->SetNumberField(TEXT("max_ms"), M.MaxMs);
+		Obj->SetNumberField(TEXT("call_count"), (double)M.CallCount);
+		MatchesArray.Add(MakeShared<FJsonValueObject>(Obj));
+	}
+
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("session_id"), SessionId);
 	Data->SetStringField(TEXT("scope_name"), ScopeName);
 	Data->SetNumberField(TEXT("total_ms"), TotalMs);
 	Data->SetNumberField(TEXT("avg_ms"), AvgMs);
 	Data->SetNumberField(TEXT("call_count"), (double)CallCount);
+	Data->SetArrayField(TEXT("matches"), MatchesArray);
+	Data->SetArrayField(TEXT("callers"), TArray<TSharedPtr<FJsonValue>>());
+	Data->SetArrayField(TEXT("callees"), TArray<TSharedPtr<FJsonValue>>());
 
-	TArray<TSharedPtr<FJsonValue>> CallersArray;
-	TArray<TSharedPtr<FJsonValue>> CalleesArray;
-	Data->SetArrayField(TEXT("callers"), CallersArray);
-	Data->SetArrayField(TEXT("callees"), CalleesArray);
-
-	const FString Summary = FString::Printf(TEXT("Scope '%s': %.1fms avg, called %llu times"),
-		*ScopeName, AvgMs, CallCount);
+	const FString Summary = FString::Printf(TEXT("Scope '%s': %.1fms avg, called %llu times (%d timer(s) matched)"),
+		*ScopeName, AvgMs, CallCount, Matches.Num());
 
 	return MakeSuccessResult(Data, Summary);
 }

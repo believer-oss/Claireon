@@ -196,19 +196,52 @@ namespace ClaireonBlueprintHelpers
 		return true;
 	}
 
-	UEdGraphNode* FindNodeByGuid(UEdGraph* Graph, const FGuid& NodeGuid)
+	UEdGraphNode* FindNodeByGuid(const UEdGraph* Graph, const FGuid& NodeGuid, FGuid* OutCorrectedGuid)
 	{
 		if (!Graph || !NodeGuid.IsValid())
 		{
 			return nullptr;
 		}
 
+		// Exact match
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
 			if (Node && Node->NodeGuid == NodeGuid)
 			{
 				return Node;
 			}
+		}
+
+		// Fallback: match on the A field only. Blueprint recompilation can
+		// regenerate B/C/D while preserving A, causing GUIDs returned by
+		// get_blueprint_graph to go stale by the time edit_blueprint_graph
+		// tries to resolve them.  If exactly one node shares the A field we
+		// treat it as the same logical node and log a warning.
+		UEdGraphNode* AFieldMatch = nullptr;
+		int32 AFieldMatchCount = 0;
+		for (UEdGraphNode* Node : Graph->Nodes)
+		{
+			if (Node && Node->NodeGuid.A == NodeGuid.A)
+			{
+				AFieldMatch = Node;
+				++AFieldMatchCount;
+			}
+		}
+
+		if (AFieldMatchCount == 1 && AFieldMatch)
+		{
+			UE_LOG(LogClaireon, Warning,
+				TEXT("[FindNodeByGuid] Exact GUID match failed — recovered via A-field fallback. ")
+				TEXT("Requested=%s  Matched=%s  Node='%s'. ")
+				TEXT("This usually means the blueprint was recompiled between get and edit calls."),
+				*NodeGuid.ToString(),
+				*AFieldMatch->NodeGuid.ToString(),
+				*AFieldMatch->GetNodeTitle(ENodeTitleType::ListView).ToString());
+			if (OutCorrectedGuid)
+			{
+				*OutCorrectedGuid = AFieldMatch->NodeGuid;
+			}
+			return AFieldMatch;
 		}
 
 		return nullptr;

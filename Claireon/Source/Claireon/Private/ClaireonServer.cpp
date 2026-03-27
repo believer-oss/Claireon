@@ -3,7 +3,13 @@
 
 #include "ClaireonServer.h"
 #include "ClaireonLog.h"
+#include "ClaireonBridge.h"
 #include "Tools/IClaireonTool.h"
+#include "Tools/ClaireonTool_MapOpen.h"
+#include "Tools/ClaireonTool_MapDuplicate.h"
+#include "Tools/ClaireonTool_PIEStart.h"
+#include "Tools/ClaireonTool_PIEStop.h"
+#include "Tools/ClaireonTool_LiveCodingReload.h"
 #include "HttpServerModule.h"
 #include "IHttpRouter.h"
 #include "HttpServerResponse.h"
@@ -528,6 +534,35 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsCall(const FMCPRequestContex
 			});
 
 			ToolResult = Future.Get();
+		}
+	}
+
+	// Drain deferred world-transition actions (map open, PIE start/stop, etc.).
+	// These were previously only dispatched from ExecutePython's post-execution
+	// hook, but MCP direct tool calls bypass Python entirely.
+	if (FClaireonBridge::HasDeferredActions())
+	{
+		TArray<FClaireonDeferredAction> Actions = FClaireonBridge::DrainDeferredActions();
+		for (const FClaireonDeferredAction& Action : Actions)
+		{
+			switch (Action.Type)
+			{
+			case EClaireonDeferredActionType::LoadMap:
+				ClaireonTool_MapOpen::ExecuteDeferredLoadMap(Action.Payload);
+				break;
+			case EClaireonDeferredActionType::PIEStart:
+				ClaireonTool_PIEStart::ExecuteDeferredPIEStart(Action.Payload);
+				break;
+			case EClaireonDeferredActionType::PIEStop:
+				ClaireonTool_PIEStop::ExecuteDeferredPIEStop();
+				break;
+			case EClaireonDeferredActionType::LiveCodingReload:
+				ClaireonTool_LiveCodingReload::ExecuteDeferredLiveCodingReload(Action.Payload);
+				break;
+			case EClaireonDeferredActionType::DuplicateAndOpenMap:
+				ClaireonTool_MapDuplicate::ExecuteDeferredDuplicateAndOpenMap(Action.Payload);
+				break;
+			}
 		}
 	}
 

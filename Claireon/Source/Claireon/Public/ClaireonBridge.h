@@ -18,6 +18,7 @@ enum class EClaireonDeferredActionType : uint8
 	PIEStart,
 	PIEStop,
 	LiveCodingReload,
+	DuplicateAndOpenMap,
 };
 
 /** A queued world-transition action with optional payload (map path, JSON args, etc.). */

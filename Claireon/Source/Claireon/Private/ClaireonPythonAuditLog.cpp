@@ -168,8 +168,30 @@ void FClaireonPythonAuditLog::RotateEntries()
 		return;
 	}
 
+	// Batch rotation: when we need to evict, remove all entries from the same day
+	// as the oldest entry (up to MaxBatchRotation). This avoids rotating 1 entry
+	// at a time on every call and keeps the log on clean day boundaries.
+	static constexpr int32 MaxBatchRotation = 300;
+
+	const FDateTime OldestDay = Entries[0].Timestamp.GetDate();
+	int32 NumToRemove = 0;
+
+	for (int32 i = 0; i < Entries.Num() && NumToRemove < MaxBatchRotation; ++i)
+	{
+		if (Entries[i].Timestamp.GetDate() == OldestDay)
+		{
+			NumToRemove = i + 1;
+		}
+		else
+		{
+			break;
+		}
+	}
+
+	// Always remove at least enough to get back under MaxEntries
+	NumToRemove = FMath::Max(NumToRemove, Entries.Num() - MaxEntries);
+
 	const FString AuditDir = GetAuditLogDir();
-	const int32 NumToRemove = Entries.Num() - MaxEntries;
 
 	for (int32 i = 0; i < NumToRemove; ++i)
 	{
@@ -190,7 +212,7 @@ void FClaireonPythonAuditLog::RotateEntries()
 
 	Entries.RemoveAt(0, NumToRemove);
 
-	UE_LOG(LogClaireon, Display, TEXT("[MCP] PythonAuditLog: Rotated %d old entries, %d remaining"), NumToRemove, Entries.Num());
+	UE_LOG(LogClaireon, Display, TEXT("[MCP] PythonAuditLog: Rotated %d old entries (batch by day), %d remaining"), NumToRemove, Entries.Num());
 }
 
 void FClaireonPythonAuditLog::RecordInvocation(

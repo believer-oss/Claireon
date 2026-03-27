@@ -168,6 +168,12 @@ TSharedPtr<FJsonObject> ClaireonTool_EditBlueprintGraph::GetInputSchema() const
 	SessionProp->SetStringField(TEXT("description"), TEXT("Session ID returned by the 'open' operation. Required for all operations except 'open' and 'create'."));
 	Properties->SetObjectField(TEXT("session_id"), SessionProp);
 
+	// timeout_minutes - optional, for open/create
+	TSharedPtr<FJsonObject> TimeoutProp = MakeShared<FJsonObject>();
+	TimeoutProp->SetStringField(TEXT("type"), TEXT("number"));
+	TimeoutProp->SetStringField(TEXT("description"), TEXT("Session timeout in minutes (default: 60). Use higher values for known-long workflows."));
+	Properties->SetObjectField(TEXT("timeout_minutes"), TimeoutProp);
+
 	// graph_name - optional
 	TSharedPtr<FJsonObject> GraphProp = MakeShared<FJsonObject>();
 	GraphProp->SetStringField(TEXT("type"), TEXT("string"));
@@ -318,7 +324,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Execute(const TSharedPtr<FJsonObjec
 		FString SessionId;
 		if (!Arguments->TryGetStringField(TEXT("session_id"), SessionId))
 		{
-			return MakeErrorResult(TEXT("Missing 'session_id' field (required for all operations except 'open' and 'create')"));
+			return MakeErrorResult(FString::Printf(TEXT("Missing 'session_id' for operation '%s'. First call open(asset_path='/Game/...') to get a session_id, then pass it to subsequent operations."), *Operation));
 		}
 
 		// Find the session in the manager
@@ -500,6 +506,25 @@ void ClaireonTool_EditBlueprintGraph::HandleSessionClosed(const FMCPSessionClose
 }
 
 // ============================================================================
+// GUID lookup helper — wraps FindNodeByGuid and records A-field fallback
+// corrections so they can be surfaced in the MCP response.
+// ============================================================================
+
+static UEdGraphNode* FindNodeForOperation(
+	UEdGraph* Graph,
+	const FGuid& RequestedGuid,
+	FBlueprintEditToolData* Data)
+{
+	FGuid CorrectedGuid;
+	UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, RequestedGuid, &CorrectedGuid);
+	if (Node && CorrectedGuid.IsValid() && Data)
+	{
+		Data->GuidCorrections.Add(RequestedGuid, CorrectedGuid);
+	}
+	return Node;
+}
+
+// ============================================================================
 // Operations (Placeholders - will be implemented incrementally)
 // ============================================================================
 
@@ -549,17 +574,20 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_Open(const TSharedPtr<FJs
 	}
 
 	// Open session via the manager (handles locking)
-	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(AssetPath, TEXT("editor.blueprint.edit"));
+	double TimeoutMinutes = 60.0;
+	Params->TryGetNumberField(TEXT("timeout_minutes"), TimeoutMinutes);
+	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(AssetPath, TEXT("editor.blueprint.edit"), TimeoutMinutes);
 
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{
 		const FMCPSession& Blocker = OpenResult.BlockingSession.GetValue();
 		const FTimespan Elapsed = FDateTime::UtcNow() - Blocker.LastAccessTime;
 		return MakeErrorResult(FString::Printf(
-			TEXT("Asset is locked by %s session %s (last activity %dm %ds ago). Close that session first."),
+			TEXT("Asset is locked by %s session %s (last activity %dm %ds ago). Close that session first, or use mcp_release_sessions(asset_path='%s') to force-release it."),
 			*Blocker.ToolName, *Blocker.SessionId,
 			static_cast<int32>(Elapsed.GetTotalMinutes()),
-			static_cast<int32>(Elapsed.GetTotalSeconds()) % 60));
+			static_cast<int32>(Elapsed.GetTotalSeconds()) % 60,
+			*AssetPath));
 	}
 
 	if (OpenResult.Result == EOpenSessionResult::InvalidAssetPath)
@@ -717,17 +745,20 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_Create(const TSharedPtr<F
 	}
 
 	// Open session via the manager (handles locking)
-	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(Blueprint->GetPathName(), TEXT("editor.blueprint.edit"));
+	double TimeoutMinutes = 60.0;
+	Params->TryGetNumberField(TEXT("timeout_minutes"), TimeoutMinutes);
+	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(Blueprint->GetPathName(), TEXT("editor.blueprint.edit"), TimeoutMinutes);
 
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{
 		const FMCPSession& Blocker = OpenResult.BlockingSession.GetValue();
 		const FTimespan Elapsed = FDateTime::UtcNow() - Blocker.LastAccessTime;
 		return MakeErrorResult(FString::Printf(
-			TEXT("Asset is locked by %s session %s (last activity %dm %ds ago). Close that session first."),
+			TEXT("Asset is locked by %s session %s (last activity %dm %ds ago). Close that session first, or use mcp_release_sessions(asset_path='%s') to force-release it."),
 			*Blocker.ToolName, *Blocker.SessionId,
 			static_cast<int32>(Elapsed.GetTotalMinutes()),
-			static_cast<int32>(Elapsed.GetTotalSeconds()) % 60));
+			static_cast<int32>(Elapsed.GetTotalSeconds()) % 60,
+			*Blueprint->GetPathName()));
 	}
 
 	if (OpenResult.Result == EOpenSessionResult::InvalidAssetPath)
@@ -1733,7 +1764,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_RemoveNode(const FString&
 	}
 
 	// Find the node
-	UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
+	UEdGraphNode* Node = FindNodeForOperation(Graph, NodeGuid, Data);
 	if (!Node)
 	{
 		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
@@ -1824,7 +1855,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_ConnectPins(const FString
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Invalid source_node_guid format: %s"), *SourceNodeGuidStr));
 		}
-		SourceNode = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, SourceNodeGuid);
+		SourceNode = FindNodeForOperation(Graph, SourceNodeGuid, Data);
 		if (!SourceNode)
 		{
 			FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
@@ -1863,7 +1894,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_ConnectPins(const FString
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Invalid target_node_guid format: %s"), *TargetNodeGuidStr));
 		}
-		TargetNode = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, TargetNodeGuid);
+		TargetNode = FindNodeForOperation(Graph, TargetNodeGuid, Data);
 		if (!TargetNode)
 		{
 			FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
@@ -2023,7 +2054,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_DisconnectPin(const FStri
 	}
 
 	// Find node
-	UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
+	UEdGraphNode* Node = FindNodeForOperation(Graph, NodeGuid, Data);
 	if (!Node)
 	{
 		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
@@ -2114,7 +2145,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_SetPinValue(const FString
 	}
 
 	// Find node
-	UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
+	UEdGraphNode* Node = FindNodeForOperation(Graph, NodeGuid, Data);
 	if (!Node)
 	{
 		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
@@ -2742,7 +2773,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_SelectNode(const FString&
 	}
 
 	// Find the node
-	UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
+	UEdGraphNode* Node = FindNodeForOperation(Graph, NodeGuid, Data);
 	if (!Node)
 	{
 		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
@@ -2799,7 +2830,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_SelectPin(const FString& 
 	}
 
 	// Find the node
-	UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
+	UEdGraphNode* Node = FindNodeForOperation(Graph, NodeGuid, Data);
 	if (!Node)
 	{
 		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
@@ -3226,11 +3257,27 @@ FToolResult ClaireonTool_EditBlueprintGraph::BuildStateResponse(const FString& S
 	}
 
 	// =========================================================================
+	// Surface GUID corrections so the MCP client can update stale references
+	// =========================================================================
+	FString GuidCorrectionNote;
+	if (Data->GuidCorrections.Num() > 0)
+	{
+		GuidCorrectionNote = TEXT("\n\n## GUID Corrections (blueprint was recompiled — update your references)\n");
+		for (const auto& Pair : Data->GuidCorrections)
+		{
+			GuidCorrectionNote += FString::Printf(TEXT("  %s → %s\n"),
+				*Pair.Key.ToString(), *Pair.Value.ToString());
+		}
+		Data->GuidCorrections.Empty();
+	}
+
+	// =========================================================================
 	// "status" mode — brief status line only
 	// =========================================================================
 	if (EffectiveMode == TEXT("status"))
 	{
-		return MakeSuccessResult(nullptr, Data->Cursor.LastOperationStatus.IsEmpty() ? TEXT("ok") : FString::Printf(TEXT("ok: %s"), *Data->Cursor.LastOperationStatus));
+		FString StatusMsg = Data->Cursor.LastOperationStatus.IsEmpty() ? TEXT("ok") : FString::Printf(TEXT("ok: %s"), *Data->Cursor.LastOperationStatus);
+		return MakeSuccessResult(nullptr, StatusMsg + GuidCorrectionNote);
 	}
 
 	// =========================================================================
@@ -3353,7 +3400,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::BuildStateResponse(const FString& S
 			TEXT("(Full graph: %d nodes. Use editor.blueprint.getGraph to see all.)"),
 			TotalNodes);
 
-		return MakeSuccessResult(nullptr, DiffText);
+		return MakeSuccessResult(nullptr, DiffText + GuidCorrectionNote);
 	}
 
 	// =========================================================================
@@ -3399,7 +3446,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::BuildStateResponse(const FString& S
 					}
 				}
 
-				StatusText += FString::Printf(TEXT("Position: (%d, %d)\n"), static_cast<int32>(FocusedNode->NodePosX), static_cast<int32>(FocusedNode->NodePosY));
+				StatusText += FString::Printf(TEXT("Position: (%.0f, %.0f)\n"), FocusedNode->NodePosX, FocusedNode->NodePosY);
 			}
 			else
 			{
@@ -3427,11 +3474,11 @@ FToolResult ClaireonTool_EditBlueprintGraph::BuildStateResponse(const FString& S
 			FString NodeTitle = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();
 			bool bIsCursor = (Node->NodeGuid == Data->Cursor.FocusedNodeGuid);
 
-			StatusText += FString::Printf(TEXT("%d. [%s] @ (%d, %d)%s\n"),
+			StatusText += FString::Printf(TEXT("%d. [%s] @ (%.0f, %.0f)%s\n"),
 				NodeIndex++,
 				*NodeTitle,
-				static_cast<int32>(Node->NodePosX),
-				static_cast<int32>(Node->NodePosY),
+				Node->NodePosX,
+				Node->NodePosY,
 				bIsCursor ? TEXT(" <<<CURSOR>>>") : TEXT(""));
 
 			// Show execution connections (simplified)
@@ -3474,7 +3521,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::BuildStateResponse(const FString& S
 			}
 		}
 
-		return MakeSuccessResult(nullptr, StatusText);
+		return MakeSuccessResult(nullptr, StatusText + GuidCorrectionNote);
 	}
 }
 
@@ -3610,7 +3657,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_RemoveNodeStateless(const
 	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
 		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
 
-	UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
+	UEdGraphNode* Node = FindNodeForOperation(Graph, NodeGuid, nullptr);
 	if (!Node)
 	{
 		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
@@ -3650,7 +3697,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_ReconstructNode(const FSt
 	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
 		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
 
-	UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
+	UEdGraphNode* Node = FindNodeForOperation(Graph, NodeGuid, Data);
 	if (!Node)
 	{
 		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
@@ -3695,7 +3742,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_ReconstructNodeStateless(
 	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
 		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
 
-	UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
+	UEdGraphNode* Node = FindNodeForOperation(Graph, NodeGuid, nullptr);
 	if (!Node)
 	{
 		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
@@ -3732,7 +3779,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddPin(const FString& Ses
 	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
 		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
 
-	UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
+	UEdGraphNode* Node = FindNodeForOperation(Graph, NodeGuid, Data);
 	if (!Node)
 	{
 		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
@@ -3846,7 +3893,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_RemovePin(const FString& 
 	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
 		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
 
-	UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
+	UEdGraphNode* Node = FindNodeForOperation(Graph, NodeGuid, Data);
 	if (!Node)
 	{
 		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
@@ -3973,7 +4020,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_SplitPin(const FString& S
 	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
 		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
 
-	UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
+	UEdGraphNode* Node = FindNodeForOperation(Graph, NodeGuid, Data);
 	if (!Node)
 	{
 		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
@@ -4044,7 +4091,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_RecombinePin(const FStrin
 	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
 		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
 
-	UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
+	UEdGraphNode* Node = FindNodeForOperation(Graph, NodeGuid, Data);
 	if (!Node)
 	{
 		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);

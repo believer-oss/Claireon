@@ -39,6 +39,26 @@
 // File-local helpers for graph traversal (replacing non-exported engine functions)
 // ============================================================================
 
+/**
+ * Local reimplementation of FNiagaraStackGraphUtilities::GetStackFunctionInputs
+ * which is not exported from NiagaraEditor in UE 5.5. Enumerates module-level input
+ * variables (Module.* pins) on a function call node using only exported graph APIs.
+ */
+static void GetModuleInputVariables(UNiagaraNodeFunctionCall& ModuleNode, TArray<FNiagaraVariable>& OutInputVars)
+{
+	FPinCollectorArray InputPins;
+	ModuleNode.GetInputPins(InputPins);
+	for (UEdGraphPin* Pin : InputPins)
+	{
+		if (!Pin) continue;
+		const FString PinName = Pin->PinName.ToString();
+		if (!PinName.StartsWith(TEXT("Module."))) continue;
+		FNiagaraTypeDefinition PinType = UEdGraphSchema_Niagara::PinToTypeDefinition(Pin);
+		if (!PinType.IsValid()) continue;
+		OutInputVars.Emplace(PinType, *PinName);
+	}
+}
+
 /** Find the ParameterMap input pin on a Niagara node by checking pin types. */
 static UEdGraphPin* FindParameterMapInputPin(UNiagaraNode& Node)
 {
@@ -1376,8 +1396,7 @@ FToolResult ClaireonTool_NiagaraEdit::Operation_GetModuleInputs(const FString& S
 
 	// Get all module inputs
 	TArray<FNiagaraVariable> InputVars;
-	FCompileConstantResolver ConstantResolver;
-	FNiagaraStackGraphUtilities::GetStackFunctionInputs(*ModuleNode, InputVars, ConstantResolver, FNiagaraStackGraphUtilities::ENiagaraGetStackFunctionInputPinsOptions::ModuleInputsOnly);
+	GetModuleInputVariables(*ModuleNode, InputVars);
 
 	// Build output
 	FString Output;
@@ -1538,8 +1557,7 @@ FToolResult ClaireonTool_NiagaraEdit::Operation_SetModuleInput(const FString& Se
 
 	// Get all module inputs
 	TArray<FNiagaraVariable> InputVars;
-	FCompileConstantResolver ConstantResolver;
-	FNiagaraStackGraphUtilities::GetStackFunctionInputs(*ModuleNode, InputVars, ConstantResolver, FNiagaraStackGraphUtilities::ENiagaraGetStackFunctionInputPinsOptions::ModuleInputsOnly);
+	GetModuleInputVariables(*ModuleNode, InputVars);
 
 	// Find matching input by name (case-insensitive)
 	const FNiagaraVariable* MatchedVar = nullptr;
@@ -1873,15 +1891,16 @@ FToolResult ClaireonTool_NiagaraEdit::Operation_Create(const TSharedPtr<FJsonObj
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create package: %s"), *PackageName));
 	}
 
-	// Create the system using factory
-	UNiagaraSystemFactoryNew* Factory = NewObject<UNiagaraSystemFactoryNew>();
-	UNiagaraSystem* System = Cast<UNiagaraSystem>(Factory->FactoryCreateNew(UNiagaraSystem::StaticClass(), Package, *FPackageName::GetShortName(AssetPath), RF_Public | RF_Standalone, nullptr, GWarn));
+	// UNiagaraSystemFactoryNew is not exported (no NIAGARAEDITOR_API on class) in UE 5.5.
+	// Create the system directly and initialize via the exported static InitializeSystem.
+	UNiagaraSystem* System = NewObject<UNiagaraSystem>(Package, *FPackageName::GetShortName(AssetPath), RF_Public | RF_Standalone);
 	if (!System)
 	{
-		return MakeErrorResult(TEXT("Failed to create Niagara System via factory"));
+		return MakeErrorResult(TEXT("Failed to create Niagara System"));
 	}
 
-	// Initialize with default nodes (SystemState etc.) — required for emitters to resolve dependencies
+	// Initialize with default nodes (SystemState etc.) — required for emitters to resolve dependencies.
+	// InitializeSystem is NIAGARAEDITOR_API and available in all supported engine versions.
 	UNiagaraSystemFactoryNew::InitializeSystem(System, true);
 
 	// Save package

@@ -144,6 +144,12 @@ struct FBlueprintEditToolData
 	// Snapshotted before each mutation op; consumed by BuildStateResponse in "changed" mode.
 	TMap<FGuid, TMap<FName, TArray<FString>>> PreOpPinConnections;
 
+	// GUID corrections from the current operation (stale GUID -> current GUID).
+	// Populated by FindNodeByGuid's A-field fallback when a blueprint was recompiled
+	// between get and edit calls.  Surfaced in BuildStateResponse so the MCP client
+	// can update its references.
+	TMap<FGuid, FGuid> GuidCorrections;
+
 	/** Check if the session is still valid (Blueprint and Graph are still loaded) */
 	bool IsValid() const
 	{
@@ -205,9 +211,10 @@ namespace ClaireonBlueprintHelpers
 	 *
 	 * @param Graph The graph to search
 	 * @param NodeGuid The GUID of the node to find
+	 * @param OutCorrectedGuid If non-null and a fallback match was used, receives the node's actual GUID so callers can surface the correction.
 	 * @return The node, or nullptr if not found
 	 */
-	UEdGraphNode* FindNodeByGuid(UEdGraph* Graph, const FGuid& NodeGuid);
+	UEdGraphNode* FindNodeByGuid(const UEdGraph* Graph, const FGuid& NodeGuid, FGuid* OutCorrectedGuid = nullptr);
 
 	/**
 	 * Find nodes in a graph by their title (display name).

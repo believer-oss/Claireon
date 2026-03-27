@@ -82,6 +82,12 @@
 // Level tools
 #include "Tools/ClaireonTool_ListActors.h"
 #include "Tools/ClaireonTool_LevelSetActorProperty.h"
+#include "Tools/ClaireonTool_PlaceActor.h"
+#include "Tools/ClaireonTool_MapDuplicate.h"
+#include "Tools/ClaireonTool_SetSplinePoints.h"
+
+// Blueprint CDO tools
+#include "Tools/ClaireonTool_SetBlueprintCDOProperty.h"
 
 // Meta tools
 #include "Tools/ClaireonTool_SearchTools.h"
@@ -304,6 +310,12 @@ void FClaireonModule::StartServer()
 	// Level tools
 	Server->RegisterTool(MakeShared<ClaireonTool_ListActors>());
 	Server->RegisterTool(MakeShared<ClaireonTool_LevelSetActorProperty>());
+	Server->RegisterTool(MakeShared<ClaireonTool_PlaceActor>());
+	Server->RegisterTool(MakeShared<ClaireonTool_MapDuplicate>());
+	Server->RegisterTool(MakeShared<ClaireonTool_SetSplinePoints>());
+
+	// Blueprint CDO tools
+	Server->RegisterTool(MakeShared<ClaireonTool_SetBlueprintCDOProperty>());
 
 	// Meta tools
 	{
