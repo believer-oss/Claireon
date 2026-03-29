@@ -21,6 +21,20 @@
 #include "Animation/WidgetAnimation.h"
 #include "WidgetBlueprintEditorUtils.h"
 #include "ScopedTransaction.h"
+#include "MovieScene.h"
+#include "MovieScenePossessable.h"
+#include "MovieSceneBinding.h"
+#include "Animation/WidgetAnimationBinding.h"
+#include "Components/PanelSlot.h"
+#include "Tracks/MovieSceneFloatTrack.h"
+#include "Tracks/MovieScenePropertyTrack.h"
+#include "Tracks/MovieSceneBoolTrack.h"
+#include "Tracks/MovieSceneColorTrack.h"
+#include "Sections/MovieSceneFloatSection.h"
+#include "Sections/MovieSceneBoolSection.h"
+#include "Sections/MovieSceneColorSection.h"
+#include "Channels/MovieSceneFloatChannel.h"
+#include "Channels/MovieSceneBoolChannel.h"
 #include "HAL/FileManager.h"
 #include "UObject/UObjectIterator.h"
 #include "MVVMBlueprintView.h"
@@ -73,10 +87,21 @@ FString ClaireonTool_EditWidgetBP::GetFullDescription() const
 				"Advanced (session_id required):\n"
 				"- add_binding: params: widget_name (required), property_name (required), function_name (required)\n"
 				"- remove_binding: params: widget_name (required), property_name (required)\n"
-				"- list_animations: (no params)\n"
+				"- list_animations: params: include_details (optional, default false)\n"
 				"- import_widgets: params: widget_text (required)\n"
 				"- export_widgets: params: widget_names (required, array of strings)\n"
 				"- list_widget_classes: (no params)\n\n"
+				"Animation operations (session_id required):\n"
+				"- create_animation: params: animation_name (required), duration (optional, default 5.0), display_rate (optional, default 20)\n"
+				"- delete_animation: params: animation_name (required)\n"
+				"- rename_animation: params: animation_name (required), new_name (required)\n"
+				"- duplicate_animation: params: animation_name (required), new_name (optional)\n"
+				"- get_animation_details: params: animation_name (required)\n"
+				"- add_animation_binding: params: animation_name (required), widget_name (required), include_slot (optional, default false)\n"
+				"- add_animation_track: params: animation_name (required), widget_name (required), property_path (required), target (optional, default \"widget\")\n"
+				"- add_animation_keyframe: params: animation_name (required), widget_name (required), property_path (required), time (required), value (required), interpolation (optional, default \"cubic\"), target (optional, default \"widget\")\n"
+				"- remove_animation_keyframe: params: animation_name (required), widget_name (required), property_path (required), time (required), target (optional, default \"widget\")\n"
+				"- set_animation_property: params: animation_name (required), duration (optional), start_time (optional), display_rate (optional)\n\n"
 				"MVVM ViewModel operations (session_id required):\n"
 				"- list_mvvm_viewmodels: (no params)\n"
 				"- add_mvvm_viewmodel: params: viewmodel_name (required), viewmodel_class (required), creation_type (optional, default \"Manual\"), optional (optional, default false)\n"
@@ -120,6 +145,16 @@ TSharedPtr<FJsonObject> ClaireonTool_EditWidgetBP::GetInputSchema() const
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("import_widgets")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("export_widgets")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("list_widget_classes")));
+	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("create_animation")));
+	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("delete_animation")));
+	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("rename_animation")));
+	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("duplicate_animation")));
+	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("get_animation_details")));
+	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("add_animation_binding")));
+	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("add_animation_track")));
+	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("add_animation_keyframe")));
+	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("remove_animation_keyframe")));
+	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("set_animation_property")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("list_mvvm_viewmodels")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("add_mvvm_viewmodel")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("remove_mvvm_viewmodel")));
@@ -276,6 +311,47 @@ FToolResult ClaireonTool_EditWidgetBP::Execute(const TSharedPtr<FJsonObject>& Ar
 	if (Operation == TEXT("list_widget_classes"))
 	{
 		return Operation_ListWidgetClasses(SessionId, Data, Params);
+	}
+	// Animation operations
+	if (Operation == TEXT("create_animation"))
+	{
+		return Operation_CreateAnimation(SessionId, Data, Params);
+	}
+	if (Operation == TEXT("delete_animation"))
+	{
+		return Operation_DeleteAnimation(SessionId, Data, Params);
+	}
+	if (Operation == TEXT("rename_animation"))
+	{
+		return Operation_RenameAnimation(SessionId, Data, Params);
+	}
+	if (Operation == TEXT("duplicate_animation"))
+	{
+		return Operation_DuplicateAnimation(SessionId, Data, Params);
+	}
+	if (Operation == TEXT("get_animation_details"))
+	{
+		return Operation_GetAnimationDetails(SessionId, Data, Params);
+	}
+	if (Operation == TEXT("add_animation_binding"))
+	{
+		return Operation_AddAnimationBinding(SessionId, Data, Params);
+	}
+	if (Operation == TEXT("add_animation_track"))
+	{
+		return Operation_AddAnimationTrack(SessionId, Data, Params);
+	}
+	if (Operation == TEXT("add_animation_keyframe"))
+	{
+		return Operation_AddAnimationKeyframe(SessionId, Data, Params);
+	}
+	if (Operation == TEXT("remove_animation_keyframe"))
+	{
+		return Operation_RemoveAnimationKeyframe(SessionId, Data, Params);
+	}
+	if (Operation == TEXT("set_animation_property"))
+	{
+		return Operation_SetAnimationProperty(SessionId, Data, Params);
 	}
 	if (Operation == TEXT("list_mvvm_viewmodels"))
 	{
@@ -1462,6 +1538,9 @@ FToolResult ClaireonTool_EditWidgetBP::Operation_ListAnimations(const FString& S
 		return MakeErrorResult(TEXT("Widget Blueprint is no longer valid"));
 	}
 
+	bool bIncludeDetails = false;
+	Params->TryGetBoolField(TEXT("include_details"), bIncludeDetails);
+
 	TArray<TSharedPtr<FJsonValue>> AnimArray;
 	for (UWidgetAnimation* Anim : WBP->Animations)
 	{
@@ -1470,10 +1549,18 @@ FToolResult ClaireonTool_EditWidgetBP::Operation_ListAnimations(const FString& S
 			continue;
 		}
 
-		TSharedPtr<FJsonObject> AnimObj = MakeShared<FJsonObject>();
-		AnimObj->SetStringField(TEXT("name"), Anim->GetFName().ToString());
-		AnimObj->SetNumberField(TEXT("start_time"), Anim->GetStartTime());
-		AnimObj->SetNumberField(TEXT("end_time"), Anim->GetEndTime());
+		TSharedPtr<FJsonObject> AnimObj;
+		if (bIncludeDetails)
+		{
+			AnimObj = ClaireonWidgetHelpers::SerializeAnimationDetails(Anim);
+		}
+		else
+		{
+			AnimObj = MakeShared<FJsonObject>();
+			AnimObj->SetStringField(TEXT("name"), Anim->GetDisplayName().ToString());
+			AnimObj->SetNumberField(TEXT("start_time"), Anim->GetStartTime());
+			AnimObj->SetNumberField(TEXT("end_time"), Anim->GetEndTime());
+		}
 		AnimArray.Add(MakeShared<FJsonValueObject>(AnimObj));
 	}
 
@@ -1481,12 +1568,7 @@ FToolResult ClaireonTool_EditWidgetBP::Operation_ListAnimations(const FString& S
 	ResultObj->SetArrayField(TEXT("animations"), AnimArray);
 	ResultObj->SetNumberField(TEXT("count"), AnimArray.Num());
 
-	FString ResultString;
-	TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> Writer =
-		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&ResultString);
-	FJsonSerializer::Serialize(ResultObj.ToSharedRef(), Writer);
-
-	return MakeErrorResult(ResultString);
+	return MakeSuccessResult(ResultObj, TEXT(""));
 }
 
 FToolResult ClaireonTool_EditWidgetBP::Operation_ImportWidgets(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
@@ -2328,6 +2410,876 @@ FToolResult ClaireonTool_EditWidgetBP::Operation_RemoveMVVMBinding(const FString
 	ResultObj->SetStringField(TEXT("removed_binding_id"), BindingIdStr);
 
 	return MakeSuccessResult(ResultObj, FString::Printf(TEXT("Removed MVVM binding '%s'"), *BindingIdStr));
+}
+
+// ============================================================================
+// Animation Operations — Helpers
+// ============================================================================
+
+static UWidgetAnimation* FindAnimationByName(UWidgetBlueprint* WBP, const FString& AnimationName)
+{
+	for (UWidgetAnimation* Anim : WBP->Animations)
+	{
+		if (Anim && Anim->GetDisplayName().ToString() == AnimationName)
+		{
+			return Anim;
+		}
+	}
+	return nullptr;
+}
+
+static FString GetAnimationNameList(UWidgetBlueprint* WBP)
+{
+	TArray<FString> Names;
+	for (UWidgetAnimation* Anim : WBP->Animations)
+	{
+		if (Anim)
+		{
+			Names.Add(Anim->GetDisplayName().ToString());
+		}
+	}
+	return Names.Num() > 0 ? FString::Join(Names, TEXT(", ")) : TEXT("(none)");
+}
+
+static void AddFloatKey(FMovieSceneFloatChannel& Channel, FFrameNumber Frame, float Value, const FString& Interpolation)
+{
+	if (Interpolation == TEXT("linear"))
+	{
+		Channel.AddLinearKey(Frame, Value);
+	}
+	else if (Interpolation == TEXT("constant"))
+	{
+		Channel.AddConstantKey(Frame, Value);
+	}
+	else
+	{
+		Channel.AddCubicKey(Frame, Value);
+	}
+}
+
+static UMovieSceneTrack* FindTrackByPropertyPath(UMovieScene* MovieScene, const FGuid& PossessableGuid, const FString& PropertyPath)
+{
+	const FMovieSceneBinding* Binding = MovieScene->FindBinding(PossessableGuid);
+	if (!Binding)
+	{
+		return nullptr;
+	}
+
+	for (UMovieSceneTrack* Track : Binding->GetTracks())
+	{
+		if (UMovieScenePropertyTrack* PropTrack = Cast<UMovieScenePropertyTrack>(Track))
+		{
+			if (PropTrack->GetPropertyName() == FName(*PropertyPath))
+			{
+				return Track;
+			}
+		}
+	}
+	return nullptr;
+}
+
+static FGuid FindPossessableGuidForWidget(UWidgetAnimation* Animation, const FString& WidgetName, const FString& Target)
+{
+	for (const FWidgetAnimationBinding& Binding : Animation->AnimationBindings)
+	{
+		if (Binding.WidgetName == FName(*WidgetName))
+		{
+			if (Target == TEXT("slot") && Binding.SlotWidgetName != NAME_None)
+			{
+				return Binding.AnimationGuid;
+			}
+			else if (Target == TEXT("widget") && Binding.SlotWidgetName == NAME_None)
+			{
+				return Binding.AnimationGuid;
+			}
+		}
+	}
+	return FGuid();
+}
+
+// ============================================================================
+// Animation Operations — Lifecycle
+// ============================================================================
+
+FToolResult ClaireonTool_EditWidgetBP::Operation_CreateAnimation(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+{
+	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
+	if (!WBP)
+	{
+		return MakeErrorResult(TEXT("Widget Blueprint is no longer valid"));
+	}
+
+	FString AnimationName;
+	if (!Params->TryGetStringField(TEXT("animation_name"), AnimationName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: animation_name"));
+	}
+
+	double Duration = 5.0;
+	Params->TryGetNumberField(TEXT("duration"), Duration);
+	if (Duration <= 0.0)
+	{
+		return MakeErrorResult(TEXT("Duration must be positive"));
+	}
+
+	int32 DisplayRate = 20;
+	{
+		double DisplayRateDouble = 20.0;
+		if (Params->TryGetNumberField(TEXT("display_rate"), DisplayRateDouble))
+		{
+			DisplayRate = static_cast<int32>(DisplayRateDouble);
+		}
+	}
+	if (DisplayRate <= 0)
+	{
+		return MakeErrorResult(TEXT("Display rate must be positive"));
+	}
+
+	// Ensure unique name
+	FString UniqueName = AnimationName;
+	int32 NameIndex = 1;
+	while (FindAnimationByName(WBP, UniqueName) != nullptr)
+	{
+		UniqueName = FString::Printf(TEXT("%s_%d"), *AnimationName, NameIndex);
+		NameIndex++;
+	}
+
+	const FScopedTransaction Transaction(LOCTEXT("MCPCreateAnimation", "MCP: Create Animation"));
+	WBP->Modify();
+
+	UWidgetAnimation* NewAnimation = NewObject<UWidgetAnimation>(WBP, FName(), RF_Transactional);
+	NewAnimation->SetDisplayLabel(UniqueName);
+	NewAnimation->Rename(*UniqueName);
+
+	const FName NewFName = FName(*UniqueName);
+	NewAnimation->MovieScene = NewObject<UMovieScene>(NewAnimation, NewFName, RF_Transactional);
+	NewAnimation->MovieScene->SetDisplayRate(FFrameRate(DisplayRate, 1));
+
+	// Convert duration to frames using tick resolution
+	const FFrameRate TickResolution = NewAnimation->MovieScene->GetTickResolution();
+	const FFrameTime EndFrame = Duration * TickResolution;
+	NewAnimation->MovieScene->SetPlaybackRange(TRange<FFrameNumber>(FFrameNumber(0), EndFrame.FrameNumber + 1));
+	NewAnimation->MovieScene->GetEditorData().WorkStart = 0.0f;
+	NewAnimation->MovieScene->GetEditorData().WorkEnd = static_cast<float>(Duration);
+
+	WBP->Animations.Add(NewAnimation);
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
+	Data->bModified = true;
+
+	TSharedPtr<FJsonObject> ResultObj = ClaireonWidgetHelpers::SerializeAnimationDetails(NewAnimation);
+	ResultObj->SetBoolField(TEXT("success"), true);
+
+	return MakeSuccessResult(ResultObj, TEXT(""));
+}
+
+FToolResult ClaireonTool_EditWidgetBP::Operation_DeleteAnimation(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+{
+	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
+	if (!WBP)
+	{
+		return MakeErrorResult(TEXT("Widget Blueprint is no longer valid"));
+	}
+
+	FString AnimationName;
+	if (!Params->TryGetStringField(TEXT("animation_name"), AnimationName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: animation_name"));
+	}
+
+	UWidgetAnimation* Animation = FindAnimationByName(WBP, AnimationName);
+	if (!Animation)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Animation '%s' not found. Available: %s"), *AnimationName, *GetAnimationNameList(WBP)));
+	}
+
+	{
+		const FScopedTransaction Transaction(LOCTEXT("MCPDeleteAnimation", "MCP: Delete Animation"));
+		WBP->Modify();
+		Animation->Rename(nullptr, GetTransientPackage());
+		WBP->Animations.Remove(Animation);
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
+	Data->bModified = true;
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetBoolField(TEXT("success"), true);
+	ResultObj->SetStringField(TEXT("deleted_animation"), AnimationName);
+
+	return MakeSuccessResult(ResultObj, TEXT(""));
+}
+
+FToolResult ClaireonTool_EditWidgetBP::Operation_RenameAnimation(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+{
+	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
+	if (!WBP)
+	{
+		return MakeErrorResult(TEXT("Widget Blueprint is no longer valid"));
+	}
+
+	FString AnimationName;
+	if (!Params->TryGetStringField(TEXT("animation_name"), AnimationName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: animation_name"));
+	}
+
+	FString NewName;
+	if (!Params->TryGetStringField(TEXT("new_name"), NewName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: new_name"));
+	}
+
+	UWidgetAnimation* Animation = FindAnimationByName(WBP, AnimationName);
+	if (!Animation)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Animation '%s' not found. Available: %s"), *AnimationName, *GetAnimationNameList(WBP)));
+	}
+
+	// Check new name is unique
+	if (FindAnimationByName(WBP, NewName) != nullptr)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("An animation named '%s' already exists"), *NewName));
+	}
+
+	const FName OldFName = Animation->GetFName();
+	const FName NewFName = FName(*NewName);
+
+	{
+		const FScopedTransaction Transaction(LOCTEXT("MCPRenameAnimation", "MCP: Rename Animation"));
+		Animation->Modify();
+		Animation->GetMovieScene()->Modify();
+
+		Animation->SetDisplayLabel(NewName);
+		Animation->Rename(*NewName);
+		Animation->GetMovieScene()->Rename(*NewName);
+	}
+
+	// ReplaceVariableReferences must be called outside the transaction
+	FBlueprintEditorUtils::ReplaceVariableReferences(WBP, OldFName, NewFName);
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
+	Data->bModified = true;
+
+	TSharedPtr<FJsonObject> ResultObj = ClaireonWidgetHelpers::SerializeAnimationDetails(Animation);
+	ResultObj->SetBoolField(TEXT("success"), true);
+
+	return MakeSuccessResult(ResultObj, TEXT(""));
+}
+
+FToolResult ClaireonTool_EditWidgetBP::Operation_DuplicateAnimation(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+{
+	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
+	if (!WBP)
+	{
+		return MakeErrorResult(TEXT("Widget Blueprint is no longer valid"));
+	}
+
+	FString AnimationName;
+	if (!Params->TryGetStringField(TEXT("animation_name"), AnimationName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: animation_name"));
+	}
+
+	UWidgetAnimation* SourceAnimation = FindAnimationByName(WBP, AnimationName);
+	if (!SourceAnimation)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Animation '%s' not found. Available: %s"), *AnimationName, *GetAnimationNameList(WBP)));
+	}
+
+	FString NewName;
+	if (!Params->TryGetStringField(TEXT("new_name"), NewName))
+	{
+		NewName = AnimationName + TEXT("_Copy");
+	}
+
+	// Ensure unique name
+	FString UniqueName = NewName;
+	int32 NameIndex = 1;
+	while (FindAnimationByName(WBP, UniqueName) != nullptr)
+	{
+		UniqueName = FString::Printf(TEXT("%s_%d"), *NewName, NameIndex);
+		NameIndex++;
+	}
+
+	const FScopedTransaction Transaction(LOCTEXT("MCPDuplicateAnimation", "MCP: Duplicate Animation"));
+	WBP->Modify();
+
+	UWidgetAnimation* NewAnimation = DuplicateObject<UWidgetAnimation>(
+		SourceAnimation,
+		WBP,
+		MakeUniqueObjectName(WBP, UWidgetAnimation::StaticClass(), FName(*UniqueName)));
+
+	NewAnimation->MovieScene->Rename(*UniqueName, nullptr, REN_DontCreateRedirectors);
+	NewAnimation->SetDisplayLabel(UniqueName);
+	WBP->Animations.Add(NewAnimation);
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
+	Data->bModified = true;
+
+	TSharedPtr<FJsonObject> ResultObj = ClaireonWidgetHelpers::SerializeAnimationDetails(NewAnimation);
+	ResultObj->SetBoolField(TEXT("success"), true);
+
+	return MakeSuccessResult(ResultObj, TEXT(""));
+}
+
+FToolResult ClaireonTool_EditWidgetBP::Operation_GetAnimationDetails(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+{
+	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
+	if (!WBP)
+	{
+		return MakeErrorResult(TEXT("Widget Blueprint is no longer valid"));
+	}
+
+	FString AnimationName;
+	if (!Params->TryGetStringField(TEXT("animation_name"), AnimationName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: animation_name"));
+	}
+
+	UWidgetAnimation* Animation = FindAnimationByName(WBP, AnimationName);
+	if (!Animation)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Animation '%s' not found. Available: %s"), *AnimationName, *GetAnimationNameList(WBP)));
+	}
+
+	TSharedPtr<FJsonObject> ResultObj = ClaireonWidgetHelpers::SerializeAnimationDetails(Animation);
+
+	return MakeSuccessResult(ResultObj, TEXT(""));
+}
+
+FToolResult ClaireonTool_EditWidgetBP::Operation_AddAnimationBinding(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+{
+	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
+	if (!WBP || !WBP->WidgetTree)
+	{
+		return MakeErrorResult(TEXT("Widget Blueprint or WidgetTree is no longer valid"));
+	}
+
+	FString AnimationName;
+	if (!Params->TryGetStringField(TEXT("animation_name"), AnimationName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: animation_name"));
+	}
+
+	FString WidgetName;
+	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: widget_name"));
+	}
+
+	bool bIncludeSlot = false;
+	Params->TryGetBoolField(TEXT("include_slot"), bIncludeSlot);
+
+	UWidgetAnimation* Animation = FindAnimationByName(WBP, AnimationName);
+	if (!Animation)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Animation '%s' not found. Available: %s"), *AnimationName, *GetAnimationNameList(WBP)));
+	}
+
+	UMovieScene* MovieScene = Animation->GetMovieScene();
+	if (!MovieScene)
+	{
+		return MakeErrorResult(TEXT("Animation has no MovieScene"));
+	}
+
+	// Verify widget exists
+	UWidget* Widget = ClaireonWidgetHelpers::FindWidgetByName(WBP->WidgetTree, FName(*WidgetName));
+	if (!Widget)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Widget '%s' not found in widget tree"), *WidgetName));
+	}
+
+	// Check if widget is already bound
+	for (const FWidgetAnimationBinding& ExistingBinding : Animation->AnimationBindings)
+	{
+		if (ExistingBinding.WidgetName == FName(*WidgetName) && ExistingBinding.SlotWidgetName == NAME_None)
+		{
+			return MakeErrorResult(FString::Printf(TEXT("Widget '%s' is already bound in animation '%s'"), *WidgetName, *AnimationName));
+		}
+	}
+
+	const FScopedTransaction Transaction(LOCTEXT("MCPAddAnimationBinding", "MCP: Add Animation Binding"));
+	WBP->Modify();
+
+	// Add widget possessable
+	FGuid WidgetGuid = MovieScene->AddPossessable(WidgetName, UWidget::StaticClass());
+
+	FWidgetAnimationBinding WidgetBinding;
+	WidgetBinding.WidgetName = FName(*WidgetName);
+	WidgetBinding.AnimationGuid = WidgetGuid;
+	Animation->AnimationBindings.Add(WidgetBinding);
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetBoolField(TEXT("success"), true);
+	ResultObj->SetStringField(TEXT("widget_name"), WidgetName);
+	ResultObj->SetStringField(TEXT("widget_guid"), WidgetGuid.ToString());
+
+	// Optionally add slot possessable
+	if (bIncludeSlot && Widget->Slot)
+	{
+		FString SlotName = WidgetName + TEXT("_Slot");
+		FGuid SlotGuid = MovieScene->AddPossessable(SlotName, UPanelSlot::StaticClass());
+		FMovieScenePossessable* SlotPossessable = MovieScene->FindPossessable(SlotGuid);
+		if (SlotPossessable)
+		{
+			SlotPossessable->SetParent(WidgetGuid, MovieScene);
+		}
+
+		FWidgetAnimationBinding SlotAnimBinding;
+		SlotAnimBinding.WidgetName = FName(*WidgetName);
+		SlotAnimBinding.SlotWidgetName = FName(*SlotName);
+		SlotAnimBinding.AnimationGuid = SlotGuid;
+		Animation->AnimationBindings.Add(SlotAnimBinding);
+
+		ResultObj->SetStringField(TEXT("slot_guid"), SlotGuid.ToString());
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
+	Data->bModified = true;
+
+	return MakeSuccessResult(ResultObj, TEXT(""));
+}
+
+FToolResult ClaireonTool_EditWidgetBP::Operation_AddAnimationTrack(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+{
+	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
+	if (!WBP || !WBP->WidgetTree)
+	{
+		return MakeErrorResult(TEXT("Widget Blueprint or WidgetTree is no longer valid"));
+	}
+
+	FString AnimationName;
+	if (!Params->TryGetStringField(TEXT("animation_name"), AnimationName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: animation_name"));
+	}
+
+	FString WidgetName;
+	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: widget_name"));
+	}
+
+	FString PropertyPath;
+	if (!Params->TryGetStringField(TEXT("property_path"), PropertyPath))
+	{
+		return MakeErrorResult(TEXT("Missing required field: property_path"));
+	}
+
+	FString Target = TEXT("widget");
+	Params->TryGetStringField(TEXT("target"), Target);
+
+	UWidgetAnimation* Animation = FindAnimationByName(WBP, AnimationName);
+	if (!Animation)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Animation '%s' not found. Available: %s"), *AnimationName, *GetAnimationNameList(WBP)));
+	}
+
+	UMovieScene* MovieScene = Animation->GetMovieScene();
+	if (!MovieScene)
+	{
+		return MakeErrorResult(TEXT("Animation has no MovieScene"));
+	}
+
+	FGuid PossessableGuid = FindPossessableGuidForWidget(Animation, WidgetName, Target);
+	if (!PossessableGuid.IsValid())
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Widget '%s' (target: %s) is not bound in animation '%s'. Call add_animation_binding first."), *WidgetName, *Target, *AnimationName));
+	}
+
+	// Map property path to track class
+	UClass* TrackClass = nullptr;
+	if (PropertyPath == TEXT("RenderOpacity"))
+	{
+		TrackClass = UMovieSceneFloatTrack::StaticClass();
+	}
+	else if (PropertyPath == TEXT("ColorAndOpacity"))
+	{
+		TrackClass = UMovieSceneColorTrack::StaticClass();
+	}
+	else if (PropertyPath == TEXT("bIsEnabled"))
+	{
+		TrackClass = UMovieSceneBoolTrack::StaticClass();
+	}
+	else
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Unsupported property_path: '%s'. Supported: RenderOpacity (float), ColorAndOpacity (color), bIsEnabled (bool)"), *PropertyPath));
+	}
+
+	const FScopedTransaction Transaction(LOCTEXT("MCPAddAnimationTrack", "MCP: Add Animation Track"));
+	MovieScene->Modify();
+
+	UMovieSceneTrack* Track = MovieScene->AddTrack(TrackClass, PossessableGuid);
+	if (!Track)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Failed to create track for property '%s'"), *PropertyPath));
+	}
+
+	// Set property binding
+	if (UMovieScenePropertyTrack* PropertyTrack = Cast<UMovieScenePropertyTrack>(Track))
+	{
+		PropertyTrack->SetPropertyNameAndPath(FName(*PropertyPath), PropertyPath);
+	}
+
+	// Create section spanning the full playback range
+	UMovieSceneSection* Section = Track->CreateNewSection();
+	if (Section)
+	{
+		Section->SetRange(MovieScene->GetPlaybackRange());
+		Track->AddSection(*Section);
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
+	Data->bModified = true;
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetBoolField(TEXT("success"), true);
+	ResultObj->SetStringField(TEXT("animation_name"), AnimationName);
+	ResultObj->SetStringField(TEXT("widget_name"), WidgetName);
+	ResultObj->SetStringField(TEXT("property_path"), PropertyPath);
+	ResultObj->SetStringField(TEXT("track_type"), Track->GetClass()->GetName());
+
+	return MakeSuccessResult(ResultObj, TEXT(""));
+}
+
+FToolResult ClaireonTool_EditWidgetBP::Operation_AddAnimationKeyframe(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+{
+	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
+	if (!WBP)
+	{
+		return MakeErrorResult(TEXT("Widget Blueprint is no longer valid"));
+	}
+
+	FString AnimationName, WidgetName, PropertyPath;
+	if (!Params->TryGetStringField(TEXT("animation_name"), AnimationName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: animation_name"));
+	}
+	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: widget_name"));
+	}
+	if (!Params->TryGetStringField(TEXT("property_path"), PropertyPath))
+	{
+		return MakeErrorResult(TEXT("Missing required field: property_path"));
+	}
+
+	double Time = 0.0;
+	if (!Params->TryGetNumberField(TEXT("time"), Time))
+	{
+		return MakeErrorResult(TEXT("Missing required field: time"));
+	}
+
+	FString Interpolation = TEXT("cubic");
+	Params->TryGetStringField(TEXT("interpolation"), Interpolation);
+
+	FString Target = TEXT("widget");
+	Params->TryGetStringField(TEXT("target"), Target);
+
+	UWidgetAnimation* Animation = FindAnimationByName(WBP, AnimationName);
+	if (!Animation)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Animation '%s' not found. Available: %s"), *AnimationName, *GetAnimationNameList(WBP)));
+	}
+
+	UMovieScene* MovieScene = Animation->GetMovieScene();
+	if (!MovieScene)
+	{
+		return MakeErrorResult(TEXT("Animation has no MovieScene"));
+	}
+
+	FGuid PossessableGuid = FindPossessableGuidForWidget(Animation, WidgetName, Target);
+	if (!PossessableGuid.IsValid())
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Widget '%s' (target: %s) is not bound in animation '%s'"), *WidgetName, *Target, *AnimationName));
+	}
+
+	UMovieSceneTrack* Track = FindTrackByPropertyPath(MovieScene, PossessableGuid, PropertyPath);
+	if (!Track)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("No track for property '%s' on widget '%s'. Call add_animation_track first."), *PropertyPath, *WidgetName));
+	}
+
+	const TArray<UMovieSceneSection*>& Sections = Track->GetAllSections();
+	if (Sections.Num() == 0)
+	{
+		return MakeErrorResult(TEXT("Track has no sections"));
+	}
+	UMovieSceneSection* Section = Sections[0];
+
+	const FFrameRate TickResolution = MovieScene->GetTickResolution();
+	FFrameNumber FrameNumber = (Time * TickResolution).FloorToFrame();
+
+	const FScopedTransaction Transaction(LOCTEXT("MCPAddAnimationKeyframe", "MCP: Add Animation Keyframe"));
+	Section->Modify();
+
+	// Dispatch by track type
+	if (UMovieSceneFloatSection* FloatSection = Cast<UMovieSceneFloatSection>(Section))
+	{
+		double FloatValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("value"), FloatValue))
+		{
+			return MakeErrorResult(TEXT("Missing required field: value (number expected for float track)"));
+		}
+		AddFloatKey(FloatSection->GetChannel(), FrameNumber, static_cast<float>(FloatValue), Interpolation);
+	}
+	else if (UMovieSceneColorSection* ColorSection = Cast<UMovieSceneColorSection>(Section))
+	{
+		const TSharedPtr<FJsonObject>* ColorObjPtr = nullptr;
+		if (!Params->TryGetObjectField(TEXT("value"), ColorObjPtr) || !ColorObjPtr)
+		{
+			return MakeErrorResult(TEXT("Missing required field: value (object with r,g,b,a expected for color track)"));
+		}
+		const TSharedPtr<FJsonObject>& ColorObj = *ColorObjPtr;
+
+		double R = 1.0, G = 1.0, B = 1.0, A = 1.0;
+		ColorObj->TryGetNumberField(TEXT("r"), R);
+		ColorObj->TryGetNumberField(TEXT("g"), G);
+		ColorObj->TryGetNumberField(TEXT("b"), B);
+		ColorObj->TryGetNumberField(TEXT("a"), A);
+
+		AddFloatKey(ColorSection->GetRedChannel(), FrameNumber, static_cast<float>(R), Interpolation);
+		AddFloatKey(ColorSection->GetGreenChannel(), FrameNumber, static_cast<float>(G), Interpolation);
+		AddFloatKey(ColorSection->GetBlueChannel(), FrameNumber, static_cast<float>(B), Interpolation);
+		AddFloatKey(ColorSection->GetAlphaChannel(), FrameNumber, static_cast<float>(A), Interpolation);
+	}
+	else if (UMovieSceneBoolSection* BoolSection = Cast<UMovieSceneBoolSection>(Section))
+	{
+		bool bValue = false;
+		if (!Params->TryGetBoolField(TEXT("value"), bValue))
+		{
+			return MakeErrorResult(TEXT("Missing required field: value (boolean expected for bool track)"));
+		}
+		BoolSection->GetChannel().GetData().UpdateOrAddKey(FrameNumber, bValue);
+	}
+	else
+	{
+		return MakeErrorResult(TEXT("Unsupported section type for keyframe insertion"));
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
+	Data->bModified = true;
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetBoolField(TEXT("success"), true);
+	ResultObj->SetStringField(TEXT("animation_name"), AnimationName);
+	ResultObj->SetStringField(TEXT("property_path"), PropertyPath);
+	ResultObj->SetNumberField(TEXT("time"), Time);
+
+	return MakeSuccessResult(ResultObj, TEXT(""));
+}
+
+FToolResult ClaireonTool_EditWidgetBP::Operation_RemoveAnimationKeyframe(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+{
+	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
+	if (!WBP)
+	{
+		return MakeErrorResult(TEXT("Widget Blueprint is no longer valid"));
+	}
+
+	FString AnimationName, WidgetName, PropertyPath;
+	if (!Params->TryGetStringField(TEXT("animation_name"), AnimationName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: animation_name"));
+	}
+	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: widget_name"));
+	}
+	if (!Params->TryGetStringField(TEXT("property_path"), PropertyPath))
+	{
+		return MakeErrorResult(TEXT("Missing required field: property_path"));
+	}
+
+	double Time = 0.0;
+	if (!Params->TryGetNumberField(TEXT("time"), Time))
+	{
+		return MakeErrorResult(TEXT("Missing required field: time"));
+	}
+
+	FString Target = TEXT("widget");
+	Params->TryGetStringField(TEXT("target"), Target);
+
+	UWidgetAnimation* Animation = FindAnimationByName(WBP, AnimationName);
+	if (!Animation)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Animation '%s' not found"), *AnimationName));
+	}
+
+	UMovieScene* MovieScene = Animation->GetMovieScene();
+	if (!MovieScene)
+	{
+		return MakeErrorResult(TEXT("Animation has no MovieScene"));
+	}
+
+	FGuid PossessableGuid = FindPossessableGuidForWidget(Animation, WidgetName, Target);
+	if (!PossessableGuid.IsValid())
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Widget '%s' is not bound in animation '%s'"), *WidgetName, *AnimationName));
+	}
+
+	UMovieSceneTrack* Track = FindTrackByPropertyPath(MovieScene, PossessableGuid, PropertyPath);
+	if (!Track)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("No track for property '%s' on widget '%s'"), *PropertyPath, *WidgetName));
+	}
+
+	const TArray<UMovieSceneSection*>& Sections = Track->GetAllSections();
+	if (Sections.Num() == 0)
+	{
+		return MakeErrorResult(TEXT("Track has no sections"));
+	}
+	UMovieSceneSection* Section = Sections[0];
+
+	const FFrameRate TickResolution = MovieScene->GetTickResolution();
+	FFrameNumber FrameNumber = (Time * TickResolution).FloorToFrame();
+
+	const FScopedTransaction Transaction(LOCTEXT("MCPRemoveAnimationKeyframe", "MCP: Remove Animation Keyframe"));
+	Section->Modify();
+
+	int32 RemovedCount = 0;
+
+	// Helper lambda to remove key at frame from a float channel
+	auto RemoveFloatKeyAtFrame = [&](FMovieSceneFloatChannel& Channel)
+	{
+		TArrayView<const FFrameNumber> Times = Channel.GetData().GetTimes();
+		for (int32 i = Times.Num() - 1; i >= 0; --i)
+		{
+			if (Times[i] == FrameNumber)
+			{
+				Channel.GetData().RemoveKey(i);
+				RemovedCount++;
+			}
+		}
+	};
+
+	if (UMovieSceneFloatSection* FloatSection = Cast<UMovieSceneFloatSection>(Section))
+	{
+		RemoveFloatKeyAtFrame(FloatSection->GetChannel());
+	}
+	else if (UMovieSceneColorSection* ColorSection = Cast<UMovieSceneColorSection>(Section))
+	{
+		RemoveFloatKeyAtFrame(ColorSection->GetRedChannel());
+		RemoveFloatKeyAtFrame(ColorSection->GetGreenChannel());
+		RemoveFloatKeyAtFrame(ColorSection->GetBlueChannel());
+		RemoveFloatKeyAtFrame(ColorSection->GetAlphaChannel());
+	}
+	else if (UMovieSceneBoolSection* BoolSection = Cast<UMovieSceneBoolSection>(Section))
+	{
+		TArrayView<const FFrameNumber> Times = BoolSection->GetChannel().GetData().GetTimes();
+		for (int32 i = Times.Num() - 1; i >= 0; --i)
+		{
+			if (Times[i] == FrameNumber)
+			{
+				BoolSection->GetChannel().GetData().RemoveKey(i);
+				RemovedCount++;
+			}
+		}
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
+	Data->bModified = true;
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetBoolField(TEXT("success"), RemovedCount > 0);
+	ResultObj->SetNumberField(TEXT("removed_count"), RemovedCount);
+	ResultObj->SetStringField(TEXT("animation_name"), AnimationName);
+	ResultObj->SetStringField(TEXT("property_path"), PropertyPath);
+	ResultObj->SetNumberField(TEXT("time"), Time);
+
+	return MakeSuccessResult(ResultObj, TEXT(""));
+}
+
+FToolResult ClaireonTool_EditWidgetBP::Operation_SetAnimationProperty(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+{
+	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
+	if (!WBP)
+	{
+		return MakeErrorResult(TEXT("Widget Blueprint is no longer valid"));
+	}
+
+	FString AnimationName;
+	if (!Params->TryGetStringField(TEXT("animation_name"), AnimationName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: animation_name"));
+	}
+
+	UWidgetAnimation* Animation = FindAnimationByName(WBP, AnimationName);
+	if (!Animation)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Animation '%s' not found. Available: %s"), *AnimationName, *GetAnimationNameList(WBP)));
+	}
+
+	UMovieScene* MovieScene = Animation->GetMovieScene();
+	if (!MovieScene)
+	{
+		return MakeErrorResult(TEXT("Animation has no MovieScene"));
+	}
+
+	double Duration = -1.0;
+	double StartTime = -1.0;
+	double DisplayRateDouble = -1.0;
+	bool bHasDuration = Params->TryGetNumberField(TEXT("duration"), Duration);
+	bool bHasStartTime = Params->TryGetNumberField(TEXT("start_time"), StartTime);
+	bool bHasDisplayRate = Params->TryGetNumberField(TEXT("display_rate"), DisplayRateDouble);
+
+	if (!bHasDuration && !bHasStartTime && !bHasDisplayRate)
+	{
+		return MakeErrorResult(TEXT("At least one property must be specified: duration, start_time, display_rate"));
+	}
+
+	const FScopedTransaction Transaction(LOCTEXT("MCPSetAnimationProperty", "MCP: Set Animation Property"));
+	MovieScene->Modify();
+
+	if (bHasDisplayRate)
+	{
+		int32 NewRate = static_cast<int32>(DisplayRateDouble);
+		if (NewRate <= 0)
+		{
+			return MakeErrorResult(TEXT("Display rate must be positive"));
+		}
+		MovieScene->SetDisplayRate(FFrameRate(NewRate, 1));
+	}
+
+	if (bHasDuration || bHasStartTime)
+	{
+		const FFrameRate TickResolution = MovieScene->GetTickResolution();
+		TRange<FFrameNumber> CurrentRange = MovieScene->GetPlaybackRange();
+
+		double CurrentStart = 0.0;
+		if (CurrentRange.HasLowerBound())
+		{
+			CurrentStart = static_cast<double>(CurrentRange.GetLowerBoundValue().Value) / TickResolution.AsDecimal();
+		}
+
+		double CurrentEnd = 0.0;
+		if (CurrentRange.HasUpperBound())
+		{
+			CurrentEnd = static_cast<double>(CurrentRange.GetUpperBoundValue().Value) / TickResolution.AsDecimal();
+		}
+
+		double NewStart = bHasStartTime ? StartTime : CurrentStart;
+		double NewEnd = bHasDuration ? (NewStart + Duration) : CurrentEnd;
+
+		if (NewEnd <= NewStart)
+		{
+			return MakeErrorResult(TEXT("End time must be greater than start time"));
+		}
+
+		const FFrameTime StartFrame = NewStart * TickResolution;
+		const FFrameTime EndFrame = NewEnd * TickResolution;
+		MovieScene->SetPlaybackRange(TRange<FFrameNumber>(StartFrame.FrameNumber, EndFrame.FrameNumber + 1));
+		MovieScene->GetEditorData().WorkStart = static_cast<float>(NewStart);
+		MovieScene->GetEditorData().WorkEnd = static_cast<float>(NewEnd);
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
+	Data->bModified = true;
+
+	TSharedPtr<FJsonObject> ResultObj = ClaireonWidgetHelpers::SerializeAnimationDetails(Animation);
+	ResultObj->SetBoolField(TEXT("success"), true);
+
+	return MakeSuccessResult(ResultObj, TEXT(""));
 }
 
 #undef LOCTEXT_NAMESPACE
