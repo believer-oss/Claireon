@@ -371,7 +371,7 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleInitialize(const FMCPRequestConte
 {
 	// Build capabilities
 	TSharedPtr<FJsonObject> ToolsCap = MakeShared<FJsonObject>();
-	ToolsCap->SetBoolField(TEXT("listChanged"), false);
+	ToolsCap->SetBoolField(TEXT("listChanged"), true);
 
 	TSharedPtr<FJsonObject> Capabilities = MakeShared<FJsonObject>();
 	Capabilities->SetObjectField(TEXT("tools"), ToolsCap);

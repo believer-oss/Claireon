@@ -33,6 +33,8 @@
 #include "Sections/MovieSceneFloatSection.h"
 #include "Sections/MovieSceneBoolSection.h"
 #include "Sections/MovieSceneColorSection.h"
+#include "Animation/MovieSceneMarginTrack.h"
+#include "Animation/MovieSceneMarginSection.h"
 #include "Channels/MovieSceneFloatChannel.h"
 #include "Channels/MovieSceneBoolChannel.h"
 #include "HAL/FileManager.h"
@@ -2480,9 +2482,24 @@ static UMovieSceneTrack* FindTrackByPropertyPath(UMovieScene* MovieScene, const 
 
 static FGuid FindPossessableGuidForWidget(UWidgetAnimation* Animation, const FString& WidgetName, const FString& Target)
 {
+	const bool bIsRoot = (WidgetName == TEXT("[this]") || WidgetName == TEXT("this"));
+
 	for (const FWidgetAnimationBinding& Binding : Animation->AnimationBindings)
 	{
-		if (Binding.WidgetName == FName(*WidgetName))
+		// Root widget binding
+		if (bIsRoot && Binding.bIsRootWidget)
+		{
+			if (Target == TEXT("slot") && Binding.SlotWidgetName != NAME_None)
+			{
+				return Binding.AnimationGuid;
+			}
+			else if (Target == TEXT("widget") && Binding.SlotWidgetName == NAME_None)
+			{
+				return Binding.AnimationGuid;
+			}
+		}
+		// Named widget binding
+		else if (!bIsRoot && Binding.WidgetName == FName(*WidgetName))
 		{
 			if (Target == TEXT("slot") && Binding.SlotWidgetName != NAME_None)
 			{
@@ -2782,17 +2799,35 @@ FToolResult ClaireonTool_EditWidgetBP::Operation_AddAnimationBinding(const FStri
 		return MakeErrorResult(TEXT("Animation has no MovieScene"));
 	}
 
-	// Verify widget exists
-	UWidget* Widget = ClaireonWidgetHelpers::FindWidgetByName(WBP->WidgetTree, FName(*WidgetName));
-	if (!Widget)
+	const bool bIsRoot = (WidgetName == TEXT("[this]") || WidgetName == TEXT("this"));
+
+	// Verify widget exists (root = the preview widget, child = widget tree lookup)
+	UWidget* Widget = nullptr;
+	if (bIsRoot)
 	{
-		return MakeErrorResult(FString::Printf(TEXT("Widget '%s' not found in widget tree"), *WidgetName));
+		Widget = WBP->WidgetTree ? WBP->WidgetTree->RootWidget : nullptr;
+		if (!Widget)
+		{
+			return MakeErrorResult(TEXT("Root widget not found in widget tree"));
+		}
+	}
+	else
+	{
+		Widget = ClaireonWidgetHelpers::FindWidgetByName(WBP->WidgetTree, FName(*WidgetName));
+		if (!Widget)
+		{
+			return MakeErrorResult(FString::Printf(TEXT("Widget '%s' not found in widget tree"), *WidgetName));
+		}
 	}
 
 	// Check if widget is already bound
 	for (const FWidgetAnimationBinding& ExistingBinding : Animation->AnimationBindings)
 	{
-		if (ExistingBinding.WidgetName == FName(*WidgetName) && ExistingBinding.SlotWidgetName == NAME_None)
+		if (bIsRoot && ExistingBinding.bIsRootWidget && ExistingBinding.SlotWidgetName == NAME_None)
+		{
+			return MakeErrorResult(FString::Printf(TEXT("Root widget is already bound in animation '%s'"), *AnimationName));
+		}
+		else if (!bIsRoot && ExistingBinding.WidgetName == FName(*WidgetName) && ExistingBinding.SlotWidgetName == NAME_None)
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Widget '%s' is already bound in animation '%s'"), *WidgetName, *AnimationName));
 		}
@@ -2801,10 +2836,15 @@ FToolResult ClaireonTool_EditWidgetBP::Operation_AddAnimationBinding(const FStri
 	const FScopedTransaction Transaction(LOCTEXT("MCPAddAnimationBinding", "MCP: Add Animation Binding"));
 	WBP->Modify();
 
+	// Use the actual widget name for the possessable display name
+	const FString DisplayName = bIsRoot ? Widget->GetName() : WidgetName;
+
 	// Add widget possessable
-	FGuid WidgetGuid = MovieScene->AddPossessable(WidgetName, UWidget::StaticClass());
+	UClass* PossessableClass = bIsRoot ? static_cast<UClass*>(WBP->GeneratedClass) : UWidget::StaticClass();
+	FGuid WidgetGuid = MovieScene->AddPossessable(DisplayName, PossessableClass);
 
 	FWidgetAnimationBinding WidgetBinding;
+	WidgetBinding.bIsRootWidget = bIsRoot;
 	WidgetBinding.WidgetName = FName(*WidgetName);
 	WidgetBinding.AnimationGuid = WidgetGuid;
 	Animation->AnimationBindings.Add(WidgetBinding);
@@ -2901,9 +2941,13 @@ FToolResult ClaireonTool_EditWidgetBP::Operation_AddAnimationTrack(const FString
 	{
 		TrackClass = UMovieSceneBoolTrack::StaticClass();
 	}
+	else if (PropertyPath == TEXT("Padding"))
+	{
+		TrackClass = UMovieSceneMarginTrack::StaticClass();
+	}
 	else
 	{
-		return MakeErrorResult(FString::Printf(TEXT("Unsupported property_path: '%s'. Supported: RenderOpacity (float), ColorAndOpacity (color), bIsEnabled (bool)"), *PropertyPath));
+		return MakeErrorResult(FString::Printf(TEXT("Unsupported property_path: '%s'. Supported: RenderOpacity (float), ColorAndOpacity (color), bIsEnabled (bool), Padding (margin)"), *PropertyPath));
 	}
 
 	const FScopedTransaction Transaction(LOCTEXT("MCPAddAnimationTrack", "MCP: Add Animation Track"));
@@ -3051,6 +3095,26 @@ FToolResult ClaireonTool_EditWidgetBP::Operation_AddAnimationKeyframe(const FStr
 			return MakeErrorResult(TEXT("Missing required field: value (boolean expected for bool track)"));
 		}
 		BoolSection->GetChannel().GetData().UpdateOrAddKey(FrameNumber, bValue);
+	}
+	else if (UMovieSceneMarginSection* MarginSection = Cast<UMovieSceneMarginSection>(Section))
+	{
+		const TSharedPtr<FJsonObject>* MarginObjPtr = nullptr;
+		if (!Params->TryGetObjectField(TEXT("value"), MarginObjPtr) || !MarginObjPtr)
+		{
+			return MakeErrorResult(TEXT("Missing required field: value (object with left,top,right,bottom expected for margin track)"));
+		}
+		const TSharedPtr<FJsonObject>& MarginObj = *MarginObjPtr;
+
+		double Left = 0.0, Top = 0.0, Right = 0.0, Bottom = 0.0;
+		MarginObj->TryGetNumberField(TEXT("left"), Left);
+		MarginObj->TryGetNumberField(TEXT("top"), Top);
+		MarginObj->TryGetNumberField(TEXT("right"), Right);
+		MarginObj->TryGetNumberField(TEXT("bottom"), Bottom);
+
+		AddFloatKey(MarginSection->LeftCurve, FrameNumber, static_cast<float>(Left), Interpolation);
+		AddFloatKey(MarginSection->TopCurve, FrameNumber, static_cast<float>(Top), Interpolation);
+		AddFloatKey(MarginSection->RightCurve, FrameNumber, static_cast<float>(Right), Interpolation);
+		AddFloatKey(MarginSection->BottomCurve, FrameNumber, static_cast<float>(Bottom), Interpolation);
 	}
 	else
 	{
