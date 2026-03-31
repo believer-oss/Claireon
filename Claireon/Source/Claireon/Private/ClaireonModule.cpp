@@ -54,6 +54,7 @@
 #include "Tools/ClaireonTool_CommandletRun.h"
 #include "Tools/ClaireonTool_AssetResave.h"
 #include "Tools/ClaireonTool_AssetCook.h"
+#include "Tools/ClaireonTool_AssetImportFile.h"
 #include "Tools/ClaireonTool_LogTail.h"
 #include "Tools/ClaireonTool_LogSearch.h"
 #include "Tools/ClaireonTool_TestRun.h"
@@ -258,6 +259,7 @@ void FClaireonModule::StartServer()
 	Server->RegisterTool(MakeShared<ClaireonTool_CommandletRun>());
 	Server->RegisterTool(MakeShared<ClaireonTool_AssetResave>());
 	Server->RegisterTool(MakeShared<ClaireonTool_AssetCook>());
+	Server->RegisterTool(MakeShared<ClaireonTool_AssetImportFile>());
 	Server->RegisterTool(MakeShared<ClaireonTool_LogTail>());
 	Server->RegisterTool(MakeShared<ClaireonTool_LogSearch>());
 	Server->RegisterTool(MakeShared<ClaireonTool_TestRun>());
