@@ -41,6 +41,13 @@
 #include "K2Node_SwitchEnum.h"
 #include "K2Node_ForEachElementInEnum.h"
 #include "K2Node_DoOnceMultiInput.h"
+// Delegate binding node includes
+#include "K2Node_AddDelegate.h"
+#include "K2Node_RemoveDelegate.h"
+#include "K2Node_ClearDelegate.h"
+#include "K2Node_CallDelegate.h"
+#include "K2Node_CreateDelegate.h"
+#include "K2Node_AssignDelegate.h"
 #include "Engine/TimelineTemplate.h"
 #include "Curves/CurveFloat.h"
 #include "Curves/CurveVector.h"
@@ -133,6 +140,13 @@ FString ClaireonTool_EditBlueprintGraph::GetFullDescription() const
 				"Collections:\n"
 				"- MakeArray, MakeSet, MakeMap\n"
 				"- GetArrayItem\n"
+				"Delegates:\n"
+				"- AddDelegate (requires: delegate_name, optional: target_class) - Bind event to multicast delegate\n"
+				"- RemoveDelegate (requires: delegate_name, optional: target_class) - Unbind event from delegate\n"
+				"- ClearDelegate (requires: delegate_name, optional: target_class) - Clear all delegate bindings\n"
+				"- CallDelegate (requires: delegate_name, optional: target_class) - Fire/broadcast delegate\n"
+				"- CreateDelegate (requires: function_name) - Create delegate from function reference (pure node)\n"
+				"- AssignDelegate (requires: delegate_name, optional: target_class, event_name) - Bind + auto-create custom event\n"
 				"Advanced:\n"
 				"- Generic (requires: class_name, optional: node_properties) - Create any K2Node by class name\n"
 				"All dynamic-pin nodes support optional num_extra_pins parameter (max 50).\n\n"
@@ -847,6 +861,54 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 
 	UEdGraphNode* NewNode = nullptr;
 	FString NodeDescription;
+	bool bNodeAlreadyAdded = false; // Set by AssignDelegate which handles its own graph insertion
+
+	// Helper lambda for BaseMCDelegate nodes (AddDelegate, RemoveDelegate, ClearDelegate, CallDelegate)
+	auto ResolveAndSetDelegate = [&](UK2Node_BaseMCDelegate* DelegateNode,
+		const FString& DelegateName, const FString& TargetClass) -> FString /*error or empty*/
+	{
+		UClass* OwnerClass = nullptr;
+		bool bSelfContext = TargetClass.IsEmpty();
+
+		if (bSelfContext)
+		{
+			OwnerClass = Blueprint->SkeletonGeneratedClass
+				? Blueprint->SkeletonGeneratedClass
+				: Blueprint->ParentClass;
+		}
+		else
+		{
+			OwnerClass = FindFirstObject<UClass>(*TargetClass);
+			if (!OwnerClass)
+			{
+				return FString::Printf(TEXT("Target class not found: %s"), *TargetClass);
+			}
+		}
+
+		if (!OwnerClass)
+		{
+			return FString::Printf(TEXT("Could not determine owner class for delegate '%s'"), *DelegateName);
+		}
+
+		FMulticastDelegateProperty* DelegateProp = CastField<FMulticastDelegateProperty>(
+			OwnerClass->FindPropertyByName(FName(*DelegateName)));
+
+		if (!DelegateProp)
+		{
+			// Check if the property exists but is not a multicast delegate
+			FProperty* Prop = OwnerClass->FindPropertyByName(FName(*DelegateName));
+			if (Prop)
+			{
+				return FString::Printf(TEXT("Property '%s' on class '%s' is not a multicast delegate (actual type: %s)"),
+					*DelegateName, *GetNameSafe(OwnerClass), *Prop->GetClass()->GetName());
+			}
+			return FString::Printf(TEXT("Multicast delegate '%s' not found on class '%s'"),
+				*DelegateName, *GetNameSafe(OwnerClass));
+		}
+
+		DelegateNode->SetFromProperty(DelegateProp, bSelfContext, OwnerClass);
+		return FString(); // success
+	};
 
 	// Create node based on type
 	if (NodeType == TEXT("CallFunction"))
@@ -1623,6 +1685,155 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 		NewNode = TimelineNode;
 		NodeDescription = FString::Printf(TEXT("Timeline: %s"), *TimelineName);
 	}
+	// --- Delegate binding node types ---
+	else if (NodeType == TEXT("AddDelegate"))
+	{
+		FString DelegateName, TargetClass;
+		if (!Params->TryGetStringField(TEXT("delegate_name"), DelegateName))
+		{
+			return MakeErrorResult(TEXT("Missing required field 'delegate_name' for AddDelegate node"));
+		}
+		Params->TryGetStringField(TEXT("target_class"), TargetClass);
+
+		UK2Node_AddDelegate* DelegateNode = NewObject<UK2Node_AddDelegate>(Graph);
+		FString Error = ResolveAndSetDelegate(DelegateNode, DelegateName, TargetClass);
+		if (!Error.IsEmpty())
+		{
+			return MakeErrorResult(Error);
+		}
+
+		NewNode = DelegateNode;
+		NodeDescription = FString::Printf(TEXT("Bind %s"), *DelegateName);
+	}
+	else if (NodeType == TEXT("RemoveDelegate"))
+	{
+		FString DelegateName, TargetClass;
+		if (!Params->TryGetStringField(TEXT("delegate_name"), DelegateName))
+		{
+			return MakeErrorResult(TEXT("Missing required field 'delegate_name' for RemoveDelegate node"));
+		}
+		Params->TryGetStringField(TEXT("target_class"), TargetClass);
+
+		UK2Node_RemoveDelegate* DelegateNode = NewObject<UK2Node_RemoveDelegate>(Graph);
+		FString Error = ResolveAndSetDelegate(DelegateNode, DelegateName, TargetClass);
+		if (!Error.IsEmpty())
+		{
+			return MakeErrorResult(Error);
+		}
+
+		NewNode = DelegateNode;
+		NodeDescription = FString::Printf(TEXT("Unbind %s"), *DelegateName);
+	}
+	else if (NodeType == TEXT("ClearDelegate"))
+	{
+		FString DelegateName, TargetClass;
+		if (!Params->TryGetStringField(TEXT("delegate_name"), DelegateName))
+		{
+			return MakeErrorResult(TEXT("Missing required field 'delegate_name' for ClearDelegate node"));
+		}
+		Params->TryGetStringField(TEXT("target_class"), TargetClass);
+
+		UK2Node_ClearDelegate* DelegateNode = NewObject<UK2Node_ClearDelegate>(Graph);
+		FString Error = ResolveAndSetDelegate(DelegateNode, DelegateName, TargetClass);
+		if (!Error.IsEmpty())
+		{
+			return MakeErrorResult(Error);
+		}
+
+		NewNode = DelegateNode;
+		NodeDescription = FString::Printf(TEXT("Clear %s"), *DelegateName);
+	}
+	else if (NodeType == TEXT("CallDelegate"))
+	{
+		FString DelegateName, TargetClass;
+		if (!Params->TryGetStringField(TEXT("delegate_name"), DelegateName))
+		{
+			return MakeErrorResult(TEXT("Missing required field 'delegate_name' for CallDelegate node"));
+		}
+		Params->TryGetStringField(TEXT("target_class"), TargetClass);
+
+		UK2Node_CallDelegate* DelegateNode = NewObject<UK2Node_CallDelegate>(Graph);
+		FString Error = ResolveAndSetDelegate(DelegateNode, DelegateName, TargetClass);
+		if (!Error.IsEmpty())
+		{
+			return MakeErrorResult(Error);
+		}
+
+		NewNode = DelegateNode;
+		NodeDescription = FString::Printf(TEXT("Call %s"), *DelegateName);
+	}
+	else if (NodeType == TEXT("CreateDelegate"))
+	{
+		FString FunctionName;
+		if (!Params->TryGetStringField(TEXT("function_name"), FunctionName))
+		{
+			return MakeErrorResult(TEXT("Missing required field 'function_name' for CreateDelegate node"));
+		}
+
+		UK2Node_CreateDelegate* CreateDelegateNode = NewObject<UK2Node_CreateDelegate>(Graph);
+		CreateDelegateNode->SelectedFunctionName = FName(*FunctionName);
+
+		NewNode = CreateDelegateNode;
+		NodeDescription = FString::Printf(TEXT("Create Delegate: %s"), *FunctionName);
+	}
+	else if (NodeType == TEXT("AssignDelegate"))
+	{
+		FString DelegateName, TargetClass;
+		if (!Params->TryGetStringField(TEXT("delegate_name"), DelegateName))
+		{
+			return MakeErrorResult(TEXT("Missing required field 'delegate_name' for AssignDelegate node"));
+		}
+		Params->TryGetStringField(TEXT("target_class"), TargetClass);
+
+		UK2Node_AssignDelegate* AssignNode = NewObject<UK2Node_AssignDelegate>(Graph);
+		FString Error = ResolveAndSetDelegate(AssignNode, DelegateName, TargetClass);
+		if (!Error.IsEmpty())
+		{
+			return MakeErrorResult(Error);
+		}
+
+		// AssignDelegate handles its own graph insertion because it needs to create
+		// a companion CustomEvent node after pins are allocated
+		AssignNode->NodePosX = Position.X;
+		AssignNode->NodePosY = Position.Y;
+		AssignNode->CreateNewGuid();
+		Graph->AddNode(AssignNode, false, false);
+		AssignNode->AllocateDefaultPins();
+
+		// Create companion CustomEvent with matching delegate signature
+		UFunction* DelegateSignature = AssignNode->GetDelegateSignature();
+		FString EventName;
+		if (!Params->TryGetStringField(TEXT("event_name"), EventName))
+		{
+			EventName = FString::Printf(TEXT("%s_Event"), *DelegateName);
+		}
+
+		if (DelegateSignature)
+		{
+			UK2Node_CustomEvent* EventNode = UK2Node_CustomEvent::CreateFromFunction(
+				FVector2D(Position.X - 150, Position.Y + 150),
+				Graph, EventName, DelegateSignature, /*bSelectNewNode=*/false);
+
+			if (EventNode)
+			{
+				// Wire the custom event's delegate output to the AssignDelegate's delegate input
+				UEdGraphPin* DelegatePin = AssignNode->GetDelegatePin();
+				UEdGraphPin* EventDelegatePin = EventNode->FindPin(UK2Node_Event::DelegateOutputName);
+				if (DelegatePin && EventDelegatePin)
+				{
+					const UEdGraphSchema_K2* K2Schema = GetDefault<UEdGraphSchema_K2>();
+					K2Schema->TryCreateConnection(EventDelegatePin, DelegatePin);
+				}
+
+				// Include companion event in affected nodes set
+				Data->LastOperationAffectedNodes.Add(EventNode->NodeGuid);
+			}
+		}
+
+		bNodeAlreadyAdded = true;
+		NewNode = AssignNode;
+		NodeDescription = FString::Printf(TEXT("Assign %s"), *DelegateName);
+	}
 	else
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Unsupported node type: %s. Use 'Generic' with 'class_name' parameter for custom node types."), *NodeType));
@@ -1633,26 +1844,29 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create node of type: %s"), *NodeType));
 	}
 
-	// If auto-connect is enabled and we have a cursor node, calculate position relative to it
-	if (bAutoConnect && Data->Cursor.FocusedNodeGuid.IsValid())
+	if (!bNodeAlreadyAdded)
 	{
-		UEdGraphNode* CursorNode = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, Data->Cursor.FocusedNodeGuid);
-		if (CursorNode && !Params->HasField(TEXT("position")))
+		// If auto-connect is enabled and we have a cursor node, calculate position relative to it
+		if (bAutoConnect && Data->Cursor.FocusedNodeGuid.IsValid())
 		{
-			// Place to the right of cursor node
-			Position.X = CursorNode->NodePosX + 300.0f;
-			Position.Y = CursorNode->NodePosY;
+			UEdGraphNode* CursorNode = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, Data->Cursor.FocusedNodeGuid);
+			if (CursorNode && !Params->HasField(TEXT("position")))
+			{
+				// Place to the right of cursor node
+				Position.X = CursorNode->NodePosX + 300.0f;
+				Position.Y = CursorNode->NodePosY;
+			}
 		}
+
+		// Set position and add to graph
+		NewNode->NodePosX = Position.X;
+		NewNode->NodePosY = Position.Y;
+		NewNode->CreateNewGuid();
+		Graph->AddNode(NewNode, false, false);
+
+		// Allocate default pins
+		NewNode->AllocateDefaultPins();
 	}
-
-	// Set position and add to graph
-	NewNode->NodePosX = Position.X;
-	NewNode->NodePosY = Position.Y;
-	NewNode->CreateNewGuid();
-	Graph->AddNode(NewNode, false, false);
-
-	// Allocate default pins
-	NewNode->AllocateDefaultPins();
 
 	// Handle num_extra_pins for dynamic-pin nodes
 	{

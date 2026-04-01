@@ -1443,3 +1443,261 @@ bool FEditBlueprintGraphTest_CompileRemoveUnused::RunTest(const FString& Paramet
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_DelegateNodes,
+	"Claireon.EditBlueprintGraph.DelegateNodes",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_DelegateNodes::RunTest(const FString& Parameters)
+{
+	ClaireonTool_EditBlueprintGraph Tool;
+
+	// Create a test blueprint
+	TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+	CreateParams->SetStringField(TEXT("operation"), TEXT("create"));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/__MCPTests/BP_DelegateNodeTest"));
+	Params->SetStringField(TEXT("parent_class"), TEXT("Actor"));
+	CreateParams->SetObjectField(TEXT("params"), Params);
+
+	auto Result = Tool.Execute(CreateParams);
+	if (Result.bIsError)
+	{
+		AddError(FString::Printf(TEXT("Failed to create test blueprint: %s"), *Result.GetContentAsString()));
+		return false;
+	}
+
+	// Extract session ID
+	FString ResultText = Result.GetContentAsString();
+	FString SessionId;
+	int32 SessionIdStart = ResultText.Find(TEXT("Session ID: "));
+	if (SessionIdStart != INDEX_NONE)
+	{
+		SessionIdStart += 12;
+		int32 SessionIdEnd = ResultText.Find(TEXT("\n"), ESearchCase::IgnoreCase, ESearchDir::FromStart, SessionIdStart);
+		SessionId = ResultText.Mid(SessionIdStart, SessionIdEnd - SessionIdStart);
+	}
+
+	if (SessionId.IsEmpty())
+	{
+		AddError(TEXT("Failed to extract session ID"));
+		return false;
+	}
+
+	// Test AddDelegate with AActor::OnDestroyed (external target)
+	{
+		TSharedPtr<FJsonObject> AddNodeArgs = MakeShared<FJsonObject>();
+		AddNodeArgs->SetStringField(TEXT("operation"), TEXT("add_node"));
+		AddNodeArgs->SetStringField(TEXT("session_id"), SessionId);
+
+		TSharedPtr<FJsonObject> NodeParams = MakeShared<FJsonObject>();
+		NodeParams->SetStringField(TEXT("node_type"), TEXT("AddDelegate"));
+		NodeParams->SetStringField(TEXT("delegate_name"), TEXT("OnDestroyed"));
+		NodeParams->SetStringField(TEXT("target_class"), TEXT("AActor"));
+		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
+
+		Result = Tool.Execute(AddNodeArgs);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("AddDelegate failed: %s"), *Result.GetContentAsString()));
+		}
+		else
+		{
+			AddInfo(TEXT("AddDelegate with external target_class succeeded"));
+		}
+	}
+
+	// Test RemoveDelegate
+	{
+		TSharedPtr<FJsonObject> AddNodeArgs = MakeShared<FJsonObject>();
+		AddNodeArgs->SetStringField(TEXT("operation"), TEXT("add_node"));
+		AddNodeArgs->SetStringField(TEXT("session_id"), SessionId);
+
+		TSharedPtr<FJsonObject> NodeParams = MakeShared<FJsonObject>();
+		NodeParams->SetStringField(TEXT("node_type"), TEXT("RemoveDelegate"));
+		NodeParams->SetStringField(TEXT("delegate_name"), TEXT("OnDestroyed"));
+		NodeParams->SetStringField(TEXT("target_class"), TEXT("AActor"));
+		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
+
+		Result = Tool.Execute(AddNodeArgs);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("RemoveDelegate failed: %s"), *Result.GetContentAsString()));
+		}
+		else
+		{
+			AddInfo(TEXT("RemoveDelegate succeeded"));
+		}
+	}
+
+	// Test ClearDelegate
+	{
+		TSharedPtr<FJsonObject> AddNodeArgs = MakeShared<FJsonObject>();
+		AddNodeArgs->SetStringField(TEXT("operation"), TEXT("add_node"));
+		AddNodeArgs->SetStringField(TEXT("session_id"), SessionId);
+
+		TSharedPtr<FJsonObject> NodeParams = MakeShared<FJsonObject>();
+		NodeParams->SetStringField(TEXT("node_type"), TEXT("ClearDelegate"));
+		NodeParams->SetStringField(TEXT("delegate_name"), TEXT("OnDestroyed"));
+		NodeParams->SetStringField(TEXT("target_class"), TEXT("AActor"));
+		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
+
+		Result = Tool.Execute(AddNodeArgs);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("ClearDelegate failed: %s"), *Result.GetContentAsString()));
+		}
+		else
+		{
+			AddInfo(TEXT("ClearDelegate succeeded"));
+		}
+	}
+
+	// Test CallDelegate
+	{
+		TSharedPtr<FJsonObject> AddNodeArgs = MakeShared<FJsonObject>();
+		AddNodeArgs->SetStringField(TEXT("operation"), TEXT("add_node"));
+		AddNodeArgs->SetStringField(TEXT("session_id"), SessionId);
+
+		TSharedPtr<FJsonObject> NodeParams = MakeShared<FJsonObject>();
+		NodeParams->SetStringField(TEXT("node_type"), TEXT("CallDelegate"));
+		NodeParams->SetStringField(TEXT("delegate_name"), TEXT("OnDestroyed"));
+		NodeParams->SetStringField(TEXT("target_class"), TEXT("AActor"));
+		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
+
+		Result = Tool.Execute(AddNodeArgs);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("CallDelegate failed: %s"), *Result.GetContentAsString()));
+		}
+		else
+		{
+			AddInfo(TEXT("CallDelegate succeeded"));
+		}
+	}
+
+	// Test CreateDelegate
+	{
+		TSharedPtr<FJsonObject> AddNodeArgs = MakeShared<FJsonObject>();
+		AddNodeArgs->SetStringField(TEXT("operation"), TEXT("add_node"));
+		AddNodeArgs->SetStringField(TEXT("session_id"), SessionId);
+
+		TSharedPtr<FJsonObject> NodeParams = MakeShared<FJsonObject>();
+		NodeParams->SetStringField(TEXT("node_type"), TEXT("CreateDelegate"));
+		NodeParams->SetStringField(TEXT("function_name"), TEXT("TestFunction"));
+		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
+
+		Result = Tool.Execute(AddNodeArgs);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("CreateDelegate failed: %s"), *Result.GetContentAsString()));
+		}
+		else
+		{
+			AddInfo(TEXT("CreateDelegate succeeded"));
+		}
+	}
+
+	// Test AssignDelegate
+	{
+		TSharedPtr<FJsonObject> AddNodeArgs = MakeShared<FJsonObject>();
+		AddNodeArgs->SetStringField(TEXT("operation"), TEXT("add_node"));
+		AddNodeArgs->SetStringField(TEXT("session_id"), SessionId);
+
+		TSharedPtr<FJsonObject> NodeParams = MakeShared<FJsonObject>();
+		NodeParams->SetStringField(TEXT("node_type"), TEXT("AssignDelegate"));
+		NodeParams->SetStringField(TEXT("delegate_name"), TEXT("OnDestroyed"));
+		NodeParams->SetStringField(TEXT("target_class"), TEXT("AActor"));
+		NodeParams->SetStringField(TEXT("event_name"), TEXT("OnDestroyed_Handler"));
+		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
+
+		Result = Tool.Execute(AddNodeArgs);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("AssignDelegate failed: %s"), *Result.GetContentAsString()));
+		}
+		else
+		{
+			AddInfo(TEXT("AssignDelegate succeeded"));
+		}
+	}
+
+	// Test error: invalid delegate name
+	{
+		TSharedPtr<FJsonObject> AddNodeArgs = MakeShared<FJsonObject>();
+		AddNodeArgs->SetStringField(TEXT("operation"), TEXT("add_node"));
+		AddNodeArgs->SetStringField(TEXT("session_id"), SessionId);
+
+		TSharedPtr<FJsonObject> NodeParams = MakeShared<FJsonObject>();
+		NodeParams->SetStringField(TEXT("node_type"), TEXT("AddDelegate"));
+		NodeParams->SetStringField(TEXT("delegate_name"), TEXT("NonExistentDelegate"));
+		NodeParams->SetStringField(TEXT("target_class"), TEXT("AActor"));
+		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
+
+		Result = Tool.Execute(AddNodeArgs);
+		if (!Result.bIsError)
+		{
+			AddError(TEXT("Expected error for invalid delegate_name, but got success"));
+		}
+		else
+		{
+			AddInfo(FString::Printf(TEXT("Invalid delegate_name correctly returned error: %s"), *Result.GetContentAsString()));
+		}
+	}
+
+	// Test error: invalid target class
+	{
+		TSharedPtr<FJsonObject> AddNodeArgs = MakeShared<FJsonObject>();
+		AddNodeArgs->SetStringField(TEXT("operation"), TEXT("add_node"));
+		AddNodeArgs->SetStringField(TEXT("session_id"), SessionId);
+
+		TSharedPtr<FJsonObject> NodeParams = MakeShared<FJsonObject>();
+		NodeParams->SetStringField(TEXT("node_type"), TEXT("AddDelegate"));
+		NodeParams->SetStringField(TEXT("delegate_name"), TEXT("OnDestroyed"));
+		NodeParams->SetStringField(TEXT("target_class"), TEXT("UNonExistentClass"));
+		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
+
+		Result = Tool.Execute(AddNodeArgs);
+		if (!Result.bIsError)
+		{
+			AddError(TEXT("Expected error for invalid target_class, but got success"));
+		}
+		else
+		{
+			AddInfo(FString::Printf(TEXT("Invalid target_class correctly returned error: %s"), *Result.GetContentAsString()));
+		}
+	}
+
+	// Test error: missing delegate_name
+	{
+		TSharedPtr<FJsonObject> AddNodeArgs = MakeShared<FJsonObject>();
+		AddNodeArgs->SetStringField(TEXT("operation"), TEXT("add_node"));
+		AddNodeArgs->SetStringField(TEXT("session_id"), SessionId);
+
+		TSharedPtr<FJsonObject> NodeParams = MakeShared<FJsonObject>();
+		NodeParams->SetStringField(TEXT("node_type"), TEXT("AddDelegate"));
+		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
+
+		Result = Tool.Execute(AddNodeArgs);
+		if (!Result.bIsError)
+		{
+			AddError(TEXT("Expected error for missing delegate_name, but got success"));
+		}
+		else
+		{
+			AddInfo(TEXT("Missing delegate_name correctly returned error"));
+		}
+	}
+
+	// Cleanup: close and delete
+	{
+		TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
+		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
+		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
+		CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
+		Tool.Execute(CloseArgs);
+	}
+
+	return true;
+}
