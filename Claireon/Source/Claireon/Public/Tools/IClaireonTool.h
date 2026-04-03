@@ -21,6 +21,10 @@ public:
 	/** Returns the tool name used in tools/list and tools/call */
 	virtual FString GetName() const = 0;
 
+	/** Whether this tool must be blocked while a Play-In-Editor session is active.
+	 *  Tools that mutate assets should override this to return true. */
+	virtual bool RequiresNoPIE() const { return false; }
+
 	/** Returns a human-readable description of what the tool does (standard tier, ~150-300 chars) */
 	virtual FString GetDescription() const = 0;
 

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "ClaireonPIEManager.h"
+#include "ClaireonSessionManager.h"
 #include "ClaireonLog.h"
 
 #include "Components/ActorComponent.h"
@@ -102,6 +103,15 @@ void FClaireonPIEManager::UnbindEditorDelegates()
 void FClaireonPIEManager::HandleBeginPIE(bool bIsSimulating)
 {
 	FScopeLock Lock(&CriticalSection);
+
+	// Auto-release any open edit sessions so PIE won't conflict with asset locks
+	{
+		const int32 ReleasedCount = FClaireonSessionManager::Get().ForceReleaseAll();
+		if (ReleasedCount > 0)
+		{
+			UE_LOG(LogClaireon, Warning, TEXT("[MCP] PIE starting — force-released %d active edit session(s)"), ReleasedCount);
+		}
+	}
 
 	// If a session is already active (e.g., claireon.pie_start_async MCP tool registered it), skip
 	if (ActiveSession.IsSet() && ActiveSession->bIsActive)

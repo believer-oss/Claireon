@@ -39,6 +39,7 @@ class ClaireonTool_BlackboardEdit : public IClaireonTool
 {
 public:
 	virtual FString GetName() const override;
+	virtual bool RequiresNoPIE() const override { return true; }
 	virtual FString GetDescription() const override;
 	virtual FString GetFullDescription() const override;
 	virtual TSharedPtr<FJsonObject> GetInputSchema() const override;

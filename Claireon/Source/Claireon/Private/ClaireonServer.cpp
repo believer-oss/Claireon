@@ -490,6 +490,13 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsCall(const FMCPRequestContex
 			FString::Printf(TEXT("Unknown tool: %s"), *ToolName));
 	}
 
+	// Block asset-mutating tools while PIE is active
+	if ((*FoundTool)->RequiresNoPIE() && GEditor && GEditor->IsPlaySessionInProgress())
+	{
+		return FMCPJsonRpcResponse::MakeError(Id, -32000,
+			FString::Printf(TEXT("Tool '%s' cannot run while Play-In-Editor is active. Stop PIE first (claireon.pie_stop)."), *ToolName));
+	}
+
 	TSharedPtr<FJsonObject> Arguments;
 	if (Params->HasField(TEXT("arguments")))
 	{
