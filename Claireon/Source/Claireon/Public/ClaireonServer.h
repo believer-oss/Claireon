@@ -29,7 +29,7 @@ public:
 	 * @param Port - The port to bind to. If binding fails, retries with incremented ports.
 	 * @return true if the server started successfully
 	 */
-	bool Start(uint32 Port = 8017);
+	bool Start(uint32 Port);
 
 	/** Stop the server and clean up routes */
 	void Stop();

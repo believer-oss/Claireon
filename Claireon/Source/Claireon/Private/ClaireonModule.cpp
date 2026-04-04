@@ -181,6 +181,16 @@ void FClaireonModule::ShutdownModule()
 	FClaireonPIEManager::Get().UnbindEditorDelegates();
 	FClaireonRichTextStyle::Shutdown();
 
+	// Unsubscribe from settings changes
+	if (SettingsChangedHandle.IsValid())
+	{
+		if (UClaireonSettings* MutableSettings = GetMutableDefault<UClaireonSettings>())
+		{
+			MutableSettings->OnSettingsChanged.Remove(SettingsChangedHandle);
+		}
+		SettingsChangedHandle.Reset();
+	}
+
 	StopServer();
 	SClaireonDiagnosticsWidget::UnregisterTabSpawner();
 }
@@ -344,7 +354,7 @@ void FClaireonModule::StartServer()
 	Server->RegisterTool(MakeShared<ClaireonTool_DataTableExportCsv>());
 	Server->RegisterTool(MakeShared<ClaireonTool_DataTableImportCsv>());
 
-	// Parse optional port override from command line
+	// Determine port: command-line override > settings > hardcoded default
 	uint32 Port = 8017;
 	FString PortStr;
 	if (FParse::Value(FCommandLine::Get(), TEXT("-MCPServerPort="), PortStr))
@@ -352,9 +362,17 @@ void FClaireonModule::StartServer()
 		Port = FCString::Atoi(*PortStr);
 		if (Port == 0)
 		{
-			UE_LOG(LogClaireon, Warning, TEXT("[MCP] Invalid port from command line, using default 8017"));
+			UE_LOG(LogClaireon, Warning, TEXT("[MCP] Invalid port from command line, using default"));
 			Port = 8017;
 		}
+		else
+		{
+			bPortOverriddenByCommandLine = true;
+		}
+	}
+	else if (const UClaireonSettings* Settings = UClaireonSettings::Get())
+	{
+		Port = Settings->ServerPort;
 	}
 
 	if (!Server->Start(Port))
@@ -369,6 +387,36 @@ void FClaireonModule::StartServer()
 
 	// Notify external modules so they can register their own tools
 	FClaireonServer::OnServerStarted().Broadcast(*Server);
+
+	// Subscribe to settings changes for runtime port reconfiguration
+	if (!SettingsChangedHandle.IsValid())
+	{
+		UClaireonSettings* MutableSettings = GetMutableDefault<UClaireonSettings>();
+		SettingsChangedHandle = MutableSettings->OnSettingsChanged.AddLambda([this]()
+		{
+			if (bPortOverriddenByCommandLine)
+			{
+				UE_LOG(LogClaireon, Warning,
+					TEXT("[MCP] Port change in settings ignored -- overridden by -MCPServerPort command line"));
+				return;
+			}
+
+			const UClaireonSettings* Settings = UClaireonSettings::Get();
+			if (!Settings || !Server.IsValid() || !Server->IsRunning())
+			{
+				return;
+			}
+
+			const uint32 NewPort = Settings->ServerPort;
+			if (NewPort != Server->GetPort())
+			{
+				UE_LOG(LogClaireon, Display,
+					TEXT("[MCP] Port changed from %u to %u -- restarting server"), Server->GetPort(), NewPort);
+				StopServer();
+				StartServer();
+			}
+		});
+	}
 }
 
 void FClaireonModule::StopServer()

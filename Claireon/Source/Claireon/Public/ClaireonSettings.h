@@ -27,6 +27,13 @@ public:
     /** Get the singleton. Safe to call from game thread. */
     static const UClaireonSettings* Get();
 
+    // --- Server ---
+
+    /** TCP port for the MCP HTTP server. Requires server restart to take effect. */
+    UPROPERTY(Config, EditAnywhere, Category="Server",
+        meta=(DisplayName="Server Port", ClampMin=1024, ClampMax=65535))
+    uint32 ServerPort = 8017;
+
     // --- Connection ---
 
     /** Anthropic API key. Get one at https://console.anthropic.com/settings/keys */

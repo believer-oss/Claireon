@@ -54,4 +54,10 @@ private:
 
 	/** Tools registered before the server was started. */
 	TArray<TSharedPtr<IClaireonTool>> PendingExternalTools;
+
+	/** Handle for UClaireonSettings::OnSettingsChanged subscription. */
+	FDelegateHandle SettingsChangedHandle;
+
+	/** True if -MCPServerPort= was passed on the command line; suppresses settings-change restart. */
+	bool bPortOverriddenByCommandLine = false;
 };

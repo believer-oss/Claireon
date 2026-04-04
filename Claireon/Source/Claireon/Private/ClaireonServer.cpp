@@ -24,7 +24,6 @@
 #include "ClaireonSettings.h"
 #include "ClaireonXmlFormatter.h"
 
-static constexpr uint32 DefaultPort = 8017;
 static constexpr uint32 MaxPortRetries = 10;
 
 static const TSet<FString> MCPVisibleTools = {
