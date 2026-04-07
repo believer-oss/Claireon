@@ -356,9 +356,12 @@ void FClaireonModule::ShutdownModule()
 	// Unsubscribe from settings changes
 	if (SettingsChangedHandle.IsValid())
 	{
-		if (UClaireonSettings* MutableSettings = GetMutableDefault<UClaireonSettings>())
+		if (UObjectInitialized())
 		{
-			MutableSettings->OnSettingsChanged.Remove(SettingsChangedHandle);
+			if (UClaireonSettings* MutableSettings = GetMutableDefault<UClaireonSettings>())
+			{
+				MutableSettings->OnSettingsChanged.Remove(SettingsChangedHandle);
+			}
 		}
 		SettingsChangedHandle.Reset();
 	}
