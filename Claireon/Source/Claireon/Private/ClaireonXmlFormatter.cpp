@@ -38,26 +38,26 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 		else if (ErrorMsg.Contains(TEXT("ImportError")) || ErrorMsg.Contains(TEXT("ModuleNotFoundError")))
 		{
 			ErrorCode = TEXT("import_error");
-			Suggestion = TEXT("The module may not be available in the Unreal Python environment. Use 'import unreal' and tools.* for editor operations.");
+			Suggestion = TEXT("The module may not be available in the Unreal Python environment. Use 'import unreal' and claireon.* for editor operations.");
 		}
 		else if (ErrorMsg.Contains(TEXT("NameError")))
 		{
 			ErrorCode = TEXT("name_error");
-			Suggestion = TEXT("Variable or function not defined. Use tools.claireon.tools_search() to discover available tools, or check variable names.");
+			Suggestion = TEXT("Variable or function not defined. Use claireon.tools_search() to discover available tools, or check variable names.");
 		}
 		else if (ErrorMsg.Contains(TEXT("KeyError")))
 		{
 			ErrorCode = TEXT("key_error");
-			Suggestion = TEXT("Dictionary key not found. Check the structure of the returned data with tools.claireon.tools_search().");
+			Suggestion = TEXT("Dictionary key not found. Check the structure of the returned data with claireon.tools_search().");
 		}
 		else if (ErrorMsg.Contains(TEXT("AttributeError")))
 		{
 			ErrorCode = TEXT("attribute_error");
-			Suggestion = TEXT("Object does not have the requested attribute. Use tools.claireon.tools_search() to discover available tool names.");
+			Suggestion = TEXT("Object does not have the requested attribute. Use claireon.tools_search() to discover available tool names.");
 		}
 		else
 		{
-			Suggestion = TEXT("Review the error message and logs. Use tools.claireon.tools_search() to discover available tools.");
+			Suggestion = TEXT("Review the error message and logs. Use claireon.tools_search() to discover available tools.");
 		}
 
 		Xml = FormatErrorResult(Result.ErrorMessage, Suggestion, Result.Logs);
@@ -183,7 +183,7 @@ FString FClaireonXmlFormatter::FormatIndexedResult(
 	// Compact summary surfacing the most important metadata up front
 	FString SummaryLine = FString::Printf(
 		TEXT("Result too large for inline display — indexed as '%s' (%d chunks). "
-			"Use tools.index_search(index_id, query) to retrieve content."),
+			"Use claireon.index_search(index_id, query) to retrieve content."),
 		*IndexId, ChunkCount);
 	Xml += TEXT("  <summary>") + EscapeXml(SummaryLine) + TEXT("</summary>\n");
 
@@ -209,8 +209,8 @@ FString FClaireonXmlFormatter::FormatIndexedResult(
 		Xml += TEXT("    </top-excerpts>\n");
 	}
 
-	Xml += TEXT("    <hint>Call tools.index_search(\"") + EscapeXml(IndexId)
-		+ TEXT("\", \"your query\") to search this index, or tools.index_search(\"")
+	Xml += TEXT("    <hint>Call claireon.index_search(\"") + EscapeXml(IndexId)
+		+ TEXT("\", \"your query\") to search this index, or claireon.index_search(\"")
 		+ EscapeXml(IndexId) + TEXT("\", \"\") to list the first chunks.</hint>\n");
 
 	Xml += TEXT("  </indexed-result>\n");
@@ -227,7 +227,7 @@ FString FClaireonXmlFormatter::FormatIndexedResult(
 
 FString FClaireonXmlFormatter::GenerateTypeSignature(const FString& ToolName, const TSharedPtr<FJsonObject>& InputSchema)
 {
-	FString Sig = FString::Printf(TEXT("tools.%s("), *ToolName);
+	FString Sig = FString::Printf(TEXT("%s("), *ToolName);
 
 	if (!InputSchema.IsValid())
 	{
@@ -414,7 +414,7 @@ FString FClaireonXmlFormatter::GenerateCategorySummary(const TMap<FString, TShar
 
 	constexpr int32 MaxExamples = 3;
 
-	FString Summary = TEXT("Available tool categories (use tools.claireon.tools_search() to discover full signatures):\n");
+	FString Summary = TEXT("Available tool categories (use claireon.tools_search() to discover full signatures):\n");
 	for (const FString& Category : Categories)
 	{
 		TArray<FString>& Names = Grouped[Category];

@@ -871,7 +871,7 @@ TArray<TSharedPtr<FJsonValue>> FClaireonAnthropicClient::BuildToolDefinitions() 
 	const TMap<FString, TSharedPtr<IClaireonTool>>& Tools = CurrentServer->GetTools();
 
 	// Code Mode: only expose claireon.python_execute + claireon.tools_search.
-	// All other tools are available via the tools.claireon.* Python bridge inside python_execute.
+	// All other tools are available via the claireon.* Python bridge inside python_execute.
 
 	// 1. claireon.python_execute — with embedded type stubs for all tools
 	{
@@ -880,8 +880,8 @@ TArray<TSharedPtr<FJsonValue>> FClaireonAnthropicClient::BuildToolDefinitions() 
 		{
 			FString CategorySummary = FClaireonXmlFormatter::GenerateCategorySummary(Tools);
 			FString Description = TEXT(
-				"Run Python code with access to the tools.* namespace. "
-				"All MCP tools are callable as tools.claireon.<name>(...). "
+				"Run Python code with access to the claireon.* namespace. "
+				"All MCP tools are callable as claireon.<name>(...). "
 				"The code runs in the Unreal Editor Python environment with the 'unreal' module available.\n\n")
 				+ CategorySummary;
 

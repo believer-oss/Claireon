@@ -31,7 +31,7 @@ public:
 	 * @param Output         Captured log output
 	 * @param bSuccess       Whether execution completed successfully
 	 * @param DurationMs     Execution duration in milliseconds
-	 * @param ToolCallCount  Number of tools.* calls made during execution
+	 * @param ToolCallCount  Number of claireon.* calls made during execution
 	 * @param ResultSummary  First 500 chars of the serialized result
 	 */
 	void RecordInvocation(
@@ -78,7 +78,7 @@ private:
 		int32 ScriptSizeBytes = 0;
 		bool bSuccess = false;
 		double DurationMs = 0.0;
-		int32 ToolCallCount = 0;        // Number of tools.* calls made during execution
+		int32 ToolCallCount = 0;        // Number of claireon.* calls made during execution
 		FString ResultSummary;           // First 500 chars of the serialized result
 		FString ScriptPreview;           // First N chars of the script
 	};

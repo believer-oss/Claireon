@@ -30,7 +30,7 @@ struct FClaireonDeferredAction
 
 /**
  * C++-to-Python bridge using CPython C API.
- * Registers C++ functions callable from Python via the tools.* namespace.
+ * Registers C++ functions callable from Python via the claireon.* namespace.
  * See 04-BRIDGE.md for design details.
  */
 class CLAIREON_API FClaireonBridge
@@ -51,14 +51,14 @@ public:
 	/** Reset the last execute result */
 	static void ResetLastExecuteResult();
 
-	/** Get the number of tools.* calls made during the last execute */
+	/** Get the number of claireon.* calls made during the last execute */
 	static int32 GetToolCallCount();
 
 	/** Reset the tool call counter (called before each execute) */
 	static void ResetToolCallCount();
 
 	/**
-	 * CPython C function: dispatches tools.* calls to C++ tool registry.
+	 * CPython C function: dispatches claireon.* calls to C++ tool registry.
 	 * Signature: _mcp_call_tool(tool_name: str, args_json: str) -> str
 	 * Public because CPython's PyMethodDef takes a pointer to this at file scope.
 	 */
@@ -98,7 +98,7 @@ private:
 	/** Pointer to the server instance for tool lookup */
 	static FClaireonServer* GServerInstance;
 
-	/** Counter for tools.* calls during a single execute invocation */
+	/** Counter for claireon.* calls during a single execute invocation */
 	static TAtomic<int32> GToolCallCount;
 
 	/** Queue of deferred world-transition actions */

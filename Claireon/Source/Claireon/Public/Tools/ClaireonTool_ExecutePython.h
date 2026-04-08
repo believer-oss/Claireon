@@ -7,7 +7,7 @@
 
 /**
  * MCP Code Mode execution tool.
- * Executes Python code with access to the tools.* bridge for calling
+ * Executes Python code with access to the claireon.* bridge for calling
  * other MCP tools from within Python scripts.
  */
 class ClaireonTool_ExecutePython : public IClaireonTool

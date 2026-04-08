@@ -130,7 +130,7 @@ IClaireonTool::FToolResult ClaireonTool_TraceGetScopeDetails::Execute(const TSha
 				if (Frame) IntervalEnd = Frame->EndTime;
 			}
 
-			TraceServices::FCreateAggregationParams Params;
+			TraceServices::FCreateAggreationParams Params;
 			Params.IntervalStart = IntervalStart;
 			Params.IntervalEnd = IntervalEnd;
 			Params.CpuThreadFilter = [](uint32) -> bool { return true; };

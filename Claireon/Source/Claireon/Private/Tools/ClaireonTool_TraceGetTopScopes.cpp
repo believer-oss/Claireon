@@ -178,7 +178,7 @@ IClaireonTool::FToolResult ClaireonTool_TraceGetTopScopes::Execute(const TShared
 			}
 
 			// Run aggregation over the time range
-			TraceServices::FCreateAggregationParams Params;
+			TraceServices::FCreateAggreationParams Params;
 			Params.IntervalStart = IntervalStart;
 			Params.IntervalEnd = IntervalEnd;
 
