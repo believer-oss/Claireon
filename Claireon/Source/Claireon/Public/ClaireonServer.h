@@ -169,4 +169,22 @@ private:
 
 	/** Timer handle for user-stop auto-cooldown. */
 	FTimerHandle UserStopCooldownHandle;
+
+	// --- Feedback nudge state (reset per MCP session on initialize) ---
+
+	/** Total tools/call invocations this session */
+	int32 SessionToolCallCount = 0;
+
+	/** Failed tools/call invocations this session */
+	int32 SessionToolErrorCount = 0;
+
+	/** Whether the feedback nudge has already been sent this session */
+	bool bFeedbackNudgeSent = false;
+
+	/** Whether claireon.feedback_submit was called this session */
+	bool bFeedbackSubmittedThisSession = false;
+
+	/** Thresholds that trigger a feedback nudge */
+	static constexpr int32 FeedbackNudgeErrorThreshold = 4;
+	static constexpr int32 FeedbackNudgeTotalThreshold = 10;
 };
