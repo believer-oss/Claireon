@@ -12,7 +12,7 @@ class IClaireonTool;
 class FClaireonServer;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnUserStopChanged, bool /*bIsActive*/);
-DECLARE_MULTICAST_DELEGATE_OneParam(FOnClaireonServerStarted, FClaireonServer& /*Server*/);
+DECLARE_MULTICAST_DELEGATE(FOnToolsChanged);
 
 /**
  * Core MCP HTTP server. Binds HTTP routes, dispatches JSON-RPC requests,
@@ -40,19 +40,27 @@ public:
 	/** Get the port the server is listening on */
 	uint32 GetPort() const { return BoundPort; }
 
-	/** Register a tool with the server. Can be called during or after startup. */
-	CLAIREON_API void RegisterTool(TSharedPtr<IClaireonTool> Tool);
-
 	/**
-	 * Delegate broadcast after the server starts and all built-in tools are registered.
-	 * External modules (e.g. game-specific plugins) can bind to this to register
-	 * their own tools:
-	 *
-	 *   FClaireonServer::OnServerStarted().AddLambda([](FClaireonServer& Server) {
-	 *       Server.RegisterTool(MakeShared<MyCustomTool>());
-	 *   });
+	 * Register a tool with the server. Can be called during or after startup.
+	 * @param Tool - The tool to register.
+	 * @param SourceProvider - The provider name for source tracking. NAME_None if unspecified.
 	 */
-	static CLAIREON_API FOnClaireonServerStarted& OnServerStarted();
+	CLAIREON_API void RegisterTool(TSharedPtr<IClaireonTool> Tool, FName SourceProvider = NAME_None);
+
+	/** Unregister a single tool by name. No-op if tool is not found. */
+	CLAIREON_API void UnregisterTool(const FString& ToolName);
+
+	/** Unregister all tools registered by the given source provider. No-op if NAME_None. */
+	CLAIREON_API void UnregisterToolsBySource(FName SourceProvider);
+
+	/** Delegate broadcast when tools are added or removed. */
+	FOnToolsChanged OnToolsChanged;
+
+	/** Generation counter incremented each time the tool list changes. */
+	uint32 GetToolListGeneration() const { return ToolListGeneration; }
+
+	/** Get the tool source map (ToolName -> ProviderName). */
+	const TMap<FString, FName>& GetToolSourceMap() const { return ToolSourceMap; }
 
 	/** Get the diagnostics log entries (ring buffer, newest last) */
 	const TArray<FMCPDiagnosticsEntry>& GetDiagnosticsEntries() const { return DiagnosticsEntries; }
@@ -133,6 +141,12 @@ private:
 
 	/** Registered tools */
 	TMap<FString, TSharedPtr<IClaireonTool>> Tools;
+
+	/** Maps tool name to the provider that registered it */
+	TMap<FString, FName> ToolSourceMap;
+
+	/** Incremented each time the tool list changes (for future SSE notifications) */
+	uint32 ToolListGeneration = 0;
 
 	/** HTTP route handles for cleanup */
 	TArray<FHttpRouteHandle> RouteHandles;

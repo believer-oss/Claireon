@@ -31,12 +31,6 @@ static const TSet<FString> MCPVisibleTools = {
     TEXT("claireon.tools_search")
 };
 
-FOnClaireonServerStarted& FClaireonServer::OnServerStarted()
-{
-	static FOnClaireonServerStarted Delegate;
-	return Delegate;
-}
-
 FClaireonServer::FClaireonServer()
 {
 }
@@ -167,14 +161,70 @@ void FClaireonServer::Stop()
 	UE_LOG(LogClaireon, Display, TEXT("[MCP] Server stopped"));
 }
 
-void FClaireonServer::RegisterTool(TSharedPtr<IClaireonTool> Tool)
+void FClaireonServer::RegisterTool(TSharedPtr<IClaireonTool> Tool, FName SourceProvider)
 {
+	check(IsInGameThread());
+
 	if (Tool.IsValid())
 	{
 		FString Name = Tool->GetName();
-		UE_LOG(LogClaireon, Log, TEXT("[MCP] Registered tool: %s"), *Name);
+		UE_LOG(LogClaireon, Log, TEXT("[MCP] Registered tool: %s (source: %s)"), *Name,
+			SourceProvider.IsNone() ? TEXT("unspecified") : *SourceProvider.ToString());
 		Tools.Add(Name, Tool);
+		if (!SourceProvider.IsNone())
+		{
+			ToolSourceMap.Add(Name, SourceProvider);
+		}
+		++ToolListGeneration;
+		OnToolsChanged.Broadcast();
 	}
+}
+
+void FClaireonServer::UnregisterTool(const FString& ToolName)
+{
+	check(IsInGameThread());
+
+	if (Tools.Remove(ToolName) > 0)
+	{
+		ToolSourceMap.Remove(ToolName);
+		++ToolListGeneration;
+		OnToolsChanged.Broadcast();
+		UE_LOG(LogClaireon, Log, TEXT("[MCP] Unregistered tool: %s"), *ToolName);
+	}
+}
+
+void FClaireonServer::UnregisterToolsBySource(FName SourceProvider)
+{
+	check(IsInGameThread());
+
+	if (SourceProvider.IsNone())
+	{
+		return;
+	}
+
+	TArray<FString> ToolsToRemove;
+	for (const auto& Pair : ToolSourceMap)
+	{
+		if (Pair.Value == SourceProvider)
+		{
+			ToolsToRemove.Add(Pair.Key);
+		}
+	}
+
+	if (ToolsToRemove.Num() == 0)
+	{
+		return;
+	}
+
+	for (const FString& ToolName : ToolsToRemove)
+	{
+		Tools.Remove(ToolName);
+		ToolSourceMap.Remove(ToolName);
+		UE_LOG(LogClaireon, Log, TEXT("[MCP] Unregistered tool: %s (source: %s)"), *ToolName, *SourceProvider.ToString());
+	}
+
+	++ToolListGeneration;
+	OnToolsChanged.Broadcast();
 }
 
 TSharedPtr<IClaireonTool> FClaireonServer::FindTool(const FString& ToolName) const

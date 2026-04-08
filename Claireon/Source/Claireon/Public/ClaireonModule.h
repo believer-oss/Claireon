@@ -5,6 +5,7 @@
 
 #include "CoreMinimal.h"
 #include "Modules/ModuleInterface.h"
+#include "IClaireonToolProvider.h"
 
 class FClaireonServer;
 class IClaireonTool;
@@ -34,26 +35,27 @@ public:
 	/** Get the module instance */
 	static FClaireonModule& Get();
 
-	/**
-	 * Register an external tool with the server.
-	 * Safe to call from other modules without including ClaireonServer.h.
-	 * If the server is not yet running, the tool is queued and registered
-	 * automatically when the server starts.
-	 */
-	void RegisterExternalTool(TSharedPtr<IClaireonTool> Tool);
-
 private:
 	/** Register toolbar button and menu entries */
 	void RegisterMenus();
 
-	/** Flush any pending external tools into the running server. */
-	void FlushPendingExternalTools();
+	/** Collect tools from all registered IClaireonToolProvider implementations. */
+	void CollectToolsFromProviders();
+
+	/** Collect tools from a single provider and register them with the server. */
+	void CollectToolsFromProvider(IClaireonToolProvider* Provider);
+
+	/** Called when a modular feature is registered. */
+	void OnModularFeatureRegistered(const FName& Type, IModularFeature* ModularFeature);
+
+	/** Called when a modular feature is unregistered. */
+	void OnModularFeatureUnregistered(const FName& Type, IModularFeature* ModularFeature);
 
 	/** The MCP server instance */
 	TSharedPtr<FClaireonServer> Server;
 
-	/** Tools registered before the server was started. */
-	TArray<TSharedPtr<IClaireonTool>> PendingExternalTools;
+	/** Built-in tool provider (owns the ~99 built-in tool definitions) */
+	TUniquePtr<IClaireonToolProvider> BuiltinToolProvider;
 
 	/** Handle for UClaireonSettings::OnSettingsChanged subscription. */
 	FDelegateHandle SettingsChangedHandle;

@@ -5,8 +5,6 @@
 
 #include "Tools/IClaireonTool.h"
 
-class FClaireonServer;
-
 /**
  * MCP meta-tool that searches the tool registry by query string and category.
  * Returns matching tools grouped by category with descriptions and schemas.
@@ -17,9 +15,6 @@ class FClaireonServer;
 class ClaireonTool_SearchTools : public IClaireonTool
 {
 public:
-	/** Set the server instance for tool registry access */
-	void SetServer(FClaireonServer* InServer) { Server = InServer; }
-
 	virtual FString GetName() const override;
 	virtual FString GetDescription() const override;
 	virtual TSharedPtr<FJsonObject> GetInputSchema() const override;
@@ -31,9 +26,6 @@ private:
 
 	/** Search using the Python catalog; returns ranked tool names or empty on failure */
 	TArray<FString> FuzzySearch(const FString& Query, int32 MaxResults);
-
-	/** Pointer to the server for accessing the tool registry */
-	FClaireonServer* Server = nullptr;
 
 	/** Number of tools at last catalog rebuild (used for staleness detection) */
 	int32 LastCatalogToolCount = 0;

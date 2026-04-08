@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_SearchTools.h"
+#include "ClaireonModule.h"
 #include "ClaireonServer.h"
 #include "ClaireonBridge.h"
 #include "ClaireonXmlFormatter.h"
@@ -81,6 +82,7 @@ TSharedPtr<FJsonObject> ClaireonTool_SearchTools::GetInputSchema() const
 
 bool ClaireonTool_SearchTools::RebuildCatalog()
 {
+	FClaireonServer* Server = FClaireonModule::Get().GetServer();
 	if (!Server)
 	{
 		return false;
@@ -221,9 +223,10 @@ TArray<FString> ClaireonTool_SearchTools::FuzzySearch(const FString& Query, int3
 
 IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
+	FClaireonServer* Server = FClaireonModule::Get().GetServer();
 	if (!Server)
 	{
-		return MakeErrorResult(TEXT("Internal error: search_tools has no server reference."));
+		return MakeErrorResult(TEXT("MCP server is not running"));
 	}
 
 	// Read parameters
@@ -291,6 +294,7 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 		FString Description;
 		FString Category;
 		FString TypeSignature;
+		FString Source;
 	};
 	TArray<FMatchEntry> MatchingTools;
 
@@ -373,7 +377,12 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 		Entry.Category = ToolCategory;
 		Entry.TypeSignature = FClaireonXmlFormatter::GenerateTypeSignature(ToolName, Tool->GetInputSchema());
 
-		// FuzzyRank is set during sort below
+		// Look up tool source from the server's source map
+		const TMap<FString, FName>& SourceMap = Server->GetToolSourceMap();
+		if (const FName* SourceName = SourceMap.Find(ToolName))
+		{
+			Entry.Source = SourceName->ToString();
+		}
 
 		MatchingTools.Add(MoveTemp(Entry));
 	}
@@ -448,6 +457,10 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 			ToolObj->SetStringField(TEXT("name"), Entry->Name);
 			ToolObj->SetStringField(TEXT("description"), Entry->Description);
 			ToolObj->SetStringField(TEXT("signature"), Entry->TypeSignature);
+			if (!Entry->Source.IsEmpty())
+			{
+				ToolObj->SetStringField(TEXT("source"), Entry->Source);
+			}
 			ToolsArr.Add(MakeShared<FJsonValueObject>(ToolObj));
 		}
 		CatObj->SetArrayField(TEXT("tools"), ToolsArr);

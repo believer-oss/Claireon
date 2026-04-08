@@ -9,13 +9,16 @@
 #include "ClaireonBridge.h"
 #include "ClaireonDiagnosticsWidget.h"
 #include "ClaireonSettings.h"
+#include "IClaireonToolProvider.h"
 #include "Modules/ModuleManager.h"
+#include "Features/IModularFeatures.h"
 #include "ToolMenus.h"
 #include "Styling/AppStyle.h"
 #include "Framework/Docking/TabManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Containers/Ticker.h"
+#include "Async/Async.h"
 #include "Tools/ClaireonTool_AssetReferences.h"
 #include "Tools/ClaireonTool_AssetSearch.h"
 #include "Tools/ClaireonTool_ExecutePython.h"
@@ -146,7 +149,161 @@
 
 DEFINE_LOG_CATEGORY(LogClaireon);
 
+// Define the static FeatureName for IClaireonToolProvider
+const FName IClaireonToolProvider::FeatureName = TEXT("ClaireonToolProvider");
+
 #define LOCTEXT_NAMESPACE "ClaireonModule"
+
+// ---------------------------------------------------------------------------
+// FClaireonBuiltinToolProvider -- private class that provides all built-in tools
+// ---------------------------------------------------------------------------
+
+class FClaireonBuiltinToolProvider : public IClaireonToolProvider
+{
+public:
+	virtual TArray<TSharedPtr<IClaireonTool>> GetTools() const override;
+	virtual FName GetProviderName() const override { return TEXT("Claireon Built-in"); }
+};
+
+TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
+{
+	TArray<TSharedPtr<IClaireonTool>> Tools;
+
+	Tools.Add(MakeShared<ClaireonTool_AssetReferences>());
+	Tools.Add(MakeShared<ClaireonTool_AssetSearch>());
+	Tools.Add(MakeShared<ClaireonTool_ExecutePython>());
+
+	// Blueprint MCP tools
+	Tools.Add(MakeShared<ClaireonTool_GetBlueprintProperties>());
+	Tools.Add(MakeShared<ClaireonTool_GetBlueprintGraph>());
+	Tools.Add(MakeShared<ClaireonTool_FormatBlueprintGraph>());
+	Tools.Add(MakeShared<ClaireonTool_EditBlueprintGraph>());
+	Tools.Add(MakeShared<ClaireonTool_SearchInBlueprints>());
+
+	// New tools (stage 001 stubs -- implementations filled in later stages)
+	Tools.Add(MakeShared<ClaireonTool_PythonAuditLog>());
+	Tools.Add(MakeShared<ClaireonTool_ProjectInfo>());
+	Tools.Add(MakeShared<ClaireonTool_EngineInfo>());
+	Tools.Add(MakeShared<ClaireonTool_LiveCodingReload>());
+	Tools.Add(MakeShared<ClaireonTool_MapOpen>());
+	Tools.Add(MakeShared<ClaireonTool_MapStatus>());
+	Tools.Add(MakeShared<ClaireonTool_PIEStart>());
+	Tools.Add(MakeShared<ClaireonTool_PIEStop>());
+	Tools.Add(MakeShared<ClaireonTool_PIEStatus>());
+	Tools.Add(MakeShared<ClaireonTool_PIEGetPlayerPawn>());
+	Tools.Add(MakeShared<ClaireonTool_PIEGetActor>());
+	Tools.Add(MakeShared<ClaireonTool_PIECheckInitState>());
+	Tools.Add(MakeShared<ClaireonTool_PIEWaitFor>());
+	Tools.Add(MakeShared<ClaireonTool_PIESpawnEnemy>());
+	Tools.Add(MakeShared<ClaireonTool_PIEGetComponent>());
+	Tools.Add(MakeShared<ClaireonTool_PIERegisterDamageListener>());
+	Tools.Add(MakeShared<ClaireonTool_PIEGetDamageEvents>());
+	Tools.Add(MakeShared<ClaireonTool_PIEUnregisterDamageListener>());
+	Tools.Add(MakeShared<ClaireonTool_PIEAITargetInfo>());
+	Tools.Add(MakeShared<ClaireonTool_PIETestAbility>());
+	// Flythrough camera tools
+	Tools.Add(MakeShared<ClaireonTool_FlythroughStart>());
+	Tools.Add(MakeShared<ClaireonTool_FlythroughStop>());
+	Tools.Add(MakeShared<ClaireonTool_FlythroughStatus>());
+	Tools.Add(MakeShared<ClaireonTool_PIEScreenshot>());
+	Tools.Add(MakeShared<ClaireonTool_PIETraceStart>());
+	Tools.Add(MakeShared<ClaireonTool_PIETraceStop>());
+	Tools.Add(MakeShared<ClaireonTool_ConsoleExecute>());
+	Tools.Add(MakeShared<ClaireonTool_AssetList>());
+	Tools.Add(MakeShared<ClaireonTool_AssetValidate>());
+	Tools.Add(MakeShared<ClaireonTool_AssetFixupRedirectors>());
+	Tools.Add(MakeShared<ClaireonTool_OpenAssetEditor>());
+	Tools.Add(MakeShared<ClaireonTool_BlueprintCompile>());
+	Tools.Add(MakeShared<ClaireonTool_CommandletRun>());
+	Tools.Add(MakeShared<ClaireonTool_AssetResave>());
+	Tools.Add(MakeShared<ClaireonTool_AssetCook>());
+	Tools.Add(MakeShared<ClaireonTool_AssetImportFile>());
+	Tools.Add(MakeShared<ClaireonTool_LogTail>());
+	Tools.Add(MakeShared<ClaireonTool_LogSearch>());
+	Tools.Add(MakeShared<ClaireonTool_TestRun>());
+	Tools.Add(MakeShared<ClaireonTool_TestList>());
+	// State Tree MCP tools
+	Tools.Add(MakeShared<ClaireonTool_StateTreeInspect>());
+	Tools.Add(MakeShared<ClaireonTool_StateTreeListNodeTypes>());
+	Tools.Add(MakeShared<ClaireonTool_StateTreeEdit>());
+	Tools.Add(MakeShared<ClaireonTool_StateTreeRuntimeInspect>());
+	Tools.Add(MakeShared<ClaireonTool_StateTreeRuntimeSendEvent>());
+
+	// Diff MCP tools
+	Tools.Add(MakeShared<ClaireonTool_AssetDiffProperties>());
+	Tools.Add(MakeShared<ClaireonTool_BlueprintDiff>());
+	Tools.Add(MakeShared<ClaireonTool_StateTreeDiff>());
+
+	// Trace analysis MCP tools
+	Tools.Add(MakeShared<ClaireonTool_TraceOpen>());
+	Tools.Add(MakeShared<ClaireonTool_TraceClose>());
+	Tools.Add(MakeShared<ClaireonTool_TraceGetSessionInfo>());
+	Tools.Add(MakeShared<ClaireonTool_TraceGetFrameStats>());
+	Tools.Add(MakeShared<ClaireonTool_TraceGetTopScopes>());
+	Tools.Add(MakeShared<ClaireonTool_TraceGetScopeDetails>());
+	Tools.Add(MakeShared<ClaireonTool_TraceGetThreads>());
+
+	// Widget Blueprint MCP tools
+	Tools.Add(MakeShared<ClaireonTool_GetWidgetBPTree>());
+	Tools.Add(MakeShared<ClaireonTool_EditWidgetBP>());
+
+	// Behavior Tree + EQS MCP tools
+	Tools.Add(MakeShared<ClaireonTool_BehaviorTreeInspect>());
+	Tools.Add(MakeShared<ClaireonTool_BehaviorTreeInspectBlackboard>());
+	Tools.Add(MakeShared<ClaireonTool_BehaviorTreeEdit>());
+	Tools.Add(MakeShared<ClaireonTool_BlackboardEdit>());
+	Tools.Add(MakeShared<ClaireonTool_EQSInspect>());
+	Tools.Add(MakeShared<ClaireonTool_EQSEdit>());
+
+	// Niagara MCP tools
+	Tools.Add(MakeShared<ClaireonTool_NiagaraInspect>());
+	Tools.Add(MakeShared<ClaireonTool_NiagaraEdit>());
+
+	// PCG Graph MCP tools
+	Tools.Add(MakeShared<ClaireonTool_PCGGraphInspect>());
+	Tools.Add(MakeShared<ClaireonTool_PCGGraphEdit>());
+
+	// Session management tools
+	Tools.Add(MakeShared<ClaireonTool_ListSessions>());
+	Tools.Add(MakeShared<ClaireonTool_ReleaseSessions>());
+
+	// Level tools
+	Tools.Add(MakeShared<ClaireonTool_ListActors>());
+	Tools.Add(MakeShared<ClaireonTool_LevelSetActorProperty>());
+	Tools.Add(MakeShared<ClaireonTool_PlaceActor>());
+	Tools.Add(MakeShared<ClaireonTool_MapDuplicate>());
+	Tools.Add(MakeShared<ClaireonTool_SetSplinePoints>());
+
+	// Blueprint CDO tools
+	Tools.Add(MakeShared<ClaireonTool_SetBlueprintCDOProperty>());
+
+	// Meta tools
+	Tools.Add(MakeShared<ClaireonTool_SearchTools>());
+	Tools.Add(MakeShared<ClaireonTool_FeedbackSubmit>());
+
+	// Data Table MCP tools
+	Tools.Add(MakeShared<ClaireonTool_DataTableSearch>());
+	Tools.Add(MakeShared<ClaireonTool_DataTableGetInfo>());
+	Tools.Add(MakeShared<ClaireonTool_DataTableGetRows>());
+	Tools.Add(MakeShared<ClaireonTool_DataTableGetRow>());
+	Tools.Add(MakeShared<ClaireonTool_DataTableFindRows>());
+	Tools.Add(MakeShared<ClaireonTool_DataTableAddRow>());
+	Tools.Add(MakeShared<ClaireonTool_DataTableRemoveRow>());
+	Tools.Add(MakeShared<ClaireonTool_DataTableDuplicateRow>());
+	Tools.Add(MakeShared<ClaireonTool_DataTableRenameRow>());
+	Tools.Add(MakeShared<ClaireonTool_DataTableMoveRow>());
+	Tools.Add(MakeShared<ClaireonTool_DataTableSetRowValues>());
+	Tools.Add(MakeShared<ClaireonTool_DataTableExportJson>());
+	Tools.Add(MakeShared<ClaireonTool_DataTableImportJson>());
+	Tools.Add(MakeShared<ClaireonTool_DataTableExportCsv>());
+	Tools.Add(MakeShared<ClaireonTool_DataTableImportCsv>());
+
+	return Tools;
+}
+
+// ---------------------------------------------------------------------------
+// FClaireonModule
+// ---------------------------------------------------------------------------
 
 void FClaireonModule::StartupModule()
 {
@@ -168,6 +325,17 @@ void FClaireonModule::StartupModule()
 	// Bind PIE manager to editor delegates so it detects all PIE sessions
 	FClaireonPIEManager::Get().BindEditorDelegates();
 
+	// Register built-in tool provider
+	BuiltinToolProvider = MakeUnique<FClaireonBuiltinToolProvider>();
+	IModularFeatures::Get().RegisterModularFeature(
+		IClaireonToolProvider::FeatureName, BuiltinToolProvider.Get());
+
+	// Listen for modular feature registration/unregistration
+	IModularFeatures::Get().OnModularFeatureRegistered().AddRaw(
+		this, &FClaireonModule::OnModularFeatureRegistered);
+	IModularFeatures::Get().OnModularFeatureUnregistered().AddRaw(
+		this, &FClaireonModule::OnModularFeatureUnregistered);
+
 	// Check for -StartMCPServer command-line flag
 	if (FParse::Param(FCommandLine::Get(), TEXT("StartMCPServer")))
 	{
@@ -181,6 +349,10 @@ void FClaireonModule::ShutdownModule()
 	FClaireonPIEManager::Get().UnbindEditorDelegates();
 	FClaireonRichTextStyle::Shutdown();
 
+	// Unsubscribe from modular feature events
+	IModularFeatures::Get().OnModularFeatureRegistered().RemoveAll(this);
+	IModularFeatures::Get().OnModularFeatureUnregistered().RemoveAll(this);
+
 	// Unsubscribe from settings changes
 	if (SettingsChangedHandle.IsValid())
 	{
@@ -193,6 +365,14 @@ void FClaireonModule::ShutdownModule()
 
 	StopServer();
 	SClaireonDiagnosticsWidget::UnregisterTabSpawner();
+
+	// Unregister built-in tool provider
+	if (BuiltinToolProvider)
+	{
+		IModularFeatures::Get().UnregisterModularFeature(
+			IClaireonToolProvider::FeatureName, BuiltinToolProvider.Get());
+		BuiltinToolProvider.Reset();
+	}
 }
 
 void FClaireonModule::StartServer()
@@ -221,138 +401,8 @@ void FClaireonModule::StartServer()
 	}),
 		1.0f);
 
-	Server->RegisterTool(MakeShared<ClaireonTool_AssetReferences>());
-	Server->RegisterTool(MakeShared<ClaireonTool_AssetSearch>());
-	Server->RegisterTool(MakeShared<ClaireonTool_ExecutePython>());
-
-	// Blueprint MCP tools
-	Server->RegisterTool(MakeShared<ClaireonTool_GetBlueprintProperties>());
-	Server->RegisterTool(MakeShared<ClaireonTool_GetBlueprintGraph>());
-	Server->RegisterTool(MakeShared<ClaireonTool_FormatBlueprintGraph>());
-	Server->RegisterTool(MakeShared<ClaireonTool_EditBlueprintGraph>());
-	Server->RegisterTool(MakeShared<ClaireonTool_SearchInBlueprints>());
-
-	// New tools (stage 001 stubs — implementations filled in later stages)
-	Server->RegisterTool(MakeShared<ClaireonTool_PythonAuditLog>());
-	Server->RegisterTool(MakeShared<ClaireonTool_ProjectInfo>());
-	Server->RegisterTool(MakeShared<ClaireonTool_EngineInfo>());
-	Server->RegisterTool(MakeShared<ClaireonTool_LiveCodingReload>());
-	Server->RegisterTool(MakeShared<ClaireonTool_MapOpen>());
-	Server->RegisterTool(MakeShared<ClaireonTool_MapStatus>());
-	Server->RegisterTool(MakeShared<ClaireonTool_PIEStart>());
-	Server->RegisterTool(MakeShared<ClaireonTool_PIEStop>());
-	Server->RegisterTool(MakeShared<ClaireonTool_PIEStatus>());
-	Server->RegisterTool(MakeShared<ClaireonTool_PIEGetPlayerPawn>());
-	Server->RegisterTool(MakeShared<ClaireonTool_PIEGetActor>());
-	Server->RegisterTool(MakeShared<ClaireonTool_PIECheckInitState>());
-	Server->RegisterTool(MakeShared<ClaireonTool_PIEWaitFor>());
-	Server->RegisterTool(MakeShared<ClaireonTool_PIESpawnEnemy>());
-	Server->RegisterTool(MakeShared<ClaireonTool_PIEGetComponent>());
-	Server->RegisterTool(MakeShared<ClaireonTool_PIERegisterDamageListener>());
-	Server->RegisterTool(MakeShared<ClaireonTool_PIEGetDamageEvents>());
-	Server->RegisterTool(MakeShared<ClaireonTool_PIEUnregisterDamageListener>());
-	Server->RegisterTool(MakeShared<ClaireonTool_PIEAITargetInfo>());
-	Server->RegisterTool(MakeShared<ClaireonTool_PIETestAbility>());
-	// Flythrough camera tools
-	Server->RegisterTool(MakeShared<ClaireonTool_FlythroughStart>());
-	Server->RegisterTool(MakeShared<ClaireonTool_FlythroughStop>());
-	Server->RegisterTool(MakeShared<ClaireonTool_FlythroughStatus>());
-	Server->RegisterTool(MakeShared<ClaireonTool_PIEScreenshot>());
-	Server->RegisterTool(MakeShared<ClaireonTool_PIETraceStart>());
-	Server->RegisterTool(MakeShared<ClaireonTool_PIETraceStop>());
-	Server->RegisterTool(MakeShared<ClaireonTool_ConsoleExecute>());
-	Server->RegisterTool(MakeShared<ClaireonTool_AssetList>());
-	Server->RegisterTool(MakeShared<ClaireonTool_AssetValidate>());
-	Server->RegisterTool(MakeShared<ClaireonTool_AssetFixupRedirectors>());
-	Server->RegisterTool(MakeShared<ClaireonTool_OpenAssetEditor>());
-	Server->RegisterTool(MakeShared<ClaireonTool_BlueprintCompile>());
-	Server->RegisterTool(MakeShared<ClaireonTool_CommandletRun>());
-	Server->RegisterTool(MakeShared<ClaireonTool_AssetResave>());
-	Server->RegisterTool(MakeShared<ClaireonTool_AssetCook>());
-	Server->RegisterTool(MakeShared<ClaireonTool_AssetImportFile>());
-	Server->RegisterTool(MakeShared<ClaireonTool_LogTail>());
-	Server->RegisterTool(MakeShared<ClaireonTool_LogSearch>());
-	Server->RegisterTool(MakeShared<ClaireonTool_TestRun>());
-	Server->RegisterTool(MakeShared<ClaireonTool_TestList>());
-	// State Tree MCP tools
-	Server->RegisterTool(MakeShared<ClaireonTool_StateTreeInspect>());
-	Server->RegisterTool(MakeShared<ClaireonTool_StateTreeListNodeTypes>());
-	Server->RegisterTool(MakeShared<ClaireonTool_StateTreeEdit>());
-	Server->RegisterTool(MakeShared<ClaireonTool_StateTreeRuntimeInspect>());
-	Server->RegisterTool(MakeShared<ClaireonTool_StateTreeRuntimeSendEvent>());
-
-	// Diff MCP tools
-	Server->RegisterTool(MakeShared<ClaireonTool_AssetDiffProperties>());
-	Server->RegisterTool(MakeShared<ClaireonTool_BlueprintDiff>());
-	Server->RegisterTool(MakeShared<ClaireonTool_StateTreeDiff>());
-
-	// Trace analysis MCP tools
-	Server->RegisterTool(MakeShared<ClaireonTool_TraceOpen>());
-	Server->RegisterTool(MakeShared<ClaireonTool_TraceClose>());
-	Server->RegisterTool(MakeShared<ClaireonTool_TraceGetSessionInfo>());
-	Server->RegisterTool(MakeShared<ClaireonTool_TraceGetFrameStats>());
-	Server->RegisterTool(MakeShared<ClaireonTool_TraceGetTopScopes>());
-	Server->RegisterTool(MakeShared<ClaireonTool_TraceGetScopeDetails>());
-	Server->RegisterTool(MakeShared<ClaireonTool_TraceGetThreads>());
-
-	// Widget Blueprint MCP tools
-	Server->RegisterTool(MakeShared<ClaireonTool_GetWidgetBPTree>());
-	Server->RegisterTool(MakeShared<ClaireonTool_EditWidgetBP>());
-
-	// Behavior Tree + EQS MCP tools
-	Server->RegisterTool(MakeShared<ClaireonTool_BehaviorTreeInspect>());
-	Server->RegisterTool(MakeShared<ClaireonTool_BehaviorTreeInspectBlackboard>());
-	Server->RegisterTool(MakeShared<ClaireonTool_BehaviorTreeEdit>());
-	Server->RegisterTool(MakeShared<ClaireonTool_BlackboardEdit>());
-	Server->RegisterTool(MakeShared<ClaireonTool_EQSInspect>());
-	Server->RegisterTool(MakeShared<ClaireonTool_EQSEdit>());
-
-	// Niagara MCP tools
-	Server->RegisterTool(MakeShared<ClaireonTool_NiagaraInspect>());
-	Server->RegisterTool(MakeShared<ClaireonTool_NiagaraEdit>());
-
-	// PCG Graph MCP tools
-	Server->RegisterTool(MakeShared<ClaireonTool_PCGGraphInspect>());
-	Server->RegisterTool(MakeShared<ClaireonTool_PCGGraphEdit>());
-
-	// Session management tools
-	Server->RegisterTool(MakeShared<ClaireonTool_ListSessions>());
-	Server->RegisterTool(MakeShared<ClaireonTool_ReleaseSessions>());
-
-	// Level tools
-	Server->RegisterTool(MakeShared<ClaireonTool_ListActors>());
-	Server->RegisterTool(MakeShared<ClaireonTool_LevelSetActorProperty>());
-	Server->RegisterTool(MakeShared<ClaireonTool_PlaceActor>());
-	Server->RegisterTool(MakeShared<ClaireonTool_MapDuplicate>());
-	Server->RegisterTool(MakeShared<ClaireonTool_SetSplinePoints>());
-
-	// Blueprint CDO tools
-	Server->RegisterTool(MakeShared<ClaireonTool_SetBlueprintCDOProperty>());
-
-	// Meta tools
-	{
-		auto SearchTool = MakeShared<ClaireonTool_SearchTools>();
-		SearchTool->SetServer(Server.Get());
-		Server->RegisterTool(SearchTool);
-	}
-	Server->RegisterTool(MakeShared<ClaireonTool_FeedbackSubmit>());
-
-	// Data Table MCP tools
-	Server->RegisterTool(MakeShared<ClaireonTool_DataTableSearch>());
-	Server->RegisterTool(MakeShared<ClaireonTool_DataTableGetInfo>());
-	Server->RegisterTool(MakeShared<ClaireonTool_DataTableGetRows>());
-	Server->RegisterTool(MakeShared<ClaireonTool_DataTableGetRow>());
-	Server->RegisterTool(MakeShared<ClaireonTool_DataTableFindRows>());
-	Server->RegisterTool(MakeShared<ClaireonTool_DataTableAddRow>());
-	Server->RegisterTool(MakeShared<ClaireonTool_DataTableRemoveRow>());
-	Server->RegisterTool(MakeShared<ClaireonTool_DataTableDuplicateRow>());
-	Server->RegisterTool(MakeShared<ClaireonTool_DataTableRenameRow>());
-	Server->RegisterTool(MakeShared<ClaireonTool_DataTableMoveRow>());
-	Server->RegisterTool(MakeShared<ClaireonTool_DataTableSetRowValues>());
-	Server->RegisterTool(MakeShared<ClaireonTool_DataTableExportJson>());
-	Server->RegisterTool(MakeShared<ClaireonTool_DataTableImportJson>());
-	Server->RegisterTool(MakeShared<ClaireonTool_DataTableExportCsv>());
-	Server->RegisterTool(MakeShared<ClaireonTool_DataTableImportCsv>());
+	// Collect tools from all registered providers
+	CollectToolsFromProviders();
 
 	// Determine port: command-line override > settings > hardcoded default
 	uint32 Port = 8017;
@@ -381,12 +431,6 @@ void FClaireonModule::StartServer()
 		Server.Reset();
 		return;
 	}
-
-	// Register any tools that were queued before the server started
-	FlushPendingExternalTools();
-
-	// Notify external modules so they can register their own tools
-	FClaireonServer::OnServerStarted().Broadcast(*Server);
 
 	// Subscribe to settings changes for runtime port reconfiguration
 	if (!SettingsChangedHandle.IsValid())
@@ -438,30 +482,108 @@ FClaireonModule& FClaireonModule::Get()
 	return FModuleManager::GetModuleChecked<FClaireonModule>(TEXT("Claireon"));
 }
 
-void FClaireonModule::RegisterExternalTool(TSharedPtr<IClaireonTool> Tool)
-{
-	if (Server.IsValid())
-	{
-		Server->RegisterTool(Tool);
-	}
-	else
-	{
-		PendingExternalTools.Add(Tool);
-	}
-}
-
-void FClaireonModule::FlushPendingExternalTools()
+void FClaireonModule::CollectToolsFromProviders()
 {
 	if (!Server.IsValid())
 	{
 		return;
 	}
 
-	for (const TSharedPtr<IClaireonTool>& Tool : PendingExternalTools)
+	TArray<IClaireonToolProvider*> Providers =
+		IModularFeatures::Get().GetModularFeatureImplementations<IClaireonToolProvider>(
+			IClaireonToolProvider::FeatureName);
+
+	for (IClaireonToolProvider* Provider : Providers)
 	{
-		Server->RegisterTool(Tool);
+		CollectToolsFromProvider(Provider);
 	}
-	PendingExternalTools.Empty();
+}
+
+void FClaireonModule::CollectToolsFromProvider(IClaireonToolProvider* Provider)
+{
+	if (!Server.IsValid() || !Provider)
+	{
+		return;
+	}
+
+	const FName ProviderName = Provider->GetProviderName();
+	TArray<TSharedPtr<IClaireonTool>> Tools = Provider->GetTools();
+
+	for (const TSharedPtr<IClaireonTool>& Tool : Tools)
+	{
+		if (!Tool.IsValid())
+		{
+			continue;
+		}
+
+		const FString ToolName = Tool->GetName();
+
+		// Check for name collision and log a warning
+		const TMap<FString, FName>& SourceMap = Server->GetToolSourceMap();
+		if (const FName* ExistingSource = SourceMap.Find(ToolName))
+		{
+			UE_LOG(LogClaireon, Warning,
+				TEXT("[MCP] Tool name collision: '%s' from provider '%s' overrides existing from '%s'"),
+				*ToolName, *ProviderName.ToString(), *ExistingSource->ToString());
+		}
+
+		Server->RegisterTool(Tool, ProviderName);
+	}
+}
+
+void FClaireonModule::OnModularFeatureRegistered(const FName& Type, IModularFeature* ModularFeature)
+{
+	if (Type != IClaireonToolProvider::FeatureName)
+	{
+		return;
+	}
+
+	IClaireonToolProvider* Provider = static_cast<IClaireonToolProvider*>(ModularFeature);
+
+	if (!IsInGameThread())
+	{
+		AsyncTask(ENamedThreads::GameThread, [this, Provider]()
+		{
+			if (Server.IsValid())
+			{
+				CollectToolsFromProvider(Provider);
+			}
+		});
+		return;
+	}
+
+	if (Server.IsValid())
+	{
+		CollectToolsFromProvider(Provider);
+	}
+}
+
+void FClaireonModule::OnModularFeatureUnregistered(const FName& Type, IModularFeature* ModularFeature)
+{
+	if (Type != IClaireonToolProvider::FeatureName)
+	{
+		return;
+	}
+
+	IClaireonToolProvider* Provider = static_cast<IClaireonToolProvider*>(ModularFeature);
+
+	if (!IsInGameThread())
+	{
+		FName ProviderName = Provider->GetProviderName();
+		AsyncTask(ENamedThreads::GameThread, [this, ProviderName]()
+		{
+			if (Server.IsValid())
+			{
+				Server->UnregisterToolsBySource(ProviderName);
+			}
+		});
+		return;
+	}
+
+	if (Server.IsValid())
+	{
+		Server->UnregisterToolsBySource(Provider->GetProviderName());
+	}
 }
 
 void FClaireonModule::RegisterMenus()
