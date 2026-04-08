@@ -14,7 +14,7 @@
 
 FString ClaireonTool_OpenAssetEditor::GetName() const
 {
-	return TEXT("open_asset_editor");
+	return TEXT("claireon.open_asset_editor");
 }
 
 FString ClaireonTool_OpenAssetEditor::GetCategory() const

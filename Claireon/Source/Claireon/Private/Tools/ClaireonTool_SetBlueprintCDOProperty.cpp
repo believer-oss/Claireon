@@ -15,7 +15,7 @@
 
 FString ClaireonTool_SetBlueprintCDOProperty::GetName() const
 {
-	return TEXT("set_blueprint_cdo_property");
+	return TEXT("claireon.set_blueprint_cdo_property");
 }
 
 FString ClaireonTool_SetBlueprintCDOProperty::GetCategory() const

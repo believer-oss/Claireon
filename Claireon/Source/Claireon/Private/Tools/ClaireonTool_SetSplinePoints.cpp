@@ -17,7 +17,7 @@ using FToolResult = IClaireonTool::FToolResult;
 
 FString ClaireonTool_SetSplinePoints::GetName() const
 {
-	return TEXT("set_spline_points");
+	return TEXT("claireon.set_spline_points");
 }
 
 FString ClaireonTool_SetSplinePoints::GetCategory() const

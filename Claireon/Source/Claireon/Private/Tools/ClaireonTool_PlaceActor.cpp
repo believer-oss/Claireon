@@ -23,7 +23,7 @@ using FToolResult = IClaireonTool::FToolResult;
 
 FString ClaireonTool_PlaceActor::GetName() const
 {
-	return TEXT("place_actor");
+	return TEXT("claireon.place_actor");
 }
 
 FString ClaireonTool_PlaceActor::GetCategory() const

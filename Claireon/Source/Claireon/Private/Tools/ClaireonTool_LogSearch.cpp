@@ -14,7 +14,7 @@
 
 FString ClaireonTool_LogSearch::GetName() const
 {
-	return TEXT("log_search");
+	return TEXT("claireon.log_search");
 }
 
 FString ClaireonTool_LogSearch::GetCategory() const

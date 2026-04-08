@@ -23,7 +23,7 @@ using FToolResult = IClaireonTool::FToolResult;
 
 FString ClaireonTool_MapDuplicate::GetName() const
 {
-	return TEXT("duplicate_and_open_map_async");
+	return TEXT("claireon.duplicate_and_open_map_async");
 }
 
 FString ClaireonTool_MapDuplicate::GetCategory() const
