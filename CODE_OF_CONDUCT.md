@@ -4,6 +4,6 @@ This project follows the [Contributor Covenant v2.1](https://www.contributor-cov
 
 ## Reporting
 
-If you experience or witness unacceptable behavior, please report it by opening a [GitHub private security advisory](https://github.com/believer-oss/claireon/security/advisories/new) or emailing the maintainers directly.
+If you experience or witness unacceptable behavior, please report it by emailing **security@believer.gg** or contacting the maintainers directly.
 
 Reports will be reviewed promptly and kept confidential.
