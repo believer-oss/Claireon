@@ -23,6 +23,8 @@
 #include "Editor.h"
 #include "UObject/Package.h"
 #include "Misc/Paths.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "Engine/BlueprintGeneratedClass.h"
 
 // Using statements
 using FToolResult = IClaireonTool::FToolResult;
@@ -1375,6 +1377,70 @@ FToolResult ClaireonTool_AnimEdit::Operation_ListModifiers(const FString& Sessio
 	return MakeSuccessResult(ResponseData, FString::Printf(TEXT("Session %s: list_modifiers"), *SessionId.Left(8)));
 }
 
+// Helper: resolve a modifier class name to UClass* (native or Blueprint)
+static UClass* ResolveModifierClass(const FString& ClassName, FString& OutError)
+{
+	UClass* BaseClass = UAnimationModifier::StaticClass();
+
+	// Try direct class name lookup
+	UClass* FoundClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
+	if (FoundClass && FoundClass->IsChildOf(BaseClass))
+	{
+		return FoundClass;
+	}
+
+	// Try with U prefix stripped
+	if (ClassName.StartsWith(TEXT("U")))
+	{
+		FString WithoutU = ClassName.Mid(1);
+		FoundClass = FindFirstObject<UClass>(*WithoutU, EFindFirstObjectOptions::NativeFirst);
+		if (FoundClass && FoundClass->IsChildOf(BaseClass))
+		{
+			return FoundClass;
+		}
+	}
+
+	// Search asset registry for Blueprint modifier classes
+	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	FARFilter Filter;
+	Filter.ClassPaths.Add(UBlueprintGeneratedClass::StaticClass()->GetClassPathName());
+	Filter.bRecursiveClasses = true;
+
+	TArray<FAssetData> AssetList;
+	AssetRegistry.GetAssets(Filter, AssetList);
+
+	for (const FAssetData& Asset : AssetList)
+	{
+		if (Asset.AssetName.ToString().Contains(ClassName, ESearchCase::IgnoreCase))
+		{
+			UClass* BPClass = Cast<UClass>(Asset.GetAsset());
+			if (BPClass && BPClass->IsChildOf(BaseClass))
+			{
+				return BPClass;
+			}
+		}
+	}
+
+	OutError = FString::Printf(TEXT("Could not resolve modifier class: %s. Use the full class name or a short name matching a loaded class."), *ClassName);
+	return nullptr;
+}
+
+// Helper: access the protected AnimationModifierInstances array via UE reflection
+static TArray<TObjectPtr<UAnimationModifier>>* GetModifierArrayPtr(UAnimationModifiersAssetUserData* AssetUserData)
+{
+	FProperty* Prop = AssetUserData->GetClass()->FindPropertyByName(TEXT("AnimationModifierInstances"));
+	if (!Prop) return nullptr;
+	return Prop->ContainerPtrToValuePtr<TArray<TObjectPtr<UAnimationModifier>>>(AssetUserData);
+}
+
+// Helper: access the protected AppliedModifiers map via UE reflection
+static TMap<FSoftObjectPath, TObjectPtr<UAnimationModifier>>* GetAppliedModifiersMapPtr(UAnimationModifiersAssetUserData* AssetUserData)
+{
+	FProperty* Prop = AssetUserData->GetClass()->FindPropertyByName(TEXT("AppliedModifiers"));
+	if (!Prop) return nullptr;
+	return Prop->ContainerPtrToValuePtr<TMap<FSoftObjectPath, TObjectPtr<UAnimationModifier>>>(AssetUserData);
+}
+
 FToolResult ClaireonTool_AnimEdit::Operation_AddModifier(const FString& SessionId, FAnimEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
 {
 	if (Data->AssetType != TEXT("AnimSequence"))
@@ -1388,8 +1454,50 @@ FToolResult ClaireonTool_AnimEdit::Operation_AddModifier(const FString& SessionI
 		return MakeErrorResult(TEXT("Failed to cast to AnimSequence"));
 	}
 
-	// UAnimationModifiersAssetUserData::AddAnimationModifier is protected (friend-only).
-	return MakeErrorResult(TEXT("add_modifier is not currently supported — UAnimationModifiersAssetUserData::AddAnimationModifier is protected. Use the Animation Data Modifiers panel in the editor instead."));
+	FString ClassName;
+	if (!Params->TryGetStringField(TEXT("class_name"), ClassName) || ClassName.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("Missing required parameter: class_name"));
+	}
+
+	FString Error;
+	UClass* ModifierClass = ResolveModifierClass(ClassName, Error);
+	if (!ModifierClass)
+	{
+		return MakeErrorResult(Error);
+	}
+
+	// Get or create asset user data
+	UAnimationModifiersAssetUserData* AssetUserData = AnimSeq->GetAssetUserData<UAnimationModifiersAssetUserData>();
+	if (!AssetUserData)
+	{
+		AssetUserData = NewObject<UAnimationModifiersAssetUserData>(AnimSeq, UAnimationModifiersAssetUserData::StaticClass());
+		AssetUserData->SetFlags(RF_Transactional);
+		AnimSeq->AddAssetUserData(AssetUserData);
+	}
+
+	FScopedTransaction Transaction(NSLOCTEXT("Claireon", "AnimEdit_AddModifier", "MCP: Add Animation Modifier"));
+	AnimSeq->Modify();
+
+	// Create the modifier instance
+	UAnimationModifier* NewModifier = NewObject<UAnimationModifier>(AssetUserData, ModifierClass, NAME_None, RF_Transactional);
+	if (!NewModifier)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Failed to create modifier instance of class %s"), *ClassName));
+	}
+
+	// Add to the protected array via reflection
+	TArray<TObjectPtr<UAnimationModifier>>* ArrayPtr = GetModifierArrayPtr(AssetUserData);
+	if (!ArrayPtr)
+	{
+		return MakeErrorResult(TEXT("Failed to access AnimationModifierInstances via reflection"));
+	}
+
+	ArrayPtr->Add(NewModifier);
+	AnimSeq->MarkPackageDirty();
+
+	Data->LastOperationStatus = FString::Printf(TEXT("add_modifier -> Added %s [%d]"), *ModifierClass->GetName(), ArrayPtr->Num() - 1);
+	return BuildStateResponse(SessionId, Data);
 }
 
 FToolResult ClaireonTool_AnimEdit::Operation_RemoveModifier(const FString& SessionId, FAnimEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
@@ -1405,8 +1513,53 @@ FToolResult ClaireonTool_AnimEdit::Operation_RemoveModifier(const FString& Sessi
 		return MakeErrorResult(TEXT("Failed to cast to AnimSequence"));
 	}
 
-	// UAnimationModifiersAssetUserData::RemoveAnimationModifierInstance is protected (friend-only).
-	return MakeErrorResult(TEXT("remove_modifier is not currently supported — UAnimationModifiersAssetUserData::RemoveAnimationModifierInstance is protected. Use the Animation Data Modifiers panel in the editor instead."));
+	double IndexD = -1.0;
+	if (!Params->TryGetNumberField(TEXT("modifier_index"), IndexD))
+	{
+		return MakeErrorResult(TEXT("Missing required parameter: modifier_index"));
+	}
+	int32 Index = static_cast<int32>(IndexD);
+
+	UAnimationModifiersAssetUserData* AssetUserData = AnimSeq->GetAssetUserData<UAnimationModifiersAssetUserData>();
+	if (!AssetUserData)
+	{
+		return MakeErrorResult(TEXT("No modifier asset user data found on this animation"));
+	}
+
+	const TArray<UAnimationModifier*>& Modifiers = AssetUserData->GetAnimationModifierInstances();
+	if (Index < 0 || Index >= Modifiers.Num())
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Modifier index %d out of range [0, %d)"), Index, Modifiers.Num()));
+	}
+
+	UAnimationModifier* ModifierToRemove = Modifiers[Index];
+	FString ModifierName = ModifierToRemove ? ModifierToRemove->GetClass()->GetName() : TEXT("null");
+
+	FScopedTransaction Transaction(NSLOCTEXT("Claireon", "AnimEdit_RemoveModifier", "MCP: Remove Animation Modifier"));
+	AnimSeq->Modify();
+
+	// Remove from the protected array via reflection
+	TArray<TObjectPtr<UAnimationModifier>>* ArrayPtr = GetModifierArrayPtr(AssetUserData);
+	if (!ArrayPtr)
+	{
+		return MakeErrorResult(TEXT("Failed to access AnimationModifierInstances via reflection"));
+	}
+
+	// Also remove from AppliedModifiers map (mirrors RemoveAnimationModifierInstance behavior)
+	if (ModifierToRemove)
+	{
+		TMap<FSoftObjectPath, TObjectPtr<UAnimationModifier>>* MapPtr = GetAppliedModifiersMapPtr(AssetUserData);
+		if (MapPtr)
+		{
+			MapPtr->Remove(ModifierToRemove);
+		}
+	}
+
+	ArrayPtr->RemoveAt(Index);
+	AnimSeq->MarkPackageDirty();
+
+	Data->LastOperationStatus = FString::Printf(TEXT("remove_modifier -> Removed %s [%d]"), *ModifierName, Index);
+	return BuildStateResponse(SessionId, Data);
 }
 
 FToolResult ClaireonTool_AnimEdit::Operation_ApplyModifier(const FString& SessionId, FAnimEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
