@@ -125,9 +125,17 @@ IClaireonTool::FToolResult ClaireonTool_AssetList::Execute(const TSharedPtr<FJso
 	// Apply additional filters
 	TArray<FAssetData> FilteredAssets;
 	static constexpr int32 MaxResults = 500;
+	int32 RedirectorsSkipped = 0;
 
 	for (const FAssetData& Asset : AllAssets)
 	{
+		// Skip redirector assets -- they are artifacts of asset moves, not real content
+		if (Asset.IsRedirector())
+		{
+			++RedirectorsSkipped;
+			continue;
+		}
+
 		FString PackagePath = Asset.PackageName.ToString();
 
 		// Filter out plugin assets if not requested
@@ -175,6 +183,10 @@ IClaireonTool::FToolResult ClaireonTool_AssetList::Execute(const TSharedPtr<FJso
 	if (bTruncated)
 	{
 		Output += FString::Printf(TEXT(" (capped at %d)"), MaxResults);
+	}
+	if (RedirectorsSkipped > 0)
+	{
+		Output += FString::Printf(TEXT("\nRedirectors Hidden: %d"), RedirectorsSkipped);
 	}
 	Output += TEXT("\n\n");
 

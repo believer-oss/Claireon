@@ -131,6 +131,11 @@ TArray<FAssetData> FindAssetsByClass(UClass* Class, const FString& NameFilter, i
 
 	for (const FAssetData& Asset : AllAssets)
 	{
+		// Skip redirector assets
+		if (Asset.IsRedirector())
+		{
+			continue;
+		}
 		if (!NameFilter.IsEmpty() && !Asset.AssetName.ToString().Contains(NameFilter))
 		{
 			continue;

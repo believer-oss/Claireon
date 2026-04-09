@@ -118,11 +118,20 @@ IClaireonTool::FToolResult ClaireonTool_AssetReferences::Execute(const TSharedPt
 	}
 
 	// Build referencers array
+	int32 RedirectorRefsSkipped = 0;
+	int32 RedirectorDepsSkipped = 0;
 	TArray<TSharedPtr<FJsonValue>> ReferencersArray;
 	for (const FName& RefName : ReferencerNames)
 	{
 		TArray<FAssetData> Assets;
 		AssetRegistry.GetAssetsByPackageName(RefName, Assets);
+
+		// Skip redirector assets
+		if (Assets.Num() > 0 && Assets[0].IsRedirector())
+		{
+			++RedirectorRefsSkipped;
+			continue;
+		}
 
 		TSharedPtr<FJsonObject> RefObj = MakeShared<FJsonObject>();
 		RefObj->SetStringField(TEXT("path"), RefName.ToString());
@@ -143,6 +152,13 @@ IClaireonTool::FToolResult ClaireonTool_AssetReferences::Execute(const TSharedPt
 	{
 		TArray<FAssetData> Assets;
 		AssetRegistry.GetAssetsByPackageName(DepName, Assets);
+
+		// Skip redirector assets
+		if (Assets.Num() > 0 && Assets[0].IsRedirector())
+		{
+			++RedirectorDepsSkipped;
+			continue;
+		}
 
 		TSharedPtr<FJsonObject> DepObj = MakeShared<FJsonObject>();
 		DepObj->SetStringField(TEXT("path"), DepName.ToString());
@@ -166,7 +182,14 @@ IClaireonTool::FToolResult ClaireonTool_AssetReferences::Execute(const TSharedPt
 	// Extract short asset name for summary
 	FString AssetShortName = FPackageName::GetShortName(PackageNameStr);
 	FString Summary = FString::Printf(TEXT("%s: %d referencers, %d dependencies"),
-		*AssetShortName, ReferencerNames.Num(), DependencyNames.Num());
+		*AssetShortName,
+		ReferencersArray.Num(),
+		DependenciesArray.Num());
+	if (RedirectorRefsSkipped > 0 || RedirectorDepsSkipped > 0)
+	{
+		Summary += FString::Printf(TEXT(" (%d redirector refs hidden)"),
+			RedirectorRefsSkipped + RedirectorDepsSkipped);
+	}
 
 	return MakeSuccessResult(Data, Summary);
 }

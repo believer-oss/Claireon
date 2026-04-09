@@ -137,9 +137,17 @@ IClaireonTool::FToolResult ClaireonTool_AssetSearch::Execute(const TSharedPtr<FJ
 	// Filter and collect results
 	TArray<TSharedPtr<FJsonValue>> AssetsArray;
 	int32 TotalMatched = 0;
+	int32 RedirectorsSkipped = 0;
 
 	for (const FAssetData& AssetData : AllAssets)
 	{
+		// Skip redirector assets -- they are artifacts of asset moves, not real content
+		if (AssetData.IsRedirector())
+		{
+			++RedirectorsSkipped;
+			continue;
+		}
+
 		const FString AssetName = AssetData.AssetName.ToString();
 		const FString AssetClassName = AssetData.AssetClassPath.GetAssetName().ToString();
 		const FString PackagePath = AssetData.PackagePath.ToString();
@@ -193,6 +201,10 @@ IClaireonTool::FToolResult ClaireonTool_AssetSearch::Execute(const TSharedPtr<FJ
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetArrayField(TEXT("assets"), AssetsArray);
 	Data->SetNumberField(TEXT("total_count"), TotalMatched);
+	if (RedirectorsSkipped > 0)
+	{
+		Data->SetNumberField(TEXT("redirectors_hidden"), RedirectorsSkipped);
+	}
 	Data->SetStringField(TEXT("search_dir"), SearchRoots.Num() == 1 ? SearchRoots[0] : FString::Join(SearchRoots, TEXT(", ")));
 
 	// Build summary
@@ -208,6 +220,10 @@ IClaireonTool::FToolResult ClaireonTool_AssetSearch::Execute(const TSharedPtr<FJ
 	if (TotalMatched > MaxResults)
 	{
 		Summary += FString::Printf(TEXT(" — showing first %d"), MaxResults);
+	}
+	if (RedirectorsSkipped > 0)
+	{
+		Summary += FString::Printf(TEXT(" (%d redirectors hidden)"), RedirectorsSkipped);
 	}
 
 	return MakeSuccessResult(Data, Summary);
