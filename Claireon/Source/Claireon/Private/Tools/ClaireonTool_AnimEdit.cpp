@@ -12,6 +12,8 @@
 #include "Animation/AnimNotifies/AnimNotify.h"
 #include "Animation/AnimNotifies/AnimNotifyState.h"
 #include "Animation/AnimMetaData.h"
+#include "Animation/AnimData/IAnimationDataModel.h"
+#include "Curves/RichCurve.h"
 #include "AnimationModifier.h"
 #include "AnimationModifiersAssetUserData.h"
 #include "ScopedTransaction.h"
@@ -64,7 +66,7 @@ FString ClaireonTool_AnimEdit::GetFullDescription() const
 				"Finish with 'save' to persist changes and 'close' to end the session.\n\n"
 				"Session operations: open, close, get_state, save\n"
 				"Notify operations: add_notify, remove_notify, move_notify, duplicate_notify, set_notify_property, get_notify_property, list_notify_properties, add_notify_track, remove_notify_track, rename_notify_track, reorder_notify_track\n"
-				"Curve operations: add_curve, remove_curve, add_curve_key, remove_curve_key\n"
+				"Curve operations: add_curve, remove_curve, add_curve_key, remove_curve_key, set_curve_key_property\n"
 				"Montage section operations (montage only): add_section, remove_section, set_section_link\n"
 				"Modifier operations (AnimSequence only): list_modifiers, add_modifier, remove_modifier, apply_modifier, revert_modifier\n"
 				"Metadata operations: list_metadata, add_metadata, remove_metadata, set_metadata_property\n"
@@ -115,6 +117,7 @@ TSharedPtr<FJsonObject> ClaireonTool_AnimEdit::GetInputSchema() const
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("remove_curve")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("add_curve_key")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("remove_curve_key")));
+	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("set_curve_key_property")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("add_section")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("remove_section")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("set_section_link")));
@@ -257,6 +260,8 @@ FToolResult ClaireonTool_AnimEdit::Execute(const TSharedPtr<FJsonObject>& Argume
 		return Operation_AddCurveKey(SessionId, Data, Params);
 	if (Operation == TEXT("remove_curve_key"))
 		return Operation_RemoveCurveKey(SessionId, Data, Params);
+	if (Operation == TEXT("set_curve_key_property"))
+		return Operation_SetCurveKeyProperty(SessionId, Data, Params);
 
 	// Montage section ops
 	if (Operation == TEXT("add_section"))
@@ -1071,10 +1076,21 @@ FToolResult ClaireonTool_AnimEdit::Operation_AddCurveKey(const FString& SessionI
 		return MakeErrorResult(TEXT("Missing required parameter: curve_name"));
 	}
 
-	double Time = 0.0;
-	if (!Params->TryGetNumberField(TEXT("time"), Time))
+	double Time = -1.0;
+	Params->TryGetNumberField(TEXT("time"), Time);
+
+	// Support frame as alternative to time
+	double Frame = -1.0;
+	Params->TryGetNumberField(TEXT("frame"), Frame);
+	if (Frame >= 0.0 && Time < 0.0)
 	{
-		return MakeErrorResult(TEXT("Missing required parameter: time"));
+		const IAnimationDataModel* Model = Data->Animation->GetDataModel();
+		double Fps = Model ? Model->GetFrameRate().AsDecimal() : 30.0;
+		Time = Frame / Fps;
+	}
+	if (Time < 0.0)
+	{
+		return MakeErrorResult(TEXT("Missing required parameter: time or frame"));
 	}
 
 	double Value = 0.0;
@@ -1083,11 +1099,46 @@ FToolResult ClaireonTool_AnimEdit::Operation_AddCurveKey(const FString& SessionI
 		return MakeErrorResult(TEXT("Missing required parameter: value"));
 	}
 
+	// Build FRichCurveKey with optional tangent params
+	FRichCurveKey NewKey(static_cast<float>(Time), static_cast<float>(Value));
+
+	FString InterpModeStr;
+	if (Params->TryGetStringField(TEXT("interp_mode"), InterpModeStr))
+	{
+		FString Lower = InterpModeStr.ToLower();
+		if (Lower == TEXT("linear"))        NewKey.InterpMode = RCIM_Linear;
+		else if (Lower == TEXT("cubic"))    NewKey.InterpMode = RCIM_Cubic;
+		else if (Lower == TEXT("constant")) NewKey.InterpMode = RCIM_Constant;
+		else return MakeErrorResult(FString::Printf(TEXT("Invalid interp_mode '%s'. Expected: linear, cubic, constant"), *InterpModeStr));
+	}
+
+	FString TangentModeStr;
+	if (Params->TryGetStringField(TEXT("tangent_mode"), TangentModeStr))
+	{
+		FString Lower = TangentModeStr.ToLower();
+		if (Lower == TEXT("auto"))       NewKey.TangentMode = RCTM_Auto;
+		else if (Lower == TEXT("user"))  NewKey.TangentMode = RCTM_User;
+		else if (Lower == TEXT("break")) NewKey.TangentMode = RCTM_Break;
+		else return MakeErrorResult(FString::Printf(TEXT("Invalid tangent_mode '%s'. Expected: auto, user, break"), *TangentModeStr));
+	}
+
+	double ArriveTangent = 0.0;
+	if (Params->TryGetNumberField(TEXT("arrive_tangent"), ArriveTangent))
+	{
+		NewKey.ArriveTangent = static_cast<float>(ArriveTangent);
+	}
+
+	double LeaveTangent = 0.0;
+	if (Params->TryGetNumberField(TEXT("leave_tangent"), LeaveTangent))
+	{
+		NewKey.LeaveTangent = static_cast<float>(LeaveTangent);
+	}
+
 	FScopedTransaction Transaction(NSLOCTEXT("Claireon", "AnimEdit_AddCurveKey", "MCP: Add Curve Key"));
 	Data->Animation->Modify();
 
 	FString Error;
-	if (!ClaireonAnimHelpers::AddCurveKey(Data->Animation.Get(), CurveName, static_cast<float>(Time), static_cast<float>(Value), Error))
+	if (!ClaireonAnimHelpers::AddCurveKey(Data->Animation.Get(), CurveName, NewKey, Error))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -1104,10 +1155,21 @@ FToolResult ClaireonTool_AnimEdit::Operation_RemoveCurveKey(const FString& Sessi
 		return MakeErrorResult(TEXT("Missing required parameter: curve_name"));
 	}
 
-	double Time = 0.0;
-	if (!Params->TryGetNumberField(TEXT("time"), Time))
+	double Time = -1.0;
+	Params->TryGetNumberField(TEXT("time"), Time);
+
+	// Support frame as alternative to time
+	double Frame = -1.0;
+	Params->TryGetNumberField(TEXT("frame"), Frame);
+	if (Frame >= 0.0 && Time < 0.0)
 	{
-		return MakeErrorResult(TEXT("Missing required parameter: time"));
+		const IAnimationDataModel* Model = Data->Animation->GetDataModel();
+		double Fps = Model ? Model->GetFrameRate().AsDecimal() : 30.0;
+		Time = Frame / Fps;
+	}
+	if (Time < 0.0)
+	{
+		return MakeErrorResult(TEXT("Missing required parameter: time or frame"));
 	}
 
 	FScopedTransaction Transaction(NSLOCTEXT("Claireon", "AnimEdit_RemoveCurveKey", "MCP: Remove Curve Key"));
@@ -1120,6 +1182,56 @@ FToolResult ClaireonTool_AnimEdit::Operation_RemoveCurveKey(const FString& Sessi
 	}
 
 	Data->LastOperationStatus = FString::Printf(TEXT("remove_curve_key -> '%s' key at %.3fs removed"), *CurveName, Time);
+	return BuildStateResponse(SessionId, Data);
+}
+
+FToolResult ClaireonTool_AnimEdit::Operation_SetCurveKeyProperty(const FString& SessionId, FAnimEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+{
+	FString CurveName;
+	if (!Params->TryGetStringField(TEXT("curve_name"), CurveName) || CurveName.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("Missing required parameter: curve_name"));
+	}
+
+	double Time = -1.0;
+	Params->TryGetNumberField(TEXT("time"), Time);
+
+	// Support frame as alternative to time
+	double Frame = -1.0;
+	Params->TryGetNumberField(TEXT("frame"), Frame);
+	if (Frame >= 0.0 && Time < 0.0)
+	{
+		const IAnimationDataModel* Model = Data->Animation->GetDataModel();
+		double Fps = Model ? Model->GetFrameRate().AsDecimal() : 30.0;
+		Time = Frame / Fps;
+	}
+	if (Time < 0.0)
+	{
+		return MakeErrorResult(TEXT("Missing required parameter: time or frame"));
+	}
+
+	FString PropertyName;
+	if (!Params->TryGetStringField(TEXT("property_name"), PropertyName) || PropertyName.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("Missing required parameter: property_name"));
+	}
+
+	FString Value;
+	if (!Params->TryGetStringField(TEXT("value"), Value) || Value.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("Missing required parameter: value"));
+	}
+
+	FScopedTransaction Transaction(NSLOCTEXT("Claireon", "AnimEdit_SetCurveKeyProp", "MCP: Set Curve Key Property"));
+	Data->Animation->Modify();
+
+	FString Error;
+	if (!ClaireonAnimHelpers::SetCurveKeyProperty(Data->Animation.Get(), CurveName, static_cast<float>(Time), PropertyName, Value, Error))
+	{
+		return MakeErrorResult(Error);
+	}
+
+	Data->LastOperationStatus = FString::Printf(TEXT("set_curve_key_property -> '%s' key at %.3fs: %s = %s"), *CurveName, Time, *PropertyName, *Value);
 	return BuildStateResponse(SessionId, Data);
 }
 

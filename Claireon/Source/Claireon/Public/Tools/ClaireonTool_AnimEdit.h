@@ -79,6 +79,7 @@ private:
 	FToolResult Operation_RemoveCurve(const FString& SessionId, FAnimEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_AddCurveKey(const FString& SessionId, FAnimEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_RemoveCurveKey(const FString& SessionId, FAnimEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
+	FToolResult Operation_SetCurveKeyProperty(const FString& SessionId, FAnimEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 
 	// Montage section ops
 	FToolResult Operation_AddSection(const FString& SessionId, FAnimEditToolData* Data, const TSharedPtr<FJsonObject>& Params);

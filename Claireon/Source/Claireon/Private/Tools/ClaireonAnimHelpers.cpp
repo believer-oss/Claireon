@@ -1030,7 +1030,7 @@ bool ClaireonAnimHelpers::RemoveCurve(UAnimSequenceBase* Anim, const FString& Cu
 	return true;
 }
 
-bool ClaireonAnimHelpers::AddCurveKey(UAnimSequenceBase* Anim, const FString& CurveName, float Time, float Value, FString& OutError)
+bool ClaireonAnimHelpers::AddCurveKey(UAnimSequenceBase* Anim, const FString& CurveName, const FRichCurveKey& Key, FString& OutError)
 {
 	if (!Anim)
 	{
@@ -1046,9 +1046,9 @@ bool ClaireonAnimHelpers::AddCurveKey(UAnimSequenceBase* Anim, const FString& Cu
 	}
 
 	// Validate time
-	if (Time < 0.0f || Time > Anim->GetPlayLength())
+	if (Key.Time < 0.0f || Key.Time > Anim->GetPlayLength())
 	{
-		OutError = FString::Printf(TEXT("Time %.3f is out of range [0, %.3f]"), Time, Anim->GetPlayLength());
+		OutError = FString::Printf(TEXT("Time %.3f is out of range [0, %.3f]"), Key.Time, Anim->GetPlayLength());
 		return false;
 	}
 
@@ -1056,10 +1056,9 @@ bool ClaireonAnimHelpers::AddCurveKey(UAnimSequenceBase* Anim, const FString& Cu
 	const FAnimationCurveIdentifier CurveId = UAnimationCurveIdentifierExtensions::GetCurveIdentifier(
 		Skeleton, FName(*CurveName), ERawCurveTrackTypes::RCT_Float);
 
-	const FRichCurveKey NewKey(Time, Value);
-	if (!Controller.SetCurveKey(CurveId, NewKey))
+	if (!Controller.SetCurveKey(CurveId, Key))
 	{
-		OutError = FString::Printf(TEXT("Failed to add key at time %.3f to curve '%s'. Verify the curve exists."), Time, *CurveName);
+		OutError = FString::Printf(TEXT("Failed to add key at time %.3f to curve '%s'. Verify the curve exists."), Key.Time, *CurveName);
 		return false;
 	}
 
@@ -1086,9 +1085,202 @@ bool ClaireonAnimHelpers::RemoveCurveKey(UAnimSequenceBase* Anim, const FString&
 	const FAnimationCurveIdentifier CurveId = UAnimationCurveIdentifierExtensions::GetCurveIdentifier(
 		Skeleton, FName(*CurveName), ERawCurveTrackTypes::RCT_Float);
 
+	// Snap to nearest key within tolerance to handle floating point imprecision
+	// (e.g., frame 8 at 30fps = 0.26666... which displays as 0.267)
+	const IAnimationDataModel* Model = Anim->GetDataModel();
+	if (Model)
+	{
+		const FRichCurve* RichCurve = Model->FindRichCurve(CurveId);
+		if (RichCurve)
+		{
+			constexpr float KeyTimeTolerance = 0.002f; // ~half a frame at 240fps
+			float BestTime = Time;
+			float BestDelta = KeyTimeTolerance + 1.0f;
+			for (const FRichCurveKey& Key : RichCurve->Keys)
+			{
+				const float Delta = FMath::Abs(Key.Time - Time);
+				if (Delta < BestDelta)
+				{
+					BestDelta = Delta;
+					BestTime = Key.Time;
+				}
+			}
+			if (BestDelta <= KeyTimeTolerance)
+			{
+				Time = BestTime;
+			}
+		}
+	}
+
 	if (!Controller.RemoveCurveKey(CurveId, Time))
 	{
 		OutError = FString::Printf(TEXT("Failed to remove key at time %.3f from curve '%s'. Verify the curve and key exist."), Time, *CurveName);
+		return false;
+	}
+
+	Anim->MarkPackageDirty();
+	return true;
+}
+
+const FRichCurveKey* ClaireonAnimHelpers::FindCurveKey(const UAnimSequenceBase* Anim, const FString& CurveName, float Time, float& OutSnappedTime, FString& OutError)
+{
+	if (!Anim)
+	{
+		OutError = TEXT("Animation is null");
+		return nullptr;
+	}
+
+	const USkeleton* Skeleton = Anim->GetSkeleton();
+	if (!Skeleton)
+	{
+		OutError = TEXT("Animation has no skeleton");
+		return nullptr;
+	}
+
+	const FAnimationCurveIdentifier CurveId = UAnimationCurveIdentifierExtensions::GetCurveIdentifier(
+		const_cast<USkeleton*>(Skeleton), FName(*CurveName), ERawCurveTrackTypes::RCT_Float);
+
+	const IAnimationDataModel* Model = Anim->GetDataModel();
+	if (!Model)
+	{
+		OutError = TEXT("Animation has no data model");
+		return nullptr;
+	}
+
+	const FRichCurve* RichCurve = Model->FindRichCurve(CurveId);
+	if (!RichCurve)
+	{
+		OutError = FString::Printf(TEXT("Curve '%s' not found"), *CurveName);
+		return nullptr;
+	}
+
+	constexpr float KeyTimeTolerance = 0.002f;
+	const FRichCurveKey* BestKey = nullptr;
+	float BestDelta = KeyTimeTolerance + 1.0f;
+	for (const FRichCurveKey& Key : RichCurve->Keys)
+	{
+		const float Delta = FMath::Abs(Key.Time - Time);
+		if (Delta < BestDelta)
+		{
+			BestDelta = Delta;
+			BestKey = &Key;
+		}
+	}
+
+	if (!BestKey || BestDelta > KeyTimeTolerance)
+	{
+		OutError = FString::Printf(TEXT("No key found near time %.3f on curve '%s'"), Time, *CurveName);
+		return nullptr;
+	}
+
+	OutSnappedTime = BestKey->Time;
+	return BestKey;
+}
+
+static ERichCurveInterpMode ParseInterpMode(const FString& Value, bool& bSuccess)
+{
+	bSuccess = true;
+	FString Lower = Value.ToLower();
+	if (Lower == TEXT("linear"))   return RCIM_Linear;
+	if (Lower == TEXT("cubic"))    return RCIM_Cubic;
+	if (Lower == TEXT("constant")) return RCIM_Constant;
+	if (Lower == TEXT("none"))     return RCIM_None;
+	bSuccess = false;
+	return RCIM_Linear;
+}
+
+static ERichCurveTangentMode ParseTangentMode(const FString& Value, bool& bSuccess)
+{
+	bSuccess = true;
+	FString Lower = Value.ToLower();
+	if (Lower == TEXT("auto"))  return RCTM_Auto;
+	if (Lower == TEXT("user"))  return RCTM_User;
+	if (Lower == TEXT("break")) return RCTM_Break;
+	if (Lower == TEXT("none"))  return RCTM_None;
+	bSuccess = false;
+	return RCTM_Auto;
+}
+
+static ERichCurveTangentWeightMode ParseTangentWeightMode(const FString& Value, bool& bSuccess)
+{
+	bSuccess = true;
+	FString Lower = Value.ToLower();
+	if (Lower == TEXT("none"))   return RCTWM_WeightedNone;
+	if (Lower == TEXT("arrive")) return RCTWM_WeightedArrive;
+	if (Lower == TEXT("leave"))  return RCTWM_WeightedLeave;
+	if (Lower == TEXT("both"))   return RCTWM_WeightedBoth;
+	bSuccess = false;
+	return RCTWM_WeightedNone;
+}
+
+bool ClaireonAnimHelpers::SetCurveKeyProperty(UAnimSequenceBase* Anim, const FString& CurveName, float Time, const FString& PropertyName, const FString& Value, FString& OutError)
+{
+	if (!Anim)
+	{
+		OutError = TEXT("Animation is null");
+		return false;
+	}
+
+	// Find the key (with tolerance snapping)
+	float SnappedTime = Time;
+	const FRichCurveKey* FoundKey = FindCurveKey(Anim, CurveName, Time, SnappedTime, OutError);
+	if (!FoundKey)
+	{
+		return false;
+	}
+
+	// Make a mutable copy to modify
+	FRichCurveKey ModifiedKey = *FoundKey;
+
+	FString PropLower = PropertyName.ToLower();
+	bool bSuccess = true;
+
+	if (PropLower == TEXT("interp_mode"))
+	{
+		ModifiedKey.InterpMode = ParseInterpMode(Value, bSuccess);
+		if (!bSuccess) { OutError = FString::Printf(TEXT("Invalid interp_mode '%s'. Expected: linear, cubic, constant, none"), *Value); return false; }
+	}
+	else if (PropLower == TEXT("tangent_mode"))
+	{
+		ModifiedKey.TangentMode = ParseTangentMode(Value, bSuccess);
+		if (!bSuccess) { OutError = FString::Printf(TEXT("Invalid tangent_mode '%s'. Expected: auto, user, break, none"), *Value); return false; }
+	}
+	else if (PropLower == TEXT("tangent_weight_mode"))
+	{
+		ModifiedKey.TangentWeightMode = ParseTangentWeightMode(Value, bSuccess);
+		if (!bSuccess) { OutError = FString::Printf(TEXT("Invalid tangent_weight_mode '%s'. Expected: none, arrive, leave, both"), *Value); return false; }
+	}
+	else if (PropLower == TEXT("arrive_tangent"))
+	{
+		ModifiedKey.ArriveTangent = FCString::Atof(*Value);
+	}
+	else if (PropLower == TEXT("leave_tangent"))
+	{
+		ModifiedKey.LeaveTangent = FCString::Atof(*Value);
+	}
+	else if (PropLower == TEXT("arrive_tangent_weight"))
+	{
+		ModifiedKey.ArriveTangentWeight = FCString::Atof(*Value);
+	}
+	else if (PropLower == TEXT("leave_tangent_weight"))
+	{
+		ModifiedKey.LeaveTangentWeight = FCString::Atof(*Value);
+	}
+	else
+	{
+		OutError = FString::Printf(TEXT("Unknown curve key property '%s'. Supported: interp_mode, tangent_mode, tangent_weight_mode, arrive_tangent, leave_tangent, arrive_tangent_weight, leave_tangent_weight"), *PropertyName);
+		return false;
+	}
+
+	// Apply the modified key via the controller
+	USkeleton* Skeleton = Anim->GetSkeleton();
+	IAnimationDataController& Controller = Anim->GetController();
+	const FAnimationCurveIdentifier CurveId = UAnimationCurveIdentifierExtensions::GetCurveIdentifier(
+		Skeleton, FName(*CurveName), ERawCurveTrackTypes::RCT_Float);
+
+	if (!Controller.SetCurveKey(CurveId, ModifiedKey))
+	{
+		OutError = FString::Printf(TEXT("Failed to update key at time %.3f on curve '%s'"), SnappedTime, *CurveName);
 		return false;
 	}
 

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Curves/RichCurve.h"
 
 class UAnimSequenceBase;
 class UAnimSequence;
@@ -102,11 +103,17 @@ namespace ClaireonAnimHelpers
 	/** Remove a curve by name. */
 	bool RemoveCurve(UAnimSequenceBase* Anim, const FString& CurveName, FString& OutError);
 
-	/** Add a key to a float curve. */
-	bool AddCurveKey(UAnimSequenceBase* Anim, const FString& CurveName, float Time, float Value, FString& OutError);
+	/** Add a key to a float curve. Accepts a fully configured FRichCurveKey. */
+	bool AddCurveKey(UAnimSequenceBase* Anim, const FString& CurveName, const FRichCurveKey& Key, FString& OutError);
 
-	/** Remove a curve key by time. */
+	/** Remove a curve key by time (snaps to nearest key within tolerance). */
 	bool RemoveCurveKey(UAnimSequenceBase* Anim, const FString& CurveName, float Time, FString& OutError);
+
+	/** Find a curve key by time (with tolerance snapping). Returns nullptr if not found. */
+	const FRichCurveKey* FindCurveKey(const UAnimSequenceBase* Anim, const FString& CurveName, float Time, float& OutSnappedTime, FString& OutError);
+
+	/** Set a property on an existing curve key (interp_mode, tangent_mode, arrive_tangent, leave_tangent, etc.) */
+	bool SetCurveKeyProperty(UAnimSequenceBase* Anim, const FString& CurveName, float Time, const FString& PropertyName, const FString& Value, FString& OutError);
 
 	// ========================================================================
 	// Montage Section Helpers
