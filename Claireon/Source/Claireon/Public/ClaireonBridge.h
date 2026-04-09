@@ -77,6 +77,9 @@ public:
 	/** Returns true if any deferred actions are pending. */
 	static bool HasDeferredActions();
 
+	/** Returns true if any deferred action would replace or destroy the current world. */
+	static bool HasDeferredWorldTransition();
+
 	/** Drain and return all pending deferred actions, clearing the queue. */
 	static TArray<FClaireonDeferredAction> DrainDeferredActions();
 

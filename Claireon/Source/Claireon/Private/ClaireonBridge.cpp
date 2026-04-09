@@ -20,6 +20,8 @@ THIRD_PARTY_INCLUDES_END
 #include "Policies/CondensedJsonPrintPolicy.h"
 #include "IPythonScriptPlugin.h"
 #include "UObject/UObjectGlobals.h"
+#include "Editor.h"
+#include "ClaireonWorldReadiness.h"
 
 // Static member initialization
 bool FClaireonBridge::bIsRegistered = false;
@@ -251,6 +253,24 @@ PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 		return nullptr;
 	}
 
+	// Precondition: block tools that require no PIE session
+	if (Tool->RequiresNoPIE() && IsValid(GEditor) && GEditor->IsPlaySessionInProgress())
+	{
+		PyErr_Format(PyExc_RuntimeError, "Tool '%s' cannot be used while PIE is running. Stop PIE first.", TCHAR_TO_UTF8(*ToolName));
+		return nullptr;
+	}
+
+	// Precondition: block tools that require an editor world
+	if (Tool->RequiresEditorWorld())
+	{
+		FClaireonWorldReadinessResult WorldResult = FClaireonWorldReadiness::Check();
+		if (!WorldResult.bReady)
+		{
+			PyErr_Format(PyExc_RuntimeError, "Tool '%s' failed: %s %s", TCHAR_TO_UTF8(*ToolName), TCHAR_TO_UTF8(*WorldResult.Message), TCHAR_TO_UTF8(*WorldResult.RecoveryHint));
+			return nullptr;
+		}
+	}
+
 	// Execute the tool
 	IClaireonTool::FToolResult Result = Tool->Execute(Arguments);
 
@@ -322,6 +342,24 @@ bool FClaireonBridge::HasDeferredActions()
 	return GDeferredActions.Num() > 0;
 }
 
+bool FClaireonBridge::HasDeferredWorldTransition()
+{
+	for (const FClaireonDeferredAction& Action : GDeferredActions)
+	{
+		switch (Action.Type)
+		{
+			case EClaireonDeferredActionType::LoadMap:
+			case EClaireonDeferredActionType::DuplicateAndOpenMap:
+			case EClaireonDeferredActionType::PIEStart:
+			case EClaireonDeferredActionType::PIEStop:
+				return true;
+			default:
+				break;
+		}
+	}
+	return false;
+}
+
 TArray<FClaireonDeferredAction> FClaireonBridge::DrainDeferredActions()
 {
 	TArray<FClaireonDeferredAction> Actions = MoveTemp(GDeferredActions);
@@ -385,8 +423,7 @@ void FClaireonBridge::RunWorldTransitionBarrier()
 			"gc.collect()\n"
 			"gc.collect()\n"
 			"gc.collect()\n"
-			"del _protected, _nulled\n"
-		);
+			"del _protected, _nulled\n");
 		PurgeCommand.ExecutionMode = EPythonCommandExecutionMode::ExecuteStatement;
 		PurgeCommand.Flags = EPythonCommandFlags::Unattended;
 		PythonPlugin->ExecPythonCommandEx(PurgeCommand);

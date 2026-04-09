@@ -35,16 +35,9 @@ TSharedPtr<FJsonObject> ClaireonTool_MapStatus::GetInputSchema() const
 
 IClaireonTool::FToolResult ClaireonTool_MapStatus::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor)
-	{
-		return MakeErrorResult(TEXT("Editor not available"));
-	}
-
+	checkf(GEditor && GEditor->GetEditorWorldContext().World(),
+		TEXT("RequiresEditorWorld() tool reached Execute without a valid world. This indicates a dispatch path that bypasses precondition checks."));
 	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		return MakeErrorResult(TEXT("No world loaded"));
-	}
 
 	const FString MapName = World->GetMapName();
 	const FString MapPath = World->GetPathName();

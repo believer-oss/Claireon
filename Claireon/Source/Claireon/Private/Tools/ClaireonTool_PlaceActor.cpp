@@ -32,9 +32,9 @@ FString ClaireonTool_PlaceActor::GetCategory() const
 FString ClaireonTool_PlaceActor::GetDescription() const
 {
 	return TEXT("Place one or more actors in the editor world by class path. "
-		"Supports Blueprint and native class paths, batch placement via an actors array, "
-		"optional location/rotation/scale/label/properties per actor, and automatic ISM mode "
-		"when the class_path points to a static mesh asset.");
+				"Supports Blueprint and native class paths, batch placement via an actors array, "
+				"optional location/rotation/scale/label/properties per actor, and automatic ISM mode "
+				"when the class_path points to a static mesh asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PlaceActor::GetInputSchema() const
@@ -123,20 +123,13 @@ namespace
 		}
 		return FRotator(Pitch, Yaw, Roll);
 	}
-}
+} // namespace
 
 FToolResult ClaireonTool_PlaceActor::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor)
-	{
-		return MakeErrorResult(TEXT("Editor not available"));
-	}
-
+	checkf(GEditor && GEditor->GetEditorWorldContext().World(),
+		TEXT("RequiresEditorWorld() tool reached Execute without a valid world. This indicates a dispatch path that bypasses precondition checks."));
 	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		return MakeErrorResult(TEXT("No world loaded"));
-	}
 
 	// Normalize input: detect array vs flat object, build actor specs array
 	TArray<TSharedPtr<FJsonValue>> ActorSpecs;

@@ -19,8 +19,8 @@ FString ClaireonTool_ConsoleExecute::GetName() const
 FString ClaireonTool_ConsoleExecute::GetDescription() const
 {
 	return TEXT("Execute an Unreal console command and return its output. "
-		"In PIE context, commands route through APlayerController::ConsoleCommand so "
-		"cheat manager commands (e.g. God, Slomo, custom exec functions) work correctly.");
+				"In PIE context, commands route through APlayerController::ConsoleCommand so "
+				"cheat manager commands (e.g. God, Slomo, custom exec functions) work correctly.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ConsoleExecute::GetInputSchema() const
@@ -42,8 +42,8 @@ TSharedPtr<FJsonObject> ClaireonTool_ConsoleExecute::GetInputSchema() const
 	ContextProp->SetStringField(TEXT("type"), TEXT("string"));
 	ContextProp->SetStringField(TEXT("description"),
 		TEXT("Execution context: 'auto' (default: PIE if running, else editor), "
-			"'pie' (PIE player controller - required for cheat manager commands), "
-			"'editor' (editor world via GEngine::Exec)"));
+			 "'pie' (PIE player controller - required for cheat manager commands), "
+			 "'editor' (editor world via GEngine::Exec)"));
 	TArray<TSharedPtr<FJsonValue>> ContextEnum;
 	ContextEnum.Add(MakeShared<FJsonValueString>(TEXT("auto")));
 	ContextEnum.Add(MakeShared<FJsonValueString>(TEXT("pie")));
@@ -172,15 +172,21 @@ IClaireonTool::FToolResult ClaireonTool_ConsoleExecute::Execute(const TSharedPtr
 		FString Output;
 		virtual void Serialize(const TCHAR* V, ELogVerbosity::Type Verbosity, const FName& Category) override
 		{
-			if (!Output.IsEmpty()) Output += TEXT("\n");
+			if (!Output.IsEmpty())
+				Output += TEXT("\n");
 			Output += V;
 		}
 	};
 
-	UWorld* EditorWorld = nullptr;
-	if (GEditor)
+	if (!GEditor)
 	{
-		EditorWorld = GEditor->GetEditorWorldContext().World();
+		return MakeErrorResult(TEXT("Editor is not available. Wait for the editor to finish initializing."));
+	}
+
+	UWorld* EditorWorld = GEditor->GetEditorWorldContext().World();
+	if (!EditorWorld)
+	{
+		return MakeErrorResult(TEXT("No world loaded. Use open_map to load a map first."));
 	}
 
 	FStringOutputDevice OutputDevice;

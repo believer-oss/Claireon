@@ -28,9 +28,9 @@ FString ClaireonTool_SetSplinePoints::GetCategory() const
 FString ClaireonTool_SetSplinePoints::GetDescription() const
 {
 	return TEXT("Set the points on a USplineComponent attached to an actor in the editor world. "
-		"Replaces all existing spline points with the provided array. "
-		"Supports per-point spline type (Linear, Curve, Constant, CurveClamped, CurveCustomTangent), "
-		"closed loop toggle, and undo via FScopedTransaction.");
+				"Replaces all existing spline points with the provided array. "
+				"Supports per-point spline type (Linear, Curve, Constant, CurveClamped, CurveCustomTangent), "
+				"closed loop toggle, and undo via FScopedTransaction.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_SetSplinePoints::GetInputSchema() const
@@ -68,7 +68,7 @@ TSharedPtr<FJsonObject> ClaireonTool_SetSplinePoints::GetInputSchema() const
 	DefaultTypeProp->SetStringField(TEXT("type"), TEXT("string"));
 	DefaultTypeProp->SetStringField(TEXT("description"),
 		TEXT("Default spline point type for points without explicit type (default: Curve). "
-			"Valid values: Linear, Curve, Constant, CurveClamped, CurveCustomTangent"));
+			 "Valid values: Linear, Curve, Constant, CurveClamped, CurveCustomTangent"));
 	Properties->SetObjectField(TEXT("default_type"), DefaultTypeProp);
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
@@ -112,20 +112,13 @@ namespace
 		}
 		return false;
 	}
-}
+} // namespace
 
 FToolResult ClaireonTool_SetSplinePoints::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor)
-	{
-		return MakeErrorResult(TEXT("Editor not available"));
-	}
-
+	checkf(GEditor && GEditor->GetEditorWorldContext().World(),
+		TEXT("RequiresEditorWorld() tool reached Execute without a valid world. This indicates a dispatch path that bypasses precondition checks."));
 	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		return MakeErrorResult(TEXT("No world loaded"));
-	}
 
 	FString ActorLabel;
 	if (!Arguments->TryGetStringField(TEXT("actor_label"), ActorLabel) || ActorLabel.IsEmpty())

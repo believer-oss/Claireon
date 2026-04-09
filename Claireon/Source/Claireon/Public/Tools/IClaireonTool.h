@@ -25,6 +25,8 @@ public:
 	 *  Tools that mutate assets should override this to return true. */
 	virtual bool RequiresNoPIE() const { return false; }
 
+	virtual bool RequiresEditorWorld() const { return false; }
+
 	/** Returns a human-readable description of what the tool does (standard tier, ~150-300 chars) */
 	virtual FString GetDescription() const = 0;
 

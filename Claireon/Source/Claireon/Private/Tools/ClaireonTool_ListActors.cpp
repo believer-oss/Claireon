@@ -47,17 +47,9 @@ TSharedPtr<FJsonObject> ClaireonTool_ListActors::GetInputSchema() const
 
 IClaireonTool::FToolResult ClaireonTool_ListActors::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	// Get the editor world
-	if (!GEditor)
-	{
-		return MakeErrorResult(TEXT("Editor not available. Cannot list actors."));
-	}
-
+	checkf(GEditor && GEditor->GetEditorWorldContext().World(),
+		TEXT("RequiresEditorWorld() tool reached Execute without a valid world. This indicates a dispatch path that bypasses precondition checks."));
 	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		return MakeErrorResult(TEXT("No world loaded. Use open_map() to load a map first."));
-	}
 
 	// Parse arguments
 	FString ClassFilter;
