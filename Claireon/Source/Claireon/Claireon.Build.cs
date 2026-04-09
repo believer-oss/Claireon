@@ -83,6 +83,10 @@ public class Claireon : ModuleRules
 			"ContentBrowser",    // Rich text asset path navigation
 			"ApplicationCore",   // FPlatformApplicationMisc::ClipboardCopy
 
+			// Animation tools dependencies
+			"AnimationModifiers",          // UAnimationModifier (anim modifier inspection/resolution)
+			"AnimationBlueprintLibrary",   // Required by AnimationModifier.h
+
 			// Niagara tools dependencies
 			"Niagara",           // UNiagaraSystem, UNiagaraEmitter, UNiagaraRendererProperties
 			"NiagaraCore",       // FNiagaraTypeDefinition, core Niagara type system

@@ -139,6 +139,10 @@
 // Asset editor tool
 #include "Tools/ClaireonTool_OpenAssetEditor.h"
 
+// Animation MCP tools
+#include "Tools/ClaireonTool_AnimInspect.h"
+#include "Tools/ClaireonTool_AnimEdit.h"
+
 // Session management MCP tools
 #include "Tools/ClaireonTool_ListSessions.h"
 #include "Tools/ClaireonTool_ReleaseSessions.h"
@@ -216,6 +220,8 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_AssetValidate>());
 	Tools.Add(MakeShared<ClaireonTool_AssetFixupRedirectors>());
 	Tools.Add(MakeShared<ClaireonTool_OpenAssetEditor>());
+	Tools.Add(MakeShared<ClaireonTool_AnimInspect>());
+	Tools.Add(MakeShared<ClaireonTool_AnimEdit>());
 	Tools.Add(MakeShared<ClaireonTool_BlueprintCompile>());
 	Tools.Add(MakeShared<ClaireonTool_CommandletRun>());
 	Tools.Add(MakeShared<ClaireonTool_AssetResave>());
