@@ -34,8 +34,7 @@ static constexpr uint32 MaxPortRetries = 10;
 
 static const TSet<FString> MCPVisibleTools = {
 	TEXT("claireon.python_execute"),
-	TEXT("claireon.tools_search"),
-	TEXT("claireon.transaction")
+	TEXT("claireon.tools_search")
 };
 
 FClaireonServer::FClaireonServer()
