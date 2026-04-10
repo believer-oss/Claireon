@@ -7,8 +7,10 @@
 #include "Tools/IClaireonTool.h"
 
 /**
- * Generates XML responses per 02-XML-CONTRACT.md.
- * Formats tool execution results, search results, and errors into XML.
+ * Generates XML-ish structural markup for LLM consumption per 02-XML-CONTRACT.md.
+ * Content text is NOT XML-escaped since these tags are structural delimiters
+ * for LLM token parsing, not real XML consumed by an XML parser.
+ * Formats tool execution results, search results, and errors.
  */
 class FClaireonXmlFormatter
 {
@@ -23,9 +25,9 @@ public:
 	static FString FormatExecuteResult(const IClaireonTool::FToolResult& Result);
 
 	/** Format an error into XML response */
-	static FString FormatErrorResult(const FString& Error, const FString& Suggestion, const FString& Logs);
+	static FString FormatErrorResult(const FString& Error, const FString& ErrorCode, const FString& Suggestion, const FString& Logs);
 
-	/** Escape XML special characters in content */
+	/** Escape XML special characters. Retained for attribute values and the hint template in FormatIndexedResult. */
 	static FString EscapeXml(const FString& Input);
 
 	/**
