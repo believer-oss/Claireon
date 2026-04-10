@@ -6,18 +6,6 @@
 #include "Serialization/JsonWriter.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 
-FString FClaireonXmlFormatter::EscapeXml(const FString& Input)
-{
-	FString Output = Input;
-	// Order matters: & must be replaced first to avoid double-escaping
-	Output.ReplaceInline(TEXT("&"), TEXT("&amp;"));
-	Output.ReplaceInline(TEXT("<"), TEXT("&lt;"));
-	Output.ReplaceInline(TEXT(">"), TEXT("&gt;"));
-	Output.ReplaceInline(TEXT("\""), TEXT("&quot;"));
-	Output.ReplaceInline(TEXT("'"), TEXT("&apos;"));
-	return Output;
-}
-
 FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolResult& Result)
 {
 	FString Xml;
@@ -60,7 +48,7 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 			Suggestion = TEXT("Review the error message and logs. Use claireon.tools_search() to discover available tools.");
 		}
 
-		Xml = FormatErrorResult(Result.ErrorMessage, ErrorCode, Suggestion, Result.Logs);
+		Xml = FormatErrorResult(Result.ErrorMessage, ErrorCode, Suggestion, Result.Logs, Result.UELog);
 	}
 	else
 	{
@@ -97,7 +85,7 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 					}
 				}
 
-				Xml = FormatIndexedResult(IndexId, static_cast<int32>(ChunkCountDouble), IndexSummary, Excerpts, Result.Logs);
+				Xml = FormatIndexedResult(IndexId, static_cast<int32>(ChunkCountDouble), IndexSummary, Excerpts, Result.Logs, Result.UELog);
 			}
 		}
 
@@ -120,10 +108,16 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 				Xml += TEXT("<warning>\n") + Warning + TEXT("\n</warning>\n");
 			}
 
-			// Logs always last
+			// Logs
 			if (!Result.Logs.IsEmpty())
 			{
 				Xml += TEXT("<logs>\n") + Result.Logs + TEXT("\n</logs>\n");
+			}
+
+			// Engine UE_LOG output (Warning/Error level captured during execution)
+			if (!Result.UELog.IsEmpty())
+			{
+				Xml += TEXT("  <ue_log>") + Result.UELog + TEXT("</ue_log>\n");
 			}
 
 			Xml += TEXT("</execute-result>");
@@ -133,12 +127,12 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 	return Xml;
 }
 
-FString FClaireonXmlFormatter::FormatErrorResult(const FString& Error, const FString& ErrorCode, const FString& Suggestion, const FString& Logs)
+FString FClaireonXmlFormatter::FormatErrorResult(const FString& Error, const FString& ErrorCode, const FString& Suggestion, const FString& Logs, const FString& UELog)
 {
 	FString Xml = TEXT("<execute-result status=\"error\">\n");
 
 	// Error first (required on failure)
-	Xml += TEXT("<error code=\"") + EscapeXml(ErrorCode) + TEXT("\">\n") + Error + TEXT("\n</error>\n");
+	Xml += TEXT("<error code=\"") + ErrorCode + TEXT("\">\n") + Error + TEXT("\n</error>\n");
 
 	// Suggestion
 	if (!Suggestion.IsEmpty())
@@ -146,10 +140,16 @@ FString FClaireonXmlFormatter::FormatErrorResult(const FString& Error, const FSt
 		Xml += TEXT("<suggestion>\n") + Suggestion + TEXT("\n</suggestion>\n");
 	}
 
-	// Logs always last
+	// Logs
 	if (!Logs.IsEmpty())
 	{
 		Xml += TEXT("<logs>\n") + Logs + TEXT("\n</logs>\n");
+	}
+
+	// Engine UE_LOG output
+	if (!UELog.IsEmpty())
+	{
+		Xml += TEXT("  <ue_log>") + UELog + TEXT("</ue_log>\n");
 	}
 
 	Xml += TEXT("</execute-result>");
@@ -161,14 +161,15 @@ FString FClaireonXmlFormatter::FormatIndexedResult(
 	int32 ChunkCount,
 	const FString& Summary,
 	const TArray<FString>& Excerpts,
-	const FString& Logs)
+	const FString& Logs,
+	const FString& UELog)
 {
 	FString Xml = TEXT("<execute-result status=\"success\">\n");
 
 	// Compact summary surfacing the most important metadata up front
 	FString SummaryLine = FString::Printf(
 		TEXT("Result too large for inline display — indexed as '%s' (%d chunks). "
-			"Use claireon.index_search(index_id, query) to retrieve content."),
+			 "Use claireon.index_search(index_id, query) to retrieve content."),
 		*IndexId, ChunkCount);
 	Xml += TEXT("<summary>\n") + SummaryLine + TEXT("\n</summary>\n");
 
@@ -194,16 +195,22 @@ FString FClaireonXmlFormatter::FormatIndexedResult(
 		Xml += TEXT("</top-excerpts>\n");
 	}
 
-	Xml += TEXT("<hint>\nCall claireon.index_search(\"") + EscapeXml(IndexId)
+	Xml += TEXT("<hint>\nCall claireon.index_search(\"") + IndexId
 		+ TEXT("\", \"your query\") to search this index, or claireon.index_search(\"")
-		+ EscapeXml(IndexId) + TEXT("\", \"\") to list the first chunks.\n</hint>\n");
+		+ IndexId + TEXT("\", \"\") to list the first chunks.\n</hint>\n");
 
 	Xml += TEXT("</indexed-result>\n");
 
-	// Logs always last
+	// Logs
 	if (!Logs.IsEmpty())
 	{
 		Xml += TEXT("<logs>\n") + Logs + TEXT("\n</logs>\n");
+	}
+
+	// Engine UE_LOG output
+	if (!UELog.IsEmpty())
+	{
+		Xml += TEXT("  <ue_log>") + UELog + TEXT("</ue_log>\n");
 	}
 
 	Xml += TEXT("</execute-result>");
@@ -258,13 +265,20 @@ FString FClaireonXmlFormatter::GenerateTypeSignature(const FString& ToolName, co
 			if ((*PropObj)->TryGetStringField(TEXT("type"), JsonType))
 			{
 				// Map JSON Schema types to Python types
-				if (JsonType == TEXT("string")) TypeStr = TEXT("str");
-				else if (JsonType == TEXT("integer")) TypeStr = TEXT("int");
-				else if (JsonType == TEXT("number")) TypeStr = TEXT("float");
-				else if (JsonType == TEXT("boolean")) TypeStr = TEXT("bool");
-				else if (JsonType == TEXT("array")) TypeStr = TEXT("list");
-				else if (JsonType == TEXT("object")) TypeStr = TEXT("dict");
-				else TypeStr = JsonType;
+				if (JsonType == TEXT("string"))
+					TypeStr = TEXT("str");
+				else if (JsonType == TEXT("integer"))
+					TypeStr = TEXT("int");
+				else if (JsonType == TEXT("number"))
+					TypeStr = TEXT("float");
+				else if (JsonType == TEXT("boolean"))
+					TypeStr = TEXT("bool");
+				else if (JsonType == TEXT("array"))
+					TypeStr = TEXT("list");
+				else if (JsonType == TEXT("object"))
+					TypeStr = TEXT("dict");
+				else
+					TypeStr = JsonType;
 			}
 
 			// Check for default value
@@ -359,7 +373,8 @@ FString FClaireonXmlFormatter::GenerateCategorySummary(const TMap<FString, TShar
 		FString Examples;
 		for (int32 i = 0; i < Names.Num() && i < MaxExamples; ++i)
 		{
-			if (i > 0) Examples += TEXT(", ");
+			if (i > 0)
+				Examples += TEXT(", ");
 			Examples += Names[i];
 		}
 		if (Names.Num() > MaxExamples)
