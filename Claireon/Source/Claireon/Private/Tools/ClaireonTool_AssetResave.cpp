@@ -4,6 +4,7 @@
 #include "Tools/ClaireonTool_AssetResave.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonLog.h"
+#include "ClaireonSafeExec.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -125,6 +126,12 @@ IClaireonTool::FToolResult ClaireonTool_AssetResave::Execute(const TSharedPtr<FJ
 		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
 		SaveArgs.Error = GError;
 
+		if (ClaireonSafeExec::DidLastExecutionCrash())
+		{
+			FailedArray.Add(MakeShared<FJsonValueString>(AssetPath));
+			UE_LOG(LogTemp, Warning, TEXT("ClaireonTool_AssetResave: Save blocked after crash for: %s"), *PackagePathStr);
+			continue;
+		}
 		const FSavePackageResultStruct SaveResult = UPackage::Save(Package, nullptr, *PackageFilename, SaveArgs);
 		if (SaveResult.Result == ESavePackageResult::Success)
 		{

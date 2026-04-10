@@ -5,6 +5,7 @@
 #include "Tools/ClaireonPCGGraphHelpers.h"
 #include "ClaireonLog.h"
 #include "ClaireonPathResolver.h"
+#include "ClaireonSafeExec.h"
 #include "ClaireonSessionManager.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -334,8 +335,11 @@ FToolResult ClaireonTool_PCGGraphEdit::Operation_Close(const FString& SessionId,
 			FString PackageFilename;
 			if (FPackageName::DoesPackageExist(Package->GetName(), &PackageFilename))
 			{
-				FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Save PCG Graph")));
-				UEditorLoadingAndSavingUtils::SavePackages({ Package }, false);
+				if (!ClaireonSafeExec::DidLastExecutionCrash())
+				{
+					FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Save PCG Graph")));
+					UEditorLoadingAndSavingUtils::SavePackages({ Package }, false);
+				}
 			}
 		}
 	}
@@ -754,6 +758,10 @@ FToolResult ClaireonTool_PCGGraphEdit::Operation_Save(const FString& SessionId, 
 		return MakeErrorResult(FString::Printf(TEXT("Package file not found for: %s"), *Package->GetName()));
 	}
 
+	if (ClaireonSafeExec::DidLastExecutionCrash())
+	{
+		return MakeErrorResult(TEXT("Save blocked: editor state may be corrupted after a previous crash. Restart the editor."));
+	}
 	bool bSaved = UEditorLoadingAndSavingUtils::SavePackages({ Package }, false);
 
 	Data->LastOperationStatus = bSaved ? TEXT("Saved successfully") : TEXT("Save failed");

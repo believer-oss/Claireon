@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonTool_EditWidgetBP.h"
 #include "ClaireonLog.h"
+#include "ClaireonSafeExec.h"
 #include "ClaireonWidgetHelpers.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSessionManager.h"
@@ -719,6 +720,10 @@ FToolResult ClaireonTool_EditWidgetBP::Operation_Save(const FString& SessionId, 
 		Package->GetName(),
 		FPackageName::GetAssetPackageExtension());
 
+	if (ClaireonSafeExec::DidLastExecutionCrash())
+	{
+		return MakeErrorResult(TEXT("Save blocked: editor state may be corrupted after a previous crash. Restart the editor."));
+	}
 	FSavePackageArgs SaveArgs;
 	const bool bSaved = UPackage::SavePackage(Package, WBP, *PackageFilename, SaveArgs);
 
@@ -1771,21 +1776,61 @@ FToolResult ClaireonTool_EditWidgetBP::Operation_ListWidgetClasses(const FString
 
 static bool ParseBindingMode(const FString& ModeStr, EMVVMBindingMode& OutMode)
 {
-	if (ModeStr == TEXT("OneWayToDestination")) { OutMode = EMVVMBindingMode::OneWayToDestination; return true; }
-	if (ModeStr == TEXT("OneWayToSource")) { OutMode = EMVVMBindingMode::OneWayToSource; return true; }
-	if (ModeStr == TEXT("TwoWay")) { OutMode = EMVVMBindingMode::TwoWay; return true; }
-	if (ModeStr == TEXT("OneTimeToDestination")) { OutMode = EMVVMBindingMode::OneTimeToDestination; return true; }
-	if (ModeStr == TEXT("OneTimeToSource")) { OutMode = EMVVMBindingMode::OneTimeToSource; return true; }
+	if (ModeStr == TEXT("OneWayToDestination"))
+	{
+		OutMode = EMVVMBindingMode::OneWayToDestination;
+		return true;
+	}
+	if (ModeStr == TEXT("OneWayToSource"))
+	{
+		OutMode = EMVVMBindingMode::OneWayToSource;
+		return true;
+	}
+	if (ModeStr == TEXT("TwoWay"))
+	{
+		OutMode = EMVVMBindingMode::TwoWay;
+		return true;
+	}
+	if (ModeStr == TEXT("OneTimeToDestination"))
+	{
+		OutMode = EMVVMBindingMode::OneTimeToDestination;
+		return true;
+	}
+	if (ModeStr == TEXT("OneTimeToSource"))
+	{
+		OutMode = EMVVMBindingMode::OneTimeToSource;
+		return true;
+	}
 	return false;
 }
 
 static bool ParseCreationType(const FString& TypeStr, EMVVMBlueprintViewModelContextCreationType& OutType)
 {
-	if (TypeStr == TEXT("Manual")) { OutType = EMVVMBlueprintViewModelContextCreationType::Manual; return true; }
-	if (TypeStr == TEXT("CreateInstance")) { OutType = EMVVMBlueprintViewModelContextCreationType::CreateInstance; return true; }
-	if (TypeStr == TEXT("GlobalViewModelCollection")) { OutType = EMVVMBlueprintViewModelContextCreationType::GlobalViewModelCollection; return true; }
-	if (TypeStr == TEXT("PropertyPath")) { OutType = EMVVMBlueprintViewModelContextCreationType::PropertyPath; return true; }
-	if (TypeStr == TEXT("Resolver")) { OutType = EMVVMBlueprintViewModelContextCreationType::Resolver; return true; }
+	if (TypeStr == TEXT("Manual"))
+	{
+		OutType = EMVVMBlueprintViewModelContextCreationType::Manual;
+		return true;
+	}
+	if (TypeStr == TEXT("CreateInstance"))
+	{
+		OutType = EMVVMBlueprintViewModelContextCreationType::CreateInstance;
+		return true;
+	}
+	if (TypeStr == TEXT("GlobalViewModelCollection"))
+	{
+		OutType = EMVVMBlueprintViewModelContextCreationType::GlobalViewModelCollection;
+		return true;
+	}
+	if (TypeStr == TEXT("PropertyPath"))
+	{
+		OutType = EMVVMBlueprintViewModelContextCreationType::PropertyPath;
+		return true;
+	}
+	if (TypeStr == TEXT("Resolver"))
+	{
+		OutType = EMVVMBlueprintViewModelContextCreationType::Resolver;
+		return true;
+	}
 	return false;
 }
 
@@ -2340,7 +2385,7 @@ FToolResult ClaireonTool_EditWidgetBP::Operation_EditMVVMBinding(const FString& 
 		if (ConversionFunctionStr.IsEmpty())
 		{
 			// Clear conversion
-			UMVVMBlueprintViewConversionFunction* Existing = Binding->Conversion.GetConversionFunction(/*bSourceToDestination=*/ true);
+			UMVVMBlueprintViewConversionFunction* Existing = Binding->Conversion.GetConversionFunction(/*bSourceToDestination=*/true);
 			if (Existing)
 			{
 				Existing->RemoveWrapperGraph(WBP);

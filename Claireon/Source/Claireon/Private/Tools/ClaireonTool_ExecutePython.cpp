@@ -10,6 +10,7 @@
 #include "ClaireonBridge.h"
 #include "ClaireonAutoSave.h"
 #include "ClaireonLog.h"
+#include "ClaireonSafeExec.h"
 #include "ClaireonPythonAuditLog.h"
 #include "IPythonScriptPlugin.h"
 #include "PythonScriptTypes.h"
@@ -39,8 +40,8 @@ FString ClaireonTool_ExecutePython::GetName() const
 FString ClaireonTool_ExecutePython::GetDescription() const
 {
 	return TEXT("Execute Python code in Code Mode with access to the claireon.* bridge. "
-		"The code runs in the Unreal Editor's Python environment with the 'unreal' module "
-		"and all claireon.* wrapper functions available for calling other MCP tools.");
+				"The code runs in the Unreal Editor's Python environment with the 'unreal' module "
+				"and all claireon.* wrapper functions available for calling other MCP tools.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ExecutePython::GetInputSchema() const
@@ -181,8 +182,7 @@ FString ClaireonTool_ExecutePython::GetPythonPrefix()
 		"claireon.index_expire = _index_expire\n"
 		"result = None\n"
 		"\n"
-		"# --- user code begins here ---\n"
-	);
+		"# --- user code begins here ---\n");
 }
 
 FString ClaireonTool_ExecutePython::GetPythonSuffix()
@@ -229,8 +229,7 @@ FString ClaireonTool_ExecutePython::GetPythonSuffix()
 		"    except Exception as _gate_err:\n"
 		"        # Output gate failure must never silently swallow the result\n"
 		"        _final_json = _json.dumps(result)\n"
-		"    _unreal._mcp_set_result(_final_json)\n"
-	);
+		"    _unreal._mcp_set_result(_final_json)\n");
 }
 
 FString ClaireonTool_ExecutePython::BuildLogString(const TArray<FPythonLogOutputEntry>& LogOutput)
@@ -351,22 +350,32 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 		TArray<FClaireonDeferredAction> Actions = FClaireonBridge::DrainDeferredActions();
 		for (const FClaireonDeferredAction& Action : Actions)
 		{
-			switch (Action.Type)
+			FClaireonSafeActionResult ActionResult = ClaireonSafeExec::ExecuteAction([&Action]()
 			{
-			case EClaireonDeferredActionType::LoadMap:
-				ClaireonTool_MapOpen::ExecuteDeferredLoadMap(Action.Payload);
-				break;
-			case EClaireonDeferredActionType::PIEStart:
-				ClaireonTool_PIEStart::ExecuteDeferredPIEStart(Action.Payload);
-				break;
-			case EClaireonDeferredActionType::PIEStop:
-				ClaireonTool_PIEStop::ExecuteDeferredPIEStop();
-				break;
-			case EClaireonDeferredActionType::LiveCodingReload:
-				ClaireonTool_LiveCodingReload::ExecuteDeferredLiveCodingReload(Action.Payload);
-				break;
-			case EClaireonDeferredActionType::DuplicateAndOpenMap:
-				ClaireonTool_MapDuplicate::ExecuteDeferredDuplicateAndOpenMap(Action.Payload);
+				switch (Action.Type)
+				{
+					case EClaireonDeferredActionType::LoadMap:
+						ClaireonTool_MapOpen::ExecuteDeferredLoadMap(Action.Payload);
+						break;
+					case EClaireonDeferredActionType::PIEStart:
+						ClaireonTool_PIEStart::ExecuteDeferredPIEStart(Action.Payload);
+						break;
+					case EClaireonDeferredActionType::PIEStop:
+						ClaireonTool_PIEStop::ExecuteDeferredPIEStop();
+						break;
+					case EClaireonDeferredActionType::LiveCodingReload:
+						ClaireonTool_LiveCodingReload::ExecuteDeferredLiveCodingReload(Action.Payload);
+						break;
+					case EClaireonDeferredActionType::DuplicateAndOpenMap:
+						ClaireonTool_MapDuplicate::ExecuteDeferredDuplicateAndOpenMap(Action.Payload);
+						break;
+				}
+			});
+
+			if (ActionResult.bCaughtFatalException)
+			{
+				UE_LOG(LogClaireon, Error, TEXT("Deferred action %d crashed: %s"),
+					(int32)Action.Type, *ActionResult.ExceptionDescription);
 				break;
 			}
 		}
@@ -414,7 +423,8 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 		{
 			if (Entry.Type == EPythonLogOutputType::Error)
 			{
-				if (!ErrorMsg.IsEmpty()) ErrorMsg += TEXT("\n");
+				if (!ErrorMsg.IsEmpty())
+					ErrorMsg += TEXT("\n");
 				ErrorMsg += Entry.Output;
 			}
 		}

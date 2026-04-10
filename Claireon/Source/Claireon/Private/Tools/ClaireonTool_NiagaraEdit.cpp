@@ -5,6 +5,7 @@
 #include "Tools/ClaireonNiagaraHelpers.h"
 #include "ClaireonLog.h"
 #include "ClaireonPathResolver.h"
+#include "ClaireonSafeExec.h"
 #include "ClaireonSessionManager.h"
 #include "NiagaraSystem.h"
 #include "NiagaraEmitter.h"
@@ -51,11 +52,14 @@ static void GetModuleInputVariables(UNiagaraNodeFunctionCall& ModuleNode, TArray
 	ModuleNode.GetInputPins(InputPins);
 	for (UEdGraphPin* Pin : InputPins)
 	{
-		if (!Pin) continue;
+		if (!Pin)
+			continue;
 		const FString PinName = Pin->PinName.ToString();
-		if (!PinName.StartsWith(TEXT("Module."))) continue;
+		if (!PinName.StartsWith(TEXT("Module.")))
+			continue;
 		FNiagaraTypeDefinition PinType = UEdGraphSchema_Niagara::PinToTypeDefinition(Pin);
-		if (!PinType.IsValid()) continue;
+		if (!PinType.IsValid())
+			continue;
 		OutInputVars.Emplace(PinType, *PinName);
 	}
 }
@@ -1476,7 +1480,8 @@ FToolResult ClaireonTool_NiagaraEdit::Operation_GetModuleInputs(const FString& S
 				{
 					for (int32 e = 0; e < SwitchEnum->NumEnums() - 1; ++e)
 					{
-						if (!ValidValues.IsEmpty()) ValidValues += TEXT(", ");
+						if (!ValidValues.IsEmpty())
+							ValidValues += TEXT(", ");
 						ValidValues += FString::Printf(TEXT("%s (%s)"),
 							*SwitchEnum->GetDisplayNameTextByIndex(e).ToString(),
 							*SwitchEnum->GetNameStringByIndex(e));
@@ -1905,7 +1910,10 @@ FToolResult ClaireonTool_NiagaraEdit::Operation_Create(const TSharedPtr<FJsonObj
 	Package->SetDirtyFlag(true);
 	TArray<UPackage*> PackagesToSave;
 	PackagesToSave.Add(Package);
-	UEditorLoadingAndSavingUtils::SavePackages(PackagesToSave, true);
+	if (!ClaireonSafeExec::DidLastExecutionCrash())
+	{
+		UEditorLoadingAndSavingUtils::SavePackages(PackagesToSave, true);
+	}
 
 	// Register with asset registry
 	FAssetRegistryModule::AssetCreated(System);
@@ -2306,6 +2314,10 @@ FToolResult ClaireonTool_NiagaraEdit::Operation_Save(const FString& SessionId, F
 
 	TArray<UPackage*> PackagesToSave;
 	PackagesToSave.Add(Package);
+	if (ClaireonSafeExec::DidLastExecutionCrash())
+	{
+		return MakeErrorResult(TEXT("Save blocked: editor state may be corrupted after a previous crash. Restart the editor."));
+	}
 	bool bSuccess = UEditorLoadingAndSavingUtils::SavePackages(PackagesToSave, true);
 
 	if (bSuccess)

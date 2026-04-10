@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonTool_EditBlueprintGraph.h"
 #include "ClaireonLog.h"
+#include "ClaireonSafeExec.h"
 #include "ClaireonBlueprintHelpers.h"
 #include "Engine/Blueprint.h"
 #include "EdGraph/EdGraph.h"
@@ -866,7 +867,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 
 	// Helper lambda for BaseMCDelegate nodes (AddDelegate, RemoveDelegate, ClearDelegate, CallDelegate)
 	auto ResolveAndSetDelegate = [&](UK2Node_BaseMCDelegate* DelegateNode,
-		const FString& DelegateName, const FString& TargetClass) -> FString /*error or empty*/
+									 const FString& DelegateName, const FString& TargetClass) -> FString /*error or empty*/
 	{
 		UClass* OwnerClass = nullptr;
 		bool bSelfContext = TargetClass.IsEmpty();
@@ -1506,7 +1507,8 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 			for (const auto& TrackVal : *FloatTracksArray)
 			{
 				const TSharedPtr<FJsonObject>& TrackObj = TrackVal->AsObject();
-				if (!TrackObj) continue;
+				if (!TrackObj)
+					continue;
 
 				FString TrackName;
 				TrackObj->TryGetStringField(TEXT("track_name"), TrackName);
@@ -1531,7 +1533,8 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 					for (const auto& KeyVal : *KeysArray)
 					{
 						const TSharedPtr<FJsonObject>& KeyObj = KeyVal->AsObject();
-						if (!KeyObj) continue;
+						if (!KeyObj)
+							continue;
 
 						double Time = 0.0, Value = 0.0;
 						KeyObj->TryGetNumberField(TEXT("time"), Time);
@@ -1568,7 +1571,8 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 			for (const auto& TrackVal : *VectorTracksArray)
 			{
 				const TSharedPtr<FJsonObject>& TrackObj = TrackVal->AsObject();
-				if (!TrackObj) continue;
+				if (!TrackObj)
+					continue;
 
 				FString TrackName;
 				TrackObj->TryGetStringField(TEXT("track_name"), TrackName);
@@ -1591,7 +1595,8 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 					for (const auto& KeyVal : *KeysArray)
 					{
 						const TSharedPtr<FJsonObject>& KeyObj = KeyVal->AsObject();
-						if (!KeyObj) continue;
+						if (!KeyObj)
+							continue;
 
 						double Time = 0.0, X = 0.0, Y = 0.0, Z = 0.0;
 						KeyObj->TryGetNumberField(TEXT("time"), Time);
@@ -1607,7 +1612,8 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 
 						for (int32 Axis = 0; Axis < 3; ++Axis)
 						{
-							double Val = (Axis == 0) ? X : (Axis == 1) ? Y : Z;
+							double Val = (Axis == 0) ? X : (Axis == 1) ? Y
+																	   : Z;
 							FKeyHandle Handle = CurveVector->FloatCurves[Axis].AddKey(
 								static_cast<float>(Time), static_cast<float>(Val));
 							CurveVector->FloatCurves[Axis].SetKeyInterpMode(Handle, InterpMode);
@@ -1631,7 +1637,8 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 			for (const auto& TrackVal : *EventTracksArray)
 			{
 				const TSharedPtr<FJsonObject>& TrackObj = TrackVal->AsObject();
-				if (!TrackObj) continue;
+				if (!TrackObj)
+					continue;
 
 				FString TrackName;
 				TrackObj->TryGetStringField(TEXT("track_name"), TrackName);
@@ -1651,7 +1658,8 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 					for (const auto& KeyVal : *KeysArray)
 					{
 						const TSharedPtr<FJsonObject>& KeyObj = KeyVal->AsObject();
-						if (!KeyObj) continue;
+						if (!KeyObj)
+							continue;
 
 						double Time = 0.0;
 						KeyObj->TryGetNumberField(TEXT("time"), Time);
@@ -3343,6 +3351,10 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_Save(const FString& Sessi
 
 	UE_LOG(LogClaireon, Log, TEXT("[EditBlueprintGraph] Save: Attempting to save to %s"), *PackageFileName);
 
+	if (ClaireonSafeExec::DidLastExecutionCrash())
+	{
+		return MakeErrorResult(TEXT("Save blocked: editor state may be corrupted after a previous crash. Restart the editor."));
+	}
 	FSavePackageArgs SaveArgs;
 	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
 	SaveArgs.SaveFlags = SAVE_None; // Report errors - we expect save to succeed now

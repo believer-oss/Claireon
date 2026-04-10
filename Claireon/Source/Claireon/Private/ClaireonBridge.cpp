@@ -4,6 +4,7 @@
 #include "ClaireonBridge.h"
 #include "ClaireonLog.h"
 #include "ClaireonServer.h"
+#include "ClaireonSafeExec.h"
 #include "Tools/IClaireonTool.h"
 
 // CPython C API headers — provided by the Python3 module dependency.
@@ -271,8 +272,9 @@ PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 		}
 	}
 
-	// Execute the tool
-	IClaireonTool::FToolResult Result = Tool->Execute(Arguments);
+	// Execute the tool with SEH crash protection
+	FClaireonSafeExecResult SafeResult = ClaireonSafeExec::ExecuteTool(Tool.Get(), Arguments);
+	IClaireonTool::FToolResult Result = MoveTemp(SafeResult.ToolResult);
 
 	// If error, raise Python RuntimeError
 	if (Result.bIsError)
