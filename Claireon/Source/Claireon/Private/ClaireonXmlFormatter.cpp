@@ -60,7 +60,7 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 			Suggestion = TEXT("Review the error message and logs. Use claireon.tools_search() to discover available tools.");
 		}
 
-		Xml = FormatErrorResult(Result.ErrorMessage, Suggestion, Result.Logs);
+		Xml = FormatErrorResult(Result.ErrorMessage, ErrorCode, Suggestion, Result.Logs);
 	}
 	else
 	{
@@ -112,7 +112,7 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 			{
 				Summary = TEXT("Execution completed successfully.");
 			}
-			Xml += TEXT("  <summary>") + EscapeXml(Summary) + TEXT("</summary>\n");
+			Xml += TEXT("<summary>\n") + Summary + TEXT("\n</summary>\n");
 
 			// Result data
 			if (Result.Data.IsValid())
@@ -122,23 +122,23 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 					TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&DataJson);
 				FJsonSerializer::Serialize(Result.Data.ToSharedRef(), Writer);
 				Writer->Close();
-				Xml += TEXT("  <result>") + DataJson + TEXT("</result>\n");
+				Xml += TEXT("<result>\n") + DataJson + TEXT("\n</result>\n");
 			}
 			else
 			{
-				Xml += TEXT("  <result>null</result>\n");
+				Xml += TEXT("<result>\nnull\n</result>\n");
 			}
 
 			// Warnings
 			for (const FString& Warning : Result.Warnings)
 			{
-				Xml += TEXT("  <warning>") + EscapeXml(Warning) + TEXT("</warning>\n");
+				Xml += TEXT("<warning>\n") + Warning + TEXT("\n</warning>\n");
 			}
 
 			// Logs always last
 			if (!Result.Logs.IsEmpty())
 			{
-				Xml += TEXT("  <logs>") + EscapeXml(Result.Logs) + TEXT("</logs>\n");
+				Xml += TEXT("<logs>\n") + Result.Logs + TEXT("\n</logs>\n");
 			}
 
 			Xml += TEXT("</execute-result>");
@@ -148,23 +148,23 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 	return Xml;
 }
 
-FString FClaireonXmlFormatter::FormatErrorResult(const FString& Error, const FString& Suggestion, const FString& Logs)
+FString FClaireonXmlFormatter::FormatErrorResult(const FString& Error, const FString& ErrorCode, const FString& Suggestion, const FString& Logs)
 {
 	FString Xml = TEXT("<execute-result status=\"error\">\n");
 
 	// Error first (required on failure)
-	Xml += TEXT("  <error code=\"execution_error\">") + EscapeXml(Error) + TEXT("</error>\n");
+	Xml += TEXT("<error code=\"") + EscapeXml(ErrorCode) + TEXT("\">\n") + Error + TEXT("\n</error>\n");
 
 	// Suggestion
 	if (!Suggestion.IsEmpty())
 	{
-		Xml += TEXT("  <suggestion>") + EscapeXml(Suggestion) + TEXT("</suggestion>\n");
+		Xml += TEXT("<suggestion>\n") + Suggestion + TEXT("\n</suggestion>\n");
 	}
 
 	// Logs always last
 	if (!Logs.IsEmpty())
 	{
-		Xml += TEXT("  <logs>") + EscapeXml(Logs) + TEXT("</logs>\n");
+		Xml += TEXT("<logs>\n") + Logs + TEXT("\n</logs>\n");
 	}
 
 	Xml += TEXT("</execute-result>");
@@ -185,40 +185,40 @@ FString FClaireonXmlFormatter::FormatIndexedResult(
 		TEXT("Result too large for inline display — indexed as '%s' (%d chunks). "
 			"Use claireon.index_search(index_id, query) to retrieve content."),
 		*IndexId, ChunkCount);
-	Xml += TEXT("  <summary>") + EscapeXml(SummaryLine) + TEXT("</summary>\n");
+	Xml += TEXT("<summary>\n") + SummaryLine + TEXT("\n</summary>\n");
 
 	// Indexed result envelope
-	Xml += TEXT("  <indexed-result>\n");
-	Xml += TEXT("    <index-id>") + EscapeXml(IndexId) + TEXT("</index-id>\n");
-	Xml += FString::Printf(TEXT("    <chunk-count>%d</chunk-count>\n"), ChunkCount);
+	Xml += TEXT("<indexed-result>\n");
+	Xml += TEXT("<index-id>\n") + IndexId + TEXT("\n</index-id>\n");
+	Xml += FString::Printf(TEXT("<chunk-count>\n%d\n</chunk-count>\n"), ChunkCount);
 
 	if (!Summary.IsEmpty())
 	{
-		Xml += TEXT("    <chunk-summary>") + EscapeXml(Summary) + TEXT("</chunk-summary>\n");
+		Xml += TEXT("<chunk-summary>\n") + Summary + TEXT("\n</chunk-summary>\n");
 	}
 
 	if (Excerpts.Num() > 0)
 	{
-		Xml += TEXT("    <top-excerpts>\n");
+		Xml += TEXT("<top-excerpts>\n");
 		for (int32 i = 0; i < Excerpts.Num(); ++i)
 		{
-			Xml += FString::Printf(TEXT("      <excerpt rank=\"%d\">"), i + 1);
+			Xml += FString::Printf(TEXT("<excerpt rank=\"%d\">\n"), i + 1);
 			Xml += Excerpts[i];
-			Xml += TEXT("</excerpt>\n");
+			Xml += TEXT("\n</excerpt>\n");
 		}
-		Xml += TEXT("    </top-excerpts>\n");
+		Xml += TEXT("</top-excerpts>\n");
 	}
 
-	Xml += TEXT("    <hint>Call claireon.index_search(\"") + EscapeXml(IndexId)
+	Xml += TEXT("<hint>\nCall claireon.index_search(\"") + EscapeXml(IndexId)
 		+ TEXT("\", \"your query\") to search this index, or claireon.index_search(\"")
-		+ EscapeXml(IndexId) + TEXT("\", \"\") to list the first chunks.</hint>\n");
+		+ EscapeXml(IndexId) + TEXT("\", \"\") to list the first chunks.\n</hint>\n");
 
-	Xml += TEXT("  </indexed-result>\n");
+	Xml += TEXT("</indexed-result>\n");
 
 	// Logs always last
 	if (!Logs.IsEmpty())
 	{
-		Xml += TEXT("  <logs>") + EscapeXml(Logs) + TEXT("</logs>\n");
+		Xml += TEXT("<logs>\n") + Logs + TEXT("\n</logs>\n");
 	}
 
 	Xml += TEXT("</execute-result>");
@@ -371,7 +371,7 @@ FString FClaireonXmlFormatter::GenerateToolStubs(const TMap<FString, TSharedPtr<
 	FString Stubs = TEXT("<tool-stubs>\n");
 	for (const FString& Category : Categories)
 	{
-		Stubs += FString::Printf(TEXT("  <category name=\"%s\">\n"), *EscapeXml(Category));
+		Stubs += FString::Printf(TEXT("<category name=\"%s\">\n"), *EscapeXml(Category));
 
 		TArray<TSharedPtr<IClaireonTool>>& CategoryTools = Grouped[Category];
 		// Sort tools within category by name for deterministic output
@@ -383,10 +383,10 @@ FString FClaireonXmlFormatter::GenerateToolStubs(const TMap<FString, TSharedPtr<
 		for (const TSharedPtr<IClaireonTool>& Tool : CategoryTools)
 		{
 			FString Signature = GenerateTypeSignature(Tool->GetName(), Tool->GetInputSchema());
-			Stubs += TEXT("    ") + Signature + TEXT("\n");
+			Stubs += Signature + TEXT("\n");
 		}
 
-		Stubs += TEXT("  </category>\n");
+		Stubs += TEXT("</category>\n");
 	}
 	Stubs += TEXT("</tool-stubs>");
 
