@@ -5,6 +5,7 @@
 #include "Tools/ClaireonBehaviorTreeHelpers.h"
 #include "ClaireonLog.h"
 #include "ClaireonPathResolver.h"
+#include "ClaireonSafeExec.h"
 #include "ClaireonSessionManager.h"
 #include "BehaviorTree/BehaviorTree.h"
 #include "BehaviorTree/BTCompositeNode.h"
@@ -973,6 +974,10 @@ FToolResult ClaireonTool_BehaviorTreeEdit::Operation_Save(const FString& Session
 
 	TArray<UPackage*> PackagesToSave;
 	PackagesToSave.Add(Package);
+	if (ClaireonSafeExec::DidLastExecutionCrash())
+	{
+		return MakeErrorResult(TEXT("Save blocked: editor state may be corrupted after a previous crash. Restart the editor."));
+	}
 	bool bSuccess = UEditorLoadingAndSavingUtils::SavePackages(PackagesToSave, true);
 
 	if (bSuccess)

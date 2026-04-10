@@ -5,6 +5,7 @@
 #include "ClaireonPathResolver.h"
 #include "ClaireonBridge.h"
 #include "ClaireonLog.h"
+#include "ClaireonSafeExec.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
@@ -35,9 +36,9 @@ FString ClaireonTool_MapDuplicate::GetCategory() const
 FString ClaireonTool_MapDuplicate::GetDescription() const
 {
 	return TEXT("Duplicate a map asset and open the copy in the editor. "
-		"The duplication and map open are deferred until after the current script finishes "
-		"(world transition). Do not depend on the new map being loaded in subsequent lines "
-		"of the same execute() call.");
+				"The duplication and map open are deferred until after the current script finishes "
+				"(world transition). Do not depend on the new map being loaded in subsequent lines "
+				"of the same execute() call.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_MapDuplicate::GetInputSchema() const
@@ -147,10 +148,8 @@ FToolResult ClaireonTool_MapDuplicate::Execute(const TSharedPtr<FJsonObject>& Ar
 	FJsonSerializer::Serialize(PayloadObj.ToSharedRef(), Writer);
 
 	// Enqueue deferred action
-	FClaireonBridge::EnqueueDeferredAction({
-		EClaireonDeferredActionType::DuplicateAndOpenMap,
-		PayloadJson
-	});
+	FClaireonBridge::EnqueueDeferredAction({ EClaireonDeferredActionType::DuplicateAndOpenMap,
+		PayloadJson });
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("status"), TEXT("deferred"));
@@ -184,55 +183,60 @@ void ClaireonTool_MapDuplicate::ExecuteDeferredDuplicateAndOpenMap(const FString
 	// Phase 2: Load the map fresh from disk in a separate tick.
 	FTSTicker::GetCoreTicker().AddTicker(
 		FTickerDelegate::CreateLambda([Source, Dest](float) -> bool
+	{
+		FClaireonBridge::RunWorldTransitionBarrier();
+
+		// Phase 1: Duplicate, save, and unload
+		UEditorAssetSubsystem* AssetSubsystem = GEditor->GetEditorSubsystem<UEditorAssetSubsystem>();
+		UObject* DuplicatedAsset = AssetSubsystem->DuplicateAsset(Source, Dest);
+
+		if (!DuplicatedAsset)
 		{
-			FClaireonBridge::RunWorldTransitionBarrier();
+			UE_LOG(LogClaireon, Error, TEXT("[MCP MapDuplicate] Failed to duplicate %s to %s"), *Source, *Dest);
+			return false;
+		}
 
-			// Phase 1: Duplicate, save, and unload
-			UEditorAssetSubsystem* AssetSubsystem = GEditor->GetEditorSubsystem<UEditorAssetSubsystem>();
-			UObject* DuplicatedAsset = AssetSubsystem->DuplicateAsset(Source, Dest);
-
-			if (!DuplicatedAsset)
+		// Save the duplicated package to disk
+		UPackage* Package = DuplicatedAsset->GetOutermost();
+		if (Package)
+		{
+			FString PackageFilename;
+			if (FPackageName::TryConvertLongPackageNameToFilename(Package->GetName(), PackageFilename, FPackageName::GetMapPackageExtension()))
 			{
-				UE_LOG(LogClaireon, Error, TEXT("[MCP MapDuplicate] Failed to duplicate %s to %s"), *Source, *Dest);
-				return false;
-			}
-
-			// Save the duplicated package to disk
-			UPackage* Package = DuplicatedAsset->GetOutermost();
-			if (Package)
-			{
-				FString PackageFilename;
-				if (FPackageName::TryConvertLongPackageNameToFilename(Package->GetName(), PackageFilename, FPackageName::GetMapPackageExtension()))
+				if (!ClaireonSafeExec::DidLastExecutionCrash())
 				{
 					UPackage::SavePackage(Package, DuplicatedAsset, *PackageFilename,
 						FSavePackageArgs());
 				}
-
-				// Unload the package from memory so LoadMap can load it fresh
-				// without triggering the world memory leak check
-				TArray<UPackage*> PackagesToUnload;
-				PackagesToUnload.Add(Package);
-				UPackageTools::UnloadPackages(PackagesToUnload);
 			}
 
-			UE_LOG(LogClaireon, Display, TEXT("[MCP MapDuplicate] Duplicated and saved %s to %s, deferring map open to next tick"), *Source, *Dest);
+			// Unload the package from memory so LoadMap can load it fresh
+			// without triggering the world memory leak check
+			TArray<UPackage*> PackagesToUnload;
+			PackagesToUnload.Add(Package);
+			UPackageTools::UnloadPackages(PackagesToUnload);
+		}
 
-			// Phase 2: Open the duplicate from disk in a separate tick
-			FString MapPath = Dest;
-			if (!MapPath.Contains(TEXT(".")))
-			{
-				FString AssetName = FPaths::GetBaseFilename(MapPath);
-				MapPath = MapPath + TEXT(".") + AssetName;
-			}
+		UE_LOG(LogClaireon, Display, TEXT("[MCP MapDuplicate] Duplicated and saved %s to %s, deferring map open to next tick"), *Source, *Dest);
 
-			FTSTicker::GetCoreTicker().AddTicker(
-				FTickerDelegate::CreateLambda([MapPath](float) -> bool
-				{
-					FClaireonBridge::RunWorldTransitionBarrier();
-					FEditorFileUtils::LoadMap(MapPath);
-					return false;
-				}), 0.0f);
+		// Phase 2: Open the duplicate from disk in a separate tick
+		FString MapPath = Dest;
+		if (!MapPath.Contains(TEXT(".")))
+		{
+			FString AssetName = FPaths::GetBaseFilename(MapPath);
+			MapPath = MapPath + TEXT(".") + AssetName;
+		}
 
-			return false; // one-shot
-		}), 0.0f);
+		FTSTicker::GetCoreTicker().AddTicker(
+			FTickerDelegate::CreateLambda([MapPath](float) -> bool
+		{
+			FClaireonBridge::RunWorldTransitionBarrier();
+			FEditorFileUtils::LoadMap(MapPath);
+			return false;
+		}),
+			0.0f);
+
+		return false; // one-shot
+	}),
+		0.0f);
 }

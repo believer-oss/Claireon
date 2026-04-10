@@ -4,6 +4,7 @@
 #include "Tools/ClaireonDataTableHelpers.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonLog.h"
+#include "ClaireonSafeExec.h"
 #include "Engine/DataTable.h"
 #include "Engine/CompositeDataTable.h"
 #include "FileHelpers.h"
@@ -91,6 +92,11 @@ bool SaveDataTable(UDataTable* DataTable, FString& OutError)
 
 	TArray<UPackage*> PackagesToSave;
 	PackagesToSave.Add(DataTable->GetPackage());
+	if (ClaireonSafeExec::DidLastExecutionCrash())
+	{
+		OutError = TEXT("Save blocked: editor state may be corrupted after a previous crash. Restart the editor.");
+		return false;
+	}
 	bool bSaved = UEditorLoadingAndSavingUtils::SavePackages(PackagesToSave, true);
 	if (!bSaved)
 	{

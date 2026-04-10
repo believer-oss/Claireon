@@ -5,6 +5,7 @@
 #include "ClaireonAutoSave.h"
 #include "ClaireonLog.h"
 #include "ClaireonBridge.h"
+#include "ClaireonSafeExec.h"
 #include "Tools/IClaireonTool.h"
 #include "Tools/ClaireonTool_MapOpen.h"
 #include "Tools/ClaireonTool_MapDuplicate.h"
@@ -27,12 +28,14 @@
 #include "Tools/ClaireonTool_Transaction.h"
 #include "ClaireonWorldReadiness.h"
 
+#include <atomic>
+
 static constexpr uint32 MaxPortRetries = 10;
 
 static const TSet<FString> MCPVisibleTools = {
-    TEXT("claireon.python_execute"),
-    TEXT("claireon.tools_search"),
-    TEXT("claireon.transaction")
+	TEXT("claireon.python_execute"),
+	TEXT("claireon.tools_search"),
+	TEXT("claireon.transaction")
 };
 
 FClaireonServer::FClaireonServer()
@@ -510,6 +513,85 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsList(const FMCPRequestContex
 	return FMCPJsonRpcResponse::MakeResult(Context.Request.Id, Result);
 }
 
+// --- Async SEH helper for game-thread tool execution (Site 2) ---
+// This is file-static, NOT part of ClaireonSafeExec, because it is tightly coupled
+// to the async TPromise/TFuture pattern in HandleToolsCall.
+
+#if PLATFORM_WINDOWS
+
+#include "Windows/AllowWindowsPlatformTypes.h"
+#include <excpt.h>
+#include "Windows/HideWindowsPlatformTypes.h"
+
+// Context for the async tool execution trampoline.
+struct FAsyncToolSEHContext
+{
+	IClaireonTool* Tool;
+	const TSharedPtr<FJsonObject>* Args;
+	TPromise<IClaireonTool::FToolResult>* Promise;
+	bool* bPromiseFulfilled;
+};
+
+// Trampoline: executes the tool and fulfills the promise.
+// C++ temporaries (FToolResult) exist on THIS frame, not the __try frame.
+static void AsyncToolTrampoline(void* Context)
+{
+	FAsyncToolSEHContext* Ctx = static_cast<FAsyncToolSEHContext*>(Context);
+	Ctx->Promise->SetValue(Ctx->Tool->Execute(*Ctx->Args));
+	*Ctx->bPromiseFulfilled = true;
+}
+
+// Fulfills the promise with an error FToolResult after an SEH exception.
+// Separated from the __try/__except function to avoid C2712 (cannot use __try
+// in functions that require object unwinding).
+static void FulfillPromiseWithError(
+	TPromise<IClaireonTool::FToolResult>* Promise,
+	bool* bPromiseFulfilled,
+	uint32 Code,
+	const TCHAR* ExceptionMsg)
+{
+	if (!*bPromiseFulfilled)
+	{
+		IClaireonTool::FToolResult ErrorResult;
+		ErrorResult.bIsError = true;
+		ErrorResult.ErrorMessage = FString::Printf(
+			TEXT("FATAL: Caught SEH exception 0x%08X during async tool execution. ")
+				TEXT("Editor state may be corrupted -- restart recommended. %s"),
+			Code, ExceptionMsg);
+		Promise->SetValue(MoveTemp(ErrorResult));
+		*bPromiseFulfilled = true;
+	}
+}
+
+// Pure-SEH inner function for async path. No C++ objects with destructors
+// anywhere in this function (including __except block) to avoid C2712.
+__declspec(noinline) static uint32 ExecuteToolAsyncSEH(
+	void (*Fn)(void*),
+	void* FnContext,
+	bool* bPromiseFulfilled,
+	TPromise<IClaireonTool::FToolResult>* Promise,
+	TCHAR* OutExceptionMsg,
+	int32 ExceptionMsgLen)
+{
+	__try
+	{
+		Fn(FnContext);
+		return 0;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER)
+	{
+		uint32 Code = GetExceptionCode();
+		FCString::Strncpy(OutExceptionMsg, GErrorHist, ExceptionMsgLen);
+
+		// Fulfill the promise with an error result if not already fulfilled.
+		// Done in a separate function to avoid C++ objects on this frame.
+		FulfillPromiseWithError(Promise, bPromiseFulfilled, Code, OutExceptionMsg);
+		return Code;
+	}
+}
+
+#endif // PLATFORM_WINDOWS
+
 TSharedPtr<FJsonObject> FClaireonServer::HandleToolsCall(const FMCPRequestContext& Context)
 {
 	const TSharedPtr<FJsonValue>& Id = Context.Request.Id;
@@ -595,7 +677,8 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsCall(const FMCPRequestContex
 
 		if (IsInGameThread())
 		{
-			ToolResult = (*FoundTool)->Execute(Arguments);
+			FClaireonSafeExecResult SafeResult = ClaireonSafeExec::ExecuteTool(FoundTool->Get(), Arguments);
+			ToolResult = MoveTemp(SafeResult.ToolResult);
 		}
 		else
 		{
@@ -605,13 +688,47 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsCall(const FMCPRequestContex
 
 			IClaireonTool* ToolPtr = FoundTool->Get();
 			TSharedPtr<FJsonObject> ArgsCopy = Arguments;
+			std::atomic<uint32> AsyncExceptionCode{ 0 };
 
-			AsyncTask(ENamedThreads::GameThread, [ToolPtr, ArgsCopy, &Promise]()
+#if PLATFORM_WINDOWS
+			AsyncTask(ENamedThreads::GameThread, [ToolPtr, &ArgsCopy, &Promise, &AsyncExceptionCode]()
 			{
-				Promise.SetValue(ToolPtr->Execute(ArgsCopy));
+				TCHAR ExMsg[2048] = {};
+				bool bPromiseFulfilled = false;
+				FAsyncToolSEHContext Ctx;
+				Ctx.Tool = ToolPtr;
+				Ctx.Args = &ArgsCopy;
+				Ctx.Promise = &Promise;
+				Ctx.bPromiseFulfilled = &bPromiseFulfilled;
+				AsyncExceptionCode.store(
+					ExecuteToolAsyncSEH(&AsyncToolTrampoline, &Ctx, &bPromiseFulfilled,
+						&Promise, ExMsg, UE_ARRAY_COUNT(ExMsg)),
+					std::memory_order_release);
 			});
+#else
+			AsyncTask(ENamedThreads::GameThread, [ToolPtr, &ArgsCopy, &Promise, &AsyncExceptionCode]()
+			{
+				try
+				{
+					Promise.SetValue(ToolPtr->Execute(ArgsCopy));
+				}
+				catch (...)
+				{
+					IClaireonTool::FToolResult ErrorResult;
+					ErrorResult.bIsError = true;
+					ErrorResult.ErrorMessage = TEXT("FATAL: Caught unknown C++ exception during async tool execution. "
+													"Editor state may be corrupted -- restart recommended.");
+					Promise.SetValue(MoveTemp(ErrorResult));
+					AsyncExceptionCode.store(1, std::memory_order_release);
+				}
+			});
+#endif
 
 			ToolResult = Future.Get();
+			if (AsyncExceptionCode.load(std::memory_order_acquire) != 0)
+			{
+				ClaireonSafeExec::SetCrashFlag();
+			}
 		}
 	}
 
@@ -626,23 +743,33 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsCall(const FMCPRequestContex
 		TArray<FClaireonDeferredAction> Actions = FClaireonBridge::DrainDeferredActions();
 		for (const FClaireonDeferredAction& Action : Actions)
 		{
-			switch (Action.Type)
+			FClaireonSafeActionResult ActionResult = ClaireonSafeExec::ExecuteAction([&Action]()
 			{
-				case EClaireonDeferredActionType::LoadMap:
-					ClaireonTool_MapOpen::ExecuteDeferredLoadMap(Action.Payload);
-					break;
-				case EClaireonDeferredActionType::PIEStart:
-					ClaireonTool_PIEStart::ExecuteDeferredPIEStart(Action.Payload);
-					break;
-				case EClaireonDeferredActionType::PIEStop:
-					ClaireonTool_PIEStop::ExecuteDeferredPIEStop();
-					break;
-				case EClaireonDeferredActionType::LiveCodingReload:
-					ClaireonTool_LiveCodingReload::ExecuteDeferredLiveCodingReload(Action.Payload);
-					break;
-				case EClaireonDeferredActionType::DuplicateAndOpenMap:
-					ClaireonTool_MapDuplicate::ExecuteDeferredDuplicateAndOpenMap(Action.Payload);
-					break;
+				switch (Action.Type)
+				{
+					case EClaireonDeferredActionType::LoadMap:
+						ClaireonTool_MapOpen::ExecuteDeferredLoadMap(Action.Payload);
+						break;
+					case EClaireonDeferredActionType::PIEStart:
+						ClaireonTool_PIEStart::ExecuteDeferredPIEStart(Action.Payload);
+						break;
+					case EClaireonDeferredActionType::PIEStop:
+						ClaireonTool_PIEStop::ExecuteDeferredPIEStop();
+						break;
+					case EClaireonDeferredActionType::LiveCodingReload:
+						ClaireonTool_LiveCodingReload::ExecuteDeferredLiveCodingReload(Action.Payload);
+						break;
+					case EClaireonDeferredActionType::DuplicateAndOpenMap:
+						ClaireonTool_MapDuplicate::ExecuteDeferredDuplicateAndOpenMap(Action.Payload);
+						break;
+				}
+			});
+
+			if (ActionResult.bCaughtFatalException)
+			{
+				UE_LOG(LogClaireon, Error, TEXT("Deferred action %d crashed: %s"),
+					(int32)Action.Type, *ActionResult.ExceptionDescription);
+				break;
 			}
 		}
 	}

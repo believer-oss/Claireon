@@ -4,6 +4,7 @@
 #include "Tools/ClaireonTool_StateTreeEdit.h"
 #include "Tools/ClaireonStateTreeHelpers.h"
 #include "ClaireonLog.h"
+#include "ClaireonSafeExec.h"
 #include "StateTree.h"
 #include "StateTreeEditorData.h"
 #include "StateTreeState.h"
@@ -1780,6 +1781,10 @@ FToolResult ClaireonTool_StateTreeEdit::Operation_Save(const FString& SessionId,
 
 	TArray<UPackage*> PackagesToSave;
 	PackagesToSave.Add(Package);
+	if (ClaireonSafeExec::DidLastExecutionCrash())
+	{
+		return MakeErrorResult(TEXT("Save blocked: editor state may be corrupted after a previous crash. Restart the editor."));
+	}
 	bool bSuccess = UEditorLoadingAndSavingUtils::SavePackages(PackagesToSave, true);
 
 	if (bSuccess)

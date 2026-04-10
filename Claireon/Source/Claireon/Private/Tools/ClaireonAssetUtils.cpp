@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonPathResolver.h"
+#include "ClaireonSafeExec.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/ARFilter.h"
 #include "Engine/Blueprint.h"
@@ -187,6 +188,12 @@ bool SaveAsset(UObject* Asset, FString& OutError)
 	if (!Asset)
 	{
 		OutError = TEXT("Null asset");
+		return false;
+	}
+
+	if (ClaireonSafeExec::DidLastExecutionCrash())
+	{
+		OutError = TEXT("Save blocked: editor state may be corrupted after a previous crash. Restart the editor.");
 		return false;
 	}
 
