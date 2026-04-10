@@ -89,6 +89,9 @@ public:
 		/** Execution logs (stdout/stderr lines) */
 		FString Logs;
 
+		/** Engine UE_LOG output captured during execution (Warning/Error level) */
+		FString UELog;
+
 		/** Whether this result represents an error */
 		bool bIsError = false;
 

@@ -21,6 +21,10 @@
 #include "HAL/Event.h"
 #include "Async/Async.h"
 #include "HAL/ThreadHeartBeat.h"
+#include "ClaireonLogCapture.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
 
 // CPython C API headers for timeout enforcement
 THIRD_PARTY_INCLUDES_START
@@ -287,7 +291,10 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	FSlowHeartBeatScope SuspendHeartBeat;
 	FDisableHitchDetectorScope SuspendHitchDetector;
 
-	// Step 7: Execute (no watchdog timer for now — matches original editor.python.execute behavior)
+	// Step 7: Execute with engine log capture at the top level.
+	// All claireon.* tool calls within Python flow through ClaireonBridge::MCPCallTool,
+	// so capturing here covers the entire execution scope.
+	FClaireonLogCapture EngineLogCapture;
 	const double StartTimeSeconds = FPlatformTime::Seconds();
 	const bool bPythonSuccess = IPythonScriptPlugin::Get()->ExecPythonCommandEx(PythonCommand);
 	const double DurationMs = (FPlatformTime::Seconds() - StartTimeSeconds) * 1000.0;
@@ -335,8 +342,9 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 		}
 	}
 
-	// Step 8: Capture logs
+	// Step 8: Capture logs (Python stdout/stderr and engine UE_LOG)
 	FString Logs = FToolResult::BuildLogString(PythonCommand.LogOutput);
+	FString EngineOutput = EngineLogCapture.GetCapturedOutput();
 
 	// Step 9: Read tool call count
 	int32 ToolCallCount = FClaireonBridge::GetToolCallCount();
@@ -357,6 +365,7 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	// Step 10: Build structured FToolResult
 	FToolResult FinalResult;
 	FinalResult.Logs = Logs;
+	FinalResult.UELog = EngineOutput;
 
 	if (bTimedOut)
 	{

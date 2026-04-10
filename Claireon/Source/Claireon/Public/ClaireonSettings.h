@@ -203,6 +203,15 @@ public:
         meta=(DisplayName="Log All Tool Calls"))
     bool bLogAllToolCalls = false;
 
+    // --- Engine Diagnostics ---
+
+    /** Log categories to exclude from engine diagnostics capture during tool execution.
+     *  Categories listed here are skipped by FClaireonLogCapture.
+     *  Use this to suppress known-noisy categories (e.g., LogSlate, LogStreaming). */
+    UPROPERTY(Config, EditAnywhere, Category="Engine Diagnostics",
+        meta=(DisplayName="Excluded Engine Log Categories"))
+    TSet<FName> ExcludedEngineLogCategories;
+
     // --- Helpers ---
 
     /** Returns the effective system prompt (override if set, else built-in default). */

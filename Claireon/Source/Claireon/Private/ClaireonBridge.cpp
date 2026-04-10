@@ -286,6 +286,16 @@ PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 	}
 	Envelope->SetArrayField(TEXT("warnings"), WarningsArray);
 
+	if (!Result.Logs.IsEmpty())
+	{
+		Envelope->SetStringField(TEXT("logs"), Result.Logs);
+	}
+
+	if (!Result.UELog.IsEmpty())
+	{
+		Envelope->SetStringField(TEXT("ue_log"), Result.UELog);
+	}
+
 	// Serialize to condensed JSON string (no extra whitespace)
 	FString EnvelopeJson;
 	TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
