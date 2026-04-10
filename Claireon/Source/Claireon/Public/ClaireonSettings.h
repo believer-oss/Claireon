@@ -10,13 +10,13 @@
 DECLARE_MULTICAST_DELEGATE(FOnClaireonSettingsChanged);
 
 /**
- * Live-editable settings for the MCP REPL.
+ * Live-editable settings for Claireon.
  * All values are read fresh on each API call — change in Editor Preferences,
  * take effect immediately with no recompile or editor restart.
  *
- * Found at: Editor Preferences > Plugins > MCP REPL
+ * Found at: Editor Preferences > Plugins > Claireon
  */
-UCLASS(Config=EditorPerProjectUserSettings, meta=(DisplayName="MCP REPL"))
+UCLASS(Config=EditorPerProjectUserSettings, meta=(DisplayName="Claireon"))
 class UClaireonSettings : public UDeveloperSettings
 {
     GENERATED_BODY()
@@ -220,5 +220,5 @@ public:
 #endif
 
     virtual FName GetCategoryName() const override { return TEXT("Plugins"); }
-    virtual FName GetSectionName() const override { return TEXT("MCP REPL"); }
+    virtual FName GetSectionName() const override { return TEXT("Claireon"); }
 };

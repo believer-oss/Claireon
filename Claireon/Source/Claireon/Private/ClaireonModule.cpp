@@ -329,7 +329,7 @@ void FClaireonModule::StartupModule()
 	SClaireonDiagnosticsWidget::RegisterTabSpawner();
 
 	// Settings registration is handled automatically by UDeveloperSettings via
-	// GetCategoryName() -> "Plugins" and meta=(DisplayName="MCP REPL").
+	// GetCategoryName() -> "Plugins" and meta=(DisplayName="Claireon").
 	// Manual RegisterSettings was removed — it caused duplicate entries.
 
 	FClaireonRichTextStyle::Initialize();

@@ -98,7 +98,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEStart::Execute(const TSharedPtr<FJson
 	if (!NetModeStr.IsEmpty() && DisabledModes.Contains(NetModeStr))
 	{
 		return MakeErrorResult(FString::Printf(
-			TEXT("Net mode '%s' is disabled in MCP settings (Editor Preferences > Plugins > MCP REPL > PIE)."),
+			TEXT("Net mode '%s' is disabled in MCP settings (Editor Preferences > Plugins > Claireon > PIE)."),
 			*NetModeStr));
 	}
 

@@ -167,7 +167,7 @@ void FClaireonFeedbackReport::Generate(FOnFeedbackReportComplete OnComplete)
 	const UClaireonSettings* Settings = UClaireonSettings::Get();
 	if (!Settings || Settings->AnthropicApiKey.IsEmpty())
 	{
-		OnComplete.ExecuteIfBound(false, TEXT("No API key configured. Set your Anthropic API key in Editor Preferences > Plugins > MCP REPL."));
+		OnComplete.ExecuteIfBound(false, TEXT("No API key configured. Set your Anthropic API key in Editor Preferences > Plugins > Claireon."));
 		return;
 	}
 

@@ -359,9 +359,9 @@ TSharedRef<SWidget> SClaireonREPLWidget::BuildChatView()
 			+ SHorizontalBox::Slot().AutoWidth().Padding(4.0f, 0.0f)[SNew(SButton).Text(LOCTEXT("SettingsGear", "\u2699")).ButtonStyle(FAppStyle::Get(), "SimpleButton").OnClicked_Lambda([]() -> FReply
 	{
 		FModuleManager::LoadModuleChecked<ISettingsModule>("Settings")
-			.ShowViewer(TEXT("Editor"), TEXT("Plugins"), TEXT("MCP REPL"));
+			.ShowViewer(TEXT("Editor"), TEXT("Plugins"), TEXT("Claireon"));
 		return FReply::Handled();
-	}).ToolTipText(LOCTEXT("SettingsTooltip", "Open MCP REPL settings"))]];
+	}).ToolTipText(LOCTEXT("SettingsTooltip", "Open Claireon settings"))]];
 }
 
 // ------- Event Handling -------

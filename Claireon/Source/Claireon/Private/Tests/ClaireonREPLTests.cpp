@@ -157,7 +157,7 @@ UNTEST_UNIT_OPTS(Claireon, REPL, ToolUseViaAPI, UNTEST_TIMEOUTMS(60000))
 	{
 		UE_LOG(LogTemp, Warning,
 			TEXT("[REPL Test] ToolUseViaAPI: SKIPPED — no Anthropic API key configured in "
-			     "Editor Preferences > Plugins > MCP REPL"));
+			     "Editor Preferences > Plugins > Claireon"));
 		co_return;
 	}
 
