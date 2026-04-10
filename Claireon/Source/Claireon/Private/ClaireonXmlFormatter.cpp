@@ -114,21 +114,6 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 			}
 			Xml += TEXT("<summary>\n") + Summary + TEXT("\n</summary>\n");
 
-			// Result data
-			if (Result.Data.IsValid())
-			{
-				FString DataJson;
-				TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
-					TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&DataJson);
-				FJsonSerializer::Serialize(Result.Data.ToSharedRef(), Writer);
-				Writer->Close();
-				Xml += TEXT("<result>\n") + DataJson + TEXT("\n</result>\n");
-			}
-			else
-			{
-				Xml += TEXT("<result>\nnull\n</result>\n");
-			}
-
 			// Warnings
 			for (const FString& Warning : Result.Warnings)
 			{

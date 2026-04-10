@@ -26,7 +26,6 @@ THIRD_PARTY_INCLUDES_END
 
 // Static member initialization
 bool FClaireonBridge::bIsRegistered = false;
-FString FClaireonBridge::GLastExecuteResult;
 FClaireonServer* FClaireonBridge::GServerInstance = nullptr;
 TAtomic<int32> FClaireonBridge::GToolCallCount(0);
 TArray<FClaireonDeferredAction> FClaireonBridge::GDeferredActions;
@@ -37,13 +36,6 @@ static PyMethodDef MCPCallDef = {
 	&FClaireonBridge::MCPCallTool,
 	METH_VARARGS,
 	"Call an MCP tool by name. Args: (tool_name: str, args_json: str) -> str"
-};
-
-static PyMethodDef MCPResultDef = {
-	"_mcp_set_result",
-	&FClaireonBridge::MCPSetResult,
-	METH_VARARGS,
-	"Set the execute result JSON. Args: (result_json: str) -> None"
 };
 
 void FClaireonBridge::SetToolRegistry(FClaireonServer* Server)
@@ -76,24 +68,20 @@ void FClaireonBridge::RegisterBridgeFunctions()
 
 	// Create PyCFunction objects from our method defs
 	PyObject* CallFunc = PyCFunction_New(&MCPCallDef, nullptr);
-	PyObject* ResultFunc = PyCFunction_New(&MCPResultDef, nullptr);
 
-	if (!CallFunc || !ResultFunc)
+	if (!CallFunc)
 	{
 		UE_LOG(LogClaireon, Error, TEXT("[MCP Bridge] Failed to create PyCFunction objects"));
 		Py_XDECREF(CallFunc);
-		Py_XDECREF(ResultFunc);
 		PyGILState_Release(GILState);
 		return;
 	}
 
 	// Register into the unreal module dict
 	PyDict_SetItemString(UnrealDict, "_mcp_call_tool", CallFunc);
-	PyDict_SetItemString(UnrealDict, "_mcp_set_result", ResultFunc);
 
 	// PyDict_SetItemString increments refcount, so release our references
 	Py_DECREF(CallFunc);
-	Py_DECREF(ResultFunc);
 
 	// Add our Python modules directory to sys.path and pre-warm imports
 	// to avoid blocking the game thread during first execute call
@@ -117,7 +105,7 @@ void FClaireonBridge::RegisterBridgeFunctions()
 	}
 
 	bIsRegistered = true;
-	UE_LOG(LogClaireon, Display, TEXT("[MCP Bridge] Registered _mcp_call_tool and _mcp_set_result in unreal module"));
+	UE_LOG(LogClaireon, Display, TEXT("[MCP Bridge] Registered _mcp_call_tool in unreal module"));
 
 	PyGILState_Release(GILState);
 }
@@ -138,16 +126,6 @@ void FClaireonBridge::EnsureRegistered()
 	}
 
 	RegisterBridgeFunctions();
-}
-
-FString FClaireonBridge::GetLastExecuteResult()
-{
-	return GLastExecuteResult;
-}
-
-void FClaireonBridge::ResetLastExecuteResult()
-{
-	GLastExecuteResult.Empty();
 }
 
 int32 FClaireonBridge::GetToolCallCount()
@@ -316,18 +294,6 @@ PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 	Writer->Close();
 
 	return PyUnicode_FromString(TCHAR_TO_UTF8(*EnvelopeJson));
-}
-
-PyObject* FClaireonBridge::MCPSetResult(PyObject* /*Self*/, PyObject* Args)
-{
-	const char* ResultJsonUtf8 = nullptr;
-	if (!PyArg_ParseTuple(Args, "s", &ResultJsonUtf8))
-	{
-		return nullptr; // PyArg_ParseTuple sets the exception
-	}
-
-	GLastExecuteResult = UTF8_TO_TCHAR(ResultJsonUtf8);
-	Py_RETURN_NONE;
 }
 
 // --- Deferred world-transition actions ---

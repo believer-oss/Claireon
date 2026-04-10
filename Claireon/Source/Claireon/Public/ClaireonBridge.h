@@ -45,12 +45,6 @@ public:
 	/** Ensure bridge functions are registered (lazy initialization) */
 	static void EnsureRegistered();
 
-	/** Get the result string from the last execute call */
-	static FString GetLastExecuteResult();
-
-	/** Reset the last execute result */
-	static void ResetLastExecuteResult();
-
 	/** Get the number of claireon.* calls made during the last execute */
 	static int32 GetToolCallCount();
 
@@ -63,13 +57,6 @@ public:
 	 * Public because CPython's PyMethodDef takes a pointer to this at file scope.
 	 */
 	static PyObject* MCPCallTool(PyObject* Self, PyObject* Args);
-
-	/**
-	 * CPython C function: stores result JSON from execute script suffix.
-	 * Signature: _mcp_set_result(result_json: str) -> None
-	 * Public because CPython's PyMethodDef takes a pointer to this at file scope.
-	 */
-	static PyObject* MCPSetResult(PyObject* Self, PyObject* Args);
 
 	/** Enqueue a deferred world-transition action (executed after Python finishes). */
 	static void EnqueueDeferredAction(FClaireonDeferredAction Action);
@@ -94,9 +81,6 @@ public:
 private:
 	/** Whether bridge functions have been registered */
 	static bool bIsRegistered;
-
-	/** Result from the last execute call */
-	static FString GLastExecuteResult;
 
 	/** Pointer to the server instance for tool lookup */
 	static FClaireonServer* GServerInstance;

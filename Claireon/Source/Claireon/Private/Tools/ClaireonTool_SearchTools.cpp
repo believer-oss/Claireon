@@ -121,14 +121,11 @@ bool ClaireonTool_SearchTools::RebuildCatalog()
 	// Use raw string with triple quotes to safely embed JSON containing quotes
 	FString PythonCode = FString::Printf(
 		TEXT("import json as _json\n")
-		TEXT("import unreal as _unreal\n")
 		TEXT("from mcp_tool_catalog import rebuild as _rebuild\n")
 		TEXT("_result = _rebuild(r\"\"\"%s\"\"\")\n")
-		TEXT("_unreal._mcp_set_result(_json.dumps(_result))\n"),
+		TEXT("print(_json.dumps(_result))\n"),
 		*ToolsJson
 	);
-
-	FClaireonBridge::ResetLastExecuteResult();
 
 	FPythonCommandEx PythonCommand;
 	PythonCommand.Command = PythonCode;
@@ -142,7 +139,15 @@ bool ClaireonTool_SearchTools::RebuildCatalog()
 
 	if (bSuccess)
 	{
-		FString ResultJson = FClaireonBridge::GetLastExecuteResult();
+		// Extract the printed JSON result from log output
+		FString ResultJson;
+		for (const FPythonLogOutputEntry& Entry : PythonCommand.LogOutput)
+		{
+			if (Entry.Type == EPythonLogOutputType::Info || Entry.Type == EPythonLogOutputType::Warning)
+			{
+				ResultJson = Entry.Output;
+			}
+		}
 		if (!ResultJson.IsEmpty())
 		{
 			LastCatalogToolCount = ToolsMap.Num();
@@ -164,14 +169,11 @@ TArray<FString> ClaireonTool_SearchTools::FuzzySearch(const FString& Query, int3
 	// Use raw string with triple quotes to safely embed query containing quotes
 	FString PythonCode = FString::Printf(
 		TEXT("import json as _json\n")
-		TEXT("import unreal as _unreal\n")
 		TEXT("from mcp_tool_catalog import search as _search\n")
 		TEXT("_hits = _search(r\"\"\"%s\"\"\", max_results=%d)\n")
-		TEXT("_unreal._mcp_set_result(_json.dumps(_hits))\n"),
+		TEXT("print(_json.dumps(_hits))\n"),
 		*Query, MaxResults
 	);
-
-	FClaireonBridge::ResetLastExecuteResult();
 
 	FPythonCommandEx PythonCommand;
 	PythonCommand.Command = PythonCode;
@@ -187,7 +189,15 @@ TArray<FString> ClaireonTool_SearchTools::FuzzySearch(const FString& Query, int3
 		return Results;
 	}
 
-	FString ResultJson = FClaireonBridge::GetLastExecuteResult();
+	// Extract the printed JSON result from log output
+	FString ResultJson;
+	for (const FPythonLogOutputEntry& Entry : PythonCommand.LogOutput)
+	{
+		if (Entry.Type == EPythonLogOutputType::Info || Entry.Type == EPythonLogOutputType::Warning)
+		{
+			ResultJson = Entry.Output;
+		}
+	}
 	if (ResultJson.IsEmpty())
 	{
 		return Results;

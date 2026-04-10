@@ -21,9 +21,6 @@
 #include "HAL/Event.h"
 #include "Async/Async.h"
 #include "HAL/ThreadHeartBeat.h"
-#include "Serialization/JsonSerializer.h"
-#include "Serialization/JsonWriter.h"
-#include "Policies/CondensedJsonPrintPolicy.h"
 
 // CPython C API headers for timeout enforcement
 THIRD_PARTY_INCLUDES_START
@@ -180,56 +177,16 @@ FString ClaireonTool_ExecutePython::GetPythonPrefix()
 		"claireon.index_load = _index_load\n"
 		"claireon.index_clear = _index_clear\n"
 		"claireon.index_expire = _index_expire\n"
-		"result = None\n"
 		"\n"
 		"# --- user code begins here ---\n");
 }
 
 FString ClaireonTool_ExecutePython::GetPythonSuffix()
 {
-	// Suffix routes result through the Output Gate, then passes the (possibly
-	// rewritten) result back to C++ via the bridge.  When the result exceeds
-	// the threshold, the raw data is stored in the IndexEngine and a compact
-	// IndexedResult envelope is returned instead so the LLM can issue follow-up
-	// claireon.index_search() calls without blowing its context window.
 	return TEXT(
 		"\n"
 		"# --- user code ends here ---\n"
-		"import json as _json\n"
-		"import unreal as _unreal\n"
-		"if not _mcp_error_handled:\n"
-		"    try:\n"
-		"        # Bypass the Output Gate for index operation results — re-indexing\n"
-		"        # search results creates an infinite nesting loop.\n"
-		"        _bypass_gate = (\n"
-		"            isinstance(result, dict)\n"
-		"            and 'index_id' in result\n"
-		"            and ('results' in result or 'indexes' in result or 'chunks_inserted' in result)\n"
-		"        )\n"
-		"        if _bypass_gate:\n"
-		"            _final_json = _json.dumps(result)\n"
-		"        else:\n"
-		"            from mcp_output_gate import get_gate as _get_gate\n"
-		"            _gate = _get_gate()\n"
-		"            _routed = _gate.route(result, stream_type='result', source_tool='execute')\n"
-		"            _routed_type = type(_routed).__name__\n"
-		"            if _routed_type == 'DirectResult':\n"
-		"                # Small result — pass through unchanged\n"
-		"                _final_json = _routed.content if _routed.content else _json.dumps(result)\n"
-		"            else:\n"
-		"                # Large result — emit a compact indexed_result envelope\n"
-		"                _final_json = _json.dumps({\n"
-		"                    '__mcp_indexed__': True,\n"
-		"                    'index_id': _routed.index_id,\n"
-		"                    'chunk_count': _routed.chunk_count,\n"
-		"                    'summary': _routed.summary,\n"
-		"                    'excerpts': _routed.excerpts,\n"
-		"                    'hint': 'Use claireon.index_search(index_id, query) to retrieve specific content.',\n"
-		"                })\n"
-		"    except Exception as _gate_err:\n"
-		"        # Output gate failure must never silently swallow the result\n"
-		"        _final_json = _json.dumps(result)\n"
-		"    _unreal._mcp_set_result(_final_json)\n");
+	);
 }
 
 FString ClaireonTool_ExecutePython::BuildLogString(const TArray<FPythonLogOutputEntry>& LogOutput)
@@ -270,8 +227,7 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	// Step 2: Ensure bridge is registered
 	FClaireonBridge::EnsureRegistered();
 
-	// Step 3: Reset result state
-	FClaireonBridge::ResetLastExecuteResult();
+	// Step 3: Reset tool call counter
 	FClaireonBridge::ResetToolCallCount();
 
 	// Step 4: Generate temp .py file
@@ -297,8 +253,7 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	}
 
 	// Build the full script: prefix + try-wrapped user code + except + suffix.
-	// The except block sets _mcp_error_handled so the suffix skips the output
-	// gate and doesn't overwrite the error result with a routed None.
+	// The except block prints the traceback so it appears in PythonCommand.LogOutput.
 	FString FullScript = GetPythonPrefix()
 		+ TEXT("_mcp_error_handled = False\n")
 		+ TEXT("try:\n")
@@ -307,7 +262,6 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 		+ TEXT("    import traceback as _tb\n")
 		+ TEXT("    _mcp_error_msg = _tb.format_exc()\n")
 		+ TEXT("    print(_mcp_error_msg)\n")
-		+ TEXT("    _unreal._mcp_set_result(_json.dumps({'__mcp_error__': True, 'error': str(_mcp_user_error), 'traceback': _mcp_error_msg}))\n")
 		+ TEXT("    _mcp_error_handled = True\n")
 		+ GetPythonSuffix();
 
@@ -384,14 +338,11 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	// Step 8: Capture logs
 	FString Logs = FToolResult::BuildLogString(PythonCommand.LogOutput);
 
-	// Step 9: Read result
-	FString ResultJson = FClaireonBridge::GetLastExecuteResult();
+	// Step 9: Read tool call count
 	int32 ToolCallCount = FClaireonBridge::GetToolCallCount();
 
 	// Step 9b: Update crash flag based on execution outcome.
-	// Bridge-level failure (no result at all) suggests corrupted interpreter state.
-	// User code exceptions caught by try-except are NOT bridge failures.
-	if (!bPythonSuccess && ResultJson.IsEmpty())
+	if (!bPythonSuccess)
 	{
 		FClaireonAutoSave::SetCrashFlag();
 	}
@@ -429,185 +380,42 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 			}
 		}
 
-		if (!ResultJson.IsEmpty())
+		if (ErrorMsg.IsEmpty())
 		{
-			// Partial: _mcp_set_result was called before the error
-			if (ErrorMsg.IsEmpty())
+			if (!Logs.IsEmpty())
 			{
-				ErrorMsg = TEXT("Python execution failed.");
-			}
-			FinalResult.ErrorMessage = ErrorMsg;
-
-			// Parse partial result into Data
-			TSharedPtr<FJsonValue> ParsedPartial;
-			TSharedRef<TJsonReader<>> PartialReader = TJsonReaderFactory<>::Create(ResultJson);
-			if (FJsonSerializer::Deserialize(PartialReader, ParsedPartial) && ParsedPartial.IsValid()
-				&& ParsedPartial->Type == EJson::Object)
-			{
-				FinalResult.Data = ParsedPartial->AsObject();
-			}
-		}
-		else
-		{
-			// Full error
-			if (ErrorMsg.IsEmpty())
-			{
-				if (!Logs.IsEmpty())
-				{
-					ErrorMsg = TEXT("Python execution failed. Output:\n") + Logs;
-				}
-				else
-				{
-					// Enhanced diagnostics for bridge-level failures (before user code ran)
-					FString DiagInfo;
-
-					// Check Python bridge availability
-					IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get();
-					if (!PythonPlugin)
-					{
-						DiagInfo = TEXT("Bridge status: Python plugin not available.");
-					}
-					else
-					{
-						DiagInfo = TEXT("Bridge status: registered.");
-					}
-
-					ErrorMsg = FString::Printf(
-						TEXT("Python execution failed at bridge level (before user code executed). "
-							 "Possible causes: Python bridge not initialized, syntax error in script prefix, or module import failure. %s"),
-						*DiagInfo);
-				}
-			}
-			FinalResult.ErrorMessage = ErrorMsg;
-		}
-	}
-	else
-	{
-		// Check if the user code raised an exception caught by our try-except wrapper
-		bool bHandled = false;
-		if (!ResultJson.IsEmpty())
-		{
-			TSharedPtr<FJsonObject> ErrorCheck;
-			TSharedRef<TJsonReader<>> ErrReader = TJsonReaderFactory<>::Create(ResultJson);
-			if (FJsonSerializer::Deserialize(ErrReader, ErrorCheck) && ErrorCheck.IsValid()
-				&& ErrorCheck->HasField(TEXT("__mcp_error__")))
-			{
-				FString ErrorMsg;
-				ErrorCheck->TryGetStringField(TEXT("traceback"), ErrorMsg);
-				if (ErrorMsg.IsEmpty())
-				{
-					ErrorCheck->TryGetStringField(TEXT("error"), ErrorMsg);
-				}
-				FinalResult.bIsError = true;
-				FinalResult.ErrorMessage = ErrorMsg;
-				bHandled = true;
-			}
-		}
-
-		// Success — check whether the Output Gate produced an indexed result envelope
-		if (!bHandled && !ResultJson.IsEmpty() && ResultJson != TEXT("null"))
-		{
-			TSharedPtr<FJsonValue> ParsedValue;
-			TSharedRef<TJsonReader<>> IndexCheckReader = TJsonReaderFactory<>::Create(ResultJson);
-			if (FJsonSerializer::Deserialize(IndexCheckReader, ParsedValue) && ParsedValue.IsValid()
-				&& ParsedValue->Type == EJson::Object)
-			{
-				TSharedPtr<FJsonObject> ParsedObj = ParsedValue->AsObject();
-				bool bMCPIndexed = false;
-				if (ParsedObj->TryGetBoolField(TEXT("__mcp_indexed__"), bMCPIndexed) && bMCPIndexed)
-				{
-					// Indexed result — store the envelope in Data
-					FinalResult.Data = ParsedObj;
-					FString IndexId;
-					ParsedObj->TryGetStringField(TEXT("index_id"), IndexId);
-					double ChunkCountDouble = 0.0;
-					ParsedObj->TryGetNumberField(TEXT("chunk_count"), ChunkCountDouble);
-					FinalResult.Summary = FString::Printf(
-						TEXT("Result indexed (%d chunks). Use claireon.index_search(\"%s\", query) to retrieve content."),
-						static_cast<int32>(ChunkCountDouble), *IndexId);
-					bHandled = true;
-				}
-			}
-		}
-
-		// Normal (small) result — populate structured fields
-		if (!bHandled)
-		{
-			if (!ResultJson.IsEmpty() && ResultJson != TEXT("null"))
-			{
-				TSharedPtr<FJsonValue> ParsedValue;
-				TSharedRef<TJsonReader<>> JsonReader = TJsonReaderFactory<>::Create(ResultJson);
-				if (FJsonSerializer::Deserialize(JsonReader, ParsedValue) && ParsedValue.IsValid())
-				{
-					if (ParsedValue->Type == EJson::Object)
-					{
-						TSharedPtr<FJsonObject> ParsedObj = ParsedValue->AsObject();
-
-						// The Python bridge wraps sub-tool results as {"data": ..., "summary": ..., "warnings": [...]}.
-						// Unwrap: use the inner "data" for Data and "summary" for Summary.
-						const TSharedPtr<FJsonObject>* InnerData = nullptr;
-						FString InnerSummary;
-						if (ParsedObj->TryGetObjectField(TEXT("data"), InnerData) && InnerData
-							&& ParsedObj->TryGetStringField(TEXT("summary"), InnerSummary))
-						{
-							FinalResult.Data = *InnerData;
-							FinalResult.Summary = InnerSummary;
-
-							// Propagate warnings from the bridge envelope
-							const TArray<TSharedPtr<FJsonValue>>* WarningsArr = nullptr;
-							if (ParsedObj->TryGetArrayField(TEXT("warnings"), WarningsArr) && WarningsArr)
-							{
-								for (const TSharedPtr<FJsonValue>& WarnVal : *WarningsArr)
-								{
-									FString WarnStr;
-									if (WarnVal->TryGetString(WarnStr))
-									{
-										FinalResult.Warnings.Add(WarnStr);
-									}
-								}
-							}
-						}
-						else
-						{
-							// Not a bridge envelope — use the parsed object directly
-							FinalResult.Data = ParsedObj;
-							FinalResult.Summary = TEXT("Execution completed.");
-						}
-					}
-					else
-					{
-						// Non-object result: wrap in {"value": ...}
-						TSharedPtr<FJsonObject> Wrapper = MakeShared<FJsonObject>();
-						Wrapper->SetField(TEXT("value"), ParsedValue);
-						FinalResult.Data = Wrapper;
-						FinalResult.Summary = TEXT("Execution completed.");
-					}
-				}
-				else
-				{
-					// Raw string result — wrap it
-					TSharedPtr<FJsonObject> Wrapper = MakeShared<FJsonObject>();
-					Wrapper->SetStringField(TEXT("value"), ResultJson);
-					FinalResult.Data = Wrapper;
-					FinalResult.Summary = TEXT("Execution completed.");
-				}
+				ErrorMsg = TEXT("Python execution failed. Output:\n") + Logs;
 			}
 			else
 			{
-				FinalResult.Summary = TEXT("Execution completed (no result).");
-			}
+				// Enhanced diagnostics for bridge-level failures (before user code ran)
+				IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get();
+				FString DiagInfo = PythonPlugin
+					? TEXT("Bridge status: registered.")
+					: TEXT("Bridge status: Python plugin not available.");
 
-			if (ToolCallCount > 0)
-			{
-				FinalResult.Summary += FString::Printf(TEXT(" (%d tool call(s) made)"), ToolCallCount);
+				ErrorMsg = FString::Printf(
+					TEXT("Python execution failed at bridge level (before user code executed). "
+						 "Possible causes: Python bridge not initialized, syntax error in script prefix, or module import failure. %s"),
+					*DiagInfo);
 			}
+		}
+		FinalResult.ErrorMessage = ErrorMsg;
+	}
+	else
+	{
+		// Success -- logs are the primary output
+		FinalResult.Summary = TEXT("Execution completed.");
+		if (ToolCallCount > 0)
+		{
+			FinalResult.Summary += FString::Printf(TEXT(" (%d tool call(s) made)"), ToolCallCount);
 		}
 	}
 
 	// Step 11: Record to audit log
 	{
 		bool bSuccess = !FinalResult.bIsError;
-		FString ResultSummary = ResultJson.Left(500);
+		FString ResultSummary;
 
 		FClaireonPythonAuditLog::Get().RecordInvocation(
 			Code,
