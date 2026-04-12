@@ -1176,7 +1176,7 @@ int32 FClaireonAnthropicClient::GetApproximateTokenCount() const
 	const UClaireonSettings* Settings = UClaireonSettings::Get();
 	CharCount += Settings->GetEffectiveSystemPrompt().Len();
 
-	// Tool definitions (including the large GenerateToolStubs in execute's description)
+	// Tool definitions are sent with every request and count against the context window.
 	TArray<TSharedPtr<FJsonValue>> ToolDefs = BuildToolDefinitions();
 	for (const TSharedPtr<FJsonValue>& ToolDef : ToolDefs)
 	{

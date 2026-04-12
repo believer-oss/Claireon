@@ -344,55 +344,6 @@ FString FClaireonXmlFormatter::GenerateTypeSignature(const FString& ToolName, co
 	return Sig;
 }
 
-FString FClaireonXmlFormatter::GenerateToolStubs(const TMap<FString, TSharedPtr<IClaireonTool>>& Tools)
-{
-	// Group by category, excluding meta tools (execute, search_tools)
-	TMap<FString, TArray<TSharedPtr<IClaireonTool>>> Grouped;
-	for (const auto& Pair : Tools)
-	{
-		const TSharedPtr<IClaireonTool>& Tool = Pair.Value;
-		const FString Category = Tool->GetCategory();
-		const FString Name = Tool->GetName();
-
-		// Skip meta tools — they are the MCP-visible tools, not bridge tools
-		if (Name == TEXT("claireon.python_execute") || Name == TEXT("claireon.tools_search"))
-		{
-			continue;
-		}
-
-		Grouped.FindOrAdd(Category).Add(Tool);
-	}
-
-	// Sort categories
-	TArray<FString> Categories;
-	Grouped.GetKeys(Categories);
-	Categories.Sort();
-
-	FString Stubs = TEXT("<tool-stubs>\n");
-	for (const FString& Category : Categories)
-	{
-		Stubs += FString::Printf(TEXT("<category name=\"%s\">\n"), *EscapeXml(Category));
-
-		TArray<TSharedPtr<IClaireonTool>>& CategoryTools = Grouped[Category];
-		// Sort tools within category by name for deterministic output
-		CategoryTools.Sort([](const TSharedPtr<IClaireonTool>& A, const TSharedPtr<IClaireonTool>& B)
-		{
-			return A->GetName() < B->GetName();
-		});
-
-		for (const TSharedPtr<IClaireonTool>& Tool : CategoryTools)
-		{
-			FString Signature = GenerateTypeSignature(Tool->GetName(), Tool->GetInputSchema());
-			Stubs += Signature + TEXT("\n");
-		}
-
-		Stubs += TEXT("</category>\n");
-	}
-	Stubs += TEXT("</tool-stubs>");
-
-	return Stubs;
-}
-
 FString FClaireonXmlFormatter::GenerateCategorySummary(const TMap<FString, TSharedPtr<IClaireonTool>>& Tools)
 {
 	// Group by category, excluding meta tools

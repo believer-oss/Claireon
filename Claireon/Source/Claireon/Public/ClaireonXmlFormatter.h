@@ -55,15 +55,8 @@ public:
 		const FString& Logs);
 
 	/**
-	 * Generate XML type stubs for all tools grouped by category.
-	 * Used by HandleToolsList to embed in the execute tool description.
-	 */
-	static FString GenerateToolStubs(const TMap<FString, TSharedPtr<IClaireonTool>>& Tools);
-
-	/**
 	 * Generate a compact category summary with tool counts and example names.
-	 * Much lighter than GenerateToolStubs (~1-2k chars vs ~25-30k).
-	 * Callers should direct Claude to use search_tools for full signatures.
+	 * Compact summary (~1-2k chars) directing Claude to use search_tools for full signatures.
 	 */
 	static FString GenerateCategorySummary(const TMap<FString, TSharedPtr<IClaireonTool>>& Tools);
 };
