@@ -15,6 +15,9 @@
 #include "Animation/AnimNotifies/AnimNotifyState.h"
 #include "Animation/AnimMetaData.h"
 #include "Animation/AnimData/IAnimationDataModel.h"
+#include "Animation/AnimData/IAnimationDataController.h"
+#include "Factories/AnimMontageFactory.h"
+#include "Factories/AnimCompositeFactory.h"
 #include "Curves/RichCurve.h"
 #include "AnimationModifier.h"
 #include "AnimationModifiersAssetUserData.h"
@@ -27,6 +30,10 @@
 #include "Misc/Paths.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Engine/BlueprintGeneratedClass.h"
+#include "Animation/Skeleton.h"
+#include "AssetToolsModule.h"
+#include "IAssetTools.h"
+#include "UObject/SavePackage.h"
 
 // Using statements
 using FToolResult = IClaireonTool::FToolResult;
@@ -42,6 +49,43 @@ namespace
 			return ModUserData->GetAnimationModifierInstances();
 		}
 		return EmptyModifiers;
+	}
+
+	/** Validate a target path for new asset creation. Returns canonicalized path and short asset name. */
+	bool ValidateNewAssetPath(const FString& InPath, FString& OutCanonPath, FString& OutAssetName, FString& OutError)
+	{
+		OutCanonPath = FClaireonSessionManager::CanonicalizePath(InPath);
+		if (OutCanonPath.IsEmpty())
+		{
+			OutError = TEXT("Invalid asset path. Must start with /Game/.");
+			return false;
+		}
+		if (StaticFindObject(nullptr, nullptr, *OutCanonPath))
+		{
+			OutError = FString::Printf(TEXT("Asset already exists at '%s'"), *OutCanonPath);
+			return false;
+		}
+		OutAssetName = FPackageName::GetShortName(OutCanonPath);
+		return true;
+	}
+
+	/** Save a newly created asset to disk. Uses computed filename since the package has no file yet. */
+	bool SaveNewAsset(UObject* Asset, FString& OutError)
+	{
+		UPackage* Package = Asset->GetOutermost();
+		Package->MarkPackageDirty();
+
+		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		FSavePackageResultStruct Result = UPackage::Save(Package, Asset, *PackageFileName, SaveArgs);
+		if (Result.Result != ESavePackageResult::Success)
+		{
+			OutError = FString::Printf(TEXT("Failed to save package '%s'"), *Package->GetName());
+			return false;
+		}
+		return true;
 	}
 }
 
@@ -68,6 +112,7 @@ FString ClaireonTool_AnimEdit::GetFullDescription() const
 	return TEXT("Interactively edit animation assets (AnimSequence, AnimMontage, AnimComposite) using a session-based model. "
 				"Start with 'open' to begin a session, then use operations to modify the animation. "
 				"Finish with 'save' to persist changes and 'close' to end the session.\n\n"
+				"Asset creation (no session needed): create_montage, create_composite, duplicate_asset\n"
 				"Session operations: open, close, get_state, save\n"
 				"Notify operations: add_notify, remove_notify, move_notify, duplicate_notify, set_notify_property, get_notify_property, list_notify_properties, add_notify_track, remove_notify_track, rename_notify_track, reorder_notify_track\n"
 				"Curve operations: add_curve, remove_curve, add_curve_key, remove_curve_key, set_curve_key_property\n"
@@ -97,7 +142,7 @@ TSharedPtr<FJsonObject> ClaireonTool_AnimEdit::GetInputSchema() const
 	// session_id
 	TSharedPtr<FJsonObject> SessionIdProp = MakeShared<FJsonObject>();
 	SessionIdProp->SetStringField(TEXT("type"), TEXT("string"));
-	SessionIdProp->SetStringField(TEXT("description"), TEXT("Session identifier from a previous 'open' operation. Required for all operations except 'open'."));
+	SessionIdProp->SetStringField(TEXT("description"), TEXT("Session identifier from a previous 'open' operation. Required for all operations except 'open', 'create_montage', 'create_composite', and 'duplicate_asset'."));
 	Properties->SetObjectField(TEXT("session_id"), SessionIdProp);
 
 	// operation
@@ -105,6 +150,9 @@ TSharedPtr<FJsonObject> ClaireonTool_AnimEdit::GetInputSchema() const
 	OperationProp->SetStringField(TEXT("type"), TEXT("string"));
 	TArray<TSharedPtr<FJsonValue>> OperationEnum;
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("open")));
+	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("create_montage")));
+	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("create_composite")));
+	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("duplicate_asset")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("close")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("get_state")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("save")));
@@ -212,6 +260,12 @@ FToolResult ClaireonTool_AnimEdit::Execute(const TSharedPtr<FJsonObject>& Argume
 	{
 		return Operation_Open(Params);
 	}
+	if (Operation == TEXT("create_montage"))
+		return Operation_CreateMontage(Params);
+	if (Operation == TEXT("create_composite"))
+		return Operation_CreateComposite(Params);
+	if (Operation == TEXT("duplicate_asset"))
+		return Operation_DuplicateAsset(Params);
 
 	// All other operations require a session_id
 	FString SessionId;
@@ -2731,4 +2785,280 @@ FToolResult ClaireonTool_AnimEdit::Operation_SetProperty(const FString& SessionI
 		Data->LastOperationStatus = FString::Printf(TEXT("set_property -> %s = %s"), *PropertyName, *Value);
 		return BuildStateResponse(SessionId, Data);
 	}
+}
+
+// ============================================================================
+// Asset Creation Operations (session-agnostic)
+// ============================================================================
+
+FToolResult ClaireonTool_AnimEdit::Operation_CreateMontage(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params->TryGetStringField(TEXT("path"), Path) || Path.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("Missing required parameter: path"));
+	}
+	FString SkeletonPath;
+	if (!Params->TryGetStringField(TEXT("skeleton"), SkeletonPath) || SkeletonPath.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("Missing required parameter: skeleton"));
+	}
+
+	// Validate target path
+	FString CanonPath, AssetName, Error;
+	if (!ValidateNewAssetPath(Path, CanonPath, AssetName, Error))
+	{
+		return MakeErrorResult(Error);
+	}
+
+	// Load skeleton
+	USkeleton* Skeleton = LoadObject<USkeleton>(nullptr, *SkeletonPath);
+	if (!Skeleton)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Failed to load skeleton at '%s'"), *SkeletonPath));
+	}
+
+	// Optionally load source animation
+	FString AnimPath;
+	UAnimSequence* SourceAnim = nullptr;
+	if (Params->TryGetStringField(TEXT("animation"), AnimPath) && !AnimPath.IsEmpty())
+	{
+		SourceAnim = LoadObject<UAnimSequence>(nullptr, *AnimPath);
+		if (!SourceAnim)
+		{
+			return MakeErrorResult(FString::Printf(TEXT("Failed to load animation at '%s'"), *AnimPath));
+		}
+		// Validate skeleton compatibility
+		if (SourceAnim->GetSkeleton() != Skeleton)
+		{
+			return MakeErrorResult(TEXT("Source animation skeleton does not match the provided skeleton"));
+		}
+	}
+
+	// Optional slot name
+	FString SlotName = TEXT("DefaultSlot");
+	Params->TryGetStringField(TEXT("slot_name"), SlotName);
+
+	// Create montage via engine factory (handles frame rate, default section, etc.)
+	UPackage* Package = CreatePackage(*CanonPath);
+
+	UAnimMontageFactory* Factory = NewObject<UAnimMontageFactory>();
+	Factory->TargetSkeleton = Skeleton;
+	if (SourceAnim)
+	{
+		Factory->SourceAnimation = SourceAnim;
+	}
+
+	UAnimMontage* Montage = Cast<UAnimMontage>(
+		Factory->FactoryCreateNew(UAnimMontage::StaticClass(), Package,
+			FName(*AssetName), RF_Public | RF_Standalone, nullptr, GWarn));
+	if (!Montage)
+	{
+		return MakeErrorResult(TEXT("Factory failed to create montage"));
+	}
+
+	// Set custom slot name if specified
+	if (SlotName != TEXT("DefaultSlot") && Montage->SlotAnimTracks.Num() > 0)
+	{
+		Montage->SlotAnimTracks[0].SlotName = FName(*SlotName);
+	}
+
+	// Register and save
+	FAssetRegistryModule::AssetCreated(Montage);
+
+	FString SaveError;
+	if (!SaveNewAsset(Montage, SaveError))
+	{
+		return MakeErrorResult(SaveError);
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Montage->GetPathName());
+	Result->SetStringField(TEXT("asset_type"), TEXT("AnimMontage"));
+	Result->SetStringField(TEXT("skeleton"), Skeleton->GetPathName());
+	Result->SetStringField(TEXT("slot_name"), SlotName);
+	if (SourceAnim)
+	{
+		Result->SetStringField(TEXT("animation"), SourceAnim->GetPathName());
+		Result->SetNumberField(TEXT("length"), Montage->GetPlayLength());
+	}
+
+	return MakeSuccessResult(Result, FString::Printf(TEXT("Created montage '%s'"), *AssetName));
+}
+
+FToolResult ClaireonTool_AnimEdit::Operation_CreateComposite(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params->TryGetStringField(TEXT("path"), Path) || Path.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("Missing required parameter: path"));
+	}
+	FString SkeletonPath;
+	if (!Params->TryGetStringField(TEXT("skeleton"), SkeletonPath) || SkeletonPath.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("Missing required parameter: skeleton"));
+	}
+
+	// Validate target path
+	FString CanonPath, AssetName, Error;
+	if (!ValidateNewAssetPath(Path, CanonPath, AssetName, Error))
+	{
+		return MakeErrorResult(Error);
+	}
+
+	// Load skeleton
+	USkeleton* Skeleton = LoadObject<USkeleton>(nullptr, *SkeletonPath);
+	if (!Skeleton)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Failed to load skeleton at '%s'"), *SkeletonPath));
+	}
+
+	// Optionally load source animation
+	FString AnimPath;
+	UAnimSequence* SourceAnim = nullptr;
+	if (Params->TryGetStringField(TEXT("animation"), AnimPath) && !AnimPath.IsEmpty())
+	{
+		SourceAnim = LoadObject<UAnimSequence>(nullptr, *AnimPath);
+		if (!SourceAnim)
+		{
+			return MakeErrorResult(FString::Printf(TEXT("Failed to load animation at '%s'"), *AnimPath));
+		}
+		if (SourceAnim->GetSkeleton() != Skeleton)
+		{
+			return MakeErrorResult(TEXT("Source animation skeleton does not match the provided skeleton"));
+		}
+	}
+
+	// Create composite via engine factory (handles frame rate, etc.)
+	UPackage* Package = CreatePackage(*CanonPath);
+
+	UAnimCompositeFactory* CompositeFactory = NewObject<UAnimCompositeFactory>();
+	CompositeFactory->TargetSkeleton = Skeleton;
+	if (SourceAnim)
+	{
+		CompositeFactory->SourceAnimation = SourceAnim;
+	}
+
+	UAnimComposite* Composite = Cast<UAnimComposite>(
+		CompositeFactory->FactoryCreateNew(UAnimComposite::StaticClass(), Package,
+			FName(*AssetName), RF_Public | RF_Standalone, nullptr, GWarn));
+	if (!Composite)
+	{
+		return MakeErrorResult(TEXT("Factory failed to create composite"));
+	}
+
+	// Composite factory doesn't call UpdateCommonTargetFrameRate (unlike montage factory).
+	// Set CommonTargetFrameRate via reflection since it's a protected UPROPERTY.
+	if (SourceAnim)
+	{
+		FProperty* FrameRateProp = UAnimCompositeBase::StaticClass()->FindPropertyByName(TEXT("CommonTargetFrameRate"));
+		if (FrameRateProp)
+		{
+			FFrameRate* TargetRate = FrameRateProp->ContainerPtrToValuePtr<FFrameRate>(Composite);
+			*TargetRate = SourceAnim->GetSamplingFrameRate();
+		}
+	}
+
+	// Register and save
+	FAssetRegistryModule::AssetCreated(Composite);
+
+	FString SaveError;
+	if (!SaveNewAsset(Composite, SaveError))
+	{
+		return MakeErrorResult(SaveError);
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), Composite->GetPathName());
+	Result->SetStringField(TEXT("asset_type"), TEXT("AnimComposite"));
+	Result->SetStringField(TEXT("skeleton"), Skeleton->GetPathName());
+	if (SourceAnim)
+	{
+		Result->SetStringField(TEXT("animation"), SourceAnim->GetPathName());
+		Result->SetNumberField(TEXT("length"), Composite->GetPlayLength());
+	}
+
+	return MakeSuccessResult(Result, FString::Printf(TEXT("Created composite '%s'"), *AssetName));
+}
+
+FToolResult ClaireonTool_AnimEdit::Operation_DuplicateAsset(const TSharedPtr<FJsonObject>& Params)
+{
+	FString SourcePath;
+	if (!Params->TryGetStringField(TEXT("source_path"), SourcePath) || SourcePath.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("Missing required parameter: source_path"));
+	}
+	FString DestPath;
+	if (!Params->TryGetStringField(TEXT("dest_path"), DestPath) || DestPath.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("Missing required parameter: dest_path"));
+	}
+
+	// Canonicalize paths
+	SourcePath = FClaireonSessionManager::CanonicalizePath(SourcePath);
+	if (SourcePath.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("Invalid source_path. Must start with /Game/."));
+	}
+	DestPath = FClaireonSessionManager::CanonicalizePath(DestPath);
+	if (DestPath.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("Invalid dest_path. Must start with /Game/."));
+	}
+
+	// Load source asset
+	UObject* SourceObj = FSoftObjectPath(SourcePath).TryLoad();
+	if (!SourceObj)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Failed to load source asset at '%s'"), *SourcePath));
+	}
+
+	// Verify it's an animation asset
+	UAnimSequenceBase* SourceAnim = Cast<UAnimSequenceBase>(SourceObj);
+	if (!SourceAnim)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Source asset '%s' is not an animation asset (AnimSequence, AnimMontage, or AnimComposite)"), *SourcePath));
+	}
+
+	// Check dest doesn't already exist
+	if (StaticFindObject(nullptr, nullptr, *DestPath))
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Asset already exists at '%s'"), *DestPath));
+	}
+
+	// Parse dest into folder + name
+	FString DestFolder = FPackageName::GetLongPackagePath(DestPath);
+	FString DestName = FPackageName::GetShortName(DestPath);
+
+	// Duplicate via engine AssetTools
+	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+	UObject* NewAsset = AssetTools.DuplicateAsset(DestName, DestFolder, SourceObj);
+	if (!NewAsset)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Engine failed to duplicate asset to '%s/%s'"), *DestFolder, *DestName));
+	}
+
+	// Save the new package
+	UPackage* NewPackage = NewAsset->GetOutermost();
+	NewPackage->MarkPackageDirty();
+
+	FString PackageFileName = FPackageName::LongPackageNameToFilename(NewPackage->GetName(), FPackageName::GetAssetPackageExtension());
+
+	FSavePackageArgs SaveArgs;
+	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+	UPackage::Save(NewPackage, NewAsset, *PackageFileName, SaveArgs);
+
+	// Detect type
+	FString AssetType = TEXT("AnimSequence");
+	if (Cast<UAnimMontage>(NewAsset))
+		AssetType = TEXT("AnimMontage");
+	else if (Cast<UAnimComposite>(NewAsset))
+		AssetType = TEXT("AnimComposite");
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("source_path"), SourceAnim->GetPathName());
+	Result->SetStringField(TEXT("dest_path"), NewAsset->GetPathName());
+	Result->SetStringField(TEXT("asset_type"), AssetType);
+
+	return MakeSuccessResult(Result, FString::Printf(TEXT("Duplicated %s to '%s'"), *AssetType, *DestName));
 }

@@ -57,6 +57,11 @@ private:
 
 	// Session ops
 	FToolResult Operation_Open(const TSharedPtr<FJsonObject>& Params);
+
+	// Asset creation ops (session-agnostic)
+	FToolResult Operation_CreateMontage(const TSharedPtr<FJsonObject>& Params);
+	FToolResult Operation_CreateComposite(const TSharedPtr<FJsonObject>& Params);
+	FToolResult Operation_DuplicateAsset(const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_Close(const FString& SessionId, FAnimEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_GetState(const FString& SessionId, FAnimEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_Save(const FString& SessionId, FAnimEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
