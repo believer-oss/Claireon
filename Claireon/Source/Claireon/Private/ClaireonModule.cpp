@@ -148,6 +148,7 @@
 #include "Tools/ClaireonAnimTools_Curve.h"
 #include "Tools/ClaireonAnimTools_Montage.h"
 #include "Tools/ClaireonAnimTools_DataOps.h"
+#include "Tools/ClaireonAnimTools_BlendSpace.h"
 
 // Session management MCP tools
 #include "Tools/ClaireonTool_ListSessions.h"
@@ -274,6 +275,19 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonAnimTool_RemoveMetadata>());
 	Tools.Add(MakeShared<ClaireonAnimTool_SetMetadataProperty>());
 	Tools.Add(MakeShared<ClaireonAnimTool_SetProperty>());
+	// Blend Space / Aim Offset tools
+	Tools.Add(MakeShared<ClaireonAnimTool_BlendSpaceCreate>());
+	Tools.Add(MakeShared<ClaireonAnimTool_BlendSpaceDuplicate>());
+	Tools.Add(MakeShared<ClaireonAnimTool_BlendSpaceDelete>());
+	Tools.Add(MakeShared<ClaireonAnimTool_BlendSpaceInspect>());
+	Tools.Add(MakeShared<ClaireonAnimTool_BlendSpaceAddSample>());
+	Tools.Add(MakeShared<ClaireonAnimTool_BlendSpaceRemoveSample>());
+	Tools.Add(MakeShared<ClaireonAnimTool_BlendSpaceEditSample>());
+	Tools.Add(MakeShared<ClaireonAnimTool_BlendSpaceSetAxis>());
+	Tools.Add(MakeShared<ClaireonAnimTool_BlendSpaceSetInterpolation>());
+	Tools.Add(MakeShared<ClaireonAnimTool_BlendSpaceSetProperty>());
+	Tools.Add(MakeShared<ClaireonAnimTool_BlendSpaceAddMetadata>());
+	Tools.Add(MakeShared<ClaireonAnimTool_BlendSpaceRemoveMetadata>());
 	Tools.Add(MakeShared<ClaireonTool_BlueprintCompile>());
 	Tools.Add(MakeShared<ClaireonTool_CommandletRun>());
 	Tools.Add(MakeShared<ClaireonTool_AssetResave>());

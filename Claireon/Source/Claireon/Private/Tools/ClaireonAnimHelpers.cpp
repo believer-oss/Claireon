@@ -5,6 +5,7 @@
 #include "Tools/ClaireonPropertyUtils.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonLog.h"
+#include "Animation/AnimationAsset.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimComposite.h"
@@ -504,9 +505,9 @@ FString ClaireonAnimHelpers::FormatModifiers(const UAnimSequence* AnimSeq, bool 
 	return Output;
 }
 
-FString ClaireonAnimHelpers::FormatMetadata(const UAnimSequenceBase* Anim, bool bFullDetail)
+FString ClaireonAnimHelpers::FormatMetadata(const UAnimationAsset* Asset, bool bFullDetail)
 {
-	if (!Anim)
+	if (!Asset)
 	{
 		return FString();
 	}
@@ -514,7 +515,7 @@ FString ClaireonAnimHelpers::FormatMetadata(const UAnimSequenceBase* Anim, bool 
 	FString Output;
 	Output += TEXT("=== Metadata ===\n");
 
-	const TArray<UAnimMetaData*>& MetaDataArray = Anim->GetMetaData();
+	const TArray<UAnimMetaData*>& MetaDataArray = Asset->GetMetaData();
 
 	if (MetaDataArray.Num() == 0)
 	{

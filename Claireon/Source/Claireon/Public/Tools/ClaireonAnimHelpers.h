@@ -6,6 +6,7 @@
 #include "CoreMinimal.h"
 #include "Curves/RichCurve.h"
 
+class UAnimationAsset;
 class UAnimSequenceBase;
 class UAnimSequence;
 class UAnimMontage;
@@ -62,8 +63,8 @@ namespace ClaireonAnimHelpers
 	/** Format data modifiers (AnimSequence only). */
 	FString FormatModifiers(const UAnimSequence* AnimSeq, bool bFullDetail = true);
 
-	/** Format animation metadata. */
-	FString FormatMetadata(const UAnimSequenceBase* Anim, bool bFullDetail = true);
+	/** Format animation metadata. Accepts UAnimationAsset* so both anim sequences and blend spaces can use it. */
+	FString FormatMetadata(const UAnimationAsset* Asset, bool bFullDetail = true);
 
 	/** Format all properties of a notify sub-object as indented text. */
 	FString FormatNotifySubObjectProperties(const UObject* NotifyObj, const FString& Indent = TEXT("      "));
