@@ -55,6 +55,7 @@ namespace
 	bool SaveBlendSpaceAsset(UObject* Asset, FString& OutError)
 	{
 		UPackage* Package = Asset->GetOutermost();
+		Package->FullyLoad();
 		Package->MarkPackageDirty();
 		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
 		FSavePackageArgs SaveArgs;
@@ -118,34 +119,45 @@ namespace
 		return Cast<const UBlendSpace1D>(BlendSpace) != nullptr;
 	}
 
-	FString FormatBlendParameter(const FBlendParameter& Param, int32 Index)
+	FString FormatSmoothingType(EFilterInterpolationType Type)
 	{
-		FString Result = FString::Printf(TEXT("  Axis %d: \"%s\" [%.2f .. %.2f] GridNum=%d"),
-			Index,
-			*Param.DisplayName,
-			Param.Min,
-			Param.Max,
-			Param.GridNum);
-		if (Param.bSnapToGrid) Result += TEXT(" SnapToGrid");
-		if (Param.bWrapInput) Result += TEXT(" WrapInput");
-		return Result;
+		switch (Type)
+		{
+		case EFilterInterpolationType::BSIT_Average:           return TEXT("Average");
+		case EFilterInterpolationType::BSIT_Linear:            return TEXT("Linear");
+		case EFilterInterpolationType::BSIT_Cubic:             return TEXT("Cubic");
+		case EFilterInterpolationType::BSIT_EaseInOut:         return TEXT("EaseInOut");
+		case EFilterInterpolationType::BSIT_SpringDamper:      return TEXT("SpringDamper");
+		case EFilterInterpolationType::BSIT_ExponentialDecay:  return TEXT("Exponential");
+		default:                                               return TEXT("Unknown");
+		}
 	}
 
-	FString FormatInterpolationParam(const FInterpolationParameter& Param, int32 Index)
+	FString FormatBlendParameter(const FBlendParameter& Param, const FInterpolationParameter& Interp, int32 Index)
 	{
-		FString TypeStr;
-		switch (Param.InterpolationType.GetValue())
+		FString Result = FString::Printf(TEXT("  Axis %d: \"%s\"\n"), Index, *Param.DisplayName);
+		Result += FString::Printf(TEXT("    Range: [%.2f .. %.2f]\n"), Param.Min, Param.Max);
+		Result += FString::Printf(TEXT("    Grid Divisions: %d\n"), Param.GridNum);
+		Result += FString::Printf(TEXT("    Snap to Grid: %s\n"), Param.bSnapToGrid ? TEXT("Yes") : TEXT("No"));
+		Result += FString::Printf(TEXT("    Wrap Input: %s\n"), Param.bWrapInput ? TEXT("Yes") : TEXT("No"));
+		Result += FString::Printf(TEXT("    Smoothing Type: %s\n"), *FormatSmoothingType(Interp.InterpolationType));
+		if (Interp.InterpolationTime > 0.f)
 		{
-		case EFilterInterpolationType::BSIT_Average:      TypeStr = TEXT("Average"); break;
-		case EFilterInterpolationType::BSIT_Linear:       TypeStr = TEXT("Linear"); break;
-		case EFilterInterpolationType::BSIT_Cubic:        TypeStr = TEXT("Cubic"); break;
-		case EFilterInterpolationType::BSIT_EaseInOut:    TypeStr = TEXT("EaseInOut"); break;
-		case EFilterInterpolationType::BSIT_SpringDamper: TypeStr = TEXT("SpringDamper"); break;
-		case EFilterInterpolationType::BSIT_ExponentialDecay:  TypeStr = TEXT("Exponential"); break;
-		default: TypeStr = TEXT("Unknown"); break;
+			Result += FString::Printf(TEXT("    Smoothing Time: %.3f\n"), Interp.InterpolationTime);
+			if (Interp.InterpolationType == EFilterInterpolationType::BSIT_SpringDamper)
+			{
+				Result += FString::Printf(TEXT("    Damping Ratio: %.3f\n"), Interp.DampingRatio);
+			}
+			if (Interp.MaxSpeed > 0.f)
+			{
+				Result += FString::Printf(TEXT("    Max Speed: %.2f\n"), Interp.MaxSpeed);
+			}
 		}
-		return FString::Printf(TEXT("  Axis %d: Type=%s Time=%.3f Damping=%.3f MaxSpeed=%.1f"),
-			Index, *TypeStr, Param.InterpolationTime, Param.DampingRatio, Param.MaxSpeed);
+		else
+		{
+			Result += TEXT("    Smoothing: Off\n");
+		}
+		return Result;
 	}
 
 	FString FormatNotifyTriggerMode(ENotifyTriggerMode::Type Mode)
@@ -171,14 +183,14 @@ namespace
 		USkeleton* Skeleton = BlendSpace->GetSkeleton();
 		Result += FString::Printf(TEXT("Skeleton: %s\n"), Skeleton ? *Skeleton->GetPathName() : TEXT("(none)"));
 
-		// Axes
+		// Axes (with per-axis interpolation inline)
 		Result += TEXT("\n--- Axes ---\n");
 		const FBlendParameter& Param0 = BlendSpace->GetBlendParameter(0);
-		Result += FormatBlendParameter(Param0, 0) + TEXT("\n");
+		Result += FormatBlendParameter(Param0, BlendSpace->InterpolationParam[0], 0);
 		if (!bIs1D)
 		{
 			const FBlendParameter& Param1 = BlendSpace->GetBlendParameter(1);
-			Result += FormatBlendParameter(Param1, 1) + TEXT("\n");
+			Result += FormatBlendParameter(Param1, BlendSpace->InterpolationParam[1], 1);
 		}
 
 		// Samples
@@ -204,29 +216,34 @@ namespace
 			}
 		}
 
-		// Input Interpolation
-		if (bFullDetail)
-		{
-			Result += TEXT("\n--- Input Interpolation ---\n");
-			Result += FormatInterpolationParam(BlendSpace->InterpolationParam[0], 0) + TEXT("\n");
-			Result += FormatInterpolationParam(BlendSpace->InterpolationParam[1], 1) + TEXT("\n");
-			Result += FormatInterpolationParam(BlendSpace->InterpolationParam[2], 2) + TEXT("\n");
-		}
+		// Sample Smoothing
+		Result += TEXT("\n--- Sample Smoothing ---\n");
+		Result += FString::Printf(TEXT("  Weight Speed: %.2f\n"), BlendSpace->TargetWeightInterpolationSpeedPerSec);
+		Result += FString::Printf(TEXT("  Easing: %s\n"), BlendSpace->bTargetWeightInterpolationEaseInOut ? TEXT("Yes") : TEXT("No"));
+		Result += FString::Printf(TEXT("  Allow Mesh Space Blending: %s\n"), BlendSpace->bAllowMeshSpaceBlending ? TEXT("Yes") : TEXT("No"));
 
 		// Settings
 		Result += TEXT("\n--- Settings ---\n");
-		Result += FString::Printf(TEXT("  NotifyTriggerMode: %s\n"), *FormatNotifyTriggerMode(BlendSpace->NotifyTriggerMode));
-		Result += FString::Printf(TEXT("  Loop: %s\n"), BlendSpace->bLoop ? TEXT("true") : TEXT("false"));
-		Result += FString::Printf(TEXT("  TargetWeightInterpSpeed: %.2f\n"), BlendSpace->TargetWeightInterpolationSpeedPerSec);
-		Result += FString::Printf(TEXT("  TargetWeightEaseInOut: %s\n"), BlendSpace->bTargetWeightInterpolationEaseInOut ? TEXT("true") : TEXT("false"));
+		Result += FString::Printf(TEXT("  Notify Trigger Mode: %s\n"), *FormatNotifyTriggerMode(BlendSpace->NotifyTriggerMode));
+		Result += FString::Printf(TEXT("  Loop: %s\n"), BlendSpace->bLoop ? TEXT("Yes") : TEXT("No"));
+		Result += FString::Printf(TEXT("  Allow Marker Sync: %s\n"), BlendSpace->bAllowMarkerBasedSync ? TEXT("Yes") : TEXT("No"));
+		Result += FString::Printf(TEXT("  Use Grid Interpolation: %s\n"), BlendSpace->bInterpolateUsingGrid ? TEXT("Yes") : TEXT("No"));
 
-		if (bFullDetail)
+		// Preferred Triangulation Direction
 		{
-			Result += FString::Printf(TEXT("  AllowMeshSpaceBlending: %s\n"), BlendSpace->bAllowMeshSpaceBlending ? TEXT("true") : TEXT("false"));
-			Result += FString::Printf(TEXT("  AllowMarkerSync: %s\n"), BlendSpace->bAllowMarkerBasedSync ? TEXT("true") : TEXT("false"));
-			Result += FString::Printf(TEXT("  InterpolateUsingGrid: %s\n"), BlendSpace->bInterpolateUsingGrid ? TEXT("true") : TEXT("false"));
+			FString TriDir;
+			switch (BlendSpace->PreferredTriangulationDirection)
+			{
+			case EPreferredTriangulationDirection::None:        TriDir = TEXT("None"); break;
+			case EPreferredTriangulationDirection::Tangential:  TriDir = TEXT("Tangential"); break;
+			case EPreferredTriangulationDirection::Radial:      TriDir = TEXT("Radial"); break;
+			default:                                            TriDir = TEXT("Unknown"); break;
+			}
+			Result += FString::Printf(TEXT("  Preferred Triangulation: %s\n"), *TriDir);
+		}
 
-			// AxisToScaleAnimation via reflection
+		// AxisToScaleAnimation via reflection
+		{
 			FProperty* ScaleAxisProp = UBlendSpace::StaticClass()->FindPropertyByName(TEXT("AxisToScaleAnimation"));
 			if (ScaleAxisProp)
 			{
@@ -241,15 +258,17 @@ namespace
 					case BSA_Y:    AxisStr = TEXT("Y"); break;
 					default:       AxisStr = TEXT("Unknown"); break;
 					}
-					Result += FString::Printf(TEXT("  AxisToScaleAnimation: %s\n"), *AxisStr);
+					Result += FString::Printf(TEXT("  Axis to Scale Animation: %s\n"), *AxisStr);
 				}
 			}
+		}
 
-			// BlendSpace1D-specific
+		// BlendSpace1D-specific
+		{
 			const UBlendSpace1D* BS1D = Cast<const UBlendSpace1D>(BlendSpace);
 			if (BS1D)
 			{
-				Result += FString::Printf(TEXT("  ScaleAnimation: %s\n"), BS1D->bScaleAnimation ? TEXT("true") : TEXT("false"));
+				Result += FString::Printf(TEXT("  Scale Animation: %s\n"), BS1D->bScaleAnimation ? TEXT("Yes") : TEXT("No"));
 			}
 		}
 
@@ -1566,6 +1585,11 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceAddMetadata::Execute(const
 	if (!MetaDataClass)
 	{
 		return MakeErrorResult(ResolveError);
+	}
+
+	if (MetaDataClass->HasAnyClassFlags(CLASS_Abstract))
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Class '%s' is abstract and cannot be instantiated. Use a concrete subclass."), *ClassName));
 	}
 
 	FScopedTransaction Transaction(NSLOCTEXT("Claireon", "BSAddMetadata", "MCP: Add BlendSpace Metadata"));
