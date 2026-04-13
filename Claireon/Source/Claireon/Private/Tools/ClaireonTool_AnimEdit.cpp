@@ -109,27 +109,210 @@ FString ClaireonTool_AnimEdit::GetDescription() const
 
 FString ClaireonTool_AnimEdit::GetFullDescription() const
 {
-	return TEXT("Interactively edit animation assets (AnimSequence, AnimMontage, AnimComposite) using a session-based model. "
-				"Start with 'open' to begin a session, then use operations to modify the animation. "
-				"Finish with 'save' to persist changes and 'close' to end the session.\n\n"
-				"Asset creation (no session needed): create_montage, create_composite, duplicate_asset\n"
-				"Session operations: open, close, get_state, save\n"
-				"Notify operations: add_notify, remove_notify, move_notify, duplicate_notify, set_notify_property, get_notify_property, list_notify_properties, add_notify_track, remove_notify_track, rename_notify_track, reorder_notify_track\n"
-				"Curve operations: add_curve, remove_curve, add_curve_key, remove_curve_key, set_curve_key_property\n"
-				"Montage section operations (montage only): add_section, remove_section, set_section_link, set_section_link_method\n"
-				"Montage slot/segment operations (montage only): add_segment, remove_segment, set_segment_property, inspect_segment, retime_segment, add_slot, remove_slot, set_slot_property\n"
-				"Montage batch operations: batch_retime_animation\n"
-				"Modifier operations (AnimSequence only): list_modifiers, add_modifier, remove_modifier, apply_modifier, revert_modifier\n"
-				"Metadata operations: list_metadata, add_metadata, remove_metadata, set_metadata_property\n"
-				"Property operations: set_property\n\n"
-				"Example workflow:\n"
+	return TEXT("Session-based editor for animation assets (AnimSequence, AnimMontage, AnimComposite). "
+				"Start with 'open' to begin a session, then use operations to modify, 'save' to persist, 'close' to end. "
+				"All mutating operations are wrapped in FScopedTransaction for undo support. "
+				"Use 'suppress_output' on intermediate operations to reduce response size.\n\n"
+
+				"=== ASSET CREATION (no session needed) ===\n\n"
+
+				"open\n"
+				"  Required: asset_path (str) - Unreal asset path to the animation\n"
+				"  Returns: session_id, asset structure\n\n"
+
+				"create_montage\n"
+				"  Required: path (str) - target asset path, skeleton (str) - skeleton asset path\n"
+				"  Optional: animation (str) - source AnimSequence to populate first slot, slot_name (str, default 'DefaultSlot')\n\n"
+
+				"create_composite\n"
+				"  Required: path (str) - target asset path, skeleton (str) - skeleton asset path\n"
+				"  Optional: animation (str) - source AnimSequence to populate track\n\n"
+
+				"duplicate_asset\n"
+				"  Required: source_path (str), dest_path (str)\n\n"
+
+				"=== SESSION OPERATIONS ===\n\n"
+
+				"close\n"
+				"  Optional: save_first (bool) - save before closing\n\n"
+
+				"get_state\n"
+				"  Optional: focus (str) - show only a specific section (e.g. 'notifies', 'curves'), notify_index (int) - set focused notify\n\n"
+
+				"save\n"
+				"  No params. Saves the animation package to disk.\n\n"
+
+				"=== NOTIFY OPERATIONS ===\n\n"
+
+				"add_notify\n"
+				"  Required: notify_type (str) - 'skeleton' for skeleton notify, or class name (e.g. 'AnimNotify_PlaySound', 'FSANS_MyState'), time (float) - trigger time in seconds\n"
+				"  Required if skeleton: notify_name (str) - the skeleton notify name\n"
+				"  Optional: duration (float) - for state notifies, end_time (float) - alternative to duration, track_index (int, default 0), "
+				"properties (object) - key-value pairs to set on the notify sub-object after creation\n\n"
+
+				"remove_notify\n"
+				"  Required: notify_index (int)\n\n"
+
+				"move_notify\n"
+				"  Required: notify_index (int)\n"
+				"  Optional: time (float) - new trigger time, duration (float) - new duration, end_time (float) - alternative to duration, track_index (int) - move to different track\n"
+				"  Omitted values are left unchanged.\n\n"
+
+				"duplicate_notify\n"
+				"  Required: notify_index (int) - source notify to duplicate\n"
+				"  Optional: time (float) - override time (default: same as source), track_index (int) - override track (default: same as source)\n\n"
+
+				"set_notify_property\n"
+				"  Required: notify_index (int), property_name (str), value (str)\n\n"
+
+				"get_notify_property\n"
+				"  Required: notify_index (int), property_name (str)\n\n"
+
+				"list_notify_properties\n"
+				"  Required: notify_index (int)\n"
+				"  Optional: filter (str) - filter property names\n"
+				"  Note: only works on class-based notifies, not skeleton notifies.\n\n"
+
+				"add_notify_track\n"
+				"  Optional: track_name (str) - auto-named if omitted\n\n"
+
+				"remove_notify_track\n"
+				"  Required: track_index (int)\n"
+				"  Notifies on removed track are reassigned to track 0. Cannot remove the last track.\n\n"
+
+				"rename_notify_track\n"
+				"  Required: track_index (int), track_name (str)\n\n"
+
+				"reorder_notify_track\n"
+				"  Required: track_index (int) - current index, new_index (int) - target index\n\n"
+
+				"=== CURVE OPERATIONS ===\n\n"
+
+				"add_curve\n"
+				"  Required: curve_name (str)\n\n"
+
+				"remove_curve\n"
+				"  Required: curve_name (str)\n\n"
+
+				"add_curve_key\n"
+				"  Required: curve_name (str), value (float)\n"
+				"  Required (one of): time (float) or frame (int) - frame is converted using asset frame rate\n"
+				"  Optional: interp_mode (str: 'linear'|'cubic'|'constant'), tangent_mode (str: 'auto'|'user'|'break'), "
+				"arrive_tangent (float), leave_tangent (float)\n\n"
+
+				"remove_curve_key\n"
+				"  Required: curve_name (str)\n"
+				"  Required (one of): time (float) or frame (int)\n\n"
+
+				"set_curve_key_property\n"
+				"  Required: curve_name (str), property_name (str), value (str)\n"
+				"  Required (one of): time (float) or frame (int)\n\n"
+
+				"=== MONTAGE SECTION OPERATIONS (montage only) ===\n\n"
+
+				"add_section\n"
+				"  Required: section_name (str), start_time (float)\n\n"
+
+				"remove_section\n"
+				"  Required: section_name (str)\n\n"
+
+				"set_section_link\n"
+				"  Required: section_name (str), next_section_name (str) - empty string to clear link\n\n"
+
+				"set_section_link_method\n"
+				"  Required: section_name (str), link_method (str: 'absolute'|'relative'|'proportional')\n\n"
+
+				"=== MONTAGE SLOT/SEGMENT OPERATIONS (montage only) ===\n\n"
+
+				"add_segment\n"
+				"  Required: anim_path (str) - animation asset to add\n"
+				"  Optional: slot_index (int, default 0), start_pos (float, default end of track), play_rate (float), "
+				"anim_start_time (float), anim_end_time (float), section_name (str) - also creates a section at the segment start position\n\n"
+
+				"remove_segment\n"
+				"  Required: segment_index (int)\n"
+				"  Optional: slot_index (int, default 0)\n\n"
+
+				"set_segment_property\n"
+				"  Required: segment_index (int), property_name (str), value (str)\n"
+				"  Optional: slot_index (int, default 0)\n"
+				"  Supported properties: animation (asset path), play_rate, anim_start_time, anim_end_time, looping_count, start_pos\n\n"
+
+				"inspect_segment\n"
+				"  Required: segment_index (int)\n"
+				"  Optional: slot_index (int, default 0)\n"
+				"  Returns detailed segment info including linked notifies.\n\n"
+
+				"retime_segment\n"
+				"  Required: segment_index (int)\n"
+				"  Required (at least one): new_end_time (float), new_duration (float), or new_play_rate (float)\n"
+				"  Optional: slot_index (int, default 0), retime_notifies (bool, default true), "
+				"notify_link_method (str: 'manual'|'proportional'|'relative'|'absolute'|'none' - default 'manual')\n\n"
+
+				"add_slot\n"
+				"  Required: slot_name (str)\n\n"
+
+				"remove_slot\n"
+				"  Required: slot_index (int). Cannot remove the last slot.\n\n"
+
+				"set_slot_property\n"
+				"  Required: slot_index (int), slot_name (str) - renames the slot\n\n"
+
+				"=== BATCH OPERATIONS ===\n\n"
+
+				"batch_retime_animation\n"
+				"  Required: anim_path (str) - source animation that changed length\n"
+				"  Optional: new_length (float, default current asset length), old_length (float) - for correct ratio calculation, "
+				"retime_notifies (bool, default true), notify_link_method (str: 'manual'|'proportional'|'relative'|'absolute'|'none')\n"
+				"  Finds all montages referencing this animation and retimes their segments proportionally.\n\n"
+
+				"=== MODIFIER OPERATIONS (AnimSequence only) ===\n\n"
+
+				"list_modifiers\n"
+				"  No params.\n\n"
+
+				"add_modifier\n"
+				"  Required: class_name (str) - modifier class name (native or Blueprint)\n\n"
+
+				"remove_modifier\n"
+				"  Required: modifier_index (int)\n\n"
+
+				"apply_modifier\n"
+				"  Required: modifier_index (int)\n\n"
+
+				"revert_modifier\n"
+				"  Required: modifier_index (int)\n\n"
+
+				"=== METADATA OPERATIONS ===\n\n"
+
+				"list_metadata\n"
+				"  No params.\n\n"
+
+				"add_metadata\n"
+				"  Required: class_name (str) - UAnimMetaData subclass name\n\n"
+
+				"remove_metadata\n"
+				"  Required: metadata_index (int)\n\n"
+
+				"set_metadata_property\n"
+				"  Required: metadata_index (int), property_name (str), value (str)\n\n"
+
+				"=== PROPERTY OPERATIONS ===\n\n"
+
+				"set_property\n"
+				"  Required: property_name (str), value (str)\n"
+				"  Well-known properties: rate_scale (float), root_motion_enabled (bool, AnimSequence only), "
+				"force_root_lock (bool, AnimSequence only), root_motion_root_lock (str: 'RefPose'|'AnimFirstFrame'|'Zero', AnimSequence only), "
+				"blend_in_time (float, AnimMontage only), blend_out_time (float, AnimMontage only). "
+				"Other properties use generic reflection-based write.\n\n"
+
+				"=== EXAMPLE WORKFLOW ===\n\n"
+
 				"1. open: {\"params\": {\"asset_path\": \"/Game/Animations/MyMontage\"}}\n"
 				"2. add_notify: {\"session_id\": \"...\", \"params\": {\"notify_type\": \"skeleton\", \"notify_name\": \"FootStep\", \"time\": 0.5}}\n"
 				"3. add_notify: {\"session_id\": \"...\", \"params\": {\"notify_type\": \"AnimNotify_PlaySound\", \"time\": 1.0}, \"suppress_output\": true}\n"
 				"4. save: {\"session_id\": \"...\"}\n"
-				"5. close: {\"session_id\": \"...\"}\n\n"
-				"All mutating operations are wrapped in FScopedTransaction for undo support. "
-				"Use 'suppress_output' on intermediate operations to reduce response size.");
+				"5. close: {\"session_id\": \"...\"}");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AnimEdit::GetInputSchema() const
