@@ -142,7 +142,12 @@
 
 // Animation MCP tools
 #include "Tools/ClaireonTool_AnimInspect.h"
-#include "Tools/ClaireonAnimTools.h"
+#include "Tools/ClaireonAnimTools_Session.h"
+#include "Tools/ClaireonAnimTools_Create.h"
+#include "Tools/ClaireonAnimTools_Notify.h"
+#include "Tools/ClaireonAnimTools_Curve.h"
+#include "Tools/ClaireonAnimTools_Montage.h"
+#include "Tools/ClaireonAnimTools_DataOps.h"
 
 // Session management MCP tools
 #include "Tools/ClaireonTool_ListSessions.h"

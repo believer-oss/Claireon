@@ -32,8 +32,10 @@
 
 static constexpr uint32 MaxPortRetries = 10;
 
-// All registered tools are now directly callable via MCP.
-// python_execute retains its special description with category summary.
+static const TSet<FString> MCPVisibleTools = {
+	TEXT("claireon.python_execute"),
+	TEXT("claireon.tools_search")
+};
 
 FClaireonServer::FClaireonServer()
 {
@@ -472,19 +474,17 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsList(const FMCPRequestContex
 {
 	TArray<TSharedPtr<FJsonValue>> ToolArray;
 
-	// Expose all registered tools via MCP tools/list
-	for (const auto& Pair : Tools)
+	// Expose only MCPVisibleTools — all others are accessible via claireon.* inside python_execute
+	for (const FString& VisibleToolName : MCPVisibleTools)
 	{
-		const TSharedPtr<IClaireonTool>& Tool = Pair.Value;
-		if (!Tool.IsValid())
+		TSharedPtr<IClaireonTool>* Tool = Tools.Find(VisibleToolName);
+		if (!Tool || !Tool->IsValid())
 			continue;
 
-		const FString ToolName = Tool->GetName();//
-
 		TSharedPtr<FJsonObject> ToolObj = MakeShared<FJsonObject>();
-		ToolObj->SetStringField(TEXT("name"), ToolName);
+		ToolObj->SetStringField(TEXT("name"), (*Tool)->GetName());
 
-		if (ToolName == TEXT("claireon.python_execute"))
+		if (VisibleToolName == TEXT("claireon.python_execute"))
 		{
 			// Build description with lightweight category summary for the execute tool
 			FString CategorySummary = FClaireonXmlFormatter::GenerateCategorySummary(Tools);
@@ -494,10 +494,10 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsList(const FMCPRequestContex
 		}
 		else
 		{
-			ToolObj->SetStringField(TEXT("description"), Tool->GetDescription());
+			ToolObj->SetStringField(TEXT("description"), (*Tool)->GetDescription());
 		}
 
-		TSharedPtr<FJsonObject> InputSchema = Tool->GetInputSchema();
+		TSharedPtr<FJsonObject> InputSchema = (*Tool)->GetInputSchema();
 		if (InputSchema.IsValid())
 		{
 			ToolObj->SetObjectField(TEXT("inputSchema"), InputSchema);
@@ -622,6 +622,14 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsCall(const FMCPRequestContex
 	{
 		return FMCPJsonRpcResponse::MakeError(Id, FMCPJsonRpcResponse::InvalidParams,
 			FString::Printf(TEXT("Unknown tool: %s"), *ToolName));
+	}
+
+	// Reject tools that are not MCP-visible (they must be called via python_execute)
+	if (!MCPVisibleTools.Contains(ToolName))
+	{
+		UE_LOG(LogClaireon, Warning, TEXT("[MCP] Rejected direct MCP call to non-visible tool: %s"), *ToolName);
+		return FMCPJsonRpcResponse::MakeError(Id, FMCPJsonRpcResponse::MethodNotFound,
+			FString::Printf(TEXT("Tool '%s' is not directly callable via MCP. Use claireon.* inside python_execute."), *ToolName));
 	}
 
 	// Block asset-mutating tools while PIE is active

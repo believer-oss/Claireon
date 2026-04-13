@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-#include "Tools/ClaireonAnimTools.h"
+#include "Tools/ClaireonAnimTools_Session.h"
 #include "Tools/ClaireonAnimHelpers.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSessionManager.h"

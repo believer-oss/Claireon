@@ -108,3 +108,15 @@ protected:
 	/** Requires the asset to be an AnimSequence. Returns nullptr and sets OutError if not. */
 	class UAnimSequence* RequireAnimSequence(FAnimEditToolData* Data, FToolResult& OutError);
 };
+
+// Macro to reduce declaration boilerplate for individual anim tool classes.
+// Each tool overrides: GetName, GetDescription, GetInputSchema, Execute.
+#define DECLARE_ANIM_TOOL(ClassName) \
+	class CLAIREON_API ClassName : public ClaireonAnimEditToolBase \
+	{ \
+	public: \
+		FString GetName() const override; \
+		FString GetDescription() const override; \
+		TSharedPtr<FJsonObject> GetInputSchema() const override; \
+		FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override; \
+	}
