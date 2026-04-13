@@ -142,7 +142,7 @@
 
 // Animation MCP tools
 #include "Tools/ClaireonTool_AnimInspect.h"
-#include "Tools/ClaireonTool_AnimEdit.h"
+#include "Tools/ClaireonAnimTools.h"
 
 // Session management MCP tools
 #include "Tools/ClaireonTool_ListSessions.h"
@@ -222,7 +222,53 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_AssetFixupRedirectors>());
 	Tools.Add(MakeShared<ClaireonTool_OpenAssetEditor>());
 	Tools.Add(MakeShared<ClaireonTool_AnimInspect>());
-	Tools.Add(MakeShared<ClaireonTool_AnimEdit>());
+	// Animation editing tools (individual operations with focused inputSchema)
+	Tools.Add(MakeShared<ClaireonAnimTool_Open>());
+	Tools.Add(MakeShared<ClaireonAnimTool_Close>());
+	Tools.Add(MakeShared<ClaireonAnimTool_GetState>());
+	Tools.Add(MakeShared<ClaireonAnimTool_Save>());
+	Tools.Add(MakeShared<ClaireonAnimTool_CreateMontage>());
+	Tools.Add(MakeShared<ClaireonAnimTool_CreateComposite>());
+	Tools.Add(MakeShared<ClaireonAnimTool_DuplicateAsset>());
+	Tools.Add(MakeShared<ClaireonAnimTool_AddNotify>());
+	Tools.Add(MakeShared<ClaireonAnimTool_RemoveNotify>());
+	Tools.Add(MakeShared<ClaireonAnimTool_MoveNotify>());
+	Tools.Add(MakeShared<ClaireonAnimTool_DuplicateNotify>());
+	Tools.Add(MakeShared<ClaireonAnimTool_SetNotifyProperty>());
+	Tools.Add(MakeShared<ClaireonAnimTool_GetNotifyProperty>());
+	Tools.Add(MakeShared<ClaireonAnimTool_ListNotifyProperties>());
+	Tools.Add(MakeShared<ClaireonAnimTool_AddNotifyTrack>());
+	Tools.Add(MakeShared<ClaireonAnimTool_RemoveNotifyTrack>());
+	Tools.Add(MakeShared<ClaireonAnimTool_RenameNotifyTrack>());
+	Tools.Add(MakeShared<ClaireonAnimTool_ReorderNotifyTrack>());
+	Tools.Add(MakeShared<ClaireonAnimTool_AddCurve>());
+	Tools.Add(MakeShared<ClaireonAnimTool_RemoveCurve>());
+	Tools.Add(MakeShared<ClaireonAnimTool_AddCurveKey>());
+	Tools.Add(MakeShared<ClaireonAnimTool_RemoveCurveKey>());
+	Tools.Add(MakeShared<ClaireonAnimTool_SetCurveKeyProperty>());
+	Tools.Add(MakeShared<ClaireonAnimTool_AddSection>());
+	Tools.Add(MakeShared<ClaireonAnimTool_RemoveSection>());
+	Tools.Add(MakeShared<ClaireonAnimTool_SetSectionLink>());
+	Tools.Add(MakeShared<ClaireonAnimTool_SetSectionLinkMethod>());
+	Tools.Add(MakeShared<ClaireonAnimTool_AddSegment>());
+	Tools.Add(MakeShared<ClaireonAnimTool_RemoveSegment>());
+	Tools.Add(MakeShared<ClaireonAnimTool_SetSegmentProperty>());
+	Tools.Add(MakeShared<ClaireonAnimTool_AddSlot>());
+	Tools.Add(MakeShared<ClaireonAnimTool_RemoveSlot>());
+	Tools.Add(MakeShared<ClaireonAnimTool_SetSlotProperty>());
+	Tools.Add(MakeShared<ClaireonAnimTool_InspectSegment>());
+	Tools.Add(MakeShared<ClaireonAnimTool_RetimeSegment>());
+	Tools.Add(MakeShared<ClaireonAnimTool_BatchRetimeAnimation>());
+	Tools.Add(MakeShared<ClaireonAnimTool_ListModifiers>());
+	Tools.Add(MakeShared<ClaireonAnimTool_AddModifier>());
+	Tools.Add(MakeShared<ClaireonAnimTool_RemoveModifier>());
+	Tools.Add(MakeShared<ClaireonAnimTool_ApplyModifier>());
+	Tools.Add(MakeShared<ClaireonAnimTool_RevertModifier>());
+	Tools.Add(MakeShared<ClaireonAnimTool_ListMetadata>());
+	Tools.Add(MakeShared<ClaireonAnimTool_AddMetadata>());
+	Tools.Add(MakeShared<ClaireonAnimTool_RemoveMetadata>());
+	Tools.Add(MakeShared<ClaireonAnimTool_SetMetadataProperty>());
+	Tools.Add(MakeShared<ClaireonAnimTool_SetProperty>());
 	Tools.Add(MakeShared<ClaireonTool_BlueprintCompile>());
 	Tools.Add(MakeShared<ClaireonTool_CommandletRun>());
 	Tools.Add(MakeShared<ClaireonTool_AssetResave>());
