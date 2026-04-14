@@ -98,6 +98,11 @@ public class Claireon : ModuleRules
 			// Enhanced Input tools dependencies
 			"EnhancedInput",     // UInputAction, UInputMappingContext, modifiers, triggers
 
+			// Landscape and foliage tools dependencies
+			"Landscape",        // ALandscapeProxy, ULandscapeInfo, ULandscapeComponent, FLandscapeEditDataInterface
+			"LandscapeEditor",  // FLandscapeImportHelper, LandscapeEditorUtils (SetHeightmapData, SetWeightmapData)
+			"Foliage",          // AInstancedFoliageActor, UFoliageType, FFoliageInfo, FFoliageInstance
+
 			// Automation framework dependencies
 			"AutomationController", // IAutomationControllerModule, IAutomationControllerManager (test runner)
 

@@ -162,6 +162,13 @@
 #include "Tools/ClaireonTool_InputInspect.h"
 #include "Tools/ClaireonTool_InputEdit.h"
 
+// Landscape and foliage MCP tools
+#include "Tools/ClaireonTool_LandscapeInspect.h"
+#include "Tools/ClaireonTool_LandscapeEdit.h"
+#include "Tools/ClaireonTool_LandscapeSplineEdit.h"
+#include "Tools/ClaireonTool_FoliageEdit.h"
+#include "Tools/ClaireonTool_LandscapeImport.h"
+
 // Transaction management
 #include "Tools/ClaireonTool_Transaction.h"
 
@@ -354,6 +361,13 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	// Enhanced Input MCP tools
 	Tools.Add(MakeShared<ClaireonTool_InputInspect>());
 	Tools.Add(MakeShared<ClaireonTool_InputEdit>());
+
+	// Landscape and foliage MCP tools
+	Tools.Add(MakeShared<ClaireonTool_LandscapeInspect>());
+	Tools.Add(MakeShared<ClaireonTool_LandscapeEdit>());
+	Tools.Add(MakeShared<ClaireonTool_LandscapeSplineEdit>());
+	Tools.Add(MakeShared<ClaireonTool_FoliageEdit>());
+	Tools.Add(MakeShared<ClaireonTool_LandscapeImport>());
 
 	// Session management tools
 	Tools.Add(MakeShared<ClaireonTool_ListSessions>());
