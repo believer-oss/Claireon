@@ -69,6 +69,7 @@
 #include "AnimationGraph.h"
 #include "GameplayTagContainer.h"
 #include "GameplayTagsManager.h"
+#include "ClaireonNameResolver.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSessionManager.h"
 
@@ -685,10 +686,16 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_Create(const TSharedPtr<F
 	}
 
 	// Find parent class
-	UClass* ParentClass = FindFirstObject<UClass>(*ParentClassName);
+	ClaireonNameResolver::FNameResolveResult ParentClassResult;
+	UClass* ParentClass = ClaireonNameResolver::ResolveClassName(ParentClassName, nullptr, ParentClassResult);
 	if (!ParentClass)
 	{
-		return MakeErrorResult(FString::Printf(TEXT("Parent class '%s' not found"), *ParentClassName));
+		return MakeErrorResult(ParentClassResult.Error);
+	}
+	TArray<FString> ResolutionWarnings;
+	if (!ParentClassResult.ResolutionNote.IsEmpty())
+	{
+		ResolutionWarnings.Add(ParentClassResult.ResolutionNote);
 	}
 
 	// Extract package and asset name from path
@@ -821,7 +828,9 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_Create(const TSharedPtr<F
 
 	Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Created new Blueprint %s with parent class %s"), *AssetPath, *ParentClassName);
 
-	return BuildStateResponse(SessionId, Data);
+	FToolResult CreateResult = BuildStateResponse(SessionId, Data);
+	CreateResult.Warnings.Append(ResolutionWarnings);
+	return CreateResult;
 }
 
 FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
@@ -866,6 +875,8 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 	bool bNodeAlreadyAdded = false; // Set by AssignDelegate which handles its own graph insertion
 
 	// Helper lambda for BaseMCDelegate nodes (AddDelegate, RemoveDelegate, ClearDelegate, CallDelegate)
+	TArray<FString> ResolutionWarnings;
+
 	auto ResolveAndSetDelegate = [&](UK2Node_BaseMCDelegate* DelegateNode,
 									 const FString& DelegateName, const FString& TargetClass) -> FString /*error or empty*/
 	{
@@ -880,10 +891,15 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 		}
 		else
 		{
-			OwnerClass = FindFirstObject<UClass>(*TargetClass);
+			ClaireonNameResolver::FNameResolveResult DelegateClassResult;
+			OwnerClass = ClaireonNameResolver::ResolveClassName(TargetClass, nullptr, DelegateClassResult);
 			if (!OwnerClass)
 			{
-				return FString::Printf(TEXT("Target class not found: %s"), *TargetClass);
+				return DelegateClassResult.Error;
+			}
+			if (!DelegateClassResult.ResolutionNote.IsEmpty())
+			{
+				ResolutionWarnings.Add(DelegateClassResult.ResolutionNote);
 			}
 		}
 
@@ -926,10 +942,15 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 
 		if (!FunctionClass.IsEmpty())
 		{
-			UClass* OwnerClass = FindFirstObject<UClass>(*FunctionClass);
+			ClaireonNameResolver::FNameResolveResult FuncClassResult;
+			UClass* OwnerClass = ClaireonNameResolver::ResolveClassName(FunctionClass, nullptr, FuncClassResult);
 			if (OwnerClass)
 			{
 				CallFuncNode->FunctionReference.SetExternalMember(FName(*FunctionName), OwnerClass);
+				if (!FuncClassResult.ResolutionNote.IsEmpty())
+				{
+					ResolutionWarnings.Add(FuncClassResult.ResolutionNote);
+				}
 			}
 			else
 			{
@@ -990,10 +1011,15 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 			return MakeErrorResult(TEXT("Missing required field 'target_class' for Cast node"));
 		}
 
-		UClass* CastClass = FindFirstObject<UClass>(*TargetClass);
+		ClaireonNameResolver::FNameResolveResult CastClassResult;
+		UClass* CastClass = ClaireonNameResolver::ResolveClassName(TargetClass, nullptr, CastClassResult);
 		if (!CastClass)
 		{
-			return MakeErrorResult(FString::Printf(TEXT("Target class not found: %s"), *TargetClass));
+			return MakeErrorResult(CastClassResult.Error);
+		}
+		if (!CastClassResult.ResolutionNote.IsEmpty())
+		{
+			ResolutionWarnings.Add(CastClassResult.ResolutionNote);
 		}
 
 		UK2Node_DynamicCast* CastNode = NewObject<UK2Node_DynamicCast>(Graph);
@@ -1009,10 +1035,15 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 			return MakeErrorResult(TEXT("Missing required field 'actor_class' for SpawnActor node"));
 		}
 
-		UClass* SpawnClass = FindFirstObject<UClass>(*ActorClass);
+		ClaireonNameResolver::FNameResolveResult SpawnClassResult;
+		UClass* SpawnClass = ClaireonNameResolver::ResolveClassName(ActorClass, AActor::StaticClass(), SpawnClassResult);
 		if (!SpawnClass)
 		{
-			return MakeErrorResult(FString::Printf(TEXT("Actor class not found: %s"), *ActorClass));
+			return MakeErrorResult(SpawnClassResult.Error);
+		}
+		if (!SpawnClassResult.ResolutionNote.IsEmpty())
+		{
+			ResolutionWarnings.Add(SpawnClassResult.ResolutionNote);
 		}
 
 		UK2Node_SpawnActorFromClass* SpawnNode = NewObject<UK2Node_SpawnActorFromClass>(Graph);
@@ -1089,10 +1120,15 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 			return MakeErrorResult(TEXT("Missing required field 'struct_type' for MakeStruct node"));
 		}
 
-		UScriptStruct* Struct = FindFirstObject<UScriptStruct>(*StructType);
+		ClaireonNameResolver::FNameResolveResult MakeStructResult;
+		UScriptStruct* Struct = ClaireonNameResolver::ResolveStructName(StructType, MakeStructResult);
 		if (!Struct)
 		{
-			return MakeErrorResult(FString::Printf(TEXT("Struct type not found: %s"), *StructType));
+			return MakeErrorResult(MakeStructResult.Error);
+		}
+		if (!MakeStructResult.ResolutionNote.IsEmpty())
+		{
+			ResolutionWarnings.Add(MakeStructResult.ResolutionNote);
 		}
 
 		UK2Node_MakeStruct* MakeStructNode = NewObject<UK2Node_MakeStruct>(Graph);
@@ -1108,10 +1144,15 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 			return MakeErrorResult(TEXT("Missing required field 'struct_type' for BreakStruct node"));
 		}
 
-		UScriptStruct* Struct = FindFirstObject<UScriptStruct>(*StructType);
+		ClaireonNameResolver::FNameResolveResult BreakStructResult;
+		UScriptStruct* Struct = ClaireonNameResolver::ResolveStructName(StructType, BreakStructResult);
 		if (!Struct)
 		{
-			return MakeErrorResult(FString::Printf(TEXT("Struct type not found: %s"), *StructType));
+			return MakeErrorResult(BreakStructResult.Error);
+		}
+		if (!BreakStructResult.ResolutionNote.IsEmpty())
+		{
+			ResolutionWarnings.Add(BreakStructResult.ResolutionNote);
 		}
 
 		UK2Node_BreakStruct* BreakStructNode = NewObject<UK2Node_BreakStruct>(Graph);
@@ -1146,10 +1187,15 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 			return MakeErrorResult(TEXT("Missing required field 'enum_type' for SwitchEnum node"));
 		}
 
-		UEnum* Enum = FindFirstObject<UEnum>(*EnumType);
+		ClaireonNameResolver::FNameResolveResult SwitchEnumResult;
+		UEnum* Enum = ClaireonNameResolver::ResolveEnumName(EnumType, SwitchEnumResult);
 		if (!Enum)
 		{
-			return MakeErrorResult(FString::Printf(TEXT("Enum type not found: %s"), *EnumType));
+			return MakeErrorResult(SwitchEnumResult.Error);
+		}
+		if (!SwitchEnumResult.ResolutionNote.IsEmpty())
+		{
+			ResolutionWarnings.Add(SwitchEnumResult.ResolutionNote);
 		}
 
 		UK2Node_SwitchEnum* SwitchNode = NewObject<UK2Node_SwitchEnum>(Graph);
@@ -1178,10 +1224,15 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 			return MakeErrorResult(TEXT("Missing required field 'enum_type' for ForEachElementInEnum node"));
 		}
 
-		UEnum* Enum = FindFirstObject<UEnum>(*EnumType);
+		ClaireonNameResolver::FNameResolveResult ForEachEnumResult;
+		UEnum* Enum = ClaireonNameResolver::ResolveEnumName(EnumType, ForEachEnumResult);
 		if (!Enum)
 		{
-			return MakeErrorResult(FString::Printf(TEXT("Enum type not found: %s"), *EnumType));
+			return MakeErrorResult(ForEachEnumResult.Error);
+		}
+		if (!ForEachEnumResult.ResolutionNote.IsEmpty())
+		{
+			ResolutionWarnings.Add(ForEachEnumResult.ResolutionNote);
 		}
 
 		UK2Node_ForEachElementInEnum* ForEachNode = NewObject<UK2Node_ForEachElementInEnum>(Graph);
@@ -1271,18 +1322,16 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 			return MakeErrorResult(TEXT("Missing required field 'class_name' for Generic node type. Specify the K2Node class name (e.g., 'K2Node_AddPinInterface')"));
 		}
 
-		// Try to find the class
-		UClass* NodeClass = FindFirstObject<UClass>(*ClassName);
+		// Find the node class using fuzzy resolution (handles U prefix, K2Node_ prefix, etc.)
+		ClaireonNameResolver::FNameResolveResult NodeClassResult;
+		UClass* NodeClass = ClaireonNameResolver::ResolveClassName(ClassName, UK2Node::StaticClass(), NodeClassResult);
 		if (!NodeClass)
 		{
-			// Try with UK2Node prefix if not provided
-			FString PrefixedClassName = ClassName.StartsWith(TEXT("K2Node_")) ? FString::Printf(TEXT("U%s"), *ClassName) : FString::Printf(TEXT("UK2Node_%s"), *ClassName);
-			NodeClass = FindFirstObject<UClass>(*PrefixedClassName);
+			return MakeErrorResult(NodeClassResult.Error);
 		}
-
-		if (!NodeClass)
+		if (!NodeClassResult.ResolutionNote.IsEmpty())
 		{
-			return MakeErrorResult(FString::Printf(TEXT("Node class not found: %s. Ensure the class name is correct (e.g., 'K2Node_CallFunction')"), *ClassName));
+			ResolutionWarnings.Add(NodeClassResult.ResolutionNote);
 		}
 
 		if (!NodeClass->IsChildOf(UEdGraphNode::StaticClass()))
@@ -1349,26 +1398,41 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 					Pair.Value->TryGetString(StrVal);
 					if (ObjProp->PropertyClass->IsChildOf(UClass::StaticClass()))
 					{
-						UClass* FoundClass = FindFirstObject<UClass>(*StrVal);
+						ClaireonNameResolver::FNameResolveResult PropClassResult;
+						UClass* FoundClass = ClaireonNameResolver::ResolveClassName(StrVal, nullptr, PropClassResult);
 						if (FoundClass)
 						{
 							ObjProp->SetObjectPropertyValue(ValuePtr, FoundClass);
+							if (!PropClassResult.ResolutionNote.IsEmpty())
+							{
+								ResolutionWarnings.Add(PropClassResult.ResolutionNote);
+							}
 						}
 					}
 					else if (ObjProp->PropertyClass->IsChildOf(UEnum::StaticClass()))
 					{
-						UEnum* FoundEnum = FindFirstObject<UEnum>(*StrVal);
+						ClaireonNameResolver::FNameResolveResult PropEnumResult;
+						UEnum* FoundEnum = ClaireonNameResolver::ResolveEnumName(StrVal, PropEnumResult);
 						if (FoundEnum)
 						{
 							ObjProp->SetObjectPropertyValue(ValuePtr, FoundEnum);
+							if (!PropEnumResult.ResolutionNote.IsEmpty())
+							{
+								ResolutionWarnings.Add(PropEnumResult.ResolutionNote);
+							}
 						}
 					}
 					else if (ObjProp->PropertyClass->IsChildOf(UScriptStruct::StaticClass()))
 					{
-						UScriptStruct* FoundStruct = FindFirstObject<UScriptStruct>(*StrVal);
+						ClaireonNameResolver::FNameResolveResult PropStructResult;
+						UScriptStruct* FoundStruct = ClaireonNameResolver::ResolveStructName(StrVal, PropStructResult);
 						if (FoundStruct)
 						{
 							ObjProp->SetObjectPropertyValue(ValuePtr, FoundStruct);
+							if (!PropStructResult.ResolutionNote.IsEmpty())
+							{
+								ResolutionWarnings.Add(PropStructResult.ResolutionNote);
+							}
 						}
 					}
 					else
@@ -1394,22 +1458,27 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 		}
 
 		UClass* ParentClass = Blueprint->ParentClass;
+		ClaireonNameResolver::FNameResolveResult EventFuncResult;
 		UFunction* TargetFunc = ParentClass
-			? ParentClass->FindFunctionByName(FName(*FunctionName))
+			? ClaireonNameResolver::ResolveFunctionName(ParentClass, FunctionName, EventFuncResult)
 			: nullptr;
 
 		if (!TargetFunc)
 		{
-			return MakeErrorResult(FString::Printf(
-				TEXT("Function '%s' not found on parent class '%s'"),
-				*FunctionName, *GetNameSafe(ParentClass)));
+			return MakeErrorResult(EventFuncResult.Error.IsEmpty()
+					? FString::Printf(TEXT("Function '%s' not found: Blueprint has no parent class"), *FunctionName)
+					: EventFuncResult.Error);
+		}
+		if (!EventFuncResult.ResolutionNote.IsEmpty())
+		{
+			ResolutionWarnings.Add(EventFuncResult.ResolutionNote);
 		}
 
 		if (!TargetFunc->HasAnyFunctionFlags(FUNC_BlueprintEvent))
 		{
 			return MakeErrorResult(FString::Printf(
 				TEXT("Function '%s' is not a BlueprintNativeEvent or BlueprintImplementableEvent"),
-				*FunctionName));
+				*TargetFunc->GetName()));
 		}
 
 		// Check for existing override
@@ -1419,7 +1488,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 		{
 			return MakeErrorResult(FString::Printf(
 				TEXT("Override for '%s' already exists (node GUID: %s)"),
-				*FunctionName, *ExistingOverride->NodeGuid.ToString()));
+				*TargetFunc->GetName(), *ExistingOverride->NodeGuid.ToString()));
 		}
 
 		UK2Node_Event* EventNode = NewObject<UK2Node_Event>(Graph);
@@ -1427,7 +1496,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 		EventNode->bOverrideFunction = true;
 
 		NewNode = EventNode;
-		NodeDescription = FString::Printf(TEXT("Event Override: %s"), *FunctionName);
+		NodeDescription = FString::Printf(TEXT("Event Override: %s"), *TargetFunc->GetName());
 	}
 	else if (NodeType == TEXT("CallParentFunction"))
 	{
@@ -1438,15 +1507,20 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 		}
 
 		UClass* ParentClass = Blueprint->ParentClass;
+		ClaireonNameResolver::FNameResolveResult ParentFuncResult;
 		UFunction* TargetFunc = ParentClass
-			? ParentClass->FindFunctionByName(FName(*FunctionName))
+			? ClaireonNameResolver::ResolveFunctionName(ParentClass, FunctionName, ParentFuncResult)
 			: nullptr;
 
 		if (!TargetFunc)
 		{
-			return MakeErrorResult(FString::Printf(
-				TEXT("Function '%s' not found on parent class '%s'"),
-				*FunctionName, *GetNameSafe(ParentClass)));
+			return MakeErrorResult(ParentFuncResult.Error.IsEmpty()
+					? FString::Printf(TEXT("Function '%s' not found: Blueprint has no parent class"), *FunctionName)
+					: ParentFuncResult.Error);
+		}
+		if (!ParentFuncResult.ResolutionNote.IsEmpty())
+		{
+			ResolutionWarnings.Add(ParentFuncResult.ResolutionNote);
 		}
 
 		UK2Node_CallParentFunction* ParentCallNode =
@@ -1454,7 +1528,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 		ParentCallNode->SetFromFunction(TargetFunc);
 
 		NewNode = ParentCallNode;
-		NodeDescription = FString::Printf(TEXT("Call Parent: %s"), *FunctionName);
+		NodeDescription = FString::Printf(TEXT("Call Parent: %s"), *TargetFunc->GetName());
 	}
 	else if (NodeType == TEXT("Timeline"))
 	{
@@ -1969,7 +2043,9 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 		}
 	}
 
-	return BuildStateResponse(SessionId, Data);
+	FToolResult AddNodeResult = BuildStateResponse(SessionId, Data);
+	AddNodeResult.Warnings.Append(ResolutionWarnings);
+	return AddNodeResult;
 }
 
 FToolResult ClaireonTool_EditBlueprintGraph::Operation_RemoveNode(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
@@ -2153,58 +2229,41 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_ConnectPins(const FString
 		return MakeErrorResult(TEXT("Missing required field: target_node_guid or target_node_title"));
 	}
 
-	// Find source pin (optionally with direction hint)
-	UEdGraphPin* SourcePin = nullptr;
+	// Resolve source pin using fuzzy matching
+	TArray<FString> ResolutionWarnings;
+	EEdGraphPinDirection SourceDirHint = EGPD_Output;
 	FString SourcePinDirection;
 	if (Params->TryGetStringField(TEXT("source_pin_direction"), SourcePinDirection))
 	{
-		EEdGraphPinDirection Direction = (SourcePinDirection == TEXT("input")) ? EGPD_Input : EGPD_Output;
-		SourcePin = SourceNode->FindPin(*SourcePinName, Direction);
+		SourceDirHint = (SourcePinDirection == TEXT("input")) ? EGPD_Input : EGPD_Output;
 	}
-	else
-	{
-		SourcePin = SourceNode->FindPin(*SourcePinName);
-	}
-
+	ClaireonNameResolver::FNameResolveResult SourcePinResult;
+	UEdGraphPin* SourcePin = ClaireonNameResolver::ResolvePinName(SourceNode, SourcePinName, SourceDirHint, SourcePinResult);
 	if (!SourcePin)
 	{
-		FString AvailablePins = ClaireonBlueprintHelpers::FormatAvailablePins(SourceNode);
-		FString Suggestion = ClaireonBlueprintHelpers::FindClosestPinName(SourceNode, SourcePinName);
-		FString ErrorMsg = FString::Printf(TEXT("Source pin '%s' not found on node %s (%s).\nAvailable pins:\n%s"),
-			*SourcePinName, *SourceNode->NodeGuid.ToString(),
-			*SourceNode->GetNodeTitle(ENodeTitleType::ListView).ToString(), *AvailablePins);
-		if (!Suggestion.IsEmpty())
-		{
-			ErrorMsg += FString::Printf(TEXT("Did you mean: '%s'?"), *Suggestion);
-		}
-		return MakeErrorResult(ErrorMsg);
+		return MakeErrorResult(SourcePinResult.Error);
+	}
+	if (!SourcePinResult.ResolutionNote.IsEmpty())
+	{
+		ResolutionWarnings.Add(SourcePinResult.ResolutionNote);
 	}
 
-	// Find target pin (optionally with direction hint)
-	UEdGraphPin* TargetPin = nullptr;
+	// Resolve target pin using fuzzy matching
+	EEdGraphPinDirection TargetDirHint = EGPD_Input;
 	FString TargetPinDirection;
 	if (Params->TryGetStringField(TEXT("target_pin_direction"), TargetPinDirection))
 	{
-		EEdGraphPinDirection Direction = (TargetPinDirection == TEXT("input")) ? EGPD_Input : EGPD_Output;
-		TargetPin = TargetNode->FindPin(*TargetPinName, Direction);
+		TargetDirHint = (TargetPinDirection == TEXT("input")) ? EGPD_Input : EGPD_Output;
 	}
-	else
-	{
-		TargetPin = TargetNode->FindPin(*TargetPinName);
-	}
-
+	ClaireonNameResolver::FNameResolveResult TargetPinResult;
+	UEdGraphPin* TargetPin = ClaireonNameResolver::ResolvePinName(TargetNode, TargetPinName, TargetDirHint, TargetPinResult);
 	if (!TargetPin)
 	{
-		FString AvailablePins = ClaireonBlueprintHelpers::FormatAvailablePins(TargetNode);
-		FString Suggestion = ClaireonBlueprintHelpers::FindClosestPinName(TargetNode, TargetPinName);
-		FString ErrorMsg = FString::Printf(TEXT("Target pin '%s' not found on node %s (%s).\nAvailable pins:\n%s"),
-			*TargetPinName, *TargetNode->NodeGuid.ToString(),
-			*TargetNode->GetNodeTitle(ENodeTitleType::ListView).ToString(), *AvailablePins);
-		if (!Suggestion.IsEmpty())
-		{
-			ErrorMsg += FString::Printf(TEXT("Did you mean: '%s'?"), *Suggestion);
-		}
-		return MakeErrorResult(ErrorMsg);
+		return MakeErrorResult(TargetPinResult.Error);
+	}
+	if (!TargetPinResult.ResolutionNote.IsEmpty())
+	{
+		ResolutionWarnings.Add(TargetPinResult.ResolutionNote);
 	}
 
 	// Validate connection compatibility
@@ -2254,7 +2313,9 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_ConnectPins(const FString
 	Data->LastOperationAffectedNodes.Add(SourceNode->NodeGuid);
 	Data->LastOperationAffectedNodes.Add(TargetNode->NodeGuid);
 
-	return BuildStateResponse(SessionId, Data);
+	FToolResult ConnectResult = BuildStateResponse(SessionId, Data);
+	ConnectResult.Warnings.Append(ResolutionWarnings);
+	return ConnectResult;
 }
 
 FToolResult ClaireonTool_EditBlueprintGraph::Operation_DisconnectPin(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
@@ -2294,20 +2355,17 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_DisconnectPin(const FStri
 			*NodeGuidStr, *Graph->GetName(), *AvailableNodes));
 	}
 
-	// Find pin
-	UEdGraphPin* Pin = Node->FindPin(*PinName);
+	// Resolve pin using fuzzy matching
+	TArray<FString> ResolutionWarnings;
+	ClaireonNameResolver::FNameResolveResult DisconnectPinResult;
+	UEdGraphPin* Pin = ClaireonNameResolver::ResolvePinName(Node, PinName, EGPD_MAX, DisconnectPinResult);
 	if (!Pin)
 	{
-		FString AvailablePins = ClaireonBlueprintHelpers::FormatAvailablePins(Node);
-		FString Suggestion = ClaireonBlueprintHelpers::FindClosestPinName(Node, PinName);
-		FString ErrorMsg = FString::Printf(TEXT("Pin '%s' not found on node %s (%s).\nAvailable pins:\n%s"),
-			*PinName, *Node->NodeGuid.ToString(),
-			*Node->GetNodeTitle(ENodeTitleType::ListView).ToString(), *AvailablePins);
-		if (!Suggestion.IsEmpty())
-		{
-			ErrorMsg += FString::Printf(TEXT("Did you mean: '%s'?"), *Suggestion);
-		}
-		return MakeErrorResult(ErrorMsg);
+		return MakeErrorResult(DisconnectPinResult.Error);
+	}
+	if (!DisconnectPinResult.ResolutionNote.IsEmpty())
+	{
+		ResolutionWarnings.Add(DisconnectPinResult.ResolutionNote);
 	}
 
 	int32 ConnectionCount = Pin->LinkedTo.Num();
@@ -2341,7 +2399,9 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_DisconnectPin(const FStri
 		TEXT("Disconnected %d connection(s) from [%s].%s"),
 		ConnectionCount, *NodeTitle, *PinName);
 
-	return BuildStateResponse(SessionId, Data);
+	FToolResult DisconnectResult = BuildStateResponse(SessionId, Data);
+	DisconnectResult.Warnings.Append(ResolutionWarnings);
+	return DisconnectResult;
 }
 
 FToolResult ClaireonTool_EditBlueprintGraph::Operation_SetPinValue(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
@@ -2385,20 +2445,17 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_SetPinValue(const FString
 			*NodeGuidStr, *Graph->GetName(), *AvailableNodes));
 	}
 
-	// Find pin
-	UEdGraphPin* Pin = Node->FindPin(*PinName);
+	// Resolve pin using fuzzy matching
+	TArray<FString> ResolutionWarnings;
+	ClaireonNameResolver::FNameResolveResult SetPinResult;
+	UEdGraphPin* Pin = ClaireonNameResolver::ResolvePinName(Node, PinName, EGPD_MAX, SetPinResult);
 	if (!Pin)
 	{
-		FString AvailablePins = ClaireonBlueprintHelpers::FormatAvailablePins(Node);
-		FString Suggestion = ClaireonBlueprintHelpers::FindClosestPinName(Node, PinName);
-		FString ErrorMsg = FString::Printf(TEXT("Pin '%s' not found on node %s (%s).\nAvailable pins:\n%s"),
-			*PinName, *Node->NodeGuid.ToString(),
-			*Node->GetNodeTitle(ENodeTitleType::ListView).ToString(), *AvailablePins);
-		if (!Suggestion.IsEmpty())
-		{
-			ErrorMsg += FString::Printf(TEXT("Did you mean: '%s'?"), *Suggestion);
-		}
-		return MakeErrorResult(ErrorMsg);
+		return MakeErrorResult(SetPinResult.Error);
+	}
+	if (!SetPinResult.ResolutionNote.IsEmpty())
+	{
+		ResolutionWarnings.Add(SetPinResult.ResolutionNote);
 	}
 
 	// Validate pin can have default value (must be input pin with no connection)
@@ -2433,7 +2490,9 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_SetPinValue(const FString
 	// Populate affected nodes: the node whose pin value changed
 	Data->LastOperationAffectedNodes.Add(Node->NodeGuid);
 
-	return BuildStateResponse(SessionId, Data);
+	FToolResult SetPinValueResult = BuildStateResponse(SessionId, Data);
+	SetPinValueResult.Warnings.Append(ResolutionWarnings);
+	return SetPinValueResult;
 }
 
 FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddVariable(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
@@ -2534,18 +2593,17 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddComponent(const FStrin
 		return MakeErrorResult(TEXT("Missing required field: component_class"));
 	}
 
-	// Find component class
-	UClass* CompClass = FindFirstObject<UClass>(*ComponentClass);
+	// Find component class using fuzzy resolution (handles U prefix, Component suffix, etc.)
+	TArray<FString> ResolutionWarnings;
+	ClaireonNameResolver::FNameResolveResult CompClassResult;
+	UClass* CompClass = ClaireonNameResolver::ResolveClassName(ComponentClass, UActorComponent::StaticClass(), CompClassResult);
 	if (!CompClass)
 	{
-		// Try with "U" prefix (common for component classes)
-		FString AltClassName = FString::Printf(TEXT("U%s"), *ComponentClass);
-		CompClass = FindFirstObject<UClass>(*AltClassName);
+		return MakeErrorResult(CompClassResult.Error);
 	}
-
-	if (!CompClass)
+	if (!CompClassResult.ResolutionNote.IsEmpty())
 	{
-		return MakeErrorResult(FString::Printf(TEXT("Component class not found: %s"), *ComponentClass));
+		ResolutionWarnings.Add(CompClassResult.ResolutionNote);
 	}
 
 	if (!CompClass->IsChildOf(UActorComponent::StaticClass()))
@@ -2611,7 +2669,9 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddComponent(const FStrin
 		TEXT("Added component: %s (%s)"),
 		*ComponentName, *ComponentClass);
 
-	return BuildStateResponse(SessionId, Data);
+	FToolResult AddCompResult = BuildStateResponse(SessionId, Data);
+	AddCompResult.Warnings.Append(ResolutionWarnings);
+	return AddCompResult;
 }
 
 FToolResult ClaireonTool_EditBlueprintGraph::Operation_SetProperty(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
@@ -3070,20 +3130,17 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_SelectPin(const FString& 
 			*NodeGuidStr, *Graph->GetName(), *AvailableNodes));
 	}
 
-	// Find the pin
-	UEdGraphPin* Pin = Node->FindPin(*PinName);
+	// Resolve the pin using fuzzy matching
+	TArray<FString> ResolutionWarnings;
+	ClaireonNameResolver::FNameResolveResult SelectPinResult;
+	UEdGraphPin* Pin = ClaireonNameResolver::ResolvePinName(Node, PinName, EGPD_MAX, SelectPinResult);
 	if (!Pin)
 	{
-		FString AvailablePins = ClaireonBlueprintHelpers::FormatAvailablePins(Node);
-		FString Suggestion = ClaireonBlueprintHelpers::FindClosestPinName(Node, PinName);
-		FString ErrorMsg = FString::Printf(TEXT("Pin '%s' not found on node %s (%s).\nAvailable pins:\n%s"),
-			*PinName, *Node->NodeGuid.ToString(),
-			*Node->GetNodeTitle(ENodeTitleType::ListView).ToString(), *AvailablePins);
-		if (!Suggestion.IsEmpty())
-		{
-			ErrorMsg += FString::Printf(TEXT("Did you mean: '%s'?"), *Suggestion);
-		}
-		return MakeErrorResult(ErrorMsg);
+		return MakeErrorResult(SelectPinResult.Error);
+	}
+	if (!SelectPinResult.ResolutionNote.IsEmpty())
+	{
+		ResolutionWarnings.Add(SelectPinResult.ResolutionNote);
 	}
 
 	// Move cursor to this pin
@@ -3098,7 +3155,9 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_SelectPin(const FString& 
 		TEXT("Selected pin: [%s].%s (%s)"),
 		*NodeTitle, *PinName, *PinDir);
 
-	return BuildStateResponse(SessionId, Data);
+	FToolResult SelectPinFinalResult = BuildStateResponse(SessionId, Data);
+	SelectPinFinalResult.Warnings.Append(ResolutionWarnings);
+	return SelectPinFinalResult;
 }
 
 FToolResult ClaireonTool_EditBlueprintGraph::Operation_SelectNearestNode(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
@@ -4140,21 +4199,18 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_RemovePin(const FString& 
 	FString PinName;
 	UEdGraphPin* TargetPin = nullptr;
 
+	TArray<FString> ResolutionWarnings;
 	if (Params->TryGetStringField(TEXT("pin_name"), PinName))
 	{
-		TargetPin = Node->FindPin(FName(*PinName));
+		ClaireonNameResolver::FNameResolveResult RemovePinResult;
+		TargetPin = ClaireonNameResolver::ResolvePinName(Node, PinName, EGPD_MAX, RemovePinResult);
 		if (!TargetPin)
 		{
-			// List available pins
-			TArray<FString> PinNames;
-			for (UEdGraphPin* Pin : Node->Pins)
-			{
-				if (Pin)
-				{
-					PinNames.Add(Pin->PinName.ToString());
-				}
-			}
-			return MakeErrorResult(FString::Printf(TEXT("Pin '%s' not found on node. Available pins: %s"), *PinName, *FString::Join(PinNames, TEXT(", "))));
+			return MakeErrorResult(RemovePinResult.Error);
+		}
+		if (!RemovePinResult.ResolutionNote.IsEmpty())
+		{
+			ResolutionWarnings.Add(RemovePinResult.ResolutionNote);
 		}
 	}
 	else
@@ -4230,7 +4286,9 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_RemovePin(const FString& 
 
 	Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Removed pin '%s' from node: %s"), *RemovedPinName, *NodeTitle);
 	Data->LastOperationAffectedNodes.Add(Node->NodeGuid);
-	return BuildStateResponse(SessionId, Data);
+	FToolResult RemovePinFinalResult = BuildStateResponse(SessionId, Data);
+	RemovePinFinalResult.Warnings.Append(ResolutionWarnings);
+	return RemovePinFinalResult;
 }
 
 // ============================================================================
@@ -4263,16 +4321,16 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_SplitPin(const FString& S
 		return MakeErrorResult(FString::Printf(TEXT("Node not found with GUID: %s.\n%s"), *NodeGuidStr, *AvailableNodes));
 	}
 
-	UEdGraphPin* Pin = Node->FindPin(FName(*PinName));
+	TArray<FString> ResolutionWarnings;
+	ClaireonNameResolver::FNameResolveResult SplitPinResult;
+	UEdGraphPin* Pin = ClaireonNameResolver::ResolvePinName(Node, PinName, EGPD_MAX, SplitPinResult);
 	if (!Pin)
 	{
-		TArray<FString> PinNames;
-		for (UEdGraphPin* P : Node->Pins)
-		{
-			if (P && P->ParentPin == nullptr)
-				PinNames.Add(P->PinName.ToString());
-		}
-		return MakeErrorResult(FString::Printf(TEXT("Pin '%s' not found. Available: %s"), *PinName, *FString::Join(PinNames, TEXT(", "))));
+		return MakeErrorResult(SplitPinResult.Error);
+	}
+	if (!SplitPinResult.ResolutionNote.IsEmpty())
+	{
+		ResolutionWarnings.Add(SplitPinResult.ResolutionNote);
 	}
 
 	if (!Node->CanSplitPin(Pin))
@@ -4301,7 +4359,9 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_SplitPin(const FString& S
 	Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Split pin '%s' on node '%s' into: %s"),
 		*PinName, *NodeTitle, *FString::Join(SubPinNames, TEXT(", ")));
 	Data->LastOperationAffectedNodes.Add(Node->NodeGuid);
-	return BuildStateResponse(SessionId, Data);
+	FToolResult SplitPinFinalResult = BuildStateResponse(SessionId, Data);
+	SplitPinFinalResult.Warnings.Append(ResolutionWarnings);
+	return SplitPinFinalResult;
 }
 
 // ============================================================================
@@ -4334,16 +4394,16 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_RecombinePin(const FStrin
 		return MakeErrorResult(FString::Printf(TEXT("Node not found with GUID: %s.\n%s"), *NodeGuidStr, *AvailableNodes));
 	}
 
-	UEdGraphPin* Pin = Node->FindPin(FName(*PinName));
+	TArray<FString> ResolutionWarnings;
+	ClaireonNameResolver::FNameResolveResult RecombinePinResult;
+	UEdGraphPin* Pin = ClaireonNameResolver::ResolvePinName(Node, PinName, EGPD_MAX, RecombinePinResult);
 	if (!Pin)
 	{
-		TArray<FString> PinNames;
-		for (UEdGraphPin* P : Node->Pins)
-		{
-			if (P)
-				PinNames.Add(P->PinName.ToString());
-		}
-		return MakeErrorResult(FString::Printf(TEXT("Pin '%s' not found. Available: %s"), *PinName, *FString::Join(PinNames, TEXT(", "))));
+		return MakeErrorResult(RecombinePinResult.Error);
+	}
+	if (!RecombinePinResult.ResolutionNote.IsEmpty())
+	{
+		ResolutionWarnings.Add(RecombinePinResult.ResolutionNote);
 	}
 
 	if (Pin->SubPins.Num() == 0)
@@ -4363,7 +4423,9 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_RecombinePin(const FStrin
 	FString NodeTitle = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();
 	Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Recombined pin '%s' on node '%s'"), *PinName, *NodeTitle);
 	Data->LastOperationAffectedNodes.Add(Node->NodeGuid);
-	return BuildStateResponse(SessionId, Data);
+	FToolResult RecombineFinalResult = BuildStateResponse(SessionId, Data);
+	RecombineFinalResult.Warnings.Append(ResolutionWarnings);
+	return RecombineFinalResult;
 }
 
 // ============================================================================

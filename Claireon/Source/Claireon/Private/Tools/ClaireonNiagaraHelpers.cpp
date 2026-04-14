@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonNiagaraHelpers.h"
+#include "ClaireonNameResolver.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonLog.h"
 #include "NiagaraSystem.h"
@@ -448,7 +449,8 @@ UClass* ClaireonNiagaraHelpers::ResolveRendererClass(const FString& TypeName, FS
 	{
 		if (Pair.Key.Equals(TypeName, ESearchCase::IgnoreCase))
 		{
-			UClass* FoundClass = FindFirstObject<UClass>(*Pair.Value, EFindFirstObjectOptions::NativeFirst);
+			ClaireonNameResolver::FNameResolveResult ShorthandResult;
+			UClass* FoundClass = ClaireonNameResolver::ResolveClassName(Pair.Value, UNiagaraRendererProperties::StaticClass(), ShorthandResult);
 			if (FoundClass)
 			{
 				return FoundClass;
@@ -456,22 +458,12 @@ UClass* ClaireonNiagaraHelpers::ResolveRendererClass(const FString& TypeName, FS
 		}
 	}
 
-	// Try the raw input as a class name
-	UClass* FoundClass = FindFirstObject<UClass>(*TypeName, EFindFirstObjectOptions::NativeFirst);
-	if (FoundClass && FoundClass->IsChildOf(UNiagaraRendererProperties::StaticClass()))
+	// Try the raw input as a class name via the core resolver
+	ClaireonNameResolver::FNameResolveResult NameResult;
+	UClass* FoundClass = ClaireonNameResolver::ResolveClassName(TypeName, UNiagaraRendererProperties::StaticClass(), NameResult);
+	if (FoundClass)
 	{
 		return FoundClass;
-	}
-
-	// Try with U prefix stripped
-	if (TypeName.StartsWith(TEXT("U")))
-	{
-		FString WithoutU = TypeName.Mid(1);
-		FoundClass = FindFirstObject<UClass>(*WithoutU, EFindFirstObjectOptions::NativeFirst);
-		if (FoundClass && FoundClass->IsChildOf(UNiagaraRendererProperties::StaticClass()))
-		{
-			return FoundClass;
-		}
 	}
 
 	OutError = FString::Printf(TEXT("Could not resolve renderer class: %s. "

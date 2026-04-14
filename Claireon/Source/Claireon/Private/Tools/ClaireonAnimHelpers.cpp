@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonAnimHelpers.h"
 #include "Tools/ClaireonPropertyUtils.h"
+#include "ClaireonNameResolver.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonLog.h"
 #include "Animation/AnimationAsset.h"
@@ -676,44 +677,12 @@ UClass* ClaireonAnimHelpers::ResolveNotifyClass(const FString& ClassName, bool b
 {
 	UClass* BaseClass = bIsState ? UAnimNotifyState::StaticClass() : UAnimNotify::StaticClass();
 
-	// Try direct class name lookup
-	UClass* FoundClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
-	if (FoundClass && FoundClass->IsChildOf(BaseClass))
+	// Try the core resolver first
+	ClaireonNameResolver::FNameResolveResult NameResult;
+	UClass* FoundClass = ClaireonNameResolver::ResolveClassName(ClassName, BaseClass, NameResult);
+	if (FoundClass)
 	{
 		return FoundClass;
-	}
-
-	// Try with U prefix stripped
-	if (ClassName.StartsWith(TEXT("U")))
-	{
-		FString WithoutU = ClassName.Mid(1);
-		FoundClass = FindFirstObject<UClass>(*WithoutU, EFindFirstObjectOptions::NativeFirst);
-		if (FoundClass && FoundClass->IsChildOf(BaseClass))
-		{
-			return FoundClass;
-		}
-	}
-
-	// Try prepending standard prefixes
-	TArray<FString> Prefixes = { TEXT("UAnimNotify_"), TEXT("AnimNotify_"), TEXT("UFSAN_"), TEXT("FSAN_"), TEXT("UFSANS_"), TEXT("FSANS_") };
-	if (bIsState)
-	{
-		Prefixes.Append({ TEXT("UAnimNotifyState_"), TEXT("AnimNotifyState_") });
-	}
-
-	for (const FString& Prefix : Prefixes)
-	{
-		FString Candidate = Prefix + ClassName;
-		// Strip U prefix for FindFirstObject which expects class name without prefix
-		if (Candidate.StartsWith(TEXT("U")))
-		{
-			Candidate = Candidate.Mid(1);
-		}
-		FoundClass = FindFirstObject<UClass>(*Candidate, EFindFirstObjectOptions::NativeFirst);
-		if (FoundClass && FoundClass->IsChildOf(BaseClass))
-		{
-			return FoundClass;
-		}
 	}
 
 	// Search asset registry as a fallback for Blueprint notify classes
@@ -1456,98 +1425,4 @@ bool ClaireonAnimHelpers::SetMontageSectionLink(UAnimMontage* Montage, const FSt
 
 	Montage->MarkPackageDirty();
 	return true;
-}
-
-// ============================================================================
-// Class Resolution Helpers
-// ============================================================================
-
-UClass* ClaireonAnimHelpers::ResolveModifierClass(const FString& ClassName, FString& OutError)
-{
-	// Try direct lookup
-	UClass* FoundClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
-	if (FoundClass && FoundClass->IsChildOf(UAnimationModifier::StaticClass()))
-	{
-		return FoundClass;
-	}
-
-	// Try without U prefix
-	if (ClassName.StartsWith(TEXT("U")))
-	{
-		FString WithoutU = ClassName.Mid(1);
-		FoundClass = FindFirstObject<UClass>(*WithoutU, EFindFirstObjectOptions::NativeFirst);
-		if (FoundClass && FoundClass->IsChildOf(UAnimationModifier::StaticClass()))
-		{
-			return FoundClass;
-		}
-	}
-
-	// Search asset registry for Blueprint modifier classes
-	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-	FARFilter Filter;
-	Filter.ClassPaths.Add(UBlueprintGeneratedClass::StaticClass()->GetClassPathName());
-	Filter.bRecursiveClasses = true;
-
-	TArray<FAssetData> AssetList;
-	AssetRegistry.GetAssets(Filter, AssetList);
-
-	for (const FAssetData& Asset : AssetList)
-	{
-		if (Asset.AssetName.ToString().Contains(ClassName, ESearchCase::IgnoreCase))
-		{
-			UClass* BPClass = Cast<UClass>(Asset.GetAsset());
-			if (BPClass && BPClass->IsChildOf(UAnimationModifier::StaticClass()))
-			{
-				return BPClass;
-			}
-		}
-	}
-
-	OutError = FString::Printf(TEXT("Could not resolve animation modifier class: %s"), *ClassName);
-	return nullptr;
-}
-
-UClass* ClaireonAnimHelpers::ResolveMetaDataClass(const FString& ClassName, FString& OutError)
-{
-	// Try direct lookup
-	UClass* FoundClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
-	if (FoundClass && FoundClass->IsChildOf(UAnimMetaData::StaticClass()))
-	{
-		return FoundClass;
-	}
-
-	// Try without U prefix
-	if (ClassName.StartsWith(TEXT("U")))
-	{
-		FString WithoutU = ClassName.Mid(1);
-		FoundClass = FindFirstObject<UClass>(*WithoutU, EFindFirstObjectOptions::NativeFirst);
-		if (FoundClass && FoundClass->IsChildOf(UAnimMetaData::StaticClass()))
-		{
-			return FoundClass;
-		}
-	}
-
-	// Search asset registry for Blueprint metadata classes
-	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-	FARFilter Filter;
-	Filter.ClassPaths.Add(UBlueprintGeneratedClass::StaticClass()->GetClassPathName());
-	Filter.bRecursiveClasses = true;
-
-	TArray<FAssetData> AssetList;
-	AssetRegistry.GetAssets(Filter, AssetList);
-
-	for (const FAssetData& Asset : AssetList)
-	{
-		if (Asset.AssetName.ToString().Contains(ClassName, ESearchCase::IgnoreCase))
-		{
-			UClass* BPClass = Cast<UClass>(Asset.GetAsset());
-			if (BPClass && BPClass->IsChildOf(UAnimMetaData::StaticClass()))
-			{
-				return BPClass;
-			}
-		}
-	}
-
-	OutError = FString::Printf(TEXT("Could not resolve animation metadata class: %s"), *ClassName);
-	return nullptr;
 }

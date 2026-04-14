@@ -5,6 +5,7 @@
 #include "Tools/ClaireonAnimHelpers.h"
 #include "Tools/ClaireonAssetUtils.h"
 #include "Tools/ClaireonPropertyUtils.h"
+#include "ClaireonNameResolver.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSessionManager.h"
 #include "ClaireonLog.h"
@@ -454,12 +455,12 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceCreate::Execute(const TSha
 			FString ClassName = RawName.TrimStartAndEnd();
 			if (ClassName.IsEmpty()) continue;
 
-			FString ResolveError;
-			UClass* MetaDataClass = ClaireonAnimHelpers::ResolveMetaDataClass(ClassName, ResolveError);
+			ClaireonNameResolver::FNameResolveResult NameResult;
+			UClass* MetaDataClass = ClaireonNameResolver::ResolveClassName(ClassName, UAnimMetaData::StaticClass(), NameResult);
 			if (!MetaDataClass)
 			{
 				// Non-fatal: warn but continue
-				UE_LOG(LogClaireon, Warning, TEXT("BlendSpace create: could not resolve metadata class '%s': %s"), *ClassName, *ResolveError);
+				UE_LOG(LogClaireon, Warning, TEXT("BlendSpace create: could not resolve metadata class '%s': %s"), *ClassName, *NameResult.Error);
 				continue;
 			}
 
@@ -1580,11 +1581,11 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceAddMetadata::Execute(const
 	}
 
 	// Resolve metadata class
-	FString ResolveError;
-	UClass* MetaDataClass = ClaireonAnimHelpers::ResolveMetaDataClass(ClassName, ResolveError);
+	ClaireonNameResolver::FNameResolveResult NameResult;
+	UClass* MetaDataClass = ClaireonNameResolver::ResolveClassName(ClassName, UAnimMetaData::StaticClass(), NameResult);
 	if (!MetaDataClass)
 	{
-		return MakeErrorResult(ResolveError);
+		return MakeErrorResult(NameResult.Error);
 	}
 
 	if (MetaDataClass->HasAnyClassFlags(CLASS_Abstract))

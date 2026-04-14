@@ -5,6 +5,7 @@
 #include "Tools/ClaireonAnimHelpers.h"
 #include "Tools/ClaireonPropertyUtils.h"
 #include "Tools/ClaireonAssetUtils.h"
+#include "ClaireonNameResolver.h"
 #include "ClaireonLog.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimMontage.h"
@@ -38,22 +39,15 @@ namespace
 	{
 		UClass* BaseClass = UAnimationModifier::StaticClass();
 
-		UClass* FoundClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
-		if (FoundClass && FoundClass->IsChildOf(BaseClass))
+		// Try the core resolver first
+		ClaireonNameResolver::FNameResolveResult NameResult;
+		UClass* FoundClass = ClaireonNameResolver::ResolveClassName(ClassName, BaseClass, NameResult);
+		if (FoundClass)
 		{
 			return FoundClass;
 		}
 
-		if (ClassName.StartsWith(TEXT("U")))
-		{
-			FString WithoutU = ClassName.Mid(1);
-			FoundClass = FindFirstObject<UClass>(*WithoutU, EFindFirstObjectOptions::NativeFirst);
-			if (FoundClass && FoundClass->IsChildOf(BaseClass))
-			{
-				return FoundClass;
-			}
-		}
-
+		// Search asset registry for Blueprint modifier classes
 		IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 		FARFilter Filter;
 		Filter.ClassPaths.Add(UBlueprintGeneratedClass::StaticClass()->GetClassPathName());
@@ -489,11 +483,11 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddMetadata::Execute(const TSharedPt
 		return MakeErrorResult(TEXT("Missing required parameter: class_name"));
 	}
 
-	FString ResolveError;
-	UClass* MetaDataClass = ClaireonAnimHelpers::ResolveMetaDataClass(ClassName, ResolveError);
+	ClaireonNameResolver::FNameResolveResult NameResult;
+	UClass* MetaDataClass = ClaireonNameResolver::ResolveClassName(ClassName, UAnimMetaData::StaticClass(), NameResult);
 	if (!MetaDataClass)
 	{
-		return MakeErrorResult(ResolveError);
+		return MakeErrorResult(NameResult.Error);
 	}
 
 	FScopedTransaction Transaction(NSLOCTEXT("Claireon", "AnimAddMetadata", "MCP: Add Animation Metadata"));
@@ -508,6 +502,10 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddMetadata::Execute(const TSharedPt
 	Data->Animation->AddMetaData(NewMetaData);
 
 	Data->LastOperationStatus = FString::Printf(TEXT("add_metadata -> Added %s"), *MetaDataClass->GetName());
+	if (!NameResult.ResolutionNote.IsEmpty())
+	{
+		Data->LastOperationStatus += FString::Printf(TEXT(" [note: %s]"), *NameResult.ResolutionNote);
+	}
 	return BuildStateResponse(SessionId, Data);
 }
 

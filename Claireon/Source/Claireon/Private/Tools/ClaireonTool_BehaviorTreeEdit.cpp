@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonTool_BehaviorTreeEdit.h"
 #include "Tools/ClaireonBehaviorTreeHelpers.h"
+#include "ClaireonNameResolver.h"
 #include "ClaireonLog.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSafeExec.h"
@@ -423,10 +424,11 @@ FToolResult ClaireonTool_BehaviorTreeEdit::Operation_AddNode(const FString& Sess
 	Params->TryGetNumberField(TEXT("child_index"), ChildIndex);
 
 	// Resolve the class
-	UClass* NodeClass = ClaireonBehaviorTreeHelpers::ResolveBTNodeClass(NodeClassName, Error);
+	ClaireonNameResolver::FNameResolveResult NameResult;
+	UClass* NodeClass = ClaireonNameResolver::ResolveClassName(NodeClassName, UBTNode::StaticClass(), NameResult);
 	if (!NodeClass)
 	{
-		return MakeErrorResult(Error);
+		return MakeErrorResult(NameResult.Error);
 	}
 
 	// Verify it's a composite or task
@@ -471,6 +473,10 @@ FToolResult ClaireonTool_BehaviorTreeEdit::Operation_AddNode(const FString& Sess
 	Data->FocusedNodeGuid = NewNode->NodeGuid;
 	Data->LastOperationStatus = FString::Printf(TEXT("add_node â Added %s under parent {%s}"),
 		*NodeClassName, *ParentGuid.ToString(EGuidFormats::DigitsWithHyphensLower));
+	if (!NameResult.ResolutionNote.IsEmpty())
+	{
+		Data->LastOperationStatus += FString::Printf(TEXT(" [note: %s]"), *NameResult.ResolutionNote);
+	}
 
 	return BuildStateResponse(SessionId, Data);
 }
@@ -674,10 +680,11 @@ FToolResult ClaireonTool_BehaviorTreeEdit::Operation_AddDecorator(const FString&
 		return MakeErrorResult(FString::Printf(TEXT("Node not found: %s"), *NodeGuid.ToString(EGuidFormats::DigitsWithHyphensLower)));
 	}
 
-	UClass* DecoratorClass = ClaireonBehaviorTreeHelpers::ResolveBTNodeClass(DecoratorClassName, Error);
+	ClaireonNameResolver::FNameResolveResult DecoratorNameResult;
+	UClass* DecoratorClass = ClaireonNameResolver::ResolveClassName(DecoratorClassName, UBTDecorator::StaticClass(), DecoratorNameResult);
 	if (!DecoratorClass)
 	{
-		return MakeErrorResult(Error);
+		return MakeErrorResult(DecoratorNameResult.Error);
 	}
 
 	if (!DecoratorClass->IsChildOf(UBTDecorator::StaticClass()))
@@ -699,6 +706,10 @@ FToolResult ClaireonTool_BehaviorTreeEdit::Operation_AddDecorator(const FString&
 	Data->FocusedNodeGuid = DecoratorGraphNode->NodeGuid;
 	Data->LastOperationStatus = FString::Printf(TEXT("add_decorator â Added %s to {%s}"),
 		*DecoratorClassName, *NodeGuid.ToString(EGuidFormats::DigitsWithHyphensLower));
+	if (!DecoratorNameResult.ResolutionNote.IsEmpty())
+	{
+		Data->LastOperationStatus += FString::Printf(TEXT(" [note: %s]"), *DecoratorNameResult.ResolutionNote);
+	}
 
 	return BuildStateResponse(SessionId, Data);
 }
@@ -785,10 +796,11 @@ FToolResult ClaireonTool_BehaviorTreeEdit::Operation_AddService(const FString& S
 		return MakeErrorResult(FString::Printf(TEXT("Node not found: %s"), *NodeGuid.ToString(EGuidFormats::DigitsWithHyphensLower)));
 	}
 
-	UClass* ServiceClass = ClaireonBehaviorTreeHelpers::ResolveBTNodeClass(ServiceClassName, Error);
+	ClaireonNameResolver::FNameResolveResult ServiceNameResult;
+	UClass* ServiceClass = ClaireonNameResolver::ResolveClassName(ServiceClassName, UBTService::StaticClass(), ServiceNameResult);
 	if (!ServiceClass)
 	{
-		return MakeErrorResult(Error);
+		return MakeErrorResult(ServiceNameResult.Error);
 	}
 
 	if (!ServiceClass->IsChildOf(UBTService::StaticClass()))
@@ -809,6 +821,10 @@ FToolResult ClaireonTool_BehaviorTreeEdit::Operation_AddService(const FString& S
 	Data->FocusedNodeGuid = ServiceGraphNode->NodeGuid;
 	Data->LastOperationStatus = FString::Printf(TEXT("add_service â Added %s to {%s}"),
 		*ServiceClassName, *NodeGuid.ToString(EGuidFormats::DigitsWithHyphensLower));
+	if (!ServiceNameResult.ResolutionNote.IsEmpty())
+	{
+		Data->LastOperationStatus += FString::Printf(TEXT(" [note: %s]"), *ServiceNameResult.ResolutionNote);
+	}
 
 	return BuildStateResponse(SessionId, Data);
 }

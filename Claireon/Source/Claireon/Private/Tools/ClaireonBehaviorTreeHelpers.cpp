@@ -547,48 +547,6 @@ UBehaviorTreeGraphNode_Root* ClaireonBehaviorTreeHelpers::FindRootGraphNode(UBeh
 	return nullptr;
 }
 
-UClass* ClaireonBehaviorTreeHelpers::ResolveBTNodeClass(const FString& ClassName, FString& OutError)
-{
-	// Try exact name first
-	UClass* FoundClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
-	if (FoundClass)
-	{
-		return FoundClass;
-	}
-
-	// Try with common prefixes
-	static const TArray<FString> Prefixes = {
-		TEXT("BTComposite_"),
-		TEXT("BTTask_"),
-		TEXT("BTDecorator_"),
-		TEXT("BTService_"),
-	};
-
-	for (const FString& Prefix : Prefixes)
-	{
-		FString PrefixedName = Prefix + ClassName;
-		FoundClass = FindFirstObject<UClass>(*PrefixedName, EFindFirstObjectOptions::NativeFirst);
-		if (FoundClass)
-		{
-			return FoundClass;
-		}
-	}
-
-	// Try with U prefix (e.g., "UBTTask_Wait")
-	if (ClassName.StartsWith(TEXT("U")))
-	{
-		FString WithoutU = ClassName.Mid(1);
-		FoundClass = FindFirstObject<UClass>(*WithoutU, EFindFirstObjectOptions::NativeFirst);
-		if (FoundClass)
-		{
-			return FoundClass;
-		}
-	}
-
-	OutError = FString::Printf(TEXT("Could not resolve BT node class: %s. Try using the full class name (e.g., BTTask_Wait, BTComposite_Selector, BTDecorator_Blackboard, BTService_DefaultFocus)"), *ClassName);
-	return nullptr;
-}
-
 UBehaviorTreeGraphNode* ClaireonBehaviorTreeHelpers::CreateGraphNodeForClass(UBehaviorTreeGraph* Graph, UClass* NodeClass, FVector2D Position, FString& OutError)
 {
 	if (!Graph || !NodeClass)

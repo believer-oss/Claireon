@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "ClaireonWidgetHelpers.h"
+#include "ClaireonNameResolver.h"
 #include "ClaireonLog.h"
 #include "Blueprint/WidgetTree.h"
 #include "Blueprint/UserWidget.h"
@@ -272,36 +273,15 @@ UClass* ClaireonWidgetHelpers::ResolveWidgetClass(const FString& WidgetClassStr,
 		}
 	}
 
-	// Stage 2: Native class lookup by name
+	// Stage 2: Native class lookup by name (using ClaireonNameResolver)
 	if (!Result)
 	{
-		// Try direct name
-		Result = FindFirstObject<UClass>(*WidgetClassStr, EFindFirstObjectOptions::NativeFirst);
-
-		// Try with 'U' prefix (e.g., "TextBlock" -> "UTextBlock")
-		if (!Result)
-		{
-			FString WithPrefix = TEXT("U") + WidgetClassStr;
-			Result = FindFirstObject<UClass>(*WithPrefix, EFindFirstObjectOptions::NativeFirst);
-		}
-
-		// Try common UMG module path
-		if (!Result)
-		{
-			FString ScriptPath = FString::Printf(TEXT("/Script/UMG.%s"), *WidgetClassStr);
-			Result = FindFirstObject<UClass>(*ScriptPath, EFindFirstObjectOptions::NativeFirst);
-		}
+		ClaireonNameResolver::FNameResolveResult NameResult;
+		Result = ClaireonNameResolver::ResolveClassName(WidgetClassStr, UWidget::StaticClass(), NameResult);
 	}
 
-	// Stage 3: Validate it is a UWidget subclass
 	if (Result)
 	{
-		if (!Result->IsChildOf(UWidget::StaticClass()))
-		{
-			OutError = FString::Printf(TEXT("Class '%s' is not a UWidget subclass (actual: %s)"),
-				*WidgetClassStr, *Result->GetPathName());
-			return nullptr;
-		}
 		return Result;
 	}
 

@@ -46,9 +46,6 @@ namespace ClaireonBehaviorTreeHelpers
 	/** Find the root graph node. */
 	UBehaviorTreeGraphNode_Root* FindRootGraphNode(UBehaviorTreeGraph* Graph);
 
-	/** Resolve a BT node class name — tries exact match, then BTComposite_/BTTask_/BTDecorator_/BTService_ prefixes. */
-	UClass* ResolveBTNodeClass(const FString& ClassName, FString& OutError);
-
 	/** Create a new graph node for a given BT node class and add it to the graph. */
 	UBehaviorTreeGraphNode* CreateGraphNodeForClass(UBehaviorTreeGraph* Graph, UClass* NodeClass, FVector2D Position, FString& OutError);
 
