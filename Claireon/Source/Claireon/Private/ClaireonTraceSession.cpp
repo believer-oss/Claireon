@@ -5,6 +5,7 @@
 #include "ClaireonLog.h"
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
+#include "Modules/ModuleManager.h"
 #include "TraceServices/ITraceServicesModule.h"
 #include "TraceServices/AnalysisService.h"
 #include "TraceServices/Model/AnalysisSession.h"

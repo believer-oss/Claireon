@@ -22,6 +22,7 @@
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/SBoxPanel.h"
 #include "HAL/PlatformProcess.h"
+#include "Async/Async.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"

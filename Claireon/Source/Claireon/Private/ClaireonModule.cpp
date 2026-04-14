@@ -196,6 +196,11 @@
 #include "Tools/ClaireonTool_AnimGraphGetTransition.h"
 #include "Tools/ClaireonTool_AnimGraphAnalyze.h"
 
+// Blueprint-to-C++ translation tools
+#include "Tools/ClaireonTool_BlueprintTranslateScaffold.h"
+#include "Tools/ClaireonTool_BlueprintTranslateImplement.h"
+#include "Tools/ClaireonTool_BlueprintTranslateStatus.h"
+
 DEFINE_LOG_CATEGORY(LogClaireon);
 
 // Define the static FeatureName for IClaireonToolProvider
@@ -455,6 +460,11 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_AnimGraphGetStateMachine>());
 	Tools.Add(MakeShared<ClaireonTool_AnimGraphGetTransition>());
 	Tools.Add(MakeShared<ClaireonTool_AnimGraphAnalyze>());
+
+	// Blueprint-to-C++ translation tools
+	Tools.Add(MakeShared<ClaireonTool_BlueprintTranslateScaffold>());
+	Tools.Add(MakeShared<ClaireonTool_BlueprintTranslateImplement>());
+	Tools.Add(MakeShared<ClaireonTool_BlueprintTranslateStatus>());
 
 	return Tools;
 }

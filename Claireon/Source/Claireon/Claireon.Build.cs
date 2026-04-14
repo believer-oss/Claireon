@@ -35,6 +35,7 @@ public class Claireon : ModuleRules
 
 			// Blueprint editing tools dependencies
 			"BlueprintGraph",    // UK2Node, UEdGraphSchema_K2
+			"KismetCompiler",    // UK2Node_MacroInstance::GetMacroGraph(), FKismetEditorUtilities::CompileBlueprint()
 			"Kismet",            // FBlueprintEditor, clipboard utilities
 			"KismetWidgets",     // Blueprint editor widgets
 			"GraphEditor",       // SGraphEditor, graph panel access
