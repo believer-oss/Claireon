@@ -95,6 +95,9 @@ public class Claireon : ModuleRules
 			// PCG Graph tools dependencies
 			"PCG",               // UPCGGraph, UPCGNode, UPCGPin, UPCGEdge, UPCGSettings
 
+			// Enhanced Input tools dependencies
+			"EnhancedInput",     // UInputAction, UInputMappingContext, modifiers, triggers
+
 			// Automation framework dependencies
 			"AutomationController", // IAutomationControllerModule, IAutomationControllerManager (test runner)
 

@@ -158,6 +158,10 @@
 #include "Tools/ClaireonTool_PCGGraphInspect.h"
 #include "Tools/ClaireonTool_PCGGraphEdit.h"
 
+// Enhanced Input MCP tools
+#include "Tools/ClaireonTool_InputInspect.h"
+#include "Tools/ClaireonTool_InputEdit.h"
+
 // Transaction management
 #include "Tools/ClaireonTool_Transaction.h"
 
@@ -337,6 +341,10 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	// PCG Graph MCP tools
 	Tools.Add(MakeShared<ClaireonTool_PCGGraphInspect>());
 	Tools.Add(MakeShared<ClaireonTool_PCGGraphEdit>());
+
+	// Enhanced Input MCP tools
+	Tools.Add(MakeShared<ClaireonTool_InputInspect>());
+	Tools.Add(MakeShared<ClaireonTool_InputEdit>());
 
 	// Session management tools
 	Tools.Add(MakeShared<ClaireonTool_ListSessions>());
