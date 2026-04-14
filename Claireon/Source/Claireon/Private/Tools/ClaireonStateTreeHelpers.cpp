@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonStateTreeHelpers.h"
+#include "ClaireonNameResolver.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonLog.h"
 #include "UObject/UObjectGlobals.h"
@@ -694,10 +695,11 @@ UScriptStruct* ClaireonStateTreeHelpers::ResolveNodeStruct(const FString& Struct
 		return nullptr;
 	}
 
-	UScriptStruct* FoundStruct = FindFirstObject<UScriptStruct>(*StructName, EFindFirstObjectOptions::ExactClass | EFindFirstObjectOptions::NativeFirst);
+	ClaireonNameResolver::FNameResolveResult NameResult;
+	UScriptStruct* FoundStruct = ClaireonNameResolver::ResolveStructName(StructName, NameResult);
 	if (!FoundStruct)
 	{
-		OutError = FString::Printf(TEXT("Could not find struct: %s"), *StructName);
+		OutError = NameResult.Error;
 		return nullptr;
 	}
 

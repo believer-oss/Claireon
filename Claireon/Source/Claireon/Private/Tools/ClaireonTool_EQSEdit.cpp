@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonTool_EQSEdit.h"
 #include "Tools/ClaireonBehaviorTreeHelpers.h"
+#include "ClaireonNameResolver.h"
 #include "ClaireonLog.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSafeExec.h"
@@ -46,30 +47,19 @@ namespace
 
 	UClass* ResolveEQSClass(const FString& ClassName, UClass* BaseClass, const FString& BasePrefix, FString& OutError)
 	{
-		// Try exact name first
-		UClass* FoundClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
-		if (FoundClass && FoundClass->IsChildOf(BaseClass))
+		// Try the core resolver first
+		ClaireonNameResolver::FNameResolveResult NameResult;
+		UClass* FoundClass = ClaireonNameResolver::ResolveClassName(ClassName, BaseClass, NameResult);
+		if (FoundClass)
 		{
 			return FoundClass;
 		}
 
-		// Try with prefix
-		FString PrefixedName = BasePrefix + ClassName;
-		FoundClass = FindFirstObject<UClass>(*PrefixedName, EFindFirstObjectOptions::NativeFirst);
-		if (FoundClass && FoundClass->IsChildOf(BaseClass))
+		// Try with domain-specific prefix (e.g., "EnvQueryGenerator_" + "SimpleGrid")
+		FoundClass = ClaireonNameResolver::ResolveClassName(BasePrefix + ClassName, BaseClass, NameResult);
+		if (FoundClass)
 		{
 			return FoundClass;
-		}
-
-		// Try with U prefix stripped
-		if (ClassName.StartsWith(TEXT("U")))
-		{
-			FString WithoutU = ClassName.Mid(1);
-			FoundClass = FindFirstObject<UClass>(*WithoutU, EFindFirstObjectOptions::NativeFirst);
-			if (FoundClass && FoundClass->IsChildOf(BaseClass))
-			{
-				return FoundClass;
-			}
 		}
 
 		OutError = FString::Printf(TEXT("Could not resolve EQS class: %s (expected subclass of %s)"), *ClassName, *BaseClass->GetName());

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonPCGGraphHelpers.h"
+#include "ClaireonNameResolver.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonLog.h"
 #include "UObject/UObjectGlobals.h"
@@ -181,18 +182,9 @@ UClass* ClaireonPCGGraphHelpers::ResolveSettingsClass(const FString& ClassName, 
 
 	for (const FString& Candidate : Candidates)
 	{
-		UClass* FoundClass = UClass::TryFindTypeSlow<UClass>(Candidate);
-		if (FoundClass && FoundClass->IsChildOf(UPCGSettings::StaticClass()))
-		{
-			return FoundClass;
-		}
-	}
-
-	// Try FindFirstObject as fallback
-	for (const FString& Candidate : Candidates)
-	{
-		UClass* FoundClass = FindFirstObject<UClass>(*Candidate, EFindFirstObjectOptions::ExactClass | EFindFirstObjectOptions::NativeFirst);
-		if (FoundClass && FoundClass->IsChildOf(UPCGSettings::StaticClass()))
+		ClaireonNameResolver::FNameResolveResult NameResult;
+		UClass* FoundClass = ClaireonNameResolver::ResolveClassName(Candidate, UPCGSettings::StaticClass(), NameResult);
+		if (FoundClass)
 		{
 			return FoundClass;
 		}

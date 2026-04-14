@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_EditWidgetBP.h"
+#include "ClaireonNameResolver.h"
 #include "ClaireonLog.h"
 #include "ClaireonSafeExec.h"
 #include "ClaireonWidgetHelpers.h"
@@ -513,7 +514,8 @@ FToolResult ClaireonTool_EditWidgetBP::Operation_Create(const TSharedPtr<FJsonOb
 	}
 
 	// Resolve parent class â must be a subclass of UUserWidget
-	UClass* ParentClass = FindFirstObject<UClass>(*ParentClassName);
+	ClaireonNameResolver::FNameResolveResult ParentClassResult;
+	UClass* ParentClass = ClaireonNameResolver::ResolveClassName(ParentClassName, nullptr, ParentClassResult);
 	if (!ParentClass)
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Parent class '%s' not found"), *ParentClassName));
@@ -1925,15 +1927,12 @@ static const UFunction* ResolveConversionFunction(
 	FString ClassName, FuncName;
 	if (FunctionNameStr.Split(TEXT("::"), &ClassName, &FuncName))
 	{
-		// Strip leading 'U' if present for class lookup
-		UClass* FoundClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
-		if (!FoundClass && ClassName.StartsWith(TEXT("U")))
-		{
-			FoundClass = FindFirstObject<UClass>(*ClassName.Mid(1), EFindFirstObjectOptions::NativeFirst);
-		}
+		ClaireonNameResolver::FNameResolveResult ClassResult;
+		UClass* FoundClass = ClaireonNameResolver::ResolveClassName(ClassName, nullptr, ClassResult);
 		if (FoundClass)
 		{
-			Func = FoundClass->FindFunctionByName(FName(*FuncName));
+			ClaireonNameResolver::FNameResolveResult FuncResult;
+			Func = ClaireonNameResolver::ResolveFunctionName(FoundClass, FuncName, FuncResult);
 			if (Func)
 			{
 				if (UMVVMBlueprintViewConversionFunction::IsValidConversionFunction(WBP, Func))
@@ -1949,7 +1948,8 @@ static const UFunction* ResolveConversionFunction(
 	// 3. Self-context: search WBP generated class hierarchy
 	if (WBP->GeneratedClass)
 	{
-		Func = WBP->GeneratedClass->FindFunctionByName(FName(*FunctionNameStr));
+		ClaireonNameResolver::FNameResolveResult SelfFuncResult;
+		Func = ClaireonNameResolver::ResolveFunctionName(WBP->GeneratedClass, FunctionNameStr, SelfFuncResult);
 		if (Func)
 		{
 			if (UMVVMBlueprintViewConversionFunction::IsValidConversionFunction(WBP, Func))
@@ -2008,15 +2008,12 @@ FToolResult ClaireonTool_EditWidgetBP::Operation_AddMVVMViewModel(const FString&
 	}
 
 	// Resolve viewmodel class
-	UClass* VMClass = FindFirstObject<UClass>(*ViewModelClassStr, EFindFirstObjectOptions::NativeFirst);
+	ClaireonNameResolver::FNameResolveResult VMClassResult;
+	UClass* VMClass = ClaireonNameResolver::ResolveClassName(ViewModelClassStr, UMVVMViewModelBase::StaticClass(), VMClassResult);
 	if (!VMClass)
 	{
+		// Fall back to LoadClass for asset paths
 		VMClass = LoadClass<UMVVMViewModelBase>(nullptr, *ViewModelClassStr);
-	}
-	if (!VMClass)
-	{
-		// Try with 'U' prefix
-		VMClass = FindFirstObject<UClass>(*FString::Printf(TEXT("U%s"), *ViewModelClassStr), EFindFirstObjectOptions::NativeFirst);
 	}
 	if (!VMClass || !VMClass->IsChildOf(UMVVMViewModelBase::StaticClass()))
 	{

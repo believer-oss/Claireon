@@ -276,9 +276,6 @@ namespace ClaireonBlueprintHelpers
 	/** Format a list of available pins on a node for error messages. */
 	FString FormatAvailablePins(UEdGraphNode* Node);
 
-	/** Find the closest matching pin name on a node using simple string similarity. Returns empty string if no close match. */
-	FString FindClosestPinName(UEdGraphNode* Node, const FString& SearchName);
-
 	/** Find nodes by class name and/or title. Used for stale GUID recovery. */
 	TArray<UEdGraphNode*> FindNodesByClassAndTitle(UEdGraph* Graph, const FString& ClassName, const FString& Title);
 } // namespace ClaireonBlueprintHelpers

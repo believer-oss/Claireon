@@ -129,14 +129,4 @@ namespace ClaireonAnimHelpers
 	/** Set the next-section link for combo chains. */
 	bool SetMontageSectionLink(UAnimMontage* Montage, const FString& SectionName, const FString& NextSectionName, FString& OutError);
 
-	// ========================================================================
-	// Class Resolution Helpers
-	// ========================================================================
-
-	/** Resolve a modifier class name to UClass*. */
-	UClass* ResolveModifierClass(const FString& ClassName, FString& OutError);
-
-	/** Resolve a metadata class name to UClass*. */
-	UClass* ResolveMetaDataClass(const FString& ClassName, FString& OutError);
-
 } // namespace ClaireonAnimHelpers

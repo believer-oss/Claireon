@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "ClaireonBlueprintHelpers.h"
+#include "ClaireonNameResolver.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonLog.h"
 #include "Engine/Blueprint.h"
@@ -443,7 +444,8 @@ namespace ClaireonBlueprintHelpers
 		else
 		{
 			// Try to find as UClass
-			UClass* Class = FindFirstObject<UClass>(*TypeString, EFindFirstObjectOptions::NativeFirst);
+			ClaireonNameResolver::FNameResolveResult ClassResult;
+			UClass* Class = ClaireonNameResolver::ResolveClassName(TypeString, nullptr, ClassResult);
 			if (Class)
 			{
 				PinType.PinCategory = UEdGraphSchema_K2::PC_Object;
@@ -452,7 +454,8 @@ namespace ClaireonBlueprintHelpers
 			else
 			{
 				// Try to find as UScriptStruct
-				UScriptStruct* Struct = FindFirstObject<UScriptStruct>(*TypeString, EFindFirstObjectOptions::NativeFirst);
+				ClaireonNameResolver::FNameResolveResult StructResult;
+				UScriptStruct* Struct = ClaireonNameResolver::ResolveStructName(TypeString, StructResult);
 				if (Struct)
 				{
 					PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
@@ -461,7 +464,8 @@ namespace ClaireonBlueprintHelpers
 				else
 				{
 					// Try to find as UEnum
-					UEnum* Enum = FindFirstObject<UEnum>(*TypeString, EFindFirstObjectOptions::NativeFirst);
+					ClaireonNameResolver::FNameResolveResult EnumResult;
+					UEnum* Enum = ClaireonNameResolver::ResolveEnumName(TypeString, EnumResult);
 					if (Enum)
 					{
 						PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
@@ -600,39 +604,6 @@ namespace ClaireonBlueprintHelpers
 			Result += FString::Printf(TEXT("  %s (%s)\n"), *Pin->GetName(), *Direction);
 		}
 		return Result;
-	}
-
-	FString FindClosestPinName(UEdGraphNode* Node, const FString& SearchName)
-	{
-		if (!Node)
-			return TEXT("");
-
-		FString SearchLower = SearchName.ToLower();
-		FString BestMatch;
-		int32 BestScore = 0; // 3=exact, 2=substring, 1=prefix
-
-		for (UEdGraphPin* Pin : Node->Pins)
-		{
-			if (!Pin)
-				continue;
-			FString PinLower = Pin->GetName().ToLower();
-
-			if (PinLower == SearchLower)
-			{
-				return Pin->GetName(); // Exact case-insensitive match
-			}
-			if (BestScore < 2 && PinLower.Contains(SearchLower))
-			{
-				BestMatch = Pin->GetName();
-				BestScore = 2;
-			}
-			else if (BestScore < 1 && PinLower.StartsWith(SearchLower))
-			{
-				BestMatch = Pin->GetName();
-				BestScore = 1;
-			}
-		}
-		return BestMatch;
 	}
 
 	TArray<UEdGraphNode*> FindNodesByClassAndTitle(UEdGraph* Graph, const FString& ClassName, const FString& Title)
