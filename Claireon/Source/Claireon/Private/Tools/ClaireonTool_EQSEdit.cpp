@@ -15,6 +15,9 @@
 #include "UObject/Package.h"
 #include "FileHelpers.h"
 #include "Misc/Guid.h"
+#include "Misc/Paths.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "Misc/PackageName.h"
 
 using FToolResult = IClaireonTool::FToolResult;
 
@@ -130,7 +133,7 @@ FString ClaireonTool_EQSEdit::GetFullDescription() const
 {
 	return TEXT("Session-based EQS Query editor. Supports adding/removing options, generators, tests, "
 				"property editing, test reordering, and saving.\n\n"
-				"Session operations: open, close, status\n"
+				"Session operations: open, create_new, close, status\n"
 				"Option operations: add_option, remove_option, set_generator\n"
 				"Test operations: add_test, remove_test, reorder_tests\n"
 				"Property operations: set_node_property\n"
@@ -151,6 +154,7 @@ TSharedPtr<FJsonObject> ClaireonTool_EQSEdit::GetInputSchema() const
 	{
 		TArray<TSharedPtr<FJsonValue>> EnumValues;
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("open")));
+		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("create_new")));
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("close")));
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("status")));
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("add_option")));
@@ -222,6 +226,8 @@ FToolResult ClaireonTool_EQSEdit::Execute(const TSharedPtr<FJsonObject>& Argumen
 	// Operations that don't need a session
 	if (Operation == TEXT("open"))
 		return Operation_Open(Params);
+	if (Operation == TEXT("create_new"))
+		return Operation_CreateNew(Params);
 
 	// All other operations require session_id
 	FString SessionId;
@@ -372,6 +378,93 @@ FToolResult ClaireonTool_EQSEdit::Operation_Open(const TSharedPtr<FJsonObject>& 
 	OpenData->SetStringField(TEXT("structure"), StructureText);
 
 	return MakeSuccessResult(OpenData, FString::Printf(TEXT("Opened session for %s"), *FPaths::GetBaseFilename(AssetPath)));
+}
+
+FToolResult ClaireonTool_EQSEdit::Operation_CreateNew(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("'create_new' requires params.asset_path"));
+	}
+
+	// Resolve path to canonical form
+	auto ResolveResult = ClaireonPathResolver::Resolve(AssetPath);
+	if (!ResolveResult.bSuccess)
+	{
+		return MakeErrorResult(ResolveResult.Error);
+	}
+	AssetPath = ResolveResult.ResolvedPath.Path;
+
+	// Check that asset does not already exist
+	FSoftObjectPath SoftPath(AssetPath);
+	if (SoftPath.TryLoad())
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Asset already exists at path: %s. Use 'open' instead."), *AssetPath));
+	}
+
+	// Create the package and asset
+	FString PackageName = FPackageName::ObjectPathToPackageName(AssetPath);
+	FString AssetName = FPackageName::GetShortName(AssetPath);
+
+	UPackage* Package = CreatePackage(*PackageName);
+	if (!Package)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Failed to create package: %s"), *PackageName));
+	}
+
+	UEnvQuery* Query = NewObject<UEnvQuery>(Package, *AssetName, RF_Public | RF_Standalone);
+	if (!Query)
+	{
+		return MakeErrorResult(TEXT("Failed to create EQS Query"));
+	}
+
+	// Save the new asset
+	Package->SetDirtyFlag(true);
+	TArray<UPackage*> PackagesToSave;
+	PackagesToSave.Add(Package);
+	if (ClaireonSafeExec::DidLastExecutionCrash())
+	{
+		return MakeErrorResult(TEXT("Save blocked: editor state may be corrupted after a previous crash. Restart the editor."));
+	}
+	UEditorLoadingAndSavingUtils::SavePackages(PackagesToSave, true);
+
+	// Register with asset registry
+	FAssetRegistryModule::AssetCreated(Query);
+
+	// Register delegate if not done yet
+	if (!bDelegateRegistered)
+	{
+		FClaireonSessionManager::Get().OnSessionClosed().AddStatic(&ClaireonTool_EQSEdit::HandleSessionClosed);
+		bDelegateRegistered = true;
+	}
+
+	// Open a session for the new asset
+	const FString ResolvedAssetPath = Query->GetPathName();
+	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(ResolvedAssetPath, TEXT("claireon.eqs_edit"));
+	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
+	{
+		const FMCPSession& Blocker = OpenResult.BlockingSession.GetValue();
+		return MakeErrorResult(FString::Printf(TEXT("Asset is locked by %s session %s"), *Blocker.ToolName, *Blocker.SessionId));
+	}
+	const FString SessionId = OpenResult.SessionId;
+
+	// Create tool data entry
+	FEQSEditToolData NewData;
+	NewData.Query = Query;
+	NewData.LastOperationStatus = TEXT("Asset created and session opened");
+	ToolData.Add(SessionId, MoveTemp(NewData));
+
+	// Build response
+	FString StructureText = ClaireonBehaviorTreeHelpers::FormatEQSStructure(Query, false);
+
+	TSharedPtr<FJsonObject> ResultJson = MakeShared<FJsonObject>();
+	ResultJson->SetStringField(TEXT("session_id"), SessionId);
+	ResultJson->SetStringField(TEXT("asset_path"), AssetPath);
+	ResultJson->SetStringField(TEXT("status"), TEXT("Asset created and session opened"));
+	ResultJson->SetStringField(TEXT("structure"), StructureText);
+
+	return MakeSuccessResult(ResultJson, FString::Printf(TEXT("Created and opened session for %s"), *FPaths::GetBaseFilename(AssetPath)));
 }
 
 FToolResult ClaireonTool_EQSEdit::Operation_Close(const FString& SessionId, FEQSEditToolData* Data, const TSharedPtr<FJsonObject>& Params)

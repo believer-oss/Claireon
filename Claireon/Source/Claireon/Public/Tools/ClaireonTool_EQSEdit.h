@@ -52,6 +52,7 @@ private:
 
 	// Operations
 	FToolResult Operation_Open(const TSharedPtr<FJsonObject>& Params);
+	FToolResult Operation_CreateNew(const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_Close(const FString& SessionId, FEQSEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_Status(const FString& SessionId, FEQSEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_AddOption(const FString& SessionId, FEQSEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
