@@ -102,6 +102,20 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 			}
 			Xml += TEXT("<summary>\n") + Summary + TEXT("\n</summary>\n");
 
+			// Structured data payload (if the tool produced one).
+			// Without this block the MCP transport only delivers the summary text
+			// to the caller, so tools that return rich Data (e.g. tools_search,
+			// which returns a categories/tools catalog) appear empty on the wire.
+			if (Result.Data.IsValid())
+			{
+				FString DataJson;
+				TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> DataWriter =
+					TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&DataJson);
+				FJsonSerializer::Serialize(Result.Data.ToSharedRef(), DataWriter);
+				DataWriter->Close();
+				Xml += TEXT("<data>\n") + DataJson + TEXT("\n</data>\n");
+			}
+
 			// Warnings
 			for (const FString& Warning : Result.Warnings)
 			{
