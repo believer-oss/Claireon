@@ -42,7 +42,10 @@ FString ClaireonTool_ExecutePython::GetDescription() const
 {
 	return TEXT("Execute Python code in Code Mode with access to the claireon.* bridge. "
 				"The code runs in the Unreal Editor's Python environment with the 'unreal' module "
-				"and all claireon.* wrapper functions available for calling other MCP tools.");
+				"and all claireon.* wrapper functions available for calling other MCP tools. "
+				"Note: 'claireon' is a pre-injected global callable proxy -- do NOT 'import claireon' "
+				"(it is not a module). Call tools as claireon.<tool_name>(...); run dir(claireon) to "
+				"enumerate the available tool attributes.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ExecutePython::GetInputSchema() const
@@ -128,6 +131,21 @@ FString ClaireonTool_ExecutePython::GetPythonPrefix()
 		"        return _json.loads(result_json)\n"
 		"    def __getattr__(self, name):\n"
 		"        return _MCPToolProxy(self._full_name + '.' + name)\n"
+		"    def __dir__(self):\n"
+		"        names = set(object.__dir__(self))\n"
+		"        try:\n"
+		"            _tools_json = _unreal._mcp_call_tool('__list_tools__', '')\n"
+		"            _all_tools = _json.loads(_tools_json) if _tools_json else []\n"
+		"            _prefix = self._full_name + '.'\n"
+		"            for _t in _all_tools:\n"
+		"                if _t.startswith(_prefix):\n"
+		"                    _suffix = _t[len(_prefix):]\n"
+		"                    if '.' in _suffix:\n"
+		"                        _suffix = _suffix.split('.', 1)[0]\n"
+		"                    names.add(_suffix)\n"
+		"        except Exception:\n"
+		"            pass\n"
+		"        return sorted(names)\n"
 		"    def __repr__(self):\n"
 		"        return f'<tool {self._full_name}>'\n"
 		"\n"
