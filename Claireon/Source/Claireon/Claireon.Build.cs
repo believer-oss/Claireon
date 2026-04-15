@@ -101,6 +101,10 @@ public class Claireon : ModuleRules
 			// Automation framework dependencies
 			"AutomationController", // IAutomationControllerModule, IAutomationControllerManager (test runner)
 
+			// Chooser / Proxy Table tools dependencies
+			"Chooser",           // UChooserTable, FChooserColumnBase, FObjectChooserBase
+			"ProxyTable",        // UProxyTable, UProxyAsset, FProxyEntry
+
 		});
 
 		// Untested dependencies (Claireon REPL unit tests) — optional

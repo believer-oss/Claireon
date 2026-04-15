@@ -165,6 +165,15 @@
 // Transaction management
 #include "Tools/ClaireonTool_Transaction.h"
 
+// Chooser / Proxy Table MCP tools
+#include "Tools/ClaireonTool_ChooserInspect.h"
+#include "Tools/ClaireonChooserTools_Lifecycle.h"
+#include "Tools/ClaireonChooserTools_Edit.h"
+#include "Tools/ClaireonTool_ProxyTableInspect.h"
+#include "Tools/ClaireonTool_ProxyAssetInspect.h"
+#include "Tools/ClaireonProxyTools_Lifecycle.h"
+#include "Tools/ClaireonProxyTools_Edit.h"
+
 DEFINE_LOG_CATEGORY(LogClaireon);
 
 // Define the static FeatureName for IClaireonToolProvider
@@ -384,6 +393,31 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_DataTableImportJson>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableExportCsv>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableImportCsv>());
+
+	// Chooser Table MCP tools
+	Tools.Add(MakeShared<ClaireonTool_ChooserInspect>());
+	Tools.Add(MakeShared<ClaireonTool_ChooserCreate>());
+	Tools.Add(MakeShared<ClaireonTool_ChooserDuplicate>());
+	Tools.Add(MakeShared<ClaireonTool_ChooserEdit>());
+	Tools.Add(MakeShared<ClaireonTool_ChooserAddRow>());
+	Tools.Add(MakeShared<ClaireonTool_ChooserRemoveRow>());
+	Tools.Add(MakeShared<ClaireonTool_ChooserSetRowResult>());
+	Tools.Add(MakeShared<ClaireonTool_ChooserSetColumnValue>());
+	Tools.Add(MakeShared<ClaireonTool_ChooserAddColumn>());
+	Tools.Add(MakeShared<ClaireonTool_ChooserRemoveColumn>());
+
+	// Proxy Table / Proxy Asset MCP tools
+	Tools.Add(MakeShared<ClaireonTool_ProxyTableInspect>());
+	Tools.Add(MakeShared<ClaireonTool_ProxyAssetInspect>());
+	Tools.Add(MakeShared<ClaireonTool_ProxyTableCreate>());
+	Tools.Add(MakeShared<ClaireonTool_ProxyTableDuplicate>());
+	Tools.Add(MakeShared<ClaireonTool_ProxyAssetCreate>());
+	Tools.Add(MakeShared<ClaireonTool_ProxyAssetDuplicate>());
+	Tools.Add(MakeShared<ClaireonTool_ProxyTableEdit>());
+	Tools.Add(MakeShared<ClaireonTool_ProxyAssetEdit>());
+	Tools.Add(MakeShared<ClaireonTool_ProxyTableAddEntry>());
+	Tools.Add(MakeShared<ClaireonTool_ProxyTableRemoveEntry>());
+	Tools.Add(MakeShared<ClaireonTool_ProxyTableSetEntryValue>());
 
 	return Tools;
 }
