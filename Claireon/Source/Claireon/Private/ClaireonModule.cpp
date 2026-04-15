@@ -188,6 +188,14 @@
 #include "Tools/ClaireonProxyTools_Lifecycle.h"
 #include "Tools/ClaireonProxyTools_Edit.h"
 
+// Animation Graph inspection MCP tools
+#include "Tools/ClaireonTool_AnimGraphInspect.h"
+#include "Tools/ClaireonTool_AnimGraphGetGraph.h"
+#include "Tools/ClaireonTool_AnimGraphGetNode.h"
+#include "Tools/ClaireonTool_AnimGraphGetStateMachine.h"
+#include "Tools/ClaireonTool_AnimGraphGetTransition.h"
+#include "Tools/ClaireonTool_AnimGraphAnalyze.h"
+
 DEFINE_LOG_CATEGORY(LogClaireon);
 
 // Define the static FeatureName for IClaireonToolProvider
@@ -439,6 +447,14 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_ProxyTableAddEntry>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyTableRemoveEntry>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyTableSetEntryValue>());
+
+	// Animation Graph inspection MCP tools
+	Tools.Add(MakeShared<ClaireonTool_AnimGraphInspect>());
+	Tools.Add(MakeShared<ClaireonTool_AnimGraphGetGraph>());
+	Tools.Add(MakeShared<ClaireonTool_AnimGraphGetNode>());
+	Tools.Add(MakeShared<ClaireonTool_AnimGraphGetStateMachine>());
+	Tools.Add(MakeShared<ClaireonTool_AnimGraphGetTransition>());
+	Tools.Add(MakeShared<ClaireonTool_AnimGraphAnalyze>());
 
 	return Tools;
 }
