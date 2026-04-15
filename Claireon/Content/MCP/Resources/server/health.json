@@ -1,0 +1,6 @@
+{
+  "name": "Server Health",
+  "description": "Server uptime, total request count, error count, active tool count, tool list generation",
+  "mimeType": "text/plain",
+  "text": "Server Health:\n  Uptime: {{server.uptime_hms}}\n  Total Requests: {{server.total_requests}}\n  Errors: {{server.errors}}\n  Active Tools: {{server.active_tools}}\n  Tool List Generation: {{server.tool_list_generation}}"
+}

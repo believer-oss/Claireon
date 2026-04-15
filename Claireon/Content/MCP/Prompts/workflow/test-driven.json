@@ -1,0 +1,5 @@
+{
+  "description": "Workflow: write a test, run it (expect fail), implement, re-run (expect pass)",
+  "role": "user",
+  "text": "Step 1: Write a test assertion that describes the desired behavior\nStep 2: Run the test with claireon.test_run() -- expect it to FAIL\nStep 3: Implement the change that should make the test pass\nStep 4: Run the test again with claireon.test_run() -- expect it to PASS\nStep 5: Run related tests to ensure no regressions"
+}
