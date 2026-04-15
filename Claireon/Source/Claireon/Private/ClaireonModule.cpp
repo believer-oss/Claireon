@@ -5,7 +5,14 @@
 #include "ClaireonLog.h"
 #include "ClaireonPIEManager.h"
 #include "ClaireonRichTextStyle.h"
+#include "ClaireonToolbarStyle.h"
 #include "ClaireonServer.h"
+#include "Widgets/SOverlay.h"
+#include "Widgets/Images/SImage.h"
+#include "Widgets/Input/SButton.h"
+#include "Widgets/Layout/SBox.h"
+#include "Widgets/Text/STextBlock.h"
+#include "Widgets/SToolTip.h"
 #include "ClaireonBridge.h"
 #include "ClaireonDiagnosticsWidget.h"
 #include "ClaireonSettings.h"
@@ -454,6 +461,7 @@ void FClaireonModule::StartupModule()
 	// Manual RegisterSettings was removed — it caused duplicate entries.
 
 	FClaireonRichTextStyle::Initialize();
+	FClaireonToolbarStyle::Initialize();
 
 	UToolMenus::RegisterStartupCallback(FSimpleMulticastDelegate::FDelegate::CreateRaw(this, &FClaireonModule::RegisterMenus));
 
@@ -486,6 +494,7 @@ void FClaireonModule::ShutdownModule()
 
 	FClaireonPIEManager::Get().UnbindEditorDelegates();
 	FClaireonRichTextStyle::Shutdown();
+	FClaireonToolbarStyle::Shutdown();
 
 	// Unsubscribe from modular feature events
 	IModularFeatures::Get().OnModularFeatureRegistered().RemoveAll(this);
@@ -742,16 +751,123 @@ void FClaireonModule::RegisterMenus()
 	FToolMenuSection& Section = Toolbar->AddSection(AIChatSection);
 	Section.AddSeparator(NAME_None);
 
-	FToolMenuEntry AIChatEntry = FToolMenuEntry::InitToolBarButton(
-		TEXT("AIChat"),
-		FUIAction(
-			FExecuteAction::CreateLambda([]()
+	// Status dot color selector: red (stopped), blinking cyan/blue (processing), green (idle running).
+	// A request arriving bumps Server->GetLastRequestTime(); we stay in the blink window for at
+	// least MinDurationSeconds after, so instant requests are still visualized, and a stream of
+	// instant requests keeps the window extended -- the time-based phase toggle continues to
+	// alternate A/B through the stream.
+	auto StatusDotColorLambda = []() -> FSlateColor
+	{
+		FClaireonServer* Server = FClaireonModule::Get().GetServer();
+		if (!Server || !Server->IsRunning())
+		{
+			return FSlateColor(FClaireonToolbarStyle::GetStoppedColor());
+		}
+
+		const double Now = FPlatformTime::Seconds();
+		const double LastRequest = Server->GetLastRequestTime();
+		const double MinDuration = FClaireonToolbarStyle::GetProcessingMinDurationSeconds();
+
+		if (LastRequest > 0.0 && (Now - LastRequest) < MinDuration)
+		{
+			const double HalfPeriod = FClaireonToolbarStyle::GetProcessingBlinkHalfPeriodSeconds();
+			const int32 Phase = static_cast<int32>(Now / HalfPeriod) & 1;
+			return FSlateColor(Phase == 0
+				? FClaireonToolbarStyle::GetProcessingColorA()
+				: FClaireonToolbarStyle::GetProcessingColorB());
+		}
+
+		return FSlateColor(FClaireonToolbarStyle::GetRunningColor());
+	};
+
+	TSharedRef<SButton> AIChatButton = SNew(SButton)
+		.ButtonStyle(FAppStyle::Get(), "SimpleButton")
+		.OnClicked_Lambda([]() -> FReply
 	{
 		FGlobalTabmanager::Get()->TryInvokeTab(SClaireonDiagnosticsWidget::TabId);
-	})),
-		LOCTEXT("AIChatLabel", "AI Chat"), LOCTEXT("AIChatTooltip", "Open the AI Chat assistant (Claude REPL)"), FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Comment")), EUserInterfaceActionType::Button);
+		return FReply::Handled();
+	}).ToolTip(SNew(SToolTip)[SNew(SVerticalBox) + SVerticalBox::Slot().AutoHeight().Padding(2.0f)[SNew(STextBlock).Text_Lambda([]() -> FText
+	{
+		if (FClaireonModule::Get().IsServerRunning())
+		{
+			return INVTEXT("MCP Server: Running");
+		}
+		return INVTEXT("MCP Server: Stopped");
+	}).Font(FCoreStyle::GetDefaultFontStyle("Bold", 10))]
+				+ SVerticalBox::Slot().AutoHeight().Padding(2.0f)[SNew(STextBlock).Text_Lambda([]() -> FText
+	{
+		FClaireonServer* Server = FClaireonModule::Get().GetServer();
+		if (Server && Server->IsRunning())
+		{
+			return FText::FromString(FString::Printf(TEXT("Port: %u"), Server->GetPort()));
+		}
+		return FText::GetEmpty();
+	})] + SVerticalBox::Slot().AutoHeight().Padding(2.0f)[SNew(STextBlock).Text_Lambda([]() -> FText
+	{
+		FClaireonServer* Server = FClaireonModule::Get().GetServer();
+		if (Server && Server->IsRunning())
+		{
+			FTimespan Uptime = FDateTime::Now() - Server->GetStartTime();
+			return FText::FromString(FString::Printf(TEXT("Uptime: %s"),
+				*Uptime.ToString(TEXT("%h:%m:%s"))));
+		}
+		return FText::GetEmpty();
+	})] + SVerticalBox::Slot().AutoHeight().Padding(2.0f)[SNew(STextBlock).Text_Lambda([]() -> FText
+	{
+		FClaireonServer* Server = FClaireonModule::Get().GetServer();
+		if (Server && Server->IsRunning())
+		{
+			return FText::FromString(FString::Printf(TEXT("Requests: %d"),
+				Server->GetTotalRequestCount()));
+		}
+		return FText::GetEmpty();
+	})] + SVerticalBox::Slot().AutoHeight().Padding(2.0f)[SNew(STextBlock).Text_Lambda([]() -> FText
+	{
+		FClaireonServer* Server = FClaireonModule::Get().GetServer();
+		if (Server && Server->IsRunning())
+		{
+			return FText::FromString(FString::Printf(TEXT("Errors: %d"),
+				Server->GetErrorCount()));
+		}
+		return FText::GetEmpty();
+	})]]).ContentPadding(FMargin(4.0f))[SNew(SBox).WidthOverride(16.0f).HeightOverride(16.0f)[SNew(SOverlay) + SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)[SNew(SImage).Image(FAppStyle::GetBrush(TEXT("Icons.Comment"))).DesiredSizeOverride(FVector2D(16.0f, 16.0f))] + SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Bottom)[SNew(SImage).Image(FClaireonToolbarStyle::Get().GetBrush(TEXT("ClaireonToolbar.StatusDot"))).ColorAndOpacity_Lambda(StatusDotColorLambda).DesiredSizeOverride(FVector2D(8.0f, 8.0f))]]];
+
+	// Drive continuous repaint so the ColorAndOpacity_Lambda re-evaluates each frame of the
+	// blink window even when the user isn't hovering the button. Cost is one no-op invalidation
+	// per tick; the lambda itself is the only work per frame.
+	AIChatButton->RegisterActiveTimer(
+		0.05f, // ~20 Hz, well above the 0.15s half-period blink rate
+		FWidgetActiveTimerDelegate::CreateLambda(
+			[](double /*InCurrentTime*/, float /*InDeltaTime*/) -> EActiveTimerReturnType
+		{
+			return EActiveTimerReturnType::Continue;
+		}));
+
+	FToolMenuEntry AIChatEntry = FToolMenuEntry::InitWidget(
+		TEXT("AIChat"),
+		AIChatButton,
+		LOCTEXT("AIChatLabel", "AI Chat"));
 	AIChatEntry.StyleNameOverride = "CalloutToolbar";
 	Section.AddEntry(AIChatEntry);
+
+	// Window > AI Chat menu entry for discoverability
+	{
+		UToolMenu* WindowMenu = UToolMenus::Get()->ExtendMenu(
+			"LevelEditor.MainMenu.Window.General.Miscellaneous");
+		if (WindowMenu)
+		{
+			FToolMenuSection& WindowSection = WindowMenu->FindOrAddSection("WindowLayout");
+			WindowSection.AddMenuEntry(
+				TEXT("AIChat"),
+				LOCTEXT("WindowAIChatLabel", "AI Chat"),
+				LOCTEXT("WindowAIChatTooltip", "Open the AI Chat assistant (Claude REPL)"),
+				FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Comment")),
+				FUIAction(FExecuteAction::CreateLambda([]()
+			{
+				FGlobalTabmanager::Get()->TryInvokeTab(SClaireonDiagnosticsWidget::TabId);
+			})));
+		}
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

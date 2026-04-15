@@ -77,6 +77,14 @@ public:
 	/** Get the server start time */
 	FDateTime GetStartTime() const { return StartTime; }
 
+	/**
+	 * FPlatformTime::Seconds() timestamp of the most recent incoming request.
+	 * Updated at the entry of HandlePostRequest on the game thread. Used by the
+	 * toolbar status dot to drive the "processing" blink animation.
+	 * Returns 0.0 if no request has been received yet.
+	 */
+	double GetLastRequestTime() const { return LastRequestTime; }
+
 	/** Get the registered tools map (for REPL API client). */
 	const TMap<FString, TSharedPtr<IClaireonTool>>& GetTools() const { return Tools; }
 
@@ -174,6 +182,9 @@ private:
 
 	/** When the server started */
 	FDateTime StartTime;
+
+	/** FPlatformTime::Seconds() of the most recent HandlePostRequest entry. Game-thread only. */
+	double LastRequestTime = 0.0;
 
 	/** Whether the user has activated emergency stop (Ctrl+.). */
 	bool bUserStopActive = false;

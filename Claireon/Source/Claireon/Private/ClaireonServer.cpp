@@ -280,6 +280,10 @@ void FClaireonServer::ClearUserStop()
 
 bool FClaireonServer::HandlePostRequest(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete)
 {
+	// Stamp activity time before any work so the toolbar "processing" blink fires
+	// even on instant rejections/failures. HTTP server dispatches on the game thread.
+	LastRequestTime = FPlatformTime::Seconds();
+
 	if (!ValidateRequestHeaders(Request))
 	{
 		TSharedPtr<FJsonObject> ErrorResponse = FMCPJsonRpcResponse::MakeError(
