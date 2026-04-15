@@ -107,7 +107,16 @@ FString ClaireonTool_EditBlueprintGraph::GetDescription() const
 
 FString ClaireonTool_EditBlueprintGraph::GetFullDescription() const
 {
-	return TEXT("Interactively edit a Blueprint graph using a cursor-based model. Each operation returns the updated graph state and cursor position. Start with 'open' to begin a session, then use operations to add nodes, make connections, and navigate. Supports standard Blueprints, Animation Blueprints, Widget Blueprints, and Function Libraries.\n\n"
+	return TEXT("Interactively edit a Blueprint graph using a cursor-based model. Each operation returns the updated graph state and cursor position. Supports standard Blueprints, Animation Blueprints, Widget Blueprints, and Function Libraries.\n\n"
+				"RECOMMENDED WORKFLOW — build graphs incrementally, one node at a time:\n"
+				"  1. 'open' the Blueprint\n"
+				"  2. For EACH node: 'add_node' with auto_connect_from_cursor=true (creates + wires + advances cursor)\n"
+				"     - 'set_pin_value' if defaults needed, 'connect_pins' only for extra data wires\n"
+				"  3. 'save' every 1-3 nodes\n"
+				"  4. After all nodes: use claireon.blueprint_format_graph (separate tool) for layout\n"
+				"  5. 'save', 'compile', 'close'\n"
+				"Do NOT batch-create all nodes then connect them afterward — you will lose track of GUIDs.\n"
+				"For branching: use 'select_pin' to move cursor to the branch point, then continue adding.\n\n"
 				"response_mode parameter (default: \"changed\"):\n"
 				"- \"changed\" — pin-level diff showing only nodes whose connections changed (default, lowest token cost)\n"
 				"- \"full\"    — full graph state (JSON + T3D), same as original behavior\n"
