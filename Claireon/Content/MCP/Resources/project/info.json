@@ -1,0 +1,6 @@
+{
+  "name": "Project Info",
+  "description": "Project name, engine version, loaded map, module count",
+  "mimeType": "text/plain",
+  "text": "Project: {{project.name}}\nEngine Version: {{project.engine_version}}\nCurrent Map: {{project.current_map}}\nLoaded Modules: {{project.module_count}}"
+}

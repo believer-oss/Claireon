@@ -15,14 +15,17 @@
 #include "HttpServerModule.h"
 #include "IHttpRouter.h"
 #include "HttpServerResponse.h"
+#include "Interfaces/IPluginManager.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "Serialization/JsonReader.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
 #include "TimerManager.h"
 #include "Editor.h"
+#include "Misc/App.h"
 #include "ClaireonSettings.h"
 #include "ClaireonXmlFormatter.h"
 #include "Tools/ClaireonTool_Transaction.h"
@@ -126,6 +129,8 @@ bool FClaireonServer::Start(uint32 Port)
 	TotalRequestCount = 0;
 	ErrorCount = 0;
 	StartTime = FDateTime::Now();
+
+	LoadMCPContent();
 
 	WritePortFile();
 
@@ -426,6 +431,26 @@ TSharedPtr<FJsonObject> FClaireonServer::DispatchRequest(const FMCPRequestContex
 	{
 		return HandlePing(Context);
 	}
+	else if (Method == TEXT("prompts/list"))
+	{
+		return HandlePromptsList(Context);
+	}
+	else if (Method == TEXT("prompts/get"))
+	{
+		return HandlePromptsGet(Context);
+	}
+	else if (Method == TEXT("resources/list"))
+	{
+		return HandleResourcesList(Context);
+	}
+	else if (Method == TEXT("resources/read"))
+	{
+		return HandleResourcesRead(Context);
+	}
+	else if (Method == TEXT("resources/templates/list"))
+	{
+		return HandleResourceTemplatesList(Context);
+	}
 
 	return FMCPJsonRpcResponse::MakeError(Id, FMCPJsonRpcResponse::MethodNotFound,
 		FString::Printf(TEXT("Unknown method: %s"), *Method));
@@ -437,8 +462,17 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleInitialize(const FMCPRequestConte
 	TSharedPtr<FJsonObject> ToolsCap = MakeShared<FJsonObject>();
 	ToolsCap->SetBoolField(TEXT("listChanged"), true);
 
+	TSharedPtr<FJsonObject> PromptsCap = MakeShared<FJsonObject>();
+	PromptsCap->SetBoolField(TEXT("listChanged"), false);
+
+	TSharedPtr<FJsonObject> ResourcesCap = MakeShared<FJsonObject>();
+	ResourcesCap->SetBoolField(TEXT("subscribe"), false);
+	ResourcesCap->SetBoolField(TEXT("listChanged"), false);
+
 	TSharedPtr<FJsonObject> Capabilities = MakeShared<FJsonObject>();
 	Capabilities->SetObjectField(TEXT("tools"), ToolsCap);
+	Capabilities->SetObjectField(TEXT("prompts"), PromptsCap);
+	Capabilities->SetObjectField(TEXT("resources"), ResourcesCap);
 
 	// Build server info
 	TSharedPtr<FJsonObject> ServerInfo = MakeShared<FJsonObject>();
@@ -490,11 +524,10 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsList(const FMCPRequestContex
 
 		if (VisibleToolName == TEXT("claireon.python_execute"))
 		{
-			// Build description with lightweight category summary for the execute tool
-			FString CategorySummary = FClaireonXmlFormatter::GenerateCategorySummary(Tools);
-			FString Description = TEXT("Run Python code with claireon.* namespace for Unreal Editor automation.\n\n");
-			Description += CategorySummary;
-			ToolObj->SetStringField(TEXT("description"), Description);
+			ToolObj->SetStringField(TEXT("description"),
+				TEXT("Run Python code with claireon.* namespace for Unreal Editor automation. "
+				     "Call claireon.tools_search('keyword') to discover tools by keyword, "
+				     "or claireon.tools_search() with no arguments to list all categories."));
 		}
 		else
 		{
@@ -948,7 +981,493 @@ void FClaireonServer::AddDiagnosticsEntry(FMCPDiagnosticsEntry&& Entry)
 	OnDiagnosticsEntryAdded.Broadcast(DiagnosticsEntries.Last());
 }
 
+TSharedPtr<FJsonObject> FClaireonServer::HandlePromptsList(const FMCPRequestContext& Context)
+{
+	TArray<TSharedPtr<FJsonValue>> PromptArray;
+
+	// 1. File-backed prompts loaded from Content/MCP/Prompts/. Sorted for stable output.
+	{
+		TArray<FString> SortedNames;
+		LoadedPrompts.GetKeys(SortedNames);
+		SortedNames.Sort();
+
+		for (const FString& Name : SortedNames)
+		{
+			const FPromptTemplate& Tmpl = LoadedPrompts[Name];
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("name"), Name);
+			Entry->SetStringField(TEXT("description"), Tmpl.Description);
+			PromptArray.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+	}
+
+	// 2. Dynamic prompts generated from the live tool registry: one per tool category.
+	//    These are not file-backed because they enumerate runtime registrations.
+	{
+		TSet<FString> Categories;
+		for (const auto& Pair : Tools)
+		{
+			if (Pair.Value.IsValid())
+			{
+				FString Category = Pair.Value->GetCategory();
+				if (Category != TEXT("all"))
+				{
+					Categories.Add(Category);
+				}
+			}
+		}
+
+		TArray<FString> SortedCategories = Categories.Array();
+		SortedCategories.Sort();
+
+		for (const FString& Category : SortedCategories)
+		{
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("name"), FString::Printf(TEXT("domain/%s"), *Category));
+			Entry->SetStringField(TEXT("description"), FString::Printf(TEXT("Tools and type signatures for the %s category"), *Category));
+			PromptArray.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetArrayField(TEXT("prompts"), PromptArray);
+	return FMCPJsonRpcResponse::MakeResult(Context.Request.Id, Result);
+}
+
+TSharedPtr<FJsonObject> FClaireonServer::HandlePromptsGet(const FMCPRequestContext& Context)
+{
+	if (!Context.Request.Params.IsValid() || !Context.Request.Params->HasField(TEXT("name")))
+	{
+		return FMCPJsonRpcResponse::MakeError(Context.Request.Id, FMCPJsonRpcResponse::InvalidParams,
+			TEXT("Missing required parameter: name"));
+	}
+
+	FString Name = Context.Request.Params->GetStringField(TEXT("name"));
+	FString PromptDescription;
+	FString PromptText;
+	FString PromptRole = TEXT("user");
+
+	// 1. File-backed prompts (static text with {{placeholder}} substitution).
+	if (const FPromptTemplate* Tmpl = LoadedPrompts.Find(Name))
+	{
+		PromptDescription = Tmpl->Description;
+		PromptRole = Tmpl->Role;
+		PromptText = SubstitutePlaceholders(Tmpl->TextTemplate, BuildRuntimeVariables());
+	}
+	// 2. Dynamic domain/{category}: enumerate the tool registry.
+	else if (Name.StartsWith(TEXT("domain/")))
+	{
+		FString Category = Name.Mid(7);
+		PromptDescription = FString::Printf(TEXT("Tools and type signatures for the %s category"), *Category);
+
+		FString ToolListing;
+		int32 MatchCount = 0;
+		for (const auto& Pair : Tools)
+		{
+			if (Pair.Value.IsValid() && Pair.Value->GetCategory() == Category)
+			{
+				FString TypeSig = FClaireonXmlFormatter::GenerateTypeSignature(Pair.Value->GetName(), Pair.Value->GetInputSchema());
+				ToolListing += FString::Printf(TEXT("%s\n  %s\n  %s\n"),
+					*Pair.Value->GetName(), *Pair.Value->GetBriefDescription(), *TypeSig);
+				++MatchCount;
+			}
+		}
+
+		if (MatchCount == 0)
+		{
+			return FMCPJsonRpcResponse::MakeError(Context.Request.Id, FMCPJsonRpcResponse::InvalidParams,
+				FString::Printf(TEXT("Unknown prompt: domain/%s"), *Category));
+		}
+
+		PromptText = ToolListing;
+	}
+	else
+	{
+		return FMCPJsonRpcResponse::MakeError(Context.Request.Id, FMCPJsonRpcResponse::InvalidParams,
+			FString::Printf(TEXT("Unknown prompt: %s"), *Name));
+	}
+
+	// Build MCP prompt response
+	TSharedPtr<FJsonObject> Content = MakeShared<FJsonObject>();
+	Content->SetStringField(TEXT("type"), TEXT("text"));
+	Content->SetStringField(TEXT("text"), PromptText);
+
+	TSharedPtr<FJsonObject> Message = MakeShared<FJsonObject>();
+	Message->SetStringField(TEXT("role"), PromptRole);
+	Message->SetObjectField(TEXT("content"), Content);
+
+	TArray<TSharedPtr<FJsonValue>> Messages;
+	Messages.Add(MakeShared<FJsonValueObject>(Message));
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("description"), PromptDescription);
+	Result->SetArrayField(TEXT("messages"), Messages);
+
+	return FMCPJsonRpcResponse::MakeResult(Context.Request.Id, Result);
+}
+
+TSharedPtr<FJsonObject> FClaireonServer::HandleResourcesList(const FMCPRequestContext& Context)
+{
+	TArray<TSharedPtr<FJsonValue>> ResourceArray;
+
+	// 1. File-backed resources loaded from Content/MCP/Resources/. Sorted for stable output.
+	{
+		TArray<FString> SortedUris;
+		LoadedResources.GetKeys(SortedUris);
+		SortedUris.Sort();
+
+		for (const FString& Uri : SortedUris)
+		{
+			const FResourceTemplate& Tmpl = LoadedResources[Uri];
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("uri"), Uri);
+			Entry->SetStringField(TEXT("name"), Tmpl.Name);
+			Entry->SetStringField(TEXT("description"), Tmpl.Description);
+			Entry->SetStringField(TEXT("mimeType"), Tmpl.MimeType);
+			ResourceArray.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+	}
+
+	// 2. Dynamic resources generated from the live tool registry.
+	{
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("uri"), TEXT("claireon://tools/all"));
+		Entry->SetStringField(TEXT("name"), TEXT("All Tools"));
+		Entry->SetStringField(TEXT("description"), TEXT("Full tool catalog: all tools, all categories, brief descriptions"));
+		Entry->SetStringField(TEXT("mimeType"), TEXT("text/plain"));
+		ResourceArray.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetArrayField(TEXT("resources"), ResourceArray);
+	return FMCPJsonRpcResponse::MakeResult(Context.Request.Id, Result);
+}
+
+TSharedPtr<FJsonObject> FClaireonServer::HandleResourcesRead(const FMCPRequestContext& Context)
+{
+	if (!Context.Request.Params.IsValid() || !Context.Request.Params->HasField(TEXT("uri")))
+	{
+		return FMCPJsonRpcResponse::MakeError(Context.Request.Id, FMCPJsonRpcResponse::InvalidParams,
+			TEXT("Missing required parameter: uri"));
+	}
+
+	FString Uri = Context.Request.Params->GetStringField(TEXT("uri"));
+	FString ContentText;
+	FString MimeType = TEXT("text/plain");
+
+	// 1. File-backed resources (static text with {{placeholder}} substitution).
+	if (const FResourceTemplate* Tmpl = LoadedResources.Find(Uri))
+	{
+		MimeType = Tmpl->MimeType;
+		ContentText = SubstitutePlaceholders(Tmpl->TextTemplate, BuildRuntimeVariables());
+	}
+	// 2. Dynamic claireon://tools/all: enumerate the full tool registry grouped by category.
+	else if (Uri == TEXT("claireon://tools/all"))
+	{
+		TMap<FString, TArray<TSharedPtr<IClaireonTool>>> GroupedTools;
+		for (const auto& Pair : Tools)
+		{
+			if (Pair.Value.IsValid())
+			{
+				GroupedTools.FindOrAdd(Pair.Value->GetCategory()).Add(Pair.Value);
+			}
+		}
+
+		TArray<FString> SortedCategories;
+		GroupedTools.GetKeys(SortedCategories);
+		SortedCategories.Sort();
+
+		for (const FString& Category : SortedCategories)
+		{
+			ContentText += FString::Printf(TEXT("[%s]\n"), *Category);
+			for (const TSharedPtr<IClaireonTool>& Tool : GroupedTools[Category])
+			{
+				FString TypeSig = FClaireonXmlFormatter::GenerateTypeSignature(Tool->GetName(), Tool->GetInputSchema());
+				ContentText += FString::Printf(TEXT("  %s - %s\n    %s\n"),
+					*Tool->GetName(), *Tool->GetBriefDescription(), *TypeSig);
+			}
+		}
+	}
+	// 3. Dynamic claireon://tools/{category}: template-expanded per category.
+	else if (Uri.StartsWith(TEXT("claireon://tools/")))
+	{
+		FString Category = Uri.Mid(15);
+
+		int32 MatchCount = 0;
+		ContentText += FString::Printf(TEXT("[%s]\n"), *Category);
+		for (const auto& Pair : Tools)
+		{
+			if (Pair.Value.IsValid() && Pair.Value->GetCategory() == Category)
+			{
+				FString TypeSig = FClaireonXmlFormatter::GenerateTypeSignature(Pair.Value->GetName(), Pair.Value->GetInputSchema());
+				ContentText += FString::Printf(TEXT("  %s - %s\n    %s\n"),
+					*Pair.Value->GetName(), *Pair.Value->GetBriefDescription(), *TypeSig);
+				++MatchCount;
+			}
+		}
+
+		if (MatchCount == 0)
+		{
+			return FMCPJsonRpcResponse::MakeError(Context.Request.Id, FMCPJsonRpcResponse::InvalidParams,
+				FString::Printf(TEXT("Unknown tool category: %s"), *Category));
+		}
+	}
+	else
+	{
+		return FMCPJsonRpcResponse::MakeError(Context.Request.Id, FMCPJsonRpcResponse::InvalidParams,
+			FString::Printf(TEXT("Unknown resource: %s"), *Uri));
+	}
+
+	// Build MCP resource response
+	TSharedPtr<FJsonObject> ContentObj = MakeShared<FJsonObject>();
+	ContentObj->SetStringField(TEXT("uri"), Uri);
+	ContentObj->SetStringField(TEXT("mimeType"), MimeType);
+	ContentObj->SetStringField(TEXT("text"), ContentText);
+
+	TArray<TSharedPtr<FJsonValue>> Contents;
+	Contents.Add(MakeShared<FJsonValueObject>(ContentObj));
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetArrayField(TEXT("contents"), Contents);
+	return FMCPJsonRpcResponse::MakeResult(Context.Request.Id, Result);
+}
+
+TSharedPtr<FJsonObject> FClaireonServer::HandleResourceTemplatesList(const FMCPRequestContext& Context)
+{
+	TSharedPtr<FJsonObject> Template = MakeShared<FJsonObject>();
+	Template->SetStringField(TEXT("uriTemplate"), TEXT("claireon://tools/{category}"));
+	Template->SetStringField(TEXT("name"), TEXT("Tools by Category"));
+	Template->SetStringField(TEXT("description"), TEXT("Tools filtered by category"));
+	Template->SetStringField(TEXT("mimeType"), TEXT("text/plain"));
+
+	TArray<TSharedPtr<FJsonValue>> TemplateArray;
+	TemplateArray.Add(MakeShared<FJsonValueObject>(Template));
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetArrayField(TEXT("resourceTemplates"), TemplateArray);
+	return FMCPJsonRpcResponse::MakeResult(Context.Request.Id, Result);
+}
+
 void FClaireonServer::ClearDiagnostics()
 {
 	DiagnosticsEntries.Empty();
+}
+
+void FClaireonServer::LoadMCPContent()
+{
+	LoadedPrompts.Empty();
+	LoadedResources.Empty();
+
+	TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("Claireon"));
+	if (!Plugin.IsValid())
+	{
+		UE_LOG(LogClaireon, Warning, TEXT("[MCP] Claireon plugin not found -- no content loaded"));
+		return;
+	}
+
+	const FString ContentRoot = FPaths::Combine(Plugin->GetBaseDir(), TEXT("Content"), TEXT("MCP"));
+	LoadPromptsFromDirectory(FPaths::Combine(ContentRoot, TEXT("Prompts")));
+	LoadResourcesFromDirectory(FPaths::Combine(ContentRoot, TEXT("Resources")));
+
+	UE_LOG(LogClaireon, Display, TEXT("[MCP] Loaded %d prompt(s) and %d resource(s) from %s"),
+		LoadedPrompts.Num(), LoadedResources.Num(), *ContentRoot);
+}
+
+void FClaireonServer::LoadPromptsFromDirectory(const FString& Directory)
+{
+	if (!FPaths::DirectoryExists(Directory))
+	{
+		UE_LOG(LogClaireon, Log, TEXT("[MCP] Prompts directory not found: %s"), *Directory);
+		return;
+	}
+
+	TArray<FString> Files;
+	IFileManager::Get().FindFilesRecursive(Files, *Directory, TEXT("*.json"), /*bFiles=*/true, /*bDirs=*/false);
+
+	for (const FString& AbsPath : Files)
+	{
+		FString Contents;
+		if (!FFileHelper::LoadFileToString(Contents, *AbsPath))
+		{
+			UE_LOG(LogClaireon, Warning, TEXT("[MCP] Failed to read prompt file: %s"), *AbsPath);
+			continue;
+		}
+
+		TSharedPtr<FJsonObject> RootObject;
+		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Contents);
+		if (!FJsonSerializer::Deserialize(Reader, RootObject) || !RootObject.IsValid())
+		{
+			UE_LOG(LogClaireon, Warning, TEXT("[MCP] Failed to parse prompt JSON: %s"), *AbsPath);
+			continue;
+		}
+
+		// Key = relative path minus extension, using forward slashes (e.g. "workflow/bulk-edit").
+		FString RelPath = AbsPath;
+		FPaths::MakePathRelativeTo(RelPath, *(Directory / TEXT("")));
+		FString PromptName = FPaths::GetPath(RelPath) / FPaths::GetBaseFilename(RelPath);
+		PromptName.ReplaceInline(TEXT("\\"), TEXT("/"));
+		while (PromptName.StartsWith(TEXT("/")))
+		{
+			PromptName.RightChopInline(1, /*bAllowShrinking=*/EAllowShrinking::No);
+		}
+
+		FPromptTemplate Tmpl;
+		Tmpl.Description = RootObject->GetStringField(TEXT("description"));
+		Tmpl.Role = RootObject->HasField(TEXT("role")) ? RootObject->GetStringField(TEXT("role")) : TEXT("user");
+		Tmpl.TextTemplate = RootObject->GetStringField(TEXT("text"));
+		Tmpl.SourcePath = AbsPath;
+
+		LoadedPrompts.Add(PromptName, MoveTemp(Tmpl));
+	}
+}
+
+void FClaireonServer::LoadResourcesFromDirectory(const FString& Directory)
+{
+	if (!FPaths::DirectoryExists(Directory))
+	{
+		UE_LOG(LogClaireon, Log, TEXT("[MCP] Resources directory not found: %s"), *Directory);
+		return;
+	}
+
+	TArray<FString> Files;
+	IFileManager::Get().FindFilesRecursive(Files, *Directory, TEXT("*.json"), /*bFiles=*/true, /*bDirs=*/false);
+
+	for (const FString& AbsPath : Files)
+	{
+		FString Contents;
+		if (!FFileHelper::LoadFileToString(Contents, *AbsPath))
+		{
+			UE_LOG(LogClaireon, Warning, TEXT("[MCP] Failed to read resource file: %s"), *AbsPath);
+			continue;
+		}
+
+		TSharedPtr<FJsonObject> RootObject;
+		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Contents);
+		if (!FJsonSerializer::Deserialize(Reader, RootObject) || !RootObject.IsValid())
+		{
+			UE_LOG(LogClaireon, Warning, TEXT("[MCP] Failed to parse resource JSON: %s"), *AbsPath);
+			continue;
+		}
+
+		// URI = "claireon://" + relative path minus extension, using forward slashes.
+		FString RelPath = AbsPath;
+		FPaths::MakePathRelativeTo(RelPath, *(Directory / TEXT("")));
+		FString ResourcePath = FPaths::GetPath(RelPath) / FPaths::GetBaseFilename(RelPath);
+		ResourcePath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		while (ResourcePath.StartsWith(TEXT("/")))
+		{
+			ResourcePath.RightChopInline(1, /*bAllowShrinking=*/EAllowShrinking::No);
+		}
+		const FString Uri = FString::Printf(TEXT("claireon://%s"), *ResourcePath);
+
+		FResourceTemplate Tmpl;
+		Tmpl.Name = RootObject->GetStringField(TEXT("name"));
+		Tmpl.Description = RootObject->GetStringField(TEXT("description"));
+		Tmpl.MimeType = RootObject->HasField(TEXT("mimeType")) ? RootObject->GetStringField(TEXT("mimeType")) : TEXT("text/plain");
+		Tmpl.TextTemplate = RootObject->GetStringField(TEXT("text"));
+		Tmpl.SourcePath = AbsPath;
+
+		LoadedResources.Add(Uri, MoveTemp(Tmpl));
+	}
+}
+
+FString FClaireonServer::SubstitutePlaceholders(const FString& Template, const TMap<FString, FString>& Variables)
+{
+	FString Output;
+	Output.Reserve(Template.Len());
+
+	int32 Cursor = 0;
+	while (Cursor < Template.Len())
+	{
+		const int32 Open = Template.Find(TEXT("{{"), ESearchCase::CaseSensitive, ESearchDir::FromStart, Cursor);
+		if (Open == INDEX_NONE)
+		{
+			Output.Append(*Template + Cursor, Template.Len() - Cursor);
+			break;
+		}
+
+		// Copy literal text preceding the placeholder.
+		Output.Append(*Template + Cursor, Open - Cursor);
+
+		const int32 Close = Template.Find(TEXT("}}"), ESearchCase::CaseSensitive, ESearchDir::FromStart, Open + 2);
+		if (Close == INDEX_NONE)
+		{
+			// Unterminated placeholder -- copy the rest literally.
+			Output.Append(*Template + Open, Template.Len() - Open);
+			break;
+		}
+
+		const FString Key = Template.Mid(Open + 2, Close - (Open + 2)).TrimStartAndEnd();
+		if (const FString* Value = Variables.Find(Key))
+		{
+			Output.Append(*Value);
+		}
+		else
+		{
+			// Unknown placeholder -- leave token intact for diagnosability.
+			Output.Append(*Template + Open, (Close + 2) - Open);
+		}
+
+		Cursor = Close + 2;
+	}
+
+	return Output;
+}
+
+TMap<FString, FString> FClaireonServer::BuildRuntimeVariables() const
+{
+	TMap<FString, FString> Vars;
+
+	// Project scope.
+	Vars.Add(TEXT("project.name"), FApp::GetProjectName());
+	Vars.Add(TEXT("project.engine_version"), FApp::GetBuildVersion());
+
+	FString MapName = TEXT("No map loaded");
+	if (GEditor)
+	{
+		UWorld* World = GEditor->GetEditorWorldContext().World();
+		if (World)
+		{
+			MapName = World->GetMapName();
+		}
+	}
+	Vars.Add(TEXT("project.current_map"), MapName);
+
+	TArray<FName> ModuleNames;
+	FModuleManager::Get().FindModules(TEXT("*"), ModuleNames);
+	Vars.Add(TEXT("project.module_count"), FString::FromInt(ModuleNames.Num()));
+
+	// Tool category summary (used by quick-start).
+	{
+		TMap<FString, int32> CategoryCounts;
+		for (const auto& Pair : Tools)
+		{
+			if (Pair.Value.IsValid())
+			{
+				CategoryCounts.FindOrAdd(Pair.Value->GetCategory())++;
+			}
+		}
+
+		TArray<FString> SortedCategories;
+		CategoryCounts.GetKeys(SortedCategories);
+		SortedCategories.Sort();
+
+		FString CategoryList;
+		for (const FString& Category : SortedCategories)
+		{
+			CategoryList += FString::Printf(TEXT("  - %s: %d tools\n"), *Category, CategoryCounts[Category]);
+		}
+		Vars.Add(TEXT("project.category_list"), CategoryList);
+	}
+
+	// Server scope.
+	const FTimespan Uptime = FDateTime::Now() - StartTime;
+	Vars.Add(TEXT("server.uptime_hms"), FString::Printf(TEXT("%dh %dm %ds"),
+		Uptime.GetHours(), Uptime.GetMinutes(), Uptime.GetSeconds()));
+	Vars.Add(TEXT("server.total_requests"), FString::FromInt(TotalRequestCount));
+	Vars.Add(TEXT("server.errors"), FString::FromInt(ErrorCount));
+	Vars.Add(TEXT("server.active_tools"), FString::FromInt(Tools.Num()));
+	Vars.Add(TEXT("server.tool_list_generation"), FString::Printf(TEXT("%u"), ToolListGeneration));
+
+	return Vars;
 }

@@ -20,6 +20,7 @@ public class Claireon : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			"Projects",          // IPluginManager for plugin content directory resolution
 			"UnrealEd",
 			"Slate",
 			"SlateCore",

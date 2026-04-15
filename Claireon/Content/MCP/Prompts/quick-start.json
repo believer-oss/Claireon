@@ -1,0 +1,5 @@
+{
+  "description": "Getting-started guide with first steps for using Claireon tools",
+  "role": "user",
+  "text": "Project: {{project.name}}\nCurrent Map: {{project.current_map}}\n\nAvailable tool categories:\n{{project.category_list}}\nUse claireon.tools_search('keyword') to discover tools by keyword, or claireon.tools_search() with no arguments to list all categories. Use claireon.python_execute() to run tool code."
+}

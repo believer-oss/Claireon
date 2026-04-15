@@ -117,6 +117,25 @@ public:
 	void AddDiagnosticsEntry(FMCPDiagnosticsEntry&& Entry);
 
 private:
+	/** In-memory registry entry loaded from a JSON file in Content/MCP/Prompts/. */
+	struct FPromptTemplate
+	{
+		FString Description;
+		FString Role;
+		FString TextTemplate;
+		FString SourcePath;
+	};
+
+	/** In-memory registry entry loaded from a JSON file in Content/MCP/Resources/. */
+	struct FResourceTemplate
+	{
+		FString Name;
+		FString Description;
+		FString MimeType;
+		FString TextTemplate;
+		FString SourcePath;
+	};
+
 	/** HTTP request handlers */
 	bool HandlePostRequest(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete);
 	bool HandleGetRequest(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete);
@@ -128,9 +147,29 @@ private:
 	TSharedPtr<FJsonObject> HandleToolsList(const FMCPRequestContext& Context);
 	TSharedPtr<FJsonObject> HandleToolsCall(const FMCPRequestContext& Context);
 	TSharedPtr<FJsonObject> HandlePing(const FMCPRequestContext& Context);
+	TSharedPtr<FJsonObject> HandlePromptsList(const FMCPRequestContext& Context);
+	TSharedPtr<FJsonObject> HandlePromptsGet(const FMCPRequestContext& Context);
+	TSharedPtr<FJsonObject> HandleResourcesList(const FMCPRequestContext& Context);
+	TSharedPtr<FJsonObject> HandleResourcesRead(const FMCPRequestContext& Context);
+	TSharedPtr<FJsonObject> HandleResourceTemplatesList(const FMCPRequestContext& Context);
 
 	/** Dispatch a parsed JSON-RPC request to the appropriate handler */
 	TSharedPtr<FJsonObject> DispatchRequest(const FMCPRequestContext& Context);
+
+	/** Scan Content/MCP/Prompts and Content/MCP/Resources, populating the registries. */
+	void LoadMCPContent();
+
+	/** Load all *.json files under Directory, inserting each into LoadedPrompts keyed by relative-path-without-extension. */
+	void LoadPromptsFromDirectory(const FString& Directory);
+
+	/** Load all *.json files under Directory, inserting each into LoadedResources keyed by "claireon://" + relative-path-without-extension. */
+	void LoadResourcesFromDirectory(const FString& Directory);
+
+	/** Replace {{name}} tokens with matching values from Variables. Unknown tokens are left intact. */
+	static FString SubstitutePlaceholders(const FString& Template, const TMap<FString, FString>& Variables);
+
+	/** Build the runtime variable map used by prompt and resource templates (project.*, server.*). */
+	TMap<FString, FString> BuildRuntimeVariables() const;
 
 	/** Validate Origin and Host headers for localhost-only access */
 	bool ValidateRequestHeaders(const FHttpServerRequest& Request) const;
@@ -149,6 +188,12 @@ private:
 
 	/** Registered tools */
 	TMap<FString, TSharedPtr<IClaireonTool>> Tools;
+
+	/** File-backed prompt templates. Key is the prompt name (relative path without .json). */
+	TMap<FString, FPromptTemplate> LoadedPrompts;
+
+	/** File-backed resource templates. Key is the full URI (e.g. claireon://project/info). */
+	TMap<FString, FResourceTemplate> LoadedResources;
 
 	/** Maps tool name to the provider that registered it */
 	TMap<FString, FName> ToolSourceMap;

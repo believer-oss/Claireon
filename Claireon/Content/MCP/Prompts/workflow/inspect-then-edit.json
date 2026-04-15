@@ -1,0 +1,5 @@
+{
+  "description": "Multi-tool workflow: inspect an asset, plan edits, execute via transaction",
+  "role": "user",
+  "text": "Step 1: Identify the target asset path\nStep 2: Use claireon.asset_search() or claireon.asset_list() to find the asset\nStep 3: Inspect its properties with the appropriate inspect tool (e.g., claireon.blueprint_inspect(), claireon.state_tree_inspect())\nStep 4: Plan your changes based on the inspected state\nStep 5: Begin a transaction with claireon.transaction('begin', 'description of changes')\nStep 6: Apply changes using the appropriate edit tool\nStep 7: Complete the transaction with claireon.transaction('end')\nStep 8: Re-inspect to verify the changes took effect"
+}
