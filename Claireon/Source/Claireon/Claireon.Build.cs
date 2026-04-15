@@ -64,6 +64,7 @@ public class Claireon : ModuleRules
 
 			// Animation Blueprint graph support (UAnimationGraph for list_graphs)
 			"AnimGraph",
+			"AnimGraphRuntime",  // FAnimNode_Base runtime struct access for animgraph inspection
 
 			// Asset management tools dependencies
 			"AssetTools",        // IAssetTools, FAssetToolsModule (redirector fixup)
