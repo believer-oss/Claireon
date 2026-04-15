@@ -185,7 +185,10 @@ FString ClaireonTool_StateTreeEdit::GetFullDescription() const
 				"Transition operations: add_transition, remove_transition, modify_transition, add_transition_condition, remove_transition_condition\n"
 				"Binding operations: add_binding, add_property_function, remove_binding\n"
 				"Property operations: set_node_property\n"
-				"Build operations: compile, save");
+				"Build operations: compile, save\n\n"
+				"insert_after (optional, for add_state and move_state): GUID of a sibling state. "
+				"The new/moved state is inserted immediately after this sibling. "
+				"If omitted, the state is appended to the end of the parent's children.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_StateTreeEdit::GetInputSchema() const
@@ -598,6 +601,36 @@ FToolResult ClaireonTool_StateTreeEdit::Operation_AddState(const FString& Sessio
 
 	UStateTreeState& NewState = ParentState->AddChildState(FName(*Name), ParseStateType(StateTypeStr));
 
+	// insert_after: optionally reorder the newly-appended child
+	FGuid InsertAfterId;
+	{
+		FString InsertAfterStr;
+		if (Params->TryGetStringField(TEXT("insert_after"), InsertAfterStr) && !InsertAfterStr.IsEmpty())
+		{
+			FGuid::Parse(InsertAfterStr, InsertAfterId);
+		}
+	}
+	if (InsertAfterId.IsValid())
+	{
+		int32 AfterIndex = ParentState->Children.IndexOfByPredicate(
+			[&InsertAfterId](const UStateTreeState* S)
+		{
+			return S && S->ID == InsertAfterId;
+		});
+		if (AfterIndex == INDEX_NONE)
+		{
+			return MakeErrorResult(FString::Printf(TEXT("insert_after state '%s' not found among children of '%s'"),
+				*InsertAfterId.ToString(), *ParentState->Name.ToString()));
+		}
+		int32 LastIndex = ParentState->Children.Num() - 1;
+		if (LastIndex != AfterIndex + 1)
+		{
+			TObjectPtr<UStateTreeState> NewChild = ParentState->Children[LastIndex];
+			ParentState->Children.RemoveAt(LastIndex, EAllowShrinking::No);
+			ParentState->Children.Insert(NewChild, AfterIndex + 1);
+		}
+	}
+
 	Data->PushHistory();
 	Data->FocusedStateId = NewState.ID;
 	Data->LastOperationStatus = FString::Printf(TEXT("add_state â Added '%s' to '%s'"), *Name, *ParentState->Name.ToString());
@@ -702,6 +735,20 @@ FToolResult ClaireonTool_StateTreeEdit::Operation_MoveState(const FString& Sessi
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Move State")));
 	Data->StateTree->Modify();
 
+	// Parse optional insert_after
+	FGuid InsertAfterId;
+	{
+		FString InsertAfterStr;
+		if (Params->TryGetStringField(TEXT("insert_after"), InsertAfterStr) && !InsertAfterStr.IsEmpty())
+		{
+			FGuid::Parse(InsertAfterStr, InsertAfterId);
+		}
+	}
+	if (InsertAfterId.IsValid() && InsertAfterId == State->ID)
+	{
+		return MakeErrorResult(TEXT("insert_after cannot reference the state being moved"));
+	}
+
 	// Remove from old parent
 	UStateTreeState* OldParent = Cast<UStateTreeState>(State->GetOuter());
 	if (OldParent)
@@ -714,7 +761,33 @@ FToolResult ClaireonTool_StateTreeEdit::Operation_MoveState(const FString& Sessi
 	}
 
 	// Add to new parent
-	NewParent->Children.Add(State);
+	if (InsertAfterId.IsValid())
+	{
+		int32 AfterIndex = NewParent->Children.IndexOfByPredicate(
+			[&InsertAfterId](const UStateTreeState* S)
+		{
+			return S && S->ID == InsertAfterId;
+		});
+		if (AfterIndex == INDEX_NONE)
+		{
+			// Restore: put state back in old parent to avoid orphaning
+			if (OldParent)
+			{
+				OldParent->Children.Add(State);
+			}
+			else
+			{
+				EditorData->SubTrees.Add(State);
+			}
+			return MakeErrorResult(FString::Printf(TEXT("insert_after state '%s' not found among children of '%s'"),
+				*InsertAfterId.ToString(), *NewParent->Name.ToString()));
+		}
+		NewParent->Children.Insert(State, AfterIndex + 1);
+	}
+	else
+	{
+		NewParent->Children.Add(State);
+	}
 	State->Rename(nullptr, NewParent);
 
 	Data->FocusedStateId = StateId;
