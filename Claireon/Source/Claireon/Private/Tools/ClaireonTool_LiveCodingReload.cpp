@@ -12,6 +12,7 @@
 #include "Misc/DateTime.h"
 
 #if PLATFORM_WINDOWS
+#include "Modules/ModuleManager.h"
 #include "ILiveCodingModule.h"
 #endif
 

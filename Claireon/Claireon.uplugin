@@ -20,7 +20,8 @@
 		{ "Name": "BlueprintAssist", "Enabled": true, "Optional": true },
 		{ "Name": "PCG", "Enabled": true },
 		{ "Name": "ModelViewViewModel", "Enabled": true },
-		{ "Name": "PropertyBindingUtils", "Enabled": true }
+		{ "Name": "PropertyBindingUtils", "Enabled": true },
+		{ "Name": "Chooser", "Enabled": true }
 	],
 	"Modules": [
 		{
