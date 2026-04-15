@@ -3,6 +3,7 @@
 
 #include "ClaireonBlueprintHelpers.h"
 #include "ClaireonNameResolver.h"
+#include "Dom/JsonObject.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonLog.h"
 #include "Engine/Blueprint.h"
@@ -535,9 +536,306 @@ namespace ClaireonBlueprintHelpers
 			{
 				Flags |= CPF_ExposeOnSpawn;
 			}
+			else if (Flag == TEXT("Net") || Flag == TEXT("Replicated"))
+			{
+				Flags |= CPF_Net;
+			}
+			else if (Flag == TEXT("RepNotify"))
+			{
+				Flags |= CPF_Net | CPF_RepNotify;
+			}
+			else if (Flag == TEXT("AdvancedDisplay"))
+			{
+				Flags |= CPF_AdvancedDisplay;
+			}
+			else if (Flag == TEXT("AssetRegistrySearchable"))
+			{
+				Flags |= CPF_AssetRegistrySearchable;
+			}
+			else if (Flag == TEXT("SimpleDisplay"))
+			{
+				Flags |= CPF_SimpleDisplay;
+			}
+			else if (Flag == TEXT("DisableEditOnTemplate"))
+			{
+				Flags |= CPF_DisableEditOnTemplate;
+			}
 		}
 
 		return Flags;
+	}
+
+	TArray<FString> FormatPropertyFlags(uint64 PropertyFlags)
+	{
+		TArray<FString> Flags;
+
+		// Blueprint visibility (compound flags)
+		if (PropertyFlags & CPF_BlueprintVisible)
+		{
+			if (PropertyFlags & CPF_BlueprintReadOnly)
+			{
+				Flags.Add(TEXT("BlueprintReadOnly"));
+			}
+			else
+			{
+				Flags.Add(TEXT("BlueprintReadWrite"));
+			}
+		}
+
+		// Replication (compound flags)
+		if (PropertyFlags & CPF_Net)
+		{
+			if (PropertyFlags & CPF_RepNotify)
+			{
+				Flags.Add(TEXT("RepNotify"));
+			}
+			else
+			{
+				Flags.Add(TEXT("Net"));
+			}
+		}
+
+		// Edit specifiers (compound flags)
+		if (PropertyFlags & CPF_Edit)
+		{
+			if (PropertyFlags & CPF_DisableEditOnInstance)
+			{
+				Flags.Add(TEXT("EditDefaultsOnly"));
+			}
+			else if (PropertyFlags & CPF_EditConst)
+			{
+				Flags.Add(TEXT("VisibleAnywhere"));
+			}
+			else
+			{
+				Flags.Add(TEXT("EditAnywhere"));
+			}
+		}
+
+		// Simple flags
+		if (PropertyFlags & CPF_Transient)
+		{
+			Flags.Add(TEXT("Transient"));
+		}
+		if (PropertyFlags & CPF_Config)
+		{
+			Flags.Add(TEXT("Config"));
+		}
+		if (PropertyFlags & CPF_SaveGame)
+		{
+			Flags.Add(TEXT("SaveGame"));
+		}
+		if (PropertyFlags & CPF_Interp)
+		{
+			Flags.Add(TEXT("Interp"));
+		}
+		if (PropertyFlags & CPF_ExposeOnSpawn)
+		{
+			Flags.Add(TEXT("ExposeOnSpawn"));
+		}
+		if (PropertyFlags & CPF_AdvancedDisplay)
+		{
+			Flags.Add(TEXT("AdvancedDisplay"));
+		}
+		if (PropertyFlags & CPF_AssetRegistrySearchable)
+		{
+			Flags.Add(TEXT("AssetRegistrySearchable"));
+		}
+		if (PropertyFlags & CPF_SimpleDisplay)
+		{
+			Flags.Add(TEXT("SimpleDisplay"));
+		}
+		if (PropertyFlags & CPF_DisableEditOnTemplate)
+		{
+			Flags.Add(TEXT("DisableEditOnTemplate"));
+		}
+
+		return Flags;
+	}
+
+	void ApplyVariableProperties(UBlueprint* Blueprint, FName VarName, const TSharedPtr<FJsonObject>& Params)
+	{
+		if (!Blueprint || !Params.IsValid())
+		{
+			return;
+		}
+
+		// Find the variable description
+		FBPVariableDescription* VarDesc = nullptr;
+		for (FBPVariableDescription& Var : Blueprint->NewVariables)
+		{
+			if (Var.VarName == VarName)
+			{
+				VarDesc = &Var;
+				break;
+			}
+		}
+		if (!VarDesc)
+		{
+			return;
+		}
+
+		// Track whether the replication field was explicitly provided
+		bool bReplicationFieldProvided = false;
+
+		// 1. Apply category
+		FString Category;
+		if (Params->TryGetStringField(TEXT("category"), Category))
+		{
+			FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, VarName, nullptr, FText::FromString(Category));
+		}
+
+		// 2. Apply tooltip
+		FString Tooltip;
+		if (Params->TryGetStringField(TEXT("tooltip"), Tooltip))
+		{
+			FBlueprintEditorUtils::SetBlueprintVariableMetaData(Blueprint, VarName, nullptr, FBlueprintMetadata::MD_Tooltip, Tooltip);
+		}
+
+		// 3. Apply display_name
+		FString DisplayName;
+		if (Params->TryGetStringField(TEXT("display_name"), DisplayName))
+		{
+			FBlueprintEditorUtils::SetBlueprintVariableMetaData(Blueprint, VarName, nullptr, FBlueprintMetadata::MD_DisplayName, DisplayName);
+		}
+
+		// 4. Apply replication
+		FString Replication;
+		if (Params->TryGetStringField(TEXT("replication"), Replication))
+		{
+			bReplicationFieldProvided = true;
+
+			if (Replication == TEXT("None"))
+			{
+				VarDesc->PropertyFlags &= ~(CPF_Net | CPF_RepNotify);
+				VarDesc->RepNotifyFunc = NAME_None;
+			}
+			else if (Replication == TEXT("Replicated"))
+			{
+				VarDesc->PropertyFlags |= CPF_Net;
+				VarDesc->PropertyFlags &= ~CPF_RepNotify;
+			}
+			else if (Replication == TEXT("RepNotify"))
+			{
+				VarDesc->PropertyFlags |= CPF_Net | CPF_RepNotify;
+
+				// Set RepNotifyFunc if provided
+				FString RepNotifyFunc;
+				if (Params->TryGetStringField(TEXT("rep_notify_func"), RepNotifyFunc))
+				{
+					VarDesc->RepNotifyFunc = FName(*RepNotifyFunc);
+				}
+				else
+				{
+					// Default UE5 convention: OnRep_VarName
+					VarDesc->RepNotifyFunc = FName(*FString::Printf(TEXT("OnRep_%s"), *VarName.ToString()));
+				}
+
+				// Set ReplicationCondition if provided
+				FString ReplicationCondition;
+				if (Params->TryGetStringField(TEXT("replication_condition"), ReplicationCondition))
+				{
+					const UEnum* CondEnum = StaticEnum<ELifetimeCondition>();
+					if (CondEnum)
+					{
+						int64 CondValue = CondEnum->GetValueByNameString(ReplicationCondition);
+						if (CondValue != INDEX_NONE)
+						{
+							VarDesc->ReplicationCondition = static_cast<ELifetimeCondition>(CondValue);
+						}
+					}
+				}
+			}
+		}
+
+		// 5. Apply metadata entries
+		const TSharedPtr<FJsonObject>* MetadataObj = nullptr;
+		if (Params->TryGetObjectField(TEXT("metadata"), MetadataObj) && MetadataObj && (*MetadataObj).IsValid())
+		{
+			for (const auto& Pair : (*MetadataObj)->Values)
+			{
+				FString Value;
+				if (Pair.Value.IsValid() && Pair.Value->TryGetString(Value))
+				{
+					FBlueprintEditorUtils::SetBlueprintVariableMetaData(Blueprint, VarName, nullptr, FName(*Pair.Key), Value);
+				}
+			}
+		}
+
+		// 6. Apply flags[]
+		const TArray<TSharedPtr<FJsonValue>>* FlagsArray = nullptr;
+		if (Params->TryGetArrayField(TEXT("flags"), FlagsArray))
+		{
+			TArray<FString> RemainingFlags;
+
+			for (const TSharedPtr<FJsonValue>& FlagValue : *FlagsArray)
+			{
+				FString Flag = FlagValue->AsString();
+
+				if (Flag == TEXT("Interp"))
+				{
+					FBlueprintEditorUtils::SetInterpFlag(Blueprint, VarName, true);
+				}
+				else if (Flag == TEXT("BlueprintReadOnly"))
+				{
+					FBlueprintEditorUtils::SetBlueprintOnlyEditableFlag(Blueprint, VarName, false);
+					FBlueprintEditorUtils::SetBlueprintPropertyReadOnlyFlag(Blueprint, VarName, true);
+				}
+				else if (Flag == TEXT("BlueprintReadWrite"))
+				{
+					FBlueprintEditorUtils::SetBlueprintOnlyEditableFlag(Blueprint, VarName, true);
+					FBlueprintEditorUtils::SetBlueprintPropertyReadOnlyFlag(Blueprint, VarName, false);
+				}
+				else if (bReplicationFieldProvided && (Flag == TEXT("Net") || Flag == TEXT("Replicated") || Flag == TEXT("RepNotify")))
+				{
+					// Skip replication flags if replication field was explicitly provided
+					continue;
+				}
+				else
+				{
+					RemainingFlags.Add(Flag);
+				}
+			}
+
+			if (RemainingFlags.Num() > 0)
+			{
+				VarDesc->PropertyFlags |= ParsePropertyFlags(RemainingFlags);
+			}
+		}
+
+		// 7. Apply clear_flags[]
+		const TArray<TSharedPtr<FJsonValue>>* ClearFlagsArray = nullptr;
+		if (Params->TryGetArrayField(TEXT("clear_flags"), ClearFlagsArray))
+		{
+			TArray<FString> RemainingClearFlags;
+
+			for (const TSharedPtr<FJsonValue>& FlagValue : *ClearFlagsArray)
+			{
+				FString Flag = FlagValue->AsString();
+
+				if (Flag == TEXT("Interp"))
+				{
+					FBlueprintEditorUtils::SetInterpFlag(Blueprint, VarName, false);
+				}
+				else if (Flag == TEXT("BlueprintReadOnly"))
+				{
+					FBlueprintEditorUtils::SetBlueprintPropertyReadOnlyFlag(Blueprint, VarName, false);
+				}
+				else if (Flag == TEXT("BlueprintReadWrite"))
+				{
+					FBlueprintEditorUtils::SetBlueprintOnlyEditableFlag(Blueprint, VarName, false);
+				}
+				else
+				{
+					RemainingClearFlags.Add(Flag);
+				}
+			}
+
+			if (RemainingClearFlags.Num() > 0)
+			{
+				VarDesc->PropertyFlags &= ~ParsePropertyFlags(RemainingClearFlags);
+			}
+		}
 	}
 
 	UEdGraphPin* GetFirstOutputPin(UEdGraphNode* Node)

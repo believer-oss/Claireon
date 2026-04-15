@@ -164,6 +164,22 @@ FString ClaireonTool_EditBlueprintGraph::GetFullDescription() const
 				"- Pin identification: source/target_pin_name (required)\n"
 				"- Optional: source/target_pin_direction ('input' or 'output') for disambiguation\n"
 				"- GUIDs are preferred when multiple nodes share the same title\n\n"
+				"add_variable operation:\n"
+				"  Required: variable_name, variable_type\n"
+				"  Optional: default_value, flags[], clear_flags[], category, tooltip, display_name,\n"
+				"    replication ('None'|'Replicated'|'RepNotify'), rep_notify_func, replication_condition,\n"
+				"    metadata (object of key/value pairs, e.g. UIMin, UIMax, ClampMin, ClampMax, Units, EditCondition)\n\n"
+				"set_variable_properties operation: Modify properties of an existing variable.\n"
+				"  Required: variable_name\n"
+				"  Optional: flags[], clear_flags[], category, tooltip, display_name,\n"
+				"    replication ('None'|'Replicated'|'RepNotify'), rep_notify_func, replication_condition,\n"
+				"    metadata (object of key/value pairs)\n"
+				"  flags[] values: BlueprintReadOnly, BlueprintReadWrite, EditAnywhere, EditDefaultsOnly,\n"
+				"    EditInstanceOnly, VisibleAnywhere, Transient, Config, SaveGame, Interp, ExposeOnSpawn,\n"
+				"    Net, Replicated, RepNotify, AdvancedDisplay, AssetRegistrySearchable, SimpleDisplay,\n"
+				"    DisableEditOnTemplate\n"
+				"  clear_flags[] uses same values but removes them.\n"
+				"  replication field takes precedence over Net/RepNotify in flags[].\n\n"
 				"Recovery workflow for locked assets:\n"
 				"  1. Use the shared list_sessions / release_all tools (Stage 013) to inspect and release locks\n"
 				"  2. If the Blueprint has unsaved changes, save manually first before force-releasing");
@@ -179,7 +195,7 @@ TSharedPtr<FJsonObject> ClaireonTool_EditBlueprintGraph::GetInputSchema() const
 	// operation - required string (e.g. "open", "add_node", "connect_pins", "save", "close")
 	TSharedPtr<FJsonObject> OpProp = MakeShared<FJsonObject>();
 	OpProp->SetStringField(TEXT("type"), TEXT("string"));
-	OpProp->SetStringField(TEXT("description"), TEXT("The operation to perform: open, create, add_node (supports optional position: {x,y}), remove_node, connect_pins, disconnect_pins, set_pin_value, move_node (requires node_guid + position: {x,y}), add_pin, remove_pin, split_pin, recombine_pin, save, close, list_graphs, reconstruct_node, set_gameplay_tags, etc."));
+	OpProp->SetStringField(TEXT("description"), TEXT("The operation to perform: open, create, add_node (supports optional position: {x,y}), remove_node, connect_pins, disconnect_pins, set_pin_value, move_node (requires node_guid + position: {x,y}), add_pin, remove_pin, split_pin, recombine_pin, add_variable, set_variable_properties, save, close, list_graphs, reconstruct_node, set_gameplay_tags, etc."));
 	Properties->SetObjectField(TEXT("operation"), OpProp);
 
 	// asset_path - required for open/create
@@ -211,6 +227,72 @@ TSharedPtr<FJsonObject> ClaireonTool_EditBlueprintGraph::GetInputSchema() const
 	RespProp->SetStringField(TEXT("type"), TEXT("string"));
 	RespProp->SetStringField(TEXT("description"), TEXT("Output detail level: 'changed' (default, pin-level diff), 'full' (complete graph state), 'status' (brief status line only)."));
 	Properties->SetObjectField(TEXT("response_mode"), RespProp);
+
+	// variable_name - required for add_variable, set_variable_properties
+	TSharedPtr<FJsonObject> VarNameProp = MakeShared<FJsonObject>();
+	VarNameProp->SetStringField(TEXT("type"), TEXT("string"));
+	VarNameProp->SetStringField(TEXT("description"), TEXT("Variable name. Required for add_variable and set_variable_properties."));
+	Properties->SetObjectField(TEXT("variable_name"), VarNameProp);
+
+	// variable_type - required for add_variable
+	TSharedPtr<FJsonObject> VarTypeProp = MakeShared<FJsonObject>();
+	VarTypeProp->SetStringField(TEXT("type"), TEXT("string"));
+	VarTypeProp->SetStringField(TEXT("description"), TEXT("Variable type string (e.g. 'float', 'int', 'bool', 'Vector', 'Array<Actor>'). Required for add_variable."));
+	Properties->SetObjectField(TEXT("variable_type"), VarTypeProp);
+
+	// category - optional for add_variable, set_variable_properties
+	TSharedPtr<FJsonObject> CatProp = MakeShared<FJsonObject>();
+	CatProp->SetStringField(TEXT("type"), TEXT("string"));
+	CatProp->SetStringField(TEXT("description"), TEXT("Variable category (e.g. 'Combat|Stats'). Used by add_variable and set_variable_properties."));
+	Properties->SetObjectField(TEXT("category"), CatProp);
+
+	// tooltip - optional
+	TSharedPtr<FJsonObject> TooltipProp = MakeShared<FJsonObject>();
+	TooltipProp->SetStringField(TEXT("type"), TEXT("string"));
+	TooltipProp->SetStringField(TEXT("description"), TEXT("Tooltip text for the variable. Used by add_variable and set_variable_properties."));
+	Properties->SetObjectField(TEXT("tooltip"), TooltipProp);
+
+	// display_name - optional
+	TSharedPtr<FJsonObject> DisplayNameProp = MakeShared<FJsonObject>();
+	DisplayNameProp->SetStringField(TEXT("type"), TEXT("string"));
+	DisplayNameProp->SetStringField(TEXT("description"), TEXT("Display name override for the variable. Used by add_variable and set_variable_properties."));
+	Properties->SetObjectField(TEXT("display_name"), DisplayNameProp);
+
+	// replication - optional
+	TSharedPtr<FJsonObject> ReplicationProp = MakeShared<FJsonObject>();
+	ReplicationProp->SetStringField(TEXT("type"), TEXT("string"));
+	ReplicationProp->SetStringField(TEXT("description"), TEXT("Replication mode: 'None', 'Replicated', or 'RepNotify'. Takes precedence over Net/RepNotify in flags[]."));
+	Properties->SetObjectField(TEXT("replication"), ReplicationProp);
+
+	// rep_notify_func - optional
+	TSharedPtr<FJsonObject> RepFuncProp = MakeShared<FJsonObject>();
+	RepFuncProp->SetStringField(TEXT("type"), TEXT("string"));
+	RepFuncProp->SetStringField(TEXT("description"), TEXT("RepNotify function name (only with replication='RepNotify'). Defaults to OnRep_VarName."));
+	Properties->SetObjectField(TEXT("rep_notify_func"), RepFuncProp);
+
+	// replication_condition - optional
+	TSharedPtr<FJsonObject> RepCondProp = MakeShared<FJsonObject>();
+	RepCondProp->SetStringField(TEXT("type"), TEXT("string"));
+	RepCondProp->SetStringField(TEXT("description"), TEXT("Replication condition: COND_None, COND_OwnerOnly, COND_SkipOwner, COND_SimulatedOnly, etc."));
+	Properties->SetObjectField(TEXT("replication_condition"), RepCondProp);
+
+	// flags - optional array
+	TSharedPtr<FJsonObject> FlagsProp = MakeShared<FJsonObject>();
+	FlagsProp->SetStringField(TEXT("type"), TEXT("array"));
+	FlagsProp->SetStringField(TEXT("description"), TEXT("Property flags to SET (additive). Values: BlueprintReadOnly, BlueprintReadWrite, EditAnywhere, EditDefaultsOnly, EditInstanceOnly, VisibleAnywhere, Transient, Config, SaveGame, Interp, ExposeOnSpawn, Net, Replicated, RepNotify, AdvancedDisplay, AssetRegistrySearchable, SimpleDisplay, DisableEditOnTemplate."));
+	Properties->SetObjectField(TEXT("flags"), FlagsProp);
+
+	// clear_flags - optional array
+	TSharedPtr<FJsonObject> ClearFlagsProp = MakeShared<FJsonObject>();
+	ClearFlagsProp->SetStringField(TEXT("type"), TEXT("array"));
+	ClearFlagsProp->SetStringField(TEXT("description"), TEXT("Property flags to CLEAR. Same values as flags[]."));
+	Properties->SetObjectField(TEXT("clear_flags"), ClearFlagsProp);
+
+	// metadata - optional object
+	TSharedPtr<FJsonObject> MetadataProp = MakeShared<FJsonObject>();
+	MetadataProp->SetStringField(TEXT("type"), TEXT("object"));
+	MetadataProp->SetStringField(TEXT("description"), TEXT("Key/value metadata pairs. Common keys: UIMin, UIMax, ClampMin, ClampMax, Units, EditCondition, Bitmask, BitmaskEnum."));
+	Properties->SetObjectField(TEXT("metadata"), MetadataProp);
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
@@ -455,6 +537,10 @@ FToolResult ClaireonTool_EditBlueprintGraph::Execute(const TSharedPtr<FJsonObjec
 		else if (Operation == TEXT("add_variable"))
 		{
 			return Operation_AddVariable(SessionId, Data, Params);
+		}
+		else if (Operation == TEXT("set_variable_properties"))
+		{
+			return Operation_SetVariableProperties(SessionId, Data, Params);
 		}
 		else if (Operation == TEXT("add_component"))
 		{
@@ -2515,17 +2601,6 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddVariable(const FString
 		return MakeErrorResult(TEXT("Missing required field: variable_type"));
 	}
 
-	// Get optional flags
-	const TArray<TSharedPtr<FJsonValue>>* FlagsArray = nullptr;
-	TArray<FString> Flags;
-	if (Params->TryGetArrayField(TEXT("flags"), FlagsArray))
-	{
-		for (const TSharedPtr<FJsonValue>& FlagValue : *FlagsArray)
-		{
-			Flags.Add(FlagValue->AsString());
-		}
-	}
-
 	// Get optional default value
 	FString DefaultValue;
 	Params->TryGetStringField(TEXT("default_value"), DefaultValue);
@@ -2552,7 +2627,6 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddVariable(const FString
 	NewVar.VarType = PinType;
 	NewVar.FriendlyName = VarName;
 	NewVar.Category = FText::FromString(TEXT("Default"));
-	NewVar.PropertyFlags = ClaireonBlueprintHelpers::ParsePropertyFlags(Flags);
 
 	// Set default value if provided
 	if (!DefaultValue.IsEmpty())
@@ -2563,12 +2637,65 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddVariable(const FString
 	// Add to Blueprint
 	int32 VarIndex = Blueprint->NewVariables.Add(NewVar);
 
+	// Apply optional properties (flags, category, replication, metadata, etc.)
+	// Must be called after the variable is added to NewVariables since the
+	// FBlueprintEditorUtils setter functions look up the variable by name.
+	ClaireonBlueprintHelpers::ApplyVariableProperties(Blueprint, FName(*VarName), Params);
+
 	// Mark Blueprint as structurally modified
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 
 	Data->Cursor.LastOperationStatus = FString::Printf(
 		TEXT("Added variable: %s (%s)"),
 		*VarName, *VarType);
+
+	return BuildStateResponse(SessionId, Data);
+}
+
+FToolResult ClaireonTool_EditBlueprintGraph::Operation_SetVariableProperties(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+{
+	UBlueprint* Blueprint = Data->Blueprint.Get();
+
+	if (!Blueprint)
+	{
+		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
+	}
+
+	// Get variable name
+	FString VarName;
+	if (!Params->TryGetStringField(TEXT("variable_name"), VarName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: variable_name"));
+	}
+
+	// Find the variable
+	FName VarFName(*VarName);
+	bool bFound = false;
+	for (const FBPVariableDescription& Var : Blueprint->NewVariables)
+	{
+		if (Var.VarName == VarFName)
+		{
+			bFound = true;
+			break;
+		}
+	}
+
+	if (!bFound)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Variable '%s' not found in Blueprint"), *VarName));
+	}
+
+	// Apply properties within a transaction
+	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Set Variable Properties")));
+	Blueprint->Modify();
+
+	ClaireonBlueprintHelpers::ApplyVariableProperties(Blueprint, VarFName, Params);
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+
+	Data->Cursor.LastOperationStatus = FString::Printf(
+		TEXT("Set properties on variable: %s"),
+		*VarName);
 
 	return BuildStateResponse(SessionId, Data);
 }

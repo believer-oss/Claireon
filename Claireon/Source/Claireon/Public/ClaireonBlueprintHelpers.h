@@ -5,6 +5,7 @@
 
 #include "CoreMinimal.h"
 #include "EdGraph/EdGraphPin.h"
+#include "Dom/JsonObject.h"
 
 class UBlueprint;
 class UEdGraph;
@@ -261,6 +262,25 @@ namespace ClaireonBlueprintHelpers
 	 * @return Combined property flags
 	 */
 	uint64 ParsePropertyFlags(const TArray<FString>& FlagStrings);
+
+	/**
+	 * Decompose a CPF bitmask into human-readable flag strings.
+	 * Inverse of ParsePropertyFlags, handling compound flags.
+	 *
+	 * @param PropertyFlags The CPF bitmask to decompose
+	 * @return Array of human-readable flag strings
+	 */
+	TArray<FString> FormatPropertyFlags(uint64 PropertyFlags);
+
+	/**
+	 * Apply optional variable properties (category, tooltip, replication, flags, metadata)
+	 * to an existing Blueprint variable. Used by both set_variable_properties and add_variable.
+	 *
+	 * @param Blueprint The Blueprint containing the variable
+	 * @param VarName Name of the variable to configure
+	 * @param Params JSON object with optional property fields
+	 */
+	void ApplyVariableProperties(UBlueprint* Blueprint, FName VarName, const TSharedPtr<FJsonObject>& Params);
 
 	/**
 	 * Get the first output pin on a node (for cursor positioning).

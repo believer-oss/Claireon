@@ -79,6 +79,9 @@ private:
 	/** Add a variable to the Blueprint */
 	FToolResult Operation_AddVariable(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 
+	/** Set properties on an existing Blueprint variable */
+	FToolResult Operation_SetVariableProperties(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
+
 	/** Add a component to the Blueprint */
 	FToolResult Operation_AddComponent(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 

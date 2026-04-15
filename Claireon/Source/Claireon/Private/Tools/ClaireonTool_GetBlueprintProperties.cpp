@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_GetBlueprintProperties.h"
+#include "ClaireonBlueprintHelpers.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonLog.h"
 #include "Engine/Blueprint.h"
@@ -12,6 +13,7 @@
 #include "K2Node_FunctionEntry.h"
 #include "Animation/AnimBlueprint.h"
 #include "WidgetBlueprint.h"
+#include "UObject/CoreNetTypes.h"
 
 FString ClaireonTool_GetBlueprintProperties::GetName() const
 {
@@ -295,43 +297,7 @@ FString ClaireonTool_GetBlueprintProperties::FormatVariables(const UBlueprint* B
 			*FormatVariableType(Var.VarType));
 
 		// Add flags
-		TArray<FString> Flags;
-		if (Var.PropertyFlags & CPF_BlueprintVisible)
-		{
-			// In UE5, check if it's read-only or read-write
-			if (Var.PropertyFlags & CPF_BlueprintReadOnly)
-			{
-				Flags.Add(TEXT("BlueprintReadOnly"));
-			}
-			else
-			{
-				Flags.Add(TEXT("BlueprintReadWrite"));
-			}
-		}
-
-		if (Var.PropertyFlags & CPF_Net)
-		{
-			if (Var.PropertyFlags & CPF_RepNotify)
-			{
-				Flags.Add(TEXT("RepNotify"));
-			}
-			else
-			{
-				Flags.Add(TEXT("Replicated"));
-			}
-		}
-
-		if (Var.PropertyFlags & CPF_Edit)
-		{
-			if (Var.PropertyFlags & CPF_DisableEditOnInstance)
-			{
-				Flags.Add(TEXT("EditDefaultsOnly"));
-			}
-			else
-			{
-				Flags.Add(TEXT("EditAnywhere"));
-			}
-		}
+		TArray<FString> Flags = ClaireonBlueprintHelpers::FormatPropertyFlags(Var.PropertyFlags);
 
 		if (Flags.Num() > 0)
 		{
@@ -344,6 +310,54 @@ FString ClaireonTool_GetBlueprintProperties::FormatVariables(const UBlueprint* B
 		if (!Var.DefaultValue.IsEmpty())
 		{
 			VarLine += FString::Printf(TEXT(" Default: %s"), *Var.DefaultValue);
+		}
+
+		// Add category if not empty or "Default"
+		FString CategoryStr = Var.Category.ToString();
+		if (!CategoryStr.IsEmpty() && CategoryStr != TEXT("Default"))
+		{
+			VarLine += FString::Printf(TEXT(" Category: %s"), *CategoryStr);
+		}
+
+		// Add replication info
+		if (Var.PropertyFlags & CPF_Net)
+		{
+			if (Var.PropertyFlags & CPF_RepNotify)
+			{
+				VarLine += TEXT(" Replication: RepNotify");
+				if (Var.RepNotifyFunc != NAME_None)
+				{
+					VarLine += FString::Printf(TEXT(" RepNotifyFunc: %s"), *Var.RepNotifyFunc.ToString());
+				}
+			}
+			else
+			{
+				VarLine += TEXT(" Replication: Replicated");
+			}
+
+			if (Var.ReplicationCondition != COND_None)
+			{
+				const UEnum* CondEnum = StaticEnum<ELifetimeCondition>();
+				if (CondEnum)
+				{
+					FString CondName = CondEnum->GetNameStringByValue(static_cast<int64>(Var.ReplicationCondition));
+					if (!CondName.IsEmpty())
+					{
+						VarLine += FString::Printf(TEXT(" ReplicationCondition: %s"), *CondName);
+					}
+				}
+			}
+		}
+
+		// Add metadata entries
+		if (Var.MetaDataArray.Num() > 0)
+		{
+			TArray<FString> MetaEntries;
+			for (const FBPVariableMetaDataEntry& MetaEntry : Var.MetaDataArray)
+			{
+				MetaEntries.Add(FString::Printf(TEXT("%s=%s"), *MetaEntry.DataKey.ToString(), *MetaEntry.DataValue));
+			}
+			VarLine += FString::Printf(TEXT(" Metadata: {%s}"), *FString::Join(MetaEntries, TEXT(", ")));
 		}
 
 		VariableLines.Add(VarLine);
