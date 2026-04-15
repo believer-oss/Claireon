@@ -139,6 +139,21 @@ private:
 	/** Move a node to a new position */
 	FToolResult Operation_MoveNode(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 
+	/** Remove a component from the Blueprint SCS hierarchy */
+	FToolResult Operation_RemoveComponent(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
+
+	/** Reparent a component within the Blueprint SCS hierarchy */
+	FToolResult Operation_ReparentComponent(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
+
+	/** Rename a component variable in the Blueprint SCS */
+	FToolResult Operation_RenameComponent(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
+
+	/** Set a new root component in the Blueprint SCS hierarchy */
+	FToolResult Operation_SetRootComponent(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
+
+	/** Get detailed information about a specific component */
+	FToolResult Operation_GetComponentDetails(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
+
 	// ========================================================================
 	// Helpers
 	// ========================================================================

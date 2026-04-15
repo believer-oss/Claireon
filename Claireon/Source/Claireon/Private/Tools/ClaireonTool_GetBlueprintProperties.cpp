@@ -173,7 +173,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 		USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
 		USCS_Node* DefaultRoot = SCS->GetDefaultSceneRootNode();
 
-		TFunction<void(USCS_Node*)> CollectComponents = [&](USCS_Node* Node)
+		TFunction<void(USCS_Node*, USCS_Node*)> CollectComponents = [&](USCS_Node* Node, USCS_Node* ParentNode)
 		{
 			if (!Node)
 			{
@@ -184,17 +184,30 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 			CompObj->SetStringField(TEXT("name"), Node->GetVariableName().ToString());
 			CompObj->SetStringField(TEXT("class"), Node->ComponentClass ? Node->ComponentClass->GetName() : TEXT("Unknown"));
 			CompObj->SetBoolField(TEXT("is_root"), Node == DefaultRoot);
+
+			if (ParentNode)
+			{
+				CompObj->SetStringField(TEXT("parent_component"), ParentNode->GetVariableName().ToString());
+			}
+
+			TArray<TSharedPtr<FJsonValue>> ChildrenArray;
+			for (USCS_Node* ChildNode : Node->GetChildNodes())
+			{
+				ChildrenArray.Add(MakeShared<FJsonValueString>(ChildNode->GetVariableName().ToString()));
+			}
+			CompObj->SetArrayField(TEXT("children"), ChildrenArray);
+
 			ComponentsArray.Add(MakeShared<FJsonValueObject>(CompObj));
 
 			for (USCS_Node* ChildNode : Node->GetChildNodes())
 			{
-				CollectComponents(ChildNode);
+				CollectComponents(ChildNode, Node);
 			}
 		};
 
 		for (USCS_Node* RootNode : SCS->GetRootNodes())
 		{
-			CollectComponents(RootNode);
+			CollectComponents(RootNode, nullptr);
 		}
 	}
 

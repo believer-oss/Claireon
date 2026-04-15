@@ -63,6 +63,7 @@
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SCS_Node.h"
 #include "Components/ActorComponent.h"
+#include "Components/SceneComponent.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "ScopedTransaction.h"
 #include "Animation/AnimBlueprint.h"
@@ -191,7 +192,18 @@ FString ClaireonTool_EditBlueprintGraph::GetFullDescription() const
 				"  replication field takes precedence over Net/RepNotify in flags[].\n\n"
 				"Recovery workflow for locked assets:\n"
 				"  1. Use the shared list_sessions / release_all tools (Stage 013) to inspect and release locks\n"
-				"  2. If the Blueprint has unsaved changes, save manually first before force-releasing");
+				"  2. If the Blueprint has unsaved changes, save manually first before force-releasing\n\n"
+				"Component management operations (session-based, require an Actor Blueprint):\n"
+				"- remove_component: Remove a component and promote its children.\n"
+				"    Params: component_name (required)\n"
+				"- reparent_component: Move a component to a new parent or to root level.\n"
+				"    Params: component_name (required), parent_component (optional, omit to move to root)\n"
+				"- rename_component: Rename a component variable.\n"
+				"    Params: component_name (required), new_name (required)\n"
+				"- set_root_component: Designate a component as the new scene root.\n"
+				"    Params: component_name (required)\n"
+				"- get_component_details: Get detailed info about a component including hierarchy and properties.\n"
+				"    Params: component_name (required), include_defaults (optional boolean, default false)");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_EditBlueprintGraph::GetInputSchema() const
@@ -204,7 +216,7 @@ TSharedPtr<FJsonObject> ClaireonTool_EditBlueprintGraph::GetInputSchema() const
 	// operation - required string (e.g. "open", "add_node", "connect_pins", "save", "close")
 	TSharedPtr<FJsonObject> OpProp = MakeShared<FJsonObject>();
 	OpProp->SetStringField(TEXT("type"), TEXT("string"));
-	OpProp->SetStringField(TEXT("description"), TEXT("The operation to perform: open, create, add_node (supports optional position: {x,y}), remove_node, connect_pins, disconnect_pins, set_pin_value, move_node (requires node_guid + position: {x,y}), add_pin, remove_pin, split_pin, recombine_pin, add_variable, set_variable_properties, save, close, list_graphs, reconstruct_node, set_gameplay_tags, etc."));
+	OpProp->SetStringField(TEXT("description"), TEXT("The operation to perform: open, create, add_node (supports optional position: {x,y}), remove_node, connect_pins, disconnect_pins, set_pin_value, move_node (requires node_guid + position: {x,y}), add_pin, remove_pin, split_pin, recombine_pin, add_variable, set_variable_properties, save, close, list_graphs, reconstruct_node, set_gameplay_tags, remove_component, reparent_component, rename_component, set_root_component, get_component_details, etc."));
 	Properties->SetObjectField(TEXT("operation"), OpProp);
 
 	// asset_path - required for open/create
@@ -302,6 +314,18 @@ TSharedPtr<FJsonObject> ClaireonTool_EditBlueprintGraph::GetInputSchema() const
 	MetadataProp->SetStringField(TEXT("type"), TEXT("object"));
 	MetadataProp->SetStringField(TEXT("description"), TEXT("Key/value metadata pairs. Common keys: UIMin, UIMax, ClampMin, ClampMax, Units, EditCondition, Bitmask, BitmaskEnum."));
 	Properties->SetObjectField(TEXT("metadata"), MetadataProp);
+
+	// new_name - required for rename_component
+	TSharedPtr<FJsonObject> NewNameProp = MakeShared<FJsonObject>();
+	NewNameProp->SetStringField(TEXT("type"), TEXT("string"));
+	NewNameProp->SetStringField(TEXT("description"), TEXT("New variable name for the component. Required for rename_component. Must be a valid C++ identifier."));
+	Properties->SetObjectField(TEXT("new_name"), NewNameProp);
+
+	// include_defaults - optional for get_component_details
+	TSharedPtr<FJsonObject> IncludeDefaultsProp = MakeShared<FJsonObject>();
+	IncludeDefaultsProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	IncludeDefaultsProp->SetStringField(TEXT("description"), TEXT("When true, get_component_details returns all editable properties. When false (default), returns only properties that differ from class defaults."));
+	Properties->SetObjectField(TEXT("include_defaults"), IncludeDefaultsProp);
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
@@ -558,6 +582,26 @@ FToolResult ClaireonTool_EditBlueprintGraph::Execute(const TSharedPtr<FJsonObjec
 		else if (Operation == TEXT("set_property"))
 		{
 			return Operation_SetProperty(SessionId, Data, Params);
+		}
+		else if (Operation == TEXT("remove_component"))
+		{
+			return Operation_RemoveComponent(SessionId, Data, Params);
+		}
+		else if (Operation == TEXT("reparent_component"))
+		{
+			return Operation_ReparentComponent(SessionId, Data, Params);
+		}
+		else if (Operation == TEXT("rename_component"))
+		{
+			return Operation_RenameComponent(SessionId, Data, Params);
+		}
+		else if (Operation == TEXT("set_root_component"))
+		{
+			return Operation_SetRootComponent(SessionId, Data, Params);
+		}
+		else if (Operation == TEXT("get_component_details"))
+		{
+			return Operation_GetComponentDetails(SessionId, Data, Params);
 		}
 		else if (Operation == TEXT("move_cursor"))
 		{
@@ -2760,15 +2804,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddComponent(const FStrin
 	if (Params->TryGetStringField(TEXT("parent_component"), ParentComponentName))
 	{
 		// Find parent component node
-		TArray<USCS_Node*> AllNodes = SCS->GetAllNodes();
-		for (USCS_Node* Node : AllNodes)
-		{
-			if (Node && Node->GetVariableName() == FName(*ParentComponentName))
-			{
-				ParentNode = Node;
-				break;
-			}
-		}
+		ParentNode = SCS->FindSCSNode(FName(*ParentComponentName));
 
 		if (!ParentNode)
 		{
@@ -2844,16 +2880,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_SetProperty(const FString
 			return MakeErrorResult(TEXT("Blueprint does not have a SimpleConstructionScript"));
 		}
 
-		USCS_Node* ComponentNode = nullptr;
-		TArray<USCS_Node*> AllNodes = SCS->GetAllNodes();
-		for (USCS_Node* Node : AllNodes)
-		{
-			if (Node && Node->GetVariableName() == FName(*ComponentName))
-			{
-				ComponentNode = Node;
-				break;
-			}
-		}
+		USCS_Node* ComponentNode = SCS->FindSCSNode(FName(*ComponentName));
 
 		if (!ComponentNode)
 		{
@@ -2954,6 +2981,508 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_SetProperty(const FString
 		TEXT("Set %s.%s = '%s'"),
 		*TargetDescription, *PropertyName, *PropertyValue);
 
+	return BuildStateResponse(SessionId, Data);
+}
+
+FToolResult ClaireonTool_EditBlueprintGraph::Operation_RemoveComponent(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+{
+	UBlueprint* Blueprint = Data->Blueprint.Get();
+	if (!Blueprint)
+	{
+		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
+	}
+
+	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
+	if (!SCS)
+	{
+		return MakeErrorResult(TEXT("Blueprint does not have a SimpleConstructionScript (not an Actor Blueprint?)"));
+	}
+
+	// Parse component_name
+	FString ComponentName;
+	if (!Params->TryGetStringField(TEXT("component_name"), ComponentName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: component_name"));
+	}
+
+	// Find node
+	USCS_Node* Node = SCS->FindSCSNode(FName(*ComponentName));
+	if (!Node)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Component not found: %s"), *ComponentName));
+	}
+
+	// Verify not inherited (must be in SCS->GetAllNodes(), not only in parent BP's SCS)
+	if (!SCS->GetAllNodes().Contains(Node))
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Cannot remove inherited component: %s"), *ComponentName));
+	}
+
+	// Verify not DefaultSceneRootNode
+	if (Node == SCS->GetDefaultSceneRootNode())
+	{
+		return MakeErrorResult(TEXT("Cannot remove the DefaultSceneRootNode directly. Add another scene component first, or use set_root_component."));
+	}
+
+	// Perform removal with undo support
+	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Remove Blueprint Component")));
+	SCS->Modify();
+
+	// RemoveNodeAndPromoteChildren handles:
+	// - If root node: promotes first non-editor-only child to root, moves remaining children under it, calls ValidateSceneRootNodes()
+	// - If non-root node: moves children to the removed node's parent at the same position
+	SCS->RemoveNodeAndPromoteChildren(Node);
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+
+	Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Removed component: %s (children promoted)"), *ComponentName);
+	return BuildStateResponse(SessionId, Data);
+}
+
+FToolResult ClaireonTool_EditBlueprintGraph::Operation_ReparentComponent(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+{
+	UBlueprint* Blueprint = Data->Blueprint.Get();
+	if (!Blueprint)
+	{
+		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
+	}
+
+	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
+	if (!SCS)
+	{
+		return MakeErrorResult(TEXT("Blueprint does not have a SimpleConstructionScript (not an Actor Blueprint?)"));
+	}
+
+	// Parse component_name (required)
+	FString ComponentName;
+	if (!Params->TryGetStringField(TEXT("component_name"), ComponentName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: component_name"));
+	}
+
+	// Find source node
+	USCS_Node* SourceNode = SCS->FindSCSNode(FName(*ComponentName));
+	if (!SourceNode)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Component not found: %s"), *ComponentName));
+	}
+
+	// Verify source not inherited
+	if (!SCS->GetAllNodes().Contains(SourceNode))
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Cannot reparent inherited component: %s"), *ComponentName));
+	}
+
+	// Parse optional parent_component
+	FString ParentComponentName;
+	bool bMoveToRoot = !Params->TryGetStringField(TEXT("parent_component"), ParentComponentName);
+	USCS_Node* TargetNode = nullptr;
+
+	if (!bMoveToRoot)
+	{
+		TargetNode = SCS->FindSCSNode(FName(*ParentComponentName));
+		if (!TargetNode)
+		{
+			return MakeErrorResult(FString::Printf(TEXT("Target parent component not found: %s"), *ParentComponentName));
+		}
+
+		// Circular reparenting check: target must not be self or a descendant of source
+		if (TargetNode == SourceNode)
+		{
+			return MakeErrorResult(TEXT("Cannot reparent a component to itself"));
+		}
+		// IsChildOf checks if TargetNode is a descendant of SourceNode
+		// USCS_Node::IsChildOf(USCS_Node* TestParent) returns true if 'this' is a child of TestParent
+		// So we check: is TargetNode a child of SourceNode? -> TargetNode->IsChildOf(SourceNode)
+		if (TargetNode->IsChildOf(SourceNode))
+		{
+			return MakeErrorResult(FString::Printf(TEXT("Cannot reparent '%s' under '%s': would create a circular hierarchy (target is a descendant of source)"), *ComponentName, *ParentComponentName));
+		}
+
+		// Non-scene component cannot be attached to a parent
+		if (SourceNode->ComponentTemplate && !SourceNode->ComponentTemplate->IsA<USceneComponent>())
+		{
+			return MakeErrorResult(FString::Printf(TEXT("Cannot attach non-scene component '%s' to a parent. Non-scene components must remain at root level."), *ComponentName));
+		}
+	}
+
+	// Perform reparent with undo support
+	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Reparent Blueprint Component")));
+	SCS->Modify();
+
+	// Detach from current position
+	USCS_Node* CurrentParent = SCS->FindParentNode(SourceNode);
+	if (CurrentParent)
+	{
+		CurrentParent->RemoveChildNode(SourceNode);
+	}
+	else
+	{
+		// Source is a root node
+		SCS->RemoveNode(SourceNode, /*bValidateSceneRootNodes=*/false);
+	}
+
+	// Attach to new position
+	if (!bMoveToRoot)
+	{
+		TargetNode->AddChildNode(SourceNode);
+		SourceNode->SetParent(TargetNode);
+	}
+	else
+	{
+		// Moving to root level
+		// NOTE (v1): When reparenting to root in a Blueprint inheriting from another BP with a root
+		// component, RemoveNode above clears ParentComponentOrVariableName. This is intentional for v1
+		// and may need attention for inherited-BP scenarios.
+		SCS->AddNode(SourceNode);
+	}
+
+	SCS->ValidateSceneRootNodes();
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+
+	FString StatusMsg = bMoveToRoot
+		? FString::Printf(TEXT("Reparented component '%s' to root level"), *ComponentName)
+		: FString::Printf(TEXT("Reparented component '%s' under '%s'"), *ComponentName, *ParentComponentName);
+	Data->Cursor.LastOperationStatus = StatusMsg;
+	return BuildStateResponse(SessionId, Data);
+}
+
+FToolResult ClaireonTool_EditBlueprintGraph::Operation_RenameComponent(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+{
+	UBlueprint* Blueprint = Data->Blueprint.Get();
+	if (!Blueprint)
+	{
+		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
+	}
+
+	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
+	if (!SCS)
+	{
+		return MakeErrorResult(TEXT("Blueprint does not have a SimpleConstructionScript (not an Actor Blueprint?)"));
+	}
+
+	// Parse component_name and new_name
+	FString ComponentName;
+	if (!Params->TryGetStringField(TEXT("component_name"), ComponentName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: component_name"));
+	}
+
+	FString NewName;
+	if (!Params->TryGetStringField(TEXT("new_name"), NewName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: new_name"));
+	}
+
+	// Find node
+	USCS_Node* Node = SCS->FindSCSNode(FName(*ComponentName));
+	if (!Node)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Component not found: %s"), *ComponentName));
+	}
+
+	// Verify not inherited
+	if (!SCS->GetAllNodes().Contains(Node))
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Cannot rename inherited component: %s"), *ComponentName));
+	}
+
+	// Validate new name is a valid C++ identifier
+	if (NewName.Len() == 0)
+	{
+		return MakeErrorResult(TEXT("New name cannot be empty"));
+	}
+	if (FChar::IsDigit(NewName[0]))
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Invalid name '%s': cannot start with a digit"), *NewName));
+	}
+	for (TCHAR Ch : NewName)
+	{
+		if (!FChar::IsAlnum(Ch) && Ch != TEXT('_'))
+		{
+			return MakeErrorResult(FString::Printf(TEXT("Invalid name '%s': contains invalid character '%c'. Only alphanumeric characters and underscores are allowed."), *NewName, Ch));
+		}
+	}
+
+	// Pre-check for conflicts in all scopes
+	FName NewFName(*NewName);
+
+	// Scope 1: SCS component variables
+	for (USCS_Node* ExistingNode : SCS->GetAllNodes())
+	{
+		if (ExistingNode && ExistingNode != Node && ExistingNode->GetVariableName() == NewFName)
+		{
+			return MakeErrorResult(FString::Printf(TEXT("Name '%s' conflicts with existing SCS component variable"), *NewName));
+		}
+	}
+
+	// Scope 2: Blueprint-level variables
+	for (const FBPVariableDescription& Var : Blueprint->NewVariables)
+	{
+		if (Var.VarName == NewFName)
+		{
+			return MakeErrorResult(FString::Printf(TEXT("Name '%s' conflicts with existing Blueprint variable"), *NewName));
+		}
+	}
+
+	// Scope 3: Function graph names
+	for (UEdGraph* Graph : Blueprint->FunctionGraphs)
+	{
+		if (Graph && Graph->GetFName() == NewFName)
+		{
+			return MakeErrorResult(FString::Printf(TEXT("Name '%s' conflicts with existing function name"), *NewName));
+		}
+	}
+
+	// Perform rename
+	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Rename Blueprint Component")));
+
+	// RenameComponentMemberVariable handles:
+	// - Variable name update on the SCS node
+	// - Reference replacement in Blueprint graphs via ReplaceVariableReferences
+	// - Child Blueprint validation via ValidateBlueprintChildVariables
+	// - Inheritable component handler refresh
+	// - Structural modification marking
+	FBlueprintEditorUtils::RenameComponentMemberVariable(Blueprint, Node, NewFName);
+
+	Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Renamed component '%s' to '%s'"), *ComponentName, *NewName);
+	return BuildStateResponse(SessionId, Data);
+}
+
+FToolResult ClaireonTool_EditBlueprintGraph::Operation_SetRootComponent(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+{
+	UBlueprint* Blueprint = Data->Blueprint.Get();
+	if (!Blueprint)
+	{
+		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
+	}
+
+	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
+	if (!SCS)
+	{
+		return MakeErrorResult(TEXT("Blueprint does not have a SimpleConstructionScript (not an Actor Blueprint?)"));
+	}
+
+	// Parse component_name
+	FString ComponentName;
+	if (!Params->TryGetStringField(TEXT("component_name"), ComponentName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: component_name"));
+	}
+
+	// Find target node
+	USCS_Node* TargetNode = SCS->FindSCSNode(FName(*ComponentName));
+	if (!TargetNode)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Component not found: %s"), *ComponentName));
+	}
+
+	// Verify not inherited
+	if (!SCS->GetAllNodes().Contains(TargetNode))
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Cannot set inherited component as root: %s"), *ComponentName));
+	}
+
+	// Verify target is a USceneComponent
+	if (!TargetNode->ComponentTemplate || !TargetNode->ComponentTemplate->IsA<USceneComponent>())
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Component '%s' is not a scene component and cannot be the root"), *ComponentName));
+	}
+
+	// Check if target is already the scene root
+	USCS_Node* CurrentRootNode = nullptr;
+	SCS->GetSceneRootComponentTemplate(false, &CurrentRootNode);
+	if (CurrentRootNode == TargetNode)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Component '%s' is already the scene root"), *ComponentName));
+	}
+
+	// Get the current scene root (including DefaultSceneRootNode if applicable)
+	USCS_Node* OldRootNode = nullptr;
+	SCS->GetSceneRootComponentTemplate(true, &OldRootNode);
+	bool bWasDefaultSceneRoot = (OldRootNode == SCS->GetDefaultSceneRootNode());
+
+	// Perform root swap with undo support
+	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Set Root Component")));
+	SCS->Modify();
+
+	// Step 1: Detach target from current parent (if it has one)
+	USCS_Node* TargetParent = SCS->FindParentNode(TargetNode);
+	if (TargetParent)
+	{
+		TargetParent->RemoveChildNode(TargetNode);
+	}
+
+	// Reset target's relative transform since it becomes root
+	if (USceneComponent* SceneComp = Cast<USceneComponent>(TargetNode->ComponentTemplate))
+	{
+		SceneComp->SetRelativeLocation(FVector::ZeroVector);
+		SceneComp->SetRelativeRotation(FRotator::ZeroRotator);
+		// Preserve scale intentionally -- scale is often set at authoring time
+	}
+
+	// Step 2: Remove old root from root node set
+	// Suppress ValidateSceneRootNodes until we finish the swap.
+	// The transient state (old root removed, new root not yet added) is safe because
+	// ValidateSceneRootNodes will be called by AddNode in the next step, at which point
+	// the new root is already in the root set. (Review item M1)
+	if (OldRootNode)
+	{
+		SCS->RemoveNode(OldRootNode, /*bValidateSceneRootNodes=*/false);
+	}
+
+	// Step 3: Add target as new root
+	// AddNode adds to RootNodes and calls ValidateSceneRootNodes, which will
+	// auto-remove DefaultSceneRootNode since a real scene component now exists
+	SCS->AddNode(TargetNode);
+
+	// Step 4: Reparent old root under new root
+	if (!bWasDefaultSceneRoot && OldRootNode)
+	{
+		// Old root was a real component -- make it a child of the new root
+		TargetNode->AddChildNode(OldRootNode);
+		OldRootNode->SetParent(TargetNode);
+	}
+	// If bWasDefaultSceneRoot, the old default root is cleaned up by ValidateSceneRootNodes
+	// in step 3's AddNode call, so no reparenting is needed.
+
+	// MarkBlueprintAsStructurallyModified must be the last call after all hierarchy manipulation (Review item L2)
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+
+	Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Set '%s' as the new root component"), *ComponentName);
+	return BuildStateResponse(SessionId, Data);
+}
+
+FToolResult ClaireonTool_EditBlueprintGraph::Operation_GetComponentDetails(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+{
+	UBlueprint* Blueprint = Data->Blueprint.Get();
+	if (!Blueprint)
+	{
+		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
+	}
+
+	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
+	if (!SCS)
+	{
+		return MakeErrorResult(TEXT("Blueprint does not have a SimpleConstructionScript (not an Actor Blueprint?)"));
+	}
+
+	// Parse component_name
+	FString ComponentName;
+	if (!Params->TryGetStringField(TEXT("component_name"), ComponentName))
+	{
+		return MakeErrorResult(TEXT("Missing required field: component_name"));
+	}
+
+	// Parse optional include_defaults (default false)
+	bool bIncludeDefaults = false;
+	Params->TryGetBoolField(TEXT("include_defaults"), bIncludeDefaults);
+
+	// Find node
+	USCS_Node* Node = SCS->FindSCSNode(FName(*ComponentName));
+	if (!Node)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Component not found: %s"), *ComponentName));
+	}
+
+	UActorComponent* ComponentTemplate = Node->ComponentTemplate;
+	if (!ComponentTemplate)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Component '%s' has no template object"), *ComponentName));
+	}
+
+	// Build component details JSON
+	TSharedPtr<FJsonObject> Details = MakeShared<FJsonObject>();
+	Details->SetStringField(TEXT("name"), Node->GetVariableName().ToString());
+	Details->SetStringField(TEXT("class"), ComponentTemplate->GetClass()->GetName());
+
+	// is_root: check against scene root
+	USCS_Node* SceneRootNode = nullptr;
+	SCS->GetSceneRootComponentTemplate(true, &SceneRootNode);
+	Details->SetBoolField(TEXT("is_root"), Node == SceneRootNode);
+
+	// parent
+	USCS_Node* ParentNode = SCS->FindParentNode(Node);
+	if (ParentNode)
+	{
+		Details->SetStringField(TEXT("parent"), ParentNode->GetVariableName().ToString());
+	}
+	// If no parent, omit the field (root-level component)
+
+	// children
+	TArray<TSharedPtr<FJsonValue>> ChildrenArray;
+	for (USCS_Node* ChildNode : Node->GetChildNodes())
+	{
+		if (ChildNode)
+		{
+			ChildrenArray.Add(MakeShared<FJsonValueString>(ChildNode->GetVariableName().ToString()));
+		}
+	}
+	Details->SetArrayField(TEXT("children"), ChildrenArray);
+
+	// is_scene_component and transform
+	bool bIsSceneComponent = ComponentTemplate->IsA<USceneComponent>();
+	Details->SetBoolField(TEXT("is_scene_component"), bIsSceneComponent);
+
+	if (bIsSceneComponent)
+	{
+		USceneComponent* SceneComp = Cast<USceneComponent>(ComponentTemplate);
+		FVector Location = SceneComp->GetRelativeLocation();
+		FRotator Rotation = SceneComp->GetRelativeRotation();
+		FVector Scale = SceneComp->GetRelativeScale3D();
+
+		Details->SetStringField(TEXT("relative_location"), FString::Printf(TEXT("X=%.2f Y=%.2f Z=%.2f"), Location.X, Location.Y, Location.Z));
+		Details->SetStringField(TEXT("relative_rotation"), FString::Printf(TEXT("P=%.2f Y=%.2f R=%.2f"), Rotation.Pitch, Rotation.Yaw, Rotation.Roll));
+		Details->SetStringField(TEXT("relative_scale"), FString::Printf(TEXT("X=%.2f Y=%.2f Z=%.2f"), Scale.X, Scale.Y, Scale.Z));
+	}
+
+	// Properties
+	TArray<TSharedPtr<FJsonValue>> PropertiesArray;
+	UObject* CDO = ComponentTemplate->GetClass()->GetDefaultObject();
+
+	for (TFieldIterator<FProperty> PropIt(ComponentTemplate->GetClass()); PropIt; ++PropIt)
+	{
+		FProperty* Property = *PropIt;
+
+		// Only include editable properties
+		if (!Property->HasAnyPropertyFlags(CPF_Edit))
+		{
+			continue;
+		}
+
+		// Skip deprecated and transient properties
+		if (Property->HasAnyPropertyFlags(CPF_Deprecated | CPF_Transient))
+		{
+			continue;
+		}
+
+		// Get values as strings for comparison
+		FString TemplateValue;
+		Property->ExportTextItem_Direct(TemplateValue, Property->ContainerPtrToValuePtr<void>(ComponentTemplate), nullptr, ComponentTemplate, PPF_None);
+
+		FString DefaultValue;
+		Property->ExportTextItem_Direct(DefaultValue, Property->ContainerPtrToValuePtr<void>(CDO), nullptr, CDO, PPF_None);
+
+		// If not including defaults, skip properties that match CDO
+		if (!bIncludeDefaults && TemplateValue == DefaultValue)
+		{
+			continue;
+		}
+
+		TSharedPtr<FJsonObject> PropObj = MakeShared<FJsonObject>();
+		PropObj->SetStringField(TEXT("name"), Property->GetName());
+		PropObj->SetStringField(TEXT("type"), Property->GetCPPType());
+		PropObj->SetStringField(TEXT("value"), TemplateValue);
+		PropertiesArray.Add(MakeShared<FJsonValueObject>(PropObj));
+	}
+	Details->SetArrayField(TEXT("properties"), PropertiesArray);
+
+	// Serialize the details JSON to a string and embed in BuildStateResponse
+	FString DetailsString;
+	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&DetailsString);
+	FJsonSerializer::Serialize(Details.ToSharedRef(), Writer);
+
+	Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Component details for '%s':\n%s"), *ComponentName, *DetailsString);
 	return BuildStateResponse(SessionId, Data);
 }
 
