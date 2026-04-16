@@ -105,6 +105,9 @@ private:
 	FToolResult Operation_Save(const FString& SessionId, FStateTreeEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_Close(const FString& SessionId, FStateTreeEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 
+	// apply_spec
+	FToolResult Operation_ApplySpec(const TSharedPtr<FJsonObject>& Params);
+
 	// Response building
 	FToolResult BuildStateResponse(const FString& SessionId, FStateTreeEditToolData* Data);
 };

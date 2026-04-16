@@ -99,6 +99,9 @@ private:
 	FToolResult Operation_EditMVVMBinding(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_RemoveMVVMBinding(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 
+	// apply_spec
+	FToolResult Operation_ApplySpec(const TSharedPtr<FJsonObject>& Params);
+
 	// Helpers
 	FToolResult BuildStateResponse(const FString& SessionId, FWidgetBPEditToolData* Data);
 };

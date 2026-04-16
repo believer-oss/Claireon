@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_EQSEdit.h"
+#include "Tools/ClaireonSpecApplicator_EQS.h"
 #include "Tools/ClaireonBehaviorTreeHelpers.h"
 #include "ClaireonNameResolver.h"
 #include "ClaireonLog.h"
@@ -127,7 +128,9 @@ FString ClaireonTool_EQSEdit::GetFullDescription() const
 				"Option operations: add_option, remove_option, set_generator\n"
 				"Test operations: add_test, remove_test, reorder_tests\n"
 				"Property operations: set_node_property\n"
-				"Build operations: save");
+				"Build operations: save\n"
+				"Declarative: apply_spec - Apply a declarative JSON specification to create/modify the asset atomically. "
+				"Accepts: asset_path (string, required), spec (object, required), session_id (string, optional).");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_EQSEdit::GetInputSchema() const
@@ -155,6 +158,7 @@ TSharedPtr<FJsonObject> ClaireonTool_EQSEdit::GetInputSchema() const
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("reorder_tests")));
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("set_node_property")));
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("save")));
+		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("apply_spec")));
 		OpProp->SetArrayField(TEXT("enum"), EnumValues);
 	}
 	Properties->SetObjectField(TEXT("operation"), OpProp);
@@ -218,6 +222,8 @@ FToolResult ClaireonTool_EQSEdit::Execute(const TSharedPtr<FJsonObject>& Argumen
 		return Operation_Open(Params);
 	if (Operation == TEXT("create_new"))
 		return Operation_CreateNew(Params);
+	if (Operation == TEXT("apply_spec"))
+		return Operation_ApplySpec(Params);
 
 	// All other operations require session_id
 	FString SessionId;
@@ -833,4 +839,32 @@ FToolResult ClaireonTool_EQSEdit::Operation_Save(const FString& SessionId, FEQSE
 		Data->LastOperationStatus = TEXT("save â Failed");
 		return MakeErrorResult(TEXT("Failed to save EQS package"));
 	}
+}
+
+// ============================================================================
+// apply_spec
+// ============================================================================
+
+FToolResult ClaireonTool_EQSEdit::Operation_ApplySpec(const TSharedPtr<FJsonObject>& Params)
+{
+	// Extract asset_path -- required
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("apply_spec requires 'asset_path' parameter"));
+	}
+
+	// Extract spec -- required JSON object
+	const TSharedPtr<FJsonObject>* SpecPtr = nullptr;
+	if (!Params->TryGetObjectField(TEXT("spec"), SpecPtr) || !SpecPtr || !SpecPtr->IsValid())
+	{
+		return MakeErrorResult(TEXT("apply_spec requires 'spec' parameter (JSON object)"));
+	}
+
+	// Optional: reuse an existing session
+	FString SessionId;
+	Params->TryGetStringField(TEXT("session_id"), SessionId);
+
+	FClaireonSpecApplicator_EQS Applicator;
+	return Applicator.ApplySpec(*SpecPtr, AssetPath, SessionId);
 }

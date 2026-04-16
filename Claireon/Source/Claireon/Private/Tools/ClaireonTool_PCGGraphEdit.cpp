@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_PCGGraphEdit.h"
+#include "Tools/ClaireonSpecApplicator_PCGGraph.h"
 #include "Tools/ClaireonPCGGraphHelpers.h"
 #include "ClaireonLog.h"
 #include "ClaireonPathResolver.h"
@@ -89,6 +90,7 @@ TSharedPtr<FJsonObject> ClaireonTool_PCGGraphEdit::GetInputSchema() const
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("focus")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("cursor_back")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("save")));
+	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("apply_spec")));
 	OperationProp->SetArrayField(TEXT("enum"), OperationEnum);
 	OperationProp->SetStringField(TEXT("description"), TEXT("The editing operation to perform."));
 	Properties->SetObjectField(TEXT("operation"), OperationProp);
@@ -155,6 +157,10 @@ FToolResult ClaireonTool_PCGGraphEdit::Execute(const TSharedPtr<FJsonObject>& Ar
 	if (Operation == TEXT("open"))
 	{
 		return Operation_Open(Params);
+	}
+	if (Operation == TEXT("apply_spec"))
+	{
+		return Operation_ApplySpec(Params);
 	}
 
 	// Session-required operations
@@ -766,4 +772,32 @@ FToolResult ClaireonTool_PCGGraphEdit::Operation_Save(const FString& SessionId, 
 
 	Data->LastOperationStatus = bSaved ? TEXT("Saved successfully") : TEXT("Save failed");
 	return BuildStateResponse(SessionId, Data);
+}
+
+// ============================================================================
+// apply_spec
+// ============================================================================
+
+FToolResult ClaireonTool_PCGGraphEdit::Operation_ApplySpec(const TSharedPtr<FJsonObject>& Params)
+{
+	// Extract asset_path -- required
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("apply_spec requires 'asset_path' parameter"));
+	}
+
+	// Extract spec -- required JSON object
+	const TSharedPtr<FJsonObject>* SpecPtr = nullptr;
+	if (!Params->TryGetObjectField(TEXT("spec"), SpecPtr) || !SpecPtr || !SpecPtr->IsValid())
+	{
+		return MakeErrorResult(TEXT("apply_spec requires 'spec' parameter (JSON object)"));
+	}
+
+	// Optional: reuse an existing session
+	FString SessionId;
+	Params->TryGetStringField(TEXT("session_id"), SessionId);
+
+	FClaireonSpecApplicator_PCGGraph Applicator;
+	return Applicator.ApplySpec(*SpecPtr, AssetPath, SessionId);
 }

@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonTool_EditWidgetBP.h"
 #include "ClaireonNameResolver.h"
+#include "Tools/ClaireonSpecApplicator_WidgetBP.h"
 #include "ClaireonLog.h"
 #include "ClaireonSafeExec.h"
 #include "ClaireonWidgetHelpers.h"
@@ -115,7 +116,9 @@ FString ClaireonTool_EditWidgetBP::GetFullDescription() const
 				"- list_mvvm_bindings: (no params)\n"
 				"- add_mvvm_binding: params: viewmodel_name (required), viewmodel_property (required), widget_name (required), widget_property (required), mode (optional, default \"OneWayToDestination\"), enabled (optional, default true), conversion_function (optional)\n"
 				"- edit_mvvm_binding: params: binding_id (required), mode (optional), enabled (optional), viewmodel_property (optional), widget_property (optional), conversion_function (optional, empty string to clear)\n"
-				"- remove_mvvm_binding: params: binding_id (required)");
+				"- remove_mvvm_binding: params: binding_id (required)\n\n"
+				"Declarative: apply_spec - Apply a declarative JSON specification to create/modify the asset atomically. "
+				"Accepts: asset_path (string, required), spec (object, required), session_id (string, optional).");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_EditWidgetBP::GetInputSchema() const
@@ -167,6 +170,7 @@ TSharedPtr<FJsonObject> ClaireonTool_EditWidgetBP::GetInputSchema() const
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("add_mvvm_binding")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("edit_mvvm_binding")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("remove_mvvm_binding")));
+	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("apply_spec")));
 	OperationProp->SetArrayField(TEXT("enum"), OperationEnum);
 	OperationProp->SetStringField(TEXT("description"), TEXT("The editing operation to perform."));
 	Properties->SetObjectField(TEXT("operation"), OperationProp);
@@ -214,6 +218,13 @@ FToolResult ClaireonTool_EditWidgetBP::Execute(const TSharedPtr<FJsonObject>& Ar
 			? Arguments->GetObjectField(TEXT("params"))
 			: MakeShared<FJsonObject>();
 		return Operation_Create(Params);
+	}
+	if (Operation == TEXT("apply_spec"))
+	{
+		TSharedPtr<FJsonObject> Params = Arguments->HasField(TEXT("params"))
+			? Arguments->GetObjectField(TEXT("params"))
+			: MakeShared<FJsonObject>();
+		return Operation_ApplySpec(Params);
 	}
 
 	// Session-required operations
@@ -3390,3 +3401,31 @@ FToolResult ClaireonTool_EditWidgetBP::Operation_SetAnimationProperty(const FStr
 }
 
 #undef LOCTEXT_NAMESPACE
+
+// ============================================================================
+// apply_spec
+// ============================================================================
+
+FToolResult ClaireonTool_EditWidgetBP::Operation_ApplySpec(const TSharedPtr<FJsonObject>& Params)
+{
+	// Extract asset_path -- required
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("apply_spec requires 'asset_path' parameter"));
+	}
+
+	// Extract spec -- required JSON object
+	const TSharedPtr<FJsonObject>* SpecPtr = nullptr;
+	if (!Params->TryGetObjectField(TEXT("spec"), SpecPtr) || !SpecPtr || !SpecPtr->IsValid())
+	{
+		return MakeErrorResult(TEXT("apply_spec requires 'spec' parameter (JSON object)"));
+	}
+
+	// Optional: reuse an existing session
+	FString SessionId;
+	Params->TryGetStringField(TEXT("session_id"), SessionId);
+
+	FClaireonSpecApplicator_WidgetBP Applicator;
+	return Applicator.ApplySpec(*SpecPtr, AssetPath, SessionId);
+}

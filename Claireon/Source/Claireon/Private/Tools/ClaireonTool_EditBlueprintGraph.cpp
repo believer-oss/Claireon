@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_EditBlueprintGraph.h"
+#include "Tools/ClaireonSpecApplicator_Blueprint.h"
 #include "ClaireonLog.h"
 #include "ClaireonSafeExec.h"
 #include "ClaireonBlueprintHelpers.h"
@@ -215,7 +216,9 @@ FString ClaireonTool_EditBlueprintGraph::GetFullDescription() const
 				"  - For BlueprintImplementableEvent functions: creates a UK2Node_Event in EventGraph\n"
 				"    (same as EventOverride node_type). Session stays on EventGraph.\n"
 				"  Use this instead of add_node(node_type=EventOverride) for all function overrides.\n"
-				"  Returns error if the override already exists.");
+				"  Returns error if the override already exists.\n\n"
+				"Declarative: apply_spec - Apply a declarative JSON specification to create/modify the asset atomically. "
+				"Accepts: asset_path (string, required), spec (object, required), session_id (string, optional).");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_EditBlueprintGraph::GetInputSchema() const
@@ -228,7 +231,7 @@ TSharedPtr<FJsonObject> ClaireonTool_EditBlueprintGraph::GetInputSchema() const
 	// operation - required string (e.g. "open", "add_node", "connect_pins", "save", "close")
 	TSharedPtr<FJsonObject> OpProp = MakeShared<FJsonObject>();
 	OpProp->SetStringField(TEXT("type"), TEXT("string"));
-	OpProp->SetStringField(TEXT("description"), TEXT("The operation to perform: open, create, add_node (supports optional position: {x,y}), remove_node, connect_pins, disconnect_pins, set_pin_value, move_node (requires node_guid + position: {x,y}), add_pin, remove_pin, split_pin, recombine_pin, add_variable, set_variable_properties, add_function_override, save, close, list_graphs, reconstruct_node, set_gameplay_tags, remove_component, reparent_component, rename_component, set_root_component, get_component_details, etc."));
+	OpProp->SetStringField(TEXT("description"), TEXT("The operation to perform: open, create, add_node (supports optional position: {x,y}), remove_node, connect_pins, disconnect_pins, set_pin_value, move_node (requires node_guid + position: {x,y}), add_pin, remove_pin, split_pin, recombine_pin, add_variable, set_variable_properties, add_function_override, save, close, list_graphs, reconstruct_node, set_gameplay_tags, remove_component, reparent_component, rename_component, set_root_component, get_component_details, apply_spec, etc."));
 	Properties->SetObjectField(TEXT("operation"), OpProp);
 
 	// asset_path - required for open/create
@@ -387,6 +390,10 @@ FToolResult ClaireonTool_EditBlueprintGraph::Execute(const TSharedPtr<FJsonObjec
 	else if (Operation == TEXT("list_graphs"))
 	{
 		return Operation_ListGraphs(Params);
+	}
+	else if (Operation == TEXT("apply_spec"))
+	{
+		return Operation_ApplySpec(Params);
 	}
 	else if (Operation == TEXT("remove_node"))
 	{
@@ -5544,6 +5551,34 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddFunctionOverride(
 	}
 
 	return BuildStateResponse(SessionId, Data);
+}
+
+// ============================================================================
+// Operation: apply_spec
+// ============================================================================
+
+FToolResult ClaireonTool_EditBlueprintGraph::Operation_ApplySpec(const TSharedPtr<FJsonObject>& Params)
+{
+	// Extract asset_path -- required
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("apply_spec requires 'asset_path' parameter"));
+	}
+
+	// Extract spec -- required JSON object
+	const TSharedPtr<FJsonObject>* SpecPtr = nullptr;
+	if (!Params->TryGetObjectField(TEXT("spec"), SpecPtr) || !SpecPtr || !SpecPtr->IsValid())
+	{
+		return MakeErrorResult(TEXT("apply_spec requires 'spec' parameter (JSON object)"));
+	}
+
+	// Optional: reuse an existing session
+	FString SessionId;
+	Params->TryGetStringField(TEXT("session_id"), SessionId);
+
+	FClaireonSpecApplicator_Blueprint Applicator;
+	return Applicator.ApplySpec(*SpecPtr, AssetPath, SessionId);
 }
 
 #undef LOCTEXT_NAMESPACE

@@ -88,6 +88,9 @@ private:
 	FToolResult Operation_CursorBack(const FString& SessionId, FPCGGraphEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_Save(const FString& SessionId, FPCGGraphEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 
+	// apply_spec
+	FToolResult Operation_ApplySpec(const TSharedPtr<FJsonObject>& Params);
+
 	// Response building
 	FToolResult BuildStateResponse(const FString& SessionId, FPCGGraphEditToolData* Data);
 };

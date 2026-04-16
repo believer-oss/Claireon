@@ -157,6 +157,9 @@ private:
 	/** Create a function override graph for a BlueprintNativeEvent or BlueprintImplementableEvent */
 	FToolResult Operation_AddFunctionOverride(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 
+	// apply_spec
+	FToolResult Operation_ApplySpec(const TSharedPtr<FJsonObject>& Params);
+
 	// ========================================================================
 	// Helpers
 	// ========================================================================

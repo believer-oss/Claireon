@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_StateTreeEdit.h"
+#include "Tools/ClaireonSpecApplicator_StateTree.h"
 #include "Tools/ClaireonStateTreeHelpers.h"
 #include "ClaireonLog.h"
 #include "ClaireonSafeExec.h"
@@ -185,7 +186,9 @@ FString ClaireonTool_StateTreeEdit::GetFullDescription() const
 				"Transition operations: add_transition, remove_transition, modify_transition, add_transition_condition, remove_transition_condition\n"
 				"Binding operations: add_binding, add_property_function, remove_binding\n"
 				"Property operations: set_node_property\n"
-				"Build operations: compile, save\n\n"
+				"Build operations: compile, save\n"
+				"Declarative: apply_spec - Apply a declarative JSON specification to create/modify the asset atomically. "
+				"Accepts: asset_path (string, required), spec (object, required), session_id (string, optional).\n\n"
 				"insert_after (optional, for add_state and move_state): GUID of a sibling state. "
 				"The new/moved state is inserted immediately after this sibling. "
 				"If omitted, the state is appended to the end of the parent's children.");
@@ -236,6 +239,7 @@ TSharedPtr<FJsonObject> ClaireonTool_StateTreeEdit::GetInputSchema() const
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("compile")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("save")));
 	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("close")));
+	OperationEnum.Add(MakeShared<FJsonValueString>(TEXT("apply_spec")));
 	OperationProp->SetArrayField(TEXT("enum"), OperationEnum);
 	OperationProp->SetStringField(TEXT("description"), TEXT("The editing operation to perform."));
 	Properties->SetObjectField(TEXT("operation"), OperationProp);
@@ -295,6 +299,10 @@ FToolResult ClaireonTool_StateTreeEdit::Execute(const TSharedPtr<FJsonObject>& A
 	if (Operation == TEXT("open"))
 	{
 		return Operation_Open(Params);
+	}
+	if (Operation == TEXT("apply_spec"))
+	{
+		return Operation_ApplySpec(Params);
 	}
 
 	// All other operations require a session_id
@@ -1870,4 +1878,32 @@ FToolResult ClaireonTool_StateTreeEdit::Operation_Save(const FString& SessionId,
 		Data->LastOperationStatus = TEXT("save â Failed");
 		return MakeErrorResult(TEXT("Failed to save State Tree package"));
 	}
+}
+
+// ============================================================================
+// apply_spec
+// ============================================================================
+
+FToolResult ClaireonTool_StateTreeEdit::Operation_ApplySpec(const TSharedPtr<FJsonObject>& Params)
+{
+	// Extract asset_path -- required
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("apply_spec requires 'asset_path' parameter"));
+	}
+
+	// Extract spec -- required JSON object
+	const TSharedPtr<FJsonObject>* SpecPtr = nullptr;
+	if (!Params->TryGetObjectField(TEXT("spec"), SpecPtr) || !SpecPtr || !SpecPtr->IsValid())
+	{
+		return MakeErrorResult(TEXT("apply_spec requires 'spec' parameter (JSON object)"));
+	}
+
+	// Optional: reuse an existing session
+	FString SessionId;
+	Params->TryGetStringField(TEXT("session_id"), SessionId);
+
+	FClaireonSpecApplicator_StateTree Applicator;
+	return Applicator.ApplySpec(*SpecPtr, AssetPath, SessionId);
 }

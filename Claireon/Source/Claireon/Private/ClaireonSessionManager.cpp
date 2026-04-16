@@ -29,7 +29,8 @@ FClaireonSessionManager::~FClaireonSessionManager()
 
 FMCPOpenSessionResult FClaireonSessionManager::OpenSession(const FString& AssetPath, const FString& ToolName, double InTimeoutMinutes)
 {
-	ensureMsgf(ToolName.StartsWith(TEXT("editor.")), TEXT("Tool name must start with 'editor.': %s"), *ToolName);
+	ensureMsgf(ToolName.StartsWith(TEXT("editor.")) || ToolName.StartsWith(TEXT("claireon.")),
+		TEXT("Tool name must start with 'editor.' or 'claireon.': %s"), *ToolName);
 
 	const FString CanonicalPath = CanonicalizePath(AssetPath);
 	if (CanonicalPath.IsEmpty())

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_BlackboardEdit.h"
+#include "Tools/ClaireonSpecApplicator_Blackboard.h"
 #include "Tools/ClaireonBehaviorTreeHelpers.h"
 #include "ClaireonLog.h"
 #include "ClaireonPathResolver.h"
@@ -91,7 +92,9 @@ FString ClaireonTool_BlackboardEdit::GetFullDescription() const
 				"Session operations: open, close, status\n"
 				"Key operations: add_key, remove_key, rename_key, set_key_type\n"
 				"Parent operations: set_parent\n"
-				"Build operations: save");
+				"Build operations: save\n"
+				"Declarative: apply_spec - Apply a declarative JSON specification to create/modify the asset atomically. "
+				"Accepts: asset_path (string, required), spec (object, required), session_id (string, optional).");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_BlackboardEdit::GetInputSchema() const
@@ -116,6 +119,7 @@ TSharedPtr<FJsonObject> ClaireonTool_BlackboardEdit::GetInputSchema() const
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("set_key_type")));
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("set_parent")));
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("save")));
+		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("apply_spec")));
 		OpProp->SetArrayField(TEXT("enum"), EnumValues);
 	}
 	Properties->SetObjectField(TEXT("operation"), OpProp);
@@ -177,6 +181,8 @@ FToolResult ClaireonTool_BlackboardEdit::Execute(const TSharedPtr<FJsonObject>& 
 	// Operations that don't need a session
 	if (Operation == TEXT("open"))
 		return Operation_Open(Params);
+	if (Operation == TEXT("apply_spec"))
+		return Operation_ApplySpec(Params);
 
 	// All other operations require session_id
 	FString SessionId;
@@ -627,4 +633,32 @@ FToolResult ClaireonTool_BlackboardEdit::Operation_Save(const FString& SessionId
 		Data->LastOperationStatus = TEXT("save â Failed");
 		return MakeErrorResult(TEXT("Failed to save Blackboard package"));
 	}
+}
+
+// ============================================================================
+// apply_spec
+// ============================================================================
+
+FToolResult ClaireonTool_BlackboardEdit::Operation_ApplySpec(const TSharedPtr<FJsonObject>& Params)
+{
+	// Extract asset_path -- required
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("apply_spec requires 'asset_path' parameter"));
+	}
+
+	// Extract spec -- required JSON object
+	const TSharedPtr<FJsonObject>* SpecPtr = nullptr;
+	if (!Params->TryGetObjectField(TEXT("spec"), SpecPtr) || !SpecPtr || !SpecPtr->IsValid())
+	{
+		return MakeErrorResult(TEXT("apply_spec requires 'spec' parameter (JSON object)"));
+	}
+
+	// Optional: reuse an existing session
+	FString SessionId;
+	Params->TryGetStringField(TEXT("session_id"), SessionId);
+
+	FClaireonSpecApplicator_Blackboard Applicator;
+	return Applicator.ApplySpec(*SpecPtr, AssetPath, SessionId);
 }

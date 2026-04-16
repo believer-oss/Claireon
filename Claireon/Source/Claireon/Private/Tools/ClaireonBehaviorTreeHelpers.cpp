@@ -688,13 +688,35 @@ bool ClaireonBehaviorTreeHelpers::SetBTNodeProperty(UBTNode* Node, const FString
 
 	void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Node);
 	const TCHAR* Result = Property->ImportText_Direct(*PropertyValue, ValuePtr, Node, PPF_None);
-	if (!Result)
+	if (Result)
 	{
-		OutError = FString::Printf(TEXT("Failed to set property '%s' to '%s' on %s"), *PropertyName, *PropertyValue, *Node->GetClass()->GetName());
-		return false;
+		return true;
 	}
 
-	return true;
+	// Many BT properties are FValueOrBBKey_* structs (e.g. WaitTime, RandomDeviation).
+	// A bare scalar like "0.5" can't be imported as a struct -- the engine expects
+	// "(DefaultValue=0.5)". Detect that shape and retry transparently so callers
+	// don't have to know about the wrapper.
+	if (FStructProperty* StructProp = CastField<FStructProperty>(Property))
+	{
+		if (StructProp->Struct && StructProp->Struct->GetName().StartsWith(TEXT("ValueOrBBKey_")))
+		{
+			const FString WrappedValue = FString::Printf(TEXT("(DefaultValue=%s)"), *PropertyValue);
+			const TCHAR* WrappedResult = Property->ImportText_Direct(*WrappedValue, ValuePtr, Node, PPF_None);
+			if (WrappedResult)
+			{
+				return true;
+			}
+			OutError = FString::Printf(
+				TEXT("Failed to set property '%s' to '%s' on %s. Expected struct format like '(DefaultValue=%s)' for %s."),
+				*PropertyName, *PropertyValue, *Node->GetClass()->GetName(),
+				*PropertyValue, *StructProp->Struct->GetName());
+			return false;
+		}
+	}
+
+	OutError = FString::Printf(TEXT("Failed to set property '%s' to '%s' on %s"), *PropertyName, *PropertyValue, *Node->GetClass()->GetName());
+	return false;
 }
 
 FString ClaireonBehaviorTreeHelpers::FormatBTGraphStructure(UBehaviorTreeGraph* Graph, bool bFullDetail)

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_BehaviorTreeEdit.h"
+#include "Tools/ClaireonSpecApplicator_BehaviorTree.h"
 #include "Tools/ClaireonBehaviorTreeHelpers.h"
 #include "ClaireonNameResolver.h"
 #include "ClaireonLog.h"
@@ -92,7 +93,9 @@ FString ClaireonTool_BehaviorTreeEdit::GetFullDescription() const
 				"Decorator/Service operations: add_decorator, remove_decorator, add_service, remove_service\n"
 				"Subtree operations: set_subtree_asset\n"
 				"Build operations: update_asset, save\n"
-				"Discovery: list_node_types");
+				"Discovery: list_node_types\n"
+				"Declarative: apply_spec - Apply a declarative JSON specification to create/modify the asset atomically. "
+				"Accepts: asset_path (string, required), spec (object, required), session_id (string, optional).");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_BehaviorTreeEdit::GetInputSchema() const
@@ -123,6 +126,7 @@ TSharedPtr<FJsonObject> ClaireonTool_BehaviorTreeEdit::GetInputSchema() const
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("update_asset")));
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("save")));
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("list_node_types")));
+		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("apply_spec")));
 		OpProp->SetArrayField(TEXT("enum"), EnumValues);
 	}
 	Properties->SetObjectField(TEXT("operation"), OpProp);
@@ -187,6 +191,8 @@ FToolResult ClaireonTool_BehaviorTreeEdit::Execute(const TSharedPtr<FJsonObject>
 		return Operation_Open(Params);
 	if (Operation == TEXT("list_node_types"))
 		return Operation_ListNodeTypes(Params);
+	if (Operation == TEXT("apply_spec"))
+		return Operation_ApplySpec(Params);
 
 	// All other operations require session_id
 	FString SessionId;
@@ -1067,4 +1073,32 @@ FToolResult ClaireonTool_BehaviorTreeEdit::Operation_ListNodeTypes(const TShared
 	NodeTypesData->SetStringField(TEXT("node_types"), Output);
 	NodeTypesData->SetStringField(TEXT("category"), Category.IsEmpty() ? TEXT("all") : Category);
 	return MakeSuccessResult(NodeTypesData, FString::Printf(TEXT("Node types for category: %s"), Category.IsEmpty() ? TEXT("all") : *Category));
+}
+
+// ============================================================================
+// apply_spec
+// ============================================================================
+
+FToolResult ClaireonTool_BehaviorTreeEdit::Operation_ApplySpec(const TSharedPtr<FJsonObject>& Params)
+{
+	// Extract asset_path -- required
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("apply_spec requires 'asset_path' parameter"));
+	}
+
+	// Extract spec -- required JSON object
+	const TSharedPtr<FJsonObject>* SpecPtr = nullptr;
+	if (!Params->TryGetObjectField(TEXT("spec"), SpecPtr) || !SpecPtr || !SpecPtr->IsValid())
+	{
+		return MakeErrorResult(TEXT("apply_spec requires 'spec' parameter (JSON object)"));
+	}
+
+	// Optional: reuse an existing session
+	FString SessionId;
+	Params->TryGetStringField(TEXT("session_id"), SessionId);
+
+	FClaireonSpecApplicator_BehaviorTree Applicator;
+	return Applicator.ApplySpec(*SpecPtr, AssetPath, SessionId);
 }
