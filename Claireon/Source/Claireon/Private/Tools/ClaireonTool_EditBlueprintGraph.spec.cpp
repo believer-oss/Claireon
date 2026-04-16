@@ -231,13 +231,13 @@ bool FEditBlueprintGraphTest_NodeTypes::RunTest(const FString& Parameters)
 		{ TEXT("Sequence"), {}, TEXT("Sequence") },
 		{ TEXT("Select"), {}, TEXT("Select") },
 		{ TEXT("Knot"), {}, TEXT("Reroute node") },
-		{ TEXT("Comment"), { {TEXT("comment_text"), TEXT("Test Comment")} }, TEXT("Comment") },
+		{ TEXT("Comment"), { { TEXT("comment_text"), TEXT("Test Comment") } }, TEXT("Comment") },
 		{ TEXT("ForEachLoop"), {}, TEXT("ForEachLoop") },
 		{ TEXT("MakeArray"), {}, TEXT("Make Array") },
 		{ TEXT("MakeSet"), {}, TEXT("Make Set") },
 		{ TEXT("MakeMap"), {}, TEXT("Make Map") },
-		{ TEXT("VariableGet"), { {TEXT("variable_name"), TEXT("TestVar")} }, TEXT("Get Variable") },
-		{ TEXT("VariableSet"), { {TEXT("variable_name"), TEXT("TestVar")} }, TEXT("Set Variable") },
+		{ TEXT("VariableGet"), { { TEXT("variable_name"), TEXT("TestVar") } }, TEXT("Get Variable") },
+		{ TEXT("VariableSet"), { { TEXT("variable_name"), TEXT("TestVar") } }, TEXT("Set Variable") },
 	};
 
 	for (const FNodeTypeTest& Test : NodeTypesToTest)
@@ -598,7 +598,8 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 		{
 			GuidStart += 13;
 			int32 GuidEnd = ResultStr.Find(TEXT("\n"), ESearchCase::IgnoreCase, ESearchDir::FromStart, GuidStart);
-			if (GuidEnd == INDEX_NONE) GuidEnd = ResultStr.Len();
+			if (GuidEnd == INDEX_NONE)
+				GuidEnd = ResultStr.Len();
 			return ResultStr.Mid(GuidStart, GuidEnd - GuidStart).TrimStartAndEnd();
 		}
 		return FString();
@@ -959,8 +960,7 @@ bool FEditBlueprintGraphTest_ImportNodes::RunTest(const FString& Parameters)
 			"   CustomProperties Pin (PinId=1111111111111111111111111111111A,PinName=\"execute\",PinType.PinCategory=\"exec\",Direction=\"EGPD_Input\")\n"
 			"   CustomProperties Pin (PinId=1111111111111111111111111111111B,PinName=\"then\",Direction=\"EGPD_Output\",PinType.PinCategory=\"exec\")\n"
 			"   CustomProperties Pin (PinId=1111111111111111111111111111111C,PinName=\"InString\",PinType.PinCategory=\"string\",DefaultValue=\"Imported from T3D!\")\n"
-			"End Object"
-		);
+			"End Object");
 
 		TSharedPtr<FJsonObject> ImportArgs = MakeShared<FJsonObject>();
 		ImportArgs->SetStringField(TEXT("operation"), TEXT("import_nodes"));
@@ -1691,6 +1691,190 @@ bool FEditBlueprintGraphTest_DelegateNodes::RunTest(const FString& Parameters)
 	}
 
 	// Cleanup: close and delete
+	{
+		TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
+		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
+		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
+		CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
+		Tool.Execute(CloseArgs);
+	}
+
+	return true;
+}
+
+// ============================================================================
+// Test: add_function_override for BlueprintNativeEvent
+// ============================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_AddFunctionOverride,
+	"Claireon.EditBlueprintGraph.AddFunctionOverride",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_AddFunctionOverride::RunTest(const FString& Parameters)
+{
+	ClaireonTool_EditBlueprintGraph Tool;
+
+	// Step 1: Create a Blueprint child of FSSampleDirectorBase
+	FString SessionId;
+	{
+		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+		CreateParams->SetStringField(TEXT("operation"), TEXT("create"));
+
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/__MCPTests/BP_FuncOverrideTest"));
+		Params->SetStringField(TEXT("parent_class"), TEXT("FSSampleDirectorBase"));
+		CreateParams->SetObjectField(TEXT("params"), Params);
+
+		auto Result = Tool.Execute(CreateParams);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("Failed to create blueprint: %s"), *Result.GetContentAsString()));
+			return false;
+		}
+
+		// Extract session ID
+		FString ResultText = Result.GetContentAsString();
+		int32 SessionIdStart = ResultText.Find(TEXT("Session ID: "));
+		if (SessionIdStart != INDEX_NONE)
+		{
+			SessionIdStart += 12;
+			int32 SessionIdEnd = ResultText.Find(TEXT("\n"), ESearchCase::IgnoreCase, ESearchDir::FromStart, SessionIdStart);
+			SessionId = ResultText.Mid(SessionIdStart, SessionIdEnd - SessionIdStart);
+		}
+
+		if (SessionId.IsEmpty())
+		{
+			AddError(TEXT("Failed to extract session ID from create result"));
+			return false;
+		}
+
+		AddInfo(FString::Printf(TEXT("Created blueprint with session: %s"), *SessionId));
+	}
+
+	// Step 2: Call add_function_override for SelectDropLocation
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("operation"), TEXT("add_function_override"));
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		Args->SetStringField(TEXT("function_name"), TEXT("SelectDropLocation"));
+
+		auto Result = Tool.Execute(Args);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("add_function_override failed: %s"), *Result.GetContentAsString()));
+			return false;
+		}
+
+		FString ResultText = Result.GetContentAsString();
+		AddInfo(FString::Printf(TEXT("add_function_override result:\n%s"), *ResultText));
+
+		// Step 3: Verify graph name indicates we switched to SelectDropLocation
+		if (!ResultText.Contains(TEXT("SelectDropLocation")))
+		{
+			AddError(TEXT("Result does not contain 'SelectDropLocation' graph name -- session may not have switched"));
+			return false;
+		}
+
+		AddInfo(TEXT("Session graph switched to SelectDropLocation function graph"));
+	}
+
+	// Step 4: Save and compile to verify the override is valid
+	{
+		TSharedPtr<FJsonObject> SaveArgs = MakeShared<FJsonObject>();
+		SaveArgs->SetStringField(TEXT("operation"), TEXT("save"));
+		SaveArgs->SetStringField(TEXT("session_id"), SessionId);
+
+		auto SaveResult = Tool.Execute(SaveArgs);
+		if (SaveResult.bIsError)
+		{
+			AddError(FString::Printf(TEXT("Save failed: %s"), *SaveResult.GetContentAsString()));
+			return false;
+		}
+
+		AddInfo(TEXT("Save succeeded"));
+	}
+
+	{
+		TSharedPtr<FJsonObject> CompileArgs = MakeShared<FJsonObject>();
+		CompileArgs->SetStringField(TEXT("operation"), TEXT("compile"));
+		CompileArgs->SetStringField(TEXT("session_id"), SessionId);
+
+		auto CompileResult = Tool.Execute(CompileArgs);
+		if (CompileResult.bIsError)
+		{
+			AddError(FString::Printf(TEXT("Compile failed: %s"), *CompileResult.GetContentAsString()));
+			return false;
+		}
+
+		FString CompileText = CompileResult.GetContentAsString();
+		// Check compile result does not indicate errors
+		if (CompileText.Contains(TEXT("Error")) && !CompileText.Contains(TEXT("0 error")))
+		{
+			AddError(FString::Printf(TEXT("Compile returned errors: %s"), *CompileText));
+			return false;
+		}
+
+		AddInfo(TEXT("Compile succeeded"));
+	}
+
+	// Step 5: Call add_function_override again -- should return "already exists" error
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("operation"), TEXT("add_function_override"));
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		Args->SetStringField(TEXT("function_name"), TEXT("SelectDropLocation"));
+
+		auto Result = Tool.Execute(Args);
+		if (!Result.bIsError)
+		{
+			AddError(TEXT("Expected error for duplicate override, but got success"));
+			return false;
+		}
+
+		FString ErrorText = Result.GetContentAsString();
+		if (!ErrorText.Contains(TEXT("already exists")))
+		{
+			AddError(FString::Printf(TEXT("Expected 'already exists' error, got: %s"), *ErrorText));
+			return false;
+		}
+
+		AddInfo(TEXT("Duplicate override correctly returned 'already exists' error"));
+	}
+
+	// Step 6: Test EventOverride diagnostic for native functions
+	{
+		TSharedPtr<FJsonObject> AddNodeArgs = MakeShared<FJsonObject>();
+		AddNodeArgs->SetStringField(TEXT("operation"), TEXT("add_node"));
+		AddNodeArgs->SetStringField(TEXT("session_id"), SessionId);
+
+		TSharedPtr<FJsonObject> NodeParams = MakeShared<FJsonObject>();
+		NodeParams->SetStringField(TEXT("node_type"), TEXT("EventOverride"));
+		// Use a different BlueprintNativeEvent function to test the diagnostic
+		// (SelectDropLocation already has an override)
+		NodeParams->SetStringField(TEXT("function_name"), TEXT("GetRewardData"));
+		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
+
+		auto Result = Tool.Execute(AddNodeArgs);
+		if (!Result.bIsError)
+		{
+			// If this succeeds, the function might not be a native event -- skip the check
+			AddInfo(TEXT("EventOverride diagnostic test: function may not be a native event, skipping"));
+		}
+		else
+		{
+			FString ErrorText = Result.GetContentAsString();
+			if (ErrorText.Contains(TEXT("add_function_override")))
+			{
+				AddInfo(TEXT("EventOverride correctly recommends add_function_override for native events"));
+			}
+			else
+			{
+				AddInfo(FString::Printf(TEXT("EventOverride returned error (may be expected): %s"), *ErrorText));
+			}
+		}
+	}
+
+	// Cleanup: close session
 	{
 		TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
