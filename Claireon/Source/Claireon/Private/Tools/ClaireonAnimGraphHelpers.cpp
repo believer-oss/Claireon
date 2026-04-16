@@ -82,6 +82,9 @@ UAnimBlueprint* LoadAnimBlueprint(const FString& AssetPath, FString& OutError)
 // Graph Enumeration
 // ============================================================================
 
+// Forward declaration for mutual recursion between CollectStateMachineGraphs and CollectAnimGraphSubGraphs
+static void CollectAnimGraphSubGraphs(UEdGraph* AnimGraph, const FString& ParentName, TArray<FAnimGraphInfo>& OutGraphs);
+
 /** Internal recursive helper to collect graphs from a state machine. */
 static void CollectStateMachineGraphs(UAnimationStateMachineGraph* SMGraph, const FString& ParentName, TArray<FAnimGraphInfo>& OutGraphs)
 {
@@ -110,7 +113,8 @@ static void CollectStateMachineGraphs(UAnimationStateMachineGraph* SMGraph, cons
 				Info.ParentGraphName = ParentName;
 				OutGraphs.Add(Info);
 
-				// State pose graphs can contain nested state machines
+				// State pose graphs can contain nested state machines and node-embedded graphs
+				CollectAnimGraphSubGraphs(BoundGraph, BoundGraph->GetName(), OutGraphs);
 				for (UEdGraphNode* InnerNode : BoundGraph->Nodes)
 				{
 					if (UAnimGraphNode_StateMachine* NestedSM = Cast<UAnimGraphNode_StateMachine>(InnerNode))
@@ -202,6 +206,64 @@ static void CollectAnimGraphSubGraphs(UEdGraph* AnimGraph, const FString& Parent
 				OutGraphs.Add(Info);
 
 				CollectStateMachineGraphs(SMGraph, SMGraph->GetName(), OutGraphs);
+			}
+			continue;
+		}
+
+		// For generic UAnimGraphNode_Base nodes, check for BoundGraph (e.g., Blend Stack
+		// internal graphs, per-sample graphs, or other nodes with embedded logic).
+		// Access BoundGraph via UProperty reflection since it's not on the base class.
+		if (UAnimGraphNode_Base* AnimNode = Cast<UAnimGraphNode_Base>(Node))
+		{
+			// Look for a BoundGraph UProperty on the node
+			FObjectProperty* BoundGraphProp = CastField<FObjectProperty>(
+				AnimNode->GetClass()->FindPropertyByName(TEXT("BoundGraph")));
+			if (BoundGraphProp)
+			{
+				UEdGraph* BoundGraph = Cast<UEdGraph>(BoundGraphProp->GetObjectPropertyValue_InContainer(AnimNode));
+				if (BoundGraph && BoundGraph->Nodes.Num() > 0)
+				{
+					FAnimGraphInfo Info;
+					Info.Name = BoundGraph->GetName();
+					Info.Type = TEXT("NodeGraph");
+					Info.NodeCount = BoundGraph->Nodes.Num();
+					Info.Graph = BoundGraph;
+					Info.ParentGraphName = ParentName;
+					OutGraphs.Add(Info);
+
+					// Recursively check for nested sub-graphs within the node graph
+					CollectAnimGraphSubGraphs(BoundGraph, BoundGraph->GetName(), OutGraphs);
+				}
+			}
+
+			// Also check SubGraphs array (some nodes store multiple sub-graphs)
+			for (UEdGraph* SubGraph : Node->GetSubGraphs())
+			{
+				if (SubGraph && SubGraph != AnimGraph)
+				{
+					// Avoid duplicates (BoundGraph may already be added)
+					bool bAlreadyAdded = false;
+					for (const FAnimGraphInfo& Existing : OutGraphs)
+					{
+						if (Existing.Graph == SubGraph)
+						{
+							bAlreadyAdded = true;
+							break;
+						}
+					}
+					if (!bAlreadyAdded && SubGraph->Nodes.Num() > 0)
+					{
+						FAnimGraphInfo Info;
+						Info.Name = SubGraph->GetName();
+						Info.Type = TEXT("NodeGraph");
+						Info.NodeCount = SubGraph->Nodes.Num();
+						Info.Graph = SubGraph;
+						Info.ParentGraphName = ParentName;
+						OutGraphs.Add(Info);
+
+						CollectAnimGraphSubGraphs(SubGraph, SubGraph->GetName(), OutGraphs);
+					}
+				}
 			}
 		}
 	}
@@ -732,30 +794,16 @@ bool AnalyzeFastPath(UAnimGraphNode_Base* AnimNode, TArray<FString>& OutWarnings
 		return true;
 	}
 
-	const TMap<FName, FAnimGraphNodePropertyBinding>* BindingsPtr = GetPropertyBindingsMap(AnimNode);
-	if (!BindingsPtr || BindingsPtr->Num() == 0)
+	// Use the engine's compiler message — it's authoritative for all cases:
+	// property bindings, pin-connected BP logic, transitions, everything.
+	if (AnimNode->bHasCompilerMessage && !AnimNode->ErrorMsg.IsEmpty() &&
+		AnimNode->ErrorMsg.Contains(TEXT("uses Blueprint to update its values")))
 	{
-		return true;
+		OutWarnings.Add(AnimNode->ErrorMsg);
+		return false;
 	}
 
-	bool bAllFastPath = true;
-	for (const auto& Pair : *BindingsPtr)
-	{
-		const FAnimGraphNodePropertyBinding& Binding = Pair.Value;
-		const bool bIsFastPath = (Binding.Type == EAnimGraphNodePropertyBindingType::Property);
-
-		if (!bIsFastPath)
-		{
-			bAllFastPath = false;
-			OutWarnings.Add(FString::Printf(
-				TEXT("Property '%s' uses non-fast-path binding (type: %s, source: %s)"),
-				*Pair.Key.ToString(),
-				Binding.Type == EAnimGraphNodePropertyBindingType::Function ? TEXT("Function") : TEXT("Unknown"),
-				*FString::Join(Binding.PropertyPath, TEXT("."))));
-		}
-	}
-
-	return bAllFastPath;
+	return true;
 }
 
 // ============================================================================
@@ -946,6 +994,14 @@ TSharedPtr<FJsonObject> SerializeAnimGraphNode(UEdGraphNode* Node, const FString
 		NodeObj->SetStringField(TEXT("comment"), Node->NodeComment);
 	}
 
+	// Compiler messages (the engine's authoritative fast-path and other warnings)
+	if (Node->bHasCompilerMessage)
+	{
+		NodeObj->SetBoolField(TEXT("has_compiler_message"), true);
+		NodeObj->SetNumberField(TEXT("compiler_error_type"), Node->ErrorType);
+		NodeObj->SetStringField(TEXT("compiler_message"), Node->ErrorMsg);
+	}
+
 	// Summary: add connection counts
 	if (DetailLevel == TEXT("summary"))
 	{
@@ -987,26 +1043,17 @@ TSharedPtr<FJsonObject> SerializeAnimGraphNode(UEdGraphNode* Node, const FString
 	{
 		if (UAnimGraphNode_Base* AnimGraphNode = Cast<UAnimGraphNode_Base>(Node))
 		{
-			// Property bindings
+			// Property bindings (informational — shows what bindings exist)
 			TSharedPtr<FJsonObject> Bindings = SerializePropertyBindings(AnimGraphNode);
 			if (Bindings)
 			{
 				NodeObj->SetObjectField(TEXT("property_bindings"), Bindings);
 			}
 
-			// Fast path analysis
-			TArray<FString> Warnings;
-			bool bFastPath = AnalyzeFastPath(AnimGraphNode, Warnings);
+			// Fast path: use engine's compiler message (authoritative for all cases)
+			const bool bFastPath = !(Node->bHasCompilerMessage && !Node->ErrorMsg.IsEmpty() &&
+				Node->ErrorMsg.Contains(TEXT("uses Blueprint to update its values")));
 			NodeObj->SetBoolField(TEXT("is_fast_path"), bFastPath);
-			if (!bFastPath && Warnings.Num() > 0)
-			{
-				TArray<TSharedPtr<FJsonValue>> WarningsArray;
-				for (const FString& Warning : Warnings)
-				{
-					WarningsArray.Add(MakeShared<FJsonValueString>(Warning));
-				}
-				NodeObj->SetArrayField(TEXT("fast_path_warnings"), WarningsArray);
-			}
 
 			// Linked layer info
 			TSharedPtr<FJsonObject> LayerInfo = SerializeLinkedLayerInfo(AnimGraphNode);
@@ -1675,7 +1722,10 @@ TSharedPtr<FJsonObject> CollectWarnings(UAnimBlueprint* AnimBP)
 	TArray<TSharedPtr<FJsonValue>> ThreadSafetyWarnings;
 	TArray<TSharedPtr<FJsonValue>> CompilerWarnings;
 
-	// Collect fast path warnings from all animation graph nodes
+	// Primary: Collect compiler messages from ALL nodes across ALL graphs.
+	// The engine's blueprint compiler already computes fast-path compliance for
+	// all cases (property bindings, pin-connected BP logic, transitions, etc.)
+	// and stores results as bHasCompilerMessage + ErrorType + ErrorMsg on each node.
 	TArray<FAnimGraphInfo> AllGraphs = CollectAllGraphs(AnimBP);
 	for (const FAnimGraphInfo& GraphInfo : AllGraphs)
 	{
@@ -1686,25 +1736,42 @@ TSharedPtr<FJsonObject> CollectWarnings(UAnimBlueprint* AnimBP)
 
 		for (UEdGraphNode* Node : GraphInfo.Graph->Nodes)
 		{
-			UAnimGraphNode_Base* AnimNode = Cast<UAnimGraphNode_Base>(Node);
-			if (!AnimNode)
+			if (!Node || !Node->bHasCompilerMessage || Node->ErrorMsg.IsEmpty())
 			{
 				continue;
 			}
 
-			TArray<FString> NodeWarnings;
-			bool bFastPath = AnalyzeFastPath(AnimNode, NodeWarnings);
-			if (!bFastPath)
+			TSharedPtr<FJsonObject> WarningObj = MakeShared<FJsonObject>();
+			WarningObj->SetStringField(TEXT("graph"), GraphInfo.Name);
+			WarningObj->SetStringField(TEXT("node"), Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
+			WarningObj->SetStringField(TEXT("node_guid"), Node->NodeGuid.ToString());
+			WarningObj->SetStringField(TEXT("node_class"), Node->GetClass()->GetName());
+			WarningObj->SetNumberField(TEXT("error_type"), Node->ErrorType);
+
+			// Deduplicate repeated lines in ErrorMsg (engine sometimes repeats per-pin)
+			TArray<FString> UniqueMessages;
+			TArray<FString> Lines;
+			Node->ErrorMsg.ParseIntoArrayLines(Lines);
+			for (const FString& Line : Lines)
 			{
-				for (const FString& Warning : NodeWarnings)
+				FString Trimmed = Line.TrimStartAndEnd();
+				if (!Trimmed.IsEmpty())
 				{
-					TSharedPtr<FJsonObject> WarningObj = MakeShared<FJsonObject>();
-					WarningObj->SetStringField(TEXT("graph"), GraphInfo.Name);
-					WarningObj->SetStringField(TEXT("node"), Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
-					WarningObj->SetStringField(TEXT("node_guid"), Node->NodeGuid.ToString());
-					WarningObj->SetStringField(TEXT("warning"), Warning);
-					FastPathWarnings.Add(MakeShared<FJsonValueObject>(WarningObj));
+					UniqueMessages.AddUnique(Trimmed);
 				}
+			}
+
+			FString DeduplicatedMsg = FString::Join(UniqueMessages, TEXT("\n"));
+			WarningObj->SetStringField(TEXT("message"), DeduplicatedMsg);
+
+			// Categorize: fast-path warnings vs other compiler messages
+			if (DeduplicatedMsg.Contains(TEXT("uses Blueprint to update its values")))
+			{
+				FastPathWarnings.Add(MakeShared<FJsonValueObject>(WarningObj));
+			}
+			else
+			{
+				CompilerWarnings.Add(MakeShared<FJsonValueObject>(WarningObj));
 			}
 		}
 	}
@@ -1720,19 +1787,12 @@ TSharedPtr<FJsonObject> CollectWarnings(UAnimBlueprint* AnimBP)
 		}
 	}
 
-	// Compiler messages from the blueprint's status (compile log)
+	// Blueprint compile status
 	if (AnimBP->Status == BS_Error || AnimBP->Status == BS_UpToDateWithWarnings)
 	{
-		// Access compiler results via blueprint's message log name
+		FString StatusStr = AnimBP->Status == BS_Error ? TEXT("Error") : TEXT("UpToDateWithWarnings");
 		CompilerWarnings.Add(MakeShared<FJsonValueString>(
-			FString::Printf(TEXT("Blueprint compile status: %s"),
-				AnimBP->Status == BS_Error ? TEXT("Error") : TEXT("UpToDateWithWarnings"))));
-	}
-
-	// Also check for upgrade notes log
-	if (AnimBP->UpgradeNotesLog.IsValid())
-	{
-		CompilerWarnings.Add(MakeShared<FJsonValueString>(TEXT("Blueprint has pending upgrade notes")));
+			FString::Printf(TEXT("Blueprint compile status: %s"), *StatusStr)));
 	}
 
 	Result->SetArrayField(TEXT("fast_path_warnings"), FastPathWarnings);

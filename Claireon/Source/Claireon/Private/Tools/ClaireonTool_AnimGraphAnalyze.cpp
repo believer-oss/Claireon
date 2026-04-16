@@ -6,7 +6,6 @@
 #include "Tools/ClaireonAnimEditToolBase.h"
 #include "Animation/AnimBlueprint.h"
 #include "AnimGraphNode_Base.h"
-#include "AnimGraphNodeBinding.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
 #include "Dom/JsonObject.h"
@@ -77,13 +76,6 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphAnalyze::Execute(const TSharedP
 			{
 				UAnimGraphNode_Base* AnimNode = Cast<UAnimGraphNode_Base>(Node);
 				if (!AnimNode)
-				{
-					continue;
-				}
-
-				// Only analyze nodes that have bindings (use HasBinding via GetBinding)
-				const UAnimGraphNodeBinding* BindingObj = AnimNode->GetBinding();
-				if (!BindingObj)
 				{
 					continue;
 				}
