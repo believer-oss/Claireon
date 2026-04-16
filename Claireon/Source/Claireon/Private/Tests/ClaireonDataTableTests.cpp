@@ -40,10 +40,10 @@ static const TCHAR* UntestTempRowC = TEXT("_UNTEST_TempRow_C");
 
 UNTEST_UNIT_OPTS(Claireon, DataTableSchema, ReadToolsValid, UNTEST_TIMEOUTMS(1000))
 {
-	// editor.datatable.search
+	// claireon.datatable_search
 	{
 		ClaireonTool_DataTableSearch Tool;
-		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("editor.datatable.search"));
+		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.datatable_search"));
 		UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
@@ -60,7 +60,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, ReadToolsValid, UNTEST_TIMEOUTMS(100
 	// get_datatable_info
 	{
 		ClaireonTool_DataTableGetInfo Tool;
-		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("get_datatable_info"));
+		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.datatable_get_info"));
 		UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
@@ -72,7 +72,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, ReadToolsValid, UNTEST_TIMEOUTMS(100
 	// get_datatable_rows
 	{
 		ClaireonTool_DataTableGetRows Tool;
-		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("get_datatable_rows"));
+		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.datatable_get_rows"));
 		UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
@@ -81,7 +81,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, ReadToolsValid, UNTEST_TIMEOUTMS(100
 	// get_datatable_row
 	{
 		ClaireonTool_DataTableGetRow Tool;
-		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("get_datatable_row"));
+		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.datatable_get_row"));
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 		const TArray<TSharedPtr<FJsonValue>>* Required;
@@ -92,7 +92,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, ReadToolsValid, UNTEST_TIMEOUTMS(100
 	// find_datatable_rows
 	{
 		ClaireonTool_DataTableFindRows Tool;
-		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("find_datatable_rows"));
+		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.datatable_find_rows"));
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 		const TArray<TSharedPtr<FJsonValue>>* Required;
@@ -112,7 +112,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, MutationToolsValid, UNTEST_TIMEOUTMS
 	// add_datatable_row
 	{
 		ClaireonTool_DataTableAddRow Tool;
-		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("add_datatable_row"));
+		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.datatable_add_row"));
 		UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
@@ -124,15 +124,15 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, MutationToolsValid, UNTEST_TIMEOUTMS
 	// remove_datatable_row
 	{
 		ClaireonTool_DataTableRemoveRow Tool;
-		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("remove_datatable_row"));
+		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.datatable_remove_row"));
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 	}
 
-	// editor.datatable.duplicate_row
+	// claireon.datatable_duplicate_row
 	{
 		ClaireonTool_DataTableDuplicateRow Tool;
-		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("editor.datatable.duplicate_row"));
+		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.datatable_duplicate_row"));
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 		const TArray<TSharedPtr<FJsonValue>>* Required;
@@ -140,10 +140,10 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, MutationToolsValid, UNTEST_TIMEOUTMS
 		UNTEST_EXPECT_TRUE(Required->Num() >= 3);
 	}
 
-	// editor.datatable.rename_row
+	// claireon.datatable_rename_row
 	{
 		ClaireonTool_DataTableRenameRow Tool;
-		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("editor.datatable.rename_row"));
+		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.datatable_rename_row"));
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 		const TArray<TSharedPtr<FJsonValue>>* Required;
@@ -151,10 +151,10 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, MutationToolsValid, UNTEST_TIMEOUTMS
 		UNTEST_EXPECT_TRUE(Required->Num() >= 3);
 	}
 
-	// editor.datatable.move_row
+	// claireon.datatable_move_row
 	{
 		ClaireonTool_DataTableMoveRow Tool;
-		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("editor.datatable.move_row"));
+		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.datatable_move_row"));
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 		const TArray<TSharedPtr<FJsonValue>>* Required;
@@ -165,7 +165,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, MutationToolsValid, UNTEST_TIMEOUTMS
 	// set_datatable_row
 	{
 		ClaireonTool_DataTableSetRowValues Tool;
-		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("set_datatable_row"));
+		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.datatable_set_row_values"));
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 		const TArray<TSharedPtr<FJsonValue>>* Required;
@@ -182,19 +182,19 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, MutationToolsValid, UNTEST_TIMEOUTMS
 
 UNTEST_UNIT_OPTS(Claireon, DataTableSchema, ImportExportToolsValid, UNTEST_TIMEOUTMS(1000))
 {
-	// editor.datatable.export_json
+	// claireon.datatable_export_json
 	{
 		ClaireonTool_DataTableExportJson Tool;
-		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("editor.datatable.export_json"));
+		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.datatable_export_json"));
 		UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 	}
 
-	// editor.datatable.import_json
+	// claireon.datatable_import_json
 	{
 		ClaireonTool_DataTableImportJson Tool;
-		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("editor.datatable.import_json"));
+		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.datatable_import_json"));
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 		const TArray<TSharedPtr<FJsonValue>>* Required;
@@ -202,18 +202,18 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, ImportExportToolsValid, UNTEST_TIMEO
 		UNTEST_EXPECT_TRUE(Required->Num() >= 2);
 	}
 
-	// editor.datatable.export_csv
+	// claireon.datatable_export_csv
 	{
 		ClaireonTool_DataTableExportCsv Tool;
-		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("editor.datatable.export_csv"));
+		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.datatable_export_csv"));
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 	}
 
-	// editor.datatable.import_csv
+	// claireon.datatable_import_csv
 	{
 		ClaireonTool_DataTableImportCsv Tool;
-		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("editor.datatable.import_csv"));
+		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.datatable_import_csv"));
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 		const TArray<TSharedPtr<FJsonValue>>* Required;

@@ -77,7 +77,7 @@ public:
 	/**
 	 * Open a new session or reuse an existing one for the same tool on the same asset.
 	 * @param AssetPath Asset path (will be canonicalized internally)
-	 * @param ToolName Tool identifier, must follow "editor.<type>.edit" convention
+	 * @param ToolName Tool identifier, must follow "claireon.<category>_<action>" convention (matches MCP tool name)
 	 * @param TimeoutMinutes Session timeout (default 60 minutes)
 	 * @return Result with session ID and optional blocking session info
 	 */

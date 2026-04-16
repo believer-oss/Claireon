@@ -23,13 +23,13 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, OpenCloseLifecycle, UNTEST_TIMEOUTMS(
 	CleanupAllSessions();
 
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game/Test/BP_TestAsset"), TEXT("editor.test.edit"));
+		TEXT("/Game/Test/BP_TestAsset"), TEXT("claireon.test_edit"));
 	UNTEST_ASSERT_TRUE(OpenResult.Result == EOpenSessionResult::Success);
 	UNTEST_EXPECT_TRUE(!OpenResult.SessionId.IsEmpty());
 
 	FMCPSession* Found = FClaireonSessionManager::Get().FindSession(OpenResult.SessionId);
 	UNTEST_ASSERT_TRUE(Found != nullptr);
-	UNTEST_EXPECT_TRUE(Found->ToolName == TEXT("editor.test.edit"));
+	UNTEST_EXPECT_TRUE(Found->ToolName == TEXT("claireon.test_edit"));
 	UNTEST_EXPECT_TRUE(Found->AssetPath == TEXT("/Game/Test/BP_TestAsset"));
 
 	bool bClosed = FClaireonSessionManager::Get().CloseSession(OpenResult.SessionId);
@@ -47,11 +47,11 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, SameToolReopen, UNTEST_TIMEOUTMS(5000
 	CleanupAllSessions();
 
 	FMCPOpenSessionResult First = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game/Test/BP_Reopen"), TEXT("editor.test.edit"));
+		TEXT("/Game/Test/BP_Reopen"), TEXT("claireon.test_edit"));
 	UNTEST_ASSERT_TRUE(First.Result == EOpenSessionResult::Success);
 
 	FMCPOpenSessionResult Second = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game/Test/BP_Reopen"), TEXT("editor.test.edit"));
+		TEXT("/Game/Test/BP_Reopen"), TEXT("claireon.test_edit"));
 	UNTEST_ASSERT_TRUE(Second.Result == EOpenSessionResult::ReusedExistingSession);
 	UNTEST_EXPECT_TRUE(Second.SessionId == First.SessionId);
 
@@ -64,15 +64,15 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, DifferentToolBlock, UNTEST_TIMEOUTMS(
 	CleanupAllSessions();
 
 	FMCPOpenSessionResult First = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game/Test/BP_Block"), TEXT("editor.toolA.edit"));
+		TEXT("/Game/Test/BP_Block"), TEXT("claireon.toolA_edit"));
 	UNTEST_ASSERT_TRUE(First.Result == EOpenSessionResult::Success);
 
 	FMCPOpenSessionResult Second = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game/Test/BP_Block"), TEXT("editor.toolB.edit"));
+		TEXT("/Game/Test/BP_Block"), TEXT("claireon.toolB_edit"));
 	UNTEST_ASSERT_TRUE(Second.Result == EOpenSessionResult::BlockedByOtherTool);
 	UNTEST_EXPECT_TRUE(Second.SessionId.IsEmpty());
 	UNTEST_EXPECT_TRUE(Second.BlockingSession.IsSet());
-	UNTEST_EXPECT_TRUE(Second.BlockingSession->ToolName == TEXT("editor.toolA.edit"));
+	UNTEST_EXPECT_TRUE(Second.BlockingSession->ToolName == TEXT("claireon.toolA_edit"));
 
 	CleanupAllSessions();
 	co_return;
@@ -83,11 +83,11 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, PathCanonicalization, UNTEST_TIMEOUTM
 	CleanupAllSessions();
 
 	FMCPOpenSessionResult First = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game/Test/BP_Foo.uasset"), TEXT("editor.test.edit"));
+		TEXT("/Game/Test/BP_Foo.uasset"), TEXT("claireon.test_edit"));
 	UNTEST_ASSERT_TRUE(First.Result == EOpenSessionResult::Success);
 
 	FMCPOpenSessionResult Second = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game/Test/BP_Foo"), TEXT("editor.test.edit"));
+		TEXT("/Game/Test/BP_Foo"), TEXT("claireon.test_edit"));
 	UNTEST_ASSERT_TRUE(Second.Result == EOpenSessionResult::ReusedExistingSession);
 	UNTEST_EXPECT_TRUE(Second.SessionId == First.SessionId);
 
@@ -100,11 +100,11 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, PathCanonObjectNameSuffix, UNTEST_TIM
 	CleanupAllSessions();
 
 	FMCPOpenSessionResult First = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game/Test/BP_Foo.BP_Foo"), TEXT("editor.test.edit"));
+		TEXT("/Game/Test/BP_Foo.BP_Foo"), TEXT("claireon.test_edit"));
 	UNTEST_ASSERT_TRUE(First.Result == EOpenSessionResult::Success);
 
 	FMCPOpenSessionResult Second = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game/Test/BP_Foo"), TEXT("editor.test.edit"));
+		TEXT("/Game/Test/BP_Foo"), TEXT("claireon.test_edit"));
 	UNTEST_ASSERT_TRUE(Second.Result == EOpenSessionResult::ReusedExistingSession);
 	UNTEST_EXPECT_TRUE(Second.SessionId == First.SessionId);
 
@@ -117,7 +117,7 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, InvalidPathRejection, UNTEST_TIMEOUTM
 	CleanupAllSessions();
 
 	FMCPOpenSessionResult Result = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Script/Engine.Actor"), TEXT("editor.test.edit"));
+		TEXT("/Script/Engine.Actor"), TEXT("claireon.test_edit"));
 	UNTEST_ASSERT_TRUE(Result.Result == EOpenSessionResult::InvalidAssetPath);
 	UNTEST_EXPECT_TRUE(Result.SessionId.IsEmpty());
 
@@ -130,7 +130,7 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, IsAssetLocked, UNTEST_TIMEOUTMS(5000)
 	CleanupAllSessions();
 
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game/Test/BP_LockTest"), TEXT("editor.test.edit"));
+		TEXT("/Game/Test/BP_LockTest"), TEXT("claireon.test_edit"));
 	UNTEST_ASSERT_TRUE(OpenResult.Result == EOpenSessionResult::Success);
 
 	bool bLocked = FClaireonSessionManager::Get().IsAssetLocked(TEXT("/Game/Test/BP_LockTest"));
@@ -149,13 +149,13 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, ListSessions, UNTEST_TIMEOUTMS(5000))
 {
 	CleanupAllSessions();
 
-	FClaireonSessionManager::Get().OpenSession(TEXT("/Game/Test/BP_A"), TEXT("editor.blueprint.edit"));
-	FClaireonSessionManager::Get().OpenSession(TEXT("/Game/Test/BP_B"), TEXT("editor.niagara.edit"));
+	FClaireonSessionManager::Get().OpenSession(TEXT("/Game/Test/BP_A"), TEXT("claireon.blueprint_edit_graph"));
+	FClaireonSessionManager::Get().OpenSession(TEXT("/Game/Test/BP_B"), TEXT("claireon.niagara_edit"));
 
 	TArray<FMCPSession> All = FClaireonSessionManager::Get().ListSessions();
 	UNTEST_EXPECT_TRUE(All.Num() == 2);
 
-	TArray<FMCPSession> BPOnly = FClaireonSessionManager::Get().ListSessions(TEXT("editor.blueprint.edit"));
+	TArray<FMCPSession> BPOnly = FClaireonSessionManager::Get().ListSessions(TEXT("claireon.blueprint_edit_graph"));
 	UNTEST_EXPECT_TRUE(BPOnly.Num() == 1);
 
 	CleanupAllSessions();
@@ -167,7 +167,7 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, ReleaseByAssetPath, UNTEST_TIMEOUTMS(
 	CleanupAllSessions();
 
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game/Test/BP_Release"), TEXT("editor.test.edit"));
+		TEXT("/Game/Test/BP_Release"), TEXT("claireon.test_edit"));
 	UNTEST_ASSERT_TRUE(OpenResult.Result == EOpenSessionResult::Success);
 
 	int32 Released = FClaireonSessionManager::Get().ReleaseByAssetPath(TEXT("/Game/Test/BP_Release"));
@@ -187,9 +187,9 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, ForceReleaseAll, UNTEST_TIMEOUTMS(500
 {
 	CleanupAllSessions();
 
-	FClaireonSessionManager::Get().OpenSession(TEXT("/Game/Test/BP_1"), TEXT("editor.test.edit"));
-	FClaireonSessionManager::Get().OpenSession(TEXT("/Game/Test/BP_2"), TEXT("editor.test.edit"));
-	FClaireonSessionManager::Get().OpenSession(TEXT("/Game/Test/BP_3"), TEXT("editor.test.edit"));
+	FClaireonSessionManager::Get().OpenSession(TEXT("/Game/Test/BP_1"), TEXT("claireon.test_edit"));
+	FClaireonSessionManager::Get().OpenSession(TEXT("/Game/Test/BP_2"), TEXT("claireon.test_edit"));
+	FClaireonSessionManager::Get().OpenSession(TEXT("/Game/Test/BP_3"), TEXT("claireon.test_edit"));
 
 	int32 Count = FClaireonSessionManager::Get().ForceReleaseAll();
 	UNTEST_EXPECT_TRUE(Count == 3);
@@ -206,7 +206,7 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, Expiry, UNTEST_TIMEOUTMS(5000))
 
 	// Open with short timeout
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game/Test/BP_Expiry"), TEXT("editor.test.edit"), 30.0);
+		TEXT("/Game/Test/BP_Expiry"), TEXT("claireon.test_edit"), 30.0);
 	UNTEST_ASSERT_TRUE(OpenResult.Result == EOpenSessionResult::Success);
 
 	// Get the session pointer and manually set LastAccessTime far in the past
@@ -252,7 +252,7 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, DelegateFiresOnClose, UNTEST_TIMEOUTM
 	});
 
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game/Test/BP_Delegate"), TEXT("editor.test.edit"));
+		TEXT("/Game/Test/BP_Delegate"), TEXT("claireon.test_edit"));
 	UNTEST_ASSERT_TRUE(OpenResult.Result == EOpenSessionResult::Success);
 
 	FClaireonSessionManager::Get().CloseSession(OpenResult.SessionId);
@@ -260,7 +260,7 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, DelegateFiresOnClose, UNTEST_TIMEOUTM
 	UNTEST_EXPECT_TRUE(bDelegateFired);
 	UNTEST_EXPECT_TRUE(CapturedSessionId == OpenResult.SessionId);
 	UNTEST_EXPECT_TRUE(CapturedAssetPath == TEXT("/Game/Test/BP_Delegate"));
-	UNTEST_EXPECT_TRUE(CapturedToolName == TEXT("editor.test.edit"));
+	UNTEST_EXPECT_TRUE(CapturedToolName == TEXT("claireon.test_edit"));
 
 	FClaireonSessionManager::Get().OnSessionClosed().Remove(Handle);
 	CleanupAllSessions();
@@ -292,11 +292,11 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, TimeoutMaxOnReopen, UNTEST_TIMEOUTMS(
 	CleanupAllSessions();
 
 	FMCPOpenSessionResult First = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game/Test/BP_Timeout"), TEXT("editor.test.edit"), 10.0);
+		TEXT("/Game/Test/BP_Timeout"), TEXT("claireon.test_edit"), 10.0);
 	UNTEST_ASSERT_TRUE(First.Result == EOpenSessionResult::Success);
 
 	FMCPOpenSessionResult Second = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game/Test/BP_Timeout"), TEXT("editor.test.edit"), 60.0);
+		TEXT("/Game/Test/BP_Timeout"), TEXT("claireon.test_edit"), 60.0);
 	UNTEST_ASSERT_TRUE(Second.Result == EOpenSessionResult::ReusedExistingSession);
 
 	FMCPSession* Found = FClaireonSessionManager::Get().FindSession(First.SessionId);
@@ -317,12 +317,12 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, PathCanonDoubleSlashes, UNTEST_TIMEOU
 
 	// Double slashes should be collapsed to single slashes
 	FMCPOpenSessionResult First = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game//Test//BP_DoubleSlash"), TEXT("editor.test.edit"));
+		TEXT("/Game//Test//BP_DoubleSlash"), TEXT("claireon.test_edit"));
 	UNTEST_ASSERT_TRUE(First.Result == EOpenSessionResult::Success);
 
 	// Normal path should reuse the same session
 	FMCPOpenSessionResult Second = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game/Test/BP_DoubleSlash"), TEXT("editor.test.edit"));
+		TEXT("/Game/Test/BP_DoubleSlash"), TEXT("claireon.test_edit"));
 	UNTEST_ASSERT_TRUE(Second.Result == EOpenSessionResult::ReusedExistingSession);
 	UNTEST_EXPECT_TRUE(Second.SessionId == First.SessionId);
 
@@ -336,11 +336,11 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, PathCanonBackslashes, UNTEST_TIMEOUTM
 
 	// Backslashes should be normalized to forward slashes
 	FMCPOpenSessionResult First = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game\\Test\\BP_Backslash"), TEXT("editor.test.edit"));
+		TEXT("/Game\\Test\\BP_Backslash"), TEXT("claireon.test_edit"));
 	UNTEST_ASSERT_TRUE(First.Result == EOpenSessionResult::Success);
 
 	FMCPOpenSessionResult Second = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game/Test/BP_Backslash"), TEXT("editor.test.edit"));
+		TEXT("/Game/Test/BP_Backslash"), TEXT("claireon.test_edit"));
 	UNTEST_ASSERT_TRUE(Second.Result == EOpenSessionResult::ReusedExistingSession);
 	UNTEST_EXPECT_TRUE(Second.SessionId == First.SessionId);
 
@@ -353,11 +353,11 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, PathCanonTrailingSlash, UNTEST_TIMEOU
 	CleanupAllSessions();
 
 	FMCPOpenSessionResult First = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game/Test/BP_Trailing/"), TEXT("editor.test.edit"));
+		TEXT("/Game/Test/BP_Trailing/"), TEXT("claireon.test_edit"));
 	UNTEST_ASSERT_TRUE(First.Result == EOpenSessionResult::Success);
 
 	FMCPOpenSessionResult Second = FClaireonSessionManager::Get().OpenSession(
-		TEXT("/Game/Test/BP_Trailing"), TEXT("editor.test.edit"));
+		TEXT("/Game/Test/BP_Trailing"), TEXT("claireon.test_edit"));
 	UNTEST_ASSERT_TRUE(Second.Result == EOpenSessionResult::ReusedExistingSession);
 	UNTEST_EXPECT_TRUE(Second.SessionId == First.SessionId);
 

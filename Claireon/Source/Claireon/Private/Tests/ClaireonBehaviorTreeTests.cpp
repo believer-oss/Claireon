@@ -36,7 +36,7 @@ namespace
 }
 
 // ============================================================================
-// editor.behaviortree.inspect
+// claireon.behaviortree_inspect
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTree, InspectMissingAssetPath, UNTEST_TIMEOUTMS(5000))
@@ -150,7 +150,7 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTree, InspectDefaultsToFull, UNTEST_TIMEOUTMS
 }
 
 // ============================================================================
-// editor.behaviortree.inspectBlackboard
+// claireon.behaviortree_inspect_blackboard
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, Blackboard, InspectMissingAssetPath, UNTEST_TIMEOUTMS(5000))
@@ -221,7 +221,7 @@ UNTEST_UNIT_OPTS(Claireon, Blackboard, InspectSummaryVsFull, UNTEST_TIMEOUTMS(10
 }
 
 // ============================================================================
-// editor.eqs.inspect
+// claireon.eqs_inspect
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, EQS, InspectMissingAssetPath, UNTEST_TIMEOUTMS(5000))
@@ -304,7 +304,7 @@ UNTEST_UNIT_OPTS(Claireon, EQS, InspectWrongAssetType, UNTEST_TIMEOUTMS(5000))
 }
 
 // ============================================================================
-// editor.behaviortree.edit — open/close/status session lifecycle
+// claireon.behaviortree_edit — open/close/status session lifecycle
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEdit, MissingOperation, UNTEST_TIMEOUTMS(5000))
@@ -495,7 +495,7 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEdit, OperationsRequireParamsOnMissingInp
 UNTEST_UNIT_OPTS(Claireon, BehaviorTree, InspectSchemaValid, UNTEST_TIMEOUTMS(1000))
 {
 	ClaireonTool_BehaviorTreeInspect Tool;
-	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("inspect_behaviortree"));
+	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.behaviortree_inspect"));
 	UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
 
 	auto Schema = Tool.GetInputSchema();
@@ -518,7 +518,7 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTree, InspectSchemaValid, UNTEST_TIMEOUTMS(10
 UNTEST_UNIT_OPTS(Claireon, Blackboard, InspectSchemaValid, UNTEST_TIMEOUTMS(1000))
 {
 	ClaireonTool_BehaviorTreeInspectBlackboard Tool;
-	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("editor.behaviortree.inspectBlackboard"));
+	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.behaviortree_inspect_blackboard"));
 	UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
 
 	auto Schema = Tool.GetInputSchema();
@@ -534,7 +534,7 @@ UNTEST_UNIT_OPTS(Claireon, Blackboard, InspectSchemaValid, UNTEST_TIMEOUTMS(1000
 UNTEST_UNIT_OPTS(Claireon, EQS, InspectSchemaValid, UNTEST_TIMEOUTMS(1000))
 {
 	ClaireonTool_EQSInspect Tool;
-	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("inspect_eqs"));
+	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.eqs_inspect"));
 	UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
 
 	auto Schema = Tool.GetInputSchema();
@@ -550,7 +550,7 @@ UNTEST_UNIT_OPTS(Claireon, EQS, InspectSchemaValid, UNTEST_TIMEOUTMS(1000))
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEdit, SchemaValid, UNTEST_TIMEOUTMS(1000))
 {
 	ClaireonTool_BehaviorTreeEdit Tool;
-	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("edit_behaviortree"));
+	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.behaviortree_edit"));
 	UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
 
 	auto Schema = Tool.GetInputSchema();

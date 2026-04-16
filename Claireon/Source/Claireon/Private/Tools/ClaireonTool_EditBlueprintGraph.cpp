@@ -687,7 +687,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Execute(const TSharedPtr<FJsonObjec
 
 void ClaireonTool_EditBlueprintGraph::HandleSessionClosed(const FMCPSessionClosedInfo& Info)
 {
-	if (Info.ToolName == TEXT("editor.blueprint.edit"))
+	if (Info.ToolName == TEXT("claireon.blueprint_edit_graph"))
 	{
 		ToolData.Remove(Info.SessionId);
 	}
@@ -764,7 +764,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_Open(const TSharedPtr<FJs
 	// Open session via the manager (handles locking)
 	double TimeoutMinutes = 60.0;
 	Params->TryGetNumberField(TEXT("timeout_minutes"), TimeoutMinutes);
-	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(AssetPath, TEXT("editor.blueprint.edit"), TimeoutMinutes);
+	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(AssetPath, TEXT("claireon.blueprint_edit_graph"), TimeoutMinutes);
 
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{
@@ -941,7 +941,7 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_Create(const TSharedPtr<F
 	// Open session via the manager (handles locking)
 	double TimeoutMinutes = 60.0;
 	Params->TryGetNumberField(TEXT("timeout_minutes"), TimeoutMinutes);
-	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(Blueprint->GetPathName(), TEXT("editor.blueprint.edit"), TimeoutMinutes);
+	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(Blueprint->GetPathName(), TEXT("claireon.blueprint_edit_graph"), TimeoutMinutes);
 
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{

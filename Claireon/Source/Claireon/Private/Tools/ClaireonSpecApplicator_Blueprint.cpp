@@ -214,7 +214,7 @@ bool FClaireonSpecApplicator_Blueprint::OpenOrCreateAsset(const FString& AssetPa
 	// Open session
 	const FString BPPathName = BP->GetPathName();
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
-		BPPathName, TEXT("editor.blueprint.edit"));
+		BPPathName, TEXT("claireon.blueprint_edit_graph"));
 
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{

@@ -100,7 +100,7 @@ UNTEST_UNIT_OPTS(Claireon, Niagara, ResolveRendererClassInvalid, UNTEST_TIMEOUTM
 }
 
 // ============================================================================
-// editor.niagara.inspect
+// claireon.niagara_inspect
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, Niagara, InspectMissingAssetPath, UNTEST_TIMEOUTMS(5000))
@@ -175,7 +175,7 @@ UNTEST_UNIT_OPTS(Claireon, Niagara, InspectEmitterIndexOutOfRange, UNTEST_TIMEOU
 }
 
 // ============================================================================
-// editor.niagara.edit — Session Lifecycle
+// claireon.niagara_edit — Session Lifecycle
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, Niagara, EditOpenCloseSession, UNTEST_TIMEOUTMS(15000))
@@ -425,7 +425,7 @@ UNTEST_UNIT_OPTS(Claireon, Niagara, EditUnknownOperation, UNTEST_TIMEOUTMS(15000
 }
 
 // ============================================================================
-// editor.niagara.edit — list_modules (no session required)
+// claireon.niagara_edit — list_modules (no session required)
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, ListModules_ReturnsResults, UNTEST_TIMEOUTMS(15000))
@@ -479,7 +479,7 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, ListModules_InvalidStack, UNTEST_TIMEOUT
 }
 
 // ============================================================================
-// editor.niagara.edit — Module operations (session required)
+// claireon.niagara_edit — Module operations (session required)
 // ============================================================================
 
 // Helper: Opens a session, extracts the session ID, and returns it via OutSessionId.
@@ -718,7 +718,7 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, AddModule_InvalidStack, UNTEST_TIMEOUTMS
 }
 
 // ============================================================================
-// editor.niagara.edit — System property & parameter operations
+// claireon.niagara_edit — System property & parameter operations
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, SetSystemProperty_Success, UNTEST_TIMEOUTMS(15000))
@@ -831,7 +831,7 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, AddParameter_InvalidType, UNTEST_TIMEOUT
 }
 
 // ============================================================================
-// editor.niagara.edit — Compile
+// claireon.niagara_edit — Compile
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, Compile_Success, UNTEST_TIMEOUTMS(30000))
@@ -856,7 +856,7 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, Compile_Success, UNTEST_TIMEOUTMS(30000)
 }
 
 // ============================================================================
-// editor.niagara.edit — Enhanced status
+// claireon.niagara_edit — Enhanced status
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, Status_IncludesStacks, UNTEST_TIMEOUTMS(15000))

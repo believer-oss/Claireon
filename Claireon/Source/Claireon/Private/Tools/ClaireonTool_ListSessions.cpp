@@ -28,7 +28,7 @@ TSharedPtr<FJsonObject> ClaireonTool_ListSessions::GetInputSchema() const
 	TSharedPtr<FJsonObject> ToolNameProp = MakeShared<FJsonObject>();
 	ToolNameProp->SetStringField(TEXT("type"), TEXT("string"));
 	ToolNameProp->SetStringField(TEXT("description"),
-		TEXT("Optional tool name filter (e.g. 'editor.niagara.edit'). If omitted, returns all sessions."));
+		TEXT("Optional tool name filter (e.g. 'claireon.niagara_edit'). If omitted, returns all sessions."));
 	Properties->SetObjectField(TEXT("tool_name"), ToolNameProp);
 
 	Schema->SetObjectField(TEXT("properties"), Properties);

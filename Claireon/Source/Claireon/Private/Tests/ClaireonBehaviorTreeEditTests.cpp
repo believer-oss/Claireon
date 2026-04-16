@@ -35,13 +35,13 @@ namespace
 }
 
 // ============================================================================
-// editor.behaviortree.edit — Schema validation for updated tool
+// claireon.behaviortree_edit — Schema validation for updated tool
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, SchemaValid, UNTEST_TIMEOUTMS(1000))
 {
 	ClaireonTool_BehaviorTreeEdit Tool;
-	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("edit_behaviortree"));
+	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.behaviortree_edit"));
 	UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
 	UNTEST_EXPECT_TRUE(Tool.GetDescription().Contains(TEXT("add_node")));
 
@@ -63,7 +63,7 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, SchemaValid, UNTEST_TIMEOUTMS(100
 }
 
 // ============================================================================
-// editor.behaviortree.edit — Open/close with asset lock
+// claireon.behaviortree_edit — Open/close with asset lock
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, OpenCloseCycle, UNTEST_TIMEOUTMS(15000))
@@ -117,7 +117,7 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, OpenCloseCycle, UNTEST_TIMEOUTMS(
 }
 
 // ============================================================================
-// editor.behaviortree.edit — list_node_types discovery
+// claireon.behaviortree_edit — list_node_types discovery
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, ListNodeTypes, UNTEST_TIMEOUTMS(10000))
@@ -145,7 +145,7 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, ListNodeTypes, UNTEST_TIMEOUTMS(1
 }
 
 // ============================================================================
-// editor.behaviortree.edit — suppress_output
+// claireon.behaviortree_edit — suppress_output
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, SuppressOutput, UNTEST_TIMEOUTMS(15000))
@@ -188,7 +188,7 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, SuppressOutput, UNTEST_TIMEOUTMS(
 }
 
 // ============================================================================
-// editor.behaviortree.edit — Asset lock conflict
+// claireon.behaviortree_edit — Asset lock conflict
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, AssetLockConflict, UNTEST_TIMEOUTMS(15000))
@@ -222,13 +222,13 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, AssetLockConflict, UNTEST_TIMEOUT
 }
 
 // ============================================================================
-// editor.blackboard.edit — Schema validation
+// claireon.blackboard_edit — Schema validation
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, BlackboardEdit, SchemaValid, UNTEST_TIMEOUTMS(1000))
 {
 	ClaireonTool_BlackboardEdit Tool;
-	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("editor.blackboard.edit"));
+	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.blackboard_edit"));
 	UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
 
 	auto Schema = Tool.GetInputSchema();
@@ -242,7 +242,7 @@ UNTEST_UNIT_OPTS(Claireon, BlackboardEdit, SchemaValid, UNTEST_TIMEOUTMS(1000))
 }
 
 // ============================================================================
-// editor.blackboard.edit — Open/close cycle
+// claireon.blackboard_edit — Open/close cycle
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, BlackboardEdit, OpenCloseCycle, UNTEST_TIMEOUTMS(15000))
@@ -295,13 +295,13 @@ UNTEST_UNIT_OPTS(Claireon, BlackboardEdit, OpenCloseCycle, UNTEST_TIMEOUTMS(1500
 }
 
 // ============================================================================
-// editor.eqs.edit — Schema validation
+// claireon.eqs_edit — Schema validation
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, EQSEdit, SchemaValid, UNTEST_TIMEOUTMS(1000))
 {
 	ClaireonTool_EQSEdit Tool;
-	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("edit_eqs"));
+	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.eqs_edit"));
 	UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
 
 	auto Schema = Tool.GetInputSchema();
@@ -315,7 +315,7 @@ UNTEST_UNIT_OPTS(Claireon, EQSEdit, SchemaValid, UNTEST_TIMEOUTMS(1000))
 }
 
 // ============================================================================
-// editor.eqs.edit — Open/close cycle
+// claireon.eqs_edit — Open/close cycle
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, EQSEdit, OpenCloseCycle, UNTEST_TIMEOUTMS(15000))
