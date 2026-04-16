@@ -31,9 +31,6 @@ private:
 	/** Generate the Python suffix code (result extraction) */
 	static FString GetPythonSuffix();
 
-	/** Build concatenated log string from Python command log output */
-	static FString BuildLogString(const TArray<struct FPythonLogOutputEntry>& LogOutput);
-
 	/** Monotonic counter for temp file naming */
 	static TAtomic<int32> TempFileCounter;
 };

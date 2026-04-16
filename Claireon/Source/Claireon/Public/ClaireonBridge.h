@@ -4,6 +4,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include <atomic>
 
 // Forward declare CPython types to avoid pulling Python.h into the header
 struct _object;
@@ -78,6 +79,12 @@ public:
 	 */
 	static void RunWorldTransitionBarrier();
 
+	/** Rebuild the claireon Python module from the current tool registry. Called when bClaireonModuleStale is set. */
+	static void RebuildClaireonModule();
+
+	/** True when the tool registry has changed and the claireon Python module needs rebuilding. */
+	static std::atomic<bool> bClaireonModuleStale;
+
 private:
 	/** Whether bridge functions have been registered */
 	static bool bIsRegistered;
@@ -90,4 +97,10 @@ private:
 
 	/** Queue of deferred world-transition actions */
 	static TArray<FClaireonDeferredAction> GDeferredActions;
+
+	/** Stores the OnToolsChanged delegate subscription */
+	static FDelegateHandle ToolsChangedHandle;
+
+	/** Build the tool catalog JSON and run the Python bootstrap to populate sys.modules['claireon']. */
+	static void BuildAndRunBootstrap();
 };
