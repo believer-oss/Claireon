@@ -154,6 +154,9 @@ private:
 	/** Get detailed information about a specific component */
 	FToolResult Operation_GetComponentDetails(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 
+	/** Create a function override graph for a BlueprintNativeEvent or BlueprintImplementableEvent */
+	FToolResult Operation_AddFunctionOverride(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
+
 	// ========================================================================
 	// Helpers
 	// ========================================================================

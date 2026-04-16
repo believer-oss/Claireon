@@ -49,6 +49,8 @@
 #include "K2Node_CallDelegate.h"
 #include "K2Node_CreateDelegate.h"
 #include "K2Node_AssignDelegate.h"
+#include "K2Node_FunctionEntry.h"
+#include "K2Node_FunctionResult.h"
 #include "Engine/TimelineTemplate.h"
 #include "Curves/CurveFloat.h"
 #include "Curves/CurveVector.h"
@@ -203,7 +205,17 @@ FString ClaireonTool_EditBlueprintGraph::GetFullDescription() const
 				"- set_root_component: Designate a component as the new scene root.\n"
 				"    Params: component_name (required)\n"
 				"- get_component_details: Get detailed info about a component including hierarchy and properties.\n"
-				"    Params: component_name (required), include_defaults (optional boolean, default false)");
+				"    Params: component_name (required), include_defaults (optional boolean, default false)\n\n"
+				"add_function_override operation:\n"
+				"  Creates the correct override graph for a parent class function.\n"
+				"  Required: function_name (name of the parent class function to override)\n"
+				"  - For BlueprintNativeEvent functions: creates a new function graph in FunctionGraphs\n"
+				"    with entry/result nodes matching the parent signature. The session's active graph\n"
+				"    switches to the new function graph automatically.\n"
+				"  - For BlueprintImplementableEvent functions: creates a UK2Node_Event in EventGraph\n"
+				"    (same as EventOverride node_type). Session stays on EventGraph.\n"
+				"  Use this instead of add_node(node_type=EventOverride) for all function overrides.\n"
+				"  Returns error if the override already exists.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_EditBlueprintGraph::GetInputSchema() const
@@ -216,7 +228,7 @@ TSharedPtr<FJsonObject> ClaireonTool_EditBlueprintGraph::GetInputSchema() const
 	// operation - required string (e.g. "open", "add_node", "connect_pins", "save", "close")
 	TSharedPtr<FJsonObject> OpProp = MakeShared<FJsonObject>();
 	OpProp->SetStringField(TEXT("type"), TEXT("string"));
-	OpProp->SetStringField(TEXT("description"), TEXT("The operation to perform: open, create, add_node (supports optional position: {x,y}), remove_node, connect_pins, disconnect_pins, set_pin_value, move_node (requires node_guid + position: {x,y}), add_pin, remove_pin, split_pin, recombine_pin, add_variable, set_variable_properties, save, close, list_graphs, reconstruct_node, set_gameplay_tags, remove_component, reparent_component, rename_component, set_root_component, get_component_details, etc."));
+	OpProp->SetStringField(TEXT("description"), TEXT("The operation to perform: open, create, add_node (supports optional position: {x,y}), remove_node, connect_pins, disconnect_pins, set_pin_value, move_node (requires node_guid + position: {x,y}), add_pin, remove_pin, split_pin, recombine_pin, add_variable, set_variable_properties, add_function_override, save, close, list_graphs, reconstruct_node, set_gameplay_tags, remove_component, reparent_component, rename_component, set_root_component, get_component_details, etc."));
 	Properties->SetObjectField(TEXT("operation"), OpProp);
 
 	// asset_path - required for open/create
@@ -646,6 +658,10 @@ FToolResult ClaireonTool_EditBlueprintGraph::Execute(const TSharedPtr<FJsonObjec
 		else if (Operation == TEXT("move_node"))
 		{
 			return CheckMutationAffectedNodes(Operation, Operation_MoveNode(SessionId, Data, Params));
+		}
+		else if (Operation == TEXT("add_function_override"))
+		{
+			return CheckMutationAffectedNodes(Operation, Operation_AddFunctionOverride(SessionId, Data, Params));
 		}
 		else if (Operation == TEXT("close"))
 		{
@@ -1617,6 +1633,14 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddNode(const FString& Se
 		{
 			return MakeErrorResult(FString::Printf(
 				TEXT("Function '%s' is not a BlueprintNativeEvent or BlueprintImplementableEvent"),
+				*TargetFunc->GetName()));
+		}
+
+		// Diagnostic: recommend add_function_override for BlueprintNativeEvent functions
+		if (TargetFunc->HasAnyFunctionFlags(FUNC_Native))
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("Function '%s' is a BlueprintNativeEvent. Use the add_function_override operation instead of EventOverride node_type."),
 				*TargetFunc->GetName()));
 		}
 
@@ -5316,6 +5340,208 @@ FToolResult ClaireonTool_EditBlueprintGraph::Operation_MoveNode(const FString& S
 	Graph->NotifyGraphChanged();
 
 	Data->LastOperationAffectedNodes.Add(Node->NodeGuid);
+
+	return BuildStateResponse(SessionId, Data);
+}
+
+// ============================================================================
+// Operation: add_function_override
+// ============================================================================
+
+FToolResult ClaireonTool_EditBlueprintGraph::Operation_AddFunctionOverride(
+	const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+{
+	// 1. Extract function_name (required)
+	FString FunctionName;
+	if (!Params->TryGetStringField(TEXT("function_name"), FunctionName))
+	{
+		return MakeErrorResult(TEXT("Missing required field 'function_name' for add_function_override"));
+	}
+
+	UBlueprint* Blueprint = Data->Blueprint.Get();
+	if (!Blueprint)
+	{
+		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
+	}
+
+	// 2. Resolve the function on the parent class
+	UClass* ParentClass = Blueprint->ParentClass;
+	ClaireonNameResolver::FNameResolveResult FuncResult;
+	UFunction* TargetFunc = ParentClass
+		? ClaireonNameResolver::ResolveFunctionName(ParentClass, FunctionName, FuncResult)
+		: nullptr;
+
+	if (!TargetFunc)
+	{
+		return MakeErrorResult(FuncResult.Error.IsEmpty()
+				? FString::Printf(TEXT("Function '%s' not found: Blueprint has no parent class"), *FunctionName)
+				: FuncResult.Error);
+	}
+
+	// 3. Validate FUNC_BlueprintEvent flag
+	if (!TargetFunc->HasAnyFunctionFlags(FUNC_BlueprintEvent))
+	{
+		return MakeErrorResult(FString::Printf(
+			TEXT("Function '%s' is not a BlueprintNativeEvent or BlueprintImplementableEvent"),
+			*TargetFunc->GetName()));
+	}
+
+	// 4. Check for existing override via TWO mechanisms
+	// 4a. Check for UK2Node_Event override in EventGraph
+	UK2Node_Event* ExistingEventOverride = FBlueprintEditorUtils::FindOverrideForFunction(
+		Blueprint, ParentClass, TargetFunc->GetFName());
+	if (ExistingEventOverride)
+	{
+		return MakeErrorResult(FString::Printf(
+			TEXT("Override for '%s' already exists as event node (GUID: %s)"),
+			*TargetFunc->GetName(), *ExistingEventOverride->NodeGuid.ToString()));
+	}
+
+	// 4b. Check for existing function graph with the function's name
+	FName FuncFName = TargetFunc->GetFName();
+	for (UEdGraph* ExistingGraph : Blueprint->FunctionGraphs)
+	{
+		if (ExistingGraph && ExistingGraph->GetFName() == FuncFName)
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("Override for '%s' already exists as function graph"),
+				*TargetFunc->GetName()));
+		}
+	}
+
+	// 5. Branch on FUNC_Native
+	bool bIsNativeEvent = TargetFunc->HasAnyFunctionFlags(FUNC_Native);
+
+	if (bIsNativeEvent)
+	{
+		// === Native path: create a function graph ===
+
+		// Create the graph
+		UEdGraph* NewGraph = FBlueprintEditorUtils::CreateNewGraph(
+			Blueprint,
+			FuncFName,
+			UEdGraph::StaticClass(),
+			UEdGraphSchema_K2::StaticClass());
+
+		if (!NewGraph)
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("Failed to create function graph for '%s'"), *TargetFunc->GetName()));
+		}
+
+		// Register it as a function graph
+		FBlueprintEditorUtils::AddFunctionGraph<UClass>(Blueprint, NewGraph, /*bIsUserCreated=*/true, /*SignatureFromClass=*/nullptr);
+
+		// Get the auto-created entry node
+		UK2Node_FunctionEntry* EntryNode = nullptr;
+		{
+			TArray<UK2Node_FunctionEntry*> EntryNodes;
+			NewGraph->GetNodesOfClass(EntryNodes);
+			if (EntryNodes.Num() > 0)
+			{
+				EntryNode = EntryNodes[0];
+			}
+		}
+
+		if (!EntryNode)
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("Failed to find entry node in new function graph for '%s'"), *TargetFunc->GetName()));
+		}
+
+		// Bind entry node to parent function signature
+		EntryNode->FunctionReference.SetExternalMember(TargetFunc->GetFName(), ParentClass);
+		EntryNode->ReconstructNode();
+
+		// Create/find result node
+		UK2Node_FunctionResult* ResultNode =
+			FBlueprintEditorUtils::FindOrCreateFunctionResultNode(EntryNode);
+		if (ResultNode)
+		{
+			ResultNode->ReconstructNode();
+		}
+
+		// Mark blueprint as modified
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+
+		// Switch session to the new function graph
+		Data->Graph = NewGraph;
+		Data->Cursor.GraphName = NewGraph->GetName();
+		Data->Cursor.PushHistory();
+		Data->Cursor.FocusedNodeGuid = EntryNode->NodeGuid;
+
+		// Set cursor to entry node's first output exec pin
+		for (UEdGraphPin* Pin : EntryNode->Pins)
+		{
+			if (Pin && Pin->Direction == EGPD_Output && Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec)
+			{
+				Data->Cursor.FocusedPinName = Pin->PinName;
+				Data->Cursor.FocusedPinDirection = Pin->Direction;
+				break;
+			}
+		}
+
+		Data->Cursor.LastOperationStatus = FString::Printf(
+			TEXT("Created function override graph for '%s' (native event). Session graph switched to '%s'."),
+			*TargetFunc->GetName(), *NewGraph->GetName());
+
+		// Track affected nodes for response_mode="changed"
+		Data->LastOperationAffectedNodes.Add(EntryNode->NodeGuid);
+		if (ResultNode)
+		{
+			Data->LastOperationAffectedNodes.Add(ResultNode->NodeGuid);
+		}
+	}
+	else
+	{
+		// === Implementable path: create UK2Node_Event in EventGraph ===
+
+		UEdGraph* Graph = Data->Graph.Get();
+		if (!Graph)
+		{
+			return MakeErrorResult(TEXT("Current graph is no longer valid"));
+		}
+
+		UK2Node_Event* EventNode = NewObject<UK2Node_Event>(Graph);
+		EventNode->EventReference.SetExternalMember(TargetFunc->GetFName(), ParentClass);
+		EventNode->bOverrideFunction = true;
+
+		// Place node at cursor viewport center
+		EventNode->NodePosX = FMath::RoundToInt(Data->Cursor.ViewportCenter.X);
+		EventNode->NodePosY = FMath::RoundToInt(Data->Cursor.ViewportCenter.Y);
+
+		Graph->AddNode(EventNode, /*bUserAction=*/true, /*bSelectNewNode=*/false);
+		EventNode->AllocateDefaultPins();
+		EventNode->ReconstructNode();
+
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+
+		// Update cursor
+		Data->Cursor.PushHistory();
+		Data->Cursor.FocusedNodeGuid = EventNode->NodeGuid;
+
+		for (UEdGraphPin* Pin : EventNode->Pins)
+		{
+			if (Pin && Pin->Direction == EGPD_Output && Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec)
+			{
+				Data->Cursor.FocusedPinName = Pin->PinName;
+				Data->Cursor.FocusedPinDirection = Pin->Direction;
+				break;
+			}
+		}
+
+		Data->Cursor.LastOperationStatus = FString::Printf(
+			TEXT("Created event override for '%s' (implementable event) in EventGraph"),
+			*TargetFunc->GetName());
+
+		Data->LastOperationAffectedNodes.Add(EventNode->NodeGuid);
+	}
+
+	// Include resolution note if applicable
+	if (!FuncResult.ResolutionNote.IsEmpty())
+	{
+		Data->Cursor.LastOperationStatus += FString::Printf(TEXT(" [%s]"), *FuncResult.ResolutionNote);
+	}
 
 	return BuildStateResponse(SessionId, Data);
 }
