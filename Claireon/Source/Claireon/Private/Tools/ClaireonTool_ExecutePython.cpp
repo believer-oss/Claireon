@@ -42,10 +42,9 @@ FString ClaireonTool_ExecutePython::GetDescription() const
 {
 	return TEXT("Execute Python code in Code Mode with access to the claireon.* bridge. "
 				"The code runs in the Unreal Editor's Python environment with the 'unreal' module "
-				"and all claireon.* wrapper functions available for calling other MCP tools. "
-				"Note: 'claireon' is a pre-injected global callable proxy -- do NOT 'import claireon' "
-				"(it is not a module). Call tools as claireon.<tool_name>(...); run dir(claireon) to "
-				"enumerate the available tool attributes.");
+				"and the 'claireon' module available for calling other MCP tools. "
+				"Use 'import claireon' to access tool functions. Call tools as claireon.<tool_name>(...). "
+				"Run dir(claireon) to list available tools, or help(claireon.<tool_name>) for usage details.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ExecutePython::GetInputSchema() const
@@ -79,126 +78,11 @@ TSharedPtr<FJsonObject> ClaireonTool_ExecutePython::GetInputSchema() const
 
 FString ClaireonTool_ExecutePython::GetPythonPrefix()
 {
-	// Constant string — the claireon.* namespace proxy
-	// Uses _json and _unreal prefixed imports to avoid colliding with user code
 	return TEXT(
-		"import json as _json\n"
-		"import unreal as _unreal\n"
 		"import warnings as _warnings\n"
 		"_warnings.filterwarnings('ignore', category=DeprecationWarning)\n"
-		"\n"
-		"# --- sleep short-circuit ---\n"
-		"# Monkey-patch time.sleep so it cannot block the editor thread.\n"
-		"import time as _time\n"
-		"_time._original_sleep = _time.sleep\n"
-		"def _noop_sleep(seconds=0):\n"
-		"    _warnings.warn(\n"
-		"        f'time.sleep({seconds}) intercepted and skipped — sleeping is disabled in Claireon MCP to prevent editor hangs.',\n"
-		"        RuntimeWarning, stacklevel=2)\n"
-		"_time.sleep = _noop_sleep\n"
-		"try:\n"
-		"    import asyncio as _asyncio\n"
-		"    async def _noop_async_sleep(seconds=0, result=None):\n"
-		"        _warnings.warn(\n"
-		"            f'asyncio.sleep({seconds}) intercepted and skipped.',\n"
-		"            RuntimeWarning, stacklevel=2)\n"
-		"        return result\n"
-		"    _asyncio.sleep = _noop_async_sleep\n"
-		"except ImportError:\n"
-		"    pass\n"
-		"\n"
-		"class _MCPToolProxy:\n"
-		"    \"\"\"Callable proxy that supports dotted access for tool dispatch.\n"
-		"    claireon.asset_search returns _MCPToolProxy('claireon.asset_search').\n"
-		"    claireon.asset_search() dispatches _mcp_call_tool('claireon.asset_search', ...).\"\"\"\n"
-		"    _schema_cache = {}\n"
-		"    def __init__(self, full_name):\n"
-		"        object.__setattr__(self, '_full_name', full_name)\n"
-		"    def __call__(self, *args, **kwargs):\n"
-		"        fn = self._full_name\n"
-		"        if args:\n"
-		"            if fn not in _MCPToolProxy._schema_cache:\n"
-		"                schema_json = _unreal._mcp_call_tool('__get_schema__', fn)\n"
-		"                _MCPToolProxy._schema_cache[fn] = _json.loads(schema_json) if schema_json else {}\n"
-		"            schema = _MCPToolProxy._schema_cache[fn]\n"
-		"            required = schema.get('required', [])\n"
-		"            props = list(schema.get('properties', {}).keys())\n"
-		"            param_names = list(required) + [p for p in props if p not in required]\n"
-		"            for i, val in enumerate(args):\n"
-		"                if i < len(param_names):\n"
-		"                    kwargs[param_names[i]] = val\n"
-		"        result_json = _unreal._mcp_call_tool(fn, _json.dumps(kwargs))\n"
-		"        return _json.loads(result_json)\n"
-		"    def __getattr__(self, name):\n"
-		"        return _MCPToolProxy(self._full_name + '.' + name)\n"
-		"    def __dir__(self):\n"
-		"        names = set(object.__dir__(self))\n"
-		"        try:\n"
-		"            _tools_json = _unreal._mcp_call_tool('__list_tools__', '')\n"
-		"            _all_tools = _json.loads(_tools_json) if _tools_json else []\n"
-		"            _prefix = self._full_name + '.'\n"
-		"            for _t in _all_tools:\n"
-		"                if _t.startswith(_prefix):\n"
-		"                    _suffix = _t[len(_prefix):]\n"
-		"                    if '.' in _suffix:\n"
-		"                        _suffix = _suffix.split('.', 1)[0]\n"
-		"                    names.add(_suffix)\n"
-		"        except Exception:\n"
-		"            pass\n"
-		"        return sorted(names)\n"
-		"    def __repr__(self):\n"
-		"        return f'<tool {self._full_name}>'\n"
-		"\n"
-		"def _index_search(index_id, query='', max_results=5, method='hybrid'):\n"
-		"    from mcp_index_engine import get_engine as _get_engine\n"
-		"    _engine = _get_engine()\n"
-		"    _hits = _engine.search(index_id, query, max_results=max_results, method=method)\n"
-		"    return {'index_id': index_id, 'query': query, 'results': _hits}\n"
-		"\n"
-		"def _index_info(index_id):\n"
-		"    from mcp_index_engine import get_engine as _get_engine\n"
-		"    return _get_engine().get_index_info(index_id)\n"
-		"\n"
-		"def _index_list():\n"
-		"    from mcp_index_engine import get_engine as _get_engine\n"
-		"    return {'indexes': _get_engine().list_indexes()}\n"
-		"\n"
-		"def _index_stats(index_id):\n"
-		"    from mcp_index_engine import get_engine as _get_engine\n"
-		"    return _get_engine().stats(index_id)\n"
-		"\n"
-		"def _index_search_all(query='', max_results=10):\n"
-		"    from mcp_index_engine import get_engine as _get_engine\n"
-		"    _hits = _get_engine().search_all(query, max_results=max_results)\n"
-		"    return {'query': query, 'results': _hits}\n"
-		"\n"
-		"def _index_dump(index_id=None, name=None):\n"
-		"    from mcp_index_engine import get_engine as _get_engine\n"
-		"    return _get_engine().dump(index_id=index_id, name=name)\n"
-		"\n"
-		"def _index_load(name):\n"
-		"    from mcp_index_engine import get_engine as _get_engine\n"
-		"    return _get_engine().load(name)\n"
-		"\n"
-		"def _index_clear(index_id=None):\n"
-		"    from mcp_index_engine import get_engine as _get_engine\n"
-		"    return _get_engine().clear(index_id=index_id)\n"
-		"\n"
-		"def _index_expire(max_age_seconds=600.0):\n"
-		"    from mcp_index_engine import get_engine as _get_engine\n"
-		"    return _get_engine().expire(max_age_seconds=max_age_seconds)\n"
-		"\n"
 		"import unreal\n"
-		"claireon = _MCPToolProxy('claireon')\n"
-		"claireon.index_search = _index_search\n"
-		"claireon.index_info = _index_info\n"
-		"claireon.index_list = _index_list\n"
-		"claireon.index_stats = _index_stats\n"
-		"claireon.index_search_all = _index_search_all\n"
-		"claireon.index_dump = _index_dump\n"
-		"claireon.index_load = _index_load\n"
-		"claireon.index_clear = _index_clear\n"
-		"claireon.index_expire = _index_expire\n"
+		"import claireon\n"
 		"\n"
 		"# --- user code begins here ---\n");
 }
@@ -209,11 +93,6 @@ FString ClaireonTool_ExecutePython::GetPythonSuffix()
 		"\n"
 		"# --- user code ends here ---\n"
 	);
-}
-
-FString ClaireonTool_ExecutePython::BuildLogString(const TArray<FPythonLogOutputEntry>& LogOutput)
-{
-	return FToolResult::BuildLogString(LogOutput);
 }
 
 IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<FJsonObject>& Arguments)
@@ -248,6 +127,12 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 
 	// Step 2: Ensure bridge is registered
 	FClaireonBridge::EnsureRegistered();
+
+	// Step 2b: Rebuild claireon module if tools changed since last execution
+	if (FClaireonBridge::bClaireonModuleStale.exchange(false))
+	{
+		FClaireonBridge::RebuildClaireonModule();
+	}
 
 	// Step 3: Reset tool call counter
 	FClaireonBridge::ResetToolCallCount();
