@@ -92,6 +92,32 @@ Then use `search_tools` to discover available tools:
 > search_tools niagara
 ```
 
+#### One-click launch from the editor
+
+Once the plugin is loaded, the level editor toolbar exposes a **Claude Code** button next to **AI Chat** (also available under **Window > General > Miscellaneous > Launch Claude Code**). Clicking it:
+
+1. Resolves the live MCP server port (handles auto-incremented ports if `8017` was busy).
+2. Writes a per-launch MCP config to `Saved/Claireon/claude-code-mcp.json` so the committed `.mcp.json` stays untouched.
+3. Spawns a PowerShell window at the project root and runs `claude --mcp-config <path>` against that config. On Windows 11 with Windows Terminal as the default console host, the new window automatically opens in Terminal.
+
+Two optional settings under **Editor Preferences > Plugins > Claireon > Claude Code Launch** let teams customize the flow:
+
+- **Initial Prompt** — string sent to Claude Code on launch (typically a slash command like `/mcp-connect-claireon` to auto-fire a project-specific init skill). Empty by default.
+- **Skip Permission Prompts on Launch** — when true, passes `--dangerously-skip-permissions` so the initial-prompt skill can run unattended. Off by default.
+
+Project-wide defaults can be committed via `Config/DefaultEditorPerProjectUserSettings.ini`:
+
+```ini
+[/Script/Claireon.ClaireonSettings]
+LaunchInitialPrompt=/mcp-connect-claireon
+bLaunchSkipPermissions=True
+```
+
+**First-run requirements (per machine):**
+
+- Install Claude Code: <https://docs.anthropic.com/en/docs/claude-code/quickstart>
+- Run `claude /login` once to authenticate against your Claude.ai subscription. Inference then bills against your Pro/Max/Team seat instead of the Anthropic API.
+
 ## Optional Dependencies
 
 Claireon works standalone, but can integrate with these plugins when present:
