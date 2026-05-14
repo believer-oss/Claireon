@@ -185,8 +185,8 @@ class TestPortDerivation(unittest.TestCase):
         self.assertLessEqual(a, 65535)
 
     def test_case_normalization(self) -> None:
-        a = claireon_proxy.derive_default_mcp_port(r"C:\Git\MyGame")
-        b = claireon_proxy.derive_default_mcp_port(r"c:\git/your-project")
+        a = claireon_proxy.derive_default_mcp_port(r"C:\Path\To\Project")
+        b = claireon_proxy.derive_default_mcp_port(r"c:\path/to/project")
         self.assertEqual(a, b)
 
     def test_distribution_across_samples(self) -> None:
@@ -1143,7 +1143,7 @@ class TestProxyRegPortSync(unittest.TestCase):
 #
 # Inlined copy of Resolve-WorktreeFinalPath + Get-ProxyDefaultMcpPort from
 # Initialize-WorktreeMCP.ps1. The test owns its own copy so it can run
-# without dot-sourcing the launcher (which would execute Find-MyGameProject
+# without dot-sourcing the launcher (which would execute Find-ProjectRoot
 # top-level code). DRIFT HAZARD: if you change either function in
 # Scripts/Utilities/Initialize-WorktreeMCP.ps1, copy the new bodies into
 # the here-string below. The test's parity assertion validates THIS body
@@ -1152,14 +1152,14 @@ class TestProxyRegPortSync(unittest.TestCase):
 _PS_HELPER_BODY = textwrap.dedent(r'''
     function Resolve-WorktreeFinalPath {
         param([Parameter(Mandatory)][string]$Path)
-        if (-not ('MyGamePathResolver' -as [type])) {
+        if (-not ('WorktreePathResolver' -as [type])) {
             Add-Type -TypeDefinition @'
     using System;
     using System.IO;
     using System.Runtime.InteropServices;
     using System.Text;
 
-    public static class MyGamePathResolver
+    public static class WorktreePathResolver
     {
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
         private static extern IntPtr CreateFileW(string lpFileName, uint dwDesiredAccess, uint dwShareMode, IntPtr lpSecurityAttributes, uint dwCreationDisposition, uint dwFlagsAndAttributes, IntPtr hTemplateFile);
@@ -1212,7 +1212,7 @@ _PS_HELPER_BODY = textwrap.dedent(r'''
     }
     '@
         }
-        return [MyGamePathResolver]::ResolveFinalPath($Path)
+        return [WorktreePathResolver]::ResolveFinalPath($Path)
     }
 
     function Get-ProxyDefaultMcpPort {

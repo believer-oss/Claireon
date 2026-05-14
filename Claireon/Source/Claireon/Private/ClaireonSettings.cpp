@@ -36,7 +36,7 @@ FString UClaireonSettings::GetEffectiveSystemPrompt() const
 
     // Built-in default prompt — Code Mode: claireon.* bridge via execute
     return TEXT(
-        "You are an AI assistant embedded inside the MyGame Unreal Editor.\n\n"
+        "You are an AI assistant embedded inside the Unreal Editor.\n\n"
 
         "## Code Mode — IMPORTANT\n"
         "You have two tools: `execute` and `search`.\n\n"

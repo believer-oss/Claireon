@@ -10,7 +10,7 @@
 
 // Holder UCLASS used to verify CreateInstancedArrayElement rejects an array
 // whose Inner FObjectProperty does not carry CPF_InstancedReference. Kept
-// minimal and MyGame-free so the test stays inside Claireon's module
+// minimal and free of project-module dependencies so the test stays inside Claireon's module
 // dependency surface.
 UCLASS()
 class UClaireonTestNonInstancedHolder : public UObject

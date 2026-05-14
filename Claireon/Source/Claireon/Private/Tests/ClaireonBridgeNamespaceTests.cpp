@@ -10,8 +10,7 @@
 //   5. Invalid namespace REJECTED ('.' or empty).
 //   6. Cross-namespace name collision (foo + gas.foo coexist).
 //   7. Rebuild after OnToolsChanged removes stale namespaces from sys.modules.
-//   8. FSEditor migration smoke (fs.gas_set_property exists).
-//   9. Eager bridge before StartServer: registry constructed and tools
+//   8. Eager bridge before StartServer: registry constructed and tools
 //      visible in sys.modules['claireon'] without explicit StartServer call.
 //
 // Validation strategy: call the live bridge's RebuildClaireonModule under the
@@ -428,53 +427,6 @@ UNTEST_UNIT_OPTS(Claireon, BridgeNamespace, RebuildRemovesStaleNamespace, UNTEST
 		bErr, ErrMsg);
 	UNTEST_EXPECT_FALSE(bErr);
 	UNTEST_EXPECT_EQ(FindIntAfter(Out, TEXT("NS_STALE_AFTER=")), 0);
-
-	if (bWeStartedServer) { Module.StopServer(); }
-	co_return;
-}
-
-UNTEST_UNIT_OPTS(Claireon, BridgeNamespace, FSEditorMigrationSmoke, UNTEST_TIMEOUTMS(15000))
-{
-	using namespace ClaireonBridgeNamespaceTestsNS;
-
-	FClaireonModule& Module = FClaireonModule::Get();
-	const bool bWeStartedServer = EnsureServer(Module);
-	FClaireonServer* Server = Module.GetServer();
-	UNTEST_ASSERT_PTR(Server);
-	if (Server->GetTools().Num() == 0)
-	{
-		if (bWeStartedServer) { Module.StopServer(); }
-		co_return;
-	}
-
-	// FSEditor module may not be present in every test config; skip
-	// silently if its tools are not registered. The tool catalog lookup
-	// is via the bridge bootstrap's claireon module attribute.
-	Rebuild();
-	bool bErr = false;
-	FString ErrMsg;
-	const FString Out = RunPython(
-		TEXT("import sys\n")
-		TEXT("print('NS_FSED_HAS=' + str(int('fs' in sys.modules and hasattr(sys.modules['fs'], 'gas_set_property'))))\n"),
-		bErr, ErrMsg);
-	UNTEST_EXPECT_FALSE(bErr);
-
-	const int32 Has = FindIntAfter(Out, TEXT("NS_FSED_HAS="));
-	if (Has == INDEX_NONE)
-	{
-		// Python eval failed entirely; treat as skip.
-		if (bWeStartedServer) { Module.StopServer(); }
-		co_return;
-	}
-	if (Has == 0)
-	{
-		// FSEditor not loaded in this test config; skip.
-		UE_LOG(LogClaireon, Display,
-			TEXT("[BridgeNamespace] FSEditorMigrationSmoke SKIPPED -- fs.gas_set_property absent (FSEditor not loaded?)."));
-		if (bWeStartedServer) { Module.StopServer(); }
-		co_return;
-	}
-	UNTEST_EXPECT_EQ(Has, 1);
 
 	if (bWeStartedServer) { Module.StopServer(); }
 	co_return;
