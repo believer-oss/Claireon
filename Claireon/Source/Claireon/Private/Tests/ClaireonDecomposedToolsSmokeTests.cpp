@@ -61,7 +61,7 @@
 #include "Tools/ClaireonWidgetBPTool_Save.h"
 #include "Tools/ClaireonWidgetBPTool_Close.h"
 
-// Widget BP animation tools (#0000)
+// Widget BP animation tools
 #include "Tools/ClaireonWidgetBPTool_CreateAnimation.h"
 #include "Tools/ClaireonWidgetBPTool_DeleteAnimation.h"
 #include "Tools/ClaireonWidgetBPTool_DuplicateAnimation.h"
@@ -73,7 +73,7 @@
 #include "Tools/ClaireonWidgetBPTool_RemoveAnimationKeyframe.h"
 #include "Tools/ClaireonWidgetBPTool_SetAnimationProperty.h"
 
-// Chooser decomposition (#0000 cohort 1)
+// Chooser decomposition (cohort 1)
 #include "Tools/ClaireonChooserTool_SetResultType.h"
 #include "Tools/ClaireonChooserTool_SetOutputClass.h"
 #include "Tools/ClaireonChooserTool_AddContextParameter.h"
@@ -81,14 +81,14 @@
 #include "Tools/ClaireonChooserTool_SetContextParameterDirection.h"
 #include "Tools/ClaireonChooserTool_SetFallbackResult.h"
 
-// ProxyAsset decomposition (#0000 cohort 2)
+// ProxyAsset decomposition (cohort 2)
 #include "Tools/ClaireonProxyAssetTool_SetType.h"
 #include "Tools/ClaireonProxyAssetTool_SetResultType.h"
 #include "Tools/ClaireonProxyAssetTool_AddContextParameter.h"
 #include "Tools/ClaireonProxyAssetTool_RemoveContextParameter.h"
 #include "Tools/ClaireonProxyAssetTool_SetContextParameterDirection.h"
 
-// ProxyTable decomposition (#0000 cohort 3)
+// ProxyTable decomposition (cohort 3)
 #include "Tools/ClaireonProxyTableTool_AddInherit.h"
 #include "Tools/ClaireonProxyTableTool_RemoveInherit.h"
 

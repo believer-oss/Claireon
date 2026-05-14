@@ -30,12 +30,11 @@ public:
 	 * @param Port - The port to bind to. If binding fails, retries with incremented ports.
 	 * @return true if the server started successfully
 	 *
-	 * Stage 010: prefer TryStart / StartEphemeral. Start(uint32) survives as a
-	 * thin wrapper around TryStart(Port, bExclusive=false) for legacy
-	 * callers that want the historical "incremental retry" behaviour; new
-	 * callers (FClaireonModule::StartServer + the smoke test) take the
-	 * explicit single-attempt path so EADDRINUSE can be detected and the
-	 * editor can decide whether to auto-promote into proxy-attached mode.
+	 * Prefer TryStart / StartEphemeral. Start(uint32) is a thin wrapper around
+	 * TryStart(Port, bExclusive=false) for callers that want the incremental
+	 * retry behaviour; new callers (FClaireonModule::StartServer + the smoke
+	 * test) take the explicit single-attempt path so EADDRINUSE can be detected
+	 * and the editor can decide whether to auto-promote into proxy-attached mode.
 	 */
 	bool Start(uint32 Port);
 

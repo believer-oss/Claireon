@@ -1,10 +1,9 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Work item #0000 Item 3: ClaireonTool_GetBlueprintProperties emits plain `name`
-// alongside entity-prefixed aliases (variable_name, function_name,
-// component_name). Per-ambiguity-resolution this spec file is the chosen home
-// for get_properties alias coverage.
+// ClaireonTool_GetBlueprintProperties emits plain `name` alongside entity-prefixed
+// aliases (variable_name, function_name, component_name). This spec file owns
+// alias coverage for get_properties.
 
 #include "Tools/ClaireonTool_GetBlueprintProperties.h"
 #include "Tools/ClaireonBlueprintGraphTool_Create.h"

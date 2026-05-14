@@ -173,7 +173,7 @@ UNTEST_UNIT(Claireon, PropertyUtils_GetAll, NullObjectReturnsEmpty)
 }
 
 // ---------------------------------------------------------------------------
-// CreateInstancedArrayElement -- generic guard tests (#0000)
+// CreateInstancedArrayElement -- generic guard tests
 // ---------------------------------------------------------------------------
 
 UNTEST_UNIT(Claireon, PropertyUtils_Create, RejectsNonInstancedInner)

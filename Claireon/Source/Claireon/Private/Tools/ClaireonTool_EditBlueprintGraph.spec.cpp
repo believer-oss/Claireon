@@ -1,13 +1,11 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Stage 029 rewrite: these specs now exercise the decomposed
-// ClaireonBlueprintGraphTool_* tools directly. The legacy monolithic shim
-// (ClaireonTool_EditBlueprintGraph) and its envelope dispatcher were deleted
-// in stage 024. Tests below keep their legacy envelope-shaped JSON bodies
-// unchanged and call through DispatchLegacyEnvelope, which reads the
-// envelope "operation" field, flattens the envelope to the flat arg shape
-// each decomposed tool's Execute expects, and routes to the right tool.
+// These specs exercise the decomposed ClaireonBlueprintGraphTool_* tools
+// directly. Tests below keep their envelope-shaped JSON bodies unchanged
+// and call through DispatchLegacyEnvelope, which reads the envelope
+// "operation" field, flattens the envelope to the flat arg shape each
+// decomposed tool's Execute expects, and routes to the right tool.
 
 #include "ClaireonBlueprintHelpers.h"
 #include "ClaireonLog.h"
@@ -87,9 +85,9 @@
 namespace
 {
 	/**
-	 * Flatten the legacy {operation, session_id, params:{...}} envelope into the
-	 * flat {session_id, ...fields} shape each decomposed tool's Execute expects.
-	 * Drops "operation" itself (it was only used to pick a tool) but preserves
+	 * Flatten the {operation, session_id, params:{...}} envelope into the flat
+	 * {session_id, ...fields} shape each decomposed tool's Execute expects.
+	 * Drops "operation" itself (it is only used to pick a tool) but preserves
 	 * every other top-level field (e.g. session_id) plus all params.* fields.
 	 */
 	static TSharedPtr<FJsonObject> BPFlattenLegacyEnvelope(const TSharedPtr<FJsonObject>& Envelope)
@@ -124,11 +122,10 @@ namespace
 	/**
 	 * Read envelope.operation and route to the matching decomposed tool,
 	 * forwarding the flattened args. Returns a Tool result directly so
-	 * call sites can consume it exactly like the old monolithic shim did.
+	 * call sites can consume it.
 	 *
-	 * Unknown operations return an error result -- this preserves the
-	 * legacy "reject invalid_operation" behavior the ErrorHandling test
-	 * asserts.
+	 * Unknown operations return an error result -- the ErrorHandling test
+	 * asserts this "reject invalid_operation" behavior.
 	 */
 	static IClaireonTool::FToolResult DispatchLegacyEnvelope(const TSharedPtr<FJsonObject>& Envelope)
 	{
@@ -1570,9 +1567,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_CompileRemoveUnused,
 
 bool FEditBlueprintGraphTest_CompileRemoveUnused::RunTest(const FString& Parameters)
 {
-	// The folder-style invocation moved to blueprint_compile_batch in the
-	// session-safety split (#0000). The single-target blueprint_compile no
-	// longer accepts folder paths or arrays.
+	// The folder-style invocation lives on blueprint_compile_batch. The
+	// single-target blueprint_compile does not accept folder paths or arrays.
 	ClaireonTool_BlueprintCompileBatch CompileTool;
 
 	auto BuildPathsArgs = []()
@@ -3192,7 +3188,7 @@ bool FEditBlueprintGraphTest_AddVariable_UnknownTypeFallsBackToString::RunTest(c
 }
 
 // ============================================================================
-// Test: ComponentBoundEvent add_node branch (#0000)
+// Test: ComponentBoundEvent add_node branch
 // ============================================================================
 //
 // Verifies Stage 001 of the Blueprint Pin Type & Event Binding Fidelity work:
@@ -3552,7 +3548,7 @@ bool FEditBlueprintGraphTest_ComponentBoundEvent::RunTest(const FString& Paramet
 }
 
 // ============================================================================
-// Test: Wildcard pin resolution on connect_pins (#0000)
+// Test: Wildcard pin resolution on connect_pins
 // ============================================================================
 //
 // Verifies Stage 002 of the Blueprint Pin Type & Event Binding Fidelity work:
@@ -5518,10 +5514,10 @@ bool FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd::RunTest(c
 }
 
 // ============================================================================
-// Session-ID contract (#0000): structured Data.session_id + asset_path fallback
+// Session-ID contract: structured Data.session_id + asset_path fallback
 // ============================================================================
 //
-// These tests assert the dual-contract surface added in #0000:
+// These tests assert the dual-contract surface:
 //  1) Every non-error BuildStateResponse result carries a structured JSON
 //     payload with session_id / asset_path / graph_name / response_mode.
 //  2) Mutation ops that used to demand session_id now accept asset_path as

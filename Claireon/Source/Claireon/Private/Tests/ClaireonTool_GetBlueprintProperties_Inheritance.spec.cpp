@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 //
-// Spec for blueprint_get_properties (#0000). Verifies the schema and
+// Spec for blueprint_get_properties. Verifies the schema and
 // behavior of include_inherited across the components / variables / functions
 // arrays:
 //

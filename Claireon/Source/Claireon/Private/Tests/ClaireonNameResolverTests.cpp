@@ -132,9 +132,8 @@ UNTEST_UNIT(Claireon, NameResolver, Class_EmptyInput)
 }
 
 // Domain-prefix resolution: "Selector" under UBTCompositeNode should find
-// UBTComposite_Selector via the "BTComposite_" prefix. Previously this
-// lived as ad-hoc prefix-walking inside ClaireonBehaviorTreeHelpers; it now
-// lives centralized in ClaireonNameResolver's prefix map.
+// UBTComposite_Selector via the "BTComposite_" prefix. The prefix map lives
+// in ClaireonNameResolver.
 UNTEST_UNIT_OPTS(Claireon, NameResolver, Class_DomainPrefix_BTComposite, UNTEST_TIMEOUTMS(5000))
 {
 	UClass* CompositeBase = FindFirstObject<UClass>(TEXT("BTCompositeNode"), EFindFirstObjectOptions::NativeFirst);

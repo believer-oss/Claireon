@@ -678,8 +678,8 @@ namespace ClaireonBlueprintNodeFactory
 		// and ReconstructNode would be a no-op there. See T4 for per-branch
 		// commentary.
 		//
-		// #0000 Item 4: some K2Node ReconstructNode overrides reset NodePosX/Y to 0
-		// by calling AllocateDefaultPins on a freshly-constructed inner node.
+		// Some K2Node ReconstructNode overrides reset NodePosX/Y to 0 by
+		// calling AllocateDefaultPins on a freshly-constructed inner node.
 		// Snapshot + restore positions so get_state summary reports the authored
 		// coordinates rather than (0, 0).
 		// UK2Node_BaseAsyncTask intentionally omitted: AllocateDefaultPins is sufficient

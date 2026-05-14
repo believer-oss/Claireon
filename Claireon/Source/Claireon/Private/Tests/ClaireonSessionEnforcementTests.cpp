@@ -1,9 +1,8 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 //
-// Regression tests for #0000 (R1+R2+R3+R5 stages 001-008): verifies
-// session-mode enforcement on the per-asset, editor-wide, and bridge-
-// carve-out paths.
+// Regression tests: verifies session-mode enforcement on the per-asset,
+// editor-wide, and bridge-carve-out paths.
 //
 // Test 3 (bridge bypass-mode + session_release / session_list carve-outs)
 // is intentionally implemented as a manager-level proxy. The bridge
@@ -311,8 +310,8 @@ UNTEST_UNIT_OPTS(Claireon, SessionEnforcement, CarveOut_SessionToolNamesMatchBri
 	ClaireonTool_ReleaseSessions ReleaseTool;
 	ClaireonTool_ListSessions ListTool;
 
-	// Post-#0000: GetName() returns bare names (no "claireon." prefix). The bridge
-	// carve-out compares the registry key, which equals GetName() exactly.
+	// GetName() returns bare names (no "claireon." prefix). The bridge carve-out
+	// compares the registry key, which equals GetName() exactly.
 	UNTEST_EXPECT_TRUE(ReleaseTool.GetName() == TEXT("session_release"));
 	UNTEST_EXPECT_TRUE(ListTool.GetName() == TEXT("session_list"));
 

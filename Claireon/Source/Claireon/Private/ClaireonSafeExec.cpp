@@ -21,7 +21,7 @@ static bool bLastExecutionCrashed = false;
 #endif
 
 // UE's check() raises SEH exception via RaiseException() with this code.
-// Defined in WindowsPlatformCrashContext.cpp.
+// Defined in WindowsPlatformCrashContext.cpp (verified against the current engine release).
 // Used for log messages only, not control flow.
 static constexpr uint32 CLAIREON_UE_ASSERT_EXCEPTION_CODE = 0x4000;
 
@@ -161,8 +161,7 @@ FClaireonSafeActionResult ClaireonSafeExec::ExecuteAction(TFunctionRef<void()> A
 	return Result;
 }
 
-// Gap 6 of #0000: SEH-guarded wrapper around UBlueprintEditorLibrary::GeneratedClass.
-// Callstack analysis is recorded in BP_AUTHORING_GAPS_CLOSURE/GAP6_REPRO_ARTIFACT.md.
+// SEH-guarded wrapper around UBlueprintEditorLibrary::GeneratedClass.
 // Rationale for the helper-based guard (over REPL interception): the crash
 // originates in engine code reached via a well-defined UFUNCTION entry
 // point, so a single __try/__except around the same entry point matches

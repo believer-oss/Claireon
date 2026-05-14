@@ -1,8 +1,8 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Regression tests for the ClaireonBridge -> sys.modules['claireon'] bootstrap
-// after the #0000 claireon-name-sanitization migration. Locks in:
+// Regression tests for the ClaireonBridge -> sys.modules['claireon'] bootstrap.
+// Locks in:
 //   - F08 item 9: dir(claireon) > 100, the canary for the silent failure where
 //     the deleted prefix-required guard at ClaireonBridge.cpp:386-388 is
 //     accidentally restored and skips every tool.

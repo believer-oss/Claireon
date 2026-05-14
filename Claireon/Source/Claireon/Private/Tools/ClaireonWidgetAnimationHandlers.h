@@ -12,10 +12,9 @@ class UWidgetBlueprint;
 class UMovieSceneTrack;
 
 /**
- * #0000 widget-animation Apply-handler surface used by the per-op
+ * Widget-animation Apply-handler surface used by the per-op
  * ClaireonWidgetBPTool_* tools and by FClaireonSpecApplicator_WidgetBP. Definitions
- * live in ClaireonWidgetAnimationHandlers.cpp. See the proposal's "Handler
- * extraction requirement" for the factoring rationale.
+ * live in ClaireonWidgetAnimationHandlers.cpp.
  */
 
 bool ApplyCreateAnimation(

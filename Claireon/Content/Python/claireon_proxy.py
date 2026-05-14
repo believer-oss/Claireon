@@ -174,7 +174,7 @@ def canonicalize_worktree(worktree_root: str) -> str:
     GetFinalPathNameByHandle (P/Invoke, Resolve-WorktreeFinalPath helper)
     for the same reason. Both sides MUST resolve links; do not switch this
     back to os.path.abspath, which would diverge from PowerShell on
-    junctioned worktree paths and re-open work #0000.
+    junctioned worktree paths.
 
     Caller contract: worktree_root is expected to be an absolute path. The
     proxy's CLI entrypoint runs os.path.abspath(args.worktree_root) before
@@ -183,7 +183,7 @@ def canonicalize_worktree(worktree_root: str) -> str:
     Both Python call sites in this module -- the cold-start path
     (RUNTIME["canonical_worktree"] = canonicalize_worktree(...)) and
     handle_register (canonical_req = canonicalize_worktree(...)) -- route
-    through this single helper for #0000.
+    through this single helper.
     """
     return os.path.realpath(worktree_root).lower()
 

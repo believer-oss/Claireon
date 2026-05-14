@@ -1,7 +1,7 @@
 ﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 //
-// Spec tests for statetree_set_transition_property (#0000 / F2).
+// Spec tests for statetree_set_transition_property.
 // Exercises SetTransitionProperty helper directly on a transient FStateTreeTransition.
 
 #if WITH_UNTESTED

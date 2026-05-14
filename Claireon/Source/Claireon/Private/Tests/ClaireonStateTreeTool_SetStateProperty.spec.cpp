@@ -1,7 +1,7 @@
 ﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 //
-// Spec tests for statetree_set_state_property (#0000 / F1).
+// Spec tests for statetree_set_state_property.
 // These tests exercise the ResolvePropertyPath dot-path navigator and the
 // SetStateProperty helper directly. They synthesize a transient
 // UStateTreeState and call into ClaireonStateTreeHelpers without round-

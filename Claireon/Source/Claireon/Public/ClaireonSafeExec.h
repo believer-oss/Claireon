@@ -25,9 +25,9 @@ struct FClaireonSafeActionResult
 };
 
 // Result envelope for the guarded BlueprintEditorLibrary::GeneratedClass
-// call path (Gap 6 of #0000).  On SEH, bCaughtFatalException is true and
-// OutClass is nullptr; callers should surface ExceptionDescription as a
-// RuntimeError instead of crashing the editor.
+// call path. On SEH, bCaughtFatalException is true and OutClass is nullptr;
+// callers should surface ExceptionDescription as a RuntimeError instead of
+// crashing the editor.
 struct FClaireonGeneratedClassLookupResult
 {
 	UClass* OutClass = nullptr;

@@ -248,9 +248,8 @@ FToolResult ClaireonBlueprintGraphTool_GetComponentDetails::Execute(const TShare
 	Details->SetArrayField(TEXT("properties"), PropertiesArray);
 
 	// Structured payload goes on data.component; the summary becomes a compact one-liner
-	// for log-readability. Consumers that previously parsed the pretty-JSON body should
-	// read data.component instead (see #0000 Item 5). Consumer audit found no in-repo
-	// dependencies on the legacy summary body, so no legacy_summary flag shipped.
+	// for log-readability. Consumers that parse the response read data.component;
+	// the summary body is informational only.
 	const FString ComponentClassName = ComponentTemplate->GetClass()->GetName();
 	FString ParentDisplay = TEXT("(root)");
 	if (Details->HasField(TEXT("parent")))

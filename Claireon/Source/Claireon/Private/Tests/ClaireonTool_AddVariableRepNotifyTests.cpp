@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 // Behavioural tests for the RepNotify handler auto-creation feature shared by
-// blueprint_graph_add_variable and blueprint_graph_set_variable_properties
-// (work item #0000).
+// blueprint_graph_add_variable and blueprint_graph_set_variable_properties.
 //
 // Covers five scenarios:
 //  1. Default-name RepNotify creates OnRep_<VarName> and surfaces rep_notify_graph.
