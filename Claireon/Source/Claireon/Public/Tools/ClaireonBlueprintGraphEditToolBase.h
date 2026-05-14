@@ -90,6 +90,7 @@ protected:
 	FToolResult Operation_SetRootComponent(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_GetComponentDetails(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_AddFunctionOverride(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
+	FToolResult Operation_AddFunction(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_AddInterface(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_RemoveInterface(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
 	FToolResult Operation_ApplySpec(const TSharedPtr<FJsonObject>& Params);

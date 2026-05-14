@@ -162,12 +162,26 @@ FToolResult ClaireonTool_ApplyBlueprintGraph::Execute(const TSharedPtr<FJsonObje
 	Graph->Modify();
 
 	Data->LastOperationAffectedNodes.Reset();
+	TArray<UEdGraphNode*> CreatedNodesThisCall;
 
 	// H1: transaction rollback helper. Every error-return after this point must
 	// go through CancelAndError so the FScopedTransaction destructor discards the
 	// partial work instead of committing half-created nodes with no connections.
-	auto CancelAndError = [&Transaction](const FString& Msg)
+	auto CancelAndError = [&](const FString& Msg)
 	{
+		// Safety net: if the transaction did not record node adds for any reason,
+		// remove them explicitly while the nodes are still attached to the graph.
+		// With the RF_Transactional fix in ClaireonBlueprintNodeFactory this is a
+		// no-op (the Contains guard fails after Transaction.Cancel detaches them),
+		// but it keeps apply_graph atomic if the factory ever regresses.
+		for (UEdGraphNode* Node : CreatedNodesThisCall)
+		{
+			if (Node && IsValid(Node) && Graph->Nodes.Contains(Node))
+			{
+				Data->LastOperationAffectedNodes.Remove(Node->NodeGuid);
+				Graph->RemoveNode(Node);
+			}
+		}
 		Transaction.Cancel();
 		return MakeErrorResult(Msg);
 	};
@@ -343,6 +357,7 @@ FToolResult ClaireonTool_ApplyBlueprintGraph::Execute(const TSharedPtr<FJsonObje
 			LocalIdMap.Add(LocalId, R.Node);
 			IdMapJson->SetStringField(LocalId, R.Node->NodeGuid.ToString());
 			Data->LastOperationAffectedNodes.Add(R.Node->NodeGuid);
+			CreatedNodesThisCall.Add(R.Node);
 
 			UE_LOG(LogClaireon, Log, TEXT("[BP ApplyGraph] Created '%s' (%s) → GUID %s"),
 				*LocalId,

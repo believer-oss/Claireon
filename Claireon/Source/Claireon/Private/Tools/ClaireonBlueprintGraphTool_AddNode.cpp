@@ -281,34 +281,11 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_AddNode(const FString&
 		}
 
 		// Pick the specialized K2 node subclass that matches the function's
-		// metadata. See UBlueprintFunctionNodeSpawner::Create
-		// (BlueprintFunctionNodeSpawner.cpp:208-245) for the canonical order.
-		UClass* NodeClass = UK2Node_CallFunction::StaticClass();
-		if (ResolvedFunction)
-		{
-			const bool bIsPure = ResolvedFunction->HasAllFunctionFlags(FUNC_BlueprintPure);
-			const bool bHasArrayPointerParms = ResolvedFunction->HasMetaData(FBlueprintMetadata::MD_ArrayParam);
-			const bool bIsCommutativeAssociativeBinaryOp = ResolvedFunction->HasMetaData(FBlueprintMetadata::MD_CommutativeAssociativeBinaryOperator);
-			const bool bIsMaterialParamCollectionFunc = ResolvedFunction->HasMetaData(FBlueprintMetadata::MD_MaterialParameterCollectionFunction);
-			const bool bIsDataTableFunc = ResolvedFunction->HasMetaData(FBlueprintMetadata::MD_DataTablePin);
-
-			if (bIsCommutativeAssociativeBinaryOp && bIsPure)
-			{
-				NodeClass = UK2Node_CommutativeAssociativeBinaryOperator::StaticClass();
-			}
-			else if (bIsMaterialParamCollectionFunc)
-			{
-				NodeClass = UK2Node_CallMaterialParameterCollectionFunction::StaticClass();
-			}
-			else if (bIsDataTableFunc)
-			{
-				NodeClass = UK2Node_CallDataTableFunction::StaticClass();
-			}
-			else if (bHasArrayPointerParms)
-			{
-				NodeClass = UK2Node_CallArrayFunction::StaticClass();
-			}
-		}
+		// metadata. Shared with ClaireonBlueprintNodeFactory::CreateNode so both
+		// the incremental (Operation_AddNode) and batch (ApplyBlueprintGraph)
+		// paths stay in lockstep. See
+		// UBlueprintFunctionNodeSpawner::Create for the canonical order.
+		UClass* NodeClass = ClaireonBlueprintHelpers::PickK2NodeClassForFunction(ResolvedFunction);
 
 		UK2Node_CallFunction* CallFuncNode = NewObject<UK2Node_CallFunction>(Graph, NodeClass);
 

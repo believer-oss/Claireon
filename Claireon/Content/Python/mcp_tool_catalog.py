@@ -97,7 +97,6 @@ _ABBREVIATIONS = {
     "run":         "run execute start launch",
     "stop":        "stop end close terminate kill",
     "screenshot":  "screenshot capture image snap viewport",
-    # Decomposed bundled-tool synonyms (decompose-bundled-tools work item)
     "undo":        "undo transaction revert rollback",
     "redo":        "redo transaction reapply",
     "foliage":     "foliage paint vegetation instanced",
@@ -109,11 +108,14 @@ _ABBREVIATIONS = {
     "material":    "material shader expression parameter",
     "widgetbp":    "widget blueprint umg widgetbp user interface",
     "apply_spec":  "apply spec declarative batch idempotent",
-    # Phase 2 decomposition: claireon.sequence_edit -> 20 claireon.level_sequence_* tools.
-    # 'sequence' and 'level_sequence' both expand to the same keyword bag so either
-    # spelling surfaces the per-operation tools through _enrich_text / _expand_query.
     "sequence":       "sequence level_sequence sequencer cinematic keyframe track",
     "level_sequence": "sequence level_sequence sequencer cinematic keyframe track",
+    "chooser":     "chooser table result row column context parameter fallback",
+    "proxytable":  "proxy table inherit entry lookup",
+    "proxyasset":  "proxy asset type result context parameter",
+    "context":     "context parameter data input output struct class",
+    "inherit":     "inherit parent proxy table chain",
+    "fallback":    "fallback default result",
 }
 
 # Build reverse map: canonical term -> set of abbreviations that expand to it

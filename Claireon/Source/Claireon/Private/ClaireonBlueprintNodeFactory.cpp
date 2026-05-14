@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "ClaireonBlueprintNodeFactory.h"
+#include "ClaireonBlueprintHelpers.h"
 #include "ClaireonNameResolver.h"
 #include "ClaireonLog.h"
 
@@ -12,6 +13,10 @@
 // K2Node includes — mirrors Operation_AddNode's include set
 #include "K2Node.h"
 #include "K2Node_CallFunction.h"
+#include "K2Node_CallArrayFunction.h"
+#include "K2Node_CallDataTableFunction.h"
+#include "K2Node_CallMaterialParameterCollectionFunction.h"
+#include "K2Node_CommutativeAssociativeBinaryOperator.h"
 #include "K2Node_CallParentFunction.h"
 #include "K2Node_Event.h"
 #include "K2Node_CustomEvent.h"
@@ -223,26 +228,65 @@ namespace ClaireonBlueprintNodeFactory
 			}
 			Params->TryGetStringField(TEXT("function_class"), FunctionClass);
 
-			UK2Node_CallFunction* N = NewObject<UK2Node_CallFunction>(Graph);
+			// Resolve owner class up-front. When function_class is supplied but
+			// cannot be resolved, surface a warning instead of silently falling
+			// through to SetSelfMember (review [A2]/[U3]).
+			UClass* ResolvedOwnerClass = nullptr;
 			if (!FunctionClass.IsEmpty())
 			{
 				ClaireonNameResolver::FNameResolveResult R;
-				if (UClass* Owner = ClaireonNameResolver::ResolveClassName(FunctionClass, nullptr, R))
+				ResolvedOwnerClass = ClaireonNameResolver::ResolveClassName(FunctionClass, nullptr, R);
+				if (ResolvedOwnerClass)
 				{
-					N->FunctionReference.SetExternalMember(FName(*FunctionName), Owner);
 					if (!R.ResolutionNote.IsEmpty()) Out.Warnings.Add(R.ResolutionNote);
 				}
 				else
 				{
-					N->FunctionReference.SetSelfMember(FName(*FunctionName));
+					Out.Warnings.Add(FString::Printf(
+						TEXT("CallFunction: function_class '%s' could not be resolved; falling back to Self. (%s)"),
+						*FunctionClass, *R.Error));
 				}
+			}
+
+			// Look up the UFunction so we can (a) pick the specialized subclass
+			// and (b) give ReconstructNode real data to work with in the shared
+			// tail. Self-bound functions live on SkeletonGeneratedClass.
+			UFunction* ResolvedFunction = nullptr;
+			if (ResolvedOwnerClass)
+			{
+				ResolvedFunction = ResolvedOwnerClass->FindFunctionByName(FName(*FunctionName));
+			}
+			else if (Blueprint->SkeletonGeneratedClass)
+			{
+				ResolvedFunction = Blueprint->SkeletonGeneratedClass->FindFunctionByName(FName(*FunctionName));
+			}
+			if (!ResolvedFunction)
+			{
+				Out.Warnings.Add(FString::Printf(
+					TEXT("CallFunction: function '%s' not found on %s; node will be created with empty pins."),
+					*FunctionName,
+					ResolvedOwnerClass ? *ResolvedOwnerClass->GetName()
+					                   : (Blueprint->SkeletonGeneratedClass ? *Blueprint->SkeletonGeneratedClass->GetName()
+					                                                        : TEXT("<no owner>"))));
+			}
+
+			UClass* NodeClass = ClaireonBlueprintHelpers::PickK2NodeClassForFunction(ResolvedFunction);
+			UK2Node_CallFunction* N = NewObject<UK2Node_CallFunction>(Graph, NodeClass);
+
+			if (ResolvedOwnerClass)
+			{
+				N->FunctionReference.SetExternalMember(FName(*FunctionName), ResolvedOwnerClass);
 			}
 			else
 			{
+				// Either function_class was empty or it failed to resolve. Either
+				// way, route through SetSelfMember so functions on the blueprint's
+				// skeleton class (card repro: SetHiddenInGame self-bound on
+				// SceneComponent-owning actor) get their UFunction reference.
 				N->FunctionReference.SetSelfMember(FName(*FunctionName));
 			}
 			NewNode = N;
-			Desc = FString::Printf(TEXT("CallFunction: %s"), *FunctionName);
+			Desc = FString::Printf(TEXT("CallFunction: %s (%s)"), *FunctionName, *NodeClass->GetName());
 		}
 		else if (NodeType == TEXT("CallParentFunction"))
 		{
@@ -275,6 +319,7 @@ namespace ClaireonBlueprintNodeFactory
 				Out.Error = TEXT("VariableGet: missing required field 'variable_name'");
 				return Out;
 			}
+			// Typed pin created directly from FProperty lookup during AllocateDefaultPins; ReconstructNode not required.
 			UK2Node_VariableGet* N = NewObject<UK2Node_VariableGet>(Graph);
 			N->VariableReference.SetSelfMember(FName(*VariableName));
 			NewNode = N;
@@ -288,6 +333,7 @@ namespace ClaireonBlueprintNodeFactory
 				Out.Error = TEXT("VariableSet: missing required field 'variable_name'");
 				return Out;
 			}
+			// Typed pin created directly from FProperty lookup during AllocateDefaultPins; ReconstructNode not required.
 			UK2Node_VariableSet* N = NewObject<UK2Node_VariableSet>(Graph);
 			N->VariableReference.SetSelfMember(FName(*VariableName));
 			NewNode = N;
@@ -298,8 +344,11 @@ namespace ClaireonBlueprintNodeFactory
 			NewNode = NewObject<UK2Node_IfThenElse>(Graph);
 			Desc = TEXT("Branch");
 		}
-		else if (NodeType == TEXT("Sequence"))
+		else if (NodeType == TEXT("Sequence") || NodeType == TEXT("ExecutionSequence"))
 		{
+			// "ExecutionSequence" accepted as an alias: it is the canonical TypeTag
+			// emitted by ClaireonTool_BlueprintDiff, so round-tripping diff output
+			// through apply_graph must accept either spelling.
 			NewNode = NewObject<UK2Node_ExecutionSequence>(Graph);
 			Desc = TEXT("Sequence");
 		}
@@ -316,6 +365,7 @@ namespace ClaireonBlueprintNodeFactory
 			if (!C) { Out.Error = R.Error; return Out; }
 			if (!R.ResolutionNote.IsEmpty()) Out.Warnings.Add(R.ResolutionNote);
 
+			// TargetType drives the As* output pin; ReconstructNode finalizes via PostReconstructNode.
 			UK2Node_DynamicCast* N = NewObject<UK2Node_DynamicCast>(Graph);
 			N->TargetType = C;
 			NewNode = N;
@@ -405,6 +455,7 @@ namespace ClaireonBlueprintNodeFactory
 			if (!S) { Out.Error = R.Error; return Out; }
 			if (!R.ResolutionNote.IsEmpty()) Out.Warnings.Add(R.ResolutionNote);
 
+			// Pins derive from the UScriptStruct member list; ReconstructNode required.
 			UK2Node_MakeStruct* N = NewObject<UK2Node_MakeStruct>(Graph);
 			N->StructType = S;
 			NewNode = N;
@@ -423,6 +474,7 @@ namespace ClaireonBlueprintNodeFactory
 			if (!S) { Out.Error = R.Error; return Out; }
 			if (!R.ResolutionNote.IsEmpty()) Out.Warnings.Add(R.ResolutionNote);
 
+			// Pins derive from the UScriptStruct member list; ReconstructNode required.
 			UK2Node_BreakStruct* N = NewObject<UK2Node_BreakStruct>(Graph);
 			N->StructType = S;
 			NewNode = N;
@@ -456,6 +508,7 @@ namespace ClaireonBlueprintNodeFactory
 			if (!E) { Out.Error = R.Error; return Out; }
 			if (!R.ResolutionNote.IsEmpty()) Out.Warnings.Add(R.ResolutionNote);
 
+			// Pins regenerate from EnumEntries; ReconstructNode required after Enum/EnumEntries assignment.
 			UK2Node_SwitchEnum* N = NewObject<UK2Node_SwitchEnum>(Graph);
 			N->Enum = E;
 			N->EnumEntries.Empty();
@@ -485,6 +538,7 @@ namespace ClaireonBlueprintNodeFactory
 			if (!E) { Out.Error = R.Error; return Out; }
 			if (!R.ResolutionNote.IsEmpty()) Out.Warnings.Add(R.ResolutionNote);
 
+			// Loop pin shape derives from Enum member count; ReconstructNode required.
 			UK2Node_ForEachElementInEnum* N = NewObject<UK2Node_ForEachElementInEnum>(Graph);
 			N->Enum = E;
 			NewNode = N;
@@ -539,6 +593,7 @@ namespace ClaireonBlueprintNodeFactory
 				return Out;
 			}
 
+			// Macro-graph pin set is resolved from SetMacroGraph; ReconstructNode required.
 			UK2Node_MacroInstance* N = NewObject<UK2Node_MacroInstance>(Graph);
 			N->SetMacroGraph(MacroGraph);
 			NewNode = N;
@@ -594,13 +649,28 @@ namespace ClaireonBlueprintNodeFactory
 		NewNode->NodePosX = static_cast<int32>(Position.X);
 		NewNode->NodePosY = static_cast<int32>(Position.Y);
 		NewNode->CreateNewGuid();
+		NewNode->SetFlags(RF_Transactional);
 		Graph->AddNode(NewNode, false, false);
 		NewNode->AllocateDefaultPins();
 
-		// H2: Dynamic-pin nodes (SwitchEnum, Sequence, MakeArray, Select, etc.) regenerate
-		// their real pin set in ReconstructNode from written UPROPERTY state. AllocateDefaultPins
-		// alone is not enough when properties were set pre-allocate.
-		if (bWroteProperties)
+		// H2: Dynamic-pin nodes regenerate their real pin set in ReconstructNode.
+		// Fire ReconstructNode either when reflection wrote properties OR when
+		// the node is one of the typed branches whose pins are derived from a
+		// resolved engine reference (UFunction, UScriptStruct, UEnum, macro graph,
+		// target UClass). VariableGet/VariableSet are intentionally excluded:
+		// AllocateDefaultPins already builds the pin from the FProperty lookup,
+		// and ReconstructNode would be a no-op there. See T4 for per-branch
+		// commentary.
+		const bool bReconstructForTypedBranch =
+			   NewNode->IsA<UK2Node_CallFunction>()          // includes CallArray / CallDataTable / CallMaterialParameterCollection / CommutativeAssociativeBinaryOperator subclasses
+			|| NewNode->IsA<UK2Node_DynamicCast>()
+			|| NewNode->IsA<UK2Node_MakeStruct>()
+			|| NewNode->IsA<UK2Node_BreakStruct>()
+			|| NewNode->IsA<UK2Node_SwitchEnum>()
+			|| NewNode->IsA<UK2Node_ForEachElementInEnum>()
+			|| NewNode->IsA<UK2Node_MacroInstance>();
+
+		if (bWroteProperties || bReconstructForTypedBranch)
 		{
 			NewNode->ReconstructNode();
 		}

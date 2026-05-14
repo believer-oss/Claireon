@@ -61,6 +61,25 @@
 #include "Tools/ClaireonWidgetBPTool_Save.h"
 #include "Tools/ClaireonWidgetBPTool_Close.h"
 
+// Chooser decomposition (#0000 cohort 1)
+#include "Tools/ClaireonChooserTool_SetResultType.h"
+#include "Tools/ClaireonChooserTool_SetOutputClass.h"
+#include "Tools/ClaireonChooserTool_AddContextParameter.h"
+#include "Tools/ClaireonChooserTool_RemoveContextParameter.h"
+#include "Tools/ClaireonChooserTool_SetContextParameterDirection.h"
+#include "Tools/ClaireonChooserTool_SetFallbackResult.h"
+
+// ProxyAsset decomposition (#0000 cohort 2)
+#include "Tools/ClaireonProxyAssetTool_SetType.h"
+#include "Tools/ClaireonProxyAssetTool_SetResultType.h"
+#include "Tools/ClaireonProxyAssetTool_AddContextParameter.h"
+#include "Tools/ClaireonProxyAssetTool_RemoveContextParameter.h"
+#include "Tools/ClaireonProxyAssetTool_SetContextParameterDirection.h"
+
+// ProxyTable decomposition (#0000 cohort 3)
+#include "Tools/ClaireonProxyTableTool_AddInherit.h"
+#include "Tools/ClaireonProxyTableTool_RemoveInherit.h"
+
 namespace DecomposedToolsSmokeHelpers
 {
 	template<typename TToolClass>
@@ -164,6 +183,37 @@ UNTEST_UNIT(Claireon, DecomposedToolsSmoke, BlueprintGraphCreateExposesDiscovera
 {
 	using namespace DecomposedToolsSmokeHelpers;
 	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonBlueprintGraphTool_Create>(TEXT("blueprint_graph_create")));
+	co_return;
+}
+
+UNTEST_UNIT(Claireon, DecomposedToolsSmoke, ChooserDecomposedToolsExposeDiscoverableSurface)
+{
+	using namespace DecomposedToolsSmokeHelpers;
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonTool_ChooserSetResultType>(TEXT("chooser_set_result_type")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonTool_ChooserSetOutputClass>(TEXT("chooser_set_output_class")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonTool_ChooserAddContextParameter>(TEXT("chooser_add_context_parameter")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonTool_ChooserRemoveContextParameter>(TEXT("chooser_remove_context_parameter")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonTool_ChooserSetContextParameterDirection>(TEXT("chooser_set_context_parameter_direction")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonTool_ChooserSetFallbackResult>(TEXT("chooser_set_fallback_result")));
+	co_return;
+}
+
+UNTEST_UNIT(Claireon, DecomposedToolsSmoke, ProxyAssetDecomposedToolsExposeDiscoverableSurface)
+{
+	using namespace DecomposedToolsSmokeHelpers;
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonTool_ProxyAssetSetType>(TEXT("proxyasset_set_type")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonTool_ProxyAssetSetResultType>(TEXT("proxyasset_set_result_type")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonTool_ProxyAssetAddContextParameter>(TEXT("proxyasset_add_context_parameter")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonTool_ProxyAssetRemoveContextParameter>(TEXT("proxyasset_remove_context_parameter")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonTool_ProxyAssetSetContextParameterDirection>(TEXT("proxyasset_set_context_parameter_direction")));
+	co_return;
+}
+
+UNTEST_UNIT(Claireon, DecomposedToolsSmoke, ProxyTableDecomposedToolsExposeDiscoverableSurface)
+{
+	using namespace DecomposedToolsSmokeHelpers;
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonTool_ProxyTableAddInherit>(TEXT("proxytable_add_inherit")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonTool_ProxyTableRemoveInherit>(TEXT("proxytable_remove_inherit")));
 	co_return;
 }
 

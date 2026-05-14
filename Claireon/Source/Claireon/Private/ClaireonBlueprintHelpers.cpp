@@ -12,6 +12,11 @@
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraphSchema_K2.h"
+#include "K2Node_CallFunction.h"
+#include "K2Node_CallArrayFunction.h"
+#include "K2Node_CallDataTableFunction.h"
+#include "K2Node_CallMaterialParameterCollectionFunction.h"
+#include "K2Node_CommutativeAssociativeBinaryOperator.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Toolkits/AssetEditorToolkit.h"
@@ -1086,7 +1091,7 @@ namespace ClaireonBlueprintHelpers
 		return Flags;
 	}
 
-	void ApplyVariableProperties(UBlueprint* Blueprint, FName VarName, const TSharedPtr<FJsonObject>& Params)
+	void ApplyVariableProperties(UBlueprint* Blueprint, FName VarName, const TSharedPtr<FJsonObject>& Params, FApplyVariableResult* OutResult)
 	{
 		if (!Blueprint || !Params.IsValid())
 		{
@@ -1138,31 +1143,34 @@ namespace ClaireonBlueprintHelpers
 		{
 			bReplicationFieldProvided = true;
 
-			if (Replication == TEXT("None"))
+			if (Replication.Equals(TEXT("None"), ESearchCase::IgnoreCase))
 			{
 				VarDesc->PropertyFlags &= ~(CPF_Net | CPF_RepNotify);
 				VarDesc->RepNotifyFunc = NAME_None;
 			}
-			else if (Replication == TEXT("Replicated"))
+			else if (Replication.Equals(TEXT("Replicated"), ESearchCase::IgnoreCase))
 			{
 				VarDesc->PropertyFlags |= CPF_Net;
 				VarDesc->PropertyFlags &= ~CPF_RepNotify;
 			}
-			else if (Replication == TEXT("RepNotify"))
+			else if (Replication.Equals(TEXT("RepNotify"), ESearchCase::IgnoreCase)
+			         || Replication.Equals(TEXT("rep_notify"), ESearchCase::IgnoreCase))
 			{
 				VarDesc->PropertyFlags |= CPF_Net | CPF_RepNotify;
 
-				// Set RepNotifyFunc if provided
-				FString RepNotifyFunc;
-				if (Params->TryGetStringField(TEXT("rep_notify_func"), RepNotifyFunc))
+				// Resolve the handler function name: caller-supplied or default OnRep_<VarName>.
+				FString RepNotifyFuncStr;
+				FName HandlerName;
+				if (Params->TryGetStringField(TEXT("rep_notify_func"), RepNotifyFuncStr) && !RepNotifyFuncStr.IsEmpty())
 				{
-					VarDesc->RepNotifyFunc = FName(*RepNotifyFunc);
+					HandlerName = FName(*RepNotifyFuncStr);
 				}
 				else
 				{
 					// Default UE5 convention: OnRep_VarName
-					VarDesc->RepNotifyFunc = FName(*FString::Printf(TEXT("OnRep_%s"), *VarName.ToString()));
+					HandlerName = FName(*FString::Printf(TEXT("OnRep_%s"), *VarName.ToString()));
 				}
+				VarDesc->RepNotifyFunc = HandlerName;
 
 				// Set ReplicationCondition if provided
 				FString ReplicationCondition;
@@ -1177,6 +1185,46 @@ namespace ClaireonBlueprintHelpers
 							VarDesc->ReplicationCondition = static_cast<ELifetimeCondition>(CondValue);
 						}
 					}
+				}
+
+				// Auto-create the handler function graph.
+				// Follows editor precedent in FBlueprintVarActionDetails::ReplicationChanged
+				// (Engine/Source/Editor/Kismet/Private/BlueprintDetailsCustomization.cpp ~lines 2773-2787).
+				const FString HandlerNameStr = HandlerName.ToString();
+				UEdGraph* FoundGraph = FindObject<UEdGraph>(Blueprint, *HandlerNameStr);
+
+				// If the caller supplied a rep_notify_func that already resolves to a compiled
+				// UFunction on the skeleton class, skip graph creation entirely -- they wired it
+				// intentionally (proposal Risks #2).
+				bool bUserFunctionExists = false;
+				if (Blueprint->SkeletonGeneratedClass != nullptr)
+				{
+					bUserFunctionExists = (Blueprint->SkeletonGeneratedClass->FindFunctionByName(HandlerName) != nullptr);
+				}
+
+				if (!bUserFunctionExists && FoundGraph == nullptr)
+				{
+					UEdGraph* NewGraph = FBlueprintEditorUtils::CreateNewGraph(
+						Blueprint,
+						HandlerName,
+						UEdGraph::StaticClass(),
+						UEdGraphSchema_K2::StaticClass());
+					FBlueprintEditorUtils::AddFunctionGraph<UClass>(
+						Blueprint,
+						NewGraph,
+						/*bIsUserCreated=*/false,
+						/*SignatureFromClass=*/nullptr);
+					FoundGraph = NewGraph;
+
+					if (OutResult != nullptr)
+					{
+						OutResult->bRepNotifyGraphCreated = true;
+					}
+				}
+
+				if (OutResult != nullptr && FoundGraph != nullptr)
+				{
+					OutResult->RepNotifyHandlerGraph = HandlerName;
 				}
 			}
 		}
@@ -1364,5 +1412,37 @@ namespace ClaireonBlueprintHelpers
 		return ClassName == TEXT("Blueprint")
 			|| ClassName == TEXT("AnimBlueprint")
 			|| ClassName == TEXT("WidgetBlueprint");
+	}
+
+	UClass* PickK2NodeClassForFunction(const UFunction* Function)
+	{
+		if (!Function)
+		{
+			return UK2Node_CallFunction::StaticClass();
+		}
+
+		const bool bIsPure = Function->HasAllFunctionFlags(FUNC_BlueprintPure);
+		const bool bHasArrayPointerParms = Function->HasMetaData(FBlueprintMetadata::MD_ArrayParam);
+		const bool bIsCommutativeAssociativeBinaryOp = Function->HasMetaData(FBlueprintMetadata::MD_CommutativeAssociativeBinaryOperator);
+		const bool bIsMaterialParamCollectionFunc = Function->HasMetaData(FBlueprintMetadata::MD_MaterialParameterCollectionFunction);
+		const bool bIsDataTableFunc = Function->HasMetaData(FBlueprintMetadata::MD_DataTablePin);
+
+		if (bIsCommutativeAssociativeBinaryOp && bIsPure)
+		{
+			return UK2Node_CommutativeAssociativeBinaryOperator::StaticClass();
+		}
+		if (bIsMaterialParamCollectionFunc)
+		{
+			return UK2Node_CallMaterialParameterCollectionFunction::StaticClass();
+		}
+		if (bIsDataTableFunc)
+		{
+			return UK2Node_CallDataTableFunction::StaticClass();
+		}
+		if (bHasArrayPointerParms)
+		{
+			return UK2Node_CallArrayFunction::StaticClass();
+		}
+		return UK2Node_CallFunction::StaticClass();
 	}
 } // namespace ClaireonBlueprintHelpers

@@ -63,4 +63,44 @@ namespace ClaireonChooserHelpers
 	/** Parse a direction string to EContextObjectDirection. */
 	uint8 ParseDirection(const FString& Str);
 
+	// ---------------------------------------------------------------------
+	// Context-data helpers (shared by chooser and proxyasset context edits).
+	//
+	// Caller owns recompile. Chooser callers must call
+	// Chooser->Compile(true) when bContextChanged is true. ProxyAsset
+	// callers have no such obligation (UProxyAsset has no Compile).
+	// ---------------------------------------------------------------------
+
+	/** Appends a new FContextObjectTypeBase-derived entry to ContextData.
+	 *  TypeString: "struct" or "class" (case-insensitive).
+	 *  NameString: struct or class name (passed to FindObject / LoadObject).
+	 *  DirectionString: passed through ParseDirection.
+	 *  Sets bContextChanged = true iff ContextData was mutated.
+	 *  Returns true on success. On failure OutError describes the cause. */
+	bool AddContextParameter(
+		TArray<FInstancedStruct>& ContextData,
+		const FString& TypeString,
+		const FString& NameString,
+		const FString& DirectionString,
+		bool& bContextChanged,
+		FString& OutError);
+
+	/** Removes ContextData[Index]. Returns false with OutError if Index is out of bounds.
+	 *  Sets bContextChanged on mutation. */
+	bool RemoveContextParameter(
+		TArray<FInstancedStruct>& ContextData,
+		int32 Index,
+		bool& bContextChanged,
+		FString& OutError);
+
+	/** Sets Direction on ContextData[Index]'s FContextObjectTypeBase.
+	 *  Returns false with OutError if Index is out of bounds or entry is not a FContextObjectTypeBase.
+	 *  Sets bContextChanged on mutation. */
+	bool SetContextParameterDirection(
+		TArray<FInstancedStruct>& ContextData,
+		int32 Index,
+		const FString& DirectionString,
+		bool& bContextChanged,
+		FString& OutError);
+
 } // namespace ClaireonChooserHelpers

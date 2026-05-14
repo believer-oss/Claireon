@@ -1251,4 +1251,106 @@ uint8 ParseDirection(const FString& Str)
 	return static_cast<uint8>(EContextObjectDirection::Read);
 }
 
+// ============================================================================
+// Context-data helpers (shared by chooser and proxyasset context edits)
+// ============================================================================
+
+bool AddContextParameter(
+	TArray<FInstancedStruct>& ContextData,
+	const FString& TypeString,
+	const FString& NameString,
+	const FString& DirectionString,
+	bool& bContextChanged,
+	FString& OutError)
+{
+	const EContextObjectDirection Dir =
+		static_cast<EContextObjectDirection>(ParseDirection(DirectionString));
+
+	if (TypeString.Equals(TEXT("struct"), ESearchCase::IgnoreCase))
+	{
+		UScriptStruct* Struct = FindObject<UScriptStruct>(nullptr, *NameString);
+		if (!Struct) Struct = LoadObject<UScriptStruct>(nullptr, *NameString);
+		if (!Struct)
+		{
+			OutError = FString::Printf(TEXT("Could not find struct: %s"), *NameString);
+			return false;
+		}
+
+		FInstancedStruct NewParam;
+		NewParam.InitializeAs<FContextObjectTypeStruct>();
+		FContextObjectTypeStruct& StructParam = NewParam.GetMutable<FContextObjectTypeStruct>();
+		StructParam.Struct = Struct;
+		StructParam.Direction = Dir;
+		ContextData.Add(MoveTemp(NewParam));
+		bContextChanged = true;
+		return true;
+	}
+
+	if (TypeString.Equals(TEXT("class"), ESearchCase::IgnoreCase))
+	{
+		UClass* Class = FindObject<UClass>(nullptr, *NameString);
+		if (!Class) Class = LoadObject<UClass>(nullptr, *NameString);
+		if (!Class)
+		{
+			OutError = FString::Printf(TEXT("Could not find class: %s"), *NameString);
+			return false;
+		}
+
+		FInstancedStruct NewParam;
+		NewParam.InitializeAs<FContextObjectTypeClass>();
+		FContextObjectTypeClass& ClassParam = NewParam.GetMutable<FContextObjectTypeClass>();
+		ClassParam.Class = Class;
+		ClassParam.Direction = Dir;
+		ContextData.Add(MoveTemp(NewParam));
+		bContextChanged = true;
+		return true;
+	}
+
+	OutError = TEXT("add_parameter.type must be 'struct' or 'class'");
+	return false;
+}
+
+bool RemoveContextParameter(
+	TArray<FInstancedStruct>& ContextData,
+	int32 Index,
+	bool& bContextChanged,
+	FString& OutError)
+{
+	if (!ContextData.IsValidIndex(Index))
+	{
+		OutError = FString::Printf(TEXT("Parameter index %d out of bounds (count: %d)"),
+			Index, ContextData.Num());
+		return false;
+	}
+	ContextData.RemoveAt(Index);
+	bContextChanged = true;
+	return true;
+}
+
+bool SetContextParameterDirection(
+	TArray<FInstancedStruct>& ContextData,
+	int32 Index,
+	const FString& DirectionString,
+	bool& bContextChanged,
+	FString& OutError)
+{
+	if (!ContextData.IsValidIndex(Index))
+	{
+		OutError = FString::Printf(TEXT("Parameter index %d out of bounds"), Index);
+		return false;
+	}
+
+	FInstancedStruct& Param = ContextData[Index];
+	FContextObjectTypeBase* Base = Param.GetMutablePtr<FContextObjectTypeBase>();
+	if (!Base)
+	{
+		OutError = FString::Printf(TEXT("ContextData entry %d is not a FContextObjectTypeBase"), Index);
+		return false;
+	}
+
+	Base->Direction = static_cast<EContextObjectDirection>(ParseDirection(DirectionString));
+	bContextChanged = true;
+	return true;
+}
+
 } // namespace ClaireonChooserHelpers

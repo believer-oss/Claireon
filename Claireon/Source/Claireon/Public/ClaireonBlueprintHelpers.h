@@ -354,14 +354,31 @@ namespace ClaireonBlueprintHelpers
 	TArray<FString> FormatPropertyFlags(uint64 PropertyFlags);
 
 	/**
+	 * Side-effect report for ApplyVariableProperties.
+	 * Populated only when a non-nullptr OutResult is supplied.
+	 */
+	struct FApplyVariableResult
+	{
+		/** Name of the RepNotify handler graph that was created or reused. NAME_None if no RepNotify work ran. */
+		FName RepNotifyHandlerGraph;
+
+		/** True iff a new UEdGraph was created this call. False if the handler already existed. */
+		bool bRepNotifyGraphCreated = false;
+	};
+
+	/**
 	 * Apply optional variable properties (category, tooltip, replication, flags, metadata)
 	 * to an existing Blueprint variable. Used by both set_variable_properties and add_variable.
 	 *
 	 * @param Blueprint The Blueprint containing the variable
 	 * @param VarName Name of the variable to configure
 	 * @param Params JSON object with optional property fields
+	 * @param OutResult Optional. When non-null, receives the result of RepNotify handler-graph
+	 *                  creation or reuse. Anim-graph callers pass nullptr.
 	 */
-	void ApplyVariableProperties(UBlueprint* Blueprint, FName VarName, const TSharedPtr<FJsonObject>& Params);
+	void ApplyVariableProperties(UBlueprint* Blueprint, FName VarName,
+	                             const TSharedPtr<FJsonObject>& Params,
+	                             FApplyVariableResult* OutResult = nullptr);
 
 	/**
 	 * Get the first output pin on a node (for cursor positioning).
@@ -379,6 +396,19 @@ namespace ClaireonBlueprintHelpers
 
 	/** Find nodes by class name and/or title. Used for stale GUID recovery. */
 	TArray<UEdGraphNode*> FindNodesByClassAndTitle(UEdGraph* Graph, const FString& ClassName, const FString& Title);
+
+	/**
+	 * Pick the specialized UK2Node_CallFunction subclass for a resolved UFunction
+	 * by inspecting its metadata. Canonical order mirrors
+	 * UBlueprintFunctionNodeSpawner::Create (BlueprintFunctionNodeSpawner.cpp):
+	 *   CommutativeAssociativeBinaryOperator (pure)
+	 *     -> MaterialParameterCollectionFunction
+	 *     -> CallDataTableFunction
+	 *     -> CallArrayFunction
+	 *     -> plain UK2Node_CallFunction.
+	 * Returns UK2Node_CallFunction::StaticClass() when Function is null.
+	 */
+	UClass* PickK2NodeClassForFunction(const UFunction* Function);
 
 	/**
 	 * Returns true if the given asset class short-name is in the Blueprint family

@@ -22,6 +22,8 @@
 #include "EdGraphSchema_K2.h"
 #include "K2Node_MacroInstance.h"
 #include "K2Node_ComponentBoundEvent.h"
+#include "K2Node_FunctionEntry.h"
+#include "K2Node_FunctionResult.h"
 #include "EdGraph/EdGraphPin.h"
 #include "UObject/UObjectGlobals.h"
 #include "Serialization/JsonReader.h"
@@ -33,6 +35,7 @@
 // Decomposed blueprint-graph tools (one include per operation exercised here).
 #include "Tools/IClaireonTool.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddComponent.h"
+#include "Tools/ClaireonBlueprintGraphTool_AddFunction.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddFunctionOverride.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddInterface.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddNode.h"
@@ -76,6 +79,7 @@
 #include "Tools/ClaireonBlueprintGraphTool_SplitPin.h"
 #include "Tools/ClaireonBlueprintGraphTool_SuggestNode.h"
 #include "Tools/ClaireonBlueprintGraphTool_SwitchGraph.h"
+#include "Tools/ClaireonTool_ApplyBlueprintGraph.h"
 
 namespace
 {
@@ -137,6 +141,7 @@ namespace
 			if (Operation == TEXT(OpString)) { ToolClass Tool; return Tool.Execute(FlatArgs); }
 
 		CLAIREON_DISPATCH_CASE("add_component",           ClaireonBlueprintGraphTool_AddComponent);
+		CLAIREON_DISPATCH_CASE("add_function",            ClaireonBlueprintGraphTool_AddFunction);
 		CLAIREON_DISPATCH_CASE("add_function_override",   ClaireonBlueprintGraphTool_AddFunctionOverride);
 		CLAIREON_DISPATCH_CASE("add_interface",           ClaireonBlueprintGraphTool_AddInterface);
 		CLAIREON_DISPATCH_CASE("add_node",                ClaireonBlueprintGraphTool_AddNode);
@@ -2048,6 +2053,530 @@ bool FEditBlueprintGraphTest_AddFunctionOverride::RunTest(const FString& Paramet
 		DispatchLegacyEnvelope(CloseArgs);
 	}
 
+	return true;
+}
+
+// ============================================================================
+// Test: add_function (create a user-defined function graph)
+// ============================================================================
+
+namespace ClaireonTool_AddFunctionSpecHelpers
+{
+	static FString ExtractSessionIdFromCreate(const FString& ResultText)
+	{
+		int32 Start = ResultText.Find(TEXT("Session ID: "));
+		if (Start == INDEX_NONE)
+		{
+			return FString();
+		}
+		Start += 12;
+		int32 End = ResultText.Find(TEXT("\n"), ESearchCase::IgnoreCase, ESearchDir::FromStart, Start);
+		if (End == INDEX_NONE)
+		{
+			End = ResultText.Len();
+		}
+		return ResultText.Mid(Start, End - Start).TrimStartAndEnd();
+	}
+
+	static UEdGraph* FindFunctionGraph(UBlueprint* Blueprint, const FString& FuncName)
+	{
+		if (!Blueprint) return nullptr;
+		const FName FuncFName(*FuncName);
+		for (UEdGraph* Graph : Blueprint->FunctionGraphs)
+		{
+			if (Graph && Graph->GetFName() == FuncFName) return Graph;
+		}
+		return nullptr;
+	}
+
+	static UK2Node_FunctionEntry* FindEntryNode(UEdGraph* Graph)
+	{
+		if (!Graph) return nullptr;
+		TArray<UK2Node_FunctionEntry*> EntryNodes;
+		Graph->GetNodesOfClass<UK2Node_FunctionEntry>(EntryNodes);
+		return EntryNodes.Num() > 0 ? EntryNodes[0] : nullptr;
+	}
+
+	static UK2Node_FunctionResult* FindResultNode(UEdGraph* Graph)
+	{
+		if (!Graph) return nullptr;
+		TArray<UK2Node_FunctionResult*> ResultNodes;
+		Graph->GetNodesOfClass<UK2Node_FunctionResult>(ResultNodes);
+		return ResultNodes.Num() > 0 ? ResultNodes[0] : nullptr;
+	}
+
+	static bool HasUserDefinedPin(UEdGraphNode* Node, const FString& PinName, EEdGraphPinDirection Direction)
+	{
+		if (!Node) return false;
+		const FName PinFName(*PinName);
+		for (UEdGraphPin* Pin : Node->Pins)
+		{
+			if (Pin && Pin->PinName == PinFName && Pin->Direction == Direction)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	static FString GetUserDefinedPinCategory(UEdGraphNode* Node, const FString& PinName, EEdGraphPinDirection Direction)
+	{
+		if (!Node) return FString();
+		const FName PinFName(*PinName);
+		for (UEdGraphPin* Pin : Node->Pins)
+		{
+			if (Pin && Pin->PinName == PinFName && Pin->Direction == Direction)
+			{
+				return Pin->PinType.PinCategory.ToString();
+			}
+		}
+		return FString();
+	}
+
+	static void CloseSessionSilently(const FString& SessionId)
+	{
+		TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
+		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
+		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
+		CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
+		DispatchLegacyEnvelope(CloseArgs);
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_AddFunction,
+	"Claireon.EditBlueprintGraph.AddFunction",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
+{
+	using namespace ClaireonTool_AddFunctionSpecHelpers;
+
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_AddFunctionTest");
+
+	// Step 1: Create a scratch Blueprint
+	FString SessionId;
+	{
+		TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
+		CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
+
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), AssetPath);
+		Params->SetStringField(TEXT("parent_class"), TEXT("Actor"));
+		CreateArgs->SetObjectField(TEXT("params"), Params);
+
+		auto Result = DispatchLegacyEnvelope(CreateArgs);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("Failed to create blueprint: %s"), *Result.GetContentAsString()));
+			return false;
+		}
+		SessionId = ExtractSessionIdFromCreate(Result.GetContentAsString());
+		if (SessionId.IsEmpty())
+		{
+			AddError(TEXT("Failed to extract session ID from create result"));
+			return false;
+		}
+	}
+
+	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
+	if (!Blueprint)
+	{
+		AddError(FString::Printf(TEXT("Failed to load blueprint at %s"), *AssetPath));
+		CloseSessionSilently(SessionId);
+		return false;
+	}
+
+	// --------------------------------------------------------------------
+	// Case: Happy path (minimal)
+	// --------------------------------------------------------------------
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("operation"), TEXT("add_function"));
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		Args->SetStringField(TEXT("function_name"), TEXT("MyFunc"));
+
+		auto Result = DispatchLegacyEnvelope(Args);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("add_function MyFunc failed: %s"), *Result.GetContentAsString()));
+			CloseSessionSilently(SessionId);
+			return false;
+		}
+		FString ResultText = Result.GetContentAsString();
+		if (!ResultText.Contains(TEXT("MyFunc")))
+		{
+			AddError(TEXT("add_function MyFunc result text did not contain 'MyFunc' (session graph may not have switched)"));
+		}
+
+		UEdGraph* Graph = FindFunctionGraph(Blueprint, TEXT("MyFunc"));
+		if (!Graph)
+		{
+			AddError(TEXT("Expected 'MyFunc' in Blueprint->FunctionGraphs after add_function"));
+		}
+		else
+		{
+			TArray<UK2Node_FunctionEntry*> EntryNodes;
+			Graph->GetNodesOfClass<UK2Node_FunctionEntry>(EntryNodes);
+			if (EntryNodes.Num() != 1)
+			{
+				AddError(FString::Printf(TEXT("Expected exactly 1 UK2Node_FunctionEntry in 'MyFunc', got %d"), EntryNodes.Num()));
+			}
+		}
+	}
+
+	// --------------------------------------------------------------------
+	// Case: Inputs / outputs round-trip
+	// --------------------------------------------------------------------
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("operation"), TEXT("add_function"));
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		Args->SetStringField(TEXT("function_name"), TEXT("FuncWithIO"));
+
+		TArray<TSharedPtr<FJsonValue>> Inputs;
+		{
+			TSharedPtr<FJsonObject> A = MakeShared<FJsonObject>();
+			A->SetStringField(TEXT("name"), TEXT("InA"));
+			A->SetStringField(TEXT("type"), TEXT("int"));
+			Inputs.Add(MakeShared<FJsonValueObject>(A));
+			TSharedPtr<FJsonObject> B = MakeShared<FJsonObject>();
+			B->SetStringField(TEXT("name"), TEXT("InB"));
+			B->SetStringField(TEXT("type"), TEXT("bool"));
+			Inputs.Add(MakeShared<FJsonValueObject>(B));
+		}
+		Args->SetArrayField(TEXT("inputs"), Inputs);
+
+		TArray<TSharedPtr<FJsonValue>> Outputs;
+		{
+			TSharedPtr<FJsonObject> R = MakeShared<FJsonObject>();
+			R->SetStringField(TEXT("name"), TEXT("ReturnValue"));
+			R->SetStringField(TEXT("type"), TEXT("float"));
+			Outputs.Add(MakeShared<FJsonValueObject>(R));
+		}
+		Args->SetArrayField(TEXT("outputs"), Outputs);
+
+		auto Result = DispatchLegacyEnvelope(Args);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("add_function FuncWithIO failed: %s"), *Result.GetContentAsString()));
+		}
+
+		UEdGraph* Graph = FindFunctionGraph(Blueprint, TEXT("FuncWithIO"));
+		UK2Node_FunctionEntry* Entry = FindEntryNode(Graph);
+		UK2Node_FunctionResult* ResultNode = FindResultNode(Graph);
+		if (!Entry)
+		{
+			AddError(TEXT("FuncWithIO: entry node missing"));
+		}
+		else
+		{
+			if (!HasUserDefinedPin(Entry, TEXT("InA"), EGPD_Output))
+			{
+				AddError(TEXT("FuncWithIO: entry node missing user-defined output pin 'InA'"));
+			}
+			if (!HasUserDefinedPin(Entry, TEXT("InB"), EGPD_Output))
+			{
+				AddError(TEXT("FuncWithIO: entry node missing user-defined output pin 'InB'"));
+			}
+		}
+		if (!ResultNode)
+		{
+			AddError(TEXT("FuncWithIO: result node missing (should have been created for outputs)"));
+		}
+		else
+		{
+			if (!HasUserDefinedPin(ResultNode, TEXT("ReturnValue"), EGPD_Input))
+			{
+				AddError(TEXT("FuncWithIO: result node missing user-defined input pin 'ReturnValue'"));
+			}
+		}
+	}
+
+	// --------------------------------------------------------------------
+	// Case: is_pure=true
+	// --------------------------------------------------------------------
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("operation"), TEXT("add_function"));
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		Args->SetStringField(TEXT("function_name"), TEXT("PureFunc"));
+		Args->SetBoolField(TEXT("is_pure"), true);
+
+		auto Result = DispatchLegacyEnvelope(Args);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("add_function PureFunc failed: %s"), *Result.GetContentAsString()));
+		}
+		UK2Node_FunctionEntry* Entry = FindEntryNode(FindFunctionGraph(Blueprint, TEXT("PureFunc")));
+		if (!Entry)
+		{
+			AddError(TEXT("PureFunc: entry node missing"));
+		}
+		else if ((Entry->GetExtraFlags() & FUNC_BlueprintPure) == 0)
+		{
+			AddError(TEXT("PureFunc: expected FUNC_BlueprintPure set on entry->ExtraFlags"));
+		}
+	}
+
+	// --------------------------------------------------------------------
+	// Case: is_static=true
+	// --------------------------------------------------------------------
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("operation"), TEXT("add_function"));
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		Args->SetStringField(TEXT("function_name"), TEXT("StaticFunc"));
+		Args->SetBoolField(TEXT("is_static"), true);
+
+		auto Result = DispatchLegacyEnvelope(Args);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("add_function StaticFunc failed: %s"), *Result.GetContentAsString()));
+		}
+		UK2Node_FunctionEntry* Entry = FindEntryNode(FindFunctionGraph(Blueprint, TEXT("StaticFunc")));
+		if (!Entry)
+		{
+			AddError(TEXT("StaticFunc: entry node missing"));
+		}
+		else if ((Entry->GetExtraFlags() & FUNC_Static) == 0)
+		{
+			AddError(TEXT("StaticFunc: expected FUNC_Static set on entry->ExtraFlags"));
+		}
+	}
+
+	// --------------------------------------------------------------------
+	// Case: is_const=true
+	// --------------------------------------------------------------------
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("operation"), TEXT("add_function"));
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		Args->SetStringField(TEXT("function_name"), TEXT("ConstFunc"));
+		Args->SetBoolField(TEXT("is_const"), true);
+
+		auto Result = DispatchLegacyEnvelope(Args);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("add_function ConstFunc failed: %s"), *Result.GetContentAsString()));
+		}
+		UK2Node_FunctionEntry* Entry = FindEntryNode(FindFunctionGraph(Blueprint, TEXT("ConstFunc")));
+		if (!Entry)
+		{
+			AddError(TEXT("ConstFunc: entry node missing"));
+		}
+		else if ((Entry->GetExtraFlags() & FUNC_Const) == 0)
+		{
+			AddError(TEXT("ConstFunc: expected FUNC_Const set on entry->ExtraFlags"));
+		}
+	}
+
+	// --------------------------------------------------------------------
+	// Case: access_specifier (Public, Protected, Private)
+	// --------------------------------------------------------------------
+	struct FAccessCase { const TCHAR* FuncName; const TCHAR* Spec; int32 ExpectedBit; };
+	const FAccessCase AccessCases[] = {
+		{ TEXT("AccessPub"),  TEXT("Public"),    FUNC_Public },
+		{ TEXT("AccessProt"), TEXT("Protected"), FUNC_Protected },
+		{ TEXT("AccessPriv"), TEXT("Private"),   FUNC_Private },
+	};
+	for (const FAccessCase& C : AccessCases)
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("operation"), TEXT("add_function"));
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		Args->SetStringField(TEXT("function_name"), C.FuncName);
+		Args->SetStringField(TEXT("access_specifier"), C.Spec);
+
+		auto Result = DispatchLegacyEnvelope(Args);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("add_function %s (access %s) failed: %s"),
+				C.FuncName, C.Spec, *Result.GetContentAsString()));
+			continue;
+		}
+		UK2Node_FunctionEntry* Entry = FindEntryNode(FindFunctionGraph(Blueprint, C.FuncName));
+		if (!Entry)
+		{
+			AddError(FString::Printf(TEXT("%s: entry node missing"), C.FuncName));
+			continue;
+		}
+		const int32 AccessMask = FUNC_Public | FUNC_Protected | FUNC_Private;
+		const int32 Actual = Entry->GetExtraFlags() & AccessMask;
+		if (Actual != C.ExpectedBit)
+		{
+			AddError(FString::Printf(
+				TEXT("%s (spec %s): expected access bit 0x%x; got masked flags 0x%x"),
+				C.FuncName, C.Spec, C.ExpectedBit, Actual));
+		}
+	}
+
+	// --------------------------------------------------------------------
+	// Case: is_network_call (Server, Client, NetMulticast)
+	// --------------------------------------------------------------------
+	struct FNetCase { const TCHAR* FuncName; const TCHAR* Spec; int32 RoleBit; };
+	const FNetCase NetCases[] = {
+		{ TEXT("NetSrv"),  TEXT("Server"),       FUNC_NetServer },
+		{ TEXT("NetCli"),  TEXT("Client"),       FUNC_NetClient },
+		{ TEXT("NetMult"), TEXT("NetMulticast"), FUNC_NetMulticast },
+	};
+	for (const FNetCase& C : NetCases)
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("operation"), TEXT("add_function"));
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		Args->SetStringField(TEXT("function_name"), C.FuncName);
+		Args->SetStringField(TEXT("is_network_call"), C.Spec);
+
+		auto Result = DispatchLegacyEnvelope(Args);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("add_function %s (net %s) failed: %s"),
+				C.FuncName, C.Spec, *Result.GetContentAsString()));
+			continue;
+		}
+		UK2Node_FunctionEntry* Entry = FindEntryNode(FindFunctionGraph(Blueprint, C.FuncName));
+		if (!Entry)
+		{
+			AddError(FString::Printf(TEXT("%s: entry node missing"), C.FuncName));
+			continue;
+		}
+		const int32 ExpectMask = FUNC_Net | C.RoleBit | FUNC_NetReliable;
+		const int32 Actual = Entry->GetExtraFlags() & ExpectMask;
+		if (Actual != ExpectMask)
+		{
+			AddError(FString::Printf(
+				TEXT("%s (net %s): expected flags 0x%x ALL set; got masked flags 0x%x"),
+				C.FuncName, C.Spec, ExpectMask, Actual));
+		}
+	}
+
+	// --------------------------------------------------------------------
+	// Case: Collision (second add_function with same name -> error)
+	// --------------------------------------------------------------------
+	{
+		// MyFunc already exists from the happy-path case.
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("operation"), TEXT("add_function"));
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		Args->SetStringField(TEXT("function_name"), TEXT("MyFunc"));
+
+		auto Result = DispatchLegacyEnvelope(Args);
+		if (!Result.bIsError)
+		{
+			AddError(TEXT("Collision: expected error for duplicate function name, got success"));
+		}
+		else
+		{
+			FString ErrText = Result.GetContentAsString();
+			if (!ErrText.Contains(TEXT("already exists as function graph")))
+			{
+				AddError(FString::Printf(TEXT("Collision: expected 'already exists as function graph' in error, got: %s"), *ErrText));
+			}
+		}
+	}
+
+	// --------------------------------------------------------------------
+	// Case: Invalid access_specifier
+	// --------------------------------------------------------------------
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("operation"), TEXT("add_function"));
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		Args->SetStringField(TEXT("function_name"), TEXT("BadAccessFunc"));
+		Args->SetStringField(TEXT("access_specifier"), TEXT("Bogus"));
+
+		auto Result = DispatchLegacyEnvelope(Args);
+		if (!Result.bIsError)
+		{
+			AddError(TEXT("Invalid access_specifier: expected error, got success"));
+		}
+		else
+		{
+			FString ErrText = Result.GetContentAsString();
+			if (!ErrText.Contains(TEXT("Invalid access_specifier")))
+			{
+				AddError(FString::Printf(TEXT("Invalid access_specifier: expected 'Invalid access_specifier' in error, got: %s"), *ErrText));
+			}
+		}
+	}
+
+	// --------------------------------------------------------------------
+	// Case: Invalid is_network_call
+	// --------------------------------------------------------------------
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("operation"), TEXT("add_function"));
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		Args->SetStringField(TEXT("function_name"), TEXT("BadNetFunc"));
+		Args->SetStringField(TEXT("is_network_call"), TEXT("Bogus"));
+
+		auto Result = DispatchLegacyEnvelope(Args);
+		if (!Result.bIsError)
+		{
+			AddError(TEXT("Invalid is_network_call: expected error, got success"));
+		}
+		else
+		{
+			FString ErrText = Result.GetContentAsString();
+			if (!ErrText.Contains(TEXT("Invalid is_network_call")))
+			{
+				AddError(FString::Printf(TEXT("Invalid is_network_call: expected 'Invalid is_network_call' in error, got: %s"), *ErrText));
+			}
+		}
+	}
+
+	// --------------------------------------------------------------------
+	// Case: type_parser_error envelope shape
+	// --------------------------------------------------------------------
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("operation"), TEXT("add_function"));
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		Args->SetStringField(TEXT("function_name"), TEXT("BadTypeFunc"));
+
+		TArray<TSharedPtr<FJsonValue>> Inputs;
+		{
+			TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+			P->SetStringField(TEXT("name"), TEXT("x"));
+			P->SetStringField(TEXT("type"), TEXT("not-a-real-type"));
+			Inputs.Add(MakeShared<FJsonValueObject>(P));
+		}
+		Args->SetArrayField(TEXT("inputs"), Inputs);
+
+		auto Result = DispatchLegacyEnvelope(Args);
+		if (!Result.bIsError)
+		{
+			AddError(TEXT("type_parser_error: expected error for bad type, got success"));
+		}
+		else if (!Result.Data.IsValid())
+		{
+			AddError(TEXT("type_parser_error: Result.Data is not a valid JSON object"));
+		}
+		else if (!Result.Data->HasField(TEXT("type_parser_error")))
+		{
+			AddError(TEXT("type_parser_error: Result.Data missing 'type_parser_error' field"));
+		}
+		else
+		{
+			const TSharedPtr<FJsonObject>* Nested = nullptr;
+			if (Result.Data->TryGetObjectField(TEXT("type_parser_error"), Nested) && Nested && Nested->IsValid())
+			{
+				FString InputVal;
+				(*Nested)->TryGetStringField(TEXT("input"), InputVal);
+				if (InputVal != TEXT("not-a-real-type"))
+				{
+					AddError(FString::Printf(TEXT("type_parser_error: expected input 'not-a-real-type', got '%s'"), *InputVal));
+				}
+			}
+			else
+			{
+				AddError(TEXT("type_parser_error: 'type_parser_error' field not a JSON object"));
+			}
+		}
+	}
+
+	// Cleanup
+	CloseSessionSilently(SessionId);
 	return true;
 }
 
@@ -5286,6 +5815,145 @@ bool FEditBlueprintGraphTest_SessionIdContract::RunTest(const FString& Parameter
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionIdFromCreate);
 		DispatchLegacyEnvelope(CloseArgs);
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ApplyGraphRollback,
+    "Claireon.EditBlueprintGraph.ApplyGraphRollback",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_ApplyGraphRollback::RunTest(const FString& Parameters)
+{
+	// Step 1: Create a transient blueprint and extract the session ID.
+	FString SessionId;
+	{
+		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+		CreateParams->SetStringField(TEXT("operation"), TEXT("create"));
+
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/__MCPTests/BP_ApplyRollbackTest"));
+		Params->SetStringField(TEXT("parent_class"), TEXT("Actor"));
+		CreateParams->SetObjectField(TEXT("params"), Params);
+
+		auto CreateResult = DispatchLegacyEnvelope(CreateParams);
+		if (CreateResult.bIsError)
+		{
+			AddError(FString::Printf(TEXT("Failed to create blueprint: %s"), *CreateResult.GetContentAsString()));
+			return false;
+		}
+
+		const FString ResultText = CreateResult.GetContentAsString();
+		int32 SessionIdStart = ResultText.Find(TEXT("Session ID: "));
+		if (SessionIdStart != INDEX_NONE)
+		{
+			SessionIdStart += 12; // length of "Session ID: "
+			const int32 SessionIdEnd = ResultText.Find(TEXT("\n"), ESearchCase::IgnoreCase, ESearchDir::FromStart, SessionIdStart);
+			SessionId = ResultText.Mid(SessionIdStart, SessionIdEnd - SessionIdStart);
+		}
+		if (SessionId.IsEmpty())
+		{
+			AddError(TEXT("Failed to extract session ID from create result"));
+			return false;
+		}
+	}
+
+	// Step 2: Resolve the session's live UEdGraph and capture the initial node count.
+	FBlueprintEditToolData* Data = ClaireonBlueprintGraphEditToolBase::FindToolData(SessionId);
+	if (!Data)
+	{
+		AddError(TEXT("FindToolData returned null for freshly created session"));
+		return false;
+	}
+	UEdGraph* Graph = Data->Graph.Get();
+	if (!Graph)
+	{
+		AddError(TEXT("Session Graph weak ptr is null"));
+		return false;
+	}
+	const int32 InitialNodeCount = Graph->Nodes.Num();
+
+	// Lambda: build the shared nodes[] array (Sequence + PrintString CallFunction).
+	auto BuildNodesJson = []() -> TArray<TSharedPtr<FJsonValue>>
+	{
+		TArray<TSharedPtr<FJsonValue>> NodesJson;
+
+		TSharedPtr<FJsonObject> Seq = MakeShared<FJsonObject>();
+		Seq->SetStringField(TEXT("id"), TEXT("seq"));
+		Seq->SetStringField(TEXT("node_type"), TEXT("ExecutionSequence"));
+		NodesJson.Add(MakeShared<FJsonValueObject>(Seq));
+
+		TSharedPtr<FJsonObject> Print = MakeShared<FJsonObject>();
+		Print->SetStringField(TEXT("id"), TEXT("print"));
+		Print->SetStringField(TEXT("node_type"), TEXT("CallFunction"));
+		Print->SetStringField(TEXT("function_name"), TEXT("PrintString"));
+		Print->SetStringField(TEXT("function_class"), TEXT("KismetSystemLibrary"));
+		NodesJson.Add(MakeShared<FJsonValueObject>(Print));
+
+		return NodesJson;
+	};
+
+	// Step 3: First apply call -- intentionally bad connection, must roll back.
+	{
+		TSharedPtr<FJsonObject> ApplyArgs = MakeShared<FJsonObject>();
+		ApplyArgs->SetStringField(TEXT("session_id"), SessionId);
+		ApplyArgs->SetArrayField(TEXT("nodes"), BuildNodesJson());
+
+		TArray<TSharedPtr<FJsonValue>> ConnJson;
+		TSharedPtr<FJsonObject> Conn = MakeShared<FJsonObject>();
+		Conn->SetStringField(TEXT("from"), TEXT("seq"));
+		Conn->SetStringField(TEXT("from_pin"), TEXT("NoSuchPinOnSequence"));
+		Conn->SetStringField(TEXT("to"), TEXT("print"));
+		Conn->SetStringField(TEXT("to_pin"), TEXT("execute"));
+		ConnJson.Add(MakeShared<FJsonValueObject>(Conn));
+		ApplyArgs->SetArrayField(TEXT("connections"), ConnJson);
+
+		ClaireonTool_ApplyBlueprintGraph ApplyTool;
+		IClaireonTool::FToolResult Result = ApplyTool.Execute(ApplyArgs);
+
+		TestTrue(TEXT("apply_graph with bad connection must return error"), Result.bIsError);
+		TestEqual(TEXT("graph node count must be unchanged after failed apply_graph"),
+			Graph->Nodes.Num(), InitialNodeCount);
+	}
+
+	// Step 4: Second apply call -- valid connection, must succeed with exactly +2 nodes.
+	{
+		TSharedPtr<FJsonObject> ApplyArgs = MakeShared<FJsonObject>();
+		ApplyArgs->SetStringField(TEXT("session_id"), SessionId);
+		ApplyArgs->SetArrayField(TEXT("nodes"), BuildNodesJson());
+
+		TArray<TSharedPtr<FJsonValue>> ConnJson;
+		TSharedPtr<FJsonObject> Conn = MakeShared<FJsonObject>();
+		// Sequence's first output exec ("then_0") -> PrintString's input exec ("execute").
+		Conn->SetStringField(TEXT("from"), TEXT("seq"));
+		Conn->SetStringField(TEXT("from_pin"), TEXT("then_0"));
+		Conn->SetStringField(TEXT("to"), TEXT("print"));
+		Conn->SetStringField(TEXT("to_pin"), TEXT("execute"));
+		ConnJson.Add(MakeShared<FJsonValueObject>(Conn));
+		ApplyArgs->SetArrayField(TEXT("connections"), ConnJson);
+
+		ClaireonTool_ApplyBlueprintGraph ApplyTool;
+		IClaireonTool::FToolResult Result = ApplyTool.Execute(ApplyArgs);
+
+		TestFalse(TEXT("apply_graph retry with valid connection must succeed"), Result.bIsError);
+		TestEqual(TEXT("retry must leave exactly 2 new nodes (not 4 -- previous call's leaked nodes)"),
+			Graph->Nodes.Num(), InitialNodeCount + 2);
+	}
+
+	// Step 5: Close the session so the transient blueprint doesn't leak state to later tests.
+	{
+		TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
+		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
+		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
+		CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
+
+		auto CloseResult = DispatchLegacyEnvelope(CloseArgs);
+		if (CloseResult.bIsError)
+		{
+			AddError(FString::Printf(TEXT("Failed to close session: %s"), *CloseResult.GetContentAsString()));
+			return false;
+		}
 	}
 
 	return true;

@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_AddVariable::GetName() const
 
 FString ClaireonBlueprintGraphTool_AddVariable::GetDescription() const
 {
-    return TEXT("Add a member variable to the Blueprint with type, default value, category, tooltip, replication, and metadata.");
+    return TEXT("Add a member variable to the Blueprint. Pass a simple primitive/class/struct path via variable_type for ordinary types, or a structured variable_type_spec (with base + signature_function / subtype) for delegate, multicast-delegate, soft-class, soft-object, and instanced-struct variables. variable_type_spec takes precedence when both are provided. When replication='RepNotify', auto-creates the OnRep_<Name> handler function graph (customizable via rep_notify_func).");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddVariable::GetInputSchema() const
@@ -113,14 +113,20 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddVariable::GetInputSchema()
     Builder.AddString(TEXT("session_id"), TEXT("Session id from a prior open/create (or use asset_path to auto-open)."), false);
     Builder.AddString(TEXT("asset_path"), TEXT("Blueprint asset path (alternative to session_id)."), false);
     Builder.AddString(TEXT("variable_name"), TEXT("Name of the new variable."), true);
-    Builder.AddString(TEXT("variable_type"), TEXT("Variable type (primitive name like 'bool'/'int'/'float' or full object/struct/class path)."), true);
+    Builder.AddString(TEXT("variable_type"), TEXT("Variable type (primitive name like 'bool'/'int'/'float' or full object/struct/class path). Required unless variable_type_spec is provided."));
+    Builder.AddObject(TEXT("variable_type_spec"), TEXT("Structured type spec. Preferred for delegate / multicast-delegate / soft-ref / instanced-struct variables. Keys: 'base' (string; e.g. 'MulticastDelegate', 'Delegate', 'SoftClass', 'SoftObject', 'InstancedStruct'); 'signature_function' (string; required for delegate bases; UFunction object path, e.g. '/Script/FSTargeting.LockedTargetChanged__DelegateSignature'); 'subtype' (string; required for soft* bases, optional for InstancedStruct). Takes precedence over variable_type when both are provided."));
     Builder.AddString(TEXT("container_type"), TEXT("Optional container: 'none' | 'array' | 'set' | 'map' (default 'none')."));
     Builder.AddString(TEXT("default_value"), TEXT("Optional default value for the variable (string form)."));
     Builder.AddString(TEXT("category"), TEXT("Optional My Blueprint category."));
     Builder.AddString(TEXT("tooltip"), TEXT("Optional tooltip text."));
     Builder.AddBoolean(TEXT("instance_editable"), TEXT("Whether the variable is editable on instances."));
     Builder.AddBoolean(TEXT("blueprint_read_only"), TEXT("Whether the variable is read-only in Blueprints."));
-    Builder.AddString(TEXT("replication"), TEXT("Replication mode: 'none' | 'replicated' | 'rep_notify' (default 'none')."));
+    Builder.AddString(TEXT("replication"),
+        TEXT("Replication mode: 'None' | 'Replicated' | 'RepNotify' (PascalCase preferred; 'none'/'replicated'/'rep_notify' also accepted). Default 'None'."));
+    Builder.AddString(TEXT("rep_notify_func"),
+        TEXT("Optional OnRep handler function name. Defaults to OnRep_<VariableName> when replication='RepNotify'. Ignored for other replication modes."));
+    Builder.AddString(TEXT("replication_condition"),
+        TEXT("Optional ELifetimeCondition name (used when replication='RepNotify')."));
     Builder.AddString(TEXT("response_mode"), TEXT("Response verbosity: 'full' | 'changed' | 'status' (default 'changed')."));
     return Builder.Build();
 }
@@ -241,7 +247,8 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_AddVariable(const FStr
 	// Apply optional properties (flags, category, replication, metadata, etc.)
 	// Must be called after the variable is added to NewVariables since the
 	// FBlueprintEditorUtils setter functions look up the variable by name.
-	ClaireonBlueprintHelpers::ApplyVariableProperties(Blueprint, FName(*VarName), Params);
+	ClaireonBlueprintHelpers::FApplyVariableResult ApplyResult;
+	ClaireonBlueprintHelpers::ApplyVariableProperties(Blueprint, FName(*VarName), Params, &ApplyResult);
 
 	// Mark Blueprint as structurally modified
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
@@ -252,6 +259,20 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_AddVariable(const FStr
 
 	FToolResult AddVariableResult = BuildStateResponse(SessionId, Data);
 	AddVariableResult.Warnings.Append(ResolutionWarnings);
+
+	// Surface the RepNotify handler graph name on the tool response so callers
+	// can immediately target it with blueprint_graph_add_node.
+	if (!ApplyResult.RepNotifyHandlerGraph.IsNone())
+	{
+		if (!AddVariableResult.Data.IsValid())
+		{
+			AddVariableResult.Data = MakeShared<FJsonObject>();
+		}
+		AddVariableResult.Data->SetStringField(
+			TEXT("rep_notify_graph"),
+			ApplyResult.RepNotifyHandlerGraph.ToString());
+	}
+
 	return AddVariableResult;
 }
 

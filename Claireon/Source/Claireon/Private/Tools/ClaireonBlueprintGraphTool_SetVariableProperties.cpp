@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_SetVariableProperties::GetName() const
 
 FString ClaireonBlueprintGraphTool_SetVariableProperties::GetDescription() const
 {
-    return TEXT("Set properties on an existing Blueprint variable (flags, category, tooltip, replication, metadata).");
+    return TEXT("Set properties on an existing Blueprint variable (flags, category, tooltip, replication, metadata). When switching to replication='RepNotify', auto-creates the OnRep handler function graph if it doesn't already exist.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetVariableProperties::GetInputSchema() const
@@ -195,7 +195,8 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_SetVariableProperties(
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Set Variable Properties")));
 	Blueprint->Modify();
 
-	ClaireonBlueprintHelpers::ApplyVariableProperties(Blueprint, VarFName, Params);
+	ClaireonBlueprintHelpers::FApplyVariableResult ApplyResult;
+	ClaireonBlueprintHelpers::ApplyVariableProperties(Blueprint, VarFName, Params, &ApplyResult);
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 
@@ -203,7 +204,22 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_SetVariableProperties(
 		TEXT("Set properties on variable: %s"),
 		*VarName);
 
-	return BuildStateResponse(SessionId, Data);
+	FToolResult SetVarResult = BuildStateResponse(SessionId, Data);
+
+	// Surface the RepNotify handler graph name on the tool response so callers
+	// can immediately target it with blueprint_graph_add_node.
+	if (!ApplyResult.RepNotifyHandlerGraph.IsNone())
+	{
+		if (!SetVarResult.Data.IsValid())
+		{
+			SetVarResult.Data = MakeShared<FJsonObject>();
+		}
+		SetVarResult.Data->SetStringField(
+			TEXT("rep_notify_graph"),
+			ApplyResult.RepNotifyHandlerGraph.ToString());
+	}
+
+	return SetVarResult;
 }
 
 #undef LOCTEXT_NAMESPACE

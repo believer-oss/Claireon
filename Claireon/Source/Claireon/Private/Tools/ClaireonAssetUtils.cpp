@@ -269,4 +269,19 @@ void RefreshAssetEditorIfOpen(UObject* Asset)
 	}
 }
 
+UClass* ResolveClassName(const FString& ClassName)
+{
+	// UClass::GetName() omits the U/A prefix, so strip it for matching
+	FString Stripped = ClassName;
+	if (Stripped.Len() > 1 && (Stripped[0] == TEXT('U') || Stripped[0] == TEXT('A')) && FChar::IsUpper(Stripped[1]))
+	{
+		Stripped.RightChopInline(1);
+	}
+	for (TObjectIterator<UClass> It; It; ++It)
+	{
+		if (It->GetName() == Stripped || It->GetName() == ClassName) return *It;
+	}
+	return nullptr;
+}
+
 } // namespace ClaireonAssetUtils

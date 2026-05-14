@@ -1,0 +1,325 @@
+// Copyright (c) 2026 The Claireon Contributors
+// SPDX-License-Identifier: MIT
+
+// Regression tests for claireon.blueprint_apply_graph -- in particular, that
+// CallFunction nodes created through the batch path populate their pins
+// correctly.  See work item #0000 and 6480_FRACTURE.md for background.
+
+#if WITH_UNTESTED
+
+#include "Untest.h"
+#include "Tools/IClaireonTool.h"
+#include "Tools/ClaireonTool_ApplyBlueprintGraph.h"
+#include "Tools/ClaireonBlueprintGraphTool_Create.h"
+#include "Tools/ClaireonBlueprintGraphTool_Open.h"
+#include "Tools/ClaireonBlueprintGraphTool_AddVariable.h"
+#include "Tools/ClaireonBlueprintGraphEditToolBase.h"
+#include "ClaireonBlueprintHelpers.h"
+
+#include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
+#include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphNode.h"
+#include "EdGraph/EdGraphPin.h"
+#include "EdGraphSchema_K2.h"
+#include "ObjectTools.h"
+
+// ---------------------------------------------------------------------------
+// Test asset path + helpers
+// ---------------------------------------------------------------------------
+static const TCHAR* ApplyBPGraphPinsTestPath = TEXT("/Game/__MCPTests/BP_ApplyBlueprintGraphPinsTest");
+
+namespace
+{
+
+void ApplyGraphTests_CleanupTestAsset(const FString& AssetPath)
+{
+	UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *AssetPath);
+	if (Asset)
+	{
+		TArray<UObject*> AssetsToDelete;
+		AssetsToDelete.Add(Asset);
+		ObjectTools::ForceDeleteObjects(AssetsToDelete, false);
+	}
+}
+
+// Create a scratch BP via ClaireonBlueprintGraphTool_Create + open a session via
+// ClaireonBlueprintGraphTool_Open. Returns the session_id string; empty string
+// on failure.  ParentClass defaults to "Actor" (matches the card's repro class).
+FString OpenTestSession(const TCHAR* AssetPath, const TCHAR* ParentClass = TEXT("Actor"))
+{
+	{
+		ClaireonBlueprintGraphTool_Create CreateTool;
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("asset_path"), AssetPath);
+		Args->SetStringField(TEXT("parent_class"), ParentClass);
+		auto R = CreateTool.Execute(Args);
+		if (R.bIsError) return FString();
+	}
+	ClaireonBlueprintGraphTool_Open OpenTool;
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("asset_path"), AssetPath);
+	auto R = OpenTool.Execute(Args);
+	if (R.bIsError || !R.Data.IsValid()) return FString();
+	FString SessionId;
+	R.Data->TryGetStringField(TEXT("session_id"), SessionId);
+	return SessionId;
+}
+
+TSharedPtr<FJsonValue> ApplyGraphTests_MakeObj(const TSharedPtr<FJsonObject>& Obj)
+{
+	return MakeShared<FJsonValueObject>(Obj);
+}
+
+// Build an apply_graph args object with a single node entry.
+TSharedPtr<FJsonObject> MakeApplyGraphArgsSingle(const FString& SessionId, const TSharedPtr<FJsonObject>& Node)
+{
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("session_id"), SessionId);
+	TArray<TSharedPtr<FJsonValue>> Nodes;
+	Nodes.Add(ApplyGraphTests_MakeObj(Node));
+	Args->SetArrayField(TEXT("nodes"), Nodes);
+	return Args;
+}
+
+// Look up the created node in the session graph by id_map local id.
+UEdGraphNode* ResolveCreatedNode(const IClaireonTool::FToolResult& Result, const FString& LocalId, const FString& SessionId)
+{
+	if (!Result.Data.IsValid()) return nullptr;
+
+	const TSharedPtr<FJsonObject>* IdMap = nullptr;
+	if (!Result.Data->TryGetObjectField(TEXT("id_map"), IdMap) || !IdMap || !(*IdMap).IsValid()) return nullptr;
+
+	FString GuidStr;
+	if (!(*IdMap)->TryGetStringField(LocalId, GuidStr) || GuidStr.IsEmpty()) return nullptr;
+
+	FGuid NodeGuid;
+	if (!FGuid::Parse(GuidStr, NodeGuid)) return nullptr;
+
+	FBlueprintEditToolData* Data = ClaireonBlueprintGraphEditToolBase::FindToolData(SessionId);
+	if (!Data) return nullptr;
+	UEdGraph* Graph = Data->Graph.Get();
+	if (!Graph) return nullptr;
+
+	return ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
+}
+
+// True if a pin matching PinName (case-insensitive) exists on Node.
+bool NodeHasPin(UEdGraphNode* Node, const TCHAR* PinName)
+{
+	if (!Node) return false;
+	for (UEdGraphPin* Pin : Node->Pins)
+	{
+		if (Pin && Pin->PinName.ToString().Equals(PinName, ESearchCase::IgnoreCase))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+} // anonymous namespace
+
+// ============================================================================
+// KismetSystemLibrary.PrintString -- classic canary: a standard static helper
+// that pre-fix would come through with just the exec in/out pins.
+// ============================================================================
+
+UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, KismetSystemLibrary_PrintString_HasAllPins, UNTEST_TIMEOUTMS(30000))
+{
+	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
+	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
+
+	TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
+	Node->SetStringField(TEXT("id"), TEXT("print1"));
+	Node->SetStringField(TEXT("node_type"), TEXT("CallFunction"));
+	Node->SetStringField(TEXT("function_name"), TEXT("PrintString"));
+	Node->SetStringField(TEXT("function_class"), TEXT("KismetSystemLibrary"));
+
+	ClaireonTool_ApplyBlueprintGraph Tool;
+	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
+	UNTEST_ASSERT_FALSE(Result.bIsError);
+
+	UEdGraphNode* Created = ResolveCreatedNode(Result, TEXT("print1"), SessionId);
+	UNTEST_ASSERT_PTR(Created);
+
+	// PrintString has: execute, then, WorldContextObject, InString, bPrintToScreen, bPrintToLog, ...
+	UNTEST_EXPECT_GT(Created->Pins.Num(), 1);
+	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("execute")));
+	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("then")));
+	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("InString")));
+
+	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	co_return;
+}
+
+// ============================================================================
+// Self-bound CallFunction -- primary card repro.  Before T2+T3 this node
+// would end up with zero pins because the factory never resolved the UFunction
+// and never triggered ReconstructNode.
+// ============================================================================
+
+UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, Actor_SetHiddenInGame_SelfBound_HasPins, UNTEST_TIMEOUTMS(30000))
+{
+	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
+	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
+
+	// SetLifeSpan is a self-bound BlueprintCallable on AActor; no function_class.
+	TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
+	Node->SetStringField(TEXT("id"), TEXT("setls1"));
+	Node->SetStringField(TEXT("node_type"), TEXT("CallFunction"));
+	Node->SetStringField(TEXT("function_name"), TEXT("SetLifeSpan"));
+
+	ClaireonTool_ApplyBlueprintGraph Tool;
+	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
+	UNTEST_ASSERT_FALSE(Result.bIsError);
+
+	UEdGraphNode* Created = ResolveCreatedNode(Result, TEXT("setls1"), SessionId);
+	UNTEST_ASSERT_PTR(Created);
+
+	// Expect exec in + exec out + self + InLifespan.
+	UNTEST_EXPECT_GT(Created->Pins.Num(), 1);
+	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("execute")));
+	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("then")));
+	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("InLifespan")));
+
+	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	co_return;
+}
+
+// ============================================================================
+// Sequence -- negative-control test.  Factory already handles Sequence
+// correctly; this catches accidental regressions in the shared tail.
+// ============================================================================
+
+UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, Sequence_HasThen0_Then1, UNTEST_TIMEOUTMS(30000))
+{
+	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
+	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
+
+	TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
+	Node->SetStringField(TEXT("id"), TEXT("seq1"));
+	Node->SetStringField(TEXT("node_type"), TEXT("Sequence"));
+
+	ClaireonTool_ApplyBlueprintGraph Tool;
+	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
+	UNTEST_ASSERT_FALSE(Result.bIsError);
+
+	UEdGraphNode* Created = ResolveCreatedNode(Result, TEXT("seq1"), SessionId);
+	UNTEST_ASSERT_PTR(Created);
+
+	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("execute")));
+	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("then_0")));
+	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("then_1")));
+
+	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	co_return;
+}
+
+// ============================================================================
+// VariableGet -- FProperty-driven path.  AllocateDefaultPins already builds
+// the pin, so we just verify it comes through with the expected typed pin.
+// ============================================================================
+
+UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, VariableGet_TypedOutput, UNTEST_TIMEOUTMS(30000))
+{
+	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
+	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
+
+	// Add a float variable to the blueprint first.
+	{
+		ClaireonBlueprintGraphTool_AddVariable AddVarTool;
+		TSharedPtr<FJsonObject> VarArgs = MakeShared<FJsonObject>();
+		VarArgs->SetStringField(TEXT("session_id"), SessionId);
+		VarArgs->SetStringField(TEXT("variable_name"), TEXT("TestHealth"));
+		VarArgs->SetStringField(TEXT("variable_type"), TEXT("float"));
+		auto AddVarResult = AddVarTool.Execute(VarArgs);
+		UNTEST_ASSERT_FALSE(AddVarResult.bIsError);
+	}
+
+	TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
+	Node->SetStringField(TEXT("id"), TEXT("varget1"));
+	Node->SetStringField(TEXT("node_type"), TEXT("VariableGet"));
+	Node->SetStringField(TEXT("variable_name"), TEXT("TestHealth"));
+
+	ClaireonTool_ApplyBlueprintGraph Tool;
+	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
+	UNTEST_ASSERT_FALSE(Result.bIsError);
+
+	UEdGraphNode* Created = ResolveCreatedNode(Result, TEXT("varget1"), SessionId);
+	UNTEST_ASSERT_PTR(Created);
+
+	// Expect a single typed output pin with PC_Real (UE 5.5 float category).
+	UEdGraphPin* OutPin = nullptr;
+	for (UEdGraphPin* Pin : Created->Pins)
+	{
+		if (Pin && Pin->Direction == EGPD_Output && Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
+		{
+			OutPin = Pin;
+			break;
+		}
+	}
+	UNTEST_ASSERT_PTR(OutPin);
+	UNTEST_EXPECT_TRUE(OutPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Real);
+
+	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	co_return;
+}
+
+// ============================================================================
+// Bad function_class -- ensures the factory surfaces a resolution warning
+// (was silent pre-fix) and that the node is still created but empty.
+// ============================================================================
+
+UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, CallFunction_BadFunctionClass_EmitsWarning, UNTEST_TIMEOUTMS(30000))
+{
+	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
+	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
+
+	TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
+	Node->SetStringField(TEXT("id"), TEXT("bad1"));
+	Node->SetStringField(TEXT("node_type"), TEXT("CallFunction"));
+	Node->SetStringField(TEXT("function_name"), TEXT("Anything"));
+	Node->SetStringField(TEXT("function_class"), TEXT("NonexistentClassXYZ"));
+
+	ClaireonTool_ApplyBlueprintGraph Tool;
+	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
+	UNTEST_ASSERT_FALSE(Result.bIsError);
+
+	bool bFoundWarning = false;
+	for (const FString& W : Result.Warnings)
+	{
+		if (W.Contains(TEXT("NonexistentClassXYZ"), ESearchCase::IgnoreCase))
+		{
+			bFoundWarning = true;
+			break;
+		}
+	}
+	UNTEST_EXPECT_TRUE(bFoundWarning);
+
+	UEdGraphNode* Created = ResolveCreatedNode(Result, TEXT("bad1"), SessionId);
+	UNTEST_ASSERT_PTR(Created);
+
+	// Function name was bogus too, so pin population should be minimal (no
+	// function parameters were resolvable).  The node still exists -- the
+	// fallback is SetSelfMember with no UFunction found.
+	int32 NonExecPinCount = 0;
+	for (UEdGraphPin* Pin : Created->Pins)
+	{
+		if (Pin && Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
+		{
+			++NonExecPinCount;
+		}
+	}
+	UNTEST_EXPECT_LE(NonExecPinCount, 1); // self pin is ok; function params are not
+
+	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	co_return;
+}
+
+#endif // WITH_UNTESTED

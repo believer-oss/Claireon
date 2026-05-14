@@ -64,4 +64,8 @@ namespace ClaireonAssetUtils
 	 * @param Asset - The asset whose editor should be refreshed
 	 */
 	CLAIREON_API void RefreshAssetEditorIfOpen(UObject* Asset);
+
+	// Resolve a UClass by name, accepting either the "U"/"A"-prefixed or unprefixed
+	// form (UClass::GetName() omits the prefix). Returns nullptr if no match.
+	CLAIREON_API UClass* ResolveClassName(const FString& ClassName);
 }
