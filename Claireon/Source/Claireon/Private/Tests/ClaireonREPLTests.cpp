@@ -28,7 +28,8 @@ public:
 	/** Tracks how many times Execute() was called. */
 	int32 ExecuteCount = 0;
 
-	virtual FString GetName() const override { return TEXT("test_echo"); }
+	virtual FString GetCategory() const override { return TEXT("test"); }
+	virtual FString GetOperation() const override { return TEXT("echo"); }
 	virtual FString GetDescription() const override
 	{
 		return TEXT("Echo back the provided message. Use this to confirm tool invocation.");

@@ -13,7 +13,8 @@
 class FTestCrashingTool : public IClaireonTool
 {
 public:
-	virtual FString GetName() const override { return TEXT("test_crash"); }
+	virtual FString GetCategory() const override { return TEXT("test"); }
+	virtual FString GetOperation() const override { return TEXT("crash"); }
 	virtual FString GetDescription() const override
 	{
 		return TEXT("Deliberately crashes via null pointer dereference for SEH testing.");
@@ -40,7 +41,8 @@ public:
 class FTestCleanTool : public IClaireonTool
 {
 public:
-	virtual FString GetName() const override { return TEXT("test_clean"); }
+	virtual FString GetCategory() const override { return TEXT("test"); }
+	virtual FString GetOperation() const override { return TEXT("clean"); }
 	virtual FString GetDescription() const override
 	{
 		return TEXT("Returns success for baseline SEH comparison.");

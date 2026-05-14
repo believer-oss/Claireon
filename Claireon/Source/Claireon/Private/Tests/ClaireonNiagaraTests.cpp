@@ -139,7 +139,7 @@ UNTEST_UNIT_OPTS(Claireon, Niagara, ResolveRendererClassInvalid, UNTEST_TIMEOUTM
 }
 
 // ============================================================================
-// claireon.niagara_inspect
+// niagara_inspect
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, Niagara, InspectMissingAssetPath, UNTEST_TIMEOUTMS(5000))
@@ -213,7 +213,7 @@ UNTEST_UNIT_OPTS(Claireon, Niagara, InspectEmitterIndexOutOfRange, UNTEST_TIMEOU
 }
 
 // ============================================================================
-// claireon.niagara_edit decomposed tools - Session Lifecycle
+// niagara_edit decomposed tools - Session Lifecycle
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, OpenCloseSession, UNTEST_TIMEOUTMS(15000))

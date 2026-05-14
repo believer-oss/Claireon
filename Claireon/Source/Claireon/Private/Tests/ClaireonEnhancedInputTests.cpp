@@ -98,7 +98,7 @@ namespace
 }
 
 // ============================================================================
-// claireon.input_inspect
+// input_inspect
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, EnhancedInput, InspectMissingAssetPath, UNTEST_TIMEOUTMS(5000))
@@ -123,7 +123,7 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, InspectBadAssetPath, UNTEST_TIMEOUTMS(
 }
 
 // ============================================================================
-// claireon.input_* -- Error Handling
+// input_* -- Error Handling
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, EnhancedInput, StatusMissingSessionId, UNTEST_TIMEOUTMS(5000))
@@ -148,7 +148,7 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, StatusInvalidSessionId, UNTEST_TIMEOUT
 }
 
 // ============================================================================
-// claireon.input_* -- Create + Session Lifecycle
+// input_* -- Create + Session Lifecycle
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, EnhancedInput, CreateInputAction, UNTEST_TIMEOUTMS(15000))
@@ -178,7 +178,7 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, CreateMappingContext, UNTEST_TIMEOUTMS
 }
 
 // ============================================================================
-// claireon.input_set_value_type
+// input_set_value_type
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, EnhancedInput, SetValueType, UNTEST_TIMEOUTMS(15000))
@@ -201,7 +201,7 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, SetValueType, UNTEST_TIMEOUTMS(15000))
 }
 
 // ============================================================================
-// claireon.input_add_action_trigger / claireon.input_remove_action_trigger
+// input_add_action_trigger / input_remove_action_trigger
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, EnhancedInput, AddRemoveActionTriggers, UNTEST_TIMEOUTMS(15000))
@@ -240,7 +240,7 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, AddRemoveActionTriggers, UNTEST_TIMEOU
 }
 
 // ============================================================================
-// claireon.input_add_action_modifier / claireon.input_remove_action_modifier
+// input_add_action_modifier / input_remove_action_modifier
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, EnhancedInput, AddRemoveActionModifiers, UNTEST_TIMEOUTMS(15000))
@@ -272,7 +272,7 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, AddRemoveActionModifiers, UNTEST_TIMEO
 }
 
 // ============================================================================
-// claireon.input_* -- Cross-type Operation Errors
+// input_* -- Cross-type Operation Errors
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, EnhancedInput, IAOperationsOnIMCSession, UNTEST_TIMEOUTMS(15000))
@@ -309,7 +309,7 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, IMCOperationsOnIASession, UNTEST_TIMEO
 }
 
 // ============================================================================
-// claireon.input_add_mapping / claireon.input_set_mapping_key / claireon.input_remove_mapping
+// input_add_mapping / input_set_mapping_key / input_remove_mapping
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, EnhancedInput, AddRemoveMappings, UNTEST_TIMEOUTMS(20000))

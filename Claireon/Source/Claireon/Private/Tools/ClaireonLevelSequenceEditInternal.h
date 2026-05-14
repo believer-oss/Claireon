@@ -13,7 +13,7 @@ class UMovieSceneSection;
 struct FSequenceEditToolData;
 
 /**
- * Shared module-private helpers for claireon.level_sequence_* decomposed tools.
+ * Shared module-private helpers for level_sequence_* decomposed tools.
  * Lifted verbatim from the pre-decomposition ClaireonTool_SequenceEdit.cpp.
  */
 namespace ClaireonLevelSequenceInternal

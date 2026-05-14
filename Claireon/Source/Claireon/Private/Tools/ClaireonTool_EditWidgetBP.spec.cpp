@@ -851,7 +851,7 @@ bool FEditWidgetBPTest_AnimationLifecycle::RunTest(const FString& Parameters)
 
 		CloseSession(SessionId);
 
-		// Reopen via claireon.widgetbp_open; the animations must survive the round trip.
+		// Reopen via widgetbp_open; the animations must survive the round trip.
 		TSharedPtr<FJsonObject> OpenArgs = MakeShared<FJsonObject>();
 		OpenArgs->SetStringField(TEXT("operation"), TEXT("open"));
 		TSharedPtr<FJsonObject> OpenParams = MakeShared<FJsonObject>();

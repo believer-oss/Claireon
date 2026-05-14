@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 // Behavioural tests for the RepNotify handler auto-creation feature shared by
-// claireon.blueprint_graph_add_variable and claireon.blueprint_graph_set_variable_properties
+// blueprint_graph_add_variable and blueprint_graph_set_variable_properties
 // (work item #0000).
 //
 // Covers five scenarios:

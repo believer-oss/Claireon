@@ -26,7 +26,7 @@
 #include "UObject/UnrealType.h"
 
 // ============================================================================
-// Apply* handlers -- free functions used by decomposed claireon.level_sequence_*
+// Apply* handlers -- free functions used by decomposed level_sequence_*
 // tools and by FClaireonSpecApplicator_LevelSequence. Definitions extracted from
 // the deleted ClaireonTool_SequenceEdit.cpp so the apply-handler surface (see
 // FEATURE_6_CLAIREON_SPEC_APPLICATOR.md "Handler extraction") continues to link
