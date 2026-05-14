@@ -92,7 +92,7 @@ UBlackboardData* ClaireonBehaviorTreeHelpers::LoadBlackboardAsset(const FString&
 
 namespace
 {
-	FString GetNodeClassName(const UBTNode* Node)
+	FString BehaviorTreeHelpers_GetNodeClassName(const UBTNode* Node)
 	{
 		if (!Node)
 		{
@@ -107,7 +107,7 @@ namespace
 		return ClassName;
 	}
 
-	FString GetNodeDisplayName(const UBTNode* Node)
+	FString BehaviorTreeHelpers_GetNodeDisplayName(const UBTNode* Node)
 	{
 		if (!Node)
 		{
@@ -121,7 +121,7 @@ namespace
 		return NodeName;
 	}
 
-	FString GetCompositeTypeName(const UBTCompositeNode* Composite)
+	FString BehaviorTreeHelpers_GetCompositeTypeName(const UBTCompositeNode* Composite)
 	{
 		if (!Composite)
 		{
@@ -143,7 +143,7 @@ namespace
 		return ClassName;
 	}
 
-	void FormatCompositeNodeRecursive(const UBTCompositeNode* Composite, FString& Output, const FString& Indent, bool bFullDetail)
+	void BehaviorTreeHelpers_FormatCompositeNodeRecursive(const UBTCompositeNode* Composite, FString& Output, const FString& Indent, bool bFullDetail)
 	{
 		if (!Composite)
 		{
@@ -164,7 +164,7 @@ namespace
 				ServiceInterval = IntervalProp->GetPropertyValue_InContainer(Service);
 			}
 			Output += FString::Printf(TEXT("%s[Service] %s (%s) tick=%.2fs\n"),
-				*Indent, *GetNodeDisplayName(Service), *Service->GetClass()->GetName(),
+				*Indent, *BehaviorTreeHelpers_GetNodeDisplayName(Service), *Service->GetClass()->GetName(),
 				ServiceInterval);
 			if (bFullDetail)
 			{
@@ -197,7 +197,7 @@ namespace
 				case EBTFlowAbortMode::Both: AbortMode = TEXT("Both"); break;
 				}
 				Output += FString::Printf(TEXT("%s[Decorator] %s (%s) abort=%s\n"),
-					*Indent, *GetNodeDisplayName(Decorator), *Decorator->GetClass()->GetName(), *AbortMode);
+					*Indent, *BehaviorTreeHelpers_GetNodeDisplayName(Decorator), *Decorator->GetClass()->GetName(), *AbortMode);
 				if (bFullDetail)
 				{
 					Output += ClaireonBehaviorTreeHelpers::FormatNodeProperties(Decorator, Indent + TEXT("  "));
@@ -208,13 +208,13 @@ namespace
 			if (Child.ChildComposite)
 			{
 				Output += FString::Printf(TEXT("%s%s[%s] %s\n"),
-					*Indent, *Prefix, *GetCompositeTypeName(Child.ChildComposite), *GetNodeDisplayName(Child.ChildComposite));
-				FormatCompositeNodeRecursive(Child.ChildComposite, Output, ChildIndent, bFullDetail);
+					*Indent, *Prefix, *BehaviorTreeHelpers_GetCompositeTypeName(Child.ChildComposite), *BehaviorTreeHelpers_GetNodeDisplayName(Child.ChildComposite));
+				BehaviorTreeHelpers_FormatCompositeNodeRecursive(Child.ChildComposite, Output, ChildIndent, bFullDetail);
 			}
 			else if (Child.ChildTask)
 			{
 				Output += FString::Printf(TEXT("%s%s[Task] %s (%s)\n"),
-					*Indent, *Prefix, *GetNodeDisplayName(Child.ChildTask), *Child.ChildTask->GetClass()->GetName());
+					*Indent, *Prefix, *BehaviorTreeHelpers_GetNodeDisplayName(Child.ChildTask), *Child.ChildTask->GetClass()->GetName());
 				if (bFullDetail)
 				{
 					Output += ClaireonBehaviorTreeHelpers::FormatNodeProperties(Child.ChildTask, ChildIndent);
@@ -234,7 +234,7 @@ namespace
 						ServiceInterval = IntervalProp->GetPropertyValue_InContainer(Service);
 					}
 					Output += FString::Printf(TEXT("%s[Service] %s (%s) tick=%.2fs\n"),
-						*ChildIndent, *GetNodeDisplayName(Service), *Service->GetClass()->GetName(),
+						*ChildIndent, *BehaviorTreeHelpers_GetNodeDisplayName(Service), *Service->GetClass()->GetName(),
 						ServiceInterval);
 					if (bFullDetail)
 					{
@@ -306,8 +306,8 @@ FString ClaireonBehaviorTreeHelpers::FormatBehaviorTreeStructure(const UBehavior
 		return Output;
 	}
 
-	Output += FString::Printf(TEXT("[%s] %s (root)\n"), *GetCompositeTypeName(RootNode), *GetNodeDisplayName(RootNode));
-	FormatCompositeNodeRecursive(RootNode, Output, TEXT(""), bFullDetail);
+	Output += FString::Printf(TEXT("[%s] %s (root)\n"), *BehaviorTreeHelpers_GetCompositeTypeName(RootNode), *BehaviorTreeHelpers_GetNodeDisplayName(RootNode));
+	BehaviorTreeHelpers_FormatCompositeNodeRecursive(RootNode, Output, TEXT(""), bFullDetail);
 
 	// Summary: collect all blackboard key references
 	Output += TEXT("\n=== Blackboard Key Usage ===\n");

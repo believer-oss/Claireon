@@ -114,8 +114,6 @@ namespace ClaireonMaterialTestsImpl
 	}
 } // namespace ClaireonMaterialTestsImpl
 
-using namespace ClaireonMaterialTestsImpl;
-
 // ============================================================================
 // 1. MaterialInspect_Summary
 // ============================================================================
@@ -209,6 +207,7 @@ UNTEST_UNIT_OPTS(Claireon, Material, MaterialInstanceInspect_Overrides, UNTEST_T
 
 UNTEST_UNIT_OPTS(Claireon, Material, MaterialEdit_Lifecycle, UNTEST_TIMEOUTMS(45000))
 {
+	using namespace ClaireonMaterialTestsImpl;
 	// Create a fresh material in the sandbox so the test mutates only its own asset.
 	const FString PackagePath = MakeUniqueSandboxPackage(TEXT("Lifecycle"));
 	const FString AssetName = TEXT("M_LifecycleTest");
@@ -294,6 +293,7 @@ UNTEST_UNIT_OPTS(Claireon, Material, MaterialEdit_Lifecycle, UNTEST_TIMEOUTMS(45
 
 UNTEST_UNIT_OPTS(Claireon, Material, MaterialEdit_ApplySpec_Parity, UNTEST_TIMEOUTMS(60000))
 {
+	using namespace ClaireonMaterialTestsImpl;
 	// We compare per-op vs apply_spec final state on two freshly-created materials.
 	const FString PackagePath = MakeUniqueSandboxPackage(TEXT("Parity"));
 	const FString PerOpName = TEXT("M_PerOp");
@@ -439,6 +439,7 @@ UNTEST_UNIT_OPTS(Claireon, Material, MaterialEdit_ApplySpec_Parity, UNTEST_TIMEO
 
 UNTEST_UNIT_OPTS(Claireon, Material, MaterialInstanceEdit_Create, UNTEST_TIMEOUTMS(30000))
 {
+	using namespace ClaireonMaterialTestsImpl;
 	const FString PackagePath = MakeUniqueSandboxPackage(TEXT("MICCreate"));
 	const FString MicName = TEXT("MIC_Created");
 	const FString MicObj = FString::Printf(TEXT("%s/%s.%s"), *PackagePath, *MicName, *MicName);
@@ -492,6 +493,7 @@ UNTEST_UNIT_OPTS(Claireon, Material, MaterialInstanceEdit_Create, UNTEST_TIMEOUT
 
 UNTEST_UNIT_OPTS(Claireon, Material, MaterialInstanceEdit_ParentCycle, UNTEST_TIMEOUTMS(30000))
 {
+	using namespace ClaireonMaterialTestsImpl;
 	const FString PackagePath = MakeUniqueSandboxPackage(TEXT("Cycle"));
 	const FString MicAName = TEXT("MIC_A");
 	const FString MicAObj = FString::Printf(TEXT("%s/%s.%s"), *PackagePath, *MicAName, *MicAName);
@@ -609,6 +611,7 @@ UNTEST_UNIT_OPTS(Claireon, Material, MaterialApply_Actor, UNTEST_TIMEOUTMS(30000
 
 UNTEST_UNIT_OPTS(Claireon, Material, MaterialApply_Blueprint, UNTEST_TIMEOUTMS(60000))
 {
+	using namespace ClaireonMaterialTestsImpl;
 	const FString PackagePath = MakeUniqueSandboxPackage(TEXT("BPApply"));
 	const FString BPName = TEXT("BP_MatApply");
 	const FString BPObj = FString::Printf(TEXT("%s/%s.%s"), *PackagePath, *BPName, *BPName);
@@ -688,6 +691,7 @@ UNTEST_UNIT_OPTS(Claireon, Material, MaterialApply_Blueprint, UNTEST_TIMEOUTMS(6
 
 UNTEST_UNIT_OPTS(Claireon, Material, MaterialInstanceEdit_ApplySpec_Parity, UNTEST_TIMEOUTMS(45000))
 {
+	using namespace ClaireonMaterialTestsImpl;
 	const FString PackagePath = MakeUniqueSandboxPackage(TEXT("MICParity"));
 	const FString PerOpName = TEXT("MIC_PerOp");
 	const FString SpecName = TEXT("MIC_Spec");

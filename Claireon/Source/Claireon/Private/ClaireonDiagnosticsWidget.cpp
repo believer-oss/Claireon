@@ -3,6 +3,7 @@
 
 #include "ClaireonDiagnosticsWidget.h"
 #include "ClaireonModule.h"
+#include "ClaireonProxyClient.h"
 #include "ClaireonServer.h"
 #include "ClaireonLog.h"
 #include "ClaireonREPLWidget.h"
@@ -194,6 +195,36 @@ void SClaireonDiagnosticsWidget::Construct(const FArguments& InArgs)
 					SNew(STextBlock)
 					.Text(this, &SClaireonDiagnosticsWidget::GetStatsText)
 					.ColorAndOpacity(FSlateColor(FLinearColor(0.5f, 0.5f, 0.5f)))
+				]
+
+				// Proxy state row (D4): single-line state + Reconnect when Failed.
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				.Padding(4.0f, 0.0f, 4.0f, 4.0f)
+				[
+					SNew(SHorizontalBox)
+
+					+ SHorizontalBox::Slot()
+					.FillWidth(1.0f)
+					.VAlign(VAlign_Center)
+					[
+						SNew(STextBlock)
+						.Text(this, &SClaireonDiagnosticsWidget::GetProxyStateText)
+						.ColorAndOpacity(FSlateColor(FLinearColor(0.5f, 0.5f, 0.5f)))
+					]
+
+					+ SHorizontalBox::Slot()
+					.AutoWidth()
+					.Padding(4.0f, 0.0f)
+					[
+						SNew(SButton)
+						.Text(LOCTEXT("ProxyReconnect", "Reconnect"))
+						.ToolTipText(LOCTEXT("ProxyReconnectTip",
+							"Re-attempt /editor/register against the always-on proxy. "
+							"Does not stop or restart the editor's MCP server."))
+						.Visibility(this, &SClaireonDiagnosticsWidget::GetReconnectButtonVisibility)
+						.OnClicked(this, &SClaireonDiagnosticsWidget::OnReconnectClicked)
+					]
 				]
 
 				// Request log list (top)
@@ -519,6 +550,52 @@ FReply SClaireonDiagnosticsWidget::OnToggleServerClicked()
 	}
 
 	RefreshList();
+	return FReply::Handled();
+}
+
+FText SClaireonDiagnosticsWidget::GetProxyStateText() const
+{
+	const FClaireonModule& Module = FClaireonModule::Get();
+	const FClaireonProxyClient* Proxy = Module.GetProxyClient();
+	if (!Proxy)
+	{
+		return LOCTEXT("ProxyStateDirect", "Proxy: direct-connect mode (no proxy wiring)");
+	}
+
+	switch (Proxy->GetState())
+	{
+	case EClaireonProxyState::Unstarted:
+		return LOCTEXT("ProxyStateUnstarted", "Proxy: unstarted");
+	case EClaireonProxyState::RetryRegister:
+		return LOCTEXT("ProxyStateRetrying", "Proxy: retrying registration");
+	case EClaireonProxyState::Registered:
+		return LOCTEXT("ProxyStateRegistered", "Proxy: registered");
+	case EClaireonProxyState::Failed:
+		return LOCTEXT("ProxyStateFailed", "Proxy: registration failed -- click Reconnect to retry");
+	}
+	return FText::GetEmpty();
+}
+
+EVisibility SClaireonDiagnosticsWidget::GetReconnectButtonVisibility() const
+{
+	const FClaireonModule& Module = FClaireonModule::Get();
+	const FClaireonProxyClient* Proxy = Module.GetProxyClient();
+	if (!Proxy)
+	{
+		return EVisibility::Collapsed;
+	}
+	return Proxy->GetState() == EClaireonProxyState::Failed
+		? EVisibility::Visible
+		: EVisibility::Collapsed;
+}
+
+FReply SClaireonDiagnosticsWidget::OnReconnectClicked()
+{
+	FClaireonModule& Module = FClaireonModule::Get();
+	if (FClaireonProxyClient* Proxy = Module.GetProxyClient())
+	{
+		Proxy->RequestReconnect();
+	}
 	return FReply::Handled();
 }
 

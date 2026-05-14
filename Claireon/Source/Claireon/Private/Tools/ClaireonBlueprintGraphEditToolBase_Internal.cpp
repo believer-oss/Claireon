@@ -363,14 +363,3 @@ namespace ClaireonBPGraphInternal
 		return Node;
 	}
 }
-
-// [T2] Forwarder for the single cross-TU accessor used by other tools (dump tool).
-// The alias table itself lives in this TU above; this forwarder keeps the legacy
-// ClaireonBlueprintHelpers::GetNodeTypeAliasForClass call site working.
-namespace ClaireonBlueprintHelpers
-{
-	FString GetNodeTypeAliasForClass(const UClass* NodeClass)
-	{
-		return ::ClaireonNodeTypeAlias::GetAliasForNodeClass(NodeClass);
-	}
-}

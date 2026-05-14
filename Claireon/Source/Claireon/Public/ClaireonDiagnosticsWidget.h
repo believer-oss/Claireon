@@ -4,6 +4,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Layout/Visibility.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/Views/SListView.h"
 #include "Widgets/Layout/SWidgetSwitcher.h"
@@ -70,6 +71,15 @@ private:
 
 	/** Get the toggle button text */
 	FText GetToggleButtonText() const;
+
+	/** Single-line proxy state ("Unstarted" / "Retrying" / "Registered" / "Failed"). */
+	FText GetProxyStateText() const;
+
+	/** Visibility hook for the Reconnect button (only when ProxyState is Failed). */
+	EVisibility GetReconnectButtonVisibility() const;
+
+	/** Handle click on the Reconnect button (proxy RetryRegister kick-off). */
+	FReply OnReconnectClicked();
 
 	/** Handle log entry selection for detail view */
 	void OnLogEntrySelected(TSharedPtr<FMCPDiagnosticsEntry> SelectedItem, ESelectInfo::Type SelectInfo);

@@ -218,7 +218,7 @@ FStateTreeTransition* ClaireonStateTreeHelpers::FindTransitionById(UStateTreeSta
 
 namespace
 {
-	FString FormatPropertyValue(const FProperty* Prop, const void* ValuePtr)
+	FString StateTreeHelpers_FormatPropertyValue(const FProperty* Prop, const void* ValuePtr)
 	{
 		if (!Prop || !ValuePtr)
 		{
@@ -237,7 +237,7 @@ namespace
 		return ValueStr;
 	}
 
-	FString FormatStructProperties(const UScriptStruct* Struct, const void* StructData, int32 MaxProps = 10)
+	FString StateTreeHelpers_FormatStructProperties(const UScriptStruct* Struct, const void* StructData, int32 MaxProps = 10)
 	{
 		if (!Struct || !StructData)
 		{
@@ -257,7 +257,7 @@ namespace
 
 			const FProperty* Prop = *It;
 			const void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(StructData);
-			FString ValueStr = FormatPropertyValue(Prop, ValuePtr);
+			FString ValueStr = StateTreeHelpers_FormatPropertyValue(Prop, ValuePtr);
 
 			if (!Result.IsEmpty())
 			{
@@ -270,7 +270,7 @@ namespace
 		return Result;
 	}
 
-	FString GetStateTypeName(EStateTreeStateType Type)
+	FString StateTreeHelpers_GetStateTypeName(EStateTreeStateType Type)
 	{
 		switch (Type)
 		{
@@ -289,7 +289,7 @@ namespace
 		}
 	}
 
-	FString GetSelectionBehaviorName(EStateTreeStateSelectionBehavior Behavior)
+	FString StateTreeHelpers_GetSelectionBehaviorName(EStateTreeStateSelectionBehavior Behavior)
 	{
 		switch (Behavior)
 		{
@@ -312,7 +312,7 @@ namespace
 		}
 	}
 
-	FString GetTriggerName(EStateTreeTransitionTrigger Trigger)
+	FString StateTreeHelpers_GetTriggerName(EStateTreeTransitionTrigger Trigger)
 	{
 		if (EnumHasAllFlags(Trigger, EStateTreeTransitionTrigger::OnStateCompleted))
 		{
@@ -337,7 +337,7 @@ namespace
 		return TEXT("None");
 	}
 
-	FString GetTransitionTypeName(EStateTreeTransitionType Type)
+	FString StateTreeHelpers_GetTransitionTypeName(EStateTreeTransitionType Type)
 	{
 		switch (Type)
 		{
@@ -358,7 +358,7 @@ namespace
 		}
 	}
 
-	FString GetPriorityName(EStateTreeTransitionPriority Priority)
+	FString StateTreeHelpers_GetPriorityName(EStateTreeTransitionPriority Priority)
 	{
 		switch (Priority)
 		{
@@ -379,7 +379,7 @@ namespace
 		}
 	}
 
-	void FormatStateRecursive(UStateTreeState* State, FString& Output, const FString& Indent, bool bIsLast, const FGuid* FocusStateId)
+	void StateTreeHelpers_FormatStateRecursive(UStateTreeState* State, FString& Output, const FString& Indent, bool bIsLast, const FGuid* FocusStateId)
 	{
 		if (!State)
 		{
@@ -402,8 +402,8 @@ namespace
 			*Indent, *Connector,
 			*State->ID.ToString(EGuidFormats::DigitsWithHyphensLower),
 			*State->Name.ToString(),
-			*GetStateTypeName(State->Type),
-			*GetSelectionBehaviorName(State->SelectionBehavior),
+			*StateTreeHelpers_GetStateTypeName(State->Type),
+			*StateTreeHelpers_GetSelectionBehaviorName(State->SelectionBehavior),
 			*EnabledStr, *FocusMarker);
 
 		// Enter conditions
@@ -446,7 +446,7 @@ namespace
 			Output += FString::Printf(TEXT("%sTransitions:\n"), *ChildIndent);
 			for (const FStateTreeTransition& Trans : State->Transitions)
 			{
-				FString TriggerStr = GetTriggerName(Trans.Trigger);
+				FString TriggerStr = StateTreeHelpers_GetTriggerName(Trans.Trigger);
 
 #if WITH_EDITORONLY_DATA
 				// Add event tag info if it's an event trigger
@@ -462,7 +462,7 @@ namespace
 				}
 				else
 				{
-					TargetStr = GetTransitionTypeName(Trans.State.LinkType);
+					TargetStr = StateTreeHelpers_GetTransitionTypeName(Trans.State.LinkType);
 				}
 #else
 				FString TargetStr = TEXT("(runtime only)");
@@ -471,7 +471,7 @@ namespace
 				FString PriorityStr;
 				if (Trans.Priority != EStateTreeTransitionPriority::Normal)
 				{
-					PriorityStr = FString::Printf(TEXT(" (Priority: %s)"), *GetPriorityName(Trans.Priority));
+					PriorityStr = FString::Printf(TEXT(" (Priority: %s)"), *StateTreeHelpers_GetPriorityName(Trans.Priority));
 				}
 
 				FString EnabledTransStr = Trans.bTransitionEnabled ? TEXT("") : TEXT(" [DISABLED]");
@@ -493,7 +493,7 @@ namespace
 		for (int32 i = 0; i < State->Children.Num(); i++)
 		{
 			bool bChildIsLast = (i == State->Children.Num() - 1);
-			FormatStateRecursive(State->Children[i], Output, ChildIndent, bChildIsLast, FocusStateId);
+			StateTreeHelpers_FormatStateRecursive(State->Children[i], Output, ChildIndent, bChildIsLast, FocusStateId);
 		}
 	}
 } // namespace
@@ -513,7 +513,7 @@ FString ClaireonStateTreeHelpers::FormatEditorNode(const FStateTreeEditorNode& N
 	FString PropsStr;
 	if (NodeStruct)
 	{
-		PropsStr = FormatStructProperties(NodeStruct, Node.Node.GetMemory());
+		PropsStr = StateTreeHelpers_FormatStructProperties(NodeStruct, Node.Node.GetMemory());
 	}
 
 	// Format instance data properties
@@ -523,7 +523,7 @@ FString ClaireonStateTreeHelpers::FormatEditorNode(const FStateTreeEditorNode& N
 		const UScriptStruct* InstanceStruct = Node.Instance.GetScriptStruct();
 		if (InstanceStruct)
 		{
-			FString InstanceProps = FormatStructProperties(InstanceStruct, Node.Instance.GetMemory());
+			FString InstanceProps = StateTreeHelpers_FormatStructProperties(InstanceStruct, Node.Instance.GetMemory());
 			if (!InstanceProps.IsEmpty())
 			{
 				InstanceStr = FString::Printf(TEXT(" Instance(%s)"), *InstanceProps);
@@ -546,7 +546,7 @@ FString ClaireonStateTreeHelpers::FormatEditorNode(const FStateTreeEditorNode& N
 			if (Prop->GetOwnerClass() == UObject::StaticClass())
 				continue;
 			const void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Node.InstanceObject);
-			FString ValueStr = FormatPropertyValue(Prop, ValuePtr);
+			FString ValueStr = StateTreeHelpers_FormatPropertyValue(Prop, ValuePtr);
 			if (!ObjProps.IsEmpty())
 				ObjProps += TEXT(", ");
 			ObjProps += FString::Printf(TEXT("%s=%s"), *Prop->GetName(), *ValueStr);
@@ -579,7 +579,7 @@ FString ClaireonStateTreeHelpers::FormatStateArea(UStateTreeState* State)
 	}
 
 	FString Output;
-	FormatStateRecursive(State, Output, TEXT(""), true, nullptr);
+	StateTreeHelpers_FormatStateRecursive(State, Output, TEXT(""), true, nullptr);
 	return Output;
 }
 
@@ -664,7 +664,7 @@ FString ClaireonStateTreeHelpers::FormatStateTreeStructure(
 		for (int32 i = 0; i < EditorData->SubTrees.Num(); i++)
 		{
 			bool bIsLast = (i == EditorData->SubTrees.Num() - 1);
-			FormatStateRecursive(EditorData->SubTrees[i], Output, TEXT(""), bIsLast, FocusStateId);
+			StateTreeHelpers_FormatStateRecursive(EditorData->SubTrees[i], Output, TEXT(""), bIsLast, FocusStateId);
 		}
 		Output += TEXT("\n");
 	}
@@ -866,7 +866,7 @@ bool ClaireonStateTreeHelpers::SetStateProperty(
 	}
 	if (PropertyName.StartsWith(TEXT("Parameters.Parameters")))
 	{
-		OutError = TEXT("Use claireon.statetree_apply_spec for Parameters bag mutation. Direct FInstancedPropertyBag writes are not supported in v1.");
+		OutError = TEXT("Use statetree_apply_spec for Parameters bag mutation. Direct FInstancedPropertyBag writes are not supported in v1.");
 		return false;
 	}
 
@@ -919,7 +919,7 @@ bool ClaireonStateTreeHelpers::SetTransitionProperty(
 	{
 		if (PropertyName == Excluded || PropertyName.StartsWith(Excluded + TEXT(".")))
 		{
-			OutError = FString::Printf(TEXT("Use claireon.statetree_modify_transition for '%s' mutation."), *PropertyName);
+			OutError = FString::Printf(TEXT("Use statetree_modify_transition for '%s' mutation."), *PropertyName);
 			return false;
 		}
 	}

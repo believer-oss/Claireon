@@ -15,7 +15,6 @@
  * Any change to a value here MUST be reflected in claireon_proxy.py, and the
  * stage/commit making the change MUST mention the sync.
  *
- * See ALWAYS_ON_MCP_PROXY notes in the repository top-level docs.
  *   - ALWAYS_ON_MCP_PROXY_PROTOCOL.md  (wire contract)
  *   - ALWAYS_ON_MCP_PROXY_CPP.md       (C++ plugin spec)
  *   - ALWAYS_ON_MCP_PROXY_PYTHON.md    (Python proxy spec)

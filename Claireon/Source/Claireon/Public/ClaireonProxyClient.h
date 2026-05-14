@@ -10,7 +10,6 @@
 /**
  * Proxy registration lifecycle state. Driven by the heartbeat ticker after
  * StartServer hands the client to RetryRegister; transitions are documented
- * in the multi-worktree-proxy architecture notes.
  */
 enum class EClaireonProxyState : uint8
 {
@@ -103,10 +102,8 @@ struct FHeartbeatResult
  * calls. Claude Code connects directly to the proxy on its MCP_PORT; the
  * proxy in turn MCP-clients back into the editor on editor_mcp_port.
  *
- * See the proxy C++ design notes for the
  * current implementation contract. The next-iteration design (singleton
  * proxy serving all worktrees, port-as-lock, editor reconnect on register
- * failure) is in the multi-worktree-proxy design proposal.
  */
 class FClaireonProxyClient
 {
