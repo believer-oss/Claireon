@@ -3,7 +3,7 @@
 
 // Regression tests for blueprint_apply_graph -- in particular, that
 // CallFunction nodes created through the batch path populate their pins
-// correctly.  See work item #0000 and 6480_FRACTURE.md for background.
+// correctly.
 
 #if WITH_UNTESTED
 
@@ -156,11 +156,10 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, KismetSystemLibrary_PrintSt
 }
 
 // ============================================================================
-// AsyncAction auto-pick -- card #0000 repro.  Pre-fix this comes through as a
-// plain UK2Node_CallFunction missing the BlueprintAssignable OnComplete exec
-// pin.  Post-fix the helper picks UK2Node_AsyncAction, the call site calls
-// InitializeProxyFromFunction, and AllocateDefaultPins emits the delegate
-// exec pins from the proxy class.
+// AsyncAction auto-pick. The helper picks UK2Node_AsyncAction, the call site
+// calls InitializeProxyFromFunction, and AllocateDefaultPins emits the
+// delegate exec pins from the proxy class. A plain UK2Node_CallFunction would
+// miss the BlueprintAssignable OnComplete exec pin.
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins,

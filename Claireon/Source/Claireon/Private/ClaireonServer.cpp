@@ -35,13 +35,12 @@
 
 static constexpr uint32 MaxPortRetries = 10;
 
-// Tools exposed directly via MCP tools/list / tools/call. The MCP surface
-// is exactly two meta-tools: tool_search and python_execute. Every other
-// registered tool (including the transaction_* family that was previously
-// exempted under commit 2f04bc55a9 on 2026-04-10) is reachable only via
-// the claireon.<tool>(...) Python attribute namespace inside python_execute.
-// The proxy advertises the same two bare names; the editor and proxy must
-// stay in lock-step on this set.
+// Tools exposed directly via MCP tools/list / tools/call. The MCP surface is
+// exactly two meta-tools: tool_search and python_execute. Every other
+// registered tool (including the transaction_* family) is reachable only via
+// the claireon.<tool>(...) Python attribute namespace inside python_execute. The
+// proxy advertises the same two bare names; the editor and proxy must stay in
+// lock-step on this set.
 static const TSet<FString> MCPVisibleTools = {
 	TEXT("tool_search"),
 	TEXT("python_execute"),
@@ -937,8 +936,8 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsCall(const FMCPRequestContex
 	}
 
 	// Drain deferred world-transition actions (map open, PIE start/stop, etc.).
-	// These were previously only dispatched from ExecutePython's post-execution
-	// hook, but MCP direct tool calls bypass Python entirely.
+	// MCP direct tool calls bypass Python, so this dispatch happens here as well
+	// as in ExecutePython's post-execution hook.
 	if (FClaireonBridge::HasDeferredActions())
 	{
 		// Auto-save before world-transition actions (map load, PIE, etc.)

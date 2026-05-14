@@ -12,7 +12,7 @@
 #include "PackageTools.h"
 
 // ---------------------------------------------------------------------------
-// Tests for FClaireonBridge::EnsureNoLeakedWorlds + abort accumulator (#0000).
+// Tests for FClaireonBridge::EnsureNoLeakedWorlds + abort accumulator.
 //
 // Coverage:
 //  - Case 1: With only the editor world loaded, EnsureNoLeakedWorlds returns

@@ -113,9 +113,9 @@ UClass* FClaireonSequenceHelpers::ResolveTrackClass(const FString& TypeName)
 	{
 		return UMovieSceneFloatTrack::StaticClass();
 	}
-	// Widget-common track types (#0000 stage 002). camera_cut is intentionally not
-	// gated here -- UMovieScene::AddTrack routes through the owning sequence's
-	// ETrackSupport callback, which rejects camera_cut on UWidgetAnimation.
+	// Widget-common track types. camera_cut is intentionally not gated here --
+	// UMovieScene::AddTrack routes through the owning sequence's ETrackSupport
+	// callback, which rejects camera_cut on UWidgetAnimation.
 	if (TypeName.Equals(TEXT("color"), ESearchCase::IgnoreCase))
 	{
 		return UMovieSceneColorTrack::StaticClass();

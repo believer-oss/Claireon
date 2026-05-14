@@ -37,13 +37,13 @@ THIRD_PARTY_INCLUDES_END
 TAtomic<int32> ClaireonTool_ExecutePython::TempFileCounter(0);
 
 // ---------------------------------------------------------------------------
-// Tool-catalog nearest-string bindings (D3 / #0000).
+// Tool-catalog nearest-string bindings.
 //
-// Replaces the deleted FTS5 + semantic hybrid matcher.  Exposed to Python as
-// claireon._tool_catalog_build(entries_json_str) / claireon._tool_catalog_nearest
-// (query_str, max_results_int).  Registered into the 'unreal' module dict
-// alongside _mcp_call_tool (see FClaireonBridge::RegisterBridgeFunctions), then
-// aliased onto the claireon proxy in the script prefix below.
+// Exposed to Python as claireon._tool_catalog_build(entries_json_str) /
+// claireon._tool_catalog_nearest(query_str, max_results_int). Registered into the
+// 'unreal' module dict alongside _mcp_call_tool (see
+// FClaireonBridge::RegisterBridgeFunctions), then aliased onto the claireon proxy
+// in the script prefix below.
 // ---------------------------------------------------------------------------
 
 namespace ClaireonToolCatalogBindings
@@ -396,7 +396,7 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	}
 
 	// Step 7c: Drain any deferred-action aborts (e.g. leaked-World
-	// guard refused a map transition). [RESOLVED] D3 of #0000.
+	// guard refused a map transition).
 	TArray<FString> DeferredAborts = FClaireonBridge::DrainDeferredActionAborts();
 
 	// Step 8: Capture logs (Python stdout/stderr and engine UE_LOG)
@@ -470,9 +470,8 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	}
 	else if (DeferredAborts.Num() > 0)
 	{
-		// [RESOLVED] D3 of #0000: a deferred world-transition action was
-		// refused by the leaked-World guard. python_execute MUST NOT
-		// report success for this case.
+		// A deferred world-transition action was refused by the leaked-World
+		// guard. python_execute MUST NOT report success for this case.
 		FinalResult.bIsError = true;
 		const FString Joined = FString::Join(DeferredAborts, TEXT("\n"));
 		FinalResult.ErrorMessage = TEXT("Deferred action aborted: ") + Joined;

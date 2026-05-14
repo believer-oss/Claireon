@@ -72,7 +72,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 	// =========================================================================
 	// Determine effective response mode
 	// =========================================================================
-	// Legacy: bSuppressOutput maps to "status"
+	// bSuppressOutput maps to "status"
 	FString EffectiveMode = Data->ResponseMode;
 	if (Data->bSuppressOutput && EffectiveMode == TEXT("changed"))
 	{
@@ -89,7 +89,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 	// =========================================================================
 	// Structured response data (session_id contract: callers read Data.session_id
 	// instead of grepping the Summary's "Session ID:" line).
-	// See CLAIREON_BP_SESSION_ID_PROPOSAL.md (#0000).
+	// See CLAIREON_BP_SESSION_ID_PROPOSAL.md.
 	// =========================================================================
 	TSharedPtr<FJsonObject> ResponseData = MakeShared<FJsonObject>();
 	ResponseData->SetStringField(TEXT("session_id"), SessionId);
@@ -103,7 +103,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 	// Nudge toward explicit open/close discipline after sustained asset_path use.
 	// Threshold: > 5 consecutive auto-opens. Cadence: first hint at call 6, then
 	// every 5 past that (11, 16, ...). Counter resets whenever the caller passes
-	// session_id. See CLAIREON_BP_SESSION_ID_PROPOSAL.md (#0000).
+	// session_id. See CLAIREON_BP_SESSION_ID_PROPOSAL.md.
 	// =========================================================================
 	FString SessionHintSummaryTag;
 	if (Data->ConsecutiveAssetPathCalls > 5 && Data->ConsecutiveAssetPathCalls % 5 == 1)

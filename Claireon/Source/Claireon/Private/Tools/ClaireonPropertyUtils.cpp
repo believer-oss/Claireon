@@ -598,7 +598,7 @@ UObject* CreateInstancedSubObject(UObject* Outer, UClass* SubObjectClass, const 
 }
 
 // ---------------------------------------------------------------------------
-// Inline (EditInline / Instanced) sub-object helpers (#0000)
+// Inline (EditInline / Instanced) sub-object helpers
 // ---------------------------------------------------------------------------
 
 FProperty* ResolvePropertyByPath(

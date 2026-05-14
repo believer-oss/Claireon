@@ -19,9 +19,9 @@
 #include "Tools/ClaireonSequenceHelpers.h"
 
 // ============================================================================
-// #0000 widget-animation Apply handlers -- free functions used by the per-op
-// ClaireonWidgetBPTool_* tools (stages 004-011) and by FClaireonSpecApplicator_WidgetBP
-// (stage 015). Single definition per TU.
+// Widget-animation Apply handlers -- free functions used by the per-op
+// ClaireonWidgetBPTool_* tools and by FClaireonSpecApplicator_WidgetBP. Single
+// definition per TU.
 // ============================================================================
 
 UWidgetAnimation* FindWidgetAnimationByName(UWidgetBlueprint* WBP, const FString& AnimationName)

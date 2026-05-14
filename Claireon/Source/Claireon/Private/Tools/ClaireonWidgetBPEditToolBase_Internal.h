@@ -4,11 +4,9 @@
 #pragma once
 
 // Internal helpers shared across the decomposed ClaireonWidgetBPTool_*.cpp
-// translation units. Previously these lived as file-local (static) helpers
-// inside ClaireonWidgetBPEditToolBase.cpp. Stage 024 extracted each per-operation
-// body into its own decomposed cpp; to keep those extracted bodies compiling
-// without duplication, the MVVM helpers were promoted to this internal header
-// and a single companion translation unit (ClaireonWidgetBPEditToolBase_Internal.cpp).
+// translation units. The MVVM helpers live here and in a single companion
+// translation unit (ClaireonWidgetBPEditToolBase_Internal.cpp) so the
+// decomposed bodies compile without duplication.
 //
 // Not exported via CLAIREON_API -- intra-module only.
 

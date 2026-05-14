@@ -1,23 +1,22 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Regression test for #0000 finalization: every registered tool must survive
-// the Python bootstrap and surface in sys.modules['<namespace>'].__all__.
-// If a tool's GetName() returns something that is not a valid Python
-// identifier, the bootstrap's `def {short_name}` codegen would raise
-// SyntaxError and the entry would be silently dropped from __all__/__tools__
-// (or, with strict-validation, rejected upstream and never reach the catalog).
+// Regression test: every registered tool must survive the Python bootstrap and
+// surface in sys.modules['<namespace>'].__all__. If a tool's GetName() returns
+// something that is not a valid Python identifier, the bootstrap's
+// `def {short_name}` codegen would raise SyntaxError and the entry would be
+// silently dropped from __all__/__tools__ (or, with strict-validation,
+// rejected upstream and never reach the catalog).
 //
 // This test asserts, for every namespace observed in the registry:
 //   1. len(<ns>.__tools__) == len(<ns>.__all__) (per-entry parity).
 //   2. The Python-visible per-namespace tool count matches the C++ count of
 //      registered tools in that namespace (minus the python_execute recursion
 //      sink, which the bootstrap intentionally skips for the claireon ns).
-// #0000 would have been caught by assertion (2): the bare-prefix mass rename
-// left ~95 tools returning "claireon.<x>" from GetName(); the bootstrap would
-// either drop them (SyntaxError) or, post-#0000, reject them upstream. In
-// either case the Python-visible count would lag the registered count, and
-// this test would fail.
+// Assertion (2) catches the bare-prefix rename hazard: tools returning
+// "claireon.<x>" from GetName() would either be dropped (SyntaxError) or be
+// rejected by strict-validation, making the Python-visible count lag the
+// registered count.
 
 #if WITH_UNTESTED
 
@@ -111,11 +110,10 @@ UNTEST_UNIT_OPTS(Claireon, BridgeBootstrapCompleteness, ClaireonModuleAllMatches
 	}
 
 	// No tool should ever have a name that the bootstrap would reject -- if
-	// any do, the rename is incomplete (this is the #0000 regression itself).
+	// any do, the bare-name rename is incomplete.
 	UNTEST_EXPECT_EQ(RejectableCount, 0);
 
-	// Force a rebuild to make the test independent of when the module was
-	// previously seeded.
+	// Force a rebuild to make the test independent of any earlier seeding.
 	FClaireonBridge::EnsureRegistered();
 	FClaireonBridge::RebuildClaireonModule();
 

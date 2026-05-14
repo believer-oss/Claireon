@@ -1,7 +1,7 @@
 ﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 //
-// Spec tests for statetree_get_schema (#0000 / F3).
+// Spec tests for statetree_get_schema.
 // Smoke-level: verify the tool surface registers cleanly. Asset-backed
 // integration tests are exercised manually via the editor.
 

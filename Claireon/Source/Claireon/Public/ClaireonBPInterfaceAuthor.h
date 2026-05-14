@@ -16,9 +16,8 @@ class UBlueprint;
  * RemoveInterface, mark the Blueprint structurally modified, and auto-compile
  * via FKismetEditorUtilities::CompileBlueprint.
  *
- * Introduced for #0000 stage 02 (BP dispatcher add_interface / remove_interface).
  * The AnimGraph interface tools currently do not auto-compile; migrating them
- * onto this helper is a mechanical follow-up and out of scope for #0000.
+ * onto this helper is a mechanical follow-up.
  */
 namespace ClaireonBPInterfaceAuthor
 {

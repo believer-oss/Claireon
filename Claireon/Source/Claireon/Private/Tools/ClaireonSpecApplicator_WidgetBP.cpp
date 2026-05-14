@@ -38,8 +38,8 @@ bool FClaireonSpecApplicator_WidgetBP::ValidateToolSpec(const TSharedPtr<FJsonOb
 	const TArray<TSharedPtr<FJsonValue>>* AnimationsArray = nullptr;
 	const bool bHasAnimations = Spec->TryGetArrayField(TEXT("animations"), AnimationsArray) && AnimationsArray && AnimationsArray->Num() > 0;
 
-	// Relaxation for #0000: accept specs that have animations[] even without widgets[]
-	// so animation-only specs can run against an already-existing WBP.
+	// Accept specs that have animations[] even without widgets[] so animation-only
+	// specs can run against an already-existing WBP.
 	if (!bHasWidgets && !bHasAnimations)
 	{
 		OutErrors.Add(TEXT("WidgetBP spec must contain a non-empty 'widgets' or 'animations' array"));
@@ -392,7 +392,7 @@ bool FClaireonSpecApplicator_WidgetBP::ApplyPass2_WireRelationships(const FStrin
 		}
 	}
 
-	// --- #0000 animations[] branch ---
+	// --- animations[] branch ---
 	const TArray<TSharedPtr<FJsonValue>>* AnimationsArray = nullptr;
 	if (Spec->TryGetArrayField(TEXT("animations"), AnimationsArray) && AnimationsArray)
 	{

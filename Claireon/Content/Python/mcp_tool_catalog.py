@@ -1,4 +1,4 @@
-"""Fuzzy tool catalog backed by the C++ nearest-string matcher (#0000).
+"""Fuzzy tool catalog backed by the C++ nearest-string matcher.
 
 This harness is a thin shim around two C++ bindings:
     claireon._tool_catalog_build(entries_json: str) -> None

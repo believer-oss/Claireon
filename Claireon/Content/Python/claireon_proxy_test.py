@@ -1139,7 +1139,7 @@ class TestProxyRegPortSync(unittest.TestCase):
         )
 
 
-# ---- #0000 cross-runtime parity helpers ----
+# ---- Cross-runtime parity helpers ----
 #
 # Inlined copy of Resolve-WorktreeFinalPath + Get-ProxyDefaultMcpPort from
 # Initialize-WorktreeMCP.ps1. The test owns its own copy so it can run
@@ -1280,7 +1280,7 @@ def _ps_get_default_mcp_port(worktree_root: str) -> int:
     "Windows + powershell.exe required for cross-runtime parity test",
 )
 class TestPortHashParityWithPowerShell(unittest.TestCase):
-    """Cross-runtime parity for derive_default_mcp_port (#0000).
+    """Cross-runtime parity for derive_default_mcp_port.
 
     Asserts:
       1) PS-side and Py-side hashes agree for a fixed corpus of literal

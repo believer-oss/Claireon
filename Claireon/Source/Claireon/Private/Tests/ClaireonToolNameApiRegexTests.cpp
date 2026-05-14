@@ -1,11 +1,10 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Anthropic API tool-name regex compliance test (#0000, F08 item 7).
+// Anthropic API tool-name regex compliance test.
 // Iterates every tool registered on the live MCP server and asserts each
-// GetName() matches the wire regex `^[a-zA-Z0-9_-]{1,128}$`. After the
-// claireon-name-sanitization migration the bare names must round-trip to the
-// Anthropic API without any sanitisation layer.
+// GetName() matches the wire regex `^[a-zA-Z0-9_-]{1,128}$`. Bare names must
+// round-trip to the Anthropic API without any sanitisation layer.
 
 #if WITH_UNTESTED
 

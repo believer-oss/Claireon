@@ -4,12 +4,9 @@
 #pragma once
 
 // Internal helpers shared across the decomposed ClaireonBlueprintGraphTool_*.cpp
-// translation units. Previously these lived as file-local (anonymous namespace
-// or static) helpers inside ClaireonBlueprintGraphEditToolBase.cpp. Stage 023
-// extracted each per-operation body into its own decomposed cpp; to keep those
-// extracted bodies compiling without duplication, the helpers were promoted
-// to this internal header and a single companion translation unit
-// (ClaireonBlueprintGraphEditToolBase_Internal.cpp).
+// translation units. The helpers live here and in a single companion
+// translation unit (ClaireonBlueprintGraphEditToolBase_Internal.cpp) so the
+// decomposed bodies compile without duplication.
 //
 // Not exported via CLAIREON_API -- intra-module only.
 

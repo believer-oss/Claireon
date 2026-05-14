@@ -140,7 +140,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 		// carry their UFunction signature in PinSubCategoryMemberReference, not in
 		// PinSubCategoryObject). Emitting signature_function closes the round-trip
 		// contract with blueprint_edit_graph[add_variable] on the target side; see
-		// ClaireonBlueprintHelpers::ResolveSignatureFunction. #0000
+		// ClaireonBlueprintHelpers::ResolveSignatureFunction.
 		if (Var.VarType.PinCategory == UEdGraphSchema_K2::PC_MCDelegate ||
 			Var.VarType.PinCategory == UEdGraphSchema_K2::PC_Delegate)
 		{
@@ -303,7 +303,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 	// generated class with super included; skip those declared on this BP
 	// (already emitted above). Filter to Blueprint-visible callables/events.
 	// Inherited entries omit rich return_type/parameters detail (parameters: [],
-	// return_type: "void") to keep this PR's scope contained -- see #0000.
+	// return_type: "void").
 	if (bIncludeInherited && Blueprint->GeneratedClass)
 	{
 		for (TFieldIterator<UFunction> FuncIt(Blueprint->GeneratedClass); FuncIt; ++FuncIt)
@@ -345,7 +345,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 		}
 	}
 
-	// Build components array via a three-source merged walk (#0000):
+	// Build components array via a three-source merged walk:
 	//   A) This BP's SCS roots (always)                       -> is_inherited=false
 	//   B) Ancestor BP SCS chains (only when include_inherited) -> is_inherited=true
 	//   C) Native inherited subobjects (actor-derived only)    -> is_inherited=true
@@ -593,7 +593,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 
 	// Extract asset name for summary. When include_inherited=true and there is
 	// at least one inherited entry of a given kind, append " (N inherited)" to
-	// that count (#0000). Suffix is omitted when the count is zero.
+	// that count. Suffix is omitted when the count is zero.
 	auto MakeCountFragment = [](int32 Total, int32 Inherited, const TCHAR* Label) -> FString
 	{
 		if (Inherited > 0)

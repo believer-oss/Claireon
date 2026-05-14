@@ -1,7 +1,7 @@
 ﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 //
-// Spec tests for statetree_list_binding_sources (#0000 / F5).
+// Spec tests for statetree_list_binding_sources.
 // Surface-level: real walks require a loaded asset, exercised manually.
 
 #if WITH_UNTESTED

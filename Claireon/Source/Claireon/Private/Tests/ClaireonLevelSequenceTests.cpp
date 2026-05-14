@@ -93,7 +93,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_ResolveTrackClass, UNTEST_TIMEOUTMS
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("camera_cut")) == UMovieSceneCameraCutTrack::StaticClass());
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("float"))      == UMovieSceneFloatTrack::StaticClass());
 
-	// Widget-common track types (#0000 stage 002)
+	// Widget-common track types
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("color"))           == UMovieSceneColorTrack::StaticClass());
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("margin"))          == UMovieSceneMarginTrack::StaticClass());
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("2d_transform"))    == UMovieScene2DTransformTrack::StaticClass());

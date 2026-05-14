@@ -13,9 +13,7 @@ struct FMCPSessionClosedInfo;
  * Per-tool data for an active Level Sequence edit session.
  * Session lifecycle and locking are managed by FClaireonSessionManager.
  *
- * Struct previously lived in ClaireonTool_SequenceEdit.h; moved here so the
- * decomposed level_sequence_* tools can share it without depending on
- * the deleted monolith.
+ * Lives here so the decomposed level_sequence_* tools can share it.
  */
 struct FSequenceEditToolData
 {

@@ -215,8 +215,8 @@ namespace ClaireonNameResolver
 		// Step 6.5: Domain-specific prefixes (when RequiredBaseClass is provided)
 		// Looks up the base class in the prefix map (e.g., "BTTaskNode" -> {"BTTask_"})
 		// and tries each prefix combined with the input, both as-is and with a
-		// leading "U" object prefix. This absorbs the per-domain prefix-walking
-		// that previously lived inline in callers (anim notify and BT helpers).
+		// leading "U" object prefix. This is the canonical home for per-domain
+		// prefix-walking (anim notify and BT helpers route through here).
 		if (FuzzyCandidates.Num() == 0 && RequiredBaseClass)
 		{
 			const TMap<FString, TArray<FString>>& PrefixMap = GetBaseClassPrefixMap();

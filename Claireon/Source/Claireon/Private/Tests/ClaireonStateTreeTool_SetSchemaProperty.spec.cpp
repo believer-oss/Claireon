@@ -1,7 +1,7 @@
 ﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 //
-// Spec tests for statetree_set_schema_property (#0000 / F4).
+// Spec tests for statetree_set_schema_property.
 // Surface-level: real schema mutation requires an open session + asset, exercised manually.
 
 #if WITH_UNTESTED

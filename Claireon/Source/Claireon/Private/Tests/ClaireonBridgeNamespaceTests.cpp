@@ -1,8 +1,7 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Regression tests for the multi-namespace bootstrap introduced by #0000
-// (Specs A/B/D/E). These tests pin:
+// Regression tests for the multi-namespace bootstrap. These tests pin:
 //   1. Bare-name routing via the default 'claireon' namespace.
 //   2. Custom-namespace routing (non-default).
 //   3. Mixed catalog (claireon + custom) with disjoint contents.
@@ -359,8 +358,8 @@ UNTEST_UNIT_OPTS(Claireon, BridgeNamespace, CrossNamespaceCollisionCoexists, UNT
 	}
 
 	// Two tools with the same short name in different namespaces. Note: the
-	// registry key is the bare name (post-#0000), so to coexist they need
-	// distinct registry keys. Use a discriminating prefix on one stub's
+	// registry key is the bare name, so to coexist they need distinct registry
+	// keys. Use a discriminating prefix on one stub's
 	// registry-side ToolName, but route to "foo" via the wire identity.
 	// Workaround: same short name but different namespace will collide on
 	// Server->RegisterTool's keying (Tools is keyed by GetName()). Skip the

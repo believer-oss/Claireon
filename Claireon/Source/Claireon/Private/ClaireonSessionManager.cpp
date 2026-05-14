@@ -29,9 +29,9 @@ FClaireonSessionManager::~FClaireonSessionManager()
 
 FMCPOpenSessionResult FClaireonSessionManager::OpenSession(const FString& AssetPath, const FString& ToolName, double InTimeoutMinutes)
 {
-	// Per Spec E (#0000): bare-name validation lives in the bridge bootstrap
+	// Bare-name validation lives in the bridge bootstrap
 	// (FClaireonBridge::BuildAndRunBootstrap, IsValidPyIdentifier). The session
-	// manager has no business policing tool naming; both forms are accepted.
+	// manager does not police tool naming; both forms are accepted.
 	const FString CanonicalPath = CanonicalizePath(AssetPath);
 	if (CanonicalPath.IsEmpty())
 	{
@@ -365,8 +365,8 @@ TArray<FMCPSessionClosedInfo> FClaireonSessionManager::CleanupExpiredInternal()
 
 FMCPOpenSessionResult FClaireonSessionManager::OpenEditorWideSession(const FString& ToolName, double InTimeoutMinutes)
 {
-	// Per Spec E (#0000): naming-contract validation belongs at bootstrap
-	// time, not session-manager time. Drop the legacy assert.
+	// Naming-contract validation belongs at bootstrap time, not session-manager
+	// time.
 	FScopeLock ScopeLock(&CriticalSection);
 	CleanupExpiredInternal();
 
