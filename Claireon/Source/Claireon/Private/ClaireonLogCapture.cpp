@@ -7,6 +7,18 @@
 FClaireonLogCapture::FClaireonLogCapture(ELogVerbosity::Type InMinVerbosity)
 	: MinVerbosity(InMinVerbosity)
 {
+	// Snapshot the denylist on construction — must be on the game thread so
+	// the UObject CDO read is safe. From here on, Serialize() reads only the
+	// snapshot and works from any thread (AnimBP compile warnings, async
+	// loading, etc. routinely fire from worker threads and would otherwise
+	// bypass the per-call IsInGameThread()-guarded settings lookup).
+	if (IsInGameThread())
+	{
+		if (const UClaireonSettings* Settings = UClaireonSettings::Get())
+		{
+			ExcludedCategoriesSnapshot = Settings->ExcludedEngineLogCategories;
+		}
+	}
 	GLog->AddOutputDevice(this);
 }
 
@@ -26,14 +38,10 @@ void FClaireonLogCapture::Serialize(const TCHAR* V, ELogVerbosity::Type Verbosit
 
 	FScopeLock Lock(&CaptureCS);
 
-	// Check excluded categories (only safe on game thread since UClaireonSettings::Get() uses GetDefault)
-	if (IsInGameThread())
+	// Use the snapshot taken at construction — works from any thread.
+	if (ExcludedCategoriesSnapshot.Contains(Category))
 	{
-		const UClaireonSettings* Settings = UClaireonSettings::Get();
-		if (Settings && Settings->ExcludedEngineLogCategories.Contains(Category))
-		{
-			return;
-		}
+		return;
 	}
 
 	// Enforce caps

@@ -53,4 +53,9 @@ private:
 	int32 TotalTextBytes = 0;
 	bool bCapExceeded = false;
 	mutable FCriticalSection CaptureCS;
+
+	// Snapshot of the user denylist at construction time. Captured here so
+	// that off-thread log emissions (AnimBP compile, async loading, etc.) can
+	// still be filtered without touching the UObject CDO from a worker thread.
+	TSet<FName> ExcludedCategoriesSnapshot;
 };
