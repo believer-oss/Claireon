@@ -155,6 +155,11 @@ IClaireonTool::FToolResult ClaireonTool_ChooserInspect::Execute(const TSharedPtr
 				}
 				TSharedPtr<FJsonObject> NestedObj = MakeShared<FJsonObject>();
 				NestedObj->SetStringField(TEXT("name"), Nested->GetName());
+				// Full object path — unique per subobject, required for
+				// disambiguating nested choosers that share a short name
+				// across asset families. Consumers look this up against
+				// the NestedChooser result's `chooser_path` field.
+				NestedObj->SetStringField(TEXT("path"), Nested->GetPathName());
 
 				int32 NestedColCount = Nested->ColumnsStructs.Num();
 				int32 NestedRowCount = Nested->ResultsStructs.Num();

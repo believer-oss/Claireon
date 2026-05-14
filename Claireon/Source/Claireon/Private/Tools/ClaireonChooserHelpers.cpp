@@ -837,9 +837,31 @@ TSharedPtr<FJsonObject> SerializeInstancedStructToJson(const FInstancedStruct& S
 	for (TFieldIterator<FProperty> It(ScriptStruct); It; ++It)
 	{
 		FProperty* Property = *It;
+		const uint8* PropMem = StructMemory + Property->GetOffset_ForInternal();
+
+		// Object / soft-object properties: ExportText's representation is
+		// fragile and can emit "None" for valid refs. Go directly to the
+		// pointer's path so downstream consumers get the real asset path
+		// (load-bearing for chooser OutputStruct cells whose Anim field
+		// is an FObjectPtr to an AnimSequence that the editor displays
+		// as the visible row asset).
+		if (const FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(Property))
+		{
+			UObject* Obj = ObjProp->GetObjectPropertyValue(PropMem);
+			Result->SetStringField(Property->GetName(),
+				Obj ? Obj->GetPathName() : TEXT("None"));
+			continue;
+		}
+		if (const FSoftObjectProperty* SoftProp = CastField<FSoftObjectProperty>(Property))
+		{
+			const FSoftObjectPtr& Soft = *reinterpret_cast<const FSoftObjectPtr*>(PropMem);
+			Result->SetStringField(Property->GetName(),
+				Soft.IsNull() ? TEXT("None") : Soft.ToString());
+			continue;
+		}
+
 		FString ValueStr;
-		Property->ExportText_Direct(ValueStr, StructMemory + Property->GetOffset_ForInternal(),
-			StructMemory + Property->GetOffset_ForInternal(), nullptr, PPF_None);
+		Property->ExportText_Direct(ValueStr, PropMem, PropMem, nullptr, PPF_None);
 		Result->SetStringField(Property->GetName(), ValueStr);
 	}
 
