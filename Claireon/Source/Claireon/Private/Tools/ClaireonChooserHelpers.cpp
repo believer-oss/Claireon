@@ -1362,6 +1362,50 @@ bool SetColumnCellValue(FInstancedStruct& ColumnStruct, int32 RowIndex,
 		return false;
 	}
 
+	// Object column (filter on object/soft-object input). Value field on FChooserObjectRowData is an
+	// FSoftObjectPath, so we just resolve the caller's path string and assign. Accept either a bare
+	// string (defaults Comparison=MatchEqual) or an object {value:"...", comparison:"MatchEqual|MatchNotEqual|MatchAny"}.
+	if (FObjectColumn* ObjCol = ColumnStruct.GetMutablePtr<FObjectColumn>())
+	{
+		if (!ObjCol->RowValues.IsValidIndex(RowIndex))
+		{
+			OutError = FString::Printf(TEXT("Row index %d out of bounds (column has %d rows)"), RowIndex, ObjCol->RowValues.Num());
+			return false;
+		}
+
+		FString AssetPath;
+		FString CompStr;
+		const TSharedPtr<FJsonObject>* ObjValue;
+		if (Value->TryGetObject(ObjValue))
+		{
+			(*ObjValue)->TryGetStringField(TEXT("value"), AssetPath);
+			(*ObjValue)->TryGetStringField(TEXT("comparison"), CompStr);
+		}
+		else if (!Value->TryGetString(AssetPath))
+		{
+			OutError = TEXT("Object column value must be an asset path string or object {\"value\": \"path\", \"comparison\": \"...\"}");
+			return false;
+		}
+
+		FChooserObjectRowData& Data = ObjCol->RowValues[RowIndex];
+		if (AssetPath.IsEmpty())
+		{
+			Data.Value.Reset();
+		}
+		else
+		{
+			auto ResolveResult = ClaireonPathResolver::Resolve(AssetPath);
+			Data.Value = ResolveResult.bSuccess
+				? FSoftObjectPath(ResolveResult.ResolvedPath.Path)
+				: FSoftObjectPath(AssetPath);
+		}
+
+		if (CompStr.Equals(TEXT("MatchNotEqual"), ESearchCase::IgnoreCase))      Data.Comparison = EObjectColumnCellValueComparison::MatchNotEqual;
+		else if (CompStr.Equals(TEXT("MatchAny"), ESearchCase::IgnoreCase))       Data.Comparison = EObjectColumnCellValueComparison::MatchAny;
+		else                                                                       Data.Comparison = EObjectColumnCellValueComparison::MatchEqual;
+		return true;
+	}
+
 	OutError = FString::Printf(TEXT("Unsupported column type for editing: %s"),
 		ColumnStruct.GetScriptStruct() ? *ColumnStruct.GetScriptStruct()->GetName() : TEXT("Unknown"));
 	return false;
