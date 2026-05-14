@@ -534,6 +534,11 @@
 #include "Tools/ClaireonChooserTool_RemoveColumn.h"
 #include "Tools/ClaireonTool_ProxyTableInspect.h"
 #include "Tools/ClaireonTool_ProxyAssetInspect.h"
+#include "Tools/ClaireonTool_EnumInspect.h"
+#include "Tools/ClaireonTool_ChooserWalk.h"
+#include "Tools/ClaireonTool_ChooserRowDescend.h"
+#include "Tools/ClaireonTool_ChooserFindRows.h"
+#include "Tools/ClaireonTool_ChooserTraverse.h"
 #include "Tools/ClaireonProxyTools_Lifecycle.h"
 // Decomposed proxyasset edit tools (#0000)
 #include "Tools/ClaireonProxyAssetTool_SetType.h"
@@ -1179,6 +1184,15 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	// Proxy Table / Proxy Asset MCP tools
 	Tools.Add(MakeShared<ClaireonTool_ProxyTableInspect>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyAssetInspect>());
+
+	// Enum introspection (UEnum / UUserDefinedEnum)
+	Tools.Add(MakeShared<ClaireonTool_EnumInspect>());
+
+	// Chooser tree-walk verbs (composable primitives, complement chooser_inspect)
+	Tools.Add(MakeShared<ClaireonTool_ChooserWalk>());
+	Tools.Add(MakeShared<ClaireonTool_ChooserRowDescend>());
+	Tools.Add(MakeShared<ClaireonTool_ChooserFindRows>());
+	Tools.Add(MakeShared<ClaireonTool_ChooserTraverse>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyTableCreate>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyTableDuplicate>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyAssetCreate>());

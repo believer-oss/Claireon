@@ -7,6 +7,19 @@ UClaireonSettings::UClaireonSettings()
 {
     DisabledPIENetModes.Add(TEXT("Standalone"));
     DisabledPIENetModes.Add(TEXT("ListenServer"));
+
+    // Default denylist for engine-log capture during tool execution. These
+    // categories spam Warnings on every asset load (AnimBP compiler hygiene,
+    // retarget setup nags, deprecated linker versions, etc.) without being
+    // relevant to the tool result. Overridable in project config / editor UI;
+    // user-set value REPLACES the entire set, not augments it.
+    ExcludedEngineLogCategories.Add(TEXT("LogBlueprint"));
+    ExcludedEngineLogCategories.Add(TEXT("LogAnimation"));
+    ExcludedEngineLogCategories.Add(TEXT("LogAnimationCompressionInternal"));
+    ExcludedEngineLogCategories.Add(TEXT("LogLinker"));
+    ExcludedEngineLogCategories.Add(TEXT("LogStreaming"));
+    ExcludedEngineLogCategories.Add(TEXT("LogSlate"));
+    ExcludedEngineLogCategories.Add(TEXT("LogChooser"));
 }
 
 const UClaireonSettings* UClaireonSettings::Get()

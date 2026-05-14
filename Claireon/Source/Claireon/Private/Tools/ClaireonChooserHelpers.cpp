@@ -576,12 +576,23 @@ TSharedPtr<FJsonValue> SerializeColumnCellValue(const FInstancedStruct& ColumnSt
 			const FChooserEnumRowData& Data = EnumCol->RowValues[RowIndex];
 			TSharedPtr<FJsonObject> EnumObj = MakeShared<FJsonObject>();
 			EnumObj->SetNumberField(TEXT("value"), Data.Value);
-#if WITH_EDITORONLY_DATA
 			if (!Data.ValueName.IsNone())
 			{
 				EnumObj->SetStringField(TEXT("value_name"), Data.ValueName.ToString());
 			}
-#endif
+			// Resolve display name from the bound UEnum so callers don't need a
+			// separate enum_inspect to humanise the row. UDEs cache "NewEnumeratorN"
+			// as ValueName; the display name is what the designer actually typed.
+			if (const UEnum* Enum = EnumCol->GetEnum())
+			{
+				EnumObj->SetStringField(TEXT("display_name"),
+					Enum->GetDisplayNameTextByValue(Data.Value).ToString());
+				if (Data.ValueName.IsNone())
+				{
+					EnumObj->SetStringField(TEXT("value_name"),
+						Enum->GetNameStringByValue(Data.Value));
+				}
+			}
 			FString CompStr;
 			switch (Data.Comparison)
 			{
@@ -642,22 +653,38 @@ TSharedPtr<FJsonValue> SerializeColumnCellValue(const FInstancedStruct& ColumnSt
 			}
 			else
 			{
-				// Decode bitmask to matched enum value names
+				// Decode the bitmask to enum entries. Convention (verified
+				// from FMultiEnumColumn::EditorTestFilter, which evaluates
+				// `1 << TestValue`): bit position == enum VALUE, not enum
+				// INDEX. The original code iterated by index and emitted
+				// GetNameStringByIndex(i) — works only when an enum's
+				// values are sequential 0..N-1, silently mis-decodes any
+				// sparse or flag enum (and skips bits past NumEnums).
 				TArray<TSharedPtr<FJsonValue>> MatchedValues;
-#if WITH_EDITOR
-				const UEnum* Enum = MultiEnumCol->GetEnum();
-				if (Enum)
+				TArray<TSharedPtr<FJsonValue>> MatchedEntries;
+				if (const UEnum* Enum = MultiEnumCol->GetEnum())
 				{
-					for (int32 i = 0; i < Enum->NumEnums() - 1; ++i)
+					const int32 NumEntries = Enum->NumEnums() - 1; // exclude _MAX
+					for (int32 i = 0; i < NumEntries; ++i)
 					{
-						if (Data.Value & (1 << i))
+						const int64 EnumValue = Enum->GetValueByIndex(i);
+						if (EnumValue < 0 || EnumValue >= 32)
 						{
-							MatchedValues.Add(MakeShared<FJsonValueString>(Enum->GetNameStringByIndex(i)));
+							continue;
+						}
+						if (Data.Value & (1u << static_cast<uint32>(EnumValue)))
+						{
+							MatchedValues.Add(MakeShared<FJsonValueString>(Enum->GetNameStringByValue(EnumValue)));
+							TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+							Entry->SetNumberField(TEXT("value"), static_cast<double>(EnumValue));
+							Entry->SetStringField(TEXT("name"), Enum->GetNameStringByValue(EnumValue));
+							Entry->SetStringField(TEXT("display_name"), Enum->GetDisplayNameTextByValue(EnumValue).ToString());
+							MatchedEntries.Add(MakeShared<FJsonValueObject>(Entry));
 						}
 					}
 				}
-#endif
 				MultiObj->SetArrayField(TEXT("matched_values"), MatchedValues);
+				MultiObj->SetArrayField(TEXT("matched_entries"), MatchedEntries);
 			}
 			return MakeShared<FJsonValueObject>(MultiObj);
 		}
@@ -706,12 +733,20 @@ TSharedPtr<FJsonValue> SerializeColumnCellValue(const FInstancedStruct& ColumnSt
 			const FChooserOutputEnumRowData& Data = OutEnumCol->RowValues[RowIndex];
 			TSharedPtr<FJsonObject> EnumObj = MakeShared<FJsonObject>();
 			EnumObj->SetNumberField(TEXT("value"), Data.Value);
-#if WITH_EDITORONLY_DATA
 			if (!Data.ValueName.IsNone())
 			{
 				EnumObj->SetStringField(TEXT("value_name"), Data.ValueName.ToString());
 			}
-#endif
+			if (const UEnum* Enum = OutEnumCol->GetEnum())
+			{
+				EnumObj->SetStringField(TEXT("display_name"),
+					Enum->GetDisplayNameTextByValue(Data.Value).ToString());
+				if (Data.ValueName.IsNone())
+				{
+					EnumObj->SetStringField(TEXT("value_name"),
+						Enum->GetNameStringByValue(Data.Value));
+				}
+			}
 			return MakeShared<FJsonValueObject>(EnumObj);
 		}
 	}
@@ -815,10 +850,244 @@ TSharedPtr<FJsonObject> SerializeRowResult(const FInstancedStruct& ResultStruct)
 // Generic FInstancedStruct Serialization
 // ============================================================================
 
+// ---------------------------------------------------------------------------
+// Recursive property serialization
+// ---------------------------------------------------------------------------
+//
+// SerializePropertyToJsonValue is the type-aware primitive used everywhere
+// chooser/proxy-table content surfaces nested data. It dispatches on FProperty
+// subclass and returns proper JSON shape (object path, struct fields, array
+// elements, enum display names) instead of falling through to ExportText_Direct,
+// whose string output is fragile for object refs and opaque for nested data.
+//
+// SerializeScriptStructToJson and SerializeInstancedStructToJson are thin
+// wrappers that iterate a struct's fields and dispatch each one through the
+// primitive. SerializeInstancedStructToJson stamps a "_struct_type" field
+// on the result for callers that need to dispatch on the wrapping type
+// (chooser output struct columns, proxy entry value structs, row results).
+
+TSharedPtr<FJsonValue> SerializePropertyToJsonValue(
+	const FProperty* Property,
+	const void* ValuePtr,
+	int32 RemainingDepth)
+{
+	if (!Property || !ValuePtr)
+	{
+		return MakeShared<FJsonValueNull>();
+	}
+
+	// Soft refs FIRST (FSoftObjectProperty derives from FObjectPropertyBase, so
+	// the broader cast below would otherwise win and return only the loaded
+	// pointer — not the path of an unloaded ref). FSoftClassProperty derives
+	// from FSoftObjectProperty so it's covered here too.
+	if (CastField<FSoftObjectProperty>(Property))
+	{
+		const FSoftObjectPtr& Soft = *reinterpret_cast<const FSoftObjectPtr*>(ValuePtr);
+		return MakeShared<FJsonValueString>(Soft.IsNull() ? TEXT("None") : Soft.ToString());
+	}
+	// All other object-shaped properties: hard Object, Class, Weak, Lazy.
+	// Returns the asset path or "None".
+	if (const FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(Property))
+	{
+		UObject* Obj = ObjProp->GetObjectPropertyValue(ValuePtr);
+		return MakeShared<FJsonValueString>(Obj ? Obj->GetPathName() : TEXT("None"));
+	}
+
+	// Struct: recurse, with FGameplayTag / FGameplayTagContainer collapsed
+	// to their tag string form (matches the GameplayTagColumn cell shape).
+	if (const FStructProperty* StructProp = CastField<FStructProperty>(Property))
+	{
+		const UScriptStruct* InnerStruct = StructProp->Struct;
+		if (InnerStruct)
+		{
+			const FName StructName = InnerStruct->GetFName();
+			if (StructName == TEXT("GameplayTag"))
+			{
+				const FGameplayTag& Tag = *static_cast<const FGameplayTag*>(ValuePtr);
+				return MakeShared<FJsonValueString>(Tag.ToString());
+			}
+			if (StructName == TEXT("GameplayTagContainer"))
+			{
+				const FGameplayTagContainer& Tags = *static_cast<const FGameplayTagContainer*>(ValuePtr);
+				TArray<TSharedPtr<FJsonValue>> TagArray;
+				for (const FGameplayTag& Tag : Tags)
+				{
+					TagArray.Add(MakeShared<FJsonValueString>(Tag.ToString()));
+				}
+				return MakeShared<FJsonValueArray>(TagArray);
+			}
+			if (RemainingDepth <= 0)
+			{
+				return MakeShared<FJsonValueString>(FString::Printf(
+					TEXT("<recursion depth exceeded: %s>"), *InnerStruct->GetName()));
+			}
+			TSharedPtr<FJsonObject> Nested = SerializeScriptStructToJson(InnerStruct, ValuePtr, RemainingDepth - 1);
+			return MakeShared<FJsonValueObject>(Nested);
+		}
+	}
+
+	// Arrays / sets: recurse on inner property per element.
+	if (const FArrayProperty* ArrayProp = CastField<FArrayProperty>(Property))
+	{
+		FScriptArrayHelper Helper(ArrayProp, ValuePtr);
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (int32 i = 0; i < Helper.Num(); ++i)
+		{
+			Out.Add(SerializePropertyToJsonValue(ArrayProp->Inner, Helper.GetRawPtr(i), RemainingDepth - 1));
+		}
+		return MakeShared<FJsonValueArray>(Out);
+	}
+	if (const FSetProperty* SetProp = CastField<FSetProperty>(Property))
+	{
+		FScriptSetHelper Helper(SetProp, ValuePtr);
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (FScriptSetHelper::FIterator It(Helper); It; ++It)
+		{
+			const int32 Idx = It.GetInternalIndex();
+			Out.Add(SerializePropertyToJsonValue(SetProp->ElementProp, Helper.GetElementPtr(Idx), RemainingDepth - 1));
+		}
+		return MakeShared<FJsonValueArray>(Out);
+	}
+	if (const FMapProperty* MapProp = CastField<FMapProperty>(Property))
+	{
+		FScriptMapHelper Helper(MapProp, ValuePtr);
+		// Maps with simple key types render as JSON objects keyed by stringified key.
+		// Maps with struct keys render as an array of {key, value} pairs since JSON
+		// object keys must be strings.
+		const bool bSimpleKey =
+			CastField<FNameProperty>(MapProp->KeyProp) ||
+			CastField<FStrProperty>(MapProp->KeyProp) ||
+			CastField<FNumericProperty>(MapProp->KeyProp) ||
+			CastField<FObjectPropertyBase>(MapProp->KeyProp) ||
+			CastField<FSoftObjectProperty>(MapProp->KeyProp);
+
+		if (bSimpleKey)
+		{
+			TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+			for (FScriptMapHelper::FIterator It(Helper); It; ++It)
+			{
+				const int32 Idx = It.GetInternalIndex();
+				FString KeyStr;
+				MapProp->KeyProp->ExportText_Direct(KeyStr, Helper.GetKeyPtr(Idx), Helper.GetKeyPtr(Idx), nullptr, PPF_None);
+				Out->SetField(KeyStr, SerializePropertyToJsonValue(MapProp->ValueProp, Helper.GetValuePtr(Idx), RemainingDepth - 1));
+			}
+			return MakeShared<FJsonValueObject>(Out);
+		}
+		else
+		{
+			TArray<TSharedPtr<FJsonValue>> Out;
+			for (FScriptMapHelper::FIterator It(Helper); It; ++It)
+			{
+				const int32 Idx = It.GetInternalIndex();
+				TSharedPtr<FJsonObject> Pair = MakeShared<FJsonObject>();
+				Pair->SetField(TEXT("key"), SerializePropertyToJsonValue(MapProp->KeyProp, Helper.GetKeyPtr(Idx), RemainingDepth - 1));
+				Pair->SetField(TEXT("value"), SerializePropertyToJsonValue(MapProp->ValueProp, Helper.GetValuePtr(Idx), RemainingDepth - 1));
+				Out.Add(MakeShared<FJsonValueObject>(Pair));
+			}
+			return MakeShared<FJsonValueArray>(Out);
+		}
+	}
+
+	// Enums: emit { value, name, display_name } so callers don't need a
+	// follow-up enum_inspect just to get the human-readable label. UDEs
+	// silently ship "NewEnumeratorN" as the raw name; the display name is
+	// where the renamed-to-something-meaningful value lives.
+	auto MakeEnumValue = [](const UEnum* Enum, int64 Value) -> TSharedPtr<FJsonValue>
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetNumberField(TEXT("value"), static_cast<double>(Value));
+		if (Enum)
+		{
+			Obj->SetStringField(TEXT("name"), Enum->GetNameStringByValue(Value));
+			Obj->SetStringField(TEXT("display_name"), Enum->GetDisplayNameTextByValue(Value).ToString());
+		}
+		return MakeShared<FJsonValueObject>(Obj);
+	};
+
+	if (const FEnumProperty* EnumProp = CastField<FEnumProperty>(Property))
+	{
+		const UEnum* Enum = EnumProp->GetEnum();
+		const int64 Value = EnumProp->GetUnderlyingProperty()->GetSignedIntPropertyValue(ValuePtr);
+		return MakeEnumValue(Enum, Value);
+	}
+	if (const FByteProperty* ByteProp = CastField<FByteProperty>(Property))
+	{
+		if (ByteProp->Enum)
+		{
+			return MakeEnumValue(ByteProp->Enum, *static_cast<const uint8*>(ValuePtr));
+		}
+		return MakeShared<FJsonValueNumber>(*static_cast<const uint8*>(ValuePtr));
+	}
+
+	// Strings, names, text: avoid ExportText_Direct's quoting behaviour.
+	if (CastField<FNameProperty>(Property))
+	{
+		return MakeShared<FJsonValueString>(static_cast<const FName*>(ValuePtr)->ToString());
+	}
+	if (CastField<FStrProperty>(Property))
+	{
+		return MakeShared<FJsonValueString>(*static_cast<const FString*>(ValuePtr));
+	}
+	if (CastField<FTextProperty>(Property))
+	{
+		return MakeShared<FJsonValueString>(static_cast<const FText*>(ValuePtr)->ToString());
+	}
+
+	// Bool / numeric primitives.
+	if (const FBoolProperty* BoolProp = CastField<FBoolProperty>(Property))
+	{
+		return MakeShared<FJsonValueBoolean>(BoolProp->GetPropertyValue(ValuePtr));
+	}
+	if (const FNumericProperty* NumProp = CastField<FNumericProperty>(Property))
+	{
+		if (NumProp->IsFloatingPoint())
+		{
+			return MakeShared<FJsonValueNumber>(NumProp->GetFloatingPointPropertyValue(ValuePtr));
+		}
+		return MakeShared<FJsonValueNumber>(static_cast<double>(NumProp->GetSignedIntPropertyValue(ValuePtr)));
+	}
+
+	// Final fallback: ExportText. Reached only for property types this primitive
+	// hasn't enumerated. Logged so we know to add coverage when one shows up.
+	{
+		static TSet<FName> WarnedTypes;
+		const FName ClassName = Property->GetClass()->GetFName();
+		if (!WarnedTypes.Contains(ClassName))
+		{
+			WarnedTypes.Add(ClassName);
+			UE_LOG(LogClaireon, Verbose,
+				TEXT("SerializePropertyToJsonValue: ExportText fallback for property class '%s' (field '%s'). Add explicit handling if this shows up frequently."),
+				*ClassName.ToString(), *Property->GetName());
+		}
+	}
+	FString ValueStr;
+	Property->ExportText_Direct(ValueStr, ValuePtr, ValuePtr, nullptr, PPF_None);
+	return MakeShared<FJsonValueString>(ValueStr);
+}
+
+TSharedPtr<FJsonObject> SerializeScriptStructToJson(
+	const UScriptStruct* ScriptStruct,
+	const void* StructMemory,
+	int32 RemainingDepth)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	if (!ScriptStruct || !StructMemory)
+	{
+		return Result;
+	}
+
+	for (TFieldIterator<FProperty> It(ScriptStruct); It; ++It)
+	{
+		FProperty* Property = *It;
+		const void* PropMem = static_cast<const uint8*>(StructMemory) + Property->GetOffset_ForInternal();
+		Result->SetField(Property->GetName(), SerializePropertyToJsonValue(Property, PropMem, RemainingDepth));
+	}
+	return Result;
+}
+
 TSharedPtr<FJsonObject> SerializeInstancedStructToJson(const FInstancedStruct& Struct)
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	if (!Struct.IsValid())
 	{
 		return Result;
@@ -830,41 +1099,8 @@ TSharedPtr<FJsonObject> SerializeInstancedStructToJson(const FInstancedStruct& S
 		return Result;
 	}
 
+	Result = SerializeScriptStructToJson(ScriptStruct, Struct.GetMemory());
 	Result->SetStringField(TEXT("_struct_type"), ScriptStruct->GetName());
-
-	const uint8* StructMemory = Struct.GetMemory();
-
-	for (TFieldIterator<FProperty> It(ScriptStruct); It; ++It)
-	{
-		FProperty* Property = *It;
-		const uint8* PropMem = StructMemory + Property->GetOffset_ForInternal();
-
-		// Object / soft-object properties: ExportText's representation is
-		// fragile and can emit "None" for valid refs. Go directly to the
-		// pointer's path so downstream consumers get the real asset path
-		// (load-bearing for chooser OutputStruct cells whose Anim field
-		// is an FObjectPtr to an AnimSequence that the editor displays
-		// as the visible row asset).
-		if (const FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(Property))
-		{
-			UObject* Obj = ObjProp->GetObjectPropertyValue(PropMem);
-			Result->SetStringField(Property->GetName(),
-				Obj ? Obj->GetPathName() : TEXT("None"));
-			continue;
-		}
-		if (const FSoftObjectProperty* SoftProp = CastField<FSoftObjectProperty>(Property))
-		{
-			const FSoftObjectPtr& Soft = *reinterpret_cast<const FSoftObjectPtr*>(PropMem);
-			Result->SetStringField(Property->GetName(),
-				Soft.IsNull() ? TEXT("None") : Soft.ToString());
-			continue;
-		}
-
-		FString ValueStr;
-		Property->ExportText_Direct(ValueStr, PropMem, PropMem, nullptr, PPF_None);
-		Result->SetStringField(Property->GetName(), ValueStr);
-	}
-
 	return Result;
 }
 

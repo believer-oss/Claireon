@@ -36,8 +36,33 @@ namespace ClaireonChooserHelpers
 	/** Serialize a single row result (FInstancedStruct wrapping FObjectChooserBase) to JSON. */
 	TSharedPtr<FJsonObject> SerializeRowResult(const FInstancedStruct& ResultStruct);
 
-	/** Serialize an FInstancedStruct's fields to JSON using reflection. */
+	/** Serialize an FInstancedStruct's fields to JSON using reflection.
+	 *  Recursively walks nested structs, arrays, maps, sets; resolves object/soft refs
+	 *  to asset paths; resolves enum values to display names. */
 	TSharedPtr<FJsonObject> SerializeInstancedStructToJson(const FInstancedStruct& Struct);
+
+	/** Serialize the fields of any UScriptStruct given a memory pointer.
+	 *  Underlying primitive used by SerializeInstancedStructToJson and the recursive
+	 *  struct path of SerializePropertyToJsonValue. */
+	TSharedPtr<FJsonObject> SerializeScriptStructToJson(
+		const UScriptStruct* ScriptStruct,
+		const void* StructMemory,
+		int32 RemainingDepth = 16);
+
+	/** Serialize a single property value to a JSON value using type-aware introspection.
+	 *  - Object/SoftObject properties → asset path (GetPathName / ToString).
+	 *  - Struct properties → recurse via SerializeScriptStructToJson; FGameplayTag and
+	 *    FGameplayTagContainer special-cased to their tag string form.
+	 *  - Array/Set/Map properties → recurse on inner property per element.
+	 *  - Enum / byte-with-enum properties → { value, name, display_name }.
+	 *  - Name/Text/String → semantic string.
+	 *  - Bool/numeric → JSON bool/number.
+	 *  - Anything else → ExportText_Direct fallback (logged once per type via a static set).
+	 *  RemainingDepth guards against pathological recursion. */
+	TSharedPtr<FJsonValue> SerializePropertyToJsonValue(
+		const FProperty* Property,
+		const void* ValuePtr,
+		int32 RemainingDepth = 16);
 
 	/** Extract the property binding info from a column's InputValue FInstancedStruct.
 	 *  If ContextData is provided, resolves the binding chain to show actual property types. */
