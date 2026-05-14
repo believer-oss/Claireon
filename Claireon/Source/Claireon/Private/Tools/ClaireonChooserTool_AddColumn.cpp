@@ -54,7 +54,7 @@ TSharedPtr<FJsonObject> ClaireonTool_ChooserAddColumn::GetInputSchema() const
 namespace
 {
 	/** Set up the property binding on a column's InputValue. */
-	void SetupColumnBinding(FInstancedStruct& ColumnStruct, const TArray<FName>& PropertyChain, int32 ContextIndex)
+	void SetupColumnBinding(FInstancedStruct& ColumnStruct, const TArray<FName>& PropertyChain, int32 ContextIndex, TArrayView<const FInstancedStruct> ContextData)
 	{
 		const UScriptStruct* ColStructType = ColumnStruct.GetScriptStruct();
 		if (!ColStructType) return;
@@ -77,6 +77,37 @@ namespace
 
 		Binding->PropertyBindingChain = PropertyChain;
 		Binding->ContextIndex = ContextIndex;
+		// Required so root-binding (empty PropertyChain) passes the chooser
+		// Compile gate (ChooserPropertyAccess.cpp) and ResolvePropertyChain
+		// returns the whole context struct as Container.
+		Binding->IsBoundToRoot = (PropertyChain.Num() == 0);
+
+		// Cast guard + typed-metadata seeding.
+		const FStructProperty* BindingStructProp = CastField<FStructProperty>(BindingProp);
+		if (!BindingStructProp)
+		{
+			return; // soft fail; base fields above are still set
+		}
+
+		if (!ContextData.IsValidIndex(ContextIndex))
+		{
+			return; // soft fail; base fields above are still set
+		}
+
+		if (const FContextObjectTypeStruct* CtxStruct = ContextData[ContextIndex].GetPtr<FContextObjectTypeStruct>())
+		{
+			if (BindingStructProp->Struct->IsChildOf(FChooserStructPropertyBinding::StaticStruct()))
+			{
+				static_cast<FChooserStructPropertyBinding*>(Binding)->StructType = CtxStruct->Struct;
+			}
+		}
+		else if (const FContextObjectTypeClass* CtxClass = ContextData[ContextIndex].GetPtr<FContextObjectTypeClass>())
+		{
+			if (BindingStructProp->Struct->IsChildOf(FChooserObjectPropertyBinding::StaticStruct()))
+			{
+				static_cast<FChooserObjectPropertyBinding*>(Binding)->AllowedClass = CtxClass->Class;
+			}
+		}
 	}
 }
 
@@ -191,7 +222,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserAddColumn::Execute(const TSharedP
 	const bool bExplicitContextIndex = Arguments->HasTypedField<EJson::Number>(TEXT("context_index"));
 	if (PropertyChain.Num() > 0 || bExplicitContextIndex)
 	{
-		SetupColumnBinding(NewColumn, PropertyChain, ContextIndex);
+		SetupColumnBinding(NewColumn, PropertyChain, ContextIndex, Chooser->ContextData);
 	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Add ChooserTable Column")));
@@ -207,19 +238,35 @@ IClaireonTool::FToolResult ClaireonTool_ChooserAddColumn::Execute(const TSharedP
 		Chooser->ColumnsStructs.Insert(MoveTemp(NewColumn), InsertIndex);
 	}
 
-	// Initialize RowValues to match existing row count
-	int32 RowCount = Chooser->ResultsStructs.Num();
-	if (RowCount > 0)
+	// Initialize RowValues to match existing row count AND seed OutputStruct row types.
+	// NOTE: NewColumn has been MoveTemp'd into ColumnsStructs above -- read the live
+	// slot via ColumnsStructs[InsertIndex], not NewColumn.
 	{
-		FChooserColumnBase* Col = Chooser->ColumnsStructs[InsertIndex].GetMutablePtr<FChooserColumnBase>();
-		if (Col)
+		FInstancedStruct& InsertedColumn = Chooser->ColumnsStructs[InsertIndex];
+		int32 RowCount = Chooser->ResultsStructs.Num();
+		if (RowCount > 0)
 		{
-			Col->SetNumRows(RowCount);
+			if (FChooserColumnBase* Col = InsertedColumn.GetMutablePtr<FChooserColumnBase>())
+			{
+				Col->SetNumRows(RowCount);
+			}
+		}
+
+		// OutputStruct row InitializeAs: types DefaultRowValue, FallbackValue, and any
+		// RowValues already appended by SetNumRows. Placed outside the RowCount > 0 block
+		// because the RowCount == 0 case still needs DefaultRowValue typed for future
+		// chooser_add_row -> InsertRows calls (CHOOSER_COLUMN_BOILERPLATE2 appends copies
+		// of DefaultRowValue, IChooserColumn.h:111-113).
+		if (FOutputStructColumn* OutStructCol = InsertedColumn.GetMutablePtr<FOutputStructColumn>())
+		{
+			OutStructCol->StructTypeChanged();
 		}
 	}
 
-	// Only compile if a binding was set — otherwise leave in clean "unbound" state
-	if (PropertyChain.Num() > 0)
+	// Compile when a binding was set (PropertyChain non-empty) OR when an explicit
+	// context_index was supplied (root-bound OutputStruct column). Mirrors the
+	// SetupColumnBinding gate above.
+	if (PropertyChain.Num() > 0 || bExplicitContextIndex)
 	{
 		Chooser->Compile(true);
 	}

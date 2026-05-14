@@ -1311,8 +1311,30 @@ bool SetColumnCellValue(FInstancedStruct& ColumnStruct, int32 RowIndex,
 			FInstancedStruct& RowStruct = OutStructCol->RowValues[RowIndex];
 			if (!RowStruct.IsValid())
 			{
-				OutError = TEXT("Output struct at this row is not initialized");
-				return false;
+				// Safety net: rescue uninitialized rows when the binding knows its
+				// type (older saved asset, hand-edited table). Happy path through
+				// AddColumn's binding setup never lands here. The warning makes the
+				// rescue observable so a regressed AddColumn path is not silently masked.
+				const UScriptStruct* BindingStructType = nullptr;
+				if (OutStructCol->InputValue.IsValid())
+				{
+					BindingStructType =
+						OutStructCol->InputValue.Get<FChooserParameterStructBase>().GetStructType();
+				}
+
+				if (BindingStructType != nullptr)
+				{
+					UE_LOG(LogClaireon, Warning,
+						TEXT("SetColumnCellValue: OutputStruct row %d uninitialized; "
+							 "lazy-initializing to %s. AddColumn path likely bypassed."),
+						RowIndex, *BindingStructType->GetName());
+					RowStruct.InitializeAs(BindingStructType);
+				}
+				else
+				{
+					OutError = TEXT("Output struct at this row is not initialized");
+					return false;
+				}
 			}
 
 			const UScriptStruct* StructType = RowStruct.GetScriptStruct();
