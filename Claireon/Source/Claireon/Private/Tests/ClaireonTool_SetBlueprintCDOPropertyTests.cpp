@@ -14,8 +14,13 @@
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SCS_Node.h"
 #include "Kismet2/BlueprintEditorUtils.h"
+#include "Kismet2/KismetEditorUtilities.h"
+#include "Misc/PackageName.h"
+#include "ObjectTools.h"
 #include "UObject/UnrealType.h"
 #include "UObject/Package.h"
+#include "UObject/SavePackage.h"
+#include "UObject/SoftObjectPath.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 
 // ---------------------------------------------------------------------------
@@ -572,6 +577,170 @@ UNTEST_UNIT_OPTS(Claireon, SetBlueprintCDOProperty, ChildBlueprintInheritance_Ov
 	UNTEST_EXPECT_STREQ(*ParentAfter, *ParentOriginal);
 
 	if (GEditor) GEditor->UndoTransaction();
+	co_return;
+}
+
+// ---------------------------------------------------------------------------
+// Tests for the CPF_InstancedReference auto-construct path: writes to a
+// UPROPERTY(Instanced) FObjectProperty slot interpret the value as a class
+// path and construct an embedded sub-object instead of trying to resolve
+// the path as an existing object reference.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+	// MyGameplayAbility::DefaultTargetingInstance is the canonical MyGame
+	// UPROPERTY(Instanced) UObject* slot. Tests skip if MyGame / FSTargeting
+	// are not loaded in the test process.
+	static const TCHAR* InstancedBPParentClassPath  = TEXT("/Script/MyGame.MyGameplayAbility");
+	static const TCHAR* InstancedSubObjectClassPath = TEXT("/Script/FSTargeting.FSTargetingInstance_Modular");
+	static const TCHAR* InstancedPropertyName       = TEXT("DefaultTargetingInstance");
+	static const TCHAR* InstancedTestBPPath         = TEXT("/Game/__MCPTests/BP_SetCDOProp_Instanced");
+
+	UBlueprint* CreateInstancedTestBlueprint()
+	{
+		UClass* ParentClass = FSoftClassPath(InstancedBPParentClassPath).TryLoadClass<UObject>();
+		if (!ParentClass) return nullptr;
+
+		const FString ObjectPath = FString(InstancedTestBPPath) + TEXT(".") + FPackageName::GetShortName(InstancedTestBPPath);
+		if (UBlueprint* Existing = Cast<UBlueprint>(FSoftObjectPath(ObjectPath).TryLoad()))
+		{
+			return Existing;
+		}
+
+		UPackage* Package = CreatePackage(InstancedTestBPPath);
+		if (!Package) return nullptr;
+
+		const FString AssetName = FPackageName::GetShortName(InstancedTestBPPath);
+		UBlueprint* BP = FKismetEditorUtilities::CreateBlueprint(
+			ParentClass,
+			Package,
+			FName(*AssetName),
+			BPTYPE_Normal,
+			UBlueprint::StaticClass(),
+			UBlueprintGeneratedClass::StaticClass(),
+			NAME_None);
+		if (!BP) return nullptr;
+
+		FAssetRegistryModule::AssetCreated(BP);
+		BP->MarkPackageDirty();
+
+		const FString PackageFileName = FPackageName::LongPackageNameToFilename(
+			InstancedTestBPPath, FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		UPackage::Save(Package, BP, *PackageFileName, SaveArgs);
+
+		return BP;
+	}
+
+	void CleanupInstancedTestBlueprint()
+	{
+		const FString ObjectPath = FString(InstancedTestBPPath) + TEXT(".") + FPackageName::GetShortName(InstancedTestBPPath);
+		if (UObject* Asset = FSoftObjectPath(ObjectPath).TryLoad())
+		{
+			TArray<UObject*> AssetsToDelete;
+			AssetsToDelete.Add(Asset);
+			ObjectTools::ForceDeleteObjects(AssetsToDelete, false);
+		}
+	}
+}
+
+// Test 11 -- Writing a class path to a UPROPERTY(Instanced) UObject* slot
+// auto-constructs the sub-object via SetInstancedSubObject and the slot
+// resolves to a live instance of the requested class.
+UNTEST_UNIT_OPTS(Claireon, SetBlueprintCDOProperty, InstancedSlot_ClassPathConstructsSubObject, UNTEST_TIMEOUTMS(60000))
+{
+	UClass* SubObjectClass = FSoftClassPath(InstancedSubObjectClassPath).TryLoadClass<UObject>();
+	if (!SubObjectClass) co_return;
+
+	CleanupInstancedTestBlueprint();
+	UBlueprint* BP = CreateInstancedTestBlueprint();
+	if (!BP) co_return; // parent class not loaded; skip
+
+	UObject* CDO = BP->GeneratedClass->GetDefaultObject();
+	UNTEST_ASSERT_PTR(CDO);
+
+	FObjectProperty* SlotProp = CastField<FObjectProperty>(
+		BP->GeneratedClass->FindPropertyByName(FName(InstancedPropertyName)));
+	UNTEST_ASSERT_PTR(SlotProp);
+	UNTEST_ASSERT_TRUE(SlotProp->HasAnyPropertyFlags(CPF_InstancedReference));
+
+	IClaireonTool::FToolResult R = InvokeSetCDOProp(
+		GetBPAssetPath(BP), InstancedPropertyName, InstancedSubObjectClassPath);
+	UNTEST_ASSERT_FALSE(R.bIsError);
+	UNTEST_ASSERT_TRUE(R.Data.IsValid());
+
+	FString Note;
+	if (R.Data->TryGetStringField(TEXT("note"), Note))
+	{
+		UNTEST_EXPECT_TRUE(Note.Contains(TEXT("SetInstancedSubObject")));
+	}
+
+	UObject* Value = SlotProp->GetObjectPropertyValue(SlotProp->ContainerPtrToValuePtr<void>(CDO));
+	UNTEST_ASSERT_PTR(Value);
+	UNTEST_EXPECT_TRUE(Value->IsA(SubObjectClass));
+
+	CleanupInstancedTestBlueprint();
+	co_return;
+}
+
+// Test 12 -- Writing "None" to a populated UPROPERTY(Instanced) slot clears
+// it and marks the previous value as garbage.
+UNTEST_UNIT_OPTS(Claireon, SetBlueprintCDOProperty, InstancedSlot_NoneClearsSlot, UNTEST_TIMEOUTMS(60000))
+{
+	UClass* SubObjectClass = FSoftClassPath(InstancedSubObjectClassPath).TryLoadClass<UObject>();
+	if (!SubObjectClass) co_return;
+
+	CleanupInstancedTestBlueprint();
+	UBlueprint* BP = CreateInstancedTestBlueprint();
+	if (!BP) co_return;
+
+	// Seed the slot first so we have something to clear.
+	IClaireonTool::FToolResult Seed = InvokeSetCDOProp(
+		GetBPAssetPath(BP), InstancedPropertyName, InstancedSubObjectClassPath);
+	UNTEST_ASSERT_FALSE(Seed.bIsError);
+
+	UObject* CDO = BP->GeneratedClass->GetDefaultObject();
+	FObjectProperty* SlotProp = CastField<FObjectProperty>(
+		BP->GeneratedClass->FindPropertyByName(FName(InstancedPropertyName)));
+	UNTEST_ASSERT_PTR(SlotProp);
+	UNTEST_ASSERT_PTR(SlotProp->GetObjectPropertyValue(SlotProp->ContainerPtrToValuePtr<void>(CDO)));
+
+	IClaireonTool::FToolResult Clear = InvokeSetCDOProp(
+		GetBPAssetPath(BP), InstancedPropertyName, TEXT("None"));
+	UNTEST_ASSERT_FALSE(Clear.bIsError);
+
+	UObject* AfterClear = SlotProp->GetObjectPropertyValue(SlotProp->ContainerPtrToValuePtr<void>(CDO));
+	UNTEST_EXPECT_NULLPTR(AfterClear);
+
+	CleanupInstancedTestBlueprint();
+	co_return;
+}
+
+// Test 13 -- A class-path value that doesn't resolve to a real UClass is
+// rejected before any mutation and surfaces an error.
+UNTEST_UNIT_OPTS(Claireon, SetBlueprintCDOProperty, InstancedSlot_UnresolvableClassPathErrors, UNTEST_TIMEOUTMS(60000))
+{
+	CleanupInstancedTestBlueprint();
+	UBlueprint* BP = CreateInstancedTestBlueprint();
+	if (!BP) co_return;
+
+	UObject* CDO = BP->GeneratedClass->GetDefaultObject();
+	FObjectProperty* SlotProp = CastField<FObjectProperty>(
+		BP->GeneratedClass->FindPropertyByName(FName(InstancedPropertyName)));
+	UNTEST_ASSERT_PTR(SlotProp);
+
+	UObject* BeforeAttempt = SlotProp->GetObjectPropertyValue(SlotProp->ContainerPtrToValuePtr<void>(CDO));
+
+	IClaireonTool::FToolResult R = InvokeSetCDOProp(
+		GetBPAssetPath(BP), InstancedPropertyName, TEXT("/Script/NotARealModule.NotARealClass"));
+	UNTEST_EXPECT_TRUE(R.bIsError);
+
+	UObject* AfterAttempt = SlotProp->GetObjectPropertyValue(SlotProp->ContainerPtrToValuePtr<void>(CDO));
+	UNTEST_EXPECT_EQ(AfterAttempt, BeforeAttempt);
+
+	CleanupInstancedTestBlueprint();
 	co_return;
 }
 
