@@ -10,10 +10,8 @@
 #include "AssetRegistry/AssetData.h"
 #include "Misc/PackageName.h"
 
-FString ClaireonTool_AssetReferences::GetName() const
-{
-	return TEXT("claireon.asset_references");
-}
+FString ClaireonTool_AssetReferences::GetCategory() const { return TEXT("asset"); }
+FString ClaireonTool_AssetReferences::GetOperation() const { return TEXT("references"); }
 
 FString ClaireonTool_AssetReferences::GetDescription() const
 {

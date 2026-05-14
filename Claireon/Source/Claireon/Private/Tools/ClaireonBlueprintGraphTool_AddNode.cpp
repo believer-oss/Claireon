@@ -1639,8 +1639,8 @@ FString ClaireonBlueprintGraphTool_AddNode::GetFullDescription() const
         "preferred wiring path is auto_connect_from_cursor=true: when the "
         "session cursor sits on a pin compatible with the new node's exec "
         "input, the connection is made automatically without requiring a "
-        "follow-up blueprint_graph_connect_pins call. As part of the "
-        "incremental per-node cycle, save every "
+        "follow-up blueprint_graph_connect_pins call. Per the "
+        "per-node cycle in the per-tool authoring guidance, save every "
         "1-3 add_node calls via blueprint_graph_save to flush in-session "
         "edits to the asset and protect against editor-crash data loss.");
 }

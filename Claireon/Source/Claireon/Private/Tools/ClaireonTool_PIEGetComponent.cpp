@@ -13,10 +13,8 @@
 #include "GameFramework/Actor.h"
 #include "UObject/UnrealType.h"
 
-FString ClaireonTool_PIEGetComponent::GetName() const
-{
-	return TEXT("claireon.pie_get_component");
-}
+FString ClaireonTool_PIEGetComponent::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_PIEGetComponent::GetOperation() const { return TEXT("get_component"); }
 
 FString ClaireonTool_PIEGetComponent::GetDescription() const
 {

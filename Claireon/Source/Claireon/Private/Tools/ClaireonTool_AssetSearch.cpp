@@ -7,10 +7,8 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
 
-FString ClaireonTool_AssetSearch::GetName() const
-{
-	return TEXT("claireon.asset_search");
-}
+FString ClaireonTool_AssetSearch::GetCategory() const { return TEXT("asset"); }
+FString ClaireonTool_AssetSearch::GetOperation() const { return TEXT("search"); }
 
 FString ClaireonTool_AssetSearch::GetDescription() const
 {
@@ -301,7 +299,7 @@ int32 ClaireonTool_AssetSearch::ScoreAssetByClass(const FString& ClassName, cons
 
 int32 ClaireonTool_AssetSearch::ScoreAssetByPath(const FString& PackagePath, const FString& Query)
 {
-	// Exact match (case-sensitive) â full path matches query
+	// Exact match (case-sensitive) Ã¢Â€Â” full path matches query
 	if (PackagePath.Equals(Query))
 	{
 		return 100;
@@ -313,7 +311,7 @@ int32 ClaireonTool_AssetSearch::ScoreAssetByPath(const FString& PackagePath, con
 		return 90;
 	}
 
-	// Ends with query (case-sensitive) â e.g., query "/Characters/BP_Player" on full path
+	// Ends with query (case-sensitive) Ã¢Â€Â” e.g., query "/Characters/BP_Player" on full path
 	if (PackagePath.EndsWith(Query))
 	{
 		return 80;

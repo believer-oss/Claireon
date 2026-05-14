@@ -927,10 +927,8 @@ namespace ScaffoldInternal
 	}
 }
 
-FString ClaireonTool_BlueprintTranslateScaffold::GetName() const
-{
-	return TEXT("claireon.blueprint_translate_scaffold");
-}
+FString ClaireonTool_BlueprintTranslateScaffold::GetCategory() const { return TEXT("blueprint"); }
+FString ClaireonTool_BlueprintTranslateScaffold::GetOperation() const { return TEXT("translate_scaffold"); }
 
 FString ClaireonTool_BlueprintTranslateScaffold::GetDescription() const
 {
@@ -1077,7 +1075,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 		if (Filename.StartsWith(TEXT(".bp_translate_session_")))
 		{
 			return MakeErrorResult(FString::Printf(
-				TEXT("Session already exists in %s (%s). Use claireon.blueprint_translate_implement to continue, or delete the session file and re-scaffold."),
+				TEXT("Session already exists in %s (%s). Use blueprint_translate_implement to continue, or delete the session file and re-scaffold."),
 				*TargetDirectory, *Filename));
 		}
 	}

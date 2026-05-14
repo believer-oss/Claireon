@@ -14,10 +14,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_AddAnimationTrack::GetName() const
-{
-    return TEXT("claireon.widgetbp_add_animation_track");
-}
+FString ClaireonWidgetBPTool_AddAnimationTrack::GetOperation() const { return TEXT("add_animation_track"); }
 
 FString ClaireonWidgetBPTool_AddAnimationTrack::GetDescription() const
 {

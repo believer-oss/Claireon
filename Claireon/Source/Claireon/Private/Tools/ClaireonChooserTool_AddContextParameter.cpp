@@ -9,7 +9,8 @@
 #include "Dom/JsonObject.h"
 #include "StructUtils/InstancedStruct.h"
 
-FString ClaireonTool_ChooserAddContextParameter::GetName() const { return TEXT("claireon.chooser_add_context_parameter"); }
+FString ClaireonTool_ChooserAddContextParameter::GetCategory() const { return TEXT("chooser"); }
+FString ClaireonTool_ChooserAddContextParameter::GetOperation() const { return TEXT("add_context_parameter"); }
 
 FString ClaireonTool_ChooserAddContextParameter::GetDescription() const
 {

@@ -7,10 +7,8 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_GameplayTagsList::GetName() const
-{
-	return TEXT("claireon.gameplay_tags_list");
-}
+FString ClaireonTool_GameplayTagsList::GetCategory() const { return TEXT("gameplay"); }
+FString ClaireonTool_GameplayTagsList::GetOperation() const { return TEXT("tags_list"); }
 
 FString ClaireonTool_GameplayTagsList::GetDescription() const
 {

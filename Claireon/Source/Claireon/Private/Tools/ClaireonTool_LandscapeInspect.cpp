@@ -8,10 +8,8 @@
 #include "LandscapeInfo.h"
 #include "LandscapeProxy.h"
 
-FString ClaireonTool_LandscapeInspect::GetName() const
-{
-	return TEXT("claireon.landscape_inspect");
-}
+FString ClaireonTool_LandscapeInspect::GetCategory() const { return TEXT("landscape"); }
+FString ClaireonTool_LandscapeInspect::GetOperation() const { return TEXT("inspect"); }
 
 FString ClaireonTool_LandscapeInspect::GetDescription() const
 {

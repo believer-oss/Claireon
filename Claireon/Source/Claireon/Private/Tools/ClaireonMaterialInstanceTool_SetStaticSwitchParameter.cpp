@@ -8,10 +8,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonMaterialInstanceTool_SetStaticSwitchParameter::GetName() const
-{
-	return TEXT("claireon.material_instance_set_static_switch_parameter");
-}
+FString ClaireonMaterialInstanceTool_SetStaticSwitchParameter::GetOperation() const { return TEXT("instance_set_static_switch_parameter"); }
 
 FString ClaireonMaterialInstanceTool_SetStaticSwitchParameter::GetDescription() const
 {

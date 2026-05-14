@@ -11,10 +11,8 @@
 #include "GameFramework/Actor.h"
 #include "Components/ActorComponent.h"
 
-FString ClaireonTool_StateTreeRuntimeInspect::GetName() const
-{
-	return TEXT("claireon.statetree_runtime_inspect");
-}
+FString ClaireonTool_StateTreeRuntimeInspect::GetCategory() const { return TEXT("statetree"); }
+FString ClaireonTool_StateTreeRuntimeInspect::GetOperation() const { return TEXT("runtime_inspect"); }
 
 FString ClaireonTool_StateTreeRuntimeInspect::GetDescription() const
 {

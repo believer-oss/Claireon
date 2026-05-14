@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_RemovePossessable::GetName() const
-{
-	return TEXT("claireon.level_sequence_remove_possessable");
-}
+FString ClaireonLevelSequenceTool_RemovePossessable::GetOperation() const { return TEXT("sequence_remove_possessable"); }
 
 FString ClaireonLevelSequenceTool_RemovePossessable::GetDescription() const
 {

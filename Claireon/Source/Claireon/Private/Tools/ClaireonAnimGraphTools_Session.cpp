@@ -28,10 +28,7 @@ using FToolResult = IClaireonTool::FToolResult;
 // ClaireonAnimGraphTool_Open
 // ============================================================================
 
-FString ClaireonAnimGraphTool_Open::GetName() const
-{
-	return TEXT("claireon.animgraph_open");
-}
+FString ClaireonAnimGraphTool_Open::GetOperation() const { return TEXT("open"); }
 
 FString ClaireonAnimGraphTool_Open::GetDescription() const
 {
@@ -171,10 +168,7 @@ FToolResult ClaireonAnimGraphTool_Open::Execute(const TSharedPtr<FJsonObject>& A
 // ClaireonAnimGraphTool_Close
 // ============================================================================
 
-FString ClaireonAnimGraphTool_Close::GetName() const
-{
-	return TEXT("claireon.animgraph_close");
-}
+FString ClaireonAnimGraphTool_Close::GetOperation() const { return TEXT("close"); }
 
 FString ClaireonAnimGraphTool_Close::GetDescription() const
 {
@@ -211,10 +205,7 @@ FToolResult ClaireonAnimGraphTool_Close::Execute(const TSharedPtr<FJsonObject>& 
 // ClaireonAnimGraphTool_Save
 // ============================================================================
 
-FString ClaireonAnimGraphTool_Save::GetName() const
-{
-	return TEXT("claireon.animgraph_save");
-}
+FString ClaireonAnimGraphTool_Save::GetOperation() const { return TEXT("save"); }
 
 FString ClaireonAnimGraphTool_Save::GetDescription() const
 {
@@ -279,10 +270,7 @@ FToolResult ClaireonAnimGraphTool_Save::Execute(const TSharedPtr<FJsonObject>& A
 // ClaireonAnimGraphTool_Compile
 // ============================================================================
 
-FString ClaireonAnimGraphTool_Compile::GetName() const
-{
-	return TEXT("claireon.animgraph_compile");
-}
+FString ClaireonAnimGraphTool_Compile::GetOperation() const { return TEXT("compile"); }
 
 FString ClaireonAnimGraphTool_Compile::GetDescription() const
 {
@@ -330,10 +318,7 @@ FToolResult ClaireonAnimGraphTool_Compile::Execute(const TSharedPtr<FJsonObject>
 // ClaireonAnimGraphTool_SwitchGraph
 // ============================================================================
 
-FString ClaireonAnimGraphTool_SwitchGraph::GetName() const
-{
-	return TEXT("claireon.animgraph_switch_graph");
-}
+FString ClaireonAnimGraphTool_SwitchGraph::GetOperation() const { return TEXT("switch_graph"); }
 
 FString ClaireonAnimGraphTool_SwitchGraph::GetDescription() const
 {
@@ -454,10 +439,7 @@ FToolResult ClaireonAnimGraphTool_SwitchGraph::Execute(const TSharedPtr<FJsonObj
 // ClaireonAnimGraphTool_GetState
 // ============================================================================
 
-FString ClaireonAnimGraphTool_GetState::GetName() const
-{
-	return TEXT("claireon.animgraph_get_state");
-}
+FString ClaireonAnimGraphTool_GetState::GetOperation() const { return TEXT("get_state"); }
 
 FString ClaireonAnimGraphTool_GetState::GetDescription() const
 {

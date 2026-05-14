@@ -12,14 +12,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_SetStateEnabled::GetName() const
-{
-	return TEXT("claireon.statetree_set_state_enabled");
-}
+FString ClaireonStateTreeTool_SetStateEnabled::GetOperation() const { return TEXT("set_state_enabled"); }
 
 FString ClaireonStateTreeTool_SetStateEnabled::GetDescription() const
 {
-	return TEXT("Enable or disable a state in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Disabled states are skipped during selection without affecting the rest of the tree's structure. Use to temporarily quarantine a state without deleting its definition.");
+	return TEXT("Enable or disable a state in the open State Tree editing session. Requires open session_id from statetree_open. Transactional. Disabled states are skipped during selection without affecting the rest of the tree's structure. Use to temporarily quarantine a state without deleting its definition.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_SetStateEnabled::GetInputSchema() const

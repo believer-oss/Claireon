@@ -16,7 +16,7 @@ using FToolResult = IClaireonTool::FToolResult;
 // Static members
 // ============================================================================
 
-const TCHAR* ClaireonAnimEditToolBase::AnimSessionToolName = TEXT("claireon.anim");
+const TCHAR* ClaireonAnimEditToolBase::AnimSessionToolName = TEXT("anim");
 TMap<FString, FAnimEditToolData> ClaireonAnimEditToolBase::ToolData;
 bool ClaireonAnimEditToolBase::bDelegateRegistered = false;
 

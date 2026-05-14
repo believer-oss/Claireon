@@ -97,14 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_DisconnectPin::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_disconnect_pin");
-}
+FString ClaireonBlueprintGraphTool_DisconnectPin::GetOperation() const { return TEXT("graph_disconnect_pin"); }
 
 FString ClaireonBlueprintGraphTool_DisconnectPin::GetDescription() const
 {
-    return TEXT("Disconnect a specific pin on a node (or all its connections) in the open Blueprint editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. The pin remains on the node; only the wires are removed.");
+    return TEXT("Disconnect a specific pin on a node (or all its connections) in the open Blueprint editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. The pin remains on the node; only the wires are removed.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_DisconnectPin::GetInputSchema() const

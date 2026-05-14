@@ -9,10 +9,8 @@
 #include "Dom/JsonValue.h"
 #include "Editor.h"
 
-FString ClaireonTool_PIEUnregisterDamageListener::GetName() const
-{
-	return TEXT("claireon.pie_unregister_damage_listener");
-}
+FString ClaireonTool_PIEUnregisterDamageListener::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_PIEUnregisterDamageListener::GetOperation() const { return TEXT("unregister_damage_listener"); }
 
 FString ClaireonTool_PIEUnregisterDamageListener::GetDescription() const
 {

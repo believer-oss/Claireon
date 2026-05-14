@@ -12,10 +12,8 @@
 #include "NiagaraEmitterHandle.h"
 #include "NiagaraRendererProperties.h"
 
-FString ClaireonTool_NiagaraInspect::GetName() const
-{
-	return TEXT("claireon.niagara_inspect");
-}
+FString ClaireonTool_NiagaraInspect::GetCategory() const { return TEXT("niagara"); }
+FString ClaireonTool_NiagaraInspect::GetOperation() const { return TEXT("inspect"); }
 
 FString ClaireonTool_NiagaraInspect::GetDescription() const
 {

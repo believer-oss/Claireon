@@ -7,10 +7,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonMaterialInstanceTool_ApplySpec::GetName() const
-{
-	return TEXT("claireon.material_instance_apply_spec");
-}
+FString ClaireonMaterialInstanceTool_ApplySpec::GetOperation() const { return TEXT("instance_apply_spec"); }
 
 FString ClaireonMaterialInstanceTool_ApplySpec::GetDescription() const
 {

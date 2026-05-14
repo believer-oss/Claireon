@@ -15,14 +15,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_ExportWidgets::GetName() const
-{
-    return TEXT("claireon.widgetbp_export_widgets");
-}
+FString ClaireonWidgetBPTool_ExportWidgets::GetOperation() const { return TEXT("export_widgets"); }
 
 FString ClaireonWidgetBPTool_ExportWidgets::GetDescription() const
 {
-    return TEXT("Export the named widgets as a serialized text payload from the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Read-only. The payload uses UE's clipboard text format and round-trips with claireon.widgetbp_import_widgets across the same or different Widget BP.");
+    return TEXT("Export the named widgets as a serialized text payload from the open Widget Blueprint editing session. Requires open session_id from widgetbp_open. Read-only. The payload uses UE's clipboard text format and round-trips with widgetbp_import_widgets across the same or different Widget BP.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_ExportWidgets::GetInputSchema() const

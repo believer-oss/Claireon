@@ -20,14 +20,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_EditMVVMBinding::GetName() const
-{
-    return TEXT("claireon.widgetbp_edit_mvvm_binding");
-}
+FString ClaireonWidgetBPTool_EditMVVMBinding::GetOperation() const { return TEXT("edit_mvvm_binding"); }
 
 FString ClaireonWidgetBPTool_EditMVVMBinding::GetDescription() const
 {
-    return TEXT("Edit an existing MVVM binding by id in the open Widget Blueprint editing session: mode, enabled, property paths, conversion function. Requires open session_id from claireon.widgetbp_open. Transactional. Omitted fields are left unchanged. Common pitfall: changing source path requires the viewmodel context to still be present.");
+    return TEXT("Edit an existing MVVM binding by id in the open Widget Blueprint editing session: mode, enabled, property paths, conversion function. Requires open session_id from widgetbp_open. Transactional. Omitted fields are left unchanged. Common pitfall: changing source path requires the viewmodel context to still be present.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_EditMVVMBinding::GetInputSchema() const

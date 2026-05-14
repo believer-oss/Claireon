@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBehaviorTreeTool_UpdateAsset::GetName() const
-{
-	return TEXT("claireon.behaviortree_update_asset");
-}
+FString ClaireonBehaviorTreeTool_UpdateAsset::GetOperation() const { return TEXT("update_asset"); }
 
 FString ClaireonBehaviorTreeTool_UpdateAsset::GetDescription() const
 {

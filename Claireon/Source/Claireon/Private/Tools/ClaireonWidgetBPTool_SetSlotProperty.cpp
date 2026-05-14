@@ -14,14 +14,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_SetSlotProperty::GetName() const
-{
-    return TEXT("claireon.widgetbp_set_slot_property");
-}
+FString ClaireonWidgetBPTool_SetSlotProperty::GetOperation() const { return TEXT("set_slot_property"); }
 
 FString ClaireonWidgetBPTool_SetSlotProperty::GetDescription() const
 {
-    return TEXT("Set a slot property on a widget (e.g. Canvas Panel Slot.Anchors, Size, Offsets) in the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Transactional. Common pitfall: slot properties depend on the parent panel class; Canvas Panel slots differ from Vertical Box or Grid slots.");
+    return TEXT("Set a slot property on a widget (e.g. Canvas Panel Slot.Anchors, Size, Offsets) in the open Widget Blueprint editing session. Requires open session_id from widgetbp_open. Transactional. Common pitfall: slot properties depend on the parent panel class; Canvas Panel slots differ from Vertical Box or Grid slots.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_SetSlotProperty::GetInputSchema() const

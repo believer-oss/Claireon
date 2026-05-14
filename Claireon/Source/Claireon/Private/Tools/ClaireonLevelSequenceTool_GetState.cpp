@@ -6,10 +6,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_GetState::GetName() const
-{
-	return TEXT("claireon.level_sequence_get_state");
-}
+FString ClaireonLevelSequenceTool_GetState::GetOperation() const { return TEXT("sequence_get_state"); }
 
 FString ClaireonLevelSequenceTool_GetState::GetDescription() const
 {

@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonEQSTool_SetGenerator::GetName() const
-{
-	return TEXT("claireon.eqs_set_generator");
-}
+FString ClaireonEQSTool_SetGenerator::GetOperation() const { return TEXT("set_generator"); }
 
 FString ClaireonEQSTool_SetGenerator::GetDescription() const
 {

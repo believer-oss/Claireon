@@ -13,10 +13,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLandscapeTool_Open::GetName() const
-{
-	return TEXT("claireon.landscape_open");
-}
+FString ClaireonLandscapeTool_Open::GetOperation() const { return TEXT("open"); }
 
 FString ClaireonLandscapeTool_Open::GetDescription() const
 {

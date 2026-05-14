@@ -16,14 +16,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_SetSchemaProperty::GetName() const
-{
-	return TEXT("claireon.statetree_set_schema_property");
-}
+FString ClaireonStateTreeTool_SetSchemaProperty::GetOperation() const { return TEXT("set_schema_property"); }
 
 FString ClaireonStateTreeTool_SetSchemaProperty::GetDescription() const
 {
-	return TEXT("Set a property on the State Tree's Schema (e.g. ActorClass, bReflectActorComponents, bReflectActorProperties, PrefabAsset). Requires open session_id from claireon.statetree_open. Transactional. After writing via ImportText_Direct, dispatches Schema->PostEditChangeChainProperty so subclass overrides (e.g. <your custom StateTree schema>::UpdateContextDataDescs) re-run their reflection updaters and regenerate deterministic context-data GUIDs. Response includes a refreshed context_data_descs array so callers can immediately diff.");
+	return TEXT("Set a property on the State Tree's Schema (e.g. ActorClass, bReflectActorComponents, bReflectActorProperties, PrefabAsset). Requires open session_id from statetree_open. Transactional. After writing via ImportText_Direct, dispatches Schema->PostEditChangeChainProperty so subclass overrides (e.g. <custom StateTree schema>::UpdateContextDataDescs) re-run their reflection updaters and regenerate deterministic context-data GUIDs. Response includes a refreshed context_data_descs array so callers can immediately diff.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_SetSchemaProperty::GetInputSchema() const
@@ -80,7 +77,7 @@ FToolResult ClaireonStateTreeTool_SetSchemaProperty::Execute(const TSharedPtr<FJ
 		return MakeErrorResult(Error);
 	}
 
-	// Dispatch PostEditChangeChainProperty so subclass overrides (e.g. <your custom StateTree schema>)
+	// Dispatch PostEditChangeChainProperty so subclass overrides (e.g. <custom StateTree schema>)
 	// regenerate deterministic context-data GUIDs.
 	{
 		FProperty* LeafProperty = nullptr;

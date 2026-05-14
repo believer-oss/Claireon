@@ -13,15 +13,12 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_AddEventKey::GetName() const
-{
-	return TEXT("claireon.level_sequence_add_event_key");
-}
+FString ClaireonLevelSequenceTool_AddEventKey::GetOperation() const { return TEXT("sequence_add_event_key"); }
 
 FString ClaireonLevelSequenceTool_AddEventKey::GetDescription() const
 {
 	return TEXT("Bind a free event-section entry point to a Director Blueprint endpoint function. "
-				"Endpoint must already exist (see claireon.level_sequence_create_event_endpoint).");
+				"Endpoint must already exist (see level_sequence_create_event_endpoint).");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_AddEventKey::GetInputSchema() const
@@ -65,7 +62,7 @@ FToolResult ClaireonLevelSequenceTool_AddEventKey::Execute(const TSharedPtr<FJso
 	if (!EndpointFunc)
 	{
 		return MakeErrorResult(FString::Printf(
-			TEXT("Event endpoint '%s' not found on Director class. Create it first (claireon.level_sequence_create_event_endpoint)."),
+			TEXT("Event endpoint '%s' not found on Director class. Create it first (level_sequence_create_event_endpoint)."),
 			*EndpointName));
 	}
 

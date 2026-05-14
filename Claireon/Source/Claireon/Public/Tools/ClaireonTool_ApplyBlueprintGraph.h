@@ -6,13 +6,13 @@
 #include "Tools/IClaireonTool.h"
 
 /**
- * Atomic batch Blueprint graph editor — K2 counterpart to claireon.animgraph_apply_graph.
+ * Atomic batch Blueprint graph editor — K2 counterpart to animgraph_apply_graph.
  *
  * Shape mirrors the anim batch tool: a single call disconnects links, removes nodes,
  * creates new nodes (referenced by local IDs within the same call), and connects pins,
  * all inside one FScopedTransaction.
  *
- * Session-based: requires an existing session opened by claireon.blueprint_edit_graph
+ * Session-based: requires an existing session opened by blueprint_edit_graph
  * (the 'open' or 'create' operation). Sessions are shared across the two tools.
  *
  * Node-type surface matches the factory (ClaireonBlueprintNodeFactory) — CallFunction,
@@ -20,12 +20,12 @@
  * GetArrayItem, MakeStruct/BreakStruct, Switch{Integer/String/Name/Enum},
  * ForEachElementInEnum, DoOnceMultiInput, Macro + named aliases, and Generic with class_name.
  * Rare types (Timeline, Delegate variants, EventOverride) are handled by the incremental
- * claireon.blueprint_edit_graph tool until the factory's typed dispatch is extended.
+ * blueprint_edit_graph tool until the factory's typed dispatch is extended.
  */
 class CLAIREON_API ClaireonTool_ApplyBlueprintGraph : public IClaireonTool
 {
 public:
-	FString GetName() const override;
+	FString GetOperation() const override;
 	FString GetDescription() const override;
 	FString GetCategory() const override { return TEXT("blueprint"); }
 	bool RequiresNoPIE() const override { return true; }

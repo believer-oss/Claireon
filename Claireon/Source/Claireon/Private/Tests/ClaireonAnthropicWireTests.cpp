@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 #if WITH_UNTESTED
 
@@ -94,7 +94,7 @@ UNTEST_UNIT(Claireon, AnthropicWire, GenericSpillRendersPathAndPreview)
 
 	IClaireonTool::FToolResult R = MakeGenericDataResult(Threshold * 2);
 	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
-		MoveTemp(R), TEXT("claireon.asset_search"), TEXT("conv_4a"),
+		MoveTemp(R), TEXT("asset_search"), TEXT("conv_4a"),
 		EClaireonSpillStreamSet::GenericData);
 
 	const FString Xml = FClaireonXmlFormatter::FormatExecuteResult(Routed);
@@ -130,7 +130,7 @@ UNTEST_UNIT(Claireon, AnthropicWire, PythonStdoutOnlySpillXml)
 
 	IClaireonTool::FToolResult R = MakePythonResult(Big, SmallUELog);
 	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
-		MoveTemp(R), TEXT("claireon.python_execute"), TEXT("conv_4b"),
+		MoveTemp(R), TEXT("python_execute"), TEXT("conv_4b"),
 		EClaireonSpillStreamSet::PythonStdoutAndUELog);
 
 	const FString Xml = FClaireonXmlFormatter::FormatExecuteResult(Routed);
@@ -167,7 +167,7 @@ UNTEST_UNIT(Claireon, AnthropicWire, PythonBothStreamsSpillXml)
 
 	IClaireonTool::FToolResult R = MakePythonResult(BigStdout, BigUELog);
 	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
-		MoveTemp(R), TEXT("claireon.python_execute"), TEXT("conv_4c"),
+		MoveTemp(R), TEXT("python_execute"), TEXT("conv_4c"),
 		EClaireonSpillStreamSet::PythonStdoutAndUELog);
 
 	const FString Xml = FClaireonXmlFormatter::FormatExecuteResult(Routed);
@@ -193,7 +193,7 @@ UNTEST_UNIT(Claireon, AnthropicWire, SmallPayloadStaysInline)
 
 	IClaireonTool::FToolResult R = MakeGenericDataResult(/*TargetBytes=*/64);
 	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
-		MoveTemp(R), TEXT("claireon.asset_search"), TEXT("conv_4d"),
+		MoveTemp(R), TEXT("asset_search"), TEXT("conv_4d"),
 		EClaireonSpillStreamSet::GenericData);
 
 	const FString Xml = FClaireonXmlFormatter::FormatExecuteResult(Routed);
@@ -220,7 +220,7 @@ UNTEST_UNIT(Claireon, AnthropicWire, TruncatedDiagnosticsBodyContainsPath)
 
 	IClaireonTool::FToolResult R = MakeGenericDataResult(Threshold * 2);
 	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
-		MoveTemp(R), TEXT("claireon.asset_search"), TEXT("conv_4e"),
+		MoveTemp(R), TEXT("asset_search"), TEXT("conv_4e"),
 		EClaireonSpillStreamSet::GenericData);
 
 	const FString Xml = FClaireonXmlFormatter::FormatExecuteResult(Routed);

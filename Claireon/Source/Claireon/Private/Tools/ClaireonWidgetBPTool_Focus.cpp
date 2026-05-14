@@ -11,14 +11,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_Focus::GetName() const
-{
-    return TEXT("claireon.widgetbp_focus");
-}
+FString ClaireonWidgetBPTool_Focus::GetOperation() const { return TEXT("focus"); }
 
 FString ClaireonWidgetBPTool_Focus::GetDescription() const
 {
-    return TEXT("Set the focused widget within the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Read-only with respect to widget contents (focus is session state). The focused widget is the implicit target for some downstream tools that accept an empty widget_name.");
+    return TEXT("Set the focused widget within the open Widget Blueprint editing session. Requires open session_id from widgetbp_open. Read-only with respect to widget contents (focus is session state). The focused widget is the implicit target for some downstream tools that accept an empty widget_name.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_Focus::GetInputSchema() const

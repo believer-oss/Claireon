@@ -12,10 +12,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonFoliageTool_Open::GetName() const
-{
-	return TEXT("claireon.foliage_open");
-}
+FString ClaireonFoliageTool_Open::GetOperation() const { return TEXT("open"); }
 
 FString ClaireonFoliageTool_Open::GetDescription() const
 {

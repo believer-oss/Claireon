@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonInputTool_RemoveMappingModifier::GetName() const
-{
-	return TEXT("claireon.input_remove_mapping_modifier");
-}
+FString ClaireonInputTool_RemoveMappingModifier::GetOperation() const { return TEXT("remove_mapping_modifier"); }
 
 FString ClaireonInputTool_RemoveMappingModifier::GetDescription() const
 {

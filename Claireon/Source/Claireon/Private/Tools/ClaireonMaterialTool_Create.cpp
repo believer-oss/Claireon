@@ -37,10 +37,7 @@ namespace
 	}
 }
 
-FString ClaireonMaterialTool_Create::GetName() const
-{
-	return TEXT("claireon.material_create");
-}
+FString ClaireonMaterialTool_Create::GetOperation() const { return TEXT("create"); }
 
 FString ClaireonMaterialTool_Create::GetDescription() const
 {

@@ -100,24 +100,21 @@ namespace
 // ClaireonTool_ApplyBlueprintGraph
 // ============================================================================
 
-FString ClaireonTool_ApplyBlueprintGraph::GetName() const
-{
-	return TEXT("claireon.blueprint_apply_graph");
-}
+FString ClaireonTool_ApplyBlueprintGraph::GetOperation() const { return TEXT("apply_graph"); }
 
 FString ClaireonTool_ApplyBlueprintGraph::GetDescription() const
 {
 	return TEXT("Atomic batch K2 Blueprint graph construction and modification. Disconnects, removes, "
 		"creates nodes, and connects pins in one transactional call. New nodes are referenced by local "
 		"'id'; existing nodes by GUID or title. Execution order: disconnect → remove → create → connect. "
-		"Uses the same session opened by claireon.blueprint_edit_graph. Returns full graph state with "
-		"id_map showing local-id → GUID mappings. Counterpart to claireon.animgraph_apply_graph.");
+		"Uses the same session opened by blueprint_edit_graph. Returns full graph state with "
+		"id_map showing local-id → GUID mappings. Counterpart to animgraph_apply_graph.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ApplyBlueprintGraph::GetInputSchema() const
 {
 	FToolSchemaBuilder S;
-	S.AddString(TEXT("session_id"), TEXT("Session ID from a prior claireon.blueprint_edit_graph 'open' or 'create'"), true);
+	S.AddString(TEXT("session_id"), TEXT("Session ID from a prior blueprint_edit_graph 'open' or 'create'"), true);
 	S.AddObject(TEXT("disconnect"), TEXT("Array of connections to break first. Each: {node (GUID/title/local_id), pin, target_node? (for selective disconnect)}"));
 	S.AddObject(TEXT("remove_nodes"), TEXT("Array of node GUIDs or titles to remove"));
 	S.AddObject(TEXT("nodes"), TEXT("Array of nodes to create. Each: {id (local ref), node_type, position?: {x,y}, ...typed params (function_name, struct_type, ...), node_properties?: {}, num_extra_pins?: int}"));
@@ -138,7 +135,7 @@ FToolResult ClaireonTool_ApplyBlueprintGraph::Execute(const TSharedPtr<FJsonObje
 	if (!Data)
 	{
 		return MakeErrorResult(FString::Printf(
-			TEXT("Session '%s' not found. Open a blueprint session first via claireon.blueprint_edit_graph with operation='open' or 'create'."),
+			TEXT("Session '%s' not found. Open a blueprint session first via blueprint_edit_graph with operation='open' or 'create'."),
 			*SessionId));
 	}
 

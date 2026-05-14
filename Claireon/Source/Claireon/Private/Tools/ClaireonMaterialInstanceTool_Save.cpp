@@ -8,10 +8,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonMaterialInstanceTool_Save::GetName() const
-{
-	return TEXT("claireon.material_instance_save");
-}
+FString ClaireonMaterialInstanceTool_Save::GetOperation() const { return TEXT("instance_save"); }
 
 FString ClaireonMaterialInstanceTool_Save::GetDescription() const
 {

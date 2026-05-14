@@ -25,7 +25,7 @@ bool ClaireonWidgetBPEditToolBase::bDelegateRegistered = false;
 
 void ClaireonWidgetBPEditToolBase::HandleSessionClosed(const FMCPSessionClosedInfo& Info)
 {
-	if (Info.ToolName == TEXT("claireon.widgetbp_edit"))
+	if (Info.ToolName == TEXT("widgetbp_edit"))
 	{
 		ToolData.Remove(Info.SessionId);
 	}

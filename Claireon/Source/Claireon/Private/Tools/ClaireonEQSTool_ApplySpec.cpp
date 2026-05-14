@@ -7,10 +7,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonEQSTool_ApplySpec::GetName() const
-{
-	return TEXT("claireon.eqs_apply_spec");
-}
+FString ClaireonEQSTool_ApplySpec::GetOperation() const { return TEXT("apply_spec"); }
 
 FString ClaireonEQSTool_ApplySpec::GetDescription() const
 {

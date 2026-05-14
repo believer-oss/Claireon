@@ -12,10 +12,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_RemoveSection::GetName() const
-{
-	return TEXT("claireon.level_sequence_remove_section");
-}
+FString ClaireonLevelSequenceTool_RemoveSection::GetOperation() const { return TEXT("sequence_remove_section"); }
 
 FString ClaireonLevelSequenceTool_RemoveSection::GetDescription() const
 {

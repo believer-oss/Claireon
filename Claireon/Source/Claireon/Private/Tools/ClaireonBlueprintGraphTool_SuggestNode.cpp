@@ -97,10 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_SuggestNode::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_suggest_node");
-}
+FString ClaireonBlueprintGraphTool_SuggestNode::GetOperation() const { return TEXT("graph_suggest_node"); }
 
 FString ClaireonBlueprintGraphTool_SuggestNode::GetDescription() const
 {

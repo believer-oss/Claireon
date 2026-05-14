@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonEQSTool_SetNodeProperty::GetName() const
-{
-	return TEXT("claireon.eqs_set_node_property");
-}
+FString ClaireonEQSTool_SetNodeProperty::GetOperation() const { return TEXT("set_node_property"); }
 
 FString ClaireonEQSTool_SetNodeProperty::GetDescription() const
 {

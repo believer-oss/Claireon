@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonNiagaraTool_SetSystemProperty::GetName() const
-{
-	return TEXT("claireon.niagara_set_system_property");
-}
+FString ClaireonNiagaraTool_SetSystemProperty::GetOperation() const { return TEXT("set_system_property"); }
 
 FString ClaireonNiagaraTool_SetSystemProperty::GetDescription() const
 {

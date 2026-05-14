@@ -7,10 +7,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLandscapeTool_Close::GetName() const
-{
-	return TEXT("claireon.landscape_close");
-}
+FString ClaireonLandscapeTool_Close::GetOperation() const { return TEXT("close"); }
 
 FString ClaireonLandscapeTool_Close::GetDescription() const
 {

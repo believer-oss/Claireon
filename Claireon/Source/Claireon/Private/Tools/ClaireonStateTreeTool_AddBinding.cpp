@@ -13,14 +13,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_AddBinding::GetName() const
-{
-	return TEXT("claireon.statetree_add_binding");
-}
+FString ClaireonStateTreeTool_AddBinding::GetOperation() const { return TEXT("add_binding"); }
 
 FString ClaireonStateTreeTool_AddBinding::GetDescription() const
 {
-	return TEXT("Add a property binding between a source node's output and a target node's input in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Common pitfall: source and target property types must match (or be implicitly convertible); incompatible types error and the transaction rolls back.");
+	return TEXT("Add a property binding between a source node's output and a target node's input in the open State Tree editing session. Requires open session_id from statetree_open. Transactional. Common pitfall: source and target property types must match (or be implicitly convertible); incompatible types error and the transaction rolls back.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_AddBinding::GetInputSchema() const

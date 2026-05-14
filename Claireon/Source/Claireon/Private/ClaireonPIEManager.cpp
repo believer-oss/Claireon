@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "ClaireonPIEManager.h"
-#include "ClaireonSessionManager.h"
 #include "ClaireonLog.h"
+#include "ClaireonSessionManager.h"
 
 #include "Components/ActorComponent.h"
 #include "Editor.h"
@@ -104,16 +104,19 @@ void FClaireonPIEManager::HandleBeginPIE(bool bIsSimulating)
 {
 	FScopeLock Lock(&CriticalSection);
 
-	// Auto-release any open edit sessions so PIE won't conflict with asset locks
+	// Auto-release all edit sessions when PIE starts — assets may be loaded in the PIE world
+	// and concurrent modification is unsafe.
 	{
-		const int32 ReleasedCount = FClaireonSessionManager::Get().ForceReleaseAll();
+		int32 ReleasedCount = FClaireonSessionManager::Get().ForceReleaseAll();
 		if (ReleasedCount > 0)
 		{
-			UE_LOG(LogClaireon, Warning, TEXT("[MCP] PIE starting — force-released %d active edit session(s)"), ReleasedCount);
+			UE_LOG(LogClaireon, Warning,
+				TEXT("PIE started: auto-released %d active edit session(s)"),
+				ReleasedCount);
 		}
 	}
 
-	// If a session is already active (e.g., claireon.pie_start_async MCP tool registered it), skip
+	// If a session is already active (e.g., pie_start_async MCP tool registered it), skip
 	if (ActiveSession.IsSet() && ActiveSession->bIsActive)
 	{
 		return;
@@ -223,6 +226,7 @@ FString FClaireonPIEManager::RegisterDamageListener(AActor* Actor)
 
 		// Check for common health component patterns:
 		// - ULyraHealthComponent (Lyra)
+		// - UFSHealthComponent (MyGame)
 		// - Any component with "Health" in its name
 		if (ClassName.Contains(TEXT("Health")))
 		{

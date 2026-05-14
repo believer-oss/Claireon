@@ -27,10 +27,7 @@ using FToolResult = IClaireonTool::FToolResult;
 // ClaireonAnimGraphTool_AddVariable
 // ============================================================================
 
-FString ClaireonAnimGraphTool_AddVariable::GetName() const
-{
-	return TEXT("claireon.animgraph_add_variable");
-}
+FString ClaireonAnimGraphTool_AddVariable::GetOperation() const { return TEXT("add_variable"); }
 
 FString ClaireonAnimGraphTool_AddVariable::GetDescription() const
 {
@@ -156,10 +153,7 @@ FToolResult ClaireonAnimGraphTool_AddVariable::Execute(const TSharedPtr<FJsonObj
 // ClaireonAnimGraphTool_RemoveVariable
 // ============================================================================
 
-FString ClaireonAnimGraphTool_RemoveVariable::GetName() const
-{
-	return TEXT("claireon.animgraph_remove_variable");
-}
+FString ClaireonAnimGraphTool_RemoveVariable::GetOperation() const { return TEXT("remove_variable"); }
 
 FString ClaireonAnimGraphTool_RemoveVariable::GetDescription() const
 {
@@ -221,10 +215,7 @@ FToolResult ClaireonAnimGraphTool_RemoveVariable::Execute(const TSharedPtr<FJson
 // ClaireonAnimGraphTool_SetVariableProperties
 // ============================================================================
 
-FString ClaireonAnimGraphTool_SetVariableProperties::GetName() const
-{
-	return TEXT("claireon.animgraph_set_variable_properties");
-}
+FString ClaireonAnimGraphTool_SetVariableProperties::GetOperation() const { return TEXT("set_variable_properties"); }
 
 FString ClaireonAnimGraphTool_SetVariableProperties::GetDescription() const
 {
@@ -333,10 +324,7 @@ FToolResult ClaireonAnimGraphTool_SetVariableProperties::Execute(const TSharedPt
 // ClaireonAnimGraphTool_AddFunction
 // ============================================================================
 
-FString ClaireonAnimGraphTool_AddFunction::GetName() const
-{
-	return TEXT("claireon.animgraph_add_function");
-}
+FString ClaireonAnimGraphTool_AddFunction::GetOperation() const { return TEXT("add_function"); }
 
 FString ClaireonAnimGraphTool_AddFunction::GetDescription() const
 {
@@ -467,10 +455,7 @@ FToolResult ClaireonAnimGraphTool_AddFunction::Execute(const TSharedPtr<FJsonObj
 // ClaireonAnimGraphTool_AddFunctionOverride
 // ============================================================================
 
-FString ClaireonAnimGraphTool_AddFunctionOverride::GetName() const
-{
-	return TEXT("claireon.animgraph_add_function_override");
-}
+FString ClaireonAnimGraphTool_AddFunctionOverride::GetOperation() const { return TEXT("add_function_override"); }
 
 FString ClaireonAnimGraphTool_AddFunctionOverride::GetDescription() const
 {
@@ -598,10 +583,7 @@ FToolResult ClaireonAnimGraphTool_AddFunctionOverride::Execute(const TSharedPtr<
 // ClaireonAnimGraphTool_RemoveFunction
 // ============================================================================
 
-FString ClaireonAnimGraphTool_RemoveFunction::GetName() const
-{
-	return TEXT("claireon.animgraph_remove_function");
-}
+FString ClaireonAnimGraphTool_RemoveFunction::GetOperation() const { return TEXT("remove_function"); }
 
 FString ClaireonAnimGraphTool_RemoveFunction::GetDescription() const
 {
@@ -647,10 +629,7 @@ FToolResult ClaireonAnimGraphTool_RemoveFunction::Execute(const TSharedPtr<FJson
 // ClaireonAnimGraphTool_AddInterface
 // ============================================================================
 
-FString ClaireonAnimGraphTool_AddInterface::GetName() const
-{
-	return TEXT("claireon.animgraph_add_interface");
-}
+FString ClaireonAnimGraphTool_AddInterface::GetOperation() const { return TEXT("add_interface"); }
 
 FString ClaireonAnimGraphTool_AddInterface::GetDescription() const
 {
@@ -706,10 +685,7 @@ FToolResult ClaireonAnimGraphTool_AddInterface::Execute(const TSharedPtr<FJsonOb
 // ClaireonAnimGraphTool_RemoveInterface
 // ============================================================================
 
-FString ClaireonAnimGraphTool_RemoveInterface::GetName() const
-{
-	return TEXT("claireon.animgraph_remove_interface");
-}
+FString ClaireonAnimGraphTool_RemoveInterface::GetOperation() const { return TEXT("remove_interface"); }
 
 FString ClaireonAnimGraphTool_RemoveInterface::GetDescription() const
 {

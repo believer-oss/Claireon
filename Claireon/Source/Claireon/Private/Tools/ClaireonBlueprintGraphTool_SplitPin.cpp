@@ -97,14 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_SplitPin::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_split_pin");
-}
+FString ClaireonBlueprintGraphTool_SplitPin::GetOperation() const { return TEXT("graph_split_pin"); }
 
 FString ClaireonBlueprintGraphTool_SplitPin::GetDescription() const
 {
-    return TEXT("Split a struct pin into its component sub-pins in the open Blueprint editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: only struct-typed pins are splittable; non-struct pins error. Existing connections to the parent pin are dropped.");
+    return TEXT("Split a struct pin into its component sub-pins in the open Blueprint editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: only struct-typed pins are splittable; non-struct pins error. Existing connections to the parent pin are dropped.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SplitPin::GetInputSchema() const

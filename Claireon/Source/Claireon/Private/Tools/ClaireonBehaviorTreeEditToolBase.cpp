@@ -13,7 +13,7 @@ using FToolResult = IClaireonTool::FToolResult;
 // Static members
 // ============================================================================
 
-const TCHAR* ClaireonBehaviorTreeEditToolBase::BehaviorTreeSessionToolName = TEXT("claireon.behaviortree_edit");
+const TCHAR* ClaireonBehaviorTreeEditToolBase::BehaviorTreeSessionToolName = TEXT("behaviortree_edit");
 TMap<FString, FBehaviorTreeEditToolData> ClaireonBehaviorTreeEditToolBase::ToolData;
 bool ClaireonBehaviorTreeEditToolBase::bDelegateRegistered = false;
 

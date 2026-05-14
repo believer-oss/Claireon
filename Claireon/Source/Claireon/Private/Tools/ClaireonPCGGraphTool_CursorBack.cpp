@@ -6,10 +6,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonPCGGraphTool_CursorBack::GetName() const
-{
-	return TEXT("claireon.pcg_cursor_back");
-}
+FString ClaireonPCGGraphTool_CursorBack::GetOperation() const { return TEXT("cursor_back"); }
 
 FString ClaireonPCGGraphTool_CursorBack::GetDescription() const
 {

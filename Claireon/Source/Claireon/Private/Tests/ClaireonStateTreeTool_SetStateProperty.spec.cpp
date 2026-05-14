@@ -1,7 +1,7 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 //
-// Spec tests for claireon.statetree_set_state_property (#0000 / F1).
+// Spec tests for statetree_set_state_property (#0000 / F1).
 // These tests exercise the ResolvePropertyPath dot-path navigator and the
 // SetStateProperty helper directly. They synthesize a transient
 // UStateTreeState and call into ClaireonStateTreeHelpers without round-
@@ -32,7 +32,7 @@ namespace
 UNTEST_UNIT_OPTS(Claireon, StateTreeSetStateProperty, ToolSurface, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonStateTreeTool_SetStateProperty Tool;
-	UNTEST_ASSERT_STREQ(*Tool.GetName(), TEXT("claireon.statetree_set_state_property"));
+	UNTEST_ASSERT_STREQ(*Tool.GetName(), TEXT("statetree_set_state_property"));
 	UNTEST_ASSERT_TRUE(!Tool.GetDescription().IsEmpty());
 	const TSharedPtr<FJsonObject> Schema = Tool.GetInputSchema();
 	UNTEST_ASSERT_TRUE(Schema.IsValid());
@@ -131,7 +131,7 @@ UNTEST_UNIT_OPTS(Claireon, StateTreeSetStateProperty, HappyDotPathTag, UNTEST_TI
 	// Use ImportText format expected by FGameplayTag.
 	const bool bOk = ClaireonStateTreeHelpers::SetStateProperty(
 		*State, TEXT("RequiredEventToEnter.Tag"),
-		TEXT("(TagName=\"Demo.Event.MoveTo.Request\")"),
+		TEXT("(TagName=\"Sample.Event.Puppet.MoveTo.Request\")"),
 		Error);
 	// Tag may not be registered in test environments; the importer still
 	// succeeds even when the tag is unregistered (it stores the raw name).

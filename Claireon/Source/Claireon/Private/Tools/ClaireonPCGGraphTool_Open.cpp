@@ -12,10 +12,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonPCGGraphTool_Open::GetName() const
-{
-	return TEXT("claireon.pcg_open");
-}
+FString ClaireonPCGGraphTool_Open::GetOperation() const { return TEXT("open"); }
 
 TArray<FString> ClaireonPCGGraphTool_Open::GetSearchKeywords() const
 {

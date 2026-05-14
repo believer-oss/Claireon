@@ -15,10 +15,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBehaviorTreeTool_AddNode::GetName() const
-{
-	return TEXT("claireon.behaviortree_add_node");
-}
+FString ClaireonBehaviorTreeTool_AddNode::GetOperation() const { return TEXT("add_node"); }
 
 FString ClaireonBehaviorTreeTool_AddNode::GetDescription() const
 {

@@ -58,7 +58,7 @@ namespace
 		return nullptr;
 	}
 
-	bool SetEQSProperty(UObject* Node, const FString& PropertyName, const FString& PropertyValue, FString& OutError)
+	bool SpecApplicatorEQS_SetEQSProperty(UObject* Node, const FString& PropertyName, const FString& PropertyValue, FString& OutError)
 	{
 		if (!Node)
 		{
@@ -156,7 +156,7 @@ bool FClaireonSpecApplicator_EQS::OpenOrCreateAsset(const FString& AssetPath, FS
 
 	const FString EQSPathName = EQS->GetPathName();
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
-		EQSPathName, TEXT("claireon.eqs_edit"));
+		EQSPathName, TEXT("eqs_edit"));
 
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{
@@ -291,7 +291,7 @@ bool FClaireonSpecApplicator_EQS::ApplyPass2_WireRelationships(const FString& Se
 					if (Prop.Value->TryGetString(PropValue))
 					{
 						FString PropError;
-						if (!SetEQSProperty(Option->Generator, Prop.Key, PropValue, PropError))
+						if (!SpecApplicatorEQS_SetEQSProperty(Option->Generator, Prop.Key, PropValue, PropError))
 						{
 							AddWarning(FString::Printf(TEXT("Option '%s' generator property '%s': %s"), *SpecId, *Prop.Key, *PropError));
 						}
@@ -338,7 +338,7 @@ bool FClaireonSpecApplicator_EQS::ApplyPass2_WireRelationships(const FString& Se
 						if (Prop.Value->TryGetString(PropValue))
 						{
 							FString PropError;
-							if (!SetEQSProperty(NewTest, Prop.Key, PropValue, PropError))
+							if (!SpecApplicatorEQS_SetEQSProperty(NewTest, Prop.Key, PropValue, PropError))
 							{
 								AddWarning(FString::Printf(TEXT("Test '%s' property '%s': %s"), *TestId, *Prop.Key, *PropError));
 							}

@@ -14,10 +14,8 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
-FString ClaireonTool_EngineInfo::GetName() const
-{
-	return TEXT("claireon.engine_info");
-}
+FString ClaireonTool_EngineInfo::GetCategory() const { return TEXT("engine"); }
+FString ClaireonTool_EngineInfo::GetOperation() const { return TEXT("info"); }
 
 FString ClaireonTool_EngineInfo::GetDescription() const
 {

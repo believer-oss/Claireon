@@ -41,10 +41,7 @@ namespace
 	}
 }
 
-FString ClaireonMaterialInstanceTool_ClearParameterOverride::GetName() const
-{
-	return TEXT("claireon.material_instance_clear_parameter_override");
-}
+FString ClaireonMaterialInstanceTool_ClearParameterOverride::GetOperation() const { return TEXT("instance_clear_parameter_override"); }
 
 FString ClaireonMaterialInstanceTool_ClearParameterOverride::GetDescription() const
 {

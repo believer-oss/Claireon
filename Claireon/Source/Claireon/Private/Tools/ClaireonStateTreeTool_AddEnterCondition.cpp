@@ -14,14 +14,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_AddEnterCondition::GetName() const
-{
-	return TEXT("claireon.statetree_add_enter_condition");
-}
+FString ClaireonStateTreeTool_AddEnterCondition::GetOperation() const { return TEXT("add_enter_condition"); }
 
 FString ClaireonStateTreeTool_AddEnterCondition::GetDescription() const
 {
-	return TEXT("Add an enter-condition node to a state in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Enter conditions gate state entry; the state is skipped at selection time when any enter condition fails. Configure properties via claireon.statetree_set_node_property.");
+	return TEXT("Add an enter-condition node to a state in the open State Tree editing session. Requires open session_id from statetree_open. Transactional. Enter conditions gate state entry; the state is skipped at selection time when any enter condition fails. Configure properties via statetree_set_node_property.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_AddEnterCondition::GetInputSchema() const

@@ -20,10 +20,10 @@ namespace
 }
 
 // ============================================================================
-// claireon.skeleton_add_virtual_bone
+// skeleton_add_virtual_bone
 // ============================================================================
 
-FString ClaireonSkeletonTool_AddVirtualBone::GetName() const { return TEXT("claireon.skeleton_add_virtual_bone"); }
+FString ClaireonSkeletonTool_AddVirtualBone::GetOperation() const { return TEXT("add_virtual_bone"); }
 
 FString ClaireonSkeletonTool_AddVirtualBone::GetDescription() const
 {
@@ -103,10 +103,10 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_AddVirtualBone::Execute(const TS
 }
 
 // ============================================================================
-// claireon.skeleton_remove_virtual_bones
+// skeleton_remove_virtual_bones
 // ============================================================================
 
-FString ClaireonSkeletonTool_RemoveVirtualBones::GetName() const { return TEXT("claireon.skeleton_remove_virtual_bones"); }
+FString ClaireonSkeletonTool_RemoveVirtualBones::GetOperation() const { return TEXT("remove_virtual_bones"); }
 
 FString ClaireonSkeletonTool_RemoveVirtualBones::GetDescription() const
 {
@@ -181,10 +181,10 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RemoveVirtualBones::Execute(cons
 }
 
 // ============================================================================
-// claireon.skeleton_rename_virtual_bone
+// skeleton_rename_virtual_bone
 // ============================================================================
 
-FString ClaireonSkeletonTool_RenameVirtualBone::GetName() const { return TEXT("claireon.skeleton_rename_virtual_bone"); }
+FString ClaireonSkeletonTool_RenameVirtualBone::GetOperation() const { return TEXT("rename_virtual_bone"); }
 
 FString ClaireonSkeletonTool_RenameVirtualBone::GetDescription() const
 {

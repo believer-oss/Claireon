@@ -7,10 +7,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonPCGGraphTool_ListNodeTypes::GetName() const
-{
-	return TEXT("claireon.pcg_list_node_types");
-}
+FString ClaireonPCGGraphTool_ListNodeTypes::GetOperation() const { return TEXT("list_node_types"); }
 
 FString ClaireonPCGGraphTool_ListNodeTypes::GetDescription() const
 {

@@ -8,7 +8,8 @@
 #include "ScopedTransaction.h"
 #include "Dom/JsonObject.h"
 
-FString ClaireonTool_ProxyTableAddInherit::GetName() const { return TEXT("claireon.proxytable_add_inherit"); }
+FString ClaireonTool_ProxyTableAddInherit::GetCategory() const { return TEXT("proxytable"); }
+FString ClaireonTool_ProxyTableAddInherit::GetOperation() const { return TEXT("add_inherit"); }
 
 FString ClaireonTool_ProxyTableAddInherit::GetDescription() const
 {

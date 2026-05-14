@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLandscapeTool_AddLayer::GetName() const
-{
-	return TEXT("claireon.landscape_add_layer");
-}
+FString ClaireonLandscapeTool_AddLayer::GetOperation() const { return TEXT("add_layer"); }
 
 FString ClaireonLandscapeTool_AddLayer::GetDescription() const
 {

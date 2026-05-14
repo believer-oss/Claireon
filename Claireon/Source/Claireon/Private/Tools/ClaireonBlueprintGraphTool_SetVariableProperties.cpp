@@ -97,14 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_SetVariableProperties::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_set_variable_properties");
-}
+FString ClaireonBlueprintGraphTool_SetVariableProperties::GetOperation() const { return TEXT("graph_set_variable_properties"); }
 
 FString ClaireonBlueprintGraphTool_SetVariableProperties::GetDescription() const
 {
-    return TEXT("Set properties on an existing Blueprint variable (flags, category, tooltip, replication, metadata) in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: switching replication to RepNotify auto-creates the OnRep handler function graph if absent.");
+    return TEXT("Set properties on an existing Blueprint variable (flags, category, tooltip, replication, metadata) in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: switching replication to RepNotify auto-creates the OnRep handler function graph if absent.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetVariableProperties::GetInputSchema() const

@@ -97,14 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_RemoveVariable::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_remove_variable");
-}
+FString ClaireonBlueprintGraphTool_RemoveVariable::GetOperation() const { return TEXT("graph_remove_variable"); }
 
 FString ClaireonBlueprintGraphTool_RemoveVariable::GetDescription() const
 {
-    return TEXT("Remove a member variable from the Blueprint in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: refuses with an error if the variable is referenced by any node; pass force=true to delete the variable and break the references.");
+    return TEXT("Remove a member variable from the Blueprint in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: refuses with an error if the variable is referenced by any node; pass force=true to delete the variable and break the references.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_RemoveVariable::GetInputSchema() const

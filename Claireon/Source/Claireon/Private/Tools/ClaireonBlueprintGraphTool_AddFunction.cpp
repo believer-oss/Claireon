@@ -21,14 +21,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_AddFunction::GetName() const
-{
-	return TEXT("claireon.blueprint_graph_add_function");
-}
+FString ClaireonBlueprintGraphTool_AddFunction::GetOperation() const { return TEXT("graph_add_function"); }
 
 FString ClaireonBlueprintGraphTool_AddFunction::GetDescription() const
 {
-	return TEXT("Create a new user-defined function graph on the Blueprint in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Parity with claireon.animgraph_add_function for regular Blueprints. The function_name must be unique on the BP.");
+	return TEXT("Create a new user-defined function graph on the Blueprint in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Parity with animgraph_add_function for regular Blueprints. The function_name must be unique on the BP.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddFunction::GetInputSchema() const

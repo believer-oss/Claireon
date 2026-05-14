@@ -22,10 +22,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonNiagaraTool_SetModuleInput::GetName() const
-{
-	return TEXT("claireon.niagara_set_module_input");
-}
+FString ClaireonNiagaraTool_SetModuleInput::GetOperation() const { return TEXT("set_module_input"); }
 
 FString ClaireonNiagaraTool_SetModuleInput::GetDescription() const
 {

@@ -12,10 +12,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_AddPossessable::GetName() const
-{
-	return TEXT("claireon.level_sequence_add_possessable");
-}
+FString ClaireonLevelSequenceTool_AddPossessable::GetOperation() const { return TEXT("sequence_add_possessable"); }
 
 FString ClaireonLevelSequenceTool_AddPossessable::GetDescription() const
 {

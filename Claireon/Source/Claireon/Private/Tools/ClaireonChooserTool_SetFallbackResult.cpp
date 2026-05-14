@@ -9,7 +9,8 @@
 #include "Dom/JsonObject.h"
 #include "StructUtils/InstancedStruct.h"
 
-FString ClaireonTool_ChooserSetFallbackResult::GetName() const { return TEXT("claireon.chooser_set_fallback_result"); }
+FString ClaireonTool_ChooserSetFallbackResult::GetCategory() const { return TEXT("chooser"); }
+FString ClaireonTool_ChooserSetFallbackResult::GetOperation() const { return TEXT("set_fallback_result"); }
 
 FString ClaireonTool_ChooserSetFallbackResult::GetDescription() const
 {

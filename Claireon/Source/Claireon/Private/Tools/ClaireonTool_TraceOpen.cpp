@@ -7,10 +7,8 @@
 #include "TraceServices/Model/AnalysisSession.h"
 #include "TraceServices/Model/Frames.h"
 
-FString ClaireonTool_TraceOpen::GetName() const
-{
-	return TEXT("claireon.trace_open");
-}
+FString ClaireonTool_TraceOpen::GetCategory() const { return TEXT("trace"); }
+FString ClaireonTool_TraceOpen::GetOperation() const { return TEXT("open"); }
 
 FString ClaireonTool_TraceOpen::GetDescription() const
 {

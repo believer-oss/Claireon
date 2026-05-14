@@ -16,15 +16,13 @@
 #include "GameplayAbilitySpec.h"
 #include "GameplayEffect.h"
 
-FString ClaireonTool_PIETestAbility::GetName() const
-{
-	return TEXT("claireon.pie_test_ability");
-}
+FString ClaireonTool_PIETestAbility::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_PIETestAbility::GetOperation() const { return TEXT("test_ability"); }
 
 FString ClaireonTool_PIETestAbility::GetDescription() const
 {
 	return TEXT("Test whether a gameplay ability can be activated on an actor. "
-		"Does NOT actually activate the ability â only checks activation requirements.");
+		"Does NOT actually activate the ability Ã¢Â€Â” only checks activation requirements.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PIETestAbility::GetInputSchema() const

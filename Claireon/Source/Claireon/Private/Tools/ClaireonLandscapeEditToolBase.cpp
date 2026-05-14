@@ -13,7 +13,7 @@ using FToolResult = IClaireonTool::FToolResult;
 // Static members
 // ============================================================================
 
-const TCHAR* ClaireonLandscapeEditToolBase::LandscapeSessionToolName = TEXT("claireon.landscape_edit");
+const TCHAR* ClaireonLandscapeEditToolBase::LandscapeSessionToolName = TEXT("landscape_edit");
 TMap<FString, FLandscapeEditToolData> ClaireonLandscapeEditToolBase::ToolData;
 bool ClaireonLandscapeEditToolBase::bDelegateRegistered = false;
 

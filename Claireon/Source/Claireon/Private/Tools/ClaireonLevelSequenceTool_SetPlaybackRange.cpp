@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_SetPlaybackRange::GetName() const
-{
-	return TEXT("claireon.level_sequence_set_playback_range");
-}
+FString ClaireonLevelSequenceTool_SetPlaybackRange::GetOperation() const { return TEXT("sequence_set_playback_range"); }
 
 FString ClaireonLevelSequenceTool_SetPlaybackRange::GetDescription() const
 {

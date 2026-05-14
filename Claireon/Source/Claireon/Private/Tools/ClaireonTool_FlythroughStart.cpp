@@ -7,10 +7,8 @@
 #include "Dom/JsonValue.h"
 #include "Editor.h"
 
-FString ClaireonTool_FlythroughStart::GetName() const
-{
-	return TEXT("claireon.pie_flythrough_start");
-}
+FString ClaireonTool_FlythroughStart::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_FlythroughStart::GetOperation() const { return TEXT("flythrough_start"); }
 
 FString ClaireonTool_FlythroughStart::GetDescription() const
 {
@@ -92,7 +90,7 @@ TSharedPtr<FJsonObject> ClaireonTool_FlythroughStart::GetInputSchema() const
 
 namespace
 {
-	bool ParseVector(const TSharedPtr<FJsonObject>& Obj, FVector& Out)
+	bool FlythroughStart_ParseVector(const TSharedPtr<FJsonObject>& Obj, FVector& Out)
 	{
 		if (!Obj.IsValid())
 		{
@@ -104,7 +102,7 @@ namespace
 		return true;
 	}
 
-	bool ParseRotator(const TSharedPtr<FJsonObject>& Obj, FRotator& Out)
+	bool FlythroughStart_ParseRotator(const TSharedPtr<FJsonObject>& Obj, FRotator& Out)
 	{
 		if (!Obj.IsValid())
 		{
@@ -151,7 +149,7 @@ IClaireonTool::FToolResult ClaireonTool_FlythroughStart::Execute(const TSharedPt
 
 		// Position (required)
 		const TSharedPtr<FJsonObject>* PosObj = nullptr;
-		if (!(*WpObj)->TryGetObjectField(TEXT("position"), PosObj) || !ParseVector(*PosObj, Wp.Position))
+		if (!(*WpObj)->TryGetObjectField(TEXT("position"), PosObj) || !FlythroughStart_ParseVector(*PosObj, Wp.Position))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("waypoints[%d].position is required ({x,y,z})"), i));
 		}
@@ -161,7 +159,7 @@ IClaireonTool::FToolResult ClaireonTool_FlythroughStart::Execute(const TSharedPt
 		if ((*WpObj)->TryGetObjectField(TEXT("rotation"), RotObj))
 		{
 			FRotator Rot;
-			if (ParseRotator(*RotObj, Rot))
+			if (FlythroughStart_ParseRotator(*RotObj, Rot))
 			{
 				Wp.Rotation = Rot;
 			}
@@ -172,7 +170,7 @@ IClaireonTool::FToolResult ClaireonTool_FlythroughStart::Execute(const TSharedPt
 		if ((*WpObj)->TryGetObjectField(TEXT("lookAt"), LookObj))
 		{
 			FVector LookAt;
-			if (ParseVector(*LookObj, LookAt))
+			if (FlythroughStart_ParseVector(*LookObj, LookAt))
 			{
 				Wp.LookAt = LookAt;
 			}

@@ -6,10 +6,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBlackboardTool_Status::GetName() const
-{
-	return TEXT("claireon.blackboard_status");
-}
+FString ClaireonBlackboardTool_Status::GetOperation() const { return TEXT("status"); }
 
 FString ClaireonBlackboardTool_Status::GetDescription() const
 {

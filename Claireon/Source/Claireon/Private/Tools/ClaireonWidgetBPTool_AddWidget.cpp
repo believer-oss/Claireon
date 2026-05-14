@@ -15,14 +15,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_AddWidget::GetName() const
-{
-    return TEXT("claireon.widgetbp_add_widget");
-}
+FString ClaireonWidgetBPTool_AddWidget::GetOperation() const { return TEXT("add_widget"); }
 
 FString ClaireonWidgetBPTool_AddWidget::GetDescription() const
 {
-    return TEXT("Add a new widget of a given class into the widget tree in the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Transactional. Provide widget_class (required) and optional parent_name, widget_name, index. Returns the new widget's name for downstream operations.");
+    return TEXT("Add a new widget of a given class into the widget tree in the open Widget Blueprint editing session. Requires open session_id from widgetbp_open. Transactional. Provide widget_class (required) and optional parent_name, widget_name, index. Returns the new widget's name for downstream operations.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_AddWidget::GetInputSchema() const

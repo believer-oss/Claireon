@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonPCGGraphTool_SetNodeProperty::GetName() const
-{
-	return TEXT("claireon.pcg_set_node_property");
-}
+FString ClaireonPCGGraphTool_SetNodeProperty::GetOperation() const { return TEXT("set_node_property"); }
 
 FString ClaireonPCGGraphTool_SetNodeProperty::GetDescription() const
 {

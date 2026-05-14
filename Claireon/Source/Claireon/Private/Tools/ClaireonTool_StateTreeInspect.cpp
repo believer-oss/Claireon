@@ -11,10 +11,8 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_StateTreeInspect::GetName() const
-{
-	return TEXT("claireon.statetree_inspect");
-}
+FString ClaireonTool_StateTreeInspect::GetCategory() const { return TEXT("statetree"); }
+FString ClaireonTool_StateTreeInspect::GetOperation() const { return TEXT("inspect"); }
 
 FString ClaireonTool_StateTreeInspect::GetDescription() const
 {

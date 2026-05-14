@@ -8,10 +8,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonMaterialInstanceTool_SetStaticComponentMaskParameter::GetName() const
-{
-	return TEXT("claireon.material_instance_set_static_component_mask_parameter");
-}
+FString ClaireonMaterialInstanceTool_SetStaticComponentMaskParameter::GetOperation() const { return TEXT("instance_set_static_component_mask_parameter"); }
 
 FString ClaireonMaterialInstanceTool_SetStaticComponentMaskParameter::GetDescription() const
 {

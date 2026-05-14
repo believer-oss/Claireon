@@ -13,14 +13,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_RemoveBinding::GetName() const
-{
-	return TEXT("claireon.statetree_remove_binding");
-}
+FString ClaireonStateTreeTool_RemoveBinding::GetOperation() const { return TEXT("remove_binding"); }
 
 FString ClaireonStateTreeTool_RemoveBinding::GetDescription() const
 {
-	return TEXT("Remove all property bindings to a target property in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. After removal, the property reverts to its authored default. Common pitfall: removes ALL bindings to the property, not just the one from a specific source.");
+	return TEXT("Remove all property bindings to a target property in the open State Tree editing session. Requires open session_id from statetree_open. Transactional. After removal, the property reverts to its authored default. Common pitfall: removes ALL bindings to the property, not just the one from a specific source.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_RemoveBinding::GetInputSchema() const

@@ -7,10 +7,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonNiagaraTool_ApplySpec::GetName() const
-{
-	return TEXT("claireon.niagara_apply_spec");
-}
+FString ClaireonNiagaraTool_ApplySpec::GetOperation() const { return TEXT("apply_spec"); }
 
 FString ClaireonNiagaraTool_ApplySpec::GetDescription() const
 {

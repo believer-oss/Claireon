@@ -13,7 +13,7 @@ using FToolResult = IClaireonTool::FToolResult;
 // Static members
 // ============================================================================
 
-const TCHAR* ClaireonFoliageEditToolBase::FoliageSessionToolName = TEXT("claireon.foliage_edit");
+const TCHAR* ClaireonFoliageEditToolBase::FoliageSessionToolName = TEXT("foliage_edit");
 TMap<FString, FFoliageEditToolData> ClaireonFoliageEditToolBase::ToolData;
 bool ClaireonFoliageEditToolBase::bDelegateRegistered = false;
 

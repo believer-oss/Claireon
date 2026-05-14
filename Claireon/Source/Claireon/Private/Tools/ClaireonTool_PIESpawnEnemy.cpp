@@ -17,10 +17,8 @@
 #include "UObject/UnrealType.h"
 #include "UObject/UObjectGlobals.h"
 
-FString ClaireonTool_PIESpawnEnemy::GetName() const
-{
-	return TEXT("claireon.pie_spawn_enemy");
-}
+FString ClaireonTool_PIESpawnEnemy::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_PIESpawnEnemy::GetOperation() const { return TEXT("spawn_enemy"); }
 
 FString ClaireonTool_PIESpawnEnemy::GetDescription() const
 {

@@ -13,14 +13,14 @@
 #include "Dom/JsonValue.h"
 
 // ============================================================================
-// claireon.anim_add_notify
+// anim_add_notify
 // ============================================================================
 
-FString ClaireonAnimTool_AddNotify::GetName() const { return TEXT("claireon.anim_add_notify"); }
+FString ClaireonAnimTool_AddNotify::GetOperation() const { return TEXT("add_notify"); }
 
 FString ClaireonAnimTool_AddNotify::GetDescription() const
 {
-	return TEXT("Add a notify (or notify state) to the animation in the open editing session. Requires open session_id from claireon.anim_open. Transactional. Pass notify_type='skeleton' (requires notify_name) for skeleton notifies, or a class name like 'AnimNotify_PlaySound' for class-based notifies.");
+	return TEXT("Add a notify (or notify state) to the animation in the open editing session. Requires open session_id from anim_open. Transactional. Pass notify_type='skeleton' (requires notify_name) for skeleton notifies, or a class name like 'AnimNotify_PlaySound' for class-based notifies.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_AddNotify::GetInputSchema() const
@@ -136,14 +136,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddNotify::Execute(const TSharedPtr<
 }
 
 // ============================================================================
-// claireon.anim_remove_notify
+// anim_remove_notify
 // ============================================================================
 
-FString ClaireonAnimTool_RemoveNotify::GetName() const { return TEXT("claireon.anim_remove_notify"); }
+FString ClaireonAnimTool_RemoveNotify::GetOperation() const { return TEXT("remove_notify"); }
 
 FString ClaireonAnimTool_RemoveNotify::GetDescription() const
 {
-	return TEXT("Remove a notify by zero-based index from the animation in the open editing session. Requires open session_id from claireon.anim_open. Transactional. Common pitfall: indices shift after removal, so cache them up front when removing multiple notifies in sequence.");
+	return TEXT("Remove a notify by zero-based index from the animation in the open editing session. Requires open session_id from anim_open. Transactional. Common pitfall: indices shift after removal, so cache them up front when removing multiple notifies in sequence.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_RemoveNotify::GetInputSchema() const
@@ -190,14 +190,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_RemoveNotify::Execute(const TSharedP
 }
 
 // ============================================================================
-// claireon.anim_move_notify
+// anim_move_notify
 // ============================================================================
 
-FString ClaireonAnimTool_MoveNotify::GetName() const { return TEXT("claireon.anim_move_notify"); }
+FString ClaireonAnimTool_MoveNotify::GetOperation() const { return TEXT("move_notify"); }
 
 FString ClaireonAnimTool_MoveNotify::GetDescription() const
 {
-	return TEXT("Move or resize a notify in the open animation editing session. Requires open session_id from claireon.anim_open. Transactional. Omitted fields are left unchanged. Pass end_time to derive duration. Common pitfall: track_index must reference an existing track or this errors.");
+	return TEXT("Move or resize a notify in the open animation editing session. Requires open session_id from anim_open. Transactional. Omitted fields are left unchanged. Pass end_time to derive duration. Common pitfall: track_index must reference an existing track or this errors.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_MoveNotify::GetInputSchema() const
@@ -282,14 +282,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_MoveNotify::Execute(const TSharedPtr
 }
 
 // ============================================================================
-// claireon.anim_duplicate_notify
+// anim_duplicate_notify
 // ============================================================================
 
-FString ClaireonAnimTool_DuplicateNotify::GetName() const { return TEXT("claireon.anim_duplicate_notify"); }
+FString ClaireonAnimTool_DuplicateNotify::GetOperation() const { return TEXT("duplicate_notify"); }
 
 FString ClaireonAnimTool_DuplicateNotify::GetDescription() const
 {
-	return TEXT("Duplicate a notify to a new time and/or track in the open animation editing session. Requires open session_id from claireon.anim_open. Transactional. Sub-objects are deep-copied. Missing track positions are auto-created. Returns the new notify index.");
+	return TEXT("Duplicate a notify to a new time and/or track in the open animation editing session. Requires open session_id from anim_open. Transactional. Sub-objects are deep-copied. Missing track positions are auto-created. Returns the new notify index.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_DuplicateNotify::GetInputSchema() const
@@ -376,14 +376,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_DuplicateNotify::Execute(const TShar
 }
 
 // ============================================================================
-// claireon.anim_set_notify_property
+// anim_set_notify_property
 // ============================================================================
 
-FString ClaireonAnimTool_SetNotifyProperty::GetName() const { return TEXT("claireon.anim_set_notify_property"); }
+FString ClaireonAnimTool_SetNotifyProperty::GetOperation() const { return TEXT("set_notify_property"); }
 
 FString ClaireonAnimTool_SetNotifyProperty::GetDescription() const
 {
-	return TEXT("Set a property on the sub-object of a notify in the open animation editing session. Requires open session_id from claireon.anim_open. Transactional. Common pitfall: property_name must match the UPROPERTY name on the notify's UAnimNotify or UAnimNotifyState class.");
+	return TEXT("Set a property on the sub-object of a notify in the open animation editing session. Requires open session_id from anim_open. Transactional. Common pitfall: property_name must match the UPROPERTY name on the notify's UAnimNotify or UAnimNotifyState class.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_SetNotifyProperty::GetInputSchema() const
@@ -444,14 +444,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_SetNotifyProperty::Execute(const TSh
 }
 
 // ============================================================================
-// claireon.anim_get_notify_property
+// anim_get_notify_property
 // ============================================================================
 
-FString ClaireonAnimTool_GetNotifyProperty::GetName() const { return TEXT("claireon.anim_get_notify_property"); }
+FString ClaireonAnimTool_GetNotifyProperty::GetOperation() const { return TEXT("get_notify_property"); }
 
 FString ClaireonAnimTool_GetNotifyProperty::GetDescription() const
 {
-	return TEXT("Get a property value from the sub-object of a notify in the open animation editing session. Requires open session_id from claireon.anim_open. Read-only. Common pitfall: property_name must match the UPROPERTY name on the underlying UAnimNotify(State) class.");
+	return TEXT("Get a property value from the sub-object of a notify in the open animation editing session. Requires open session_id from anim_open. Read-only. Common pitfall: property_name must match the UPROPERTY name on the underlying UAnimNotify(State) class.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_GetNotifyProperty::GetInputSchema() const
@@ -507,14 +507,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_GetNotifyProperty::Execute(const TSh
 }
 
 // ============================================================================
-// claireon.anim_list_notify_properties
+// anim_list_notify_properties
 // ============================================================================
 
-FString ClaireonAnimTool_ListNotifyProperties::GetName() const { return TEXT("claireon.anim_list_notify_properties"); }
+FString ClaireonAnimTool_ListNotifyProperties::GetOperation() const { return TEXT("list_notify_properties"); }
 
 FString ClaireonAnimTool_ListNotifyProperties::GetDescription() const
 {
-	return TEXT("List all editable properties on the sub-object of a notify in the open animation editing session. Requires open session_id from claireon.anim_open. Read-only. Returns property name, type, and current value tuples for use with claireon.anim_set_notify_property.");
+	return TEXT("List all editable properties on the sub-object of a notify in the open animation editing session. Requires open session_id from anim_open. Read-only. Returns property name, type, and current value tuples for use with anim_set_notify_property.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_ListNotifyProperties::GetInputSchema() const
@@ -575,14 +575,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_ListNotifyProperties::Execute(const 
 }
 
 // ============================================================================
-// claireon.anim_add_notify_track
+// anim_add_notify_track
 // ============================================================================
 
-FString ClaireonAnimTool_AddNotifyTrack::GetName() const { return TEXT("claireon.anim_add_notify_track"); }
+FString ClaireonAnimTool_AddNotifyTrack::GetOperation() const { return TEXT("add_notify_track"); }
 
 FString ClaireonAnimTool_AddNotifyTrack::GetDescription() const
 {
-	return TEXT("Add a new notify track to the animation in the open editing session. Requires open session_id from claireon.anim_open. Transactional. The new track is appended at the highest index. Use the returned track index when placing notifies on it.");
+	return TEXT("Add a new notify track to the animation in the open editing session. Requires open session_id from anim_open. Transactional. The new track is appended at the highest index. Use the returned track index when placing notifies on it.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_AddNotifyTrack::GetInputSchema() const
@@ -635,14 +635,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddNotifyTrack::Execute(const TShare
 }
 
 // ============================================================================
-// claireon.anim_remove_notify_track
+// anim_remove_notify_track
 // ============================================================================
 
-FString ClaireonAnimTool_RemoveNotifyTrack::GetName() const { return TEXT("claireon.anim_remove_notify_track"); }
+FString ClaireonAnimTool_RemoveNotifyTrack::GetOperation() const { return TEXT("remove_notify_track"); }
 
 FString ClaireonAnimTool_RemoveNotifyTrack::GetDescription() const
 {
-	return TEXT("Remove a notify track from the animation in the open editing session. Requires open session_id from claireon.anim_open. Transactional. Notifies on the removed track are reassigned to track 0; remaining track indices shift down by one above the removed slot.");
+	return TEXT("Remove a notify track from the animation in the open editing session. Requires open session_id from anim_open. Transactional. Notifies on the removed track are reassigned to track 0; remaining track indices shift down by one above the removed slot.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_RemoveNotifyTrack::GetInputSchema() const
@@ -711,14 +711,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_RemoveNotifyTrack::Execute(const TSh
 }
 
 // ============================================================================
-// claireon.anim_rename_notify_track
+// anim_rename_notify_track
 // ============================================================================
 
-FString ClaireonAnimTool_RenameNotifyTrack::GetName() const { return TEXT("claireon.anim_rename_notify_track"); }
+FString ClaireonAnimTool_RenameNotifyTrack::GetOperation() const { return TEXT("rename_notify_track"); }
 
 FString ClaireonAnimTool_RenameNotifyTrack::GetDescription() const
 {
-	return TEXT("Rename a notify track in the animation in the open editing session. Requires open session_id from claireon.anim_open. Transactional. The new name must be unique within the animation; collisions error out and the rename is rolled back via the transaction.");
+	return TEXT("Rename a notify track in the animation in the open editing session. Requires open session_id from anim_open. Transactional. The new name must be unique within the animation; collisions error out and the rename is rolled back via the transaction.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_RenameNotifyTrack::GetInputSchema() const
@@ -774,14 +774,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_RenameNotifyTrack::Execute(const TSh
 }
 
 // ============================================================================
-// claireon.anim_reorder_notify_track
+// anim_reorder_notify_track
 // ============================================================================
 
-FString ClaireonAnimTool_ReorderNotifyTrack::GetName() const { return TEXT("claireon.anim_reorder_notify_track"); }
+FString ClaireonAnimTool_ReorderNotifyTrack::GetOperation() const { return TEXT("reorder_notify_track"); }
 
 FString ClaireonAnimTool_ReorderNotifyTrack::GetDescription() const
 {
-	return TEXT("Reorder a notify track to a new position in the open animation editing session. Requires open session_id from claireon.anim_open. Transactional. Common pitfall: notifies retain their stored track index, which is updated to follow the reorder so existing notifies stay on the moved track.");
+	return TEXT("Reorder a notify track to a new position in the open animation editing session. Requires open session_id from anim_open. Transactional. Common pitfall: notifies retain their stored track index, which is updated to follow the reorder so existing notifies stay on the moved track.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_ReorderNotifyTrack::GetInputSchema() const

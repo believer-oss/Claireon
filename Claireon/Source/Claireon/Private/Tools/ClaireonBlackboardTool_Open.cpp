@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBlackboardTool_Open::GetName() const
-{
-	return TEXT("claireon.blackboard_open");
-}
+FString ClaireonBlackboardTool_Open::GetOperation() const { return TEXT("open"); }
 
 TArray<FString> ClaireonBlackboardTool_Open::GetSearchKeywords() const
 {

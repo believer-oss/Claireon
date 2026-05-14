@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonInputTool_SetMappingKey::GetName() const
-{
-	return TEXT("claireon.input_set_mapping_key");
-}
+FString ClaireonInputTool_SetMappingKey::GetOperation() const { return TEXT("set_mapping_key"); }
 
 FString ClaireonInputTool_SetMappingKey::GetDescription() const
 {

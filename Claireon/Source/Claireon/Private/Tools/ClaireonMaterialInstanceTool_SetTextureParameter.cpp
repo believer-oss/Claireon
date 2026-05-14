@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonMaterialInstanceTool_SetTextureParameter::GetName() const
-{
-	return TEXT("claireon.material_instance_set_texture_parameter");
-}
+FString ClaireonMaterialInstanceTool_SetTextureParameter::GetOperation() const { return TEXT("instance_set_texture_parameter"); }
 
 FString ClaireonMaterialInstanceTool_SetTextureParameter::GetDescription() const
 {

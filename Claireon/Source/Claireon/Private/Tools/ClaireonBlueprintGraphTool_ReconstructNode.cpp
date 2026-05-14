@@ -97,14 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_ReconstructNode::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_reconstruct_node");
-}
+FString ClaireonBlueprintGraphTool_ReconstructNode::GetOperation() const { return TEXT("graph_reconstruct_node"); }
 
 FString ClaireonBlueprintGraphTool_ReconstructNode::GetDescription() const
 {
-    return TEXT("Reconstruct a node in place to refresh its pins from the current class definition. Requires open session_id from claireon.blueprint_graph_open OR pass asset_path for stateless single-shot mode. Transactional. Use after editing the underlying UFUNCTION/struct so the node picks up the new pin layout.");
+    return TEXT("Reconstruct a node in place to refresh its pins from the current class definition. Requires open session_id from blueprint_graph_open OR pass asset_path for stateless single-shot mode. Transactional. Use after editing the underlying UFUNCTION/struct so the node picks up the new pin layout.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ReconstructNode::GetInputSchema() const

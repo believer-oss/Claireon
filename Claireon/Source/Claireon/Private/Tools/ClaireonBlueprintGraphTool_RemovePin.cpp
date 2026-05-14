@@ -97,14 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_RemovePin::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_remove_pin");
-}
+FString ClaireonBlueprintGraphTool_RemovePin::GetOperation() const { return TEXT("graph_remove_pin"); }
 
 FString ClaireonBlueprintGraphTool_RemovePin::GetDescription() const
 {
-    return TEXT("Remove a dynamic pin from a node (Sequence/MakeArray/Switch/etc.) in the open Blueprint editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Connections to the removed pin are dropped; non-dynamic pins error out unmodified.");
+    return TEXT("Remove a dynamic pin from a node (Sequence/MakeArray/Switch/etc.) in the open Blueprint editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Connections to the removed pin are dropped; non-dynamic pins error out unmodified.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_RemovePin::GetInputSchema() const

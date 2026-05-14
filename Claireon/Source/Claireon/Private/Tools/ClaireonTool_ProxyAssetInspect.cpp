@@ -8,7 +8,8 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_ProxyAssetInspect::GetName() const { return TEXT("claireon.proxyasset_inspect"); }
+FString ClaireonTool_ProxyAssetInspect::GetCategory() const { return TEXT("proxyasset"); }
+FString ClaireonTool_ProxyAssetInspect::GetOperation() const { return TEXT("inspect"); }
 
 TArray<FString> ClaireonTool_ProxyAssetInspect::GetSearchKeywords() const
 {

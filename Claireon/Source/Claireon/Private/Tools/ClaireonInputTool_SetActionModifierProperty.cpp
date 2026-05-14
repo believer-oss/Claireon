@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonInputTool_SetActionModifierProperty::GetName() const
-{
-	return TEXT("claireon.input_set_action_modifier_property");
-}
+FString ClaireonInputTool_SetActionModifierProperty::GetOperation() const { return TEXT("set_action_modifier_property"); }
 
 FString ClaireonInputTool_SetActionModifierProperty::GetDescription() const
 {

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 // Lint tests for tool descriptions across the four P5 categories
-// (claireon.blueprint_graph_*, claireon.anim_*, claireon.statetree_*,
-// claireon.widgetbp_*). Validates the P5 audit acceptance criteria:
+// (blueprint_graph_*, anim_*, statetree_*,
+// widgetbp_*). Validates the P5 audit acceptance criteria:
 //
 //   1. Length: 80 <= len(description) <= 400 characters.
 //   2. Verb-opener: the first word is a recognized authoring verb (Add,
@@ -56,11 +56,11 @@ namespace ClaireonDescriptionLintHelpers
 	 */
 	bool IsP5ScopedTool(const FString& ToolName)
 	{
-		return ToolName.StartsWith(TEXT("claireon.blueprint_graph_"))
-			|| ToolName.StartsWith(TEXT("claireon.anim_"))
-			|| ToolName.StartsWith(TEXT("claireon.blendspace_"))
-			|| ToolName.StartsWith(TEXT("claireon.statetree_"))
-			|| ToolName.StartsWith(TEXT("claireon.widgetbp_"));
+		return ToolName.StartsWith(TEXT("blueprint_graph_"))
+			|| ToolName.StartsWith(TEXT("anim_"))
+			|| ToolName.StartsWith(TEXT("blendspace_"))
+			|| ToolName.StartsWith(TEXT("statetree_"))
+			|| ToolName.StartsWith(TEXT("widgetbp_"));
 	}
 
 	/** Return the first whitespace-delimited token in a string. */

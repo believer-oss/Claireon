@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonInputTool_AddMappingTrigger::GetName() const
-{
-	return TEXT("claireon.input_add_mapping_trigger");
-}
+FString ClaireonInputTool_AddMappingTrigger::GetOperation() const { return TEXT("add_mapping_trigger"); }
 
 FString ClaireonInputTool_AddMappingTrigger::GetDescription() const
 {

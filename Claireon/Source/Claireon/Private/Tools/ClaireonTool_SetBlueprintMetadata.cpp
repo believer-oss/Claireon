@@ -12,10 +12,7 @@
 #include "Serialization/JsonWriter.h"
 #include "Serialization/JsonReader.h"
 
-FString ClaireonTool_SetBlueprintMetadata::GetName() const
-{
-	return TEXT("claireon.set_blueprint_metadata");
-}
+FString ClaireonTool_SetBlueprintMetadata::GetOperation() const { return TEXT("set_metadata"); }
 
 FString ClaireonTool_SetBlueprintMetadata::GetCategory() const
 {

@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonNiagaraTool_Close::GetName() const
-{
-	return TEXT("claireon.niagara_close");
-}
+FString ClaireonNiagaraTool_Close::GetOperation() const { return TEXT("close"); }
 
 FString ClaireonNiagaraTool_Close::GetDescription() const
 {

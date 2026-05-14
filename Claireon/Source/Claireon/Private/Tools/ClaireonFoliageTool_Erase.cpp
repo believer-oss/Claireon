@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonFoliageTool_Erase::GetName() const
-{
-	return TEXT("claireon.foliage_erase");
-}
+FString ClaireonFoliageTool_Erase::GetOperation() const { return TEXT("erase"); }
 
 FString ClaireonFoliageTool_Erase::GetDescription() const
 {

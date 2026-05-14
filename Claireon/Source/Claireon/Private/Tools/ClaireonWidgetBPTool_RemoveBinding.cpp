@@ -11,14 +11,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_RemoveBinding::GetName() const
-{
-    return TEXT("claireon.widgetbp_remove_binding");
-}
+FString ClaireonWidgetBPTool_RemoveBinding::GetOperation() const { return TEXT("remove_binding"); }
 
 FString ClaireonWidgetBPTool_RemoveBinding::GetDescription() const
 {
-    return TEXT("Remove a legacy UMG property binding from a widget in the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Transactional. After removal the property reverts to its authored default. Common pitfall: this targets legacy property bindings; remove MVVM bindings via claireon.widgetbp_remove_mvvm_binding.");
+    return TEXT("Remove a legacy UMG property binding from a widget in the open Widget Blueprint editing session. Requires open session_id from widgetbp_open. Transactional. After removal the property reverts to its authored default. Common pitfall: this targets legacy property bindings; remove MVVM bindings via widgetbp_remove_mvvm_binding.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_RemoveBinding::GetInputSchema() const

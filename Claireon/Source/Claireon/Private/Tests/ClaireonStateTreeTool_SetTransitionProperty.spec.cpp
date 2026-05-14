@@ -1,7 +1,7 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 //
-// Spec tests for claireon.statetree_set_transition_property (#0000 / F2).
+// Spec tests for statetree_set_transition_property (#0000 / F2).
 // Exercises SetTransitionProperty helper directly on a transient FStateTreeTransition.
 
 #if WITH_UNTESTED
@@ -19,7 +19,7 @@
 UNTEST_UNIT_OPTS(Claireon, StateTreeSetTransitionProperty, ToolSurface, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonStateTreeTool_SetTransitionProperty Tool;
-	UNTEST_ASSERT_STREQ(*Tool.GetName(), TEXT("claireon.statetree_set_transition_property"));
+	UNTEST_ASSERT_STREQ(*Tool.GetName(), TEXT("statetree_set_transition_property"));
 	UNTEST_ASSERT_TRUE(!Tool.GetDescription().IsEmpty());
 	const TSharedPtr<FJsonObject> Schema = Tool.GetInputSchema();
 	UNTEST_ASSERT_TRUE(Schema.IsValid());
@@ -104,7 +104,7 @@ UNTEST_UNIT_OPTS(Claireon, StateTreeSetTransitionProperty, ExcludedTarget, UNTES
 	const bool bOk = ClaireonStateTreeHelpers::SetTransitionProperty(
 		Transition, TEXT("Target"), TEXT(""), Error);
 	UNTEST_ASSERT_TRUE(!bOk);
-	UNTEST_ASSERT_TRUE(Error.Contains(TEXT("claireon.statetree_modify_transition")));
+	UNTEST_ASSERT_TRUE(Error.Contains(TEXT("statetree_modify_transition")));
 	co_return;
 }
 
@@ -119,7 +119,7 @@ UNTEST_UNIT_OPTS(Claireon, StateTreeSetTransitionProperty, ExcludedStateSubPath,
 	const bool bOk = ClaireonStateTreeHelpers::SetTransitionProperty(
 		Transition, TEXT("State.LinkType"), TEXT(""), Error);
 	UNTEST_ASSERT_TRUE(!bOk);
-	UNTEST_ASSERT_TRUE(Error.Contains(TEXT("claireon.statetree_modify_transition")));
+	UNTEST_ASSERT_TRUE(Error.Contains(TEXT("statetree_modify_transition")));
 	co_return;
 }
 

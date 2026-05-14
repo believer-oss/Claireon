@@ -14,19 +14,18 @@
 #include "Components/Widget.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "UObject/Package.h"
+#include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "HAL/FileManager.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_Create::GetName() const
-{
-    return TEXT("claireon.widgetbp_create");
-}
+FString ClaireonWidgetBPTool_Create::GetOperation() const { return TEXT("create"); }
 
 FString ClaireonWidgetBPTool_Create::GetDescription() const
 {
-    return TEXT("Create a new Widget Blueprint asset at the given path and open an editing session. Stateless / non-session entry: writes the new .uasset to disk, then returns a session_id ready for further claireon.widgetbp_* operations. Common pitfall: target package directory must already exist.");
+    return TEXT("Create a new Widget Blueprint asset at the given path and open an editing session. Stateless / non-session entry: writes the new .uasset to disk, then returns a session_id ready for further widgetbp_* operations. Common pitfall: target package directory must already exist.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_Create::GetInputSchema() const
@@ -177,7 +176,7 @@ FToolResult ClaireonWidgetBPTool_Create::Execute(const TSharedPtr<FJsonObject>& 
 
 	// Open session (acts as exclusive lock)
 	FString FinalAssetPath = NewWBP->GetPathName();
-	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(FinalAssetPath, TEXT("claireon.widgetbp_edit"));
+	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(FinalAssetPath, TEXT("widgetbp_edit"));
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{
 		const FMCPSession& Blocker = OpenResult.BlockingSession.GetValue();

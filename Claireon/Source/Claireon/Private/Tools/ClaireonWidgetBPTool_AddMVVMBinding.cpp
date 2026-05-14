@@ -20,14 +20,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_AddMVVMBinding::GetName() const
-{
-    return TEXT("claireon.widgetbp_add_mvvm_binding");
-}
+FString ClaireonWidgetBPTool_AddMVVMBinding::GetOperation() const { return TEXT("add_mvvm_binding"); }
 
 FString ClaireonWidgetBPTool_AddMVVMBinding::GetDescription() const
 {
-    return TEXT("Add an MVVM binding between a ViewModel property and a widget property in the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Transactional. The viewmodel context must already be added via claireon.widgetbp_add_mvvm_viewmodel before bindings can resolve their source property paths.");
+    return TEXT("Add an MVVM binding between a ViewModel property and a widget property in the open Widget Blueprint editing session. Requires open session_id from widgetbp_open. Transactional. The viewmodel context must already be added via widgetbp_add_mvvm_viewmodel before bindings can resolve their source property paths.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_AddMVVMBinding::GetInputSchema() const

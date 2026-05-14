@@ -8,10 +8,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLandscapeSplineTool_AddControlPoint::GetName() const
-{
-	return TEXT("claireon.landscape_spline_add_control_point");
-}
+FString ClaireonLandscapeSplineTool_AddControlPoint::GetOperation() const { return TEXT("spline_add_control_point"); }
 
 FString ClaireonLandscapeSplineTool_AddControlPoint::GetDescription() const
 {

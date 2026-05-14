@@ -12,14 +12,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_SetNodeProperty::GetName() const
-{
-	return TEXT("claireon.statetree_set_node_property");
-}
+FString ClaireonStateTreeTool_SetNodeProperty::GetOperation() const { return TEXT("set_node_property"); }
 
 FString ClaireonStateTreeTool_SetNodeProperty::GetDescription() const
 {
-	return TEXT("Set a property on a node (task, condition, consideration, evaluator, etc.) in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Common pitfall: property_name must match the UPROPERTY name on the node's struct; nested paths use dot notation.");
+	return TEXT("Set a property on a node (task, condition, consideration, evaluator, etc.) in the open State Tree editing session. Requires open session_id from statetree_open. Transactional. Common pitfall: property_name must match the UPROPERTY name on the node's struct; nested paths use dot notation.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_SetNodeProperty::GetInputSchema() const

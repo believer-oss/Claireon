@@ -10,7 +10,8 @@
 #include "Dom/JsonObject.h"
 #include "StructUtils/InstancedStruct.h"
 
-FString ClaireonTool_ChooserRemoveRow::GetName() const { return TEXT("claireon.chooser_remove_row"); }
+FString ClaireonTool_ChooserRemoveRow::GetCategory() const { return TEXT("chooser"); }
+FString ClaireonTool_ChooserRemoveRow::GetOperation() const { return TEXT("remove_row"); }
 
 FString ClaireonTool_ChooserRemoveRow::GetDescription() const
 {

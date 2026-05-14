@@ -7,10 +7,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonMaterialInstanceTool_Close::GetName() const
-{
-	return TEXT("claireon.material_instance_close");
-}
+FString ClaireonMaterialInstanceTool_Close::GetOperation() const { return TEXT("instance_close"); }
 
 FString ClaireonMaterialInstanceTool_Close::GetDescription() const
 {

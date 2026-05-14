@@ -7,7 +7,7 @@
 
 /**
  * Shared process-wide transaction-group state for the decomposed
- * claireon.transaction_begin_group / end_group / rollback_group tools.
+ * transaction_begin_group / end_group / rollback_group tools.
  *
  * FClaireonServer is single-instance and single-session, so a file-scope
  * namespace singleton is sufficient. FClaireonServer::HandleInitialized() and

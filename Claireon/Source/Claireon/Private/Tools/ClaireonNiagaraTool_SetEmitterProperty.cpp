@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonNiagaraTool_SetEmitterProperty::GetName() const
-{
-	return TEXT("claireon.niagara_set_emitter_property");
-}
+FString ClaireonNiagaraTool_SetEmitterProperty::GetOperation() const { return TEXT("set_emitter_property"); }
 
 FString ClaireonNiagaraTool_SetEmitterProperty::GetDescription() const
 {

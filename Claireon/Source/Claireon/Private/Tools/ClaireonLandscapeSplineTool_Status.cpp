@@ -6,10 +6,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLandscapeSplineTool_Status::GetName() const
-{
-	return TEXT("claireon.landscape_spline_status");
-}
+FString ClaireonLandscapeSplineTool_Status::GetOperation() const { return TEXT("spline_status"); }
 
 FString ClaireonLandscapeSplineTool_Status::GetDescription() const
 {

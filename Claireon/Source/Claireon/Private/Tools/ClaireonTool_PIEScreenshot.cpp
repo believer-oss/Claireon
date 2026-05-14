@@ -11,10 +11,8 @@
 #include "Misc/DateTime.h"
 #include "HAL/PlatformFileManager.h"
 
-FString ClaireonTool_PIEScreenshot::GetName() const
-{
-	return TEXT("claireon.pie_screenshot");
-}
+FString ClaireonTool_PIEScreenshot::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_PIEScreenshot::GetOperation() const { return TEXT("screenshot"); }
 
 FString ClaireonTool_PIEScreenshot::GetDescription() const
 {

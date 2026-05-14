@@ -7,10 +7,8 @@
 #include "FindInBlueprintManager.h"
 #include "HAL/PlatformProcess.h"
 
-FString ClaireonTool_SearchInBlueprints::GetName() const
-{
-	return TEXT("claireon.blueprint_search");
-}
+FString ClaireonTool_SearchInBlueprints::GetCategory() const { return TEXT("blueprint"); }
+FString ClaireonTool_SearchInBlueprints::GetOperation() const { return TEXT("search"); }
 
 TArray<FString> ClaireonTool_SearchInBlueprints::GetSearchKeywords() const
 {

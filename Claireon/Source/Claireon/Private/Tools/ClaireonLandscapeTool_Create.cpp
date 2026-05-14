@@ -28,10 +28,7 @@ static FVector ExtractVector(const TSharedPtr<FJsonObject>& Obj, const FVector& 
 	return Result;
 }
 
-FString ClaireonLandscapeTool_Create::GetName() const
-{
-	return TEXT("claireon.landscape_create");
-}
+FString ClaireonLandscapeTool_Create::GetOperation() const { return TEXT("create"); }
 
 FString ClaireonLandscapeTool_Create::GetDescription() const
 {

@@ -15,10 +15,8 @@
 #include "Engine/World.h"
 #include "Misc/Paths.h"
 
-FString ClaireonTool_LandscapeImport::GetName() const
-{
-	return TEXT("claireon.landscape_import");
-}
+FString ClaireonTool_LandscapeImport::GetCategory() const { return TEXT("landscape"); }
+FString ClaireonTool_LandscapeImport::GetOperation() const { return TEXT("import"); }
 
 FString ClaireonTool_LandscapeImport::GetDescription() const
 {

@@ -12,10 +12,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_Open::GetName() const
-{
-	return TEXT("claireon.level_sequence_open");
-}
+FString ClaireonLevelSequenceTool_Open::GetOperation() const { return TEXT("sequence_open"); }
 
 TArray<FString> ClaireonLevelSequenceTool_Open::GetSearchKeywords() const
 {

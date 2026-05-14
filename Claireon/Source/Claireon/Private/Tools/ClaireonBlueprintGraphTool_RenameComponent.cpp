@@ -97,14 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_RenameComponent::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_rename_component");
-}
+FString ClaireonBlueprintGraphTool_RenameComponent::GetOperation() const { return TEXT("graph_rename_component"); }
 
 FString ClaireonBlueprintGraphTool_RenameComponent::GetDescription() const
 {
-    return TEXT("Rename a component variable in the Blueprint's Simple Construction Script in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. The new name must be unique within the SCS; references in graph nodes are auto-fixed when possible.");
+    return TEXT("Rename a component variable in the Blueprint's Simple Construction Script in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. The new name must be unique within the SCS; references in graph nodes are auto-fixed when possible.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_RenameComponent::GetInputSchema() const

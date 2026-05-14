@@ -16,10 +16,11 @@
 #include "Dom/JsonObject.h"
 
 // ============================================================================
-// claireon.proxytable_create
+// proxytable_create
 // ============================================================================
 
-FString ClaireonTool_ProxyTableCreate::GetName() const { return TEXT("claireon.proxytable_create"); }
+FString ClaireonTool_ProxyTableCreate::GetCategory() const { return TEXT("proxytable"); }
+FString ClaireonTool_ProxyTableCreate::GetOperation() const { return TEXT("create"); }
 
 FString ClaireonTool_ProxyTableCreate::GetDescription() const
 {
@@ -72,10 +73,11 @@ IClaireonTool::FToolResult ClaireonTool_ProxyTableCreate::Execute(const TSharedP
 }
 
 // ============================================================================
-// claireon.proxytable_duplicate
+// proxytable_duplicate
 // ============================================================================
 
-FString ClaireonTool_ProxyTableDuplicate::GetName() const { return TEXT("claireon.proxytable_duplicate"); }
+FString ClaireonTool_ProxyTableDuplicate::GetCategory() const { return TEXT("proxytable"); }
+FString ClaireonTool_ProxyTableDuplicate::GetOperation() const { return TEXT("duplicate"); }
 
 FString ClaireonTool_ProxyTableDuplicate::GetDescription() const
 {
@@ -134,10 +136,11 @@ IClaireonTool::FToolResult ClaireonTool_ProxyTableDuplicate::Execute(const TShar
 }
 
 // ============================================================================
-// claireon.proxyasset_create
+// proxyasset_create
 // ============================================================================
 
-FString ClaireonTool_ProxyAssetCreate::GetName() const { return TEXT("claireon.proxyasset_create"); }
+FString ClaireonTool_ProxyAssetCreate::GetCategory() const { return TEXT("proxyasset"); }
+FString ClaireonTool_ProxyAssetCreate::GetOperation() const { return TEXT("create"); }
 
 FString ClaireonTool_ProxyAssetCreate::GetDescription() const
 {
@@ -210,10 +213,11 @@ IClaireonTool::FToolResult ClaireonTool_ProxyAssetCreate::Execute(const TSharedP
 }
 
 // ============================================================================
-// claireon.proxyasset_duplicate
+// proxyasset_duplicate
 // ============================================================================
 
-FString ClaireonTool_ProxyAssetDuplicate::GetName() const { return TEXT("claireon.proxyasset_duplicate"); }
+FString ClaireonTool_ProxyAssetDuplicate::GetCategory() const { return TEXT("proxyasset"); }
+FString ClaireonTool_ProxyAssetDuplicate::GetOperation() const { return TEXT("duplicate"); }
 
 FString ClaireonTool_ProxyAssetDuplicate::GetDescription() const
 {

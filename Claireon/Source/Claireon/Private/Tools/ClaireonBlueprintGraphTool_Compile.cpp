@@ -97,10 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_Compile::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_compile");
-}
+FString ClaireonBlueprintGraphTool_Compile::GetOperation() const { return TEXT("graph_compile"); }
 
 TArray<FString> ClaireonBlueprintGraphTool_Compile::GetSearchKeywords() const
 {
@@ -109,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_Compile::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_Compile::GetDescription() const
 {
-    return TEXT("Compiles the Blueprint of the current session and reports structured errors and warnings. Most-common pitfall: assuming compile == save -- it does not write to disk; call claireon.blueprint_graph_save (or close, which auto-saves) to persist the compiled state.");
+    return TEXT("Compiles the Blueprint of the current session and reports structured errors and warnings. Most-common pitfall: assuming compile == save -- it does not write to disk; call blueprint_graph_save (or close, which auto-saves) to persist the compiled state.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Compile::GetInputSchema() const
@@ -186,7 +183,7 @@ FString ClaireonBlueprintGraphTool_Compile::GetFullDescription() const
         "Compiles the Blueprint of the current session and returns a "
         "structured list of errors and warnings (file/line/message). Compile "
         "is in-memory only -- it does NOT write to disk; pair with "
-        "claireon.blueprint_graph_save (or claireon.blueprint_graph_close, which "
+        "blueprint_graph_save (or blueprint_graph_close, which "
         "auto-saves) when you want the compiled state persisted. Use this "
         "tool to validate after a sequence of add_node/connect_pins calls or "
         "after a structural refactor (e.g. variable type change), so you "
@@ -196,7 +193,7 @@ FString ClaireonBlueprintGraphTool_Compile::GetFullDescription() const
 
 FString ClaireonBlueprintGraphTool_Compile::GetExampleUsage() const
 {
-    return TEXT("claireon.blueprint_graph_compile session_id=\"...\"");
+    return TEXT("blueprint_graph_compile session_id=\"...\"");
 }
 
 #undef LOCTEXT_NAMESPACE

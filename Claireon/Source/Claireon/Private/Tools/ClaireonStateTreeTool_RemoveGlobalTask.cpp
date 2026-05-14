@@ -12,14 +12,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_RemoveGlobalTask::GetName() const
-{
-	return TEXT("claireon.statetree_remove_global_task");
-}
+FString ClaireonStateTreeTool_RemoveGlobalTask::GetOperation() const { return TEXT("remove_global_task"); }
 
 FString ClaireonStateTreeTool_RemoveGlobalTask::GetDescription() const
 {
-	return TEXT("Remove a global task from the State Tree in the open editing session. Requires open session_id from claireon.statetree_open. Transactional. Common pitfall: any bindings sourced from the task's outputs are dropped along with it; downstream consumers may revert to their authored defaults.");
+	return TEXT("Remove a global task from the State Tree in the open editing session. Requires open session_id from statetree_open. Transactional. Common pitfall: any bindings sourced from the task's outputs are dropped along with it; downstream consumers may revert to their authored defaults.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_RemoveGlobalTask::GetInputSchema() const

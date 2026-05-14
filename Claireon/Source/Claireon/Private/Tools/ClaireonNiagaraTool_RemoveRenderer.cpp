@@ -12,10 +12,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonNiagaraTool_RemoveRenderer::GetName() const
-{
-	return TEXT("claireon.niagara_remove_renderer");
-}
+FString ClaireonNiagaraTool_RemoveRenderer::GetOperation() const { return TEXT("remove_renderer"); }
 
 FString ClaireonNiagaraTool_RemoveRenderer::GetDescription() const
 {

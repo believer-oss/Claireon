@@ -14,7 +14,7 @@ struct FMCPSessionClosedInfo;
  * Session lifecycle and locking are managed by FClaireonSessionManager.
  *
  * Struct previously lived in ClaireonTool_SequenceEdit.h; moved here so the
- * decomposed claireon.level_sequence_* tools can share it without depending on
+ * decomposed level_sequence_* tools can share it without depending on
  * the deleted monolith.
  */
 struct FSequenceEditToolData
@@ -59,7 +59,7 @@ struct FSequenceEditToolData
 
 /**
  * Base class for all decomposed Level Sequence editing MCP tools
- * (claireon.level_sequence_*). Provides shared session management and state
+ * (level_sequence_*). Provides shared session management and state
  * response building, mirroring ClaireonBehaviorTreeEditToolBase's shape.
  */
 class CLAIREON_API ClaireonLevelSequenceEditToolBase : public IClaireonTool
@@ -106,7 +106,7 @@ protected:
 	class CLAIREON_API ClassName : public ClaireonLevelSequenceEditToolBase \
 	{ \
 	public: \
-		FString GetName() const override; \
+		FString GetOperation() const override; \
 		FString GetDescription() const override; \
 		TSharedPtr<FJsonObject> GetInputSchema() const override; \
 		FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override; \

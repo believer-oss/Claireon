@@ -12,10 +12,8 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
-FString ClaireonTool_CommandletRun::GetName() const
-{
-	return TEXT("claireon.commandlet_run");
-}
+FString ClaireonTool_CommandletRun::GetCategory() const { return TEXT("commandlet"); }
+FString ClaireonTool_CommandletRun::GetOperation() const { return TEXT("run"); }
 
 FString ClaireonTool_CommandletRun::GetDescription() const
 {

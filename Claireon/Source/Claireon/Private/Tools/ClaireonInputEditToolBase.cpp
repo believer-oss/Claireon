@@ -13,7 +13,7 @@ using FToolResult = IClaireonTool::FToolResult;
 // Static members
 // ============================================================================
 
-const TCHAR* ClaireonInputEditToolBase::InputSessionToolName = TEXT("claireon.input_edit");
+const TCHAR* ClaireonInputEditToolBase::InputSessionToolName = TEXT("input_edit");
 TMap<FString, FInputEditToolData> ClaireonInputEditToolBase::ToolData;
 bool ClaireonInputEditToolBase::bDelegateRegistered = false;
 

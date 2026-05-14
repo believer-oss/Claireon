@@ -97,14 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_InspectNode::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_inspect_node");
-}
+FString ClaireonBlueprintGraphTool_InspectNode::GetOperation() const { return TEXT("graph_inspect_node"); }
 
 FString ClaireonBlueprintGraphTool_InspectNode::GetDescription() const
 {
-    return TEXT("Return a single node in full fidelity (structured JSON) from the open Blueprint editing session without dumping the whole graph. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Read-only. Pair with claireon.blueprint_graph_get_state to navigate, then drill in here for property-level detail.");
+    return TEXT("Return a single node in full fidelity (structured JSON) from the open Blueprint editing session without dumping the whole graph. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Read-only. Pair with blueprint_graph_get_state to navigate, then drill in here for property-level detail.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_InspectNode::GetInputSchema() const
@@ -144,7 +141,7 @@ FToolResult ClaireonBlueprintGraphTool_InspectNode::Execute(const TSharedPtr<FJs
 	if (Cast<UAnimGraphNode_Base>(Node))
 	{
 		return MakeErrorResult(FString::Printf(
-			TEXT("Node %s is an AnimGraph node; use claireon.animgraph_get_node to inspect AnimGraph nodes."),
+			TEXT("Node %s is an AnimGraph node; use animgraph_get_node to inspect AnimGraph nodes."),
 			*Node->NodeGuid.ToString(EGuidFormats::Digits)));
 	}
 

@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBlackboardTool_AddKey::GetName() const
-{
-	return TEXT("claireon.blackboard_add_key");
-}
+FString ClaireonBlackboardTool_AddKey::GetOperation() const { return TEXT("add_key"); }
 
 FString ClaireonBlackboardTool_AddKey::GetDescription() const
 {

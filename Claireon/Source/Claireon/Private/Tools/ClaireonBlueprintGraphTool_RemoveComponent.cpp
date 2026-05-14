@@ -97,14 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_RemoveComponent::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_remove_component");
-}
+FString ClaireonBlueprintGraphTool_RemoveComponent::GetOperation() const { return TEXT("graph_remove_component"); }
 
 FString ClaireonBlueprintGraphTool_RemoveComponent::GetDescription() const
 {
-    return TEXT("Remove a component from the Blueprint's Simple Construction Script in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Children of the removed component are promoted up one level so the SCS hierarchy stays connected.");
+    return TEXT("Remove a component from the Blueprint's Simple Construction Script in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Children of the removed component are promoted up one level so the SCS hierarchy stays connected.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_RemoveComponent::GetInputSchema() const

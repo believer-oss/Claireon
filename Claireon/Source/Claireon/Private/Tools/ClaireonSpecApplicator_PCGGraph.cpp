@@ -87,7 +87,7 @@ bool FClaireonSpecApplicator_PCGGraph::OpenOrCreateAsset(const FString& AssetPat
 
 	const FString GraphPathName = Graph->GetPathName();
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
-		GraphPathName, TEXT("claireon.pcg_edit"));
+		GraphPathName, TEXT("pcg_edit"));
 
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{

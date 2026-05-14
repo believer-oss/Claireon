@@ -28,10 +28,7 @@ using FToolResult = IClaireonTool::FToolResult;
 // ClaireonAnimGraphTool_AddState
 // ============================================================================
 
-FString ClaireonAnimGraphTool_AddState::GetName() const
-{
-	return TEXT("claireon.animgraph_add_state");
-}
+FString ClaireonAnimGraphTool_AddState::GetOperation() const { return TEXT("add_state"); }
 
 FString ClaireonAnimGraphTool_AddState::GetDescription() const
 {
@@ -110,10 +107,7 @@ FToolResult ClaireonAnimGraphTool_AddState::Execute(const TSharedPtr<FJsonObject
 // ClaireonAnimGraphTool_RemoveState
 // ============================================================================
 
-FString ClaireonAnimGraphTool_RemoveState::GetName() const
-{
-	return TEXT("claireon.animgraph_remove_state");
-}
+FString ClaireonAnimGraphTool_RemoveState::GetOperation() const { return TEXT("remove_state"); }
 
 FString ClaireonAnimGraphTool_RemoveState::GetDescription() const
 {
@@ -214,10 +208,7 @@ FToolResult ClaireonAnimGraphTool_RemoveState::Execute(const TSharedPtr<FJsonObj
 // ClaireonAnimGraphTool_RenameState
 // ============================================================================
 
-FString ClaireonAnimGraphTool_RenameState::GetName() const
-{
-	return TEXT("claireon.animgraph_rename_state");
-}
+FString ClaireonAnimGraphTool_RenameState::GetOperation() const { return TEXT("rename_state"); }
 
 FString ClaireonAnimGraphTool_RenameState::GetDescription() const
 {
@@ -287,10 +278,7 @@ FToolResult ClaireonAnimGraphTool_RenameState::Execute(const TSharedPtr<FJsonObj
 // ClaireonAnimGraphTool_SetEntryState
 // ============================================================================
 
-FString ClaireonAnimGraphTool_SetEntryState::GetName() const
-{
-	return TEXT("claireon.animgraph_set_entry_state");
-}
+FString ClaireonAnimGraphTool_SetEntryState::GetOperation() const { return TEXT("set_entry_state"); }
 
 FString ClaireonAnimGraphTool_SetEntryState::GetDescription() const
 {
@@ -393,10 +381,7 @@ FToolResult ClaireonAnimGraphTool_SetEntryState::Execute(const TSharedPtr<FJsonO
 // ClaireonAnimGraphTool_AddTransition
 // ============================================================================
 
-FString ClaireonAnimGraphTool_AddTransition::GetName() const
-{
-	return TEXT("claireon.animgraph_add_transition");
-}
+FString ClaireonAnimGraphTool_AddTransition::GetOperation() const { return TEXT("add_transition"); }
 
 FString ClaireonAnimGraphTool_AddTransition::GetDescription() const
 {
@@ -525,10 +510,7 @@ FToolResult ClaireonAnimGraphTool_AddTransition::Execute(const TSharedPtr<FJsonO
 // ClaireonAnimGraphTool_RemoveTransition
 // ============================================================================
 
-FString ClaireonAnimGraphTool_RemoveTransition::GetName() const
-{
-	return TEXT("claireon.animgraph_remove_transition");
-}
+FString ClaireonAnimGraphTool_RemoveTransition::GetOperation() const { return TEXT("remove_transition"); }
 
 FString ClaireonAnimGraphTool_RemoveTransition::GetDescription() const
 {
@@ -604,10 +586,7 @@ FToolResult ClaireonAnimGraphTool_RemoveTransition::Execute(const TSharedPtr<FJs
 // ClaireonAnimGraphTool_SetTransitionProperties (IMPLEMENTED)
 // ============================================================================
 
-FString ClaireonAnimGraphTool_SetTransitionProperties::GetName() const
-{
-	return TEXT("claireon.animgraph_set_transition_properties");
-}
+FString ClaireonAnimGraphTool_SetTransitionProperties::GetOperation() const { return TEXT("set_transition_properties"); }
 
 FString ClaireonAnimGraphTool_SetTransitionProperties::GetDescription() const
 {

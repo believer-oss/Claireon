@@ -95,10 +95,7 @@ static UEdGraphPin* FindPinByName(UEdGraphNode* Node, const FString& PinName, FS
 // ClaireonAnimGraphTool_AddNode
 // ============================================================================
 
-FString ClaireonAnimGraphTool_AddNode::GetName() const
-{
-	return TEXT("claireon.animgraph_add_node");
-}
+FString ClaireonAnimGraphTool_AddNode::GetOperation() const { return TEXT("add_node"); }
 
 FString ClaireonAnimGraphTool_AddNode::GetDescription() const
 {
@@ -282,10 +279,7 @@ AutoConnectDone:
 // ClaireonAnimGraphTool_RemoveNode
 // ============================================================================
 
-FString ClaireonAnimGraphTool_RemoveNode::GetName() const
-{
-	return TEXT("claireon.animgraph_remove_node");
-}
+FString ClaireonAnimGraphTool_RemoveNode::GetOperation() const { return TEXT("remove_node"); }
 
 FString ClaireonAnimGraphTool_RemoveNode::GetDescription() const
 {
@@ -366,10 +360,7 @@ FToolResult ClaireonAnimGraphTool_RemoveNode::Execute(const TSharedPtr<FJsonObje
 // ClaireonAnimGraphTool_MoveNode
 // ============================================================================
 
-FString ClaireonAnimGraphTool_MoveNode::GetName() const
-{
-	return TEXT("claireon.animgraph_move_node");
-}
+FString ClaireonAnimGraphTool_MoveNode::GetOperation() const { return TEXT("move_node"); }
 
 FString ClaireonAnimGraphTool_MoveNode::GetDescription() const
 {
@@ -435,10 +426,7 @@ FToolResult ClaireonAnimGraphTool_MoveNode::Execute(const TSharedPtr<FJsonObject
 // ClaireonAnimGraphTool_SetNodeProperty
 // ============================================================================
 
-FString ClaireonAnimGraphTool_SetNodeProperty::GetName() const
-{
-	return TEXT("claireon.animgraph_set_node_property");
-}
+FString ClaireonAnimGraphTool_SetNodeProperty::GetOperation() const { return TEXT("set_node_property"); }
 
 FString ClaireonAnimGraphTool_SetNodeProperty::GetDescription() const
 {
@@ -525,10 +513,7 @@ FToolResult ClaireonAnimGraphTool_SetNodeProperty::Execute(const TSharedPtr<FJso
 // ClaireonAnimGraphTool_ConnectPins
 // ============================================================================
 
-FString ClaireonAnimGraphTool_ConnectPins::GetName() const
-{
-	return TEXT("claireon.animgraph_connect_pins");
-}
+FString ClaireonAnimGraphTool_ConnectPins::GetOperation() const { return TEXT("connect_pins"); }
 
 FString ClaireonAnimGraphTool_ConnectPins::GetDescription() const
 {
@@ -631,10 +616,7 @@ FToolResult ClaireonAnimGraphTool_ConnectPins::Execute(const TSharedPtr<FJsonObj
 // ClaireonAnimGraphTool_DisconnectPin
 // ============================================================================
 
-FString ClaireonAnimGraphTool_DisconnectPin::GetName() const
-{
-	return TEXT("claireon.animgraph_disconnect_pin");
-}
+FString ClaireonAnimGraphTool_DisconnectPin::GetOperation() const { return TEXT("disconnect_pin"); }
 
 FString ClaireonAnimGraphTool_DisconnectPin::GetDescription() const
 {

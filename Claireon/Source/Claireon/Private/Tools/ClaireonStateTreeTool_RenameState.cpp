@@ -12,14 +12,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_RenameState::GetName() const
-{
-	return TEXT("claireon.statetree_rename_state");
-}
+FString ClaireonStateTreeTool_RenameState::GetOperation() const { return TEXT("rename_state"); }
 
 FString ClaireonStateTreeTool_RenameState::GetDescription() const
 {
-	return TEXT("Rename an existing state in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. The new name must be unique among siblings on the same parent. The state's GUID is unchanged so transitions and bindings continue to resolve.");
+	return TEXT("Rename an existing state in the open State Tree editing session. Requires open session_id from statetree_open. Transactional. The new name must be unique among siblings on the same parent. The state's GUID is unchanged so transitions and bindings continue to resolve.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_RenameState::GetInputSchema() const

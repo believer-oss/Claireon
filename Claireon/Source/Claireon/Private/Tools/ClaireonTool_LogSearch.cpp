@@ -12,14 +12,11 @@
 #include "HAL/PlatformOutputDevices.h"
 #include "Misc/Paths.h"
 
-FString ClaireonTool_LogSearch::GetName() const
-{
-	return TEXT("claireon.log_search");
-}
+FString ClaireonTool_LogSearch::GetOperation() const { return TEXT("log_search"); }
 
 FString ClaireonTool_LogSearch::GetCategory() const
 {
-	return TEXT("build");
+	return TEXT("editor");
 }
 
 FString ClaireonTool_LogSearch::GetDescription() const

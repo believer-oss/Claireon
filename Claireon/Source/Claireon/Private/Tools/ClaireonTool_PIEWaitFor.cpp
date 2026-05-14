@@ -21,10 +21,8 @@
 #endif
 #include "Misc/Timespan.h"
 
-FString ClaireonTool_PIEWaitFor::GetName() const
-{
-	return TEXT("claireon.pie_wait_for");
-}
+FString ClaireonTool_PIEWaitFor::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_PIEWaitFor::GetOperation() const { return TEXT("wait_for"); }
 
 FString ClaireonTool_PIEWaitFor::GetDescription() const
 {
@@ -108,7 +106,7 @@ namespace
 
 #if WITH_LYRA_GAME
 	/** Map a user-friendly state string to the corresponding gameplay tag.
-	 *  Named uniquely to avoid collision with the identical function in ClaireonTool_PIECheckInitState.cpp
+	 *  Named uniquely to avoid collision with the identical function in ClaireonTool_PIEPIEWaitFor_CheckInitState.cpp
 	 *  during unity builds. */
 	FGameplayTag ResolveInitStateTagForWait(const FString& StateName)
 	{
@@ -133,7 +131,7 @@ namespace
 #endif // WITH_LYRA_GAME
 
 	/** Check the "mapLoad" condition: editor world exists and is valid */
-	bool CheckMapLoad()
+	bool PIEWaitFor_CheckMapLoad()
 	{
 		if (!GEditor)
 		{
@@ -152,7 +150,7 @@ namespace
 	}
 
 	/** Check the "pieReady" condition: PIE world exists and HasBegunPlay */
-	bool CheckPIEReady()
+	bool PIEWaitFor_CheckPIEReady()
 	{
 		if (!GEditor || !GEditor->IsPlaySessionInProgress())
 		{
@@ -163,7 +161,7 @@ namespace
 	}
 
 	/** Check the "actorValid" condition: actor ID resolves to a valid actor */
-	bool CheckActorValid(const FString& ActorId)
+	bool PIEWaitFor_CheckActorValid(const FString& ActorId)
 	{
 		if (ActorId.IsEmpty())
 		{
@@ -180,7 +178,7 @@ namespace
 
 #if WITH_LYRA_GAME
 	/** Check the "initState" condition: actor has reached specified init state */
-	bool CheckInitState(const FString& ActorId, const FGameplayTag& TargetTag)
+	bool PIEWaitFor_CheckInitState(const FString& ActorId, const FGameplayTag& TargetTag)
 	{
 		if (ActorId.IsEmpty() || !TargetTag.IsValid())
 		{
@@ -328,21 +326,21 @@ IClaireonTool::FToolResult ClaireonTool_PIEWaitFor::Execute(const TSharedPtr<FJs
 		// Check condition based on type
 		if (Condition == TEXT("mapLoad"))
 		{
-			bConditionMet = CheckMapLoad();
+			bConditionMet = PIEWaitFor_CheckMapLoad();
 		}
 		else if (Condition == TEXT("pieReady"))
 		{
-			bConditionMet = CheckPIEReady();
+			bConditionMet = PIEWaitFor_CheckPIEReady();
 		}
 		else if (Condition == TEXT("actorValid"))
 		{
-			bConditionMet = CheckActorValid(ParamActorId);
+			bConditionMet = PIEWaitFor_CheckActorValid(ParamActorId);
 		}
 		else if (Condition == TEXT("initState"))
 		{
 #if WITH_LYRA_GAME
 			const FGameplayTag TargetTag = ResolveInitStateTagForWait(ParamInitState);
-			bConditionMet = CheckInitState(ParamActorId, TargetTag);
+			bConditionMet = PIEWaitFor_CheckInitState(ParamActorId, TargetTag);
 #endif
 		}
 		else if (Condition == TEXT("duration"))

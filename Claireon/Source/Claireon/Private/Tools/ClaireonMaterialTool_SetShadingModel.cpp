@@ -21,10 +21,7 @@ namespace
 	}
 }
 
-FString ClaireonMaterialTool_SetShadingModel::GetName() const
-{
-	return TEXT("claireon.material_set_shading_model");
-}
+FString ClaireonMaterialTool_SetShadingModel::GetOperation() const { return TEXT("set_shading_model"); }
 
 FString ClaireonMaterialTool_SetShadingModel::GetDescription() const
 {

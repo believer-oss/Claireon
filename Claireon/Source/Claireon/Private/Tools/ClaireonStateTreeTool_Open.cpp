@@ -14,10 +14,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_Open::GetName() const
-{
-	return TEXT("claireon.statetree_open");
-}
+FString ClaireonStateTreeTool_Open::GetOperation() const { return TEXT("open"); }
 
 TArray<FString> ClaireonStateTreeTool_Open::GetSearchKeywords() const
 {
@@ -26,7 +23,7 @@ TArray<FString> ClaireonStateTreeTool_Open::GetSearchKeywords() const
 
 FString ClaireonStateTreeTool_Open::GetDescription() const
 {
-	return TEXT("Open a State Tree asset for editing and acquire an asset lock. Returns a session_id used as the handle for all subsequent claireon.statetree_* operations. Transactional. The session must be closed via claireon.statetree_close to release the lock; only one session per asset at a time.");
+	return TEXT("Open a State Tree asset for editing and acquire an asset lock. Returns a session_id used as the handle for all subsequent statetree_* operations. Transactional. The session must be closed via statetree_close to release the lock; only one session per asset at a time.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_Open::GetInputSchema() const

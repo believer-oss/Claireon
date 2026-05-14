@@ -23,7 +23,7 @@ using FToolResult = IClaireonTool::FToolResult;
 // Static members
 // ============================================================================
 
-const TCHAR* ClaireonBlackboardEditToolBase::BlackboardSessionToolName = TEXT("claireon.blackboard_edit");
+const TCHAR* ClaireonBlackboardEditToolBase::BlackboardSessionToolName = TEXT("blackboard_edit");
 TMap<FString, FBlackboardEditToolData> ClaireonBlackboardEditToolBase::ToolData;
 bool ClaireonBlackboardEditToolBase::bDelegateRegistered = false;
 

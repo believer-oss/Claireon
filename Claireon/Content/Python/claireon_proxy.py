@@ -10,11 +10,16 @@ Runtime: UE's vendored Python 3
 
 Dependencies: stdlib only.
 
-The proxy is a small persistent process keyed to one editor instance per
-worktree. It owns the public MCP port, forwards JSON-RPC to the editor over
-a SHA-derived loopback port, and keeps clients connected across editor
-restarts. Newer revisions add a multi-worktree mode where a single proxy
-serves any number of concurrently-running editors keyed by worktree_id.
+per-worktree design (current behaviour):
+  - ALWAYS_ON_MCP_PROXY_PROPOSAL.md (overview)
+  - ALWAYS_ON_MCP_PROXY_PROTOCOL.md (wire contract)
+  - ALWAYS_ON_MCP_PROXY_PYTHON.md (this file's spec)
+  - ALWAYS_ON_MCP_PROXY_CPP.md (plugin-side spec)
+  - ALWAYS_ON_MCP_PROXY_TESTS.md (validation)
+
+The next iteration -- one singleton proxy serving all worktrees, port-as-lock,
+no idle-exit, editor-side reconnect on register failure -- is specified in
+document supersedes the operational decisions above when implemented.
 
 PROXY_REG_PORT_SOURCE_OF_TRUTH: ClaireonProxyConstants.h
 The PROXY_REG_PORT constant below MUST match the C++ header
@@ -160,7 +165,26 @@ class _ExclusiveBindHTTPServer(ThreadingHTTPServer):
 
 
 def canonicalize_worktree(worktree_root: str) -> str:
-    """Canonicalize a worktree path for hashing. Windows-first, lowercase."""
+    """Canonicalize a worktree path for hashing. Windows-first, lowercase.
+
+    Resolves junctions and symlinks via os.path.realpath so that a worktree
+    reached via a junction (e.g. W:\\yara) and via its underlying realpath
+    (e.g. D:\\git\\yara) hash to the SAME port. The PowerShell mirror in
+    Initialize-WorktreeMCP.ps1::Get-ProxyDefaultMcpPort uses
+    GetFinalPathNameByHandle (P/Invoke, Resolve-WorktreeFinalPath helper)
+    for the same reason. Both sides MUST resolve links; do not switch this
+    back to os.path.abspath, which would diverge from PowerShell on
+    junctioned worktree paths and re-open work #0000.
+
+    Caller contract: worktree_root is expected to be an absolute path. The
+    proxy's CLI entrypoint runs os.path.abspath(args.worktree_root) before
+    calling this helper (run() in this file at the cold-start hand-off,
+    line ~1386), so relative-input behavior is defined by that call site.
+    Both Python call sites in this module -- the cold-start path
+    (RUNTIME["canonical_worktree"] = canonicalize_worktree(...)) and
+    handle_register (canonical_req = canonicalize_worktree(...)) -- route
+    through this single helper for #0000.
+    """
     return os.path.realpath(worktree_root).lower()
 
 
@@ -691,7 +715,7 @@ def handle_register(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
         log.warning("register rejected reason=%s", reason)
         return 400, {"accepted": False, "reason": reason}
 
-    canonical_req = os.path.realpath(body["worktree_root"]).lower()
+    canonical_req = canonicalize_worktree(body["worktree_root"])
 
     # Version drift is advisory after Stage 005 (D5). Log dedup as before so
     # a fast-retrying editor doesn't flood proxy.log; never reject.

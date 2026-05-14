@@ -6,10 +6,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonNiagaraTool_Status::GetName() const
-{
-	return TEXT("claireon.niagara_status");
-}
+FString ClaireonNiagaraTool_Status::GetOperation() const { return TEXT("status"); }
 
 FString ClaireonNiagaraTool_Status::GetDescription() const
 {

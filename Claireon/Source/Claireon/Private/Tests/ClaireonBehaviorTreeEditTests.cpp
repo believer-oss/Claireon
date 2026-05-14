@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 #if WITH_UNTESTED
 
@@ -29,7 +29,7 @@ static const TCHAR* EditTestEQSPath = TEXT("/Game/BP/AI/EQS/EQS_CombatWaiting_St
 // ---------------------------------------------------------------------------
 namespace
 {
-	FString ExtractSessionId(const IClaireonTool::FToolResult& Result)
+	FString MCPBehaviorTreeEditTests_ExtractSessionId(const IClaireonTool::FToolResult& Result)
 	{
 		if (Result.bIsError || !Result.Data.IsValid())
 		{
@@ -42,13 +42,13 @@ namespace
 }
 
 // ============================================================================
-// claireon.behaviortree_edit — Schema validation for updated tool
+// behaviortree_edit — Schema validation for updated tool
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, SchemaValid, UNTEST_TIMEOUTMS(1000))
 {
 	ClaireonBehaviorTreeTool_Open Tool;
-	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.behaviortree_open"));
+	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("behaviortree_open"));
 	UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
 
 	auto Schema = Tool.GetInputSchema();
@@ -65,7 +65,7 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, SchemaValid, UNTEST_TIMEOUTMS(100
 }
 
 // ============================================================================
-// claireon.behaviortree_edit — Open/close with asset lock
+// behaviortree_edit — Open/close with asset lock
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, OpenCloseCycle, UNTEST_TIMEOUTMS(15000))
@@ -114,7 +114,7 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, OpenCloseCycle, UNTEST_TIMEOUTMS(
 }
 
 // ============================================================================
-// claireon.behaviortree_edit — list_node_types discovery
+// behaviortree_edit — list_node_types discovery
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, ListNodeTypes, UNTEST_TIMEOUTMS(10000))
@@ -138,7 +138,7 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, ListNodeTypes, UNTEST_TIMEOUTMS(1
 }
 
 // ============================================================================
-// claireon.behaviortree_edit — suppress_output
+// behaviortree_edit — suppress_output
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, SuppressOutput, UNTEST_TIMEOUTMS(15000))
@@ -153,7 +153,7 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, SuppressOutput, UNTEST_TIMEOUTMS(
 
 	auto OpenResult = OpenTool.Execute(OpenArgs);
 	UNTEST_ASSERT_FALSE(OpenResult.bIsError);
-	FString SessionId = ExtractSessionId(OpenResult);
+	FString SessionId = MCPBehaviorTreeEditTests_ExtractSessionId(OpenResult);
 	UNTEST_ASSERT_TRUE(!SessionId.IsEmpty());
 
 	// Status with suppress_output
@@ -177,7 +177,7 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, SuppressOutput, UNTEST_TIMEOUTMS(
 }
 
 // ============================================================================
-// claireon.behaviortree_edit — Asset lock conflict
+// behaviortree_edit — Asset lock conflict
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, AssetLockConflict, UNTEST_TIMEOUTMS(15000))
@@ -191,7 +191,7 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, AssetLockConflict, UNTEST_TIMEOUT
 
 	auto Result1 = OpenTool.Execute(OpenArgs);
 	UNTEST_ASSERT_FALSE(Result1.bIsError);
-	FString SessionId1 = ExtractSessionId(Result1);
+	FString SessionId1 = MCPBehaviorTreeEditTests_ExtractSessionId(Result1);
 
 	// Try to open second session on same asset — should fail with lock error
 	auto Result2 = OpenTool.Execute(OpenArgs);
@@ -207,13 +207,13 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, AssetLockConflict, UNTEST_TIMEOUT
 }
 
 // ============================================================================
-// claireon.blackboard_edit — Schema validation
+// blackboard_edit — Schema validation
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, BlackboardEdit, SchemaValid, UNTEST_TIMEOUTMS(1000))
 {
 	ClaireonBlackboardTool_Open Tool;
-	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.blackboard_open"));
+	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("blackboard_open"));
 	UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
 
 	auto Schema = Tool.GetInputSchema();
@@ -227,7 +227,7 @@ UNTEST_UNIT_OPTS(Claireon, BlackboardEdit, SchemaValid, UNTEST_TIMEOUTMS(1000))
 }
 
 // ============================================================================
-// claireon.blackboard_edit — Open/close cycle
+// blackboard_edit — Open/close cycle
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, BlackboardEdit, OpenCloseCycle, UNTEST_TIMEOUTMS(15000))
@@ -276,13 +276,13 @@ UNTEST_UNIT_OPTS(Claireon, BlackboardEdit, OpenCloseCycle, UNTEST_TIMEOUTMS(1500
 }
 
 // ============================================================================
-// claireon.eqs_edit — Schema validation
+// eqs_edit — Schema validation
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, EQSEdit, SchemaValid, UNTEST_TIMEOUTMS(1000))
 {
 	ClaireonEQSTool_Open Tool;
-	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.eqs_open"));
+	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("eqs_open"));
 	UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
 
 	auto Schema = Tool.GetInputSchema();
@@ -296,7 +296,7 @@ UNTEST_UNIT_OPTS(Claireon, EQSEdit, SchemaValid, UNTEST_TIMEOUTMS(1000))
 }
 
 // ============================================================================
-// claireon.eqs_edit — Open/close cycle
+// eqs_edit — Open/close cycle
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, EQSEdit, OpenCloseCycle, UNTEST_TIMEOUTMS(15000))

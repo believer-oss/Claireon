@@ -92,10 +92,8 @@ namespace
 	};
 }
 
-FString ClaireonTool_SequenceListTrackTypes::GetName() const
-{
-	return TEXT("claireon.level_sequence_list_track_types");
-}
+FString ClaireonTool_SequenceListTrackTypes::GetCategory() const { return TEXT("level"); }
+FString ClaireonTool_SequenceListTrackTypes::GetOperation() const { return TEXT("sequence_list_track_types"); }
 
 FString ClaireonTool_SequenceListTrackTypes::GetDescription() const
 {
@@ -109,7 +107,7 @@ FString ClaireonTool_SequenceListTrackTypes::GetFullDescription() const
 	return TEXT(
 		"Enumerate Claireon-supported Level Sequence track types.\n"
 		"\n"
-		"Canonical list Claireon accepts for `claireon.sequence_edit.add_track` (F2) and for\n"
+		"Canonical list Claireon accepts for `sequence_edit.add_track` (F2) and for\n"
 		"ClaireonSpecApplicator_LevelSequence specs (F6). Stateless, no input fields.\n"
 		"\n"
 		"Each entry has:\n"

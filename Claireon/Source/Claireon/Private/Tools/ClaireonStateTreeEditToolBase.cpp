@@ -15,7 +15,7 @@ using FToolResult = IClaireonTool::FToolResult;
 // Static members
 // ============================================================================
 
-const TCHAR* ClaireonStateTreeEditToolBase::StateTreeSessionToolName = TEXT("claireon.statetree_edit");
+const TCHAR* ClaireonStateTreeEditToolBase::StateTreeSessionToolName = TEXT("statetree_edit");
 TMap<FString, FStateTreeEditToolData> ClaireonStateTreeEditToolBase::ToolData;
 bool ClaireonStateTreeEditToolBase::bDelegateRegistered = false;
 

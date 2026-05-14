@@ -6,14 +6,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_Status::GetName() const
-{
-	return TEXT("claireon.statetree_status");
-}
+FString ClaireonStateTreeTool_Status::GetOperation() const { return TEXT("status"); }
 
 FString ClaireonStateTreeTool_Status::GetDescription() const
 {
-	return TEXT("Return the current authoring snapshot of the open State Tree editing session: states, transitions, evaluators, global tasks, parameters, and any unsaved-change indicator. Requires open session_id from claireon.statetree_open. Read-only. Use to verify state before save/close.");
+	return TEXT("Return the current authoring snapshot of the open State Tree editing session: states, transitions, evaluators, global tasks, parameters, and any unsaved-change indicator. Requires open session_id from statetree_open. Read-only. Use to verify state before save/close.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_Status::GetInputSchema() const

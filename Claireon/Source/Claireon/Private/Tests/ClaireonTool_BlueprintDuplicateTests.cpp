@@ -1,7 +1,7 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Tests for claireon.blueprint_duplicate (fracture 04).
+// Tests for blueprint_duplicate (fracture 04).
 //
 // The project's Untest framework exposes UNTEST_UNIT and UNTEST_WORLD (plus a few
 // client/server variants); there is no standalone UNTEST_FUNCTIONAL macro. Per the
@@ -212,7 +212,7 @@ UNTEST_UNIT(Claireon, BlueprintDuplicate, Unit_InvalidDestinationPathPropagatesR
 UNTEST_UNIT(Claireon, BlueprintDuplicate, Unit_GetNameReturnsCanonicalString)
 {
 	ClaireonTool_BlueprintDuplicate Tool;
-	UNTEST_EXPECT_STREQ(*Tool.GetName(), TEXT("claireon.blueprint_duplicate"));
+	UNTEST_EXPECT_STREQ(*Tool.GetName(), TEXT("blueprint_duplicate"));
 	co_return;
 }
 
@@ -441,7 +441,7 @@ UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_RenameDependenciesTrue
 UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_AcceptanceCaseMatchesParentProposal, UNTEST_TIMEOUTMS(60000))
 {
 	// Parent proposal acceptance case:
-	//   claireon.blueprint_duplicate('/Game/Sandbox/BP_Example',
+	//   blueprint_duplicate('/Game/Sandbox/BP_Example',
 	//                              '/Game/Sandbox/BP_Example_Clone')
 	// Skip (pass) if the acceptance-case source asset has moved or is absent.
 

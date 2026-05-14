@@ -8,10 +8,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonTool_TransactionBeginGroup::GetName() const
-{
-	return TEXT("claireon.transaction_begin_group");
-}
+FString ClaireonTool_TransactionBeginGroup::GetOperation() const { return TEXT("begin_group"); }
 
 FString ClaireonTool_TransactionBeginGroup::GetDescription() const
 {

@@ -12,10 +12,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonMaterialTool_AddExpression::GetName() const
-{
-	return TEXT("claireon.material_add_expression");
-}
+FString ClaireonMaterialTool_AddExpression::GetOperation() const { return TEXT("add_expression"); }
 
 FString ClaireonMaterialTool_AddExpression::GetDescription() const
 {

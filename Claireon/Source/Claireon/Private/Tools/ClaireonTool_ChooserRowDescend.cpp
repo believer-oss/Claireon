@@ -8,14 +8,15 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_ChooserRowDescend::GetName() const { return TEXT("claireon.chooser_row_descend"); }
+FString ClaireonTool_ChooserRowDescend::GetCategory() const { return TEXT("chooser"); }
+FString ClaireonTool_ChooserRowDescend::GetOperation() const { return TEXT("row_descend"); }
 
 FString ClaireonTool_ChooserRowDescend::GetDescription() const
 {
 	return TEXT("Given a parent chooser and a row index, follow that row's result reference one hop "
 		"into the target chooser (FNestedChooser or FEvaluateChooser). Returns identifying info on the "
-		"hop and a compact summary of the target chooser. Composes with claireon.chooser_walk: walk first, "
-		"then descend specific rows of interest. Use claireon.chooser_inspect for the full body of the target.");
+		"hop and a compact summary of the target chooser. Composes with chooser_walk: walk first, "
+		"then descend specific rows of interest. Use chooser_inspect for the full body of the target.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ChooserRowDescend::GetInputSchema() const

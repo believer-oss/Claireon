@@ -4,10 +4,8 @@
 #include "Tools/ClaireonTool_PIETraceStop.h"
 #include "ProfilingDebugging/TraceAuxiliary.h"
 
-FString ClaireonTool_PIETraceStop::GetName() const
-{
-	return TEXT("claireon.pie_trace_stop");
-}
+FString ClaireonTool_PIETraceStop::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_PIETraceStop::GetOperation() const { return TEXT("trace_stop"); }
 
 FString ClaireonTool_PIETraceStop::GetDescription() const
 {

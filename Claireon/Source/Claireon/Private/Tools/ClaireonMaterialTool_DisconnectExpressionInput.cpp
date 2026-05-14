@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonMaterialTool_DisconnectExpressionInput::GetName() const
-{
-	return TEXT("claireon.material_disconnect_expression_input");
-}
+FString ClaireonMaterialTool_DisconnectExpressionInput::GetOperation() const { return TEXT("disconnect_expression_input"); }
 
 FString ClaireonMaterialTool_DisconnectExpressionInput::GetDescription() const
 {

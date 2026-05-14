@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonFoliageTool_Scatter::GetName() const
-{
-	return TEXT("claireon.foliage_scatter");
-}
+FString ClaireonFoliageTool_Scatter::GetOperation() const { return TEXT("scatter"); }
 
 FString ClaireonFoliageTool_Scatter::GetDescription() const
 {

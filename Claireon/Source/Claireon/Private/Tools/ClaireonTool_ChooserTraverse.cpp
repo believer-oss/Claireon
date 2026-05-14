@@ -9,7 +9,8 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_ChooserTraverse::GetName() const { return TEXT("claireon.chooser_traverse"); }
+FString ClaireonTool_ChooserTraverse::GetCategory() const { return TEXT("chooser"); }
+FString ClaireonTool_ChooserTraverse::GetOperation() const { return TEXT("traverse"); }
 
 FString ClaireonTool_ChooserTraverse::GetDescription() const
 {

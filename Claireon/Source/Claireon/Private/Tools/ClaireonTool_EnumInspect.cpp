@@ -9,7 +9,8 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_EnumInspect::GetName() const { return TEXT("claireon.enum_inspect"); }
+FString ClaireonTool_EnumInspect::GetCategory() const { return TEXT("enum"); }
+FString ClaireonTool_EnumInspect::GetOperation() const { return TEXT("inspect"); }
 
 FString ClaireonTool_EnumInspect::GetDescription() const
 {

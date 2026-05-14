@@ -12,7 +12,7 @@
 
 namespace
 {
-	FString ResolveCatalogPath()
+	FString ApplySpecHelp_ResolveCatalogPath()
 	{
 		TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("Claireon"));
 		if (!Plugin.IsValid())
@@ -23,10 +23,8 @@ namespace
 	}
 }
 
-FString ClaireonTool_ApplySpecHelp::GetName() const
-{
-	return TEXT("claireon.apply_spec_help");
-}
+FString ClaireonTool_ApplySpecHelp::GetCategory() const { return TEXT("apply"); }
+FString ClaireonTool_ApplySpecHelp::GetOperation() const { return TEXT("spec_help"); }
 
 FString ClaireonTool_ApplySpecHelp::GetDescription() const
 {
@@ -44,7 +42,7 @@ TSharedPtr<FJsonObject> ClaireonTool_ApplySpecHelp::GetInputSchema() const
 
 IClaireonTool::FToolResult ClaireonTool_ApplySpecHelp::Execute(const TSharedPtr<FJsonObject>& /*Arguments*/)
 {
-	const FString CatalogPath = ResolveCatalogPath();
+	const FString CatalogPath = ApplySpecHelp_ResolveCatalogPath();
 	if (CatalogPath.IsEmpty())
 	{
 		return MakeErrorResult(TEXT("Claireon plugin not found"));

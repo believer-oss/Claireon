@@ -4,10 +4,8 @@
 #include "Tools/ClaireonTool_FlythroughStatus.h"
 #include "Tools/ClaireonFlythroughManager.h"
 
-FString ClaireonTool_FlythroughStatus::GetName() const
-{
-	return TEXT("claireon.pie_flythrough_status");
-}
+FString ClaireonTool_FlythroughStatus::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_FlythroughStatus::GetOperation() const { return TEXT("flythrough_status"); }
 
 FString ClaireonTool_FlythroughStatus::GetDescription() const
 {
@@ -23,7 +21,7 @@ TSharedPtr<FJsonObject> ClaireonTool_FlythroughStatus::GetInputSchema() const
 
 namespace
 {
-	FString StateToString(EFlythroughState InState)
+	FString FlythroughStatus_StateToString(EFlythroughState InState)
 	{
 		switch (InState)
 		{
@@ -48,7 +46,7 @@ IClaireonTool::FToolResult ClaireonTool_FlythroughStatus::Execute(const TSharedP
 	}
 
 	const FFlythroughStatusInfo Status = Manager->GetStatus();
-	const FString StateStr = StateToString(Status.State);
+	const FString StateStr = FlythroughStatus_StateToString(Status.State);
 
 	FString Output = FString::Printf(
 		TEXT("state: %s\n")

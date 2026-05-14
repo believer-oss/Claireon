@@ -7,10 +7,8 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 
-FString ClaireonTool_InputInspect::GetName() const
-{
-	return TEXT("claireon.input_inspect");
-}
+FString ClaireonTool_InputInspect::GetCategory() const { return TEXT("input"); }
+FString ClaireonTool_InputInspect::GetOperation() const { return TEXT("inspect"); }
 
 FString ClaireonTool_InputInspect::GetDescription() const
 {

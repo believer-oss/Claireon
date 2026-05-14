@@ -12,14 +12,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_AddEvaluator::GetName() const
-{
-	return TEXT("claireon.statetree_add_evaluator");
-}
+FString ClaireonStateTreeTool_AddEvaluator::GetOperation() const { return TEXT("add_evaluator"); }
 
 FString ClaireonStateTreeTool_AddEvaluator::GetDescription() const
 {
-	return TEXT("Add a global evaluator node to the State Tree in the open editing session. Requires open session_id from claireon.statetree_open. Transactional. Evaluators run every tick at the asset scope and feed shared output values into bindings. The node_type must be a registered FStateTreeEvaluatorBase subclass.");
+	return TEXT("Add a global evaluator node to the State Tree in the open editing session. Requires open session_id from statetree_open. Transactional. Evaluators run every tick at the asset scope and feed shared output values into bindings. The node_type must be a registered FStateTreeEvaluatorBase subclass.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_AddEvaluator::GetInputSchema() const

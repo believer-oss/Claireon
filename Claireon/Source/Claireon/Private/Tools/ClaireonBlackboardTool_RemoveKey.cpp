@@ -8,10 +8,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBlackboardTool_RemoveKey::GetName() const
-{
-	return TEXT("claireon.blackboard_remove_key");
-}
+FString ClaireonBlackboardTool_RemoveKey::GetOperation() const { return TEXT("remove_key"); }
 
 FString ClaireonBlackboardTool_RemoveKey::GetDescription() const
 {

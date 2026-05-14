@@ -8,10 +8,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonTool_TransactionHistory::GetName() const
-{
-	return TEXT("claireon.transaction_history");
-}
+FString ClaireonTool_TransactionHistory::GetOperation() const { return TEXT("history"); }
 
 FString ClaireonTool_TransactionHistory::GetDescription() const
 {

@@ -15,10 +15,8 @@
 #include "UObject/SavePackage.h"
 #include "UObject/UObjectGlobals.h"
 
-FString ClaireonTool_AssetResave::GetName() const
-{
-	return TEXT("claireon.asset_resave");
-}
+FString ClaireonTool_AssetResave::GetCategory() const { return TEXT("asset"); }
+FString ClaireonTool_AssetResave::GetOperation() const { return TEXT("resave"); }
 
 FString ClaireonTool_AssetResave::GetDescription() const
 {

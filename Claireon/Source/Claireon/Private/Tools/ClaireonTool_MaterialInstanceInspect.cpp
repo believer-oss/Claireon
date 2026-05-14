@@ -13,10 +13,8 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonTool_MaterialInstanceInspect::GetName() const
-{
-	return TEXT("claireon.material_instance_inspect");
-}
+FString ClaireonTool_MaterialInstanceInspect::GetCategory() const { return TEXT("material"); }
+FString ClaireonTool_MaterialInstanceInspect::GetOperation() const { return TEXT("instance_inspect"); }
 
 FString ClaireonTool_MaterialInstanceInspect::GetDescription() const
 {

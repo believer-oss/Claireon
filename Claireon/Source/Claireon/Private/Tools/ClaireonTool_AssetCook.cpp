@@ -12,10 +12,8 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
-FString ClaireonTool_AssetCook::GetName() const
-{
-	return TEXT("claireon.asset_cook");
-}
+FString ClaireonTool_AssetCook::GetCategory() const { return TEXT("asset"); }
+FString ClaireonTool_AssetCook::GetOperation() const { return TEXT("cook"); }
 
 FString ClaireonTool_AssetCook::GetDescription() const
 {

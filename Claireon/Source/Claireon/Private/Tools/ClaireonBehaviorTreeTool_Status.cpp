@@ -6,10 +6,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBehaviorTreeTool_Status::GetName() const
-{
-	return TEXT("claireon.behaviortree_status");
-}
+FString ClaireonBehaviorTreeTool_Status::GetOperation() const { return TEXT("status"); }
 
 FString ClaireonBehaviorTreeTool_Status::GetDescription() const
 {

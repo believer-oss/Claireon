@@ -20,10 +20,10 @@ namespace
 }
 
 // ============================================================================
-// claireon.skeleton_add_socket
+// skeleton_add_socket
 // ============================================================================
 
-FString ClaireonSkeletonTool_AddSocket::GetName() const { return TEXT("claireon.skeleton_add_socket"); }
+FString ClaireonSkeletonTool_AddSocket::GetOperation() const { return TEXT("add_socket"); }
 
 FString ClaireonSkeletonTool_AddSocket::GetDescription() const
 {
@@ -117,10 +117,10 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_AddSocket::Execute(const TShared
 }
 
 // ============================================================================
-// claireon.skeleton_remove_socket
+// skeleton_remove_socket
 // ============================================================================
 
-FString ClaireonSkeletonTool_RemoveSocket::GetName() const { return TEXT("claireon.skeleton_remove_socket"); }
+FString ClaireonSkeletonTool_RemoveSocket::GetOperation() const { return TEXT("remove_socket"); }
 
 FString ClaireonSkeletonTool_RemoveSocket::GetDescription() const
 {
@@ -165,10 +165,10 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RemoveSocket::Execute(const TSha
 }
 
 // ============================================================================
-// claireon.skeleton_rename_socket
+// skeleton_rename_socket
 // ============================================================================
 
-FString ClaireonSkeletonTool_RenameSocket::GetName() const { return TEXT("claireon.skeleton_rename_socket"); }
+FString ClaireonSkeletonTool_RenameSocket::GetOperation() const { return TEXT("rename_socket"); }
 
 FString ClaireonSkeletonTool_RenameSocket::GetDescription() const
 {
@@ -220,10 +220,10 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RenameSocket::Execute(const TSha
 }
 
 // ============================================================================
-// claireon.skeleton_modify_socket
+// skeleton_modify_socket
 // ============================================================================
 
-FString ClaireonSkeletonTool_ModifySocket::GetName() const { return TEXT("claireon.skeleton_modify_socket"); }
+FString ClaireonSkeletonTool_ModifySocket::GetOperation() const { return TEXT("modify_socket"); }
 
 FString ClaireonSkeletonTool_ModifySocket::GetDescription() const
 {

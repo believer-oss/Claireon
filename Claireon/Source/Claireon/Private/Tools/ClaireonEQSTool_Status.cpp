@@ -6,10 +6,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonEQSTool_Status::GetName() const
-{
-	return TEXT("claireon.eqs_status");
-}
+FString ClaireonEQSTool_Status::GetOperation() const { return TEXT("status"); }
 
 FString ClaireonEQSTool_Status::GetDescription() const
 {

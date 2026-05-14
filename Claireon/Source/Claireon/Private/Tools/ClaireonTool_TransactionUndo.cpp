@@ -8,10 +8,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonTool_TransactionUndo::GetName() const
-{
-	return TEXT("claireon.transaction_undo");
-}
+FString ClaireonTool_TransactionUndo::GetOperation() const { return TEXT("undo"); }
 
 FString ClaireonTool_TransactionUndo::GetDescription() const
 {

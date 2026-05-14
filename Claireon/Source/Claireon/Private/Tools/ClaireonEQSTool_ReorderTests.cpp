@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonEQSTool_ReorderTests::GetName() const
-{
-	return TEXT("claireon.eqs_reorder_tests");
-}
+FString ClaireonEQSTool_ReorderTests::GetOperation() const { return TEXT("reorder_tests"); }
 
 FString ClaireonEQSTool_ReorderTests::GetDescription() const
 {

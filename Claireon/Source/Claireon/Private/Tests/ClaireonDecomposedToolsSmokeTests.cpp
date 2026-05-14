@@ -107,9 +107,14 @@ namespace DecomposedToolsSmokeHelpers
 			UE_LOG(LogTemp, Error, TEXT("[DecomposedToolsSmoke] Empty Name for tool"));
 			return false;
 		}
-		if (!Name.StartsWith(TEXT("claireon.")))
+		if (Name.StartsWith(TEXT("claireon.")))
 		{
-			UE_LOG(LogTemp, Error, TEXT("[DecomposedToolsSmoke] Tool name '%s' missing 'claireon.' prefix"), *Name);
+			UE_LOG(LogTemp, Error, TEXT("[DecomposedToolsSmoke] Tool name '%s' carries the legacy 'claireon.' prefix"), *Name);
+			return false;
+		}
+		if (Name.Contains(TEXT(".")))
+		{
+			UE_LOG(LogTemp, Error, TEXT("[DecomposedToolsSmoke] Tool name '%s' contains a '.' character (Anthropic API requires ^[a-zA-Z0-9_-]{1,128}$)"), *Name);
 			return false;
 		}
 		if (ExpectedNameSubstr && !Name.Contains(ExpectedNameSubstr))

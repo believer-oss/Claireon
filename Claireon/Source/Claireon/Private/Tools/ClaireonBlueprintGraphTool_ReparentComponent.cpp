@@ -97,14 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_ReparentComponent::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_reparent_component");
-}
+FString ClaireonBlueprintGraphTool_ReparentComponent::GetOperation() const { return TEXT("graph_reparent_component"); }
 
 FString ClaireonBlueprintGraphTool_ReparentComponent::GetDescription() const
 {
-    return TEXT("Reparent a component within the Blueprint's Simple Construction Script hierarchy in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: cycles are rejected; the new parent must not be the component itself or any of its descendants.");
+    return TEXT("Reparent a component within the Blueprint's Simple Construction Script hierarchy in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: cycles are rejected; the new parent must not be the component itself or any of its descendants.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ReparentComponent::GetInputSchema() const

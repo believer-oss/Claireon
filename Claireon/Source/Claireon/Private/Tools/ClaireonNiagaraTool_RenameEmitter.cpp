@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonNiagaraTool_RenameEmitter::GetName() const
-{
-	return TEXT("claireon.niagara_rename_emitter");
-}
+FString ClaireonNiagaraTool_RenameEmitter::GetOperation() const { return TEXT("rename_emitter"); }
 
 FString ClaireonNiagaraTool_RenameEmitter::GetDescription() const
 {

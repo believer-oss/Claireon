@@ -24,7 +24,7 @@ namespace
 	// Reads optional transition fields from a spec JSON object and applies them to NewTransition.
 	// Mirrors ClaireonStateTreeTool_AddTransition's parsing and additionally handles
 	// consume_event_on_select for the gap-#1 payload-routing pattern.
-	void ApplySpecTransitionFields(
+	void SpecApplicatorStateTree_ApplySpecTransitionFields(
 		const TSharedPtr<FJsonObject>& TransitionJson,
 		FStateTreeTransition& NewTransition)
 	{
@@ -190,7 +190,7 @@ bool FClaireonSpecApplicator_StateTree::OpenOrCreateAsset(const FString& AssetPa
 
 	const FString STPathName = ST->GetPathName();
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
-		STPathName, TEXT("claireon.statetree_edit"));
+		STPathName, TEXT("statetree_edit"));
 
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{
@@ -571,7 +571,7 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass2_WireRelationships(const FStri
 					}
 				}
 
-				ApplySpecTransitionFields(TransObj, NewTransition);
+				SpecApplicatorStateTree_ApplySpecTransitionFields(TransObj, NewTransition);
 
 				FString TransGuidStr = NewTransition.ID.ToString(EGuidFormats::DigitsWithHyphensLower);
 				State->Transitions.Add(MoveTemp(NewTransition));
@@ -694,7 +694,7 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass2_WireRelationships(const FStri
 				}
 			}
 
-			ApplySpecTransitionFields(TransObj, NewTransition);
+			SpecApplicatorStateTree_ApplySpecTransitionFields(TransObj, NewTransition);
 
 			FString TransGuidStr = NewTransition.ID.ToString(EGuidFormats::DigitsWithHyphensLower);
 			FromState->Transitions.Add(MoveTemp(NewTransition));

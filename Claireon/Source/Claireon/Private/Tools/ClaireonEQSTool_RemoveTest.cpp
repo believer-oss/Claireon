@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonEQSTool_RemoveTest::GetName() const
-{
-	return TEXT("claireon.eqs_remove_test");
-}
+FString ClaireonEQSTool_RemoveTest::GetOperation() const { return TEXT("remove_test"); }
 
 FString ClaireonEQSTool_RemoveTest::GetDescription() const
 {

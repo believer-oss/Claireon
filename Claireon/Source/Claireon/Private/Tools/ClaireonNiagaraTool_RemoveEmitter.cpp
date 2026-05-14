@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonNiagaraTool_RemoveEmitter::GetName() const
-{
-	return TEXT("claireon.niagara_remove_emitter");
-}
+FString ClaireonNiagaraTool_RemoveEmitter::GetOperation() const { return TEXT("remove_emitter"); }
 
 FString ClaireonNiagaraTool_RemoveEmitter::GetDescription() const
 {

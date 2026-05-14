@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonPCGGraphTool_RemoveNode::GetName() const
-{
-	return TEXT("claireon.pcg_remove_node");
-}
+FString ClaireonPCGGraphTool_RemoveNode::GetOperation() const { return TEXT("remove_node"); }
 
 FString ClaireonPCGGraphTool_RemoveNode::GetDescription() const
 {

@@ -21,7 +21,7 @@ class UTexture;
  * parameter mutation, root property setters, compile/save wrappers, and
  * batched edit scoping.
  *
- * Used by the five material tools (claireon.material_inspect, material_edit,
+ * Used by the five material tools (material_inspect, material_edit,
  * material_instance_inspect, material_instance_edit, material_apply) and the
  * two spec applicators (FClaireonSpecApplicator_Material,
  * FClaireonSpecApplicator_MaterialInstance).
@@ -105,7 +105,7 @@ namespace ClaireonMaterialHelpers
 	bool SetStaticComponentMaskParameterDefault(UMaterial* Material, const FName& ParamName, bool R, bool G, bool B, bool A, FString& OutError);
 
 	// ------------------------------------------------------------------
-	// MIC parameter mutation (used by claireon.material_instance_edit)
+	// MIC parameter mutation (used by material_instance_edit)
 	// ------------------------------------------------------------------
 
 	bool SetMICScalar(UMaterialInstanceConstant* Instance, const FName& ParamName, float Value, FString& OutError);
@@ -138,7 +138,7 @@ namespace ClaireonMaterialHelpers
 	bool SaveMaterialInstanceAsset(UMaterialInstanceConstant* Instance, FString& OutError);
 
 	// ------------------------------------------------------------------
-	// Edit scoping (used by claireon.material_edit when bCompileDeferred is true)
+	// Edit scoping (used by material_edit when bCompileDeferred is true)
 	// ------------------------------------------------------------------
 
 	/** Construct and stash a FMaterialUpdateContext keyed by weak-ptr; call PreEditChange(nullptr). */

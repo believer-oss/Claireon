@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBehaviorTreeTool_RemoveDecorator::GetName() const
-{
-	return TEXT("claireon.behaviortree_remove_decorator");
-}
+FString ClaireonBehaviorTreeTool_RemoveDecorator::GetOperation() const { return TEXT("remove_decorator"); }
 
 FString ClaireonBehaviorTreeTool_RemoveDecorator::GetDescription() const
 {

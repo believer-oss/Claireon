@@ -11,10 +11,8 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_AnimGraphGetStateMachine::GetName() const
-{
-	return TEXT("claireon.animgraph_get_state_machine");
-}
+FString ClaireonTool_AnimGraphGetStateMachine::GetCategory() const { return TEXT("animgraph"); }
+FString ClaireonTool_AnimGraphGetStateMachine::GetOperation() const { return TEXT("get_state_machine"); }
 
 FString ClaireonTool_AnimGraphGetStateMachine::GetDescription() const
 {

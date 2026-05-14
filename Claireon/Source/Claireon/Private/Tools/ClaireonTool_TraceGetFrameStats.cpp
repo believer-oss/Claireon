@@ -10,10 +10,8 @@
 #include "TraceServices/Model/Threads.h"
 #include "TraceServices/Containers/Tables.h"
 
-FString ClaireonTool_TraceGetFrameStats::GetName() const
-{
-	return TEXT("claireon.trace_get_frame_stats");
-}
+FString ClaireonTool_TraceGetFrameStats::GetCategory() const { return TEXT("trace"); }
+FString ClaireonTool_TraceGetFrameStats::GetOperation() const { return TEXT("get_frame_stats"); }
 
 FString ClaireonTool_TraceGetFrameStats::GetDescription() const
 {
@@ -95,7 +93,7 @@ struct FHitchScopeEntry
 	uint64 Count = 0;
 };
 
-// Scopes that are just frame wrappers â not useful for cause identification
+// Scopes that are just frame wrappers Ã¢Â€Â” not useful for cause identification
 static const TSet<FString> GFrameWrapperScopes = {
 	TEXT("Frame"),
 	TEXT("FEngineLoop::Tick"),

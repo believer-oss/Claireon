@@ -11,10 +11,8 @@
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 
-FString ClaireonTool_AssetList::GetName() const
-{
-	return TEXT("claireon.asset_list");
-}
+FString ClaireonTool_AssetList::GetCategory() const { return TEXT("asset"); }
+FString ClaireonTool_AssetList::GetOperation() const { return TEXT("list"); }
 
 FString ClaireonTool_AssetList::GetDescription() const
 {

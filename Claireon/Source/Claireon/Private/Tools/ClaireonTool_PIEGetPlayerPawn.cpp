@@ -13,10 +13,8 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 
-FString ClaireonTool_PIEGetPlayerPawn::GetName() const
-{
-	return TEXT("claireon.pie_get_player_pawn");
-}
+FString ClaireonTool_PIEGetPlayerPawn::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_PIEGetPlayerPawn::GetOperation() const { return TEXT("get_player_pawn"); }
 
 FString ClaireonTool_PIEGetPlayerPawn::GetDescription() const
 {

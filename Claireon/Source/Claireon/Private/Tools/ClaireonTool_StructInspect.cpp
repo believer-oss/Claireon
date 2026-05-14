@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonTool_StructInspect::GetName() const
-{
-	return TEXT("claireon.struct_inspect");
-}
+FString ClaireonTool_StructInspect::GetOperation() const { return TEXT("inspect"); }
 
 FString ClaireonTool_StructInspect::GetDescription() const
 {

@@ -8,10 +8,8 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_AnimGraphInspect::GetName() const
-{
-	return TEXT("claireon.animgraph_inspect");
-}
+FString ClaireonTool_AnimGraphInspect::GetCategory() const { return TEXT("animgraph"); }
+FString ClaireonTool_AnimGraphInspect::GetOperation() const { return TEXT("inspect"); }
 
 TArray<FString> ClaireonTool_AnimGraphInspect::GetSearchKeywords() const
 {

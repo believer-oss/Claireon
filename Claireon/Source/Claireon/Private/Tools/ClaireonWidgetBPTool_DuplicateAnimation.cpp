@@ -14,10 +14,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_DuplicateAnimation::GetName() const
-{
-    return TEXT("claireon.widgetbp_duplicate_animation");
-}
+FString ClaireonWidgetBPTool_DuplicateAnimation::GetOperation() const { return TEXT("duplicate_animation"); }
 
 FString ClaireonWidgetBPTool_DuplicateAnimation::GetDescription() const
 {

@@ -7,10 +7,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBehaviorTreeTool_ApplySpec::GetName() const
-{
-	return TEXT("claireon.behaviortree_apply_spec");
-}
+FString ClaireonBehaviorTreeTool_ApplySpec::GetOperation() const { return TEXT("apply_spec"); }
 
 FString ClaireonBehaviorTreeTool_ApplySpec::GetDescription() const
 {

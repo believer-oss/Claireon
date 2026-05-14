@@ -14,14 +14,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_RemoveWidget::GetName() const
-{
-    return TEXT("claireon.widgetbp_remove_widget");
-}
+FString ClaireonWidgetBPTool_RemoveWidget::GetOperation() const { return TEXT("remove_widget"); }
 
 FString ClaireonWidgetBPTool_RemoveWidget::GetDescription() const
 {
-    return TEXT("Remove a widget from the widget tree by name in the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Transactional. The widget and any of its descendants are removed together; bindings targeting the removed widgets become unresolvable until reauthored.");
+    return TEXT("Remove a widget from the widget tree by name in the open Widget Blueprint editing session. Requires open session_id from widgetbp_open. Transactional. The widget and any of its descendants are removed together; bindings targeting the removed widgets become unresolvable until reauthored.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_RemoveWidget::GetInputSchema() const

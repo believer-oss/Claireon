@@ -8,10 +8,8 @@
 #include "Dom/JsonValue.h"
 #include "Misc/AutomationTest.h"
 
-FString ClaireonTool_TestList::GetName() const
-{
-	return TEXT("claireon.test_list");
-}
+FString ClaireonTool_TestList::GetCategory() const { return TEXT("test"); }
+FString ClaireonTool_TestList::GetOperation() const { return TEXT("list"); }
 
 FString ClaireonTool_TestList::GetDescription() const
 {

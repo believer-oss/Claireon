@@ -13,14 +13,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_RemoveTask::GetName() const
-{
-	return TEXT("claireon.statetree_remove_task");
-}
+FString ClaireonStateTreeTool_RemoveTask::GetOperation() const { return TEXT("remove_task"); }
 
 FString ClaireonStateTreeTool_RemoveTask::GetDescription() const
 {
-	return TEXT("Remove a task node from a state in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Bindings targeting the removed task's properties are dropped. Transitions with trigger=OnTaskCompleted on this task become unreachable; remove or retarget them as needed.");
+	return TEXT("Remove a task node from a state in the open State Tree editing session. Requires open session_id from statetree_open. Transactional. Bindings targeting the removed task's properties are dropped. Transitions with trigger=OnTaskCompleted on this task become unreachable; remove or retarget them as needed.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_RemoveTask::GetInputSchema() const

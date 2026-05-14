@@ -12,14 +12,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_ListWidgetClasses::GetName() const
-{
-    return TEXT("claireon.widgetbp_list_widget_classes");
-}
+FString ClaireonWidgetBPTool_ListWidgetClasses::GetOperation() const { return TEXT("list_widget_classes"); }
 
 FString ClaireonWidgetBPTool_ListWidgetClasses::GetDescription() const
 {
-    return TEXT("List UWidget subclasses the editor can instantiate. Stateless / read-only / non-session: never mutates and does not require an open session, though one may be passed for symmetry. Optionally filter by case-insensitive substring or restrict to panel classes only. Use to discover valid widget_class values for claireon.widgetbp_add_widget.");
+    return TEXT("List UWidget subclasses the editor can instantiate. Stateless / read-only / non-session: never mutates and does not require an open session, though one may be passed for symmetry. Optionally filter by case-insensitive substring or restrict to panel classes only. Use to discover valid widget_class values for widgetbp_add_widget.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_ListWidgetClasses::GetInputSchema() const

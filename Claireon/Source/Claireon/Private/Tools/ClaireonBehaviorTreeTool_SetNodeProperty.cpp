@@ -12,10 +12,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBehaviorTreeTool_SetNodeProperty::GetName() const
-{
-	return TEXT("claireon.behaviortree_set_node_property");
-}
+FString ClaireonBehaviorTreeTool_SetNodeProperty::GetOperation() const { return TEXT("set_node_property"); }
 
 FString ClaireonBehaviorTreeTool_SetNodeProperty::GetDescription() const
 {

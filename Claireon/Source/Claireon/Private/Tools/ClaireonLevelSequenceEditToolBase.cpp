@@ -12,7 +12,7 @@ using FToolResult = IClaireonTool::FToolResult;
 // Static members
 // ============================================================================
 
-const TCHAR* ClaireonLevelSequenceEditToolBase::LevelSequenceSessionToolName = TEXT("claireon.level_sequence_open");
+const TCHAR* ClaireonLevelSequenceEditToolBase::LevelSequenceSessionToolName = TEXT("level_sequence_open");
 TMap<FString, FSequenceEditToolData> ClaireonLevelSequenceEditToolBase::ToolData;
 bool ClaireonLevelSequenceEditToolBase::bDelegateRegistered = false;
 

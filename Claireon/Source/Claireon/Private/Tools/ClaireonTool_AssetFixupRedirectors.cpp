@@ -10,10 +10,8 @@
 #include "IAssetTools.h"
 #include "UObject/ObjectRedirector.h"
 
-FString ClaireonTool_AssetFixupRedirectors::GetName() const
-{
-	return TEXT("claireon.asset_fixup_redirectors");
-}
+FString ClaireonTool_AssetFixupRedirectors::GetCategory() const { return TEXT("asset"); }
+FString ClaireonTool_AssetFixupRedirectors::GetOperation() const { return TEXT("fixup_redirectors"); }
 
 FString ClaireonTool_AssetFixupRedirectors::GetDescription() const
 {

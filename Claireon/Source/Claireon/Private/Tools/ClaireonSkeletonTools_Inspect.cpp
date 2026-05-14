@@ -7,10 +7,10 @@
 #include "Dom/JsonValue.h"
 
 // ============================================================================
-// claireon.skeleton_inspect
+// skeleton_inspect
 // ============================================================================
 
-FString ClaireonSkeletonTool_Inspect::GetName() const { return TEXT("claireon.skeleton_inspect"); }
+FString ClaireonSkeletonTool_Inspect::GetOperation() const { return TEXT("inspect"); }
 
 FString ClaireonSkeletonTool_Inspect::GetDescription() const
 {

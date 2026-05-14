@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonPCGGraphTool_Save::GetName() const
-{
-	return TEXT("claireon.pcg_save");
-}
+FString ClaireonPCGGraphTool_Save::GetOperation() const { return TEXT("save"); }
 
 FString ClaireonPCGGraphTool_Save::GetDescription() const
 {

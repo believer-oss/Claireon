@@ -97,14 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_ListGraphs::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_list_graphs");
-}
+FString ClaireonBlueprintGraphTool_ListGraphs::GetOperation() const { return TEXT("graph_list_graphs"); }
 
 FString ClaireonBlueprintGraphTool_ListGraphs::GetDescription() const
 {
-    return TEXT("List all graphs in a Blueprint by asset_path. Stateless / read-only / non-session: never mutates and requires no open session. Returns event-graph, function-graph, and macro-graph names. Use the returned name with claireon.blueprint_graph_open's graph_name parameter to start an editing session on a specific graph.");
+    return TEXT("List all graphs in a Blueprint by asset_path. Stateless / read-only / non-session: never mutates and requires no open session. Returns event-graph, function-graph, and macro-graph names. Use the returned name with blueprint_graph_open's graph_name parameter to start an editing session on a specific graph.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ListGraphs::GetInputSchema() const

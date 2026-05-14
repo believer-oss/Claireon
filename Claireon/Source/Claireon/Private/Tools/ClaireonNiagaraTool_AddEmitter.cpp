@@ -13,10 +13,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonNiagaraTool_AddEmitter::GetName() const
-{
-	return TEXT("claireon.niagara_add_emitter");
-}
+FString ClaireonNiagaraTool_AddEmitter::GetOperation() const { return TEXT("add_emitter"); }
 
 FString ClaireonNiagaraTool_AddEmitter::GetDescription() const
 {

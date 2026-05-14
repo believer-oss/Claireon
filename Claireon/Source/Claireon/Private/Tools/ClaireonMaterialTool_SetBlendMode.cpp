@@ -21,10 +21,7 @@ namespace
 	}
 }
 
-FString ClaireonMaterialTool_SetBlendMode::GetName() const
-{
-	return TEXT("claireon.material_set_blend_mode");
-}
+FString ClaireonMaterialTool_SetBlendMode::GetOperation() const { return TEXT("set_blend_mode"); }
 
 FString ClaireonMaterialTool_SetBlendMode::GetDescription() const
 {

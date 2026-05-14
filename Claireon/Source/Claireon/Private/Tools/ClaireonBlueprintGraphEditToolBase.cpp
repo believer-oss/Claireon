@@ -29,7 +29,7 @@ bool ClaireonBlueprintGraphEditToolBase::bDelegateRegistered = false;
 
 void ClaireonBlueprintGraphEditToolBase::HandleSessionClosed(const FMCPSessionClosedInfo& Info)
 {
-	if (Info.ToolName == TEXT("claireon.blueprint_edit_graph"))
+	if (Info.ToolName == TEXT("blueprint_edit_graph"))
 	{
 		ToolData.Remove(Info.SessionId);
 	}
@@ -710,7 +710,7 @@ bool ClaireonBlueprintGraphEditToolBase::ResolveOrOpenSession(
 		// Open (or reuse) a session via the manager.
 		double TimeoutMinutes = 60.0;
 		Params->TryGetNumberField(TEXT("timeout_minutes"), TimeoutMinutes);
-		FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(AssetPath, TEXT("claireon.blueprint_edit_graph"), TimeoutMinutes);
+		FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(AssetPath, TEXT("blueprint_edit_graph"), TimeoutMinutes);
 
 		if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 		{

@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonMaterialTool_SetExpressionProperty::GetName() const
-{
-	return TEXT("claireon.material_set_expression_property");
-}
+FString ClaireonMaterialTool_SetExpressionProperty::GetOperation() const { return TEXT("set_expression_property"); }
 
 FString ClaireonMaterialTool_SetExpressionProperty::GetDescription() const
 {

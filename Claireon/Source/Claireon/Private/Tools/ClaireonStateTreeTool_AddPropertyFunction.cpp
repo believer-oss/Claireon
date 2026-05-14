@@ -17,14 +17,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_AddPropertyFunction::GetName() const
-{
-	return TEXT("claireon.statetree_add_property_function");
-}
+FString ClaireonStateTreeTool_AddPropertyFunction::GetOperation() const { return TEXT("add_property_function"); }
 
 FString ClaireonStateTreeTool_AddPropertyFunction::GetDescription() const
 {
-	return TEXT("Add a property function binding that feeds the function output into a target property in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. The function_node_type must be a FStateTreePropertyFunctionBase subclass; the output type must match the target property type.");
+	return TEXT("Add a property function binding that feeds the function output into a target property in the open State Tree editing session. Requires open session_id from statetree_open. Transactional. The function_node_type must be a FStateTreePropertyFunctionBase subclass; the output type must match the target property type.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_AddPropertyFunction::GetInputSchema() const

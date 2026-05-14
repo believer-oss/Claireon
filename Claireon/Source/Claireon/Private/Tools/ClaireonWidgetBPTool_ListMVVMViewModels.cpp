@@ -9,14 +9,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_ListMVVMViewModels::GetName() const
-{
-    return TEXT("claireon.widgetbp_list_mvvm_viewmodels");
-}
+FString ClaireonWidgetBPTool_ListMVVMViewModels::GetOperation() const { return TEXT("list_mvvm_viewmodels"); }
 
 FString ClaireonWidgetBPTool_ListMVVMViewModels::GetDescription() const
 {
-    return TEXT("List ViewModel contexts currently registered on the Widget Blueprint's MVVM extension in the open editing session. Requires open session_id from claireon.widgetbp_open. Read-only. Returns one entry per viewmodel context with class and name; manage via claireon.widgetbp_add_mvvm_viewmodel and remove counterparts.");
+    return TEXT("List ViewModel contexts currently registered on the Widget Blueprint's MVVM extension in the open editing session. Requires open session_id from widgetbp_open. Read-only. Returns one entry per viewmodel context with class and name; manage via widgetbp_add_mvvm_viewmodel and remove counterparts.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_ListMVVMViewModels::GetInputSchema() const

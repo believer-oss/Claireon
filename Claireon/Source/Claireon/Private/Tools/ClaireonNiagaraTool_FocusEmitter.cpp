@@ -8,10 +8,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonNiagaraTool_FocusEmitter::GetName() const
-{
-	return TEXT("claireon.niagara_focus_emitter");
-}
+FString ClaireonNiagaraTool_FocusEmitter::GetOperation() const { return TEXT("focus_emitter"); }
 
 FString ClaireonNiagaraTool_FocusEmitter::GetDescription() const
 {

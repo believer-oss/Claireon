@@ -12,10 +12,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBehaviorTreeTool_AddDecorator::GetName() const
-{
-	return TEXT("claireon.behaviortree_add_decorator");
-}
+FString ClaireonBehaviorTreeTool_AddDecorator::GetOperation() const { return TEXT("add_decorator"); }
 
 FString ClaireonBehaviorTreeTool_AddDecorator::GetDescription() const
 {

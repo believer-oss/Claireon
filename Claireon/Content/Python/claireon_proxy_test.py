@@ -28,8 +28,10 @@ import os
 import re
 import shutil
 import socket
+import subprocess
 import sys
 import tempfile
+import textwrap
 import threading
 import time
 import unittest
@@ -175,7 +177,7 @@ class _FakeEditor:
 
 class TestPortDerivation(unittest.TestCase):
     def test_same_root_same_port(self) -> None:
-        root = r"C:\path\to\project"
+        root = r"C:\git/your-project"
         a = claireon_proxy.derive_default_mcp_port(root)
         b = claireon_proxy.derive_default_mcp_port(root)
         self.assertEqual(a, b)
@@ -184,7 +186,7 @@ class TestPortDerivation(unittest.TestCase):
 
     def test_case_normalization(self) -> None:
         a = claireon_proxy.derive_default_mcp_port(r"C:\Git\MyGame")
-        b = claireon_proxy.derive_default_mcp_port(r"c:\path\to\project")
+        b = claireon_proxy.derive_default_mcp_port(r"c:\git/your-project")
         self.assertEqual(a, b)
 
     def test_distribution_across_samples(self) -> None:
@@ -1135,6 +1137,246 @@ class TestProxyRegPortSync(unittest.TestCase):
             claireon_proxy.PROXY_REG_PORT,
             f"PROXY_REG_PORT mismatch: header={header_value} py={claireon_proxy.PROXY_REG_PORT}",
         )
+
+
+# ---- #0000 cross-runtime parity helpers ----
+#
+# Inlined copy of Resolve-WorktreeFinalPath + Get-ProxyDefaultMcpPort from
+# Initialize-WorktreeMCP.ps1. The test owns its own copy so it can run
+# without dot-sourcing the launcher (which would execute Find-MyGameProject
+# top-level code). DRIFT HAZARD: if you change either function in
+# Scripts/Utilities/Initialize-WorktreeMCP.ps1, copy the new bodies into
+# the here-string below. The test's parity assertion validates THIS body
+# against Python; drift between launcher and test is caught by the live
+# launch path, not by this unit test.
+_PS_HELPER_BODY = textwrap.dedent(r'''
+    function Resolve-WorktreeFinalPath {
+        param([Parameter(Mandatory)][string]$Path)
+        if (-not ('MyGamePathResolver' -as [type])) {
+            Add-Type -TypeDefinition @'
+    using System;
+    using System.IO;
+    using System.Runtime.InteropServices;
+    using System.Text;
+
+    public static class MyGamePathResolver
+    {
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern IntPtr CreateFileW(string lpFileName, uint dwDesiredAccess, uint dwShareMode, IntPtr lpSecurityAttributes, uint dwCreationDisposition, uint dwFlagsAndAttributes, IntPtr hTemplateFile);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern uint GetFinalPathNameByHandleW(IntPtr hFile, StringBuilder lpszFilePath, uint cchFilePath, uint dwFlags);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool CloseHandle(IntPtr hObject);
+
+        private const uint FILE_READ_ATTRIBUTES         = 0x0080;
+        private const uint FILE_SHARE_READ              = 0x00000001;
+        private const uint FILE_SHARE_WRITE             = 0x00000002;
+        private const uint FILE_SHARE_DELETE            = 0x00000004;
+        private const uint OPEN_EXISTING                = 3;
+        private const uint FILE_FLAG_BACKUP_SEMANTICS   = 0x02000000;
+        private const uint FILE_NAME_NORMALIZED         = 0x0;
+        private const uint VOLUME_NAME_DOS              = 0x0;
+        private static readonly IntPtr INVALID_HANDLE_VALUE = new IntPtr(-1);
+
+        public static string ResolveFinalPath(string path)
+        {
+            IntPtr h = CreateFileW(path, FILE_READ_ATTRIBUTES,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                IntPtr.Zero, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, IntPtr.Zero);
+            if (h == INVALID_HANDLE_VALUE) { return Path.GetFullPath(path); }
+            try {
+                StringBuilder sb = new StringBuilder(1024);
+                uint len = GetFinalPathNameByHandleW(h, sb, (uint)sb.Capacity, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+                if (len == 0) { return Path.GetFullPath(path); }
+                if (len > sb.Capacity) {
+                    int newCap = (int)System.Math.Min(len, (uint)int.MaxValue);
+                    sb = new StringBuilder(newCap);
+                    len = GetFinalPathNameByHandleW(h, sb, (uint)sb.Capacity, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+                    if (len == 0) { return Path.GetFullPath(path); }
+                }
+                string result = sb.ToString();
+                const string uncLongPrefix = @"\\?\UNC\";
+                const string longPrefix = @"\\?\";
+                if (result.StartsWith(uncLongPrefix, StringComparison.Ordinal)) {
+                    return @"\\" + result.Substring(uncLongPrefix.Length);
+                }
+                if (result.StartsWith(longPrefix, StringComparison.Ordinal)) {
+                    return result.Substring(longPrefix.Length);
+                }
+                return result;
+            } finally { CloseHandle(h); }
+        }
+    }
+    '@
+        }
+        return [MyGamePathResolver]::ResolveFinalPath($Path)
+    }
+
+    function Get-ProxyDefaultMcpPort {
+        param([Parameter(Mandatory)][string]$WorktreeRoot)
+        $resolved  = Resolve-WorktreeFinalPath -Path $WorktreeRoot
+        $canonical = $resolved.ToLowerInvariant()
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            $bytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($canonical))
+        } finally {
+            $sha.Dispose()
+        }
+        $offset = ([int]$bytes[0] * 256 + [int]$bytes[1]) % 16384
+        return 49152 + $offset
+    }
+''').strip()
+
+
+def _ps_get_default_mcp_port(worktree_root: str) -> int:
+    """Run the inlined Get-ProxyDefaultMcpPort against a worktree path.
+
+    Writes _PS_HELPER_BODY plus a final invocation line to a temporary
+    .ps1 file and runs it via `powershell.exe -NoProfile -ExecutionPolicy
+    Bypass -File <tempfile>`. The -File form (vs -Command) avoids PS 5.1
+    argument-escaping fragility around the embedded C# here-string.
+    """
+    powershell = shutil.which("powershell.exe")
+    if powershell is None:
+        raise RuntimeError("powershell.exe not found")
+    # Build the script: helpers + a single invocation that prints the int.
+    # The escaped single quotes around $worktree_root are sufficient because
+    # the value is already a normalized absolute path.
+    script_text = (
+        _PS_HELPER_BODY
+        + "\n"
+        + "Get-ProxyDefaultMcpPort -WorktreeRoot "
+        + "'" + worktree_root.replace("'", "''") + "'"
+        + "\n"
+    )
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".ps1",
+        delete=False,
+        encoding="utf-8",
+    )
+    try:
+        tmp.write(script_text)
+        tmp.close()
+        result = subprocess.run(
+            [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", tmp.name],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return int(result.stdout.strip().splitlines()[-1])
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+
+
+@unittest.skipUnless(
+    sys.platform == "win32" and shutil.which("powershell.exe") is not None,
+    "Windows + powershell.exe required for cross-runtime parity test",
+)
+class TestPortHashParityWithPowerShell(unittest.TestCase):
+    """Cross-runtime parity for derive_default_mcp_port (#0000).
+
+    Asserts:
+      1) PS-side and Py-side hashes agree for a fixed corpus of literal
+         absolute paths (exercises SHA-256 + offset arithmetic; does NOT
+         exercise link resolution).
+      2) Junction-and-realpath equality on BOTH sides: a real
+         `mklink /J` junction and its underlying realpath produce the
+         same port in Python AND in PowerShell, AND the cross-runtime
+         hashes match for both forms (all four ports equal).
+
+    Skips on non-Windows or if powershell.exe is not on PATH.
+    """
+
+    # Fixed literal corpus: paths need not exist on disk. The PS-side
+    # CreateFileW will fail and fall back to Path.GetFullPath; Python's
+    # os.path.realpath also returns a literal absolute path on missing
+    # inputs (no junctioned ancestor). Both sides converge on the same
+    # canonical literal -- this corpus tests the SHA + offset, not links.
+    _LITERAL_CORPUS = [
+        r"C:\Users\test\Repos\Foo",
+        r"D:\Mixed\Case\Path\WithCaps",
+        r"E:\path\with\..\dotdot\segments",
+        r"F:\path\\with\\redundant\\separators",
+    ]
+
+    def test_literal_corpus_parity(self):
+        for input_path in self._LITERAL_CORPUS:
+            with self.subTest(input_path=input_path):
+                py_port = claireon_proxy.derive_default_mcp_port(input_path)
+                ps_port = _ps_get_default_mcp_port(input_path)
+                self.assertEqual(
+                    py_port, ps_port,
+                    "PS/Py hash divergence on literal input: " + input_path,
+                )
+
+    def test_real_junction_equality(self):
+        # Create a real directory + a junction pointing at it. Both temp;
+        # both cleaned up explicitly. NEVER shutil.rmtree(tmp_link) -- it
+        # would follow the junction and delete the target's contents.
+        tmp_real = tempfile.mkdtemp(prefix="claireon-real-")
+        tmp_link = os.path.join(
+            tempfile.gettempdir(),
+            "claireon-junction-" + uuid.uuid4().hex[:8],
+        )
+        try:
+            # mklink /J creates a directory junction; does NOT require admin.
+            subprocess.run(
+                ["cmd", "/c", "mklink", "/J", tmp_link, tmp_real],
+                check=True,
+                capture_output=True,
+            )
+            real_resolved = os.path.realpath(tmp_link)
+            self.assertNotEqual(
+                tmp_link.lower(), real_resolved.lower(),
+                "tmp_link and its realpath must differ for this test to be meaningful",
+            )
+
+            py_port_link = claireon_proxy.derive_default_mcp_port(tmp_link)
+            py_port_real = claireon_proxy.derive_default_mcp_port(real_resolved)
+            ps_port_link = _ps_get_default_mcp_port(tmp_link)
+            ps_port_real = _ps_get_default_mcp_port(real_resolved)
+
+            # Per-runtime equality (junction == realpath).
+            self.assertEqual(
+                py_port_link, py_port_real,
+                "Python: junction and realpath must hash to the same port",
+            )
+            self.assertEqual(
+                ps_port_link, ps_port_real,
+                "PowerShell: junction and realpath must hash to the same port",
+            )
+            # Cross-runtime equality (PS == Py) on both forms.
+            self.assertEqual(
+                py_port_link, ps_port_link,
+                "PS/Py disagree on the junction-form hash",
+            )
+            self.assertEqual(
+                py_port_real, ps_port_real,
+                "PS/Py disagree on the realpath-form hash",
+            )
+            # All four equal -- the operator-stated invariant.
+            self.assertEqual(
+                py_port_link, ps_port_real,
+                "All four ports must match",
+            )
+        finally:
+            # Junction cleanup MUST use os.rmdir (or os.unlink); NEVER
+            # shutil.rmtree(tmp_link). The junction's target contents are
+            # disposable (also temp), but the asymmetry matters because a
+            # future contributor copy-pasting this pattern is one mistake
+            # away from rmtree-through-junction against a non-temp target.
+            try:
+                os.rmdir(tmp_link)  # detaches the junction; leaves target intact
+            except OSError:
+                pass
+            shutil.rmtree(tmp_real, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------

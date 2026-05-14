@@ -14,14 +14,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_AddTransitionCondition::GetName() const
-{
-	return TEXT("claireon.statetree_add_transition_condition");
-}
+FString ClaireonStateTreeTool_AddTransitionCondition::GetOperation() const { return TEXT("add_transition_condition"); }
 
 FString ClaireonStateTreeTool_AddTransitionCondition::GetDescription() const
 {
-	return TEXT("Add a condition node to a transition in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Transition conditions gate firing of the transition; all conditions must pass at evaluation time. The node_type must be a FStateTreeConditionBase subclass.");
+	return TEXT("Add a condition node to a transition in the open State Tree editing session. Requires open session_id from statetree_open. Transactional. Transition conditions gate firing of the transition; all conditions must pass at evaluation time. The node_type must be a FStateTreeConditionBase subclass.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_AddTransitionCondition::GetInputSchema() const
