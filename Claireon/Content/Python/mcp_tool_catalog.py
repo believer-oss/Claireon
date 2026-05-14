@@ -75,6 +75,10 @@ _ABBREVIATIONS = {
     "screenshot":  "capture image viewport",
     "fly":         "flythrough camera",
     "cam":         "camera flythrough viewport",
+    "camera":         "camera camera_asset camera_node rig",
+    "cam_asset":      "camera asset rig camera_asset",
+    "camera_node":    "camera_node node camera rig",
+    "rig":            "camera rig camera_asset",
     "bb":          "blackboard behavior tree keys",
     "niag":        "niagara",
     "prefab":      "prefabrication level instance",
@@ -116,6 +120,13 @@ _ABBREVIATIONS = {
     "context":     "context parameter data input output struct class",
     "inherit":     "inherit parent proxy table chain",
     "fallback":    "fallback default result",
+    # Audio cohort synonyms (decomposed audio_edit -> 42 per-op tools)
+    "soundcue":    "sound cue node graph audio wave_player mixer",
+    "metasound":   "metasound source builder audio document graph node",
+    "soundclass":  "sound class hierarchy children audio mix volume pitch",
+    "soundmix":    "sound mix adjuster envelope audio fade volume",
+    "attenuation": "attenuation falloff audio spatial 3d distance",
+    "concurrency": "concurrency limit voice stealing audio resolution",
 }
 
 # Build reverse map: canonical term -> set of abbreviations that expand to it
