@@ -31,6 +31,7 @@ THIRD_PARTY_INCLUDES_END
 #include "UObject/Package.h"
 #include "UObject/UObjectIterator.h"
 #include "PackageTools.h"
+#include "FileHelpers.h"
 #include "HAL/ThreadHeartBeat.h"
 
 // Static member initialization
@@ -103,10 +104,9 @@ void FClaireonBridge::RegisterBridgeFunctions()
 	// mcp_index_engine hybrid matcher with a dependency-free C++ BM25-lite.
 	ClaireonTool_ExecutePython::RegisterToolCatalogBindings(UnrealDict);
 
-	// Add our Python modules directory to sys.path.  The prewarm imports for the old
-	// index-engine / output-gate / chunkers Python modules were removed in #0000 once
-	// the output gate and tool-catalog matcher moved to C++; mcp_tool_catalog.py is
-	// imported lazily from ClaireonTool_SearchTools.cpp and does not need prewarming.
+	// Add our Python modules directory to sys.path. The output gate and
+	// tool-catalog matcher live in C++; mcp_tool_catalog.py is imported lazily
+	// from ClaireonTool_SearchTools.cpp and does not need prewarming.
 	{
 		const FString PluginPythonDir = FPaths::ConvertRelativePathToFull(
 			FPaths::Combine(FPaths::ProjectPluginsDir(), TEXT("Claireon"), TEXT("Content"), TEXT("Python")));
@@ -255,7 +255,7 @@ PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 
 	// Carve-out: session_release and session_list are always allowed
 	// regardless of held sessions, so an operator can always recover from a stuck lock.
-	// Tool names are bare (post-#0000); registry key matches GetName() exactly.
+	// Tool names are bare; registry key matches GetName() exactly.
 	const bool bIsSessionRecoveryTool =
 		(ToolName == TEXT("session_release")) ||
 		(ToolName == TEXT("session_list"));
@@ -944,6 +944,20 @@ void FClaireonBridge::RunWorldTransitionBarrier()
 	UE_LOG(LogClaireon, Log, TEXT("[MCP Bridge] World-transition barrier complete"));
 }
 
+namespace ClaireonBridgeUnsavedWorkFilter
+{
+	/** Return true if a package name should be kept (i.e. counted as unsaved
+	 *  user work). Pure-string predicate so unit tests can call it without
+	 *  constructing UPackages. */
+	static bool ShouldKeepPackageName(const FString& PackageName)
+	{
+		if (PackageName.IsEmpty()) { return false; }
+		if (PackageName.StartsWith(TEXT("/Temp/"))) { return false; }
+		if (PackageName.StartsWith(TEXT("/Memory/"))) { return false; }
+		return true;
+	}
+}
+
 bool FClaireonBridge::EnsureNoLeakedWorlds(TArray<FClaireonLeakedWorld>& OutRemaining)
 {
 	OutRemaining.Reset();
@@ -1098,6 +1112,89 @@ FString FClaireonBridge::FormatLeakedWorldError(const TArray<FClaireonLeakedWorl
 void FClaireonBridge::ReportDeferredActionAbort(const FString& Message)
 {
 	GDeferredActionAborts.Add(Message);
+}
+
+bool FClaireonBridge::EnsureNoUnsavedWork(TArray<FClaireonUnsavedPackage>& OutDirty)
+{
+	OutDirty.Reset();
+
+	TArray<UPackage*> DirtyPackages;
+	FEditorFileUtils::GetDirtyWorldPackages(DirtyPackages);
+	FEditorFileUtils::GetDirtyContentPackages(DirtyPackages);
+
+	for (UPackage* Pkg : DirtyPackages)
+	{
+		if (!Pkg) { continue; }
+		if (Pkg == GetTransientPackage()) { continue; }
+		const FString PackageName = Pkg->GetName();
+		if (!ClaireonBridgeUnsavedWorkFilter::ShouldKeepPackageName(PackageName))
+		{
+			continue;
+		}
+
+		FClaireonUnsavedPackage Entry;
+		Entry.PackageName = PackageName;
+		Entry.bIsMapPackage = Pkg->ContainsMap();
+		OutDirty.Add(Entry);
+		UE_LOG(LogClaireon, Warning,
+			TEXT("[MCP Guard] Unsaved %s detected: %s"),
+			Entry.bIsMapPackage ? TEXT("map") : TEXT("asset"),
+			*Entry.PackageName);
+	}
+
+	return OutDirty.Num() == 0;
+}
+
+FString FClaireonBridge::FormatUnsavedWorkError(const TArray<FClaireonUnsavedPackage>& Dirty)
+{
+	if (Dirty.Num() == 0)
+	{
+		return FString();
+	}
+
+	TArray<FString> MapNames;
+	TArray<FString> AssetNames;
+	for (const FClaireonUnsavedPackage& D : Dirty)
+	{
+		if (D.bIsMapPackage) { MapNames.Add(D.PackageName); }
+		else { AssetNames.Add(D.PackageName); }
+	}
+
+	FString Msg = TEXT("[MCP Guard] Aborting world transition: the editor has unsaved work that would be lost.");
+	if (MapNames.Num() > 0)
+	{
+		Msg += TEXT("\n  unsaved map(s) (save or discard before transitioning): ");
+		Msg += FString::Join(MapNames, TEXT(", "));
+	}
+	if (AssetNames.Num() > 0)
+	{
+		Msg += TEXT("\n  unsaved asset(s) (save or discard before transitioning): ");
+		Msg += FString::Join(AssetNames, TEXT(", "));
+	}
+	Msg += TEXT("\nSave these packages (File > Save All / Ctrl+S) or revert them, then retry map_open. ");
+	Msg += TEXT("Enable auto-save in Project Settings > Plugins > Claireon to save automatically before deferred actions.");
+	return Msg;
+}
+
+bool FClaireonBridge::ShouldAbortDeferredLoadMap(FString& OutError)
+{
+	OutError.Reset();
+
+	TArray<FClaireonLeakedWorld> Leaks;
+	if (!EnsureNoLeakedWorlds(Leaks))
+	{
+		OutError = FormatLeakedWorldError(Leaks);
+		return true;
+	}
+
+	TArray<FClaireonUnsavedPackage> Dirty;
+	if (!EnsureNoUnsavedWork(Dirty))
+	{
+		OutError = FormatUnsavedWorkError(Dirty);
+		return true;
+	}
+
+	return false;
 }
 
 TArray<FString> FClaireonBridge::DrainDeferredActionAborts()

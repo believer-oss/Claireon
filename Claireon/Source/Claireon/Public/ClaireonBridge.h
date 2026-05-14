@@ -45,6 +45,16 @@ struct FClaireonLeakedWorld
 	bool bDirty = false;
 };
 
+/** Description of an unsaved (dirty) package returned by EnsureNoUnsavedWork. */
+struct FClaireonUnsavedPackage
+{
+	/** Long package name, e.g. /Game/Maps/L_MyLevel or /Game/Items/DA_Sword. */
+	FString PackageName;
+
+	/** True if this package contains a map (UPackage::ContainsMap()). */
+	bool bIsMapPackage = false;
+};
+
 /**
  * C++-to-Python bridge using CPython C API.
  * Registers C++ functions callable from Python via the claireon.* namespace.
@@ -136,6 +146,40 @@ public:
 	 * python_execute are joined newline-separated by the dispatcher.
 	 */
 	static void ReportDeferredActionAbort(const FString& Message);
+
+	/**
+	 * Scan loaded dirty packages and return those that represent unsaved user
+	 * editor work. Filter rule:
+	 *   - skip nullptr and GetTransientPackage()
+	 *   - skip names beginning with "/Temp/" or "/Memory/" (engine scratch roots)
+	 *   - keep everything else, INCLUDING "/Game/", "/Engine/", and third-party
+	 *     plugin roots ("/MyPlugin/", etc.) -- plugin assets can be open editor
+	 *     work and must be protected.
+	 *
+	 * Returns true iff zero packages survived the filter (safe to transition).
+	 * Caller is responsible for surfacing the structured error via
+	 * FormatUnsavedWorkError + ReportDeferredActionAbort.
+	 */
+	static bool EnsureNoUnsavedWork(TArray<FClaireonUnsavedPackage>& OutDirty);
+
+	/**
+	 * Build the human-readable error string for an unsaved-work abort.
+	 * Empty input -> empty string (parity with FormatLeakedWorldError).
+	 * Non-empty -> single "[MCP Guard] ..." message with comma-separated names
+	 * split into "unsaved map(s)" and "unsaved asset(s)" buckets.
+	 */
+	static FString FormatUnsavedWorkError(const TArray<FClaireonUnsavedPackage>& Dirty);
+
+	/**
+	 * Compose the leaked-world guard and the unsaved-work guard into a single
+	 * abort decision for the deferred-load-map ticker. OutError receives the
+	 * formatted error string when this returns true; empty when false.
+	 *
+	 * Test-friendly entry point: invoking this exercises the production
+	 * composition WITHOUT scheduling a ticker, WITHOUT running
+	 * RunWorldTransitionBarrier, and WITHOUT calling FEditorFileUtils::LoadMap.
+	 */
+	static bool ShouldAbortDeferredLoadMap(FString& OutError);
 
 	/**
 	 * Drain and return all reported deferred-action aborts since the
