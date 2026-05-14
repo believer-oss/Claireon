@@ -183,6 +183,11 @@ FString ClaireonTool_ExecutePython::GetName() const
 	return TEXT("claireon.python_execute");
 }
 
+TArray<FString> ClaireonTool_ExecutePython::GetSearchKeywords() const
+{
+	return {TEXT("python"), TEXT("execute"), TEXT("run"), TEXT("script"), TEXT("code"), TEXT("eval")};
+}
+
 FString ClaireonTool_ExecutePython::GetDescription() const
 {
 	return TEXT("Execute Python code in Code Mode with access to the claireon.* bridge. "

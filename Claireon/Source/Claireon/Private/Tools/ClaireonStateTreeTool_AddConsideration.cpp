@@ -20,7 +20,7 @@ FString ClaireonStateTreeTool_AddConsideration::GetName() const
 
 FString ClaireonStateTreeTool_AddConsideration::GetDescription() const
 {
-	return TEXT("Add a utility consideration to a state.");
+	return TEXT("Add a utility consideration to a state in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Considerations score the state for utility-based selection; configure properties via claireon.statetree_set_node_property after the consideration is added.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_AddConsideration::GetInputSchema() const
@@ -77,9 +77,10 @@ FToolResult ClaireonStateTreeTool_AddConsideration::Execute(const TSharedPtr<FJs
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Add Consideration")));
 	Data->StateTree->Modify();
+	const FString NewIdStr = NewNode.ID.ToString(EGuidFormats::DigitsWithHyphens);
 	State->Considerations.Add(MoveTemp(NewNode));
 
 	Data->FocusedStateId = StateId;
 	Data->LastOperationStatus = FString::Printf(TEXT("add_consideration -> Added %s to '%s'"), *NodeType, *State->Name.ToString());
-	return BuildStateResponse(SessionId, Data);
+	return BuildStateResponse(SessionId, Data, FStringView(TEXT("consideration_id")), FStringView(NewIdStr));
 }

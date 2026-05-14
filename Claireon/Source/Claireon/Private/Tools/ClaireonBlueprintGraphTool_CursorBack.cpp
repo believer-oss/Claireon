@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_CursorBack::GetName() const
 
 FString ClaireonBlueprintGraphTool_CursorBack::GetDescription() const
 {
-    return TEXT("Navigate the cursor back in history.");
+    return TEXT("Navigate the editing cursor back through its history in the open Blueprint editing session. Requires open session_id from claireon.blueprint_graph_open. Read-only with respect to graph contents (the cursor is session state). Common pitfall: errors when history is empty; use claireon.blueprint_graph_get_state to inspect the current cursor position.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_CursorBack::GetInputSchema() const
@@ -126,11 +126,6 @@ FToolResult ClaireonBlueprintGraphTool_CursorBack::Execute(const TSharedPtr<FJso
     {
         return Error;
     }
-    return Operation_CursorBack(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_CursorBack(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	if (!Blueprint)
 	{

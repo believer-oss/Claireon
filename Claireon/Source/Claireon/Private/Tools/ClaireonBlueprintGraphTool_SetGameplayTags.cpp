@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_SetGameplayTags::GetName() const
 
 FString ClaireonBlueprintGraphTool_SetGameplayTags::GetDescription() const
 {
-    return TEXT("Surgically add/remove gameplay tags from a FGameplayTagContainer property on a Blueprint CDO (stateless).");
+    return TEXT("Surgically add/remove gameplay tags from a FGameplayTagContainer property on a Blueprint CDO. Stateless / non-session: writes the asset directly by path, no open session required. Common pitfall: the property must be a FGameplayTagContainer (not a single FGameplayTag); the tags must already be registered in a tag table.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetGameplayTags::GetInputSchema() const
@@ -149,11 +149,6 @@ FToolResult ClaireonBlueprintGraphTool_SetGameplayTags::Execute(const TSharedPtr
             Params = *NestedObj;
         }
     }
-    return Operation_SetGameplayTags(Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_SetGameplayTags(const TSharedPtr<FJsonObject>& Params)
-{
 	FString AssetPath, PropertyPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
 		return MakeErrorResult(TEXT("Missing required field: asset_path. set_gameplay_tags requires: asset_path, property_path, tags_to_add (array), tags_to_remove (array)"));
@@ -235,7 +230,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_SetGameplayTags(const 
 			if (!StructProp)
 			{
 				return MakeErrorResult(FString::Printf(
-					TEXT("Property '%s' is not a struct — cannot walk further"), *PathParts[i]));
+					TEXT("Property '%s' is not a struct -- cannot walk further"), *PathParts[i]));
 			}
 			CurrentContainer = StructProp->ContainerPtrToValuePtr<void>(CurrentContainer);
 			CurrentStruct = StructProp->Struct;
@@ -253,7 +248,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_SetGameplayTags(const 
 	FGameplayTagContainer* Container =
 		TagContainerProp->ContainerPtrToValuePtr<FGameplayTagContainer>(FinalContainer);
 
-	// Check for deprecated property — surface as warning, not error
+	// Check for deprecated property -- surface as warning, not error
 	FString WarningText;
 	if (FinalProperty->HasAnyPropertyFlags(CPF_Deprecated))
 	{
@@ -280,7 +275,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_SetGameplayTags(const 
 		}
 		else
 		{
-			WarningText += FString::Printf(TEXT("[WARN] Tag '%s' not registered in project — skipped removal\n"), *TagName);
+			WarningText += FString::Printf(TEXT("[WARN] Tag '%s' not registered in project -- skipped removal\n"), *TagName);
 		}
 	}
 
@@ -293,7 +288,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_SetGameplayTags(const 
 		}
 		else
 		{
-			WarningText += FString::Printf(TEXT("[WARN] Tag '%s' not registered in project — skipped add\n"), *TagName);
+			WarningText += FString::Printf(TEXT("[WARN] Tag '%s' not registered in project -- skipped add\n"), *TagName);
 		}
 	}
 

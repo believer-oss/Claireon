@@ -1,13 +1,12 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Dispatch Backlog: https://example.com/internal-doc
-// Animation op stub. Expected UMG APIs: UWidgetAnimation / UWidgetBlueprint::Animations / UWidgetAnimationBinding.
-// Follow-up PR implements Execute; schema / description / keywords are already wired.
-
 #include "Tools/ClaireonWidgetBPTool_RenameAnimation.h"
 #include "Tools/FToolSchemaBuilder.h"
+#include "ClaireonWidgetAnimationHandlers.h"
 #include "Dom/JsonObject.h"
+#include "ScopedTransaction.h"
+#include "WidgetBlueprint.h"
 
 using FToolResult = IClaireonTool::FToolResult;
 
@@ -18,7 +17,7 @@ FString ClaireonWidgetBPTool_RenameAnimation::GetName() const
 
 FString ClaireonWidgetBPTool_RenameAnimation::GetDescription() const
 {
-    return TEXT("[Backlogged] Rename a UWidgetAnimation. Implementation deferred to Dispatch Backlog: https://example.com/internal-doc.");
+    return TEXT("Rename a UWidgetAnimation.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_RenameAnimation::GetInputSchema() const
@@ -37,5 +36,42 @@ TArray<FString> ClaireonWidgetBPTool_RenameAnimation::GetSearchKeywords() const
 
 FToolResult ClaireonWidgetBPTool_RenameAnimation::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-    return MakeErrorResult(TEXT("rename_animation is not yet implemented; tracked in Dispatch Backlog: https://example.com/internal-doc"));
+    TSharedPtr<FJsonObject> Params;
+    FString SessionId;
+    FWidgetBPEditToolData* Data = nullptr;
+    FToolResult BeginError;
+    if (!BeginSessionOp(Arguments, TEXT("rename_animation"), Params, SessionId, Data, BeginError))
+    {
+        return BeginError;
+    }
+    UWidgetBlueprint* WBP = Data ? Data->WidgetBlueprint.Get() : nullptr;
+    if (!WBP)
+    {
+        return MakeErrorResult(TEXT("widget blueprint unavailable on session"));
+    }
+    FString OldName;
+    if (!Params->TryGetStringField(TEXT("animation_name"), OldName) || OldName.IsEmpty())
+    {
+        return MakeErrorResult(TEXT("animation_name is required"));
+    }
+    FString NewName;
+    if (!Params->TryGetStringField(TEXT("new_name"), NewName) || NewName.IsEmpty())
+    {
+        return MakeErrorResult(TEXT("new_name is required"));
+    }
+
+    FScopedTransaction Transaction(NSLOCTEXT("Claireon", "RenameWidgetAnimation", "Rename Widget Animation"));
+    FString ApplyError;
+    if (!ApplyRenameAnimation(WBP, OldName, NewName, ApplyError))
+    {
+        Transaction.Cancel();
+        return MakeErrorResult(ApplyError);
+    }
+    Data->bModified = true;
+
+    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetStringField(TEXT("old_name"), OldName);
+    ResultObj->SetStringField(TEXT("new_name"), NewName);
+    return MakeSuccessResult(ResultObj, FString::Printf(TEXT("Renamed '%s' -> '%s'"), *OldName, *NewName));
 }
+

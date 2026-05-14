@@ -16,7 +16,7 @@ FString ClaireonTool_GetWidgetBPTree::GetName() const
 
 FString ClaireonTool_GetWidgetBPTree::GetDescription() const
 {
-	return TEXT("Read-only inspection of a Widget Blueprint's widget tree hierarchy. Returns JSON with widget names, classes, slot properties, and optionally full widget properties, bindings, MVVM bindings, and animations. Does not require a session.");
+	return TEXT("Inspect a Widget Blueprint's widget tree hierarchy by asset_path. Stateless / read-only / non-session: never mutates and requires no open session. Returns widget names, classes, slot properties, and optionally full widget properties, bindings, MVVM bindings, and animations. Use the in-session claireon.widgetbp_get_state when an editing session is already open.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_GetWidgetBPTree::GetInputSchema() const

@@ -12,6 +12,11 @@ FString ClaireonTool_SearchInBlueprints::GetName() const
 	return TEXT("claireon.blueprint_search");
 }
 
+TArray<FString> ClaireonTool_SearchInBlueprints::GetSearchKeywords() const
+{
+	return {TEXT("bp"), TEXT("blueprint"), TEXT("search"), TEXT("find"), TEXT("find_in_blueprints"), TEXT("query"), TEXT("nodes"), TEXT("pins")};
+}
+
 FString ClaireonTool_SearchInBlueprints::GetDescription() const
 {
 	return TEXT("Search within Blueprint content (nodes, pins, values, comments). Equivalent to Edit > Find in Blueprints. Supports expression syntax: plain text, Nodes(\"Name\"), Pins(\"Name\"), AND/OR/NOT.");

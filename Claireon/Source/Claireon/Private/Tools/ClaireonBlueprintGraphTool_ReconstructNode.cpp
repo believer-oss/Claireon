@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_ReconstructNode::GetName() const
 
 FString ClaireonBlueprintGraphTool_ReconstructNode::GetDescription() const
 {
-    return TEXT("Reconstruct a node in place (refreshes pins from its current class definition). Session-based when session_id present, stateless otherwise.");
+    return TEXT("Reconstruct a node in place to refresh its pins from the current class definition. Requires open session_id from claireon.blueprint_graph_open OR pass asset_path for stateless single-shot mode. Transactional. Use after editing the underlying UFUNCTION/struct so the node picks up the new pin layout.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ReconstructNode::GetInputSchema() const
@@ -141,13 +141,13 @@ FToolResult ClaireonBlueprintGraphTool_ReconstructNode::Execute(const TSharedPtr
         {
             return Error;
         }
-        return Operation_ReconstructNode(SessionId, Data, SessionParams);
+        return ReconstructNode_Impl(SessionId, Data, SessionParams);
     }
 
-    return Operation_ReconstructNodeStateless(Params);
+    return ReconstructNodeStateless_Impl(Params);
 }
 
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_ReconstructNode(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+FToolResult ClaireonBlueprintGraphTool_ReconstructNode::ReconstructNode_Impl(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
 {
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
@@ -181,7 +181,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_ReconstructNode(const 
 	return BuildStateResponse(SessionId, Data);
 }
 
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_ReconstructNodeStateless(const TSharedPtr<FJsonObject>& Params)
+FToolResult ClaireonBlueprintGraphTool_ReconstructNode::ReconstructNodeStateless_Impl(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath, GraphName, NodeGuidStr;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))

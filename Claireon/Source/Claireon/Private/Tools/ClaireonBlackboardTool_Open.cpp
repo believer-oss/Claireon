@@ -16,6 +16,11 @@ FString ClaireonBlackboardTool_Open::GetName() const
 	return TEXT("claireon.blackboard_open");
 }
 
+TArray<FString> ClaireonBlackboardTool_Open::GetSearchKeywords() const
+{
+	return {TEXT("bb"), TEXT("blackboard"), TEXT("behavior"), TEXT("tree"), TEXT("keys"), TEXT("open"), TEXT("session")};
+}
+
 FString ClaireonBlackboardTool_Open::GetDescription() const
 {
 	return TEXT("Open a Blackboard Data asset for editing. Returns a session_id for subsequent operations.");

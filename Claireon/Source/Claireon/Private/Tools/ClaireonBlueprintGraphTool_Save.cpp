@@ -102,9 +102,14 @@ FString ClaireonBlueprintGraphTool_Save::GetName() const
     return TEXT("claireon.blueprint_graph_save");
 }
 
+TArray<FString> ClaireonBlueprintGraphTool_Save::GetSearchKeywords() const
+{
+    return {TEXT("bp"), TEXT("save"), TEXT("write"), TEXT("persist"), TEXT("commit"), TEXT("graph")};
+}
+
 FString ClaireonBlueprintGraphTool_Save::GetDescription() const
 {
-    return TEXT("Compile and save the Blueprint package to disk.");
+    return TEXT("Compiles and saves the Blueprint package to disk for the current session. Per the per-node cycle, call save every 1-3 add_node operations to flush in-session edits. Most-common pitfall: skipping save until close, which loses progress on editor crash and forces a full re-author of the in-session graph.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Save::GetInputSchema() const
@@ -126,11 +131,6 @@ FToolResult ClaireonBlueprintGraphTool_Save::Execute(const TSharedPtr<FJsonObjec
     {
         return Error;
     }
-    return Operation_Save(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_Save(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	if (!Blueprint)
 	{
@@ -178,6 +178,31 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_Save(const FString& Se
 		UE_LOG(LogClaireon, Error, TEXT("[EditBlueprintGraph] Save: Failed to save Blueprint to %s"), *PackageFileName);
 		return MakeErrorResult(FString::Printf(TEXT("Failed to save Blueprint to %s"), *PackageFileName));
 	}
+}
+
+// ----------------------------------------------------------------------------
+// P1: hot-path metadata enrichment
+// ----------------------------------------------------------------------------
+
+FString ClaireonBlueprintGraphTool_Save::GetFullDescription() const
+{
+    return TEXT(
+        "Compiles and saves the Blueprint package to disk for the current "
+        "session. As part of the per-node incremental cycle, "
+        "call claireon.blueprint_graph_save every 1-3 add_node operations rather "
+        "than batching dozens of edits before a single save. This protects "
+        "against editor crashes (which would otherwise drop in-session edits) "
+        "and ensures git diffs stay scoped per logical authoring unit. The "
+        "tool internally calls FKismetEditorUtilities::CompileBlueprint and "
+        "then UEditorAssetLibrary::SaveLoadedAsset on the package; if compile "
+        "errors are present, save still proceeds (the asset is saved with "
+        "compile errors recorded). Use claireon.blueprint_graph_compile to "
+        "fetch the structured error list.");
+}
+
+FString ClaireonBlueprintGraphTool_Save::GetExampleUsage() const
+{
+    return TEXT("claireon.blueprint_graph_save session_id=\"...\"");
 }
 
 #undef LOCTEXT_NAMESPACE

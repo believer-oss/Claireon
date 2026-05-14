@@ -19,7 +19,7 @@ FString ClaireonStateTreeTool_SetStateSelectionBehavior::GetName() const
 
 FString ClaireonStateTreeTool_SetStateSelectionBehavior::GetDescription() const
 {
-	return TEXT("Set the selection behavior for a state.");
+	return TEXT("Set the selection behavior for a state in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Behavior controls whether the state is entered directly, only through its children, or by utility scoring. Common pitfall: changing behavior may force re-entry semantics at runtime.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_SetStateSelectionBehavior::GetInputSchema() const

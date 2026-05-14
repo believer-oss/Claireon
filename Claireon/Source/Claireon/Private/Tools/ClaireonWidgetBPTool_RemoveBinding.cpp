@@ -18,7 +18,7 @@ FString ClaireonWidgetBPTool_RemoveBinding::GetName() const
 
 FString ClaireonWidgetBPTool_RemoveBinding::GetDescription() const
 {
-    return TEXT("Remove a legacy UMG property binding from a widget.");
+    return TEXT("Remove a legacy UMG property binding from a widget in the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Transactional. After removal the property reverts to its authored default. Common pitfall: this targets legacy property bindings; remove MVVM bindings via claireon.widgetbp_remove_mvvm_binding.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_RemoveBinding::GetInputSchema() const
@@ -40,15 +40,6 @@ FToolResult ClaireonWidgetBPTool_RemoveBinding::Execute(const TSharedPtr<FJsonOb
     {
         return Error;
     }
-    return Operation_RemoveBinding(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_RemoveBinding(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	FString WidgetNameStr;
 	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetNameStr))
 	{
@@ -88,3 +79,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_RemoveBinding(const FString&
 
 	return MakeErrorResult(ResultString);
 }
+

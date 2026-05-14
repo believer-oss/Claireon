@@ -583,17 +583,30 @@ FString ClaireonStateTreeHelpers::FormatStateArea(UStateTreeState* State)
 	return Output;
 }
 
-FString ClaireonStateTreeHelpers::FormatStateTreeStructure(UStateTreeEditorData* EditorData, const FGuid* FocusStateId)
+FString ClaireonStateTreeHelpers::FormatStateTreeStructure(
+	UStateTreeEditorData* EditorData,
+	const FGuid* FocusStateId,
+	const TArray<FString>* IncludedSections)
 {
 	if (!EditorData)
 	{
 		return TEXT("(null editor data)");
 	}
 
+	// Section inclusion test: empty/null array means "emit all sections".
+	auto IsIncluded = [IncludedSections](const TCHAR* SectionName) -> bool
+	{
+		if (IncludedSections == nullptr || IncludedSections->IsEmpty())
+		{
+			return true;
+		}
+		return IncludedSections->Contains(FString(SectionName));
+	};
+
 	UStateTree* StateTree = Cast<UStateTree>(EditorData->GetOuter());
 	FString Output;
 
-	// Header
+	// Header (always emitted; not a filterable section)
 	FString AssetName = StateTree ? StateTree->GetName() : TEXT("Unknown");
 	Output += FString::Printf(TEXT("=== State Tree: %s ===\n"), *AssetName);
 
@@ -609,75 +622,87 @@ FString ClaireonStateTreeHelpers::FormatStateTreeStructure(UStateTreeEditorData*
 	Output += TEXT("\n");
 
 	// Global Evaluators
-	Output += TEXT("=== Global Evaluators ===\n");
-	if (EditorData->Evaluators.Num() > 0)
+	if (IsIncluded(TEXT("global_evaluators")))
 	{
-		for (const FStateTreeEditorNode& EvalNode : EditorData->Evaluators)
+		Output += TEXT("=== Global Evaluators ===\n");
+		if (EditorData->Evaluators.Num() > 0)
 		{
-			Output += FString::Printf(TEXT("%s\n"), *FormatEditorNode(EvalNode));
+			for (const FStateTreeEditorNode& EvalNode : EditorData->Evaluators)
+			{
+				Output += FString::Printf(TEXT("%s\n"), *FormatEditorNode(EvalNode));
+			}
 		}
+		else
+		{
+			Output += TEXT("(none)\n");
+		}
+		Output += TEXT("\n");
 	}
-	else
-	{
-		Output += TEXT("(none)\n");
-	}
-	Output += TEXT("\n");
 
 	// Global Tasks
-	Output += TEXT("=== Global Tasks ===\n");
-	if (EditorData->GlobalTasks.Num() > 0)
+	if (IsIncluded(TEXT("global_tasks")))
 	{
-		for (const FStateTreeEditorNode& TaskNode : EditorData->GlobalTasks)
+		Output += TEXT("=== Global Tasks ===\n");
+		if (EditorData->GlobalTasks.Num() > 0)
 		{
-			Output += FString::Printf(TEXT("%s\n"), *FormatEditorNode(TaskNode));
+			for (const FStateTreeEditorNode& TaskNode : EditorData->GlobalTasks)
+			{
+				Output += FString::Printf(TEXT("%s\n"), *FormatEditorNode(TaskNode));
+			}
 		}
+		else
+		{
+			Output += TEXT("(none)\n");
+		}
+		Output += TEXT("\n");
 	}
-	else
-	{
-		Output += TEXT("(none)\n");
-	}
-	Output += TEXT("\n");
 
 	// State Hierarchy
-	Output += TEXT("=== State Hierarchy ===\n");
-	for (int32 i = 0; i < EditorData->SubTrees.Num(); i++)
+	if (IsIncluded(TEXT("states")))
 	{
-		bool bIsLast = (i == EditorData->SubTrees.Num() - 1);
-		FormatStateRecursive(EditorData->SubTrees[i], Output, TEXT(""), bIsLast, FocusStateId);
+		Output += TEXT("=== State Hierarchy ===\n");
+		for (int32 i = 0; i < EditorData->SubTrees.Num(); i++)
+		{
+			bool bIsLast = (i == EditorData->SubTrees.Num() - 1);
+			FormatStateRecursive(EditorData->SubTrees[i], Output, TEXT(""), bIsLast, FocusStateId);
+		}
+		Output += TEXT("\n");
 	}
-	Output += TEXT("\n");
 
 	// Property Bindings
-	Output += TEXT("=== Property Bindings ===\n");
-	const auto& Bindings = EditorData->EditorBindings.GetBindings();
-	if (Bindings.Num() > 0)
+	if (IsIncluded(TEXT("bindings")))
 	{
-		for (const FStateTreePropertyPathBinding& Binding : Bindings)
+		Output += TEXT("=== Property Bindings ===\n");
+		const auto& Bindings = EditorData->EditorBindings.GetBindings();
+		if (Bindings.Num() > 0)
 		{
-			FString SourceStr;
-			FString TargetStr;
+			for (const FStateTreePropertyPathBinding& Binding : Bindings)
+			{
+				FString SourceStr;
+				FString TargetStr;
 
 #if WITH_EDITORONLY_DATA
-			SourceStr = Binding.GetSourcePath().GetStructID().ToString(EGuidFormats::DigitsWithHyphensLower);
-			// auto&: segment type renamed from FStateTreePropertyPathSegment (5.5) to FPropertyBindingPathSegment (5.7)
-			for (const auto& Seg : Binding.GetSourcePath().GetSegments())
-			{
-				SourceStr += FString::Printf(TEXT(".%s"), *Seg.GetName().ToString());
-			}
+				SourceStr = Binding.GetSourcePath().GetStructID().ToString(EGuidFormats::DigitsWithHyphensLower);
+				// auto&: segment type renamed from FStateTreePropertyPathSegment (5.5) to FPropertyBindingPathSegment (5.7)
+				for (const auto& Seg : Binding.GetSourcePath().GetSegments())
+				{
+					SourceStr += FString::Printf(TEXT(".%s"), *Seg.GetName().ToString());
+				}
 
-			TargetStr = Binding.GetTargetPath().GetStructID().ToString(EGuidFormats::DigitsWithHyphensLower);
-			for (const auto& Seg : Binding.GetTargetPath().GetSegments())
-			{
-				TargetStr += FString::Printf(TEXT(".%s"), *Seg.GetName().ToString());
-			}
+				TargetStr = Binding.GetTargetPath().GetStructID().ToString(EGuidFormats::DigitsWithHyphensLower);
+				for (const auto& Seg : Binding.GetTargetPath().GetSegments())
+				{
+					TargetStr += FString::Printf(TEXT(".%s"), *Seg.GetName().ToString());
+				}
 #endif
 
-			Output += FString::Printf(TEXT("%s \u2192 %s\n"), *SourceStr, *TargetStr);
+				Output += FString::Printf(TEXT("%s \u2192 %s\n"), *SourceStr, *TargetStr);
+			}
 		}
-	}
-	else
-	{
-		Output += TEXT("(none)\n");
+		else
+		{
+			Output += TEXT("(none)\n");
+		}
 	}
 
 	return Output;
@@ -743,6 +768,254 @@ bool ClaireonStateTreeHelpers::CreateEditorNode(FStateTreeEditorNode& OutNode, U
 	}
 
 	return true;
+}
+
+bool ClaireonStateTreeHelpers::ResolvePropertyPath(
+	const UStruct* RootStruct,
+	void* StructPtr,
+	const FString& PropertyPath,
+	FProperty*& OutLeafProperty,
+	void*& OutLeafAddress,
+	FString& OutError)
+{
+	OutLeafProperty = nullptr;
+	OutLeafAddress = nullptr;
+
+	if (!RootStruct)
+	{
+		OutError = TEXT("ResolvePropertyPath: RootStruct is null");
+		return false;
+	}
+	if (!StructPtr)
+	{
+		OutError = TEXT("ResolvePropertyPath: StructPtr is null");
+		return false;
+	}
+	if (PropertyPath.IsEmpty())
+	{
+		OutError = TEXT("ResolvePropertyPath: PropertyPath is empty");
+		return false;
+	}
+
+	TArray<FString> Segments;
+	PropertyPath.ParseIntoArray(Segments, TEXT("."), true);
+	if (Segments.Num() == 0)
+	{
+		OutError = TEXT("ResolvePropertyPath: PropertyPath contains no segments");
+		return false;
+	}
+
+	const UStruct* CurrentStruct = RootStruct;
+	void* CurrentData = StructPtr;
+
+	for (int32 Index = 0; Index < Segments.Num(); ++Index)
+	{
+		const FString& Segment = Segments[Index];
+		FProperty* Prop = CurrentStruct ? CurrentStruct->FindPropertyByName(FName(*Segment)) : nullptr;
+		if (!Prop)
+		{
+			OutError = FString::Printf(TEXT("Property '%s' not found on '%s'"),
+				*Segment,
+				CurrentStruct ? *CurrentStruct->GetName() : TEXT("(null)"));
+			return false;
+		}
+
+		const bool bIsLast = (Index == Segments.Num() - 1);
+		if (bIsLast)
+		{
+			OutLeafProperty = Prop;
+			OutLeafAddress = Prop->ContainerPtrToValuePtr<void>(CurrentData);
+			return true;
+		}
+
+		// Non-final segment: must be a struct property to dive deeper.
+		FStructProperty* StructProp = CastField<FStructProperty>(Prop);
+		if (!StructProp)
+		{
+			OutError = FString::Printf(TEXT("Property '%s' on '%s' is not a struct; cannot traverse further"),
+				*Segment,
+				*CurrentStruct->GetName());
+			return false;
+		}
+
+		CurrentData = StructProp->ContainerPtrToValuePtr<void>(CurrentData);
+		CurrentStruct = StructProp->Struct;
+	}
+
+	OutError = TEXT("ResolvePropertyPath: traversal ended without producing a leaf");
+	return false;
+}
+
+bool ClaireonStateTreeHelpers::SetStateProperty(
+	UStateTreeState& State,
+	const FString& PropertyName,
+	const FString& PropertyValue,
+	FString& OutError)
+{
+	if (PropertyName.IsEmpty())
+	{
+		OutError = TEXT("Property name is empty");
+		return false;
+	}
+
+	// Excluded-field checks (v1).
+	if (PropertyName == TEXT("Color") || PropertyName == TEXT("ColorRef") || PropertyName.StartsWith(TEXT("ColorRef.")))
+	{
+		OutError = TEXT("Setting Color is not supported in v1; UStateTreeState uses FStateTreeEditorColorRef (FGuid into EditorData->Colors), not a direct FColor.");
+		return false;
+	}
+	if (PropertyName.StartsWith(TEXT("Parameters.Parameters")))
+	{
+		OutError = TEXT("Use claireon.statetree_apply_spec for Parameters bag mutation. Direct FInstancedPropertyBag writes are not supported in v1.");
+		return false;
+	}
+
+	FProperty* LeafProperty = nullptr;
+	void* LeafAddress = nullptr;
+	FString ResolveError;
+	if (!ResolvePropertyPath(UStateTreeState::StaticClass(), &State, PropertyName, LeafProperty, LeafAddress, ResolveError))
+	{
+		// Match the documented failure-shape "Property '<name>' not found on UStateTreeState".
+		if (ResolveError.StartsWith(TEXT("Property '")))
+		{
+			OutError = ResolveError;
+		}
+		else
+		{
+			OutError = FString::Printf(TEXT("Property '%s' not found on UStateTreeState: %s"), *PropertyName, *ResolveError);
+		}
+		return false;
+	}
+
+	const TCHAR* Result = LeafProperty->ImportText_Direct(*PropertyValue, LeafAddress, /*OwnerObject=*/&State, PPF_None);
+	if (!Result)
+	{
+		OutError = FString::Printf(TEXT("Failed to set property '%s' on UStateTreeState: ImportText_Direct returned nullptr"), *PropertyName);
+		return false;
+	}
+
+	return true;
+}
+
+bool ClaireonStateTreeHelpers::SetTransitionProperty(
+	FStateTreeTransition& Transition,
+	const FString& PropertyName,
+	const FString& PropertyValue,
+	FString& OutError)
+{
+	if (PropertyName.IsEmpty())
+	{
+		OutError = TEXT("Property name is empty");
+		return false;
+	}
+
+	// Excluded-field check: refuse anything ClaireonStateTreeTool_ModifyTransition handles.
+	static const TArray<FString> ExcludedNames = {
+		TEXT("Target"),
+		TEXT("State"),
+		TEXT("StateLink"),
+	};
+	for (const FString& Excluded : ExcludedNames)
+	{
+		if (PropertyName == Excluded || PropertyName.StartsWith(Excluded + TEXT(".")))
+		{
+			OutError = FString::Printf(TEXT("Use claireon.statetree_modify_transition for '%s' mutation."), *PropertyName);
+			return false;
+		}
+	}
+
+	// Normalize bare bConsumeEventOnSelect to the FStateTreeEventDesc-prefixed form.
+	FString CanonicalPath = PropertyName;
+	if (CanonicalPath == TEXT("bConsumeEventOnSelect"))
+	{
+		CanonicalPath = TEXT("RequiredEvent.bConsumeEventOnSelect");
+	}
+
+	FProperty* LeafProperty = nullptr;
+	void* LeafAddress = nullptr;
+	FString ResolveError;
+	if (!ResolvePropertyPath(FStateTreeTransition::StaticStruct(), &Transition, CanonicalPath, LeafProperty, LeafAddress, ResolveError))
+	{
+		if (ResolveError.StartsWith(TEXT("Property '")))
+		{
+			OutError = ResolveError;
+		}
+		else
+		{
+			OutError = FString::Printf(TEXT("Property '%s' not found on FStateTreeTransition: %s"), *CanonicalPath, *ResolveError);
+		}
+		return false;
+	}
+
+	const TCHAR* Result = LeafProperty->ImportText_Direct(*PropertyValue, LeafAddress, /*OwnerObject=*/nullptr, PPF_None);
+	if (!Result)
+	{
+		OutError = FString::Printf(TEXT("Failed to set property '%s' on FStateTreeTransition: ImportText_Direct returned nullptr."), *CanonicalPath);
+		return false;
+	}
+
+	return true;
+}
+
+bool ClaireonStateTreeHelpers::SetSchemaProperty(
+	UStateTreeSchema& Schema,
+	const FString& PropertyName,
+	const FString& PropertyValue,
+	FString& OutError)
+{
+	if (PropertyName.IsEmpty())
+	{
+		OutError = TEXT("Property name is empty");
+		return false;
+	}
+
+	FProperty* LeafProperty = nullptr;
+	void* LeafAddress = nullptr;
+	FString ResolveError;
+	if (!ResolvePropertyPath(Schema.GetClass(), &Schema, PropertyName, LeafProperty, LeafAddress, ResolveError))
+	{
+		if (ResolveError.StartsWith(TEXT("Property '")))
+		{
+			OutError = FString::Printf(TEXT("Property '%s' not found on Schema '%s'"), *PropertyName, *Schema.GetClass()->GetName());
+		}
+		else
+		{
+			OutError = FString::Printf(TEXT("Property '%s' not found on Schema '%s': %s"), *PropertyName, *Schema.GetClass()->GetName(), *ResolveError);
+		}
+		return false;
+	}
+
+	const TCHAR* Result = LeafProperty->ImportText_Direct(*PropertyValue, LeafAddress, /*OwnerObject=*/&Schema, PPF_None);
+	if (!Result)
+	{
+		OutError = FString::Printf(TEXT("Failed to set property '%s' on Schema: ImportText_Direct returned nullptr."), *PropertyName);
+		return false;
+	}
+	return true;
+}
+
+TSharedPtr<FJsonObject> ClaireonStateTreeHelpers::EmitBindingSourceRecord(const FStateTreeBindableStructDesc& Desc)
+{
+	TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+	Out->SetStringField(TEXT("name"), Desc.Name.ToString());
+
+#if WITH_EDITORONLY_DATA
+	Out->SetStringField(TEXT("guid"), Desc.ID.ToString(EGuidFormats::DigitsWithHyphens));
+	Out->SetStringField(TEXT("state_path"), Desc.StatePath);
+#else
+	Out->SetStringField(TEXT("guid"), FString());
+	Out->SetStringField(TEXT("state_path"), FString());
+#endif
+
+	Out->SetStringField(TEXT("struct"), Desc.Struct ? Desc.Struct->GetPathName() : FString());
+
+	const UEnum* SourceEnum = StaticEnum<EStateTreeBindableStructSource>();
+	const FString SourceTypeStr = SourceEnum
+		? SourceEnum->GetNameStringByValue(static_cast<int64>(Desc.DataSource))
+		: FString::FromInt(static_cast<int32>(Desc.DataSource));
+	Out->SetStringField(TEXT("source_type"), SourceTypeStr);
+
+	return Out;
 }
 
 bool ClaireonStateTreeHelpers::SetNodeProperty(FStateTreeEditorNode& Node, const FString& PropertyName, const FString& PropertyValue, bool bOnInstanceData, FString& OutError)

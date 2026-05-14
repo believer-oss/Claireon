@@ -19,7 +19,7 @@ FString ClaireonWidgetBPTool_ListWidgetClasses::GetName() const
 
 FString ClaireonWidgetBPTool_ListWidgetClasses::GetDescription() const
 {
-    return TEXT("List UWidget subclasses the editor can instantiate. Optionally filter by substring and restrict to panel classes.");
+    return TEXT("List UWidget subclasses the editor can instantiate. Stateless / read-only / non-session: never mutates and does not require an open session, though one may be passed for symmetry. Optionally filter by case-insensitive substring or restrict to panel classes only. Use to discover valid widget_class values for claireon.widgetbp_add_widget.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_ListWidgetClasses::GetInputSchema() const
@@ -41,15 +41,6 @@ FToolResult ClaireonWidgetBPTool_ListWidgetClasses::Execute(const TSharedPtr<FJs
     {
         return Error;
     }
-    return Operation_ListWidgetClasses(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_ListWidgetClasses(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	FString Filter;
 	Params->TryGetStringField(TEXT("filter"), Filter);
 
@@ -117,3 +108,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_ListWidgetClasses(const FStr
 
 	return MakeErrorResult(ResultString);
 }
+

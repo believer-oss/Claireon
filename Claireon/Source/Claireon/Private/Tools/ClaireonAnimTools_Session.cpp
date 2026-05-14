@@ -21,8 +21,7 @@ FString ClaireonAnimTool_Open::GetName() const { return TEXT("claireon.anim_open
 
 FString ClaireonAnimTool_Open::GetDescription() const
 {
-	return TEXT("Open an animation asset for editing. Returns a session_id used by all subsequent operations. "
-				"Supports AnimSequence, AnimMontage, and AnimComposite.");
+	return TEXT("Open an animation asset (AnimSequence, AnimMontage, or AnimComposite) for editing and return a session_id used by all subsequent claireon.anim_* operations. The session reuses an existing one for the same asset path; close it with claireon.anim_close to release the lock.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_Open::GetInputSchema() const
@@ -101,7 +100,7 @@ FString ClaireonAnimTool_Close::GetName() const { return TEXT("claireon.anim_clo
 
 FString ClaireonAnimTool_Close::GetDescription() const
 {
-	return TEXT("Close an animation editing session. Optionally saves before closing.");
+	return TEXT("Close an animation editing session and release the asset lock. Pass save=true to persist outstanding changes before closing. Common pitfall: closing without save discards in-flight edits silently; call claireon.anim_save first when changes must survive.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_Close::GetInputSchema() const
@@ -151,7 +150,7 @@ FString ClaireonAnimTool_GetState::GetName() const { return TEXT("claireon.anim_
 
 FString ClaireonAnimTool_GetState::GetDescription() const
 {
-	return TEXT("Get the current state of an animation editing session. Shows notifies, curves, sections, and other structure.");
+	return TEXT("Get the current state of an animation editing session. Requires open session_id from claireon.anim_open. Read-only. Returns notifies, curves, sections, segments, slots, and asset metadata so the caller can re-anchor after a series of edits without round-tripping the asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_GetState::GetInputSchema() const
@@ -205,7 +204,7 @@ FString ClaireonAnimTool_Save::GetName() const { return TEXT("claireon.anim_save
 
 FString ClaireonAnimTool_Save::GetDescription() const
 {
-	return TEXT("Save the animation asset to disk. The session remains open for further editing.");
+	return TEXT("Save the animation asset to disk in the open editing session. Requires open session_id from claireon.anim_open. Immediate-write to the package; the session itself remains open for further edits. Common pitfall: save does not validate the asset; chain claireon.asset_validate when stricter checks are required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_Save::GetInputSchema() const

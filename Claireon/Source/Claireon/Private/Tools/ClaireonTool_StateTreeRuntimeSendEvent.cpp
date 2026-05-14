@@ -17,9 +17,7 @@ FString ClaireonTool_StateTreeRuntimeSendEvent::GetName() const
 
 FString ClaireonTool_StateTreeRuntimeSendEvent::GetDescription() const
 {
-	return TEXT("Send a gameplay event to a running State Tree instance during PIE. "
-				"Useful for testing event-driven transitions in AI behavior trees. "
-				"Requires an active PIE session with a State Tree component on the target actor.");
+	return TEXT("Send a gameplay event to a running State Tree instance during PIE. Stateless / non-session: requires no open editing session, but does require an active PIE session with a State Tree component on the target actor. Useful for testing event-driven transitions in AI behaviors. Immediate-write to runtime state.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_StateTreeRuntimeSendEvent::GetInputSchema() const

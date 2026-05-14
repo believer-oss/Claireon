@@ -21,7 +21,7 @@ FString ClaireonWidgetBPTool_GetWidgetDetails::GetName() const
 
 FString ClaireonWidgetBPTool_GetWidgetDetails::GetDescription() const
 {
-    return TEXT("Return detailed information about a single widget: class, parent, children, editable properties, slot properties.");
+    return TEXT("Return detailed information about a single widget in the open Widget Blueprint editing session: class, parent, children, editable properties, slot properties. Requires open session_id from claireon.widgetbp_open. Read-only. Pair with claireon.widgetbp_get_state to discover names, then drill in here for property detail.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_GetWidgetDetails::GetInputSchema() const
@@ -42,15 +42,6 @@ FToolResult ClaireonWidgetBPTool_GetWidgetDetails::Execute(const TSharedPtr<FJso
     {
         return Error;
     }
-    return Operation_GetWidgetDetails(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_GetWidgetDetails(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	FString WidgetName;
 	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
 	{
@@ -153,3 +144,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_GetWidgetDetails(const FStri
 
 	return MakeErrorResult(ResultString);
 }
+

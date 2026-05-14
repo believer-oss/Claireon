@@ -5,6 +5,7 @@
 #include "Tools/ClaireonBlueprintGraphTool_AddInterface.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "ClaireonBlueprintHelpers.h"
+#include "ClaireonBlueprintGraphInterfaceImpl.h"
 #include "Dom/JsonObject.h"
 #include "Tools/ClaireonSpecApplicator_Blueprint.h"
 #include "Tools/ClaireonBlueprintGraphEditToolBase_Internal.h"
@@ -104,7 +105,7 @@ FString ClaireonBlueprintGraphTool_AddInterface::GetName() const
 
 FString ClaireonBlueprintGraphTool_AddInterface::GetDescription() const
 {
-    return TEXT("Add an interface to the Blueprint's ImplementedInterfaces and compile.");
+    return TEXT("Add an interface to the Blueprint's ImplementedInterfaces in the open editing session and compile. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: interface_path must reference a UInterface-derived BlueprintType class.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddInterface::GetInputSchema() const
@@ -127,48 +128,7 @@ FToolResult ClaireonBlueprintGraphTool_AddInterface::Execute(const TSharedPtr<FJ
     {
         return Error;
     }
-    return Operation_AddInterface(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_AddInterface(
-	const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
-	FString InterfaceClassName;
-	if (!Params->TryGetStringField(TEXT("interface_class"), InterfaceClassName) || InterfaceClassName.IsEmpty())
-	{
-		return MakeErrorResult(TEXT("Missing required field 'interface_class' for add_interface"));
-	}
-
-	UBlueprint* Blueprint = Data->Blueprint.Get();
-	if (!Blueprint)
-	{
-		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
-	}
-
-	ClaireonBPInterfaceAuthor::FInterfaceOpResult OpResult =
-		ClaireonBPInterfaceAuthor::Implement(Blueprint, InterfaceClassName);
-
-	if (!OpResult.bSucceeded)
-	{
-		return MakeErrorResult(OpResult.Error);
-	}
-
-	Data->Cursor.LastOperationStatus = FString::Printf(
-		TEXT("Added %s; compiled (%d interfaces total)"),
-		*OpResult.ResolvedClassName,
-		OpResult.PostOpInterfaceNames.Num());
-
-	if (!OpResult.ResolutionNote.IsEmpty())
-	{
-		Data->Cursor.LastOperationStatus += FString::Printf(TEXT(" [%s]"), *OpResult.ResolutionNote);
-	}
-
-	FToolResult Result = BuildStateResponse(SessionId, Data);
-	if (!OpResult.ResolutionNote.IsEmpty())
-	{
-		Result.Warnings.Add(OpResult.ResolutionNote);
-	}
-	return Result;
+    return ClaireonBlueprintGraphInterfaceImpl::ApplyAddInterface(*this, SessionId, Data, Params);
 }
 
 #undef LOCTEXT_NAMESPACE

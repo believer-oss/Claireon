@@ -21,7 +21,7 @@ FString ClaireonWidgetBPTool_SetSlotProperty::GetName() const
 
 FString ClaireonWidgetBPTool_SetSlotProperty::GetDescription() const
 {
-    return TEXT("Set a slot property on a widget (e.g. Canvas Panel Slot.Anchors, Size, Offsets).");
+    return TEXT("Set a slot property on a widget (e.g. Canvas Panel Slot.Anchors, Size, Offsets) in the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Transactional. Common pitfall: slot properties depend on the parent panel class; Canvas Panel slots differ from Vertical Box or Grid slots.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_SetSlotProperty::GetInputSchema() const
@@ -44,15 +44,6 @@ FToolResult ClaireonWidgetBPTool_SetSlotProperty::Execute(const TSharedPtr<FJson
     {
         return Error;
     }
-    return Operation_SetSlotProperty(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_SetSlotProperty(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	FString WidgetName;
 	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
 	{
@@ -103,3 +94,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_SetSlotProperty(const FStrin
 
 	return BuildStateResponse(SessionId, Data);
 }
+

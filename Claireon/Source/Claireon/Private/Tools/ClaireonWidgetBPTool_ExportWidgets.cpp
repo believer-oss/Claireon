@@ -22,7 +22,7 @@ FString ClaireonWidgetBPTool_ExportWidgets::GetName() const
 
 FString ClaireonWidgetBPTool_ExportWidgets::GetDescription() const
 {
-    return TEXT("Export the named widgets as a serialized text payload (for later import_widgets).");
+    return TEXT("Export the named widgets as a serialized text payload from the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Read-only. The payload uses UE's clipboard text format and round-trips with claireon.widgetbp_import_widgets across the same or different Widget BP.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_ExportWidgets::GetInputSchema() const
@@ -64,15 +64,6 @@ FToolResult ClaireonWidgetBPTool_ExportWidgets::Execute(const TSharedPtr<FJsonOb
     {
         return Error;
     }
-    return Operation_ExportWidgets(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_ExportWidgets(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	const TArray<TSharedPtr<FJsonValue>>* WidgetNamesArray = nullptr;
 	if (!Params->TryGetArrayField(TEXT("widget_names"), WidgetNamesArray) || !WidgetNamesArray)
 	{
@@ -117,3 +108,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_ExportWidgets(const FString&
 
 	return MakeErrorResult(ResultString);
 }
+

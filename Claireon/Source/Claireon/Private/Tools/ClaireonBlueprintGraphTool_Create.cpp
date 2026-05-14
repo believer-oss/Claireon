@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_Create::GetName() const
 
 FString ClaireonBlueprintGraphTool_Create::GetDescription() const
 {
-    return TEXT("Create a new Blueprint from scratch. Accepts asset_path, parent_class, and graph scaffolding parameters.");
+    return TEXT("Create a new Blueprint from scratch. Stateless / non-session: writes the asset to disk immediately. Accepts asset_path, parent_class, and graph scaffolding parameters. Common pitfall: parent_class must be a Blueprintable native class; the package directory portion of asset_path must already exist.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Create::GetInputSchema() const
@@ -129,11 +129,6 @@ FToolResult ClaireonBlueprintGraphTool_Create::Execute(const TSharedPtr<FJsonObj
             Params = *NestedObj;
         }
     }
-    return Operation_Create(Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_Create(const TSharedPtr<FJsonObject>& Params)
-{
 	// Get asset_path
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))

@@ -17,6 +17,11 @@ FString ClaireonLevelSequenceTool_Open::GetName() const
 	return TEXT("claireon.level_sequence_open");
 }
 
+TArray<FString> ClaireonLevelSequenceTool_Open::GetSearchKeywords() const
+{
+	return {TEXT("sequence"), TEXT("sequencer"), TEXT("cinematic"), TEXT("keyframe"), TEXT("track"), TEXT("open"), TEXT("session")};
+}
+
 FString ClaireonLevelSequenceTool_Open::GetDescription() const
 {
 	return TEXT("Open a Level Sequence asset for editing. Returns a session_id for subsequent operations. "

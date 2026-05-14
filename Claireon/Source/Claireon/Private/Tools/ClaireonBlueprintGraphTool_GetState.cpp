@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_GetState::GetName() const
 
 FString ClaireonBlueprintGraphTool_GetState::GetDescription() const
 {
-    return TEXT("Return the current graph state (nodes, pins, cursor) for the active session.");
+    return TEXT("Return the current graph state (nodes, pins, cursor) for the open Blueprint editing session. Requires open session_id from claireon.blueprint_graph_open. Read-only. The most-used inspection tool during the per-node author cycle; pair with claireon.blueprint_graph_inspect_node for full single-node fidelity.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_GetState::GetInputSchema() const
@@ -126,11 +126,6 @@ FToolResult ClaireonBlueprintGraphTool_GetState::Execute(const TSharedPtr<FJsonO
     {
         return Error;
     }
-    return Operation_GetState(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_GetState(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	Data->Cursor.LastOperationStatus = TEXT("Retrieved current state (no modifications)");
 	return BuildStateResponse(SessionId, Data);
 }

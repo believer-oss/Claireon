@@ -19,7 +19,7 @@ FString ClaireonStateTreeTool_AddEvaluator::GetName() const
 
 FString ClaireonStateTreeTool_AddEvaluator::GetDescription() const
 {
-	return TEXT("Add a global evaluator node to the State Tree.");
+	return TEXT("Add a global evaluator node to the State Tree in the open editing session. Requires open session_id from claireon.statetree_open. Transactional. Evaluators run every tick at the asset scope and feed shared output values into bindings. The node_type must be a registered FStateTreeEvaluatorBase subclass.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_AddEvaluator::GetInputSchema() const
@@ -67,8 +67,9 @@ FToolResult ClaireonStateTreeTool_AddEvaluator::Execute(const TSharedPtr<FJsonOb
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Add Evaluator")));
 	Data->StateTree->Modify();
+	const FString NewIdStr = NewNode.ID.ToString(EGuidFormats::DigitsWithHyphens);
 	EditorData->Evaluators.Add(MoveTemp(NewNode));
 
 	Data->LastOperationStatus = FString::Printf(TEXT("add_evaluator -> Added global evaluator %s"), *NodeType);
-	return BuildStateResponse(SessionId, Data);
+	return BuildStateResponse(SessionId, Data, FStringView(TEXT("evaluator_id")), FStringView(NewIdStr));
 }

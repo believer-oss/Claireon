@@ -19,7 +19,7 @@ FString ClaireonStateTreeTool_MoveState::GetName() const
 
 FString ClaireonStateTreeTool_MoveState::GetDescription() const
 {
-	return TEXT("Move an existing state under a different parent, optionally inserting after a sibling.");
+	return TEXT("Move an existing state under a different parent in the open State Tree editing session, optionally specifying placement among the new parent's children. Requires open session_id from claireon.statetree_open. Transactional. Common pitfall: cycles are rejected; the new parent must not be the state itself or any of its descendants.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_MoveState::GetInputSchema() const
@@ -28,7 +28,9 @@ TSharedPtr<FJsonObject> ClaireonStateTreeTool_MoveState::GetInputSchema() const
 	Builder.AddSessionParams();
 	Builder.AddString(TEXT("state_id"), TEXT("GUID of the state to move."), true);
 	Builder.AddString(TEXT("new_parent_id"), TEXT("GUID of the new parent state."), true);
-	Builder.AddString(TEXT("insert_after"), TEXT("Optional GUID of a sibling; insert the moved state after it."));
+	Builder.AddInteger(TEXT("index"), TEXT("Optional explicit insertion index among the new parent's children. Out-of-range values clamp to [0, num_children]. Highest precedence: wins over insert_before and insert_after."));
+	Builder.AddString(TEXT("insert_before"), TEXT("Optional GUID of a sibling under the new parent; insert the moved state before it. Loses to index, wins over insert_after."));
+	Builder.AddString(TEXT("insert_after"), TEXT("Optional GUID of a sibling under the new parent; insert the moved state after it. Lowest precedence (loses to index and insert_before)."));
 	return Builder.Build();
 }
 
@@ -62,18 +64,26 @@ FToolResult ClaireonStateTreeTool_MoveState::Execute(const TSharedPtr<FJsonObjec
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Move State")));
 	Data->StateTree->Modify();
 
-	// Parse optional insert_after
-	FGuid InsertAfterId;
+	// Reject self-referential placement before mutating any container.
 	{
+		FString InsertBeforeStr;
+		if (Arguments->TryGetStringField(TEXT("insert_before"), InsertBeforeStr) && !InsertBeforeStr.IsEmpty())
+		{
+			FGuid PeekGuid;
+			if (FGuid::Parse(InsertBeforeStr, PeekGuid) && PeekGuid == State->ID)
+			{
+				return MakeErrorResult(TEXT("insert_before cannot reference the state being moved"));
+			}
+		}
 		FString InsertAfterStr;
 		if (Arguments->TryGetStringField(TEXT("insert_after"), InsertAfterStr) && !InsertAfterStr.IsEmpty())
 		{
-			FGuid::Parse(InsertAfterStr, InsertAfterId);
+			FGuid PeekGuid;
+			if (FGuid::Parse(InsertAfterStr, PeekGuid) && PeekGuid == State->ID)
+			{
+				return MakeErrorResult(TEXT("insert_after cannot reference the state being moved"));
+			}
 		}
-	}
-	if (InsertAfterId.IsValid() && InsertAfterId == State->ID)
-	{
-		return MakeErrorResult(TEXT("insert_after cannot reference the state being moved"));
 	}
 
 	// Remove from old parent
@@ -87,38 +97,44 @@ FToolResult ClaireonStateTreeTool_MoveState::Execute(const TSharedPtr<FJsonObjec
 		EditorData->SubTrees.Remove(State);
 	}
 
-	// Add to new parent
-	if (InsertAfterId.IsValid())
+	// Resolve placement under the new parent (after removal, so 'index' clamps to the
+	// post-removal child count and sibling-GUID lookups can't accidentally match the
+	// state being moved -- matters for same-parent reorders).
+	int32 TargetIndex = NewParent->Children.Num();
+	FString ResolutionNote;
+	FString ResolveError;
+	if (!ClaireonStateTreeEditInternal::ResolveInsertionIndex(
+			NewParent->Children, Arguments, NewParent->Children.Num(),
+			TargetIndex, ResolutionNote, ResolveError))
 	{
-		int32 AfterIndex = NewParent->Children.IndexOfByPredicate(
-			[&InsertAfterId](const UStateTreeState* S)
+		// Restore: put state back in old parent to avoid orphaning.
+		if (OldParent)
 		{
-			return S && S->ID == InsertAfterId;
-		});
-		if (AfterIndex == INDEX_NONE)
-		{
-			// Restore: put state back in old parent to avoid orphaning
-			if (OldParent)
-			{
-				OldParent->Children.Add(State);
-			}
-			else
-			{
-				EditorData->SubTrees.Add(State);
-			}
-			return MakeErrorResult(FString::Printf(TEXT("insert_after state '%s' not found among children of '%s'"),
-				*InsertAfterId.ToString(), *NewParent->Name.ToString()));
+			OldParent->Children.Add(State);
 		}
-		NewParent->Children.Insert(State, AfterIndex + 1);
+		else
+		{
+			EditorData->SubTrees.Add(State);
+		}
+		return MakeErrorResult(ResolveError);
 	}
-	else
-	{
-		NewParent->Children.Add(State);
-	}
+
+	NewParent->Children.Insert(State, TargetIndex);
 	State->Rename(nullptr, NewParent);
 
 	Data->FocusedStateId = StateId;
-	Data->LastOperationStatus = FString::Printf(TEXT("move_state -> Moved '%s' to '%s'"), *State->Name.ToString(), *NewParent->Name.ToString());
+	if (!ResolutionNote.IsEmpty())
+	{
+		Data->LastOperationStatus = FString::Printf(
+			TEXT("move_state -> Moved '%s' to '%s' at index %d (%s)"),
+			*State->Name.ToString(), *NewParent->Name.ToString(), TargetIndex, *ResolutionNote);
+	}
+	else
+	{
+		Data->LastOperationStatus = FString::Printf(
+			TEXT("move_state -> Moved '%s' to '%s' at index %d"),
+			*State->Name.ToString(), *NewParent->Name.ToString(), TargetIndex);
+	}
 
 	return BuildStateResponse(SessionId, Data);
 }

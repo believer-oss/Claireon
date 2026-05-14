@@ -21,7 +21,7 @@ FString ClaireonStateTreeTool_AddEnterCondition::GetName() const
 
 FString ClaireonStateTreeTool_AddEnterCondition::GetDescription() const
 {
-	return TEXT("Add an enter-condition node to a state.");
+	return TEXT("Add an enter-condition node to a state in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Enter conditions gate state entry; the state is skipped at selection time when any enter condition fails. Configure properties via claireon.statetree_set_node_property.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_AddEnterCondition::GetInputSchema() const
@@ -97,10 +97,11 @@ FToolResult ClaireonStateTreeTool_AddEnterCondition::Execute(const TSharedPtr<FJ
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Add Enter Condition")));
 	Data->StateTree->Modify();
+	const FString NewIdStr = NewNode.ID.ToString(EGuidFormats::DigitsWithHyphens);
 	State->EnterConditions.Add(MoveTemp(NewNode));
 
 	Data->FocusedStateId = StateId;
 	Data->LastOperationStatus = FString::Printf(TEXT("add_enter_condition -> Added %s to '%s'"), *NodeType, *State->Name.ToString());
 
-	return BuildStateResponse(SessionId, Data);
+	return BuildStateResponse(SessionId, Data, FStringView(TEXT("enter_condition_id")), FStringView(NewIdStr));
 }

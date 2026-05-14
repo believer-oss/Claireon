@@ -31,6 +31,11 @@ FString ClaireonTool_FormatBlueprintGraph::GetName() const
 	return TEXT("claireon.blueprint_format_graph");
 }
 
+TArray<FString> ClaireonTool_FormatBlueprintGraph::GetSearchKeywords() const
+{
+	return {TEXT("bp"), TEXT("blueprint"), TEXT("format"), TEXT("graph"), TEXT("layout"), TEXT("arrange"), TEXT("pretty")};
+}
+
 FString ClaireonTool_FormatBlueprintGraph::GetDescription() const
 {
 	return TEXT("Auto-format a Blueprint graph using Blueprint Assist. Arranges nodes in a readable layout.");

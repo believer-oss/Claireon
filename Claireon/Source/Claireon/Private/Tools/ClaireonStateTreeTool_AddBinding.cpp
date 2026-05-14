@@ -20,7 +20,7 @@ FString ClaireonStateTreeTool_AddBinding::GetName() const
 
 FString ClaireonStateTreeTool_AddBinding::GetDescription() const
 {
-	return TEXT("Add a property binding between a source node's output and a target node's input.");
+	return TEXT("Add a property binding between a source node's output and a target node's input in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Common pitfall: source and target property types must match (or be implicitly convertible); incompatible types error and the transaction rolls back.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_AddBinding::GetInputSchema() const

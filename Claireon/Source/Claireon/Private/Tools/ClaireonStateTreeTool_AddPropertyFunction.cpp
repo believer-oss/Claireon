@@ -24,7 +24,7 @@ FString ClaireonStateTreeTool_AddPropertyFunction::GetName() const
 
 FString ClaireonStateTreeTool_AddPropertyFunction::GetDescription() const
 {
-	return TEXT("Add a property function binding that feeds the function output into a target property.");
+	return TEXT("Add a property function binding that feeds the function output into a target property in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. The function_node_type must be a FStateTreePropertyFunctionBase subclass; the output type must match the target property type.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_AddPropertyFunction::GetInputSchema() const
@@ -115,43 +115,46 @@ FToolResult ClaireonStateTreeTool_AddPropertyFunction::Execute(const TSharedPtr<
 
 	FStateTreePropertyPath ResultSourcePath = EditorData->EditorBindings.AddFunctionPropertyBinding(NodeStruct, SourceSegments, TargetPath);
 
+	// Locate the just-added binding by target path, capture its embedded function-node
+	// GUID, and apply any optional initial properties in the same pass.
 	const TSharedPtr<FJsonObject>* PropertiesObj = nullptr;
-	if (Arguments->TryGetObjectField(TEXT("properties"), PropertiesObj) && PropertiesObj)
+	const bool bHasProperties = Arguments->TryGetObjectField(TEXT("properties"), PropertiesObj) && PropertiesObj;
+	FString NewIdStr;
+	for (FStateTreePropertyPathBinding& Binding : EditorData->EditorBindings.GetMutableBindings())
 	{
-		for (FStateTreePropertyPathBinding& Binding : EditorData->EditorBindings.GetMutableBindings())
+		if (Binding.GetTargetPath() == TargetPath)
 		{
-			if (Binding.GetTargetPath() == TargetPath)
+			FStructView PropertyFunctionNodeView = Binding.GetMutablePropertyFunctionNode();
+			if (PropertyFunctionNodeView.IsValid())
 			{
-				FStructView PropertyFunctionNodeView = Binding.GetMutablePropertyFunctionNode();
-				if (PropertyFunctionNodeView.IsValid())
+				FStateTreeEditorNode& EditorNode = PropertyFunctionNodeView.Get<FStateTreeEditorNode>();
+				NewIdStr = EditorNode.ID.ToString(EGuidFormats::DigitsWithHyphens);
+				if (bHasProperties && EditorNode.Instance.IsValid())
 				{
-					FStateTreeEditorNode& EditorNode = PropertyFunctionNodeView.Get<FStateTreeEditorNode>();
-					if (EditorNode.Instance.IsValid())
+					for (const auto& Pair : (*PropertiesObj)->Values)
 					{
-						for (const auto& Pair : (*PropertiesObj)->Values)
+						FString PropValue;
+						if (Pair.Value->TryGetString(PropValue))
 						{
-							FString PropValue;
-							if (Pair.Value->TryGetString(PropValue))
+							ClaireonStateTreeHelpers::SetNodeProperty(EditorNode, Pair.Key, PropValue, true, Error);
+							if (!Error.IsEmpty())
 							{
-								ClaireonStateTreeHelpers::SetNodeProperty(EditorNode, Pair.Key, PropValue, true, Error);
-								if (!Error.IsEmpty())
-								{
-									UE_LOG(LogClaireon, Warning, TEXT("AddPropertyFunction: Failed to set property '%s': %s"), *Pair.Key, *Error);
-									Error.Empty();
-								}
+								UE_LOG(LogClaireon, Warning, TEXT("AddPropertyFunction: Failed to set property '%s': %s"), *Pair.Key, *Error);
+								Error.Empty();
 							}
 						}
 					}
 				}
-				break;
 			}
+			break;
 		}
 	}
 
 	Data->LastOperationStatus = FString::Printf(TEXT("add_property_function -> Added %s -> %s.%s"), *StructName, *TargetNodeId.ToString(), *TargetProperty);
+
+	return BuildStateResponse(SessionId, Data, FStringView(TEXT("property_function_id")), FStringView(NewIdStr));
 #else
 	Data->LastOperationStatus = TEXT("add_property_function -> Not available in non-editor builds");
-#endif
-
 	return BuildStateResponse(SessionId, Data);
+#endif
 }

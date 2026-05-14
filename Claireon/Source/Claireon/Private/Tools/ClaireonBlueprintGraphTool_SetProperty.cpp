@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_SetProperty::GetName() const
 
 FString ClaireonBlueprintGraphTool_SetProperty::GetDescription() const
 {
-    return TEXT("Set a property on a component template or the Blueprint CDO.");
+    return TEXT("Set a property on a component template or the Blueprint CDO in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: property_name must match the UPROPERTY name on the target class; nested property paths use dot notation.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetProperty::GetInputSchema() const
@@ -129,11 +129,6 @@ FToolResult ClaireonBlueprintGraphTool_SetProperty::Execute(const TSharedPtr<FJs
     {
         return Error;
     }
-    return Operation_SetProperty(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_SetProperty(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 
 	if (!Blueprint)
@@ -234,7 +229,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_SetProperty(const FStr
 			if (Tag.IsValid())
 				NewContainer.AddTag(Tag);
 			else
-				Warnings.Add(FString::Printf(TEXT("[WARN] Tag '%s' not registered — skipped"), *TagName));
+				Warnings.Add(FString::Printf(TEXT("[WARN] Tag '%s' not registered -- skipped"), *TagName));
 		}
 
 		FGameplayTagContainer* Target =

@@ -24,9 +24,7 @@ FString ClaireonTool_StateTreeListNodeTypes::GetName() const
 
 FString ClaireonTool_StateTreeListNodeTypes::GetDescription() const
 {
-	return TEXT("Enumerate available State Tree node types with their property schemas. "
-				"Lists tasks, conditions, evaluators, considerations, and property functions that can be added to a State Tree. "
-				"Optionally filter by category, name substring, or schema compatibility with a specific State Tree asset.");
+	return TEXT("Enumerate available State Tree node types and their property schemas. Stateless / read-only / non-session: never mutates and requires no open session. Lists tasks, conditions, evaluators, considerations, and property functions. Optionally filter by category, name substring, or schema compatibility with a target asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_StateTreeListNodeTypes::GetInputSchema() const
@@ -43,10 +41,15 @@ TSharedPtr<FJsonObject> ClaireonTool_StateTreeListNodeTypes::GetInputSchema() co
 	{
 		TArray<TSharedPtr<FJsonValue>> EnumValues;
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("task")));
+		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("tasks")));
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("condition")));
+		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("conditions")));
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("evaluator")));
+		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("evaluators")));
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("consideration")));
+		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("considerations")));
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("property_function")));
+		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("property_functions")));
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("all")));
 		CategoryProp->SetArrayField(TEXT("enum"), EnumValues);
 	}
@@ -176,30 +179,30 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeListNodeTypes::Execute(const TS
 
 	// Build category list
 	TArray<FCategoryInfo> Categories;
-	if (Category == TEXT("task") || Category == TEXT("all"))
+	if (Category == TEXT("task") || Category == TEXT("tasks") || Category == TEXT("all"))
 	{
 		Categories.Add({ TEXT("Tasks"), FStateTreeTaskBase::StaticStruct() });
 	}
-	if (Category == TEXT("condition") || Category == TEXT("all"))
+	if (Category == TEXT("condition") || Category == TEXT("conditions") || Category == TEXT("all"))
 	{
 		Categories.Add({ TEXT("Conditions"), FStateTreeConditionBase::StaticStruct() });
 	}
-	if (Category == TEXT("evaluator") || Category == TEXT("all"))
+	if (Category == TEXT("evaluator") || Category == TEXT("evaluators") || Category == TEXT("all"))
 	{
 		Categories.Add({ TEXT("Evaluators"), FStateTreeEvaluatorBase::StaticStruct() });
 	}
-	if (Category == TEXT("consideration") || Category == TEXT("all"))
+	if (Category == TEXT("consideration") || Category == TEXT("considerations") || Category == TEXT("all"))
 	{
 		Categories.Add({ TEXT("Considerations"), FStateTreeConsiderationBase::StaticStruct() });
 	}
-	if (Category == TEXT("property_function") || Category == TEXT("all"))
+	if (Category == TEXT("property_function") || Category == TEXT("property_functions") || Category == TEXT("all"))
 	{
 		Categories.Add({ TEXT("Property Functions"), FStateTreePropertyFunctionBase::StaticStruct() });
 	}
 
 	if (Categories.Num() == 0)
 	{
-		return MakeErrorResult(FString::Printf(TEXT("Unknown category: %s. Valid: task, condition, evaluator, consideration, property_function, all"), *Category));
+		return MakeErrorResult(FString::Printf(TEXT("Unknown category: %s. Valid: task|tasks, condition|conditions, evaluator|evaluators, consideration|considerations, property_function|property_functions, all"), *Category));
 	}
 
 	FString Output;

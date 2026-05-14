@@ -21,7 +21,7 @@ FString ClaireonWidgetBPTool_AddBinding::GetName() const
 
 FString ClaireonWidgetBPTool_AddBinding::GetDescription() const
 {
-    return TEXT("Bind a widget property to a Blueprint function (legacy UMG property binding).");
+    return TEXT("Bind a widget property to a Blueprint function (legacy UMG property binding) in the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Transactional. Common pitfall: prefer claireon.widgetbp_add_mvvm_binding for new code; legacy bindings exist for compatibility with older UMG patterns.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_AddBinding::GetInputSchema() const
@@ -44,15 +44,6 @@ FToolResult ClaireonWidgetBPTool_AddBinding::Execute(const TSharedPtr<FJsonObjec
     {
         return Error;
     }
-    return Operation_AddBinding(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_AddBinding(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	FString WidgetNameStr;
 	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetNameStr))
 	{
@@ -114,3 +105,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_AddBinding(const FString& Se
 
 	return MakeErrorResult(ResultString);
 }
+

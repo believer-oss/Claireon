@@ -20,6 +20,11 @@ FString ClaireonTool_SearchTools::GetName() const
 	return TEXT("claireon.tools_search");
 }
 
+TArray<FString> ClaireonTool_SearchTools::GetSearchKeywords() const
+{
+	return {TEXT("search"), TEXT("tools"), TEXT("find"), TEXT("discover"), TEXT("lookup"), TEXT("query"), TEXT("catalog")};
+}
+
 FString ClaireonTool_SearchTools::GetDescription() const
 {
 	return TEXT("Search available tools by query string and/or category. "

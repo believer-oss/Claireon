@@ -101,7 +101,7 @@ FString ClaireonAnimTool_ListModifiers::GetName() const { return TEXT("claireon.
 
 FString ClaireonAnimTool_ListModifiers::GetDescription() const
 {
-	return TEXT("List animation modifiers on an AnimSequence.");
+	return TEXT("List animation modifiers on the AnimSequence in the open editing session. Requires open session_id from claireon.anim_open. Read-only. Returns each modifier's index, class name, and applied/dirty state. Use claireon.anim_apply_modifier to run one and claireon.anim_remove_modifier to delete it.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_ListModifiers::GetInputSchema() const
@@ -142,7 +142,7 @@ FString ClaireonAnimTool_AddModifier::GetName() const { return TEXT("claireon.an
 
 FString ClaireonAnimTool_AddModifier::GetDescription() const
 {
-	return TEXT("Add an animation modifier to an AnimSequence.");
+	return TEXT("Add an animation modifier to the AnimSequence in the open editing session. Requires open session_id from claireon.anim_open. Transactional. The modifier_class must be a UAnimationModifier subclass; the new modifier is appended unapplied. Call claireon.anim_apply_modifier to execute it after configuring properties.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_AddModifier::GetInputSchema() const
@@ -221,7 +221,7 @@ FString ClaireonAnimTool_RemoveModifier::GetName() const { return TEXT("claireon
 
 FString ClaireonAnimTool_RemoveModifier::GetDescription() const
 {
-	return TEXT("Remove an animation modifier by index.");
+	return TEXT("Remove an animation modifier by zero-based index from the AnimSequence in the open editing session. Requires open session_id from claireon.anim_open. Transactional. Common pitfall: indices shift after removal, so cache them up front when removing multiple modifiers in sequence. Does not revert applied effects.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_RemoveModifier::GetInputSchema() const
@@ -303,7 +303,7 @@ FString ClaireonAnimTool_ApplyModifier::GetName() const { return TEXT("claireon.
 
 FString ClaireonAnimTool_ApplyModifier::GetDescription() const
 {
-	return TEXT("Apply (execute) an animation modifier.");
+	return TEXT("Apply (execute) an animation modifier on the AnimSequence in the open editing session. Requires open session_id from claireon.anim_open. Transactional. Runs the modifier's OnApply hook to mutate animation data. Common pitfall: modifiers are not idempotent in general; reverting before reapply is safer when reconfiguring.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_ApplyModifier::GetInputSchema() const
@@ -362,7 +362,7 @@ FString ClaireonAnimTool_RevertModifier::GetName() const { return TEXT("claireon
 
 FString ClaireonAnimTool_RevertModifier::GetDescription() const
 {
-	return TEXT("Revert an applied animation modifier.");
+	return TEXT("Revert an applied animation modifier on the AnimSequence in the open editing session. Requires open session_id from claireon.anim_open. Transactional. Runs the modifier's OnRevert hook to undo its changes. Common pitfall: not all modifiers implement clean revert; verify with claireon.anim_inspect after reverting.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_RevertModifier::GetInputSchema() const
@@ -421,7 +421,7 @@ FString ClaireonAnimTool_ListMetadata::GetName() const { return TEXT("claireon.a
 
 FString ClaireonAnimTool_ListMetadata::GetDescription() const
 {
-	return TEXT("List metadata objects on the animation.");
+	return TEXT("List metadata objects on the animation in the open editing session. Requires open session_id from claireon.anim_open. Read-only. Returns each metadata entry's index and class name. Use claireon.anim_set_metadata_property to mutate one and claireon.anim_remove_metadata to delete.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_ListMetadata::GetInputSchema() const
@@ -458,7 +458,7 @@ FString ClaireonAnimTool_AddMetadata::GetName() const { return TEXT("claireon.an
 
 FString ClaireonAnimTool_AddMetadata::GetDescription() const
 {
-	return TEXT("Add a metadata object to the animation.");
+	return TEXT("Add a metadata object to the animation in the open editing session. Requires open session_id from claireon.anim_open. Transactional. The metadata_class must be a UAnimMetaData subclass. New entries append to the asset's metadata array; configure with claireon.anim_set_metadata_property afterward.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_AddMetadata::GetInputSchema() const
@@ -517,7 +517,7 @@ FString ClaireonAnimTool_RemoveMetadata::GetName() const { return TEXT("claireon
 
 FString ClaireonAnimTool_RemoveMetadata::GetDescription() const
 {
-	return TEXT("Remove a metadata object by index.");
+	return TEXT("Remove a metadata object by zero-based index from the animation in the open editing session. Requires open session_id from claireon.anim_open. Transactional. Common pitfall: indices shift after removal, so cache them up front when removing multiple metadata entries in sequence on the same asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_RemoveMetadata::GetInputSchema() const
@@ -574,7 +574,7 @@ FString ClaireonAnimTool_SetMetadataProperty::GetName() const { return TEXT("cla
 
 FString ClaireonAnimTool_SetMetadataProperty::GetDescription() const
 {
-	return TEXT("Set a property on a metadata object.");
+	return TEXT("Set a property on a metadata object in the open animation editing session. Requires open session_id from claireon.anim_open. Transactional. Common pitfall: property_name must match the UPROPERTY name on the metadata's UAnimMetaData class. Pass value as a JSON-encoded string (true/false/numbers/quoted strings).");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_SetMetadataProperty::GetInputSchema() const
@@ -648,7 +648,7 @@ FString ClaireonAnimTool_SetProperty::GetName() const { return TEXT("claireon.an
 
 FString ClaireonAnimTool_SetProperty::GetDescription() const
 {
-	return TEXT("Set a property on the animation asset itself.");
+	return TEXT("Set a property directly on the animation asset itself in the open editing session. Requires open session_id from claireon.anim_open. Transactional. Common pitfall: this targets top-level UAnimSequenceBase / UAnimMontage UPROPERTYs (e.g. RateScale, BlendIn, AdditiveAnimType), not curve or notify sub-objects.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_SetProperty::GetInputSchema() const

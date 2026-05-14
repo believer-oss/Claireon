@@ -17,6 +17,11 @@ FString ClaireonPCGGraphTool_Open::GetName() const
 	return TEXT("claireon.pcg_open");
 }
 
+TArray<FString> ClaireonPCGGraphTool_Open::GetSearchKeywords() const
+{
+	return {TEXT("pcg"), TEXT("procedural"), TEXT("content"), TEXT("generation"), TEXT("graph"), TEXT("open"), TEXT("session")};
+}
+
 FString ClaireonPCGGraphTool_Open::GetDescription() const
 {
 	return TEXT("Open a PCG (Procedural Content Generation) Graph asset for editing. Returns a session_id for subsequent operations.");

@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_MoveCursor::GetName() const
 
 FString ClaireonBlueprintGraphTool_MoveCursor::GetDescription() const
 {
-    return TEXT("Move the editing cursor to a specific graph/node/pin.");
+    return TEXT("Move the editing cursor to a specific graph/node/pin in the open Blueprint editing session. Requires open session_id from claireon.blueprint_graph_open. Read-only with respect to graph contents (cursor is session state). The cursor drives auto_connect_from_cursor on claireon.blueprint_graph_add_node.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_MoveCursor::GetInputSchema() const
@@ -130,11 +130,6 @@ FToolResult ClaireonBlueprintGraphTool_MoveCursor::Execute(const TSharedPtr<FJso
     {
         return Error;
     }
-    return Operation_MoveCursor(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_MoveCursor(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UEdGraph* Graph = Data->Graph.Get();
 
 	if (!Graph)

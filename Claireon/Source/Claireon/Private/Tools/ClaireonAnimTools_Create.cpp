@@ -66,7 +66,7 @@ FString ClaireonAnimTool_CreateMontage::GetName() const { return TEXT("claireon.
 
 FString ClaireonAnimTool_CreateMontage::GetDescription() const
 {
-	return TEXT("Create a new AnimMontage asset with an optional source animation and slot name.");
+	return TEXT("Create a new AnimMontage asset on disk at the given path. Stateless / non-session: writes the asset immediately, no open session required. Optionally seeds with a source AnimSequence on a named slot. Common pitfall: source_animation_path must use the same skeleton or asset creation fails.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_CreateMontage::GetInputSchema() const
@@ -182,7 +182,7 @@ FString ClaireonAnimTool_CreateComposite::GetName() const { return TEXT("claireo
 
 FString ClaireonAnimTool_CreateComposite::GetDescription() const
 {
-	return TEXT("Create a new AnimComposite asset with an optional source animation.");
+	return TEXT("Create a new AnimComposite asset on disk at the given path. Stateless / non-session: the asset is written and saved immediately. Optionally seeds with a source AnimSequence segment. Common pitfall: source_animation_path must use the same skeleton or the seed segment is dropped.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_CreateComposite::GetInputSchema() const
@@ -297,7 +297,7 @@ FString ClaireonAnimTool_DuplicateAsset::GetName() const { return TEXT("claireon
 
 FString ClaireonAnimTool_DuplicateAsset::GetDescription() const
 {
-	return TEXT("Duplicate an existing animation asset (AnimSequence, AnimMontage, or AnimComposite) to a new path.");
+	return TEXT("Duplicate an existing animation asset (AnimSequence, AnimMontage, or AnimComposite) to a new path. Stateless / non-session: writes the duplicate immediately on disk, no open session required. Common pitfall: target package directory must already exist; the path must end with the asset name (no .uasset suffix).");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_DuplicateAsset::GetInputSchema() const

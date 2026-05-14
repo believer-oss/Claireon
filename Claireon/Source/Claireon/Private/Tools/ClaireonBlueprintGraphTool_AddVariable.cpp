@@ -102,9 +102,14 @@ FString ClaireonBlueprintGraphTool_AddVariable::GetName() const
     return TEXT("claireon.blueprint_graph_add_variable");
 }
 
+TArray<FString> ClaireonBlueprintGraphTool_AddVariable::GetSearchKeywords() const
+{
+    return {TEXT("bp"), TEXT("var"), TEXT("variable"), TEXT("add"), TEXT("create"), TEXT("property"), TEXT("graph")};
+}
+
 FString ClaireonBlueprintGraphTool_AddVariable::GetDescription() const
 {
-    return TEXT("Add a member variable to the Blueprint. Pass a simple primitive/class/struct path via variable_type for ordinary types, or a structured variable_type_spec (with base + signature_function / subtype) for delegate, multicast-delegate, soft-class, soft-object, and instanced-struct variables. variable_type_spec takes precedence when both are provided. When replication='RepNotify', auto-creates the OnRep_<Name> handler function graph (customizable via rep_notify_func).");
+    return TEXT("Add a member variable to the Blueprint in the open editing session. Requires open session_id from claireon.blueprint_graph_open. Transactional. Pass variable_type for primitives/classes/structs, or variable_type_spec (base + signature_function/subtype) for delegate/multicast/soft-class/soft-object/instanced-struct. Common pitfall: plain delegate names in variable_type silently fail.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddVariable::GetInputSchema() const
@@ -141,11 +146,6 @@ FToolResult ClaireonBlueprintGraphTool_AddVariable::Execute(const TSharedPtr<FJs
     {
         return Error;
     }
-    return Operation_AddVariable(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_AddVariable(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 
 	if (!Blueprint)
@@ -274,6 +274,47 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_AddVariable(const FStr
 	}
 
 	return AddVariableResult;
+}
+
+// ----------------------------------------------------------------------------
+// P1: hot-path metadata enrichment
+// ----------------------------------------------------------------------------
+
+FString ClaireonBlueprintGraphTool_AddVariable::GetFullDescription() const
+{
+    return TEXT(
+        "Adds a member variable to the Blueprint via the current session. The "
+        "variable type is specified via one of two parameters: variable_type "
+        "(simple form: pass a primitive name like 'float', a class path like "
+        "'/Game/BP/MyActor', or a struct path) OR variable_type_spec (structured "
+        "form: an object with base + signature_function or subtype, used for "
+        "delegate, multicast-delegate, soft-class, soft-object, and "
+        "instanced-struct variables). When both are provided, variable_type_spec "
+        "takes precedence -- this is a deliberate ergonomics choice so you can "
+        "pass a fallback type alongside the structured form during refactors. "
+        "Plain delegate names in variable_type silently fail; always use "
+        "variable_type_spec with base='Delegate' for delegate variables. "
+        "Setting replication='RepNotify' "
+        "auto-creates the OnRep_<Name> handler function graph; pass "
+        "rep_notify_func to customize the function name.");
+}
+
+FString ClaireonBlueprintGraphTool_AddVariable::GetExampleUsage() const
+{
+    return TEXT(
+        "claireon.blueprint_graph_add_variable session_id=\"...\" "
+        "name=\"MaxHealth\" variable_type=\"float\" replication=\"RepNotify\"");
+}
+
+TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddVariable::GetParameterTooltips() const
+{
+    TSharedPtr<FJsonObject> T = MakeShared<FJsonObject>();
+    T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by claireon.blueprint_graph_open or _create."));
+    T->SetStringField(TEXT("name"), TEXT("Variable name (also member name on the generated CDO)."));
+    T->SetStringField(TEXT("variable_type"), TEXT("Simple type form: primitive name, class path, or struct path. Use variable_type_spec for delegate/soft-class/soft-object/instanced-struct types."));
+    T->SetStringField(TEXT("variable_type_spec"), TEXT("Structured type form: { base: 'Delegate'|'MulticastDelegate'|'SoftClass'|'SoftObject'|'InstancedStruct', signature_function: '...', subtype: '...' }. Takes precedence over variable_type when both are provided."));
+    T->SetStringField(TEXT("replication"), TEXT("'None' | 'Replicated' | 'RepNotify'. RepNotify auto-creates the OnRep_<Name> handler function graph (customizable via rep_notify_func)."));
+    return T;
 }
 
 #undef LOCTEXT_NAMESPACE

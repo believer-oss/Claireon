@@ -108,19 +108,19 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 	FString SessionHintSummaryTag;
 	if (Data->ConsecutiveAssetPathCalls > 5 && Data->ConsecutiveAssetPathCalls % 5 == 1)
 	{
+		const FString HintAssetPath = Data->Blueprint.IsValid() ? Data->Blueprint->GetPathName() : TEXT("<unknown>");
 		const FString HintText = FString::Printf(
-			TEXT("You've called this tool %d times in a row with asset_path and no session_id. ")
-			TEXT("This session (id=%s) is still locked on '%s' and will not release until the ")
-			TEXT("configured idle timeout elapses. For multi-step edits, call operation='open' ")
-			TEXT("once, read Data.session_id from the response, and pass it on subsequent calls. ")
-			TEXT("Call operation='close' when done to release the lock immediately."),
+			TEXT("You've called tools on '%s' %d times in a row with asset_path (no session_id). ")
+			TEXT("Session %s is still locked on that asset and will not release until idle timeout. ")
+			TEXT("For multi-step edits on this asset, read Data.session_id from any response and pass ")
+			TEXT("it on subsequent calls. Call operation='close' when done to release the lock."),
+			*HintAssetPath,
 			Data->ConsecutiveAssetPathCalls,
-			*SessionId,
-			Data->Blueprint.IsValid() ? *Data->Blueprint->GetPathName() : TEXT("<unknown>"));
+			*SessionId);
 		ResponseData->SetStringField(TEXT("session_hint"), HintText);
 		SessionHintSummaryTag = FString::Printf(
-			TEXT("\n\n[hint] %d consecutive asset_path calls -- consider explicit session_id (session=%s)."),
-			Data->ConsecutiveAssetPathCalls,
+			TEXT("\n\n[hint] session_hint: reuse session_id for '%s' (session=%s)."),
+			*HintAssetPath,
 			*SessionId);
 	}
 
@@ -444,6 +444,74 @@ void ClaireonBlueprintGraphEditToolBase::ValidateCursor(FBlueprintEditToolData* 
 			}
 		}
 	}
+}
+
+bool ClaireonBlueprintGraphEditToolBase::ResolveTargetNode(
+	const TSharedPtr<FJsonObject>& Params,
+	UEdGraph* Graph,
+	UEdGraphNode*& OutNode,
+	FToolResult& OutError)
+{
+	OutNode = nullptr;
+
+	if (!Graph)
+	{
+		OutError = MakeErrorResult(TEXT("ResolveTargetNode: Graph is null"));
+		return false;
+	}
+
+	FString NodeGuidStr;
+	if (Params.IsValid() && Params->TryGetStringField(TEXT("node_guid"), NodeGuidStr))
+	{
+		FGuid NodeGuid;
+		if (!FGuid::Parse(NodeGuidStr, NodeGuid))
+		{
+			OutError = MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
+			return false;
+		}
+		OutNode = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
+		if (!OutNode)
+		{
+			const FString Available = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
+			OutError = MakeErrorResult(FString::Printf(
+				TEXT("Node %s not found in graph '%s'. Available nodes: %s"),
+				*NodeGuidStr, *Graph->GetName(), *Available));
+			return false;
+		}
+		return true;
+	}
+
+	FString NodeTitle;
+	if (Params.IsValid() && Params->TryGetStringField(TEXT("node_title"), NodeTitle))
+	{
+		TArray<UEdGraphNode*> Matches = ClaireonBlueprintHelpers::FindNodesByTitle(Graph, NodeTitle, /*bExactMatch=*/true);
+		if (Matches.Num() == 0)
+		{
+			const FString Available = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
+			OutError = MakeErrorResult(FString::Printf(
+				TEXT("Node not found by title '%s' in graph '%s'. Available nodes: %s"),
+				*NodeTitle, *Graph->GetName(), *Available));
+			return false;
+		}
+		if (Matches.Num() > 1)
+		{
+			FString GuidList;
+			for (int32 Idx = 0; Idx < Matches.Num(); ++Idx)
+			{
+				if (Idx > 0) { GuidList += TEXT(", "); }
+				GuidList += Matches[Idx]->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens);
+			}
+			OutError = MakeErrorResult(FString::Printf(
+				TEXT("Ambiguous node title '%s' -- %d matches with GUIDs: %s. Pass node_guid to disambiguate."),
+				*NodeTitle, Matches.Num(), *GuidList));
+			return false;
+		}
+		OutNode = Matches[0];
+		return true;
+	}
+
+	OutError = MakeErrorResult(TEXT("Missing required field: node_guid or node_title"));
+	return false;
 }
 
 void ClaireonBlueprintGraphEditToolBase::InitToolDataForSession(const FString& SessionId, UBlueprint* Blueprint, UEdGraph* Graph)

@@ -21,7 +21,7 @@ FString ClaireonWidgetBPTool_RemoveWidget::GetName() const
 
 FString ClaireonWidgetBPTool_RemoveWidget::GetDescription() const
 {
-    return TEXT("Remove a widget from the widget tree by name.");
+    return TEXT("Remove a widget from the widget tree by name in the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Transactional. The widget and any of its descendants are removed together; bindings targeting the removed widgets become unresolvable until reauthored.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_RemoveWidget::GetInputSchema() const
@@ -42,15 +42,6 @@ FToolResult ClaireonWidgetBPTool_RemoveWidget::Execute(const TSharedPtr<FJsonObj
     {
         return Error;
     }
-    return Operation_RemoveWidget(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_RemoveWidget(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	FString WidgetName;
 	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
 	{
@@ -96,3 +87,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_RemoveWidget(const FString& 
 
 	return BuildStateResponse(SessionId, Data);
 }
+

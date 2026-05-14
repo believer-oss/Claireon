@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_ApplySpec::GetName() const
 
 FString ClaireonBlueprintGraphTool_ApplySpec::GetDescription() const
 {
-    return TEXT("Apply a declarative JSON specification to create/modify the Blueprint atomically.");
+    return TEXT("Apply a declarative JSON specification to create/modify the Blueprint atomically in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. The spec runs as one rollback unit; partial failures revert all spec operations together.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ApplySpec::GetInputSchema() const
@@ -128,11 +128,6 @@ FToolResult ClaireonBlueprintGraphTool_ApplySpec::Execute(const TSharedPtr<FJson
             Params = *NestedObj;
         }
     }
-    return Operation_ApplySpec(Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_ApplySpec(const TSharedPtr<FJsonObject>& Params)
-{
 	// Extract asset_path -- required
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())

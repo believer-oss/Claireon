@@ -32,7 +32,9 @@
 #include "Tools/ClaireonWidgetBPTool_ListMVVMBindings.h"
 #include "Tools/ClaireonWidgetBPTool_ListMVVMViewModels.h"
 #include "Tools/ClaireonWidgetBPTool_MoveWidget.h"
+#include "Tools/ClaireonWidgetBPTool_Open.h"
 #include "Tools/ClaireonWidgetBPTool_RemoveAnimationKeyframe.h"
+#include "Tools/ClaireonWidgetBPTool_Save.h"
 #include "Tools/ClaireonWidgetBPTool_RemoveMVVMBinding.h"
 #include "Tools/ClaireonWidgetBPTool_RemoveMVVMViewModel.h"
 #include "Tools/ClaireonWidgetBPTool_RemoveWidget.h"
@@ -695,7 +697,7 @@ bool FEditWidgetBPTest_AnimationLifecycle::RunTest(const FString& Parameters)
 		return Args;
 	};
 
-	// --- Step 1: create_animation "FadeIn" (stub; expected error) ---
+	// --- Step 1: create_animation "FadeIn" ---
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("animation_name"), TEXT("FadeIn"));
@@ -703,12 +705,18 @@ bool FEditWidgetBPTest_AnimationLifecycle::RunTest(const FString& Parameters)
 
 		ClaireonWidgetBPTool_CreateAnimation Tool;
 		auto Result = Tool.Execute(FlattenLegacyEnvelope(MakeEnvelope(TEXT("create_animation"), Params)));
-		TestTrue("create_animation is backlogged; expected stub error", Result.bIsError);
-		TestTrue("create_animation error should cite Dispatch Backlog",
-			Result.GetContentAsString().Contains(StubMarker));
+		TestFalse("create_animation FadeIn should succeed", Result.bIsError);
+
+		TSharedPtr<FJsonObject> Json = ParseJson(Result.GetContentAsString());
+		if (Json.IsValid())
+		{
+			FString Name;
+			Json->TryGetStringField(TEXT("name"), Name);
+			TestEqual("create_animation name echoes FadeIn", Name, TEXT("FadeIn"));
+		}
 	}
 
-	// --- Step 2: create_animation "SlideOut" (stub; expected error) ---
+	// --- Step 2: create_animation "SlideOut" ---
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("animation_name"), TEXT("SlideOut"));
@@ -716,15 +724,13 @@ bool FEditWidgetBPTest_AnimationLifecycle::RunTest(const FString& Parameters)
 
 		ClaireonWidgetBPTool_CreateAnimation Tool;
 		auto Result = Tool.Execute(FlattenLegacyEnvelope(MakeEnvelope(TEXT("create_animation"), Params)));
-		TestTrue("create_animation is backlogged; expected stub error", Result.bIsError);
+		TestFalse("create_animation SlideOut should succeed", Result.bIsError);
 	}
 
 	// --- Step 3: list_animations (implemented) ---
 	{
 		ClaireonWidgetBPTool_ListAnimations Tool;
 		auto Result = Tool.Execute(FlattenLegacyEnvelope(MakeEnvelope(TEXT("list_animations"), MakeShared<FJsonObject>())));
-		// list_animations is implemented and should NOT error; animation mutators
-		// are stubbed so count is expected to be 0 on a freshly-created WBP.
 		TestFalse("list_animations should succeed", Result.bIsError);
 
 		TSharedPtr<FJsonObject> Json = ParseJson(Result.GetContentAsString());
@@ -732,12 +738,12 @@ bool FEditWidgetBPTest_AnimationLifecycle::RunTest(const FString& Parameters)
 		{
 			double Count = 0;
 			Json->TryGetNumberField(TEXT("count"), Count);
-			TestEqual("Fresh WBP with no implemented create_animation should have 0 animations",
-				static_cast<int32>(Count), 0);
+			TestEqual("create_animation produced two animations (FadeIn, SlideOut)",
+				static_cast<int32>(Count), 2);
 		}
 	}
 
-	// --- Step 4: rename_animation (stub; expected error) ---
+	// --- Step 4: rename_animation FadeIn -> FadeInNew ---
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("animation_name"), TEXT("FadeIn"));
@@ -745,10 +751,10 @@ bool FEditWidgetBPTest_AnimationLifecycle::RunTest(const FString& Parameters)
 
 		ClaireonWidgetBPTool_RenameAnimation Tool;
 		auto Result = Tool.Execute(FlattenLegacyEnvelope(MakeEnvelope(TEXT("rename_animation"), Params)));
-		TestTrue("rename_animation is backlogged; expected stub error", Result.bIsError);
+		TestFalse("rename_animation should succeed", Result.bIsError);
 	}
 
-	// --- Step 5: set_animation_property (stub; expected error) ---
+	// --- Step 5: set_animation_property duration=4.0 ---
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("animation_name"), TEXT("FadeInNew"));
@@ -756,27 +762,44 @@ bool FEditWidgetBPTest_AnimationLifecycle::RunTest(const FString& Parameters)
 
 		ClaireonWidgetBPTool_SetAnimationProperty Tool;
 		auto Result = Tool.Execute(FlattenLegacyEnvelope(MakeEnvelope(TEXT("set_animation_property"), Params)));
-		TestTrue("set_animation_property is backlogged; expected stub error", Result.bIsError);
+		TestFalse("set_animation_property duration should succeed", Result.bIsError);
 	}
 
-	// --- Step 6: duplicate_animation (stub; expected error) ---
+	// --- Step 6: duplicate_animation FadeInNew -> FadeInCopy ---
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("animation_name"), TEXT("FadeInNew"));
+		Params->SetStringField(TEXT("new_name"), TEXT("FadeInCopy"));
 
 		ClaireonWidgetBPTool_DuplicateAnimation Tool;
 		auto Result = Tool.Execute(FlattenLegacyEnvelope(MakeEnvelope(TEXT("duplicate_animation"), Params)));
-		TestTrue("duplicate_animation is backlogged; expected stub error", Result.bIsError);
+		TestFalse("duplicate_animation should succeed", Result.bIsError);
+
+		TSharedPtr<FJsonObject> Json = ParseJson(Result.GetContentAsString());
+		if (Json.IsValid())
+		{
+			FString Source;
+			Json->TryGetStringField(TEXT("source"), Source);
+			TestEqual("duplicate_animation source echoes FadeInNew", Source, TEXT("FadeInNew"));
+		}
 	}
 
-	// --- Step 7: delete_animation (stub; expected error) ---
+	// --- Step 7: delete_animation ---
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("animation_name"), TEXT("SlideOut"));
 
 		ClaireonWidgetBPTool_DeleteAnimation Tool;
 		auto Result = Tool.Execute(FlattenLegacyEnvelope(MakeEnvelope(TEXT("delete_animation"), Params)));
-		TestTrue("delete_animation is backlogged; expected stub error", Result.bIsError);
+		TestFalse("delete_animation should succeed", Result.bIsError);
+
+		TSharedPtr<FJsonObject> Json = ParseJson(Result.GetContentAsString());
+		if (Json.IsValid())
+		{
+			FString DeletedName;
+			Json->TryGetStringField(TEXT("deleted"), DeletedName);
+			TestEqual("delete_animation echoes deleted name", DeletedName, TEXT("SlideOut"));
+		}
 	}
 
 	// --- Step 8: list_animations (implemented; still 0) ---
@@ -790,19 +813,27 @@ bool FEditWidgetBPTest_AnimationLifecycle::RunTest(const FString& Parameters)
 		{
 			double Count = 0;
 			Json->TryGetNumberField(TEXT("count"), Count);
-			TestEqual("Count remains 0 because mutators are stubbed",
-				static_cast<int32>(Count), 0);
+			TestEqual("Count reflects FadeIn + FadeInCopy after SlideOut delete",
+				static_cast<int32>(Count), 2);
 		}
 	}
 
-	// --- Step 9: get_animation_details (stub; expected error) ---
+	// --- Step 9: get_animation_details ---
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("animation_name"), TEXT("FadeInNew"));
 
 		ClaireonWidgetBPTool_GetAnimationDetails Tool;
 		auto Result = Tool.Execute(FlattenLegacyEnvelope(MakeEnvelope(TEXT("get_animation_details"), Params)));
-		TestTrue("get_animation_details is backlogged; expected stub error", Result.bIsError);
+		TestFalse("get_animation_details should succeed", Result.bIsError);
+
+		TSharedPtr<FJsonObject> Json = ParseJson(Result.GetContentAsString());
+		if (Json.IsValid())
+		{
+			FString Name;
+			Json->TryGetStringField(TEXT("name"), Name);
+			TestEqual("get_animation_details echoes name", Name, TEXT("FadeInNew"));
+		}
 	}
 
 	// --- Step 10: compile (implemented) ---
@@ -810,6 +841,39 @@ bool FEditWidgetBPTest_AnimationLifecycle::RunTest(const FString& Parameters)
 		ClaireonWidgetBPTool_Compile Tool;
 		auto Result = Tool.Execute(FlattenLegacyEnvelope(MakeEnvelope(TEXT("compile"), MakeShared<FJsonObject>())));
 		TestFalse("compile should succeed", Result.bIsError);
+	}
+
+	// --- Step 11 (stage 014 persistence): save, close, reopen, verify count ---
+	{
+		ClaireonWidgetBPTool_Save SaveTool;
+		auto SaveResult = SaveTool.Execute(FlattenLegacyEnvelope(MakeEnvelope(TEXT("save"), MakeShared<FJsonObject>())));
+		TestFalse("save should succeed", SaveResult.bIsError);
+
+		CloseSession(SessionId);
+
+		// Reopen via claireon.widgetbp_open; the animations must survive the round trip.
+		TSharedPtr<FJsonObject> OpenArgs = MakeShared<FJsonObject>();
+		OpenArgs->SetStringField(TEXT("operation"), TEXT("open"));
+		TSharedPtr<FJsonObject> OpenParams = MakeShared<FJsonObject>();
+		OpenParams->SetStringField(TEXT("asset_path"), AssetPath);
+		OpenArgs->SetObjectField(TEXT("params"), OpenParams);
+
+		ClaireonWidgetBPTool_Open OpenTool;
+		auto OpenResult = OpenTool.Execute(FlattenLegacyEnvelope(OpenArgs));
+		TestFalse("reopen should succeed", OpenResult.bIsError);
+		SessionId = ParseSessionId(OpenResult.GetContentAsString());
+
+		ClaireonWidgetBPTool_ListAnimations ListTool;
+		auto ListResult = ListTool.Execute(FlattenLegacyEnvelope(MakeEnvelope(TEXT("list_animations"), MakeShared<FJsonObject>())));
+		TestFalse("list_animations after reopen should succeed", ListResult.bIsError);
+		TSharedPtr<FJsonObject> ListJson = ParseJson(ListResult.GetContentAsString());
+		if (ListJson.IsValid())
+		{
+			double Count = 0;
+			ListJson->TryGetNumberField(TEXT("count"), Count);
+			TestEqual("Persistence: FadeInNew + FadeInCopy survive save/close/reopen",
+				static_cast<int32>(Count), 2);
+		}
 	}
 
 	CloseSession(SessionId);
@@ -863,7 +927,7 @@ bool FEditWidgetBPTest_AnimationBindingTracksKeyframes::RunTest(const FString& P
 		TestFalse("add_widget should succeed", Result.bIsError);
 	}
 
-	// --- Step 2: Create animation (stub; expected error) ---
+	// --- Step 2: Create animation ---
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("animation_name"), TEXT("FadeAnim"));
@@ -871,10 +935,10 @@ bool FEditWidgetBPTest_AnimationBindingTracksKeyframes::RunTest(const FString& P
 
 		ClaireonWidgetBPTool_CreateAnimation Tool;
 		auto Result = Tool.Execute(FlattenLegacyEnvelope(MakeEnvelope(TEXT("create_animation"), Params)));
-		TestTrue("create_animation is backlogged; expected stub error", Result.bIsError);
+		TestFalse("create_animation should succeed", Result.bIsError);
 	}
 
-	// --- Step 3: Bind widget to animation (stub; expected error) ---
+	// --- Step 3: Bind widget to animation ---
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("animation_name"), TEXT("FadeAnim"));
@@ -882,22 +946,31 @@ bool FEditWidgetBPTest_AnimationBindingTracksKeyframes::RunTest(const FString& P
 
 		ClaireonWidgetBPTool_AddAnimationBinding Tool;
 		auto Result = Tool.Execute(FlattenLegacyEnvelope(MakeEnvelope(TEXT("add_animation_binding"), Params)));
-		TestTrue("add_animation_binding is backlogged; expected stub error", Result.bIsError);
+		TestFalse("add_animation_binding should succeed", Result.bIsError);
 	}
 
-	// --- Step 4: Add RenderOpacity track (stub; expected error) ---
+	// --- Step 4: Add RenderOpacity track ---
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("animation_name"), TEXT("FadeAnim"));
 		Params->SetStringField(TEXT("widget_name"), TEXT("FadeLabel"));
 		Params->SetStringField(TEXT("property_path"), TEXT("RenderOpacity"));
+		Params->SetStringField(TEXT("track_type"), TEXT("float"));
 
 		ClaireonWidgetBPTool_AddAnimationTrack Tool;
 		auto Result = Tool.Execute(FlattenLegacyEnvelope(MakeEnvelope(TEXT("add_animation_track"), Params)));
-		TestTrue("add_animation_track is backlogged; expected stub error", Result.bIsError);
+		TestFalse("add_animation_track should succeed", Result.bIsError);
+
+		TSharedPtr<FJsonObject> Json = ParseJson(Result.GetContentAsString());
+		if (Json.IsValid())
+		{
+			FString TrackClass;
+			Json->TryGetStringField(TEXT("track_class"), TrackClass);
+			TestEqual("add_animation_track returns float track class", TrackClass, TEXT("MovieSceneFloatTrack"));
+		}
 	}
 
-	// --- Step 5: Add keyframe at t=0 (stub; expected error) ---
+	// --- Step 5: Add keyframe at t=0 ---
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("animation_name"), TEXT("FadeAnim"));
@@ -909,10 +982,10 @@ bool FEditWidgetBPTest_AnimationBindingTracksKeyframes::RunTest(const FString& P
 
 		ClaireonWidgetBPTool_AddAnimationKeyframe Tool;
 		auto Result = Tool.Execute(FlattenLegacyEnvelope(MakeEnvelope(TEXT("add_animation_keyframe"), Params)));
-		TestTrue("add_animation_keyframe is backlogged; expected stub error", Result.bIsError);
+		TestFalse("add_animation_keyframe at t=0 should succeed", Result.bIsError);
 	}
 
-	// --- Step 6: Add keyframe at t=2 (stub; expected error) ---
+	// --- Step 6: Add keyframe at t=2 ---
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("animation_name"), TEXT("FadeAnim"));
@@ -923,20 +996,20 @@ bool FEditWidgetBPTest_AnimationBindingTracksKeyframes::RunTest(const FString& P
 
 		ClaireonWidgetBPTool_AddAnimationKeyframe Tool;
 		auto Result = Tool.Execute(FlattenLegacyEnvelope(MakeEnvelope(TEXT("add_animation_keyframe"), Params)));
-		TestTrue("add_animation_keyframe is backlogged; expected stub error", Result.bIsError);
+		TestFalse("add_animation_keyframe at t=2 should succeed", Result.bIsError);
 	}
 
-	// --- Step 7: get_animation_details (stub; expected error) ---
+	// --- Step 7: get_animation_details ---
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("animation_name"), TEXT("FadeAnim"));
 
 		ClaireonWidgetBPTool_GetAnimationDetails Tool;
 		auto Result = Tool.Execute(FlattenLegacyEnvelope(MakeEnvelope(TEXT("get_animation_details"), Params)));
-		TestTrue("get_animation_details is backlogged; expected stub error", Result.bIsError);
+		TestFalse("get_animation_details should succeed", Result.bIsError);
 	}
 
-	// --- Step 8: Remove keyframe at t=0 (stub; expected error) ---
+	// --- Step 8: Remove keyframe at t=0 ---
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("animation_name"), TEXT("FadeAnim"));
@@ -946,7 +1019,7 @@ bool FEditWidgetBPTest_AnimationBindingTracksKeyframes::RunTest(const FString& P
 
 		ClaireonWidgetBPTool_RemoveAnimationKeyframe Tool;
 		auto Result = Tool.Execute(FlattenLegacyEnvelope(MakeEnvelope(TEXT("remove_animation_keyframe"), Params)));
-		TestTrue("remove_animation_keyframe is backlogged; expected stub error", Result.bIsError);
+		TestFalse("remove_animation_keyframe should succeed", Result.bIsError);
 	}
 
 	// --- Step 9: Error scenario -- add track for unbound widget (stub still errors) ---

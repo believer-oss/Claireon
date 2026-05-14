@@ -16,6 +16,11 @@ FString ClaireonEQSTool_Open::GetName() const
 	return TEXT("claireon.eqs_open");
 }
 
+TArray<FString> ClaireonEQSTool_Open::GetSearchKeywords() const
+{
+	return {TEXT("eqs"), TEXT("environment"), TEXT("query"), TEXT("system"), TEXT("ai"), TEXT("open"), TEXT("session")};
+}
+
 FString ClaireonEQSTool_Open::GetDescription() const
 {
 	return TEXT("Open an EQS Query asset for editing. Returns a session_id for subsequent operations.");

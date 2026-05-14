@@ -23,7 +23,7 @@ FString ClaireonWidgetBPTool_AddMVVMViewModel::GetName() const
 
 FString ClaireonWidgetBPTool_AddMVVMViewModel::GetDescription() const
 {
-    return TEXT("Add an MVVM ViewModel context to the Widget Blueprint.");
+    return TEXT("Add an MVVM ViewModel context to the Widget Blueprint in the open editing session. Requires open session_id from claireon.widgetbp_open. Transactional. The viewmodel_class must be a UMVVMViewModelBase subclass. Once added, bindings sourced from this viewmodel resolve via claireon.widgetbp_add_mvvm_binding.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_AddMVVMViewModel::GetInputSchema() const
@@ -47,15 +47,6 @@ FToolResult ClaireonWidgetBPTool_AddMVVMViewModel::Execute(const TSharedPtr<FJso
     {
         return Error;
     }
-    return Operation_AddMVVMViewModel(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_AddMVVMViewModel(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
 	if (!WBP)
 	{
@@ -144,3 +135,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_AddMVVMViewModel(const FStri
 
 	return MakeSuccessResult(ResultObj, FString::Printf(TEXT("Added MVVM ViewModel '%s' (%s)"), *ViewModelName, *VMClass->GetName()));
 }
+

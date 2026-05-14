@@ -38,65 +38,6 @@ protected:
 	static bool bDelegateRegistered;
 
 	// ========================================================================
-	// Operation member-function declarations.
-	//
-	// These stay on the base class so every decomposed tool's Execute() can
-	// invoke a single consistent signature for its underlying operation. Each
-	// body is defined in the corresponding decomposed tool's cpp (e.g.
-	// Operation_AddComponent lives in ClaireonBlueprintGraphTool_AddComponent.cpp
-	// as an out-of-line definition of ClaireonBlueprintGraphEditToolBase::
-	// Operation_AddComponent). Cross-TU linkage is normal C++: member functions
-	// can be defined in any translation unit that has the class declaration.
-	// ========================================================================
-
-	FToolResult Operation_Open(const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_Create(const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_ListGraphs(const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_AddNode(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_RemoveNode(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_RemoveNodeStateless(const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_ReconstructNode(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_ReconstructNodeStateless(const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_ConnectPins(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_DisconnectPin(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_SetPinValue(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_AddVariable(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_SetVariableProperties(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_RemoveVariable(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_AddComponent(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_SetProperty(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_SetGameplayTags(const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_MoveCursor(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_CursorBack(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_SwitchGraph(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_InspectNode(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_SelectNode(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_SelectPin(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_SelectNearestNode(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_GetState(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_ImportNodes(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_Compile(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_Save(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_Format(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_Close(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_AddPin(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_RemovePin(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_SplitPin(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_RecombinePin(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_MoveNode(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_RemoveComponent(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_ReparentComponent(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_RenameComponent(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_SetRootComponent(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_GetComponentDetails(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_AddFunctionOverride(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_AddFunction(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_AddInterface(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_RemoveInterface(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_ApplySpec(const TSharedPtr<FJsonObject>& Params);
-	FToolResult Operation_SuggestNode(const TSharedPtr<FJsonObject>& Params);
-
-	// ========================================================================
 	// Helpers (defined in ClaireonBlueprintGraphEditToolBase.cpp)
 	// ========================================================================
 
@@ -135,11 +76,38 @@ protected:
 
 	FString BuildAvailableGraphsList(const UBlueprint* Blueprint) const;
 
+	/**
+	 * Resolve the target node for an operation that accepts either node_guid or
+	 * node_title in its params. On success OutNode is set and returns true. On
+	 * failure OutError carries a populated error result (caller returns it directly).
+	 *
+	 * Sole responsibility is (Params, Graph) -> (Node, Error). Does not mutate
+	 * session data, does not participate in GUID-correction tracking, and does
+	 * not auto-correct -- callers that need GUID correction keep using the
+	 * session-aware path in ClaireonBPGraphInternal::FindNodeForOperation.
+	 */
+	static bool ResolveTargetNode(
+		const TSharedPtr<FJsonObject>& Params,
+		UEdGraph* Graph,
+		UEdGraphNode*& OutNode,
+		FToolResult& OutError);
+
 	// Tool-specific data storage (keyed by session ID from FClaireonSessionManager).
 	static TMap<FString, FBlueprintEditToolData> ToolData;
 
 public:
 	static FBlueprintEditToolData* FindToolData(const FString& SessionId) { return ToolData.Find(SessionId); }
+
+	/**
+	 * Public forwarder for the protected BuildStateResponse helper. Used by the
+	 * AddInterface/ImplementInterface shared body that lives outside the class
+	 * hierarchy (ClaireonBlueprintGraphInterfaceImpl::ApplyAddInterface). Internal
+	 * callers should keep using the protected member directly.
+	 */
+	FToolResult PublicBuildStateResponse(const FString& SessionId, FBlueprintEditToolData* Data)
+	{
+		return BuildStateResponse(SessionId, Data);
+	}
 };
 
 // Macro used by the decomposed tool headers to reduce boilerplate.

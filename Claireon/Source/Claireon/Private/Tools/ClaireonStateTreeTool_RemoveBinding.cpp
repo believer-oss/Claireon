@@ -20,7 +20,7 @@ FString ClaireonStateTreeTool_RemoveBinding::GetName() const
 
 FString ClaireonStateTreeTool_RemoveBinding::GetDescription() const
 {
-	return TEXT("Remove all property bindings to a target property.");
+	return TEXT("Remove all property bindings to a target property in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. After removal, the property reverts to its authored default. Common pitfall: removes ALL bindings to the property, not just the one from a specific source.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_RemoveBinding::GetInputSchema() const

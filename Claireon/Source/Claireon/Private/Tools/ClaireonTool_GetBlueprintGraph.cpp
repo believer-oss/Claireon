@@ -20,6 +20,11 @@ FString ClaireonTool_GetBlueprintGraph::GetName() const
 	return TEXT("claireon.blueprint_get_graph");
 }
 
+TArray<FString> ClaireonTool_GetBlueprintGraph::GetSearchKeywords() const
+{
+	return {TEXT("bp"), TEXT("blueprint"), TEXT("graph"), TEXT("get"), TEXT("read"), TEXT("inspect"), TEXT("t3d"), TEXT("outline")};
+}
+
 FString ClaireonTool_GetBlueprintGraph::GetDescription() const
 {
 	return TEXT("Read Blueprint graph structure at configurable detail levels (exec/full/summary/outline). Supports BFS traversal from anchor nodes and JSON or T3D export formats.");
@@ -254,6 +259,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 
 		TSharedPtr<FJsonObject> GraphObj = MakeShared<FJsonObject>();
 		GraphObj->SetStringField(TEXT("graph_name"), Graph->GetName());
+		GraphObj->SetStringField(TEXT("name"), Graph->GetName());
 
 		// Build nodes array
 		TArray<TSharedPtr<FJsonValue>> NodesArray;
@@ -349,10 +355,20 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 			}
 
 			TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
-			NodeObj->SetStringField(TEXT("node_id"), Node->NodeGuid.ToString());
+			if (!Node->NodeGuid.IsValid())
+			{
+				Node->CreateNewGuid();
+				UE_LOG(LogClaireon, Warning,
+					TEXT("[get_graph] Node '%s' in graph '%s' had invalid GUID; assigned %s."),
+					*Node->GetNodeTitle(ENodeTitleType::ListView).ToString(),
+					*Graph->GetName(),
+					*Node->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+			}
+			NodeObj->SetStringField(TEXT("node_id"), Node->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
 			const FString ClassName = Node->GetClass()->GetName();
 			const FString AliasName = ClaireonBlueprintHelpers::GetNodeTypeAliasForClass(Node->GetClass());
 			NodeObj->SetStringField(TEXT("node_class"), ClassName);
+			NodeObj->SetStringField(TEXT("class"), ClassName);
 			if (!AliasName.IsEmpty())
 			{
 				NodeObj->SetStringField(TEXT("node_type_alias"), AliasName);
@@ -363,7 +379,9 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 				NodeObj->SetStringField(TEXT("node_type_alias"), TEXT("Generic"));
 				NodeObj->SetStringField(TEXT("generic_class_name"), ClassName);
 			}
-			NodeObj->SetStringField(TEXT("node_title"), GetNodeTitle(Node));
+			const FString NodeTitleStr = GetNodeTitle(Node);
+			NodeObj->SetStringField(TEXT("node_title"), NodeTitleStr);
+			NodeObj->SetStringField(TEXT("title"), NodeTitleStr);
 
 			// Full detail: emit node_subtitle when the node's FullTitle has a second line
 			// (e.g. "Target is Kismet System Library" on K2Node_CallFunction nodes).

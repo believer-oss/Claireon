@@ -15,7 +15,7 @@ FString ClaireonWidgetBPTool_ApplySpec::GetName() const
 
 FString ClaireonWidgetBPTool_ApplySpec::GetDescription() const
 {
-    return TEXT("Apply a declarative JSON specification to create/modify the Widget Blueprint atomically.");
+    return TEXT("Apply a declarative JSON specification to create/modify the Widget Blueprint atomically. Stateless / non-session: opens its own internal editing session keyed by asset_path. Transactional. The spec runs as one rollback unit; partial failures revert all spec operations together.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_ApplySpec::GetInputSchema() const
@@ -39,15 +39,6 @@ FToolResult ClaireonWidgetBPTool_ApplySpec::Execute(const TSharedPtr<FJsonObject
             Params = *NestedObj;
         }
     }
-    return Operation_ApplySpec(Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_ApplySpec(const TSharedPtr<FJsonObject>& Params)
-{
 	// Extract asset_path -- required
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
@@ -69,3 +60,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_ApplySpec(const TSharedPtr<F
 	FClaireonSpecApplicator_WidgetBP Applicator;
 	return Applicator.ApplySpec(*SpecPtr, AssetPath, SessionId);
 }
+

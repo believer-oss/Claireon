@@ -102,9 +102,14 @@ FString ClaireonBlueprintGraphTool_ConnectPins::GetName() const
     return TEXT("claireon.blueprint_graph_connect_pins");
 }
 
+TArray<FString> ClaireonBlueprintGraphTool_ConnectPins::GetSearchKeywords() const
+{
+    return {TEXT("bp"), TEXT("pin"), TEXT("connect"), TEXT("wire"), TEXT("link"), TEXT("graph"), TEXT("node")};
+}
+
 FString ClaireonBlueprintGraphTool_ConnectPins::GetDescription() const
 {
-    return TEXT("Connect two pins. Accepts node GUIDs or titles plus pin names.");
+    return TEXT("Connects two pins on the current session's graph. Accepts node GUIDs or titles plus pin names; pin names are fuzzy-resolved (e.g. 'exec' matches 'execute', 'then' matches the canonical exec output). Most-common pitfall: forgetting that auto_connect_from_cursor on claireon.blueprint_graph_add_node typically removes the need for a follow-up connect_pins call.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ConnectPins::GetInputSchema() const
@@ -132,10 +137,13 @@ FToolResult ClaireonBlueprintGraphTool_ConnectPins::Execute(const TSharedPtr<FJs
     {
         return Error;
     }
-    return CheckMutationAffectedNodes(TEXT("connect_pins"), Data, Operation_ConnectPins(SessionId, Data, Params));
+    return CheckMutationAffectedNodes(TEXT("connect_pins"), Data, ConnectPins_Impl(SessionId, Data, Params));
 }
 
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_ConnectPins(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+FToolResult ClaireonBlueprintGraphTool_ConnectPins::ConnectPins_Impl(
+    const FString& SessionId,
+    FBlueprintEditToolData* Data,
+    const TSharedPtr<FJsonObject>& Params)
 {
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
@@ -350,6 +358,43 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_ConnectPins(const FStr
 	FToolResult ConnectResult = BuildStateResponse(SessionId, Data);
 	ConnectResult.Warnings.Append(ResolutionWarnings);
 	return ConnectResult;
+}
+
+// ----------------------------------------------------------------------------
+// P1: hot-path metadata enrichment
+// ----------------------------------------------------------------------------
+
+FString ClaireonBlueprintGraphTool_ConnectPins::GetFullDescription() const
+{
+    return TEXT(
+        "Connects two pins on the current session's graph. Accepts node GUIDs "
+        "(stable across saves) or human-readable node titles plus pin names. "
+        "Pin names are fuzzy-resolved: 'exec' matches the canonical exec input, "
+        "'then' matches the canonical exec output, and partial substring "
+        "matches resolve as long as they are unambiguous. In the per-node "
+        "incremental authoring cycle, prefer auto_connect_from_cursor=true "
+        "on claireon.blueprint_graph_add_node to wire as you go; an explicit "
+        "connect_pins call is mainly needed when joining two pre-existing "
+        "nodes or wiring data pins that the cursor cannot route automatically.");
+}
+
+FString ClaireonBlueprintGraphTool_ConnectPins::GetExampleUsage() const
+{
+    return TEXT(
+        "claireon.blueprint_graph_connect_pins session_id=\"...\" "
+        "from_node=\"PrintString_0\" from_pin=\"then\" "
+        "to_node=\"DelayUntilNextTick_1\" to_pin=\"exec\"");
+}
+
+TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ConnectPins::GetParameterTooltips() const
+{
+    TSharedPtr<FJsonObject> T = MakeShared<FJsonObject>();
+    T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by claireon.blueprint_graph_open or _create."));
+    T->SetStringField(TEXT("from_node"), TEXT("Source node identifier: GUID (stable) or human-readable title."));
+    T->SetStringField(TEXT("from_pin"), TEXT("Source pin name. Fuzzy-resolved ('exec', 'then', partial substrings)."));
+    T->SetStringField(TEXT("to_node"), TEXT("Target node identifier: GUID or title."));
+    T->SetStringField(TEXT("to_pin"), TEXT("Target pin name. Fuzzy-resolved."));
+    return T;
 }
 
 #undef LOCTEXT_NAMESPACE

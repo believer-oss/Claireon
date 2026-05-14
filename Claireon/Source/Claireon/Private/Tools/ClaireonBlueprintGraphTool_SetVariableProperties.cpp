@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_SetVariableProperties::GetName() const
 
 FString ClaireonBlueprintGraphTool_SetVariableProperties::GetDescription() const
 {
-    return TEXT("Set properties on an existing Blueprint variable (flags, category, tooltip, replication, metadata). When switching to replication='RepNotify', auto-creates the OnRep handler function graph if it doesn't already exist.");
+    return TEXT("Set properties on an existing Blueprint variable (flags, category, tooltip, replication, metadata) in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: switching replication to RepNotify auto-creates the OnRep handler function graph if absent.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetVariableProperties::GetInputSchema() const
@@ -155,11 +155,6 @@ FToolResult ClaireonBlueprintGraphTool_SetVariableProperties::Execute(const TSha
     {
         return Error;
     }
-    return Operation_SetVariableProperties(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_SetVariableProperties(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 
 	if (!Blueprint)

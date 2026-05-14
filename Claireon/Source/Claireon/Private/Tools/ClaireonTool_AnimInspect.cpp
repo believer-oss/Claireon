@@ -21,10 +21,7 @@ FString ClaireonTool_AnimInspect::GetName() const
 
 FString ClaireonTool_AnimInspect::GetDescription() const
 {
-	return TEXT("Read the structure of an animation asset (AnimSequence, AnimMontage, or AnimComposite). "
-				"Auto-detects asset type. Displays notifies, curves, sync markers, and montage-specific data "
-				"(sections, slots, blend settings). Use detail_level='summary' for a compact overview or "
-				"'full' for complete property details.");
+	return TEXT("Read the structure of an animation asset (AnimSequence, AnimMontage, or AnimComposite) by path. Stateless / read-only / non-session: never mutates and requires no open session. Auto-detects asset type. Returns notifies, curves, sync markers, and montage-specific data. Use detail_level='summary' or 'full'.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AnimInspect::GetInputSchema() const

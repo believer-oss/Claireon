@@ -5,4 +5,14 @@
 
 #include "Tools/ClaireonWidgetBPEditToolBase.h"
 
-DECLARE_WIDGETBP_TOOL(ClaireonWidgetBPTool_Open);
+class CLAIREON_API ClaireonWidgetBPTool_Open : public ClaireonWidgetBPEditToolBase
+{
+public:
+	FString GetName() const override;
+	FString GetDescription() const override;
+	TSharedPtr<FJsonObject> GetInputSchema() const override;
+	FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;
+
+	// P3: synonym/abbreviation keywords for tools_search ranking
+	virtual TArray<FString> GetSearchKeywords() const override;
+};

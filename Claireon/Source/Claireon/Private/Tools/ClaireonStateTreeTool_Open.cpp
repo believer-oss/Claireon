@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonStateTreeTool_Open.h"
+#include "Tools/ClaireonStateTreeEditInternal.h"
 #include "Tools/ClaireonStateTreeHelpers.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "ClaireonPathResolver.h"
@@ -18,9 +19,14 @@ FString ClaireonStateTreeTool_Open::GetName() const
 	return TEXT("claireon.statetree_open");
 }
 
+TArray<FString> ClaireonStateTreeTool_Open::GetSearchKeywords() const
+{
+	return {TEXT("st"), TEXT("state"), TEXT("tree"), TEXT("statetree"), TEXT("hierarchical"), TEXT("open"), TEXT("session")};
+}
+
 FString ClaireonStateTreeTool_Open::GetDescription() const
 {
-	return TEXT("Open a State Tree asset for editing. Returns a session_id for subsequent operations.");
+	return TEXT("Open a State Tree asset for editing and acquire an asset lock. Returns a session_id used as the handle for all subsequent claireon.statetree_* operations. Transactional. The session must be closed via claireon.statetree_close to release the lock; only one session per asset at a time.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_Open::GetInputSchema() const
@@ -103,7 +109,8 @@ FToolResult ClaireonStateTreeTool_Open::Execute(const TSharedPtr<FJsonObject>& A
 	OpenData->SetStringField(TEXT("session_id"), SessionId);
 	OpenData->SetStringField(TEXT("asset_path"), AssetPath);
 	OpenData->SetStringField(TEXT("status"), TEXT("Opened session"));
-	OpenData->SetStringField(TEXT("structure"), StructureText);
+	ClaireonStateTreeEditInternal::ApplyStructuredSpill(
+		*OpenData, TEXT("structure"), TEXT("structure_full"), StructureText);
 
 	return MakeSuccessResult(OpenData, FString::Printf(TEXT("Opened session for %s"), *FPaths::GetBaseFilename(AssetPath)));
 }

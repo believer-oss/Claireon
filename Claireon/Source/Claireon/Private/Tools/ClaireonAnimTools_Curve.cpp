@@ -19,7 +19,7 @@ FString ClaireonAnimTool_AddCurve::GetName() const { return TEXT("claireon.anim_
 
 FString ClaireonAnimTool_AddCurve::GetDescription() const
 {
-	return TEXT("Add a new float curve to the animation.");
+	return TEXT("Add a new float curve to the animation in the open editing session. Requires open session_id from claireon.anim_open. Transactional. The curve_name must be unique within the asset; collisions error and the transaction rolls back. Use claireon.anim_add_curve_key after to populate values.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_AddCurve::GetInputSchema() const
@@ -61,7 +61,7 @@ FString ClaireonAnimTool_RemoveCurve::GetName() const { return TEXT("claireon.an
 
 FString ClaireonAnimTool_RemoveCurve::GetDescription() const
 {
-	return TEXT("Remove a float curve from the animation.");
+	return TEXT("Remove a float curve from the animation in the open editing session. Requires open session_id from claireon.anim_open. Transactional. All keys on the curve are deleted with it. Common pitfall: curve_name is case-sensitive and must match the asset's stored curve identifier.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_RemoveCurve::GetInputSchema() const
@@ -103,7 +103,7 @@ FString ClaireonAnimTool_AddCurveKey::GetName() const { return TEXT("claireon.an
 
 FString ClaireonAnimTool_AddCurveKey::GetDescription() const
 {
-	return TEXT("Add a key to a float curve at a specific time or frame.");
+	return TEXT("Add a key to a float curve at a specific time or frame in the open animation editing session. Requires open session_id from claireon.anim_open. Transactional. Provide either time (seconds) or frame; frame is converted using the asset frame rate. Optional interp_mode/tangent_mode default to cubic/auto.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_AddCurveKey::GetInputSchema() const
@@ -217,7 +217,7 @@ FString ClaireonAnimTool_RemoveCurveKey::GetName() const { return TEXT("claireon
 
 FString ClaireonAnimTool_RemoveCurveKey::GetDescription() const
 {
-	return TEXT("Remove a key from a float curve at a specific time or frame.");
+	return TEXT("Remove a key from a float curve at a specific time or frame in the open animation editing session. Requires open session_id from claireon.anim_open. Transactional. Provide either time (seconds) or frame; frame is converted using the asset frame rate. Errors if no key exists at the requested time.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_RemoveCurveKey::GetInputSchema() const
@@ -279,7 +279,7 @@ FString ClaireonAnimTool_SetCurveKeyProperty::GetName() const { return TEXT("cla
 
 FString ClaireonAnimTool_SetCurveKeyProperty::GetDescription() const
 {
-	return TEXT("Set a property on an existing curve key (e.g. interp_mode, tangent values).");
+	return TEXT("Set a property on an existing curve key in the open animation editing session. Requires open session_id from claireon.anim_open. Transactional. Supports interp_mode (linear/cubic/constant), tangent_mode (auto/user/break), and arrive_tangent / leave_tangent values. Provide either time or frame to locate the key.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_SetCurveKeyProperty::GetInputSchema() const

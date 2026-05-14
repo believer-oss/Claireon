@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_AddFunctionOverride::GetName() const
 
 FString ClaireonBlueprintGraphTool_AddFunctionOverride::GetDescription() const
 {
-    return TEXT("Create a function-override graph for a BlueprintNativeEvent or BlueprintImplementableEvent.");
+    return TEXT("Create a function-override graph for a BlueprintNativeEvent or BlueprintImplementableEvent in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. The override target must be declared on the parent class or a UFUNCTION-marked interface.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddFunctionOverride::GetInputSchema() const
@@ -128,11 +128,13 @@ FToolResult ClaireonBlueprintGraphTool_AddFunctionOverride::Execute(const TShare
     {
         return Error;
     }
-    return CheckMutationAffectedNodes(TEXT("add_function_override"), Data, Operation_AddFunctionOverride(SessionId, Data, Params));
+    return CheckMutationAffectedNodes(TEXT("add_function_override"), Data, AddFunctionOverride_Impl(SessionId, Data, Params));
 }
 
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_AddFunctionOverride(
-	const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+FToolResult ClaireonBlueprintGraphTool_AddFunctionOverride::AddFunctionOverride_Impl(
+    const FString& SessionId,
+    FBlueprintEditToolData* Data,
+    const TSharedPtr<FJsonObject>& Params)
 {
 	// 1. Extract function_name (required)
 	FString FunctionName;

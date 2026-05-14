@@ -20,7 +20,7 @@ FString ClaireonStateTreeTool_RemoveConsideration::GetName() const
 
 FString ClaireonStateTreeTool_RemoveConsideration::GetDescription() const
 {
-	return TEXT("Remove a consideration node from a state.");
+	return TEXT("Remove a consideration node from a state in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Bindings targeting the removed consideration's properties are dropped along with it. Use claireon.statetree_inspect to verify state's remaining considerations after removal.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_RemoveConsideration::GetInputSchema() const

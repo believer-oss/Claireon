@@ -24,7 +24,7 @@ FString ClaireonWidgetBPTool_ImportWidgets::GetName() const
 
 FString ClaireonWidgetBPTool_ImportWidgets::GetDescription() const
 {
-    return TEXT("Import widgets from the UE clipboard/text format (produced by export_widgets).");
+    return TEXT("Import widgets from a UE clipboard/text payload into the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Transactional. The text format is the same as claireon.widgetbp_export_widgets emits; widgets paste under the requested parent with new names.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_ImportWidgets::GetInputSchema() const
@@ -46,15 +46,6 @@ FToolResult ClaireonWidgetBPTool_ImportWidgets::Execute(const TSharedPtr<FJsonOb
     {
         return Error;
     }
-    return Operation_ImportWidgets(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_ImportWidgets(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	FString WidgetText;
 	if (!Params->TryGetStringField(TEXT("widget_text"), WidgetText))
 	{
@@ -126,3 +117,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_ImportWidgets(const FString&
 
 	return MakeErrorResult(ResultString);
 }
+

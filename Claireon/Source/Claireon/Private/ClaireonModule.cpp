@@ -125,6 +125,8 @@
 // State Tree MCP tools
 #include "Tools/ClaireonTool_StateTreeInspect.h"
 #include "Tools/ClaireonTool_StateTreeListNodeTypes.h"
+#include "Tools/ClaireonTool_StateTreeGetSchema.h"
+#include "Tools/ClaireonTool_StateTreeListBindingSources.h"
 #include "Tools/ClaireonTool_StateTreeRuntimeInspect.h"
 #include "Tools/ClaireonTool_StateTreeRuntimeSendEvent.h"
 #include "Tools/ClaireonStateTreeTool_Open.h"
@@ -156,6 +158,9 @@
 #include "Tools/ClaireonStateTreeTool_AddPropertyFunction.h"
 #include "Tools/ClaireonStateTreeTool_RemoveBinding.h"
 #include "Tools/ClaireonStateTreeTool_SetNodeProperty.h"
+#include "Tools/ClaireonStateTreeTool_SetStateProperty.h"
+#include "Tools/ClaireonStateTreeTool_SetTransitionProperty.h"
+#include "Tools/ClaireonStateTreeTool_SetSchemaProperty.h"
 #include "Tools/ClaireonStateTreeTool_Compile.h"
 #include "Tools/ClaireonStateTreeTool_Save.h"
 #include "Tools/ClaireonStateTreeTool_ApplySpec.h"
@@ -188,6 +193,7 @@
 // Meta tools
 #include "Tools/ClaireonTool_SearchTools.h"
 #include "Tools/ClaireonTool_FeedbackSubmit.h"
+#include "Tools/ClaireonTool_ApplySpecHelp.h"
 
 // Widget Blueprint MCP tools
 #include "Tools/ClaireonTool_GetWidgetBPTree.h"
@@ -792,6 +798,8 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	// State Tree MCP tools
 	Tools.Add(MakeShared<ClaireonTool_StateTreeInspect>());
 	Tools.Add(MakeShared<ClaireonTool_StateTreeListNodeTypes>());
+	Tools.Add(MakeShared<ClaireonTool_StateTreeGetSchema>());
+	Tools.Add(MakeShared<ClaireonTool_StateTreeListBindingSources>());
 	Tools.Add(MakeShared<ClaireonTool_StateTreeRuntimeInspect>());
 	Tools.Add(MakeShared<ClaireonTool_StateTreeRuntimeSendEvent>());
 	// State Tree edit (decomposed per-operation tools)
@@ -824,6 +832,9 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonStateTreeTool_AddPropertyFunction>());
 	Tools.Add(MakeShared<ClaireonStateTreeTool_RemoveBinding>());
 	Tools.Add(MakeShared<ClaireonStateTreeTool_SetNodeProperty>());
+	Tools.Add(MakeShared<ClaireonStateTreeTool_SetStateProperty>());
+	Tools.Add(MakeShared<ClaireonStateTreeTool_SetTransitionProperty>());
+	Tools.Add(MakeShared<ClaireonStateTreeTool_SetSchemaProperty>());
 	Tools.Add(MakeShared<ClaireonStateTreeTool_Compile>());
 	Tools.Add(MakeShared<ClaireonStateTreeTool_Save>());
 	Tools.Add(MakeShared<ClaireonStateTreeTool_ApplySpec>());
@@ -1137,6 +1148,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	// Meta tools
 	Tools.Add(MakeShared<ClaireonTool_SearchTools>());
 	Tools.Add(MakeShared<ClaireonTool_FeedbackSubmit>());
+	Tools.Add(MakeShared<ClaireonTool_ApplySpecHelp>());
 
 	// Transaction management (decomposed -- one tool per operation)
 	Tools.Add(MakeShared<ClaireonTool_TransactionUndo>());

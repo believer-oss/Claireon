@@ -18,7 +18,7 @@ FString ClaireonWidgetBPTool_Focus::GetName() const
 
 FString ClaireonWidgetBPTool_Focus::GetDescription() const
 {
-    return TEXT("Set the focused widget within an open Widget Blueprint editing session.");
+    return TEXT("Set the focused widget within the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Read-only with respect to widget contents (focus is session state). The focused widget is the implicit target for some downstream tools that accept an empty widget_name.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_Focus::GetInputSchema() const
@@ -39,15 +39,6 @@ FToolResult ClaireonWidgetBPTool_Focus::Execute(const TSharedPtr<FJsonObject>& A
     {
         return Error;
     }
-    return Operation_Focus(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_Focus(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	FString WidgetName;
 	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
 	{
@@ -70,3 +61,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_Focus(const FString& Session
 
 	return BuildStateResponse(SessionId, Data);
 }
+

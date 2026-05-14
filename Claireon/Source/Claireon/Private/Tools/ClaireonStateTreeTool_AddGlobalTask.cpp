@@ -19,7 +19,7 @@ FString ClaireonStateTreeTool_AddGlobalTask::GetName() const
 
 FString ClaireonStateTreeTool_AddGlobalTask::GetDescription() const
 {
-	return TEXT("Add a global task to the State Tree.");
+	return TEXT("Add a global task to the State Tree in the open editing session. Requires open session_id from claireon.statetree_open. Transactional. Global tasks run for the lifetime of the State Tree instance regardless of selected state. The node_type must be a registered FStateTreeTaskBase subclass.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_AddGlobalTask::GetInputSchema() const
@@ -67,8 +67,9 @@ FToolResult ClaireonStateTreeTool_AddGlobalTask::Execute(const TSharedPtr<FJsonO
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Add Global Task")));
 	Data->StateTree->Modify();
+	const FString NewIdStr = NewNode.ID.ToString(EGuidFormats::DigitsWithHyphens);
 	EditorData->GlobalTasks.Add(MoveTemp(NewNode));
 
 	Data->LastOperationStatus = FString::Printf(TEXT("add_global_task -> Added global task %s"), *NodeType);
-	return BuildStateResponse(SessionId, Data);
+	return BuildStateResponse(SessionId, Data, FStringView(TEXT("global_task_id")), FStringView(NewIdStr));
 }

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonStateTreeEditToolBase.h"
+#include "Tools/ClaireonStateTreeEditInternal.h"
 #include "Tools/ClaireonStateTreeHelpers.h"
 #include "ClaireonSessionManager.h"
 #include "StateTree.h"
@@ -85,7 +86,11 @@ bool ClaireonStateTreeEditToolBase::RequireSession(
 // State response
 // ============================================================================
 
-FToolResult ClaireonStateTreeEditToolBase::BuildStateResponse(const FString& SessionId, FStateTreeEditToolData* Data)
+FToolResult ClaireonStateTreeEditToolBase::BuildStateResponse(
+	const FString& SessionId,
+	FStateTreeEditToolData* Data,
+	FStringView ExtraField,
+	FStringView ExtraValue)
 {
 	if (!Data || !Data->IsValid())
 	{
@@ -100,6 +105,10 @@ FToolResult ClaireonStateTreeEditToolBase::BuildStateResponse(const FString& Ses
 		TSharedPtr<FJsonObject> SuppressData = MakeShared<FJsonObject>();
 		SuppressData->SetStringField(TEXT("session_id"), SessionId);
 		SuppressData->SetStringField(TEXT("status"), StatusMsg);
+		if (!ExtraField.IsEmpty() && !ExtraValue.IsEmpty())
+		{
+			SuppressData->SetStringField(FString(ExtraField), FString(ExtraValue));
+		}
 		return MakeSuccessResult(SuppressData, StatusMsg);
 	}
 
@@ -144,7 +153,13 @@ FToolResult ClaireonStateTreeEditToolBase::BuildStateResponse(const FString& Ses
 	ResponseData->SetStringField(TEXT("asset_path"), Data->StateTree->GetPathName());
 	ResponseData->SetStringField(TEXT("session_id"), SessionId);
 	ResponseData->SetStringField(TEXT("last_operation"), Data->LastOperationStatus);
-	ResponseData->SetStringField(TEXT("state_view"), Output);
+	ClaireonStateTreeEditInternal::ApplyStructuredSpill(
+		*ResponseData, TEXT("state_view"), TEXT("state_view_full"), Output);
+
+	if (!ExtraField.IsEmpty() && !ExtraValue.IsEmpty())
+	{
+		ResponseData->SetStringField(FString(ExtraField), FString(ExtraValue));
+	}
 
 	const FString Summary = FString::Printf(TEXT("Session %s: %s"),
 		*SessionId.Left(8), *Data->LastOperationStatus);

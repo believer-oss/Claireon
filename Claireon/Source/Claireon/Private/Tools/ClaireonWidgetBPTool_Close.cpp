@@ -17,7 +17,7 @@ FString ClaireonWidgetBPTool_Close::GetName() const
 
 FString ClaireonWidgetBPTool_Close::GetDescription() const
 {
-    return TEXT("Close an open Widget Blueprint editing session, releasing the lock.");
+    return TEXT("Close an open Widget Blueprint editing session and release its asset lock. Requires open session_id from claireon.widgetbp_open. Transactional with respect to any final save. Run claireon.widgetbp_save first if you want unsaved changes flushed before close; otherwise pending changes are discarded.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_Close::GetInputSchema() const
@@ -37,15 +37,6 @@ FToolResult ClaireonWidgetBPTool_Close::Execute(const TSharedPtr<FJsonObject>& A
     {
         return Error;
     }
-    return Operation_Close(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_Close(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	bool bWasModified = Data->bModified;
 
 	// Remove tool data before closing session (delegate will also try, but be explicit)
@@ -71,5 +62,6 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_Close(const FString& Session
 	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ResultString);
 	FJsonSerializer::Serialize(ResultJson.ToSharedRef(), Writer);
 
-	return MakeErrorResult(ResultString);
+	return MakeSuccessResult(ResultJson, ResultString);
 }
+

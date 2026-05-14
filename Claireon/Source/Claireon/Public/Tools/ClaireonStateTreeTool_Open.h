@@ -5,4 +5,14 @@
 
 #include "Tools/ClaireonStateTreeEditToolBase.h"
 
-DECLARE_STATETREE_TOOL(ClaireonStateTreeTool_Open);
+class CLAIREON_API ClaireonStateTreeTool_Open : public ClaireonStateTreeEditToolBase
+{
+public:
+	FString GetName() const override;
+	FString GetDescription() const override;
+	TSharedPtr<FJsonObject> GetInputSchema() const override;
+	FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;
+
+	// P3: synonym/abbreviation keywords for tools_search ranking
+	virtual TArray<FString> GetSearchKeywords() const override;
+};

@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_AddComponent::GetName() const
 
 FString ClaireonBlueprintGraphTool_AddComponent::GetDescription() const
 {
-    return TEXT("Add a component to the Blueprint's Simple Construction Script (Actor blueprints only).");
+    return TEXT("Add a component to the Blueprint's Simple Construction Script in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: only Actor-derived Blueprints have an SCS; non-Actor BPs error.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddComponent::GetInputSchema() const
@@ -129,11 +129,6 @@ FToolResult ClaireonBlueprintGraphTool_AddComponent::Execute(const TSharedPtr<FJ
     {
         return Error;
     }
-    return Operation_AddComponent(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_AddComponent(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 
 	if (!Blueprint)

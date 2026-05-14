@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_ImportNodes::GetName() const
 
 FString ClaireonBlueprintGraphTool_ImportNodes::GetDescription() const
 {
-    return TEXT("Import nodes from T3D text.");
+    return TEXT("Import nodes from a T3D text payload into the open Blueprint editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. The T3D format is the same as the engine's clipboard copy/paste format; nodes paste at the cursor position with new GUIDs.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ImportNodes::GetInputSchema() const
@@ -127,11 +127,6 @@ FToolResult ClaireonBlueprintGraphTool_ImportNodes::Execute(const TSharedPtr<FJs
     {
         return Error;
     }
-    return Operation_ImportNodes(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_ImportNodes(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
 

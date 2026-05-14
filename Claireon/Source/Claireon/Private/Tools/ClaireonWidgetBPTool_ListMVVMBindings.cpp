@@ -16,7 +16,7 @@ FString ClaireonWidgetBPTool_ListMVVMBindings::GetName() const
 
 FString ClaireonWidgetBPTool_ListMVVMBindings::GetDescription() const
 {
-    return TEXT("List MVVM bindings (source/destination paths, mode, conversion function) on the Widget Blueprint.");
+    return TEXT("List MVVM bindings on the Widget Blueprint in the open editing session: source/destination paths, mode, conversion function, and binding id. Requires open session_id from claireon.widgetbp_open. Read-only. Returns one entry per binding; the id is the handle for claireon.widgetbp_edit_mvvm_binding and remove.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_ListMVVMBindings::GetInputSchema() const
@@ -36,15 +36,6 @@ FToolResult ClaireonWidgetBPTool_ListMVVMBindings::Execute(const TSharedPtr<FJso
     {
         return Error;
     }
-    return Operation_ListMVVMBindings(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_ListMVVMBindings(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
 	if (!WBP)
 	{
@@ -60,3 +51,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_ListMVVMBindings(const FStri
 
 	return MakeSuccessResult(Result, FString::Printf(TEXT("Found %d MVVM binding(s)"), Count));
 }
+

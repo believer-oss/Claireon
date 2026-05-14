@@ -18,9 +18,14 @@ FString ClaireonWidgetBPTool_Open::GetName() const
     return TEXT("claireon.widgetbp_open");
 }
 
+TArray<FString> ClaireonWidgetBPTool_Open::GetSearchKeywords() const
+{
+    return {TEXT("widgetbp"), TEXT("widget"), TEXT("umg"), TEXT("ui"), TEXT("hud"), TEXT("open"), TEXT("session")};
+}
+
 FString ClaireonWidgetBPTool_Open::GetDescription() const
 {
-    return TEXT("Open an existing Widget Blueprint for editing. Creates or reuses a session keyed by the MCP client, and returns the session id plus initial widget state.");
+    return TEXT("Open an existing Widget Blueprint for editing and acquire an asset lock. Creates or reuses a session keyed by the MCP client and returns the session_id plus initial widget tree. Transactional. The session must be closed via claireon.widgetbp_close to release the lock.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_Open::GetInputSchema() const
@@ -42,15 +47,6 @@ FToolResult ClaireonWidgetBPTool_Open::Execute(const TSharedPtr<FJsonObject>& Ar
             Params = *NestedObj;
         }
     }
-    return Operation_Open(Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_Open(const TSharedPtr<FJsonObject>& Params)
-{
 	// Extract asset_path (required)
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
@@ -125,3 +121,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_Open(const TSharedPtr<FJsonO
 
 	return BuildStateResponse(SessionId, LiveData);
 }
+

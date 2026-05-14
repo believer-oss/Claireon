@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_RenameComponent::GetName() const
 
 FString ClaireonBlueprintGraphTool_RenameComponent::GetDescription() const
 {
-    return TEXT("Rename a component variable in the Blueprint SCS.");
+    return TEXT("Rename a component variable in the Blueprint's Simple Construction Script in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. The new name must be unique within the SCS; references in graph nodes are auto-fixed when possible.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_RenameComponent::GetInputSchema() const
@@ -128,11 +128,6 @@ FToolResult ClaireonBlueprintGraphTool_RenameComponent::Execute(const TSharedPtr
     {
         return Error;
     }
-    return Operation_RenameComponent(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_RenameComponent(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	if (!Blueprint)
 	{

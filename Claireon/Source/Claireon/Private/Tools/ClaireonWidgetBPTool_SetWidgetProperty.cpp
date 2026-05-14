@@ -20,7 +20,7 @@ FString ClaireonWidgetBPTool_SetWidgetProperty::GetName() const
 
 FString ClaireonWidgetBPTool_SetWidgetProperty::GetDescription() const
 {
-    return TEXT("Set a property on a widget by name (top-level widget property, not slot property).");
+    return TEXT("Set a property on a widget by name in the open Widget Blueprint editing session (top-level widget property, not slot property). Requires open session_id from claireon.widgetbp_open. Transactional. Common pitfall: slot properties (Anchors, Offsets, Size) live on the slot, not the widget; use claireon.widgetbp_set_slot_property for those.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_SetWidgetProperty::GetInputSchema() const
@@ -43,15 +43,6 @@ FToolResult ClaireonWidgetBPTool_SetWidgetProperty::Execute(const TSharedPtr<FJs
     {
         return Error;
     }
-    return Operation_SetWidgetProperty(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_SetWidgetProperty(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	FString WidgetName;
 	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
 	{
@@ -96,3 +87,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_SetWidgetProperty(const FStr
 
 	return BuildStateResponse(SessionId, Data);
 }
+

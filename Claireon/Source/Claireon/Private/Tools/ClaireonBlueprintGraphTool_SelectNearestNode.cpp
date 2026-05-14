@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_SelectNearestNode::GetName() const
 
 FString ClaireonBlueprintGraphTool_SelectNearestNode::GetDescription() const
 {
-    return TEXT("Move the cursor to the node nearest a graph-space position (object with x, y).");
+    return TEXT("Move the cursor to the node nearest a graph-space position (object with x, y) in the open Blueprint editing session. Requires open session_id from claireon.blueprint_graph_open. Read-only with respect to graph contents (cursor is session state). Useful when chaining new nodes off an existing layout cluster.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SelectNearestNode::GetInputSchema() const
@@ -127,11 +127,6 @@ FToolResult ClaireonBlueprintGraphTool_SelectNearestNode::Execute(const TSharedP
     {
         return Error;
     }
-    return Operation_SelectNearestNode(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_SelectNearestNode(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UEdGraph* Graph = Data->Graph.Get();
 
 	if (!Graph)

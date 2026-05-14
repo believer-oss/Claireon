@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_AddPin::GetName() const
 
 FString ClaireonBlueprintGraphTool_AddPin::GetDescription() const
 {
-    return TEXT("Add a dynamic pin to nodes that support it (Sequence, MakeArray, Switch*, DoOnceMultiInput, etc.).");
+    return TEXT("Add a dynamic pin to a node in the open Blueprint editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Only nodes that implement AddPin support this (Sequence, MakeArray, Switch*, DoOnceMultiInput, etc.); non-supporting nodes error.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddPin::GetInputSchema() const
@@ -129,29 +129,24 @@ FToolResult ClaireonBlueprintGraphTool_AddPin::Execute(const TSharedPtr<FJsonObj
     {
         return Error;
     }
-    return CheckMutationAffectedNodes(TEXT("add_pin"), Data, Operation_AddPin(SessionId, Data, Params));
+    return CheckMutationAffectedNodes(TEXT("add_pin"), Data, AddPin_Impl(SessionId, Data, Params));
 }
 
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_AddPin(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+FToolResult ClaireonBlueprintGraphTool_AddPin::AddPin_Impl(
+    const FString& SessionId,
+    FBlueprintEditToolData* Data,
+    const TSharedPtr<FJsonObject>& Params)
 {
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
 	if (!Blueprint || !Graph)
 		return MakeErrorResult(TEXT("Blueprint or Graph is no longer valid"));
 
-	FString NodeGuidStr;
-	if (!Params->TryGetStringField(TEXT("node_guid"), NodeGuidStr))
-		return MakeErrorResult(TEXT("Missing required field: node_guid"));
-
-	FGuid NodeGuid;
-	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
-		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
-
-	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperation(Graph, NodeGuid, Data);
-	if (!Node)
+	UEdGraphNode* Node = nullptr;
+	FToolResult ResolveError;
+	if (!ResolveTargetNode(Params, Graph, Node, ResolveError))
 	{
-		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
-		return MakeErrorResult(FString::Printf(TEXT("Node not found with GUID: %s.\n%s"), *NodeGuidStr, *AvailableNodes));
+		return ResolveError;
 	}
 
 	int32 Count = 1;
@@ -213,7 +208,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_AddPin(const FString& 
 				}
 				else
 				{
-					// Integer switch — ignore pin_value, use auto-numbering
+					// Integer switch -- ignore pin_value, use auto-numbering
 					SwitchNode->AddPinToSwitchNode();
 				}
 			}

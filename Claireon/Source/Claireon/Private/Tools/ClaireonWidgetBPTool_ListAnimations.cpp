@@ -18,7 +18,7 @@ FString ClaireonWidgetBPTool_ListAnimations::GetName() const
 
 FString ClaireonWidgetBPTool_ListAnimations::GetDescription() const
 {
-    return TEXT("List UWidgetAnimation assets on the Widget Blueprint, with start/end times.");
+    return TEXT("List UWidgetAnimation entries on the Widget Blueprint in the open editing session, with start/end times. Requires open session_id from claireon.widgetbp_open. Read-only. Returns animation names and durations; pair with claireon.widgetbp_get_animation_details for per-animation track and binding detail.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_ListAnimations::GetInputSchema() const
@@ -38,15 +38,6 @@ FToolResult ClaireonWidgetBPTool_ListAnimations::Execute(const TSharedPtr<FJsonO
     {
         return Error;
     }
-    return Operation_ListAnimations(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_ListAnimations(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
 	if (!WBP)
 	{
@@ -72,10 +63,7 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_ListAnimations(const FString
 	ResultObj->SetArrayField(TEXT("animations"), AnimArray);
 	ResultObj->SetNumberField(TEXT("count"), AnimArray.Num());
 
-	FString ResultString;
-	TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> Writer =
-		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&ResultString);
-	FJsonSerializer::Serialize(ResultObj.ToSharedRef(), Writer);
-
-	return MakeErrorResult(ResultString);
+	return MakeSuccessResult(ResultObj,
+		FString::Printf(TEXT("Listed %d animation(s) on %s"), AnimArray.Num(), *WBP->GetName()));
 }
+

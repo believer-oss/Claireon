@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_SuggestNode::GetName() const
 
 FString ClaireonBlueprintGraphTool_SuggestNode::GetDescription() const
 {
-    return TEXT("Suggest Blueprint authoring patterns matching an intent string (stateless, read-only pattern lookup).");
+    return TEXT("Suggest Blueprint authoring patterns matching an intent string. Stateless / read-only / non-session: never mutates and requires no open session. Reads BPAuthoringPatterns.json from the Claireon plugin content directory and ranks matches by keyword overlap. Use during planning to discover the right node sequence.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SuggestNode::GetInputSchema() const
@@ -114,22 +114,6 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SuggestNode::GetInputSchema()
     Builder.AddInteger(TEXT("top_k"), TEXT("Number of matches to return (default 5, max 20)."));
     return Builder.Build();
 }
-
-FToolResult ClaireonBlueprintGraphTool_SuggestNode::Execute(const TSharedPtr<FJsonObject>& Arguments)
-{
-    // suggest_node is stateless; it does a read-only pattern lookup.
-    TSharedPtr<FJsonObject> Params = Arguments.IsValid() ? Arguments : MakeShared<FJsonObject>();
-    if (Params->HasField(TEXT("params")))
-    {
-        const TSharedPtr<FJsonObject>* NestedObj = nullptr;
-        if (Params->TryGetObjectField(TEXT("params"), NestedObj) && NestedObj && NestedObj->IsValid())
-        {
-            Params = *NestedObj;
-        }
-    }
-    return Operation_SuggestNode(Params);
-}
-
 
 namespace ClaireonSuggestNode
 {
@@ -302,9 +286,18 @@ namespace ClaireonSuggestNode
 	}
 }
 
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_SuggestNode(const TSharedPtr<FJsonObject>& Params)
+FToolResult ClaireonBlueprintGraphTool_SuggestNode::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
+    // suggest_node is stateless; it does a read-only pattern lookup.
+    TSharedPtr<FJsonObject> Params = Arguments.IsValid() ? Arguments : MakeShared<FJsonObject>();
+    if (Params->HasField(TEXT("params")))
+    {
+        const TSharedPtr<FJsonObject>* NestedObj = nullptr;
+        if (Params->TryGetObjectField(TEXT("params"), NestedObj) && NestedObj && NestedObj->IsValid())
+        {
+            Params = *NestedObj;
+        }
+    }
 	using namespace ClaireonSuggestNode;
 
 	FString Intent;
@@ -394,5 +387,6 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_SuggestNode(const TSha
 
 	return MakeSuccessResult(Data, Summary);
 }
+
 
 #undef LOCTEXT_NAMESPACE

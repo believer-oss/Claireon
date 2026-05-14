@@ -27,7 +27,7 @@ FString ClaireonWidgetBPTool_EditMVVMBinding::GetName() const
 
 FString ClaireonWidgetBPTool_EditMVVMBinding::GetDescription() const
 {
-    return TEXT("Edit an existing MVVM binding by id (mode, enabled, property paths, conversion function).");
+    return TEXT("Edit an existing MVVM binding by id in the open Widget Blueprint editing session: mode, enabled, property paths, conversion function. Requires open session_id from claireon.widgetbp_open. Transactional. Omitted fields are left unchanged. Common pitfall: changing source path requires the viewmodel context to still be present.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_EditMVVMBinding::GetInputSchema() const
@@ -53,15 +53,6 @@ FToolResult ClaireonWidgetBPTool_EditMVVMBinding::Execute(const TSharedPtr<FJson
     {
         return Error;
     }
-    return Operation_EditMVVMBinding(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_EditMVVMBinding(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
 	if (!WBP)
 	{
@@ -132,10 +123,10 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_EditMVVMBinding(const FStrin
 
 		FMVVMBlueprintPropertyPath NewSourcePath;
 		NewSourcePath.SetViewModelId(VMId);
-		FString Error;
-		if (!ClaireonWidgetBPInternal::ResolvePropertyPath(WBP, NewSourcePath, VMClass, ViewModelProperty, Error))
+		FString PathError;
+		if (!ClaireonWidgetBPInternal::ResolvePropertyPath(WBP, NewSourcePath, VMClass, ViewModelProperty, PathError))
 		{
-			return MakeErrorResult(FString::Printf(TEXT("Failed to resolve viewmodel property path '%s': %s"), *ViewModelProperty, *Error));
+			return MakeErrorResult(FString::Printf(TEXT("Failed to resolve viewmodel property path '%s': %s"), *ViewModelProperty, *PathError));
 		}
 		Binding->SourcePath = NewSourcePath;
 	}
@@ -153,10 +144,10 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_EditMVVMBinding(const FStrin
 
 		FMVVMBlueprintPropertyPath NewDestPath;
 		NewDestPath.SetWidgetName(WidgetName);
-		FString Error;
-		if (!ClaireonWidgetBPInternal::ResolvePropertyPath(WBP, NewDestPath, Widget->GetClass(), WidgetProperty, Error))
+		FString PathError;
+		if (!ClaireonWidgetBPInternal::ResolvePropertyPath(WBP, NewDestPath, Widget->GetClass(), WidgetProperty, PathError))
 		{
-			return MakeErrorResult(FString::Printf(TEXT("Failed to resolve widget property path '%s': %s"), *WidgetProperty, *Error));
+			return MakeErrorResult(FString::Printf(TEXT("Failed to resolve widget property path '%s': %s"), *WidgetProperty, *PathError));
 		}
 		Binding->DestinationPath = NewDestPath;
 	}
@@ -197,3 +188,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_EditMVVMBinding(const FStrin
 	TSharedPtr<FJsonObject> ResultObj = ClaireonWidgetHelpers::SerializeMVVMBinding(WBP, *Binding);
 	return MakeSuccessResult(ResultObj, FString::Printf(TEXT("Updated MVVM binding '%s'"), *BindingIdStr));
 }
+

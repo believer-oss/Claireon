@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_RecombinePin::GetName() const
 
 FString ClaireonBlueprintGraphTool_RecombinePin::GetDescription() const
 {
-    return TEXT("Recombine a previously split struct pin.");
+    return TEXT("Recombine a previously split struct pin in the open Blueprint editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: connections to sub-pins are dropped on recombine; cache them and reconnect to the parent pin after if needed.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_RecombinePin::GetInputSchema() const
@@ -129,33 +129,28 @@ FToolResult ClaireonBlueprintGraphTool_RecombinePin::Execute(const TSharedPtr<FJ
     {
         return Error;
     }
-    return CheckMutationAffectedNodes(TEXT("recombine_pin"), Data, Operation_RecombinePin(SessionId, Data, Params));
+    return CheckMutationAffectedNodes(TEXT("recombine_pin"), Data, RecombinePin_Impl(SessionId, Data, Params));
 }
 
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_RecombinePin(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+FToolResult ClaireonBlueprintGraphTool_RecombinePin::RecombinePin_Impl(
+    const FString& SessionId,
+    FBlueprintEditToolData* Data,
+    const TSharedPtr<FJsonObject>& Params)
 {
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
 	if (!Blueprint || !Graph)
 		return MakeErrorResult(TEXT("Blueprint or Graph is no longer valid"));
 
-	FString NodeGuidStr;
-	if (!Params->TryGetStringField(TEXT("node_guid"), NodeGuidStr))
-		return MakeErrorResult(TEXT("Missing required field: node_guid"));
-
 	FString PinName;
 	if (!Params->TryGetStringField(TEXT("pin_name"), PinName))
 		return MakeErrorResult(TEXT("Missing required field: pin_name"));
 
-	FGuid NodeGuid;
-	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
-		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
-
-	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperation(Graph, NodeGuid, Data);
-	if (!Node)
+	UEdGraphNode* Node = nullptr;
+	FToolResult ResolveError;
+	if (!ResolveTargetNode(Params, Graph, Node, ResolveError))
 	{
-		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
-		return MakeErrorResult(FString::Printf(TEXT("Node not found with GUID: %s.\n%s"), *NodeGuidStr, *AvailableNodes));
+		return ResolveError;
 	}
 
 	TArray<FString> ResolutionWarnings;

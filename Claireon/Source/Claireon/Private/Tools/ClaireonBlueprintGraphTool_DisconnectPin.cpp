@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_DisconnectPin::GetName() const
 
 FString ClaireonBlueprintGraphTool_DisconnectPin::GetDescription() const
 {
-    return TEXT("Disconnect a specific pin on a node (or all its connections).");
+    return TEXT("Disconnect a specific pin on a node (or all its connections) in the open Blueprint editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. The pin remains on the node; only the wires are removed.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_DisconnectPin::GetInputSchema() const
@@ -129,10 +129,13 @@ FToolResult ClaireonBlueprintGraphTool_DisconnectPin::Execute(const TSharedPtr<F
     {
         return Error;
     }
-    return CheckMutationAffectedNodes(TEXT("disconnect_pin"), Data, Operation_DisconnectPin(SessionId, Data, Params));
+    return CheckMutationAffectedNodes(TEXT("disconnect_pin"), Data, DisconnectPin_Impl(SessionId, Data, Params));
 }
 
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_DisconnectPin(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+FToolResult ClaireonBlueprintGraphTool_DisconnectPin::DisconnectPin_Impl(
+    const FString& SessionId,
+    FBlueprintEditToolData* Data,
+    const TSharedPtr<FJsonObject>& Params)
 {
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
@@ -142,31 +145,18 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_DisconnectPin(const FS
 		return MakeErrorResult(TEXT("Blueprint or Graph is no longer valid"));
 	}
 
-	// Get node and pin
-	FString NodeGuidStr, PinName;
-	if (!Params->TryGetStringField(TEXT("node_guid"), NodeGuidStr))
-	{
-		return MakeErrorResult(TEXT("Missing required field: node_guid"));
-	}
+	// Get pin (node is resolved via ResolveTargetNode below)
+	FString PinName;
 	if (!Params->TryGetStringField(TEXT("pin_name"), PinName))
 	{
 		return MakeErrorResult(TEXT("Missing required field: pin_name"));
 	}
 
-	// Parse GUID
-	FGuid NodeGuid;
-	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
+	UEdGraphNode* Node = nullptr;
+	FToolResult ResolveError;
+	if (!ResolveTargetNode(Params, Graph, Node, ResolveError))
 	{
-		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
-	}
-
-	// Find node
-	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperation(Graph, NodeGuid, Data);
-	if (!Node)
-	{
-		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
-		return MakeErrorResult(FString::Printf(TEXT("Node not found with GUID: %s in graph '%s'.\n%s"),
-			*NodeGuidStr, *Graph->GetName(), *AvailableNodes));
+		return ResolveError;
 	}
 
 	// Resolve pin using fuzzy matching

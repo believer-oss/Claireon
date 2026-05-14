@@ -37,6 +37,11 @@ namespace
 
 FString ClaireonTool_ProxyTableInspect::GetName() const { return TEXT("claireon.proxytable_inspect"); }
 
+TArray<FString> ClaireonTool_ProxyTableInspect::GetSearchKeywords() const
+{
+	return {TEXT("proxytable"), TEXT("proxy"), TEXT("table"), TEXT("inspect"), TEXT("inherit"), TEXT("entry"), TEXT("lookup")};
+}
+
 FString ClaireonTool_ProxyTableInspect::GetDescription() const
 {
 	return TEXT("Inspect a ProxyTable. Returns local entries (proxy ref + value + output struct), "

@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_MoveNode::GetName() const
 
 FString ClaireonBlueprintGraphTool_MoveNode::GetDescription() const
 {
-    return TEXT("Move a node to a new position in the graph.");
+    return TEXT("Move a node to a new position in the graph in the open Blueprint editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Layout-only: connections, properties, and pin values are unchanged. Use claireon.blueprint_graph_format for whole-graph cleanup.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_MoveNode::GetInputSchema() const
@@ -130,10 +130,13 @@ FToolResult ClaireonBlueprintGraphTool_MoveNode::Execute(const TSharedPtr<FJsonO
     {
         return Error;
     }
-    return CheckMutationAffectedNodes(TEXT("move_node"), Data, Operation_MoveNode(SessionId, Data, Params));
+    return CheckMutationAffectedNodes(TEXT("move_node"), Data, MoveNode_Impl(SessionId, Data, Params));
 }
 
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_MoveNode(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+FToolResult ClaireonBlueprintGraphTool_MoveNode::MoveNode_Impl(
+    const FString& SessionId,
+    FBlueprintEditToolData* Data,
+    const TSharedPtr<FJsonObject>& Params)
 {
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
@@ -141,19 +144,6 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_MoveNode(const FString
 	if (!Blueprint || !Graph)
 	{
 		return MakeErrorResult(TEXT("Blueprint or Graph is no longer valid"));
-	}
-
-	// Get node_guid
-	FString NodeGuidStr;
-	if (!Params->TryGetStringField(TEXT("node_guid"), NodeGuidStr))
-	{
-		return MakeErrorResult(TEXT("Missing required field: node_guid"));
-	}
-
-	FGuid NodeGuid;
-	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
-	{
-		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
 	}
 
 	// Get position
@@ -167,13 +157,11 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_MoveNode(const FString
 	(*PositionObj)->TryGetNumberField(TEXT("x"), X);
 	(*PositionObj)->TryGetNumberField(TEXT("y"), Y);
 
-	// Find the node
-	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperation(Graph, NodeGuid, Data);
-	if (!Node)
+	UEdGraphNode* Node = nullptr;
+	FToolResult ResolveError;
+	if (!ResolveTargetNode(Params, Graph, Node, ResolveError))
 	{
-		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
-		return MakeErrorResult(FString::Printf(TEXT("Node not found with GUID: %s in graph '%s'.\n%s"),
-			*NodeGuidStr, *Graph->GetName(), *AvailableNodes));
+		return ResolveError;
 	}
 
 	// Move the node

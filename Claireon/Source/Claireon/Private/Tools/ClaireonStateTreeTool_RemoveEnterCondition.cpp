@@ -20,7 +20,7 @@ FString ClaireonStateTreeTool_RemoveEnterCondition::GetName() const
 
 FString ClaireonStateTreeTool_RemoveEnterCondition::GetDescription() const
 {
-	return TEXT("Remove an enter-condition node from a state.");
+	return TEXT("Remove an enter-condition node from a state in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Bindings targeting the removed condition's properties are dropped. After removal the state's entry is unblocked relative to that condition.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_RemoveEnterCondition::GetInputSchema() const

@@ -5,4 +5,17 @@
 
 #include "Tools/ClaireonBlueprintGraphEditToolBase.h"
 
-DECLARE_BPGRAPH_TOOL(ClaireonBlueprintGraphTool_MoveNode);
+class CLAIREON_API ClaireonBlueprintGraphTool_MoveNode : public ClaireonBlueprintGraphEditToolBase
+{
+public:
+    FString GetName() const override;
+    FString GetDescription() const override;
+    TSharedPtr<FJsonObject> GetInputSchema() const override;
+    FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;
+
+private:
+    FToolResult MoveNode_Impl(
+        const FString& SessionId,
+        FBlueprintEditToolData* Data,
+        const TSharedPtr<FJsonObject>& Params);
+};

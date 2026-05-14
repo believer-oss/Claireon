@@ -296,11 +296,7 @@ FString ClaireonTool_StateTreeDiff::GetName() const
 
 FString ClaireonTool_StateTreeDiff::GetDescription() const
 {
-	return TEXT("State Tree structural comparison: states, tasks, conditions, transitions, evaluators, "
-		"global tasks, and bindings. Supports loading State Trees from the current editor state or "
-		"from git revisions. Each side is an asset path with an optional git revision. "
-		"Use 'sections' to select which parts to compare (states, global, bindings). "
-		"Use 'resolution' for output detail level: exists, summary, or detailed.");
+	return TEXT("Diff two State Tree assets structurally: states, tasks, conditions, transitions, evaluators, global tasks, and bindings. Stateless / read-only / non-session: never mutates and requires no open session. Each side is an asset path with an optional git revision. Use 'sections' to scope and 'resolution' for detail (exists/summary/detailed).");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_StateTreeDiff::GetInputSchema() const

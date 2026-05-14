@@ -20,6 +20,9 @@
 #include "Channels/MovieSceneFloatChannel.h"
 #include "Channels/MovieSceneBoolChannel.h"
 #include "Channels/MovieSceneDoubleChannel.h"
+#include "Channels/MovieSceneIntegerChannel.h"
+#include "Curves/RichCurve.h"
+#include "KeyParams.h"
 #include "UObject/UnrealType.h"
 
 // ============================================================================
@@ -341,6 +344,128 @@ bool ApplyRemoveKeyframe(UMovieSceneSection* Section, FFrameNumber Frame, FStrin
 		OutError = FString::Printf(TEXT("no keys found at frame %d"), Frame.Value);
 		return false;
 	}
+	return true;
+}
+
+namespace Claireon::SequenceEdit
+{
+	// EMovieSceneKeyInterpolation (storage) -> ERichCurveInterpMode (per-key field on
+	// FMovieSceneFloatValue / FMovieSceneDoubleValue). Maps follow the engine
+	// convention used by TMovieSceneCurveChannelImpl::AddKeyToChannel at
+	// MovieSceneCurveChannelImpl.cpp:1043.
+	static ERichCurveInterpMode InterpolationToRichMode(EMovieSceneKeyInterpolation In)
+	{
+		switch (In)
+		{
+		case EMovieSceneKeyInterpolation::SmartAuto: return RCIM_Cubic;
+		case EMovieSceneKeyInterpolation::Auto:      return RCIM_Cubic;
+		case EMovieSceneKeyInterpolation::User:      return RCIM_Cubic;
+		case EMovieSceneKeyInterpolation::Break:     return RCIM_Cubic;
+		case EMovieSceneKeyInterpolation::Linear:    return RCIM_Linear;
+		case EMovieSceneKeyInterpolation::Constant:  return RCIM_Constant;
+		default:                                     return RCIM_Cubic;
+		}
+	}
+}
+
+bool ApplySetKeyInterpMode(UMovieSceneSection* Section, FFrameNumber Frame,
+	EMovieSceneKeyInterpolation InterpMode, FString& OutError)
+{
+	if (!Section)
+	{
+		OutError = TEXT("section is null");
+		return false;
+	}
+
+	FMovieSceneChannelProxy& Proxy = Section->GetChannelProxy();
+	const ERichCurveInterpMode RichMode = Claireon::SequenceEdit::InterpolationToRichMode(InterpMode);
+
+	bool bMatched = false;
+	TArray<FString> UnsupportedChannelErrors;
+
+	for (const FMovieSceneChannelEntry& Entry : Proxy.GetAllEntries())
+	{
+		const FName TypeName = Entry.GetChannelTypeName();
+		for (FMovieSceneChannel* Channel : Entry.GetChannels())
+		{
+			if (!Channel)
+			{
+				continue;
+			}
+
+			// Detect whether the channel holds a key at the frame first -- this is
+			// the discriminator used for the "unsupported type" accounting below.
+			TArray<FFrameNumber> Times;
+			TArray<FKeyHandle> Handles;
+			Channel->GetKeys(TRange<FFrameNumber>(Frame, Frame), &Times, &Handles);
+			if (Times.Num() == 0)
+			{
+				continue;
+			}
+
+			const FName FloatTypeName   = FMovieSceneFloatChannel::StaticStruct()->GetFName();
+			const FName DoubleTypeName  = FMovieSceneDoubleChannel::StaticStruct()->GetFName();
+			const FName IntegerTypeName = FMovieSceneIntegerChannel::StaticStruct()->GetFName();
+
+			if (TypeName == FloatTypeName)
+			{
+				FMovieSceneFloatChannel* FloatChannel = static_cast<FMovieSceneFloatChannel*>(Channel);
+				TMovieSceneChannelData<FMovieSceneFloatValue> Data = FloatChannel->GetData();
+				for (const FKeyHandle& Handle : Handles)
+				{
+					const int32 ValueIdx = Data.GetIndex(Handle);
+					if (ValueIdx != INDEX_NONE)
+					{
+						Data.GetValues()[ValueIdx].InterpMode = RichMode;
+						bMatched = true;
+					}
+				}
+				continue;
+			}
+
+			if (TypeName == DoubleTypeName)
+			{
+				FMovieSceneDoubleChannel* DoubleChannel = static_cast<FMovieSceneDoubleChannel*>(Channel);
+				TMovieSceneChannelData<FMovieSceneDoubleValue> Data = DoubleChannel->GetData();
+				for (const FKeyHandle& Handle : Handles)
+				{
+					const int32 ValueIdx = Data.GetIndex(Handle);
+					if (ValueIdx != INDEX_NONE)
+					{
+						Data.GetValues()[ValueIdx].InterpMode = RichMode;
+						bMatched = true;
+					}
+				}
+				continue;
+			}
+
+			if (TypeName == IntegerTypeName)
+			{
+				// Integer channels have no per-key interp mode; treat as success no-op
+				// once a key is located at the frame.
+				bMatched = true;
+				continue;
+			}
+
+			UnsupportedChannelErrors.Add(FString::Printf(
+				TEXT("channel of type '%s' does not support interpolation"), *TypeName.ToString()));
+		}
+	}
+
+	if (!bMatched && UnsupportedChannelErrors.Num() == 0)
+	{
+		OutError = FString::Printf(TEXT("no key at frame %d on section"), Frame.Value);
+		return false;
+	}
+
+	if (UnsupportedChannelErrors.Num() > 0)
+	{
+		OutError = FString::Printf(
+			TEXT("interpolation not supported on channel type; supported types: float, double, integer (%s)"),
+			*FString::Join(UnsupportedChannelErrors, TEXT("; ")));
+		return false;
+	}
+
 	return true;
 }
 

@@ -102,9 +102,14 @@ FString ClaireonBlueprintGraphTool_Compile::GetName() const
     return TEXT("claireon.blueprint_graph_compile");
 }
 
+TArray<FString> ClaireonBlueprintGraphTool_Compile::GetSearchKeywords() const
+{
+    return {TEXT("bp"), TEXT("compile"), TEXT("build"), TEXT("validate"), TEXT("graph")};
+}
+
 FString ClaireonBlueprintGraphTool_Compile::GetDescription() const
 {
-    return TEXT("Compile the Blueprint and report any errors/warnings.");
+    return TEXT("Compiles the Blueprint of the current session and reports structured errors and warnings. Most-common pitfall: assuming compile == save -- it does not write to disk; call claireon.blueprint_graph_save (or close, which auto-saves) to persist the compiled state.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Compile::GetInputSchema() const
@@ -126,11 +131,6 @@ FToolResult ClaireonBlueprintGraphTool_Compile::Execute(const TSharedPtr<FJsonOb
     {
         return Error;
     }
-    return Operation_Compile(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_Compile(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	if (!Blueprint)
 	{
@@ -174,6 +174,29 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_Compile(const FString&
 
 	Data->Cursor.LastOperationStatus = StatusText;
 	return BuildStateResponse(SessionId, Data);
+}
+
+// ----------------------------------------------------------------------------
+// P1: hot-path metadata enrichment
+// ----------------------------------------------------------------------------
+
+FString ClaireonBlueprintGraphTool_Compile::GetFullDescription() const
+{
+    return TEXT(
+        "Compiles the Blueprint of the current session and returns a "
+        "structured list of errors and warnings (file/line/message). Compile "
+        "is in-memory only -- it does NOT write to disk; pair with "
+        "claireon.blueprint_graph_save (or claireon.blueprint_graph_close, which "
+        "auto-saves) when you want the compiled state persisted. Use this "
+        "tool to validate after a sequence of add_node/connect_pins calls or "
+        "after a structural refactor (e.g. variable type change), so you "
+        "catch broken pin types before they propagate. Returns success even "
+        "if errors are present -- inspect the errors[] array on the result.");
+}
+
+FString ClaireonBlueprintGraphTool_Compile::GetExampleUsage() const
+{
+    return TEXT("claireon.blueprint_graph_compile session_id=\"...\"");
 }
 
 #undef LOCTEXT_NAMESPACE

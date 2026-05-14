@@ -102,9 +102,14 @@ FString ClaireonBlueprintGraphTool_SetPinValue::GetName() const
     return TEXT("claireon.blueprint_graph_set_pin_value");
 }
 
+TArray<FString> ClaireonBlueprintGraphTool_SetPinValue::GetSearchKeywords() const
+{
+    return {TEXT("bp"), TEXT("pin"), TEXT("set"), TEXT("default"), TEXT("value"), TEXT("literal"), TEXT("graph")};
+}
+
 FString ClaireonBlueprintGraphTool_SetPinValue::GetDescription() const
 {
-    return TEXT("Set a pin's default literal value (input pin, no connection).");
+    return TEXT("Sets a pin's default literal value on the current session's graph (input pin only; the pin must be unconnected). Most-common pitfall: trying to set a value on a pin that is already wired to another node, which silently does nothing -- disconnect first via claireon.blueprint_graph_disconnect_pin.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetPinValue::GetInputSchema() const
@@ -129,10 +134,13 @@ FToolResult ClaireonBlueprintGraphTool_SetPinValue::Execute(const TSharedPtr<FJs
     {
         return Error;
     }
-    return CheckMutationAffectedNodes(TEXT("set_pin_value"), Data, Operation_SetPinValue(SessionId, Data, Params));
+    return CheckMutationAffectedNodes(TEXT("set_pin_value"), Data, SetPinValue_Impl(SessionId, Data, Params));
 }
 
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_SetPinValue(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+FToolResult ClaireonBlueprintGraphTool_SetPinValue::SetPinValue_Impl(
+    const FString& SessionId,
+    FBlueprintEditToolData* Data,
+    const TSharedPtr<FJsonObject>& Params)
 {
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
@@ -221,6 +229,41 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_SetPinValue(const FStr
 	FToolResult SetPinValueResult = BuildStateResponse(SessionId, Data);
 	SetPinValueResult.Warnings.Append(ResolutionWarnings);
 	return SetPinValueResult;
+}
+
+// ----------------------------------------------------------------------------
+// P1: hot-path metadata enrichment
+// ----------------------------------------------------------------------------
+
+FString ClaireonBlueprintGraphTool_SetPinValue::GetFullDescription() const
+{
+    return TEXT(
+        "Sets a pin's default literal value on the current session's graph. "
+        "Only applies to input pins that have NO incoming connection: a pin "
+        "wired to another node ignores the literal value (the connection "
+        "wins). If you need to override a wired pin, first disconnect it via "
+        "claireon.blueprint_graph_disconnect_pin. Value strings go through "
+        "FProperty::ImportText_Direct, so primitives use plain text ('42', "
+        "'1.5', 'true', 'Hello') while structs use the engine's text format "
+        "(e.g. '(X=1.0,Y=2.0,Z=3.0)' for FVector). Object pins accept asset "
+        "paths.");
+}
+
+FString ClaireonBlueprintGraphTool_SetPinValue::GetExampleUsage() const
+{
+    return TEXT(
+        "claireon.blueprint_graph_set_pin_value session_id=\"...\" "
+        "node=\"PrintString_0\" pin=\"InString\" value=\"Hello\"");
+}
+
+TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetPinValue::GetParameterTooltips() const
+{
+    TSharedPtr<FJsonObject> T = MakeShared<FJsonObject>();
+    T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by claireon.blueprint_graph_open or _create."));
+    T->SetStringField(TEXT("node"), TEXT("Node identifier: GUID or human-readable title."));
+    T->SetStringField(TEXT("pin"), TEXT("Pin name. Must be an INPUT pin with no incoming connection."));
+    T->SetStringField(TEXT("value"), TEXT("Literal value as text. Primitives use plain text; structs use engine text format (e.g. (X=1,Y=2,Z=3))."));
+    return T;
 }
 
 #undef LOCTEXT_NAMESPACE

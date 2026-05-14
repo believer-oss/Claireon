@@ -3,6 +3,7 @@
 
 #include "ClaireonBlueprintNodeSerializer.h"
 
+#include "ClaireonLog.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "EdGraph/EdGraphNode.h"
@@ -95,8 +96,18 @@ namespace ClaireonBlueprintNodeSerializer
 		}
 
 		// Identity fields
+		if (!Node->NodeGuid.IsValid())
+		{
+			const_cast<UEdGraphNode*>(Node)->CreateNewGuid();
+			UE_LOG(LogClaireon, Warning,
+				TEXT("[serializer] Node '%s' had invalid GUID; assigned %s."),
+				*Node->GetNodeTitle(ENodeTitleType::ListView).ToString(),
+				*Node->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+		}
 		Root->SetStringField(TEXT("node_id"), Node->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
-		Root->SetStringField(TEXT("node_class"), Node->GetClass()->GetName());
+		const FString NodeClassName = Node->GetClass()->GetName();
+		Root->SetStringField(TEXT("node_class"), NodeClassName);
+		Root->SetStringField(TEXT("class"), NodeClassName);
 
 		// Title / subtitle
 		const FString FullTitle = Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString();
@@ -104,6 +115,7 @@ namespace ClaireonBlueprintNodeSerializer
 		FString Subtitle;
 		SplitFullTitleIntoTitleSubtitle(FullTitle, Title, Subtitle);
 		Root->SetStringField(TEXT("node_title"), Title);
+		Root->SetStringField(TEXT("title"), Title);
 		if (!Subtitle.IsEmpty())
 		{
 			Root->SetStringField(TEXT("node_subtitle"), Subtitle);
@@ -255,7 +267,9 @@ namespace ClaireonBlueprintNodeSerializer
 					const UEdGraphNode* LinkedNode = LinkedPin->GetOwningNode();
 					LinkObj->SetStringField(TEXT("node_guid"),
 						LinkedNode ? LinkedNode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens) : FString());
-					LinkObj->SetStringField(TEXT("node_title"), BuildLinkedNodeTitle(LinkedNode));
+					const FString LinkedNodeTitleStr = BuildLinkedNodeTitle(LinkedNode);
+					LinkObj->SetStringField(TEXT("node_title"), LinkedNodeTitleStr);
+					LinkObj->SetStringField(TEXT("title"), LinkedNodeTitleStr);
 					LinkObj->SetStringField(TEXT("pin_name"), LinkedPin->PinName.ToString());
 					LinkObj->SetStringField(TEXT("pin_direction"),
 						LinkedPin->Direction == EGPD_Input ? TEXT("input") : TEXT("output"));

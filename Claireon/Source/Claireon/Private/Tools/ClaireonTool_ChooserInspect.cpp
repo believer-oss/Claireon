@@ -71,6 +71,11 @@ namespace
 
 FString ClaireonTool_ChooserInspect::GetName() const { return TEXT("claireon.chooser_inspect"); }
 
+TArray<FString> ClaireonTool_ChooserInspect::GetSearchKeywords() const
+{
+	return {TEXT("chooser"), TEXT("inspect"), TEXT("table"), TEXT("result"), TEXT("row"), TEXT("column"), TEXT("context")};
+}
+
 FString ClaireonTool_ChooserInspect::GetDescription() const
 {
 	return TEXT("Inspect a ChooserTable asset. Returns result type, output class, context parameters, "

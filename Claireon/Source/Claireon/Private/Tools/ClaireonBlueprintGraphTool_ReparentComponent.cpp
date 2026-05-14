@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_ReparentComponent::GetName() const
 
 FString ClaireonBlueprintGraphTool_ReparentComponent::GetDescription() const
 {
-    return TEXT("Reparent a component within the Blueprint SCS hierarchy.");
+    return TEXT("Reparent a component within the Blueprint's Simple Construction Script hierarchy in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: cycles are rejected; the new parent must not be the component itself or any of its descendants.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ReparentComponent::GetInputSchema() const
@@ -128,11 +128,6 @@ FToolResult ClaireonBlueprintGraphTool_ReparentComponent::Execute(const TSharedP
     {
         return Error;
     }
-    return Operation_ReparentComponent(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_ReparentComponent(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	if (!Blueprint)
 	{

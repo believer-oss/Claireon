@@ -4,6 +4,7 @@
 #include "Tools/ClaireonBlueprintGraphTool_ImplementInterface.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "ClaireonBlueprintHelpers.h"
+#include "ClaireonBlueprintGraphInterfaceImpl.h"
 #include "Dom/JsonObject.h"
 
 using FToolResult = IClaireonTool::FToolResult;
@@ -15,7 +16,7 @@ FString ClaireonBlueprintGraphTool_ImplementInterface::GetName() const
 
 FString ClaireonBlueprintGraphTool_ImplementInterface::GetDescription() const
 {
-    return TEXT("Alias of add_interface matching the editor's Implement Interface UI label.");
+    return TEXT("Alias of add_interface matching the editor's 'Implement Interface' UI label. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Adds the interface to the Blueprint's ImplementedInterfaces and compiles. Prefer claireon.blueprint_graph_add_interface as the canonical name.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ImplementInterface::GetInputSchema() const
@@ -39,5 +40,5 @@ FToolResult ClaireonBlueprintGraphTool_ImplementInterface::Execute(const TShared
     {
         return Error;
     }
-    return Operation_AddInterface(SessionId, Data, Params);
+    return ClaireonBlueprintGraphInterfaceImpl::ApplyAddInterface(*this, SessionId, Data, Params);
 }

@@ -328,8 +328,7 @@ FString ClaireonAnimTool_BlendSpaceCreate::GetName() const { return TEXT("claire
 
 FString ClaireonAnimTool_BlendSpaceCreate::GetDescription() const
 {
-	return TEXT("Create a new BlendSpace, BlendSpace1D, AimOffset, or AimOffset1D asset. "
-				"Requires a target path, skeleton, and type. Optionally set notify trigger mode and metadata at creation time.");
+	return TEXT("Create a new BlendSpace, BlendSpace1D, AimOffset, or AimOffset1D asset on disk. Stateless / non-session: writes the asset and saves it immediately, no open session required. Requires target path, skeleton, and asset type. Optionally seed notify trigger mode and metadata at creation time.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_BlendSpaceCreate::GetInputSchema() const
@@ -504,7 +503,7 @@ FString ClaireonAnimTool_BlendSpaceDuplicate::GetName() const { return TEXT("cla
 
 FString ClaireonAnimTool_BlendSpaceDuplicate::GetDescription() const
 {
-	return TEXT("Duplicate an existing BlendSpace or AimOffset asset to a new path. Auto-detects the specific type.");
+	return TEXT("Duplicate an existing BlendSpace or AimOffset asset to a new path. Stateless / non-session: writes the duplicate immediately, no open session required. Auto-detects the source asset's specific type. Common pitfall: target package directory must already exist before invoking.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_BlendSpaceDuplicate::GetInputSchema() const
@@ -586,7 +585,7 @@ FString ClaireonAnimTool_BlendSpaceDelete::GetName() const { return TEXT("claire
 
 FString ClaireonAnimTool_BlendSpaceDelete::GetDescription() const
 {
-	return TEXT("Delete a BlendSpace or AimOffset asset. Requires explicit confirmation via the confirm parameter.");
+	return TEXT("Delete a BlendSpace or AimOffset asset from disk. Stateless / non-session: immediate-write deletion, no open session required. Common pitfall: requires explicit confirm=true to prevent accidental deletes; referenced assets are not auto-fixed-up and may produce dangling pointers downstream.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_BlendSpaceDelete::GetInputSchema() const
@@ -655,8 +654,7 @@ FString ClaireonAnimTool_BlendSpaceInspect::GetName() const { return TEXT("clair
 
 FString ClaireonAnimTool_BlendSpaceInspect::GetDescription() const
 {
-	return TEXT("Inspect a BlendSpace or AimOffset asset. Shows axes, samples, input interpolation, "
-				"settings, notify trigger mode, and metadata. Use detail_level='summary' for a compact overview.");
+	return TEXT("Inspect a BlendSpace or AimOffset asset by path. Stateless / read-only / non-session: never mutates and requires no open session. Shows axes, samples, input interpolation, settings, notify trigger mode, and metadata. Use detail_level='summary' for a compact overview or 'full' for everything.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_BlendSpaceInspect::GetInputSchema() const
@@ -706,8 +704,7 @@ FString ClaireonAnimTool_BlendSpaceAddSample::GetName() const { return TEXT("cla
 
 FString ClaireonAnimTool_BlendSpaceAddSample::GetDescription() const
 {
-	return TEXT("Add a blend sample to a BlendSpace or AimOffset. Specify the animation, position (x and optionally y for 2D), "
-				"and an optional rate scale. The animation must use the same skeleton as the blend space.");
+	return TEXT("Add a blend sample to a BlendSpace or AimOffset. Stateless / non-session: immediate-write to the asset by path. Specify the animation, position (x and optionally y for 2D), and an optional rate scale. Common pitfall: the animation must use the same skeleton as the blend space or this errors.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_BlendSpaceAddSample::GetInputSchema() const
@@ -826,7 +823,7 @@ FString ClaireonAnimTool_BlendSpaceRemoveSample::GetName() const { return TEXT("
 
 FString ClaireonAnimTool_BlendSpaceRemoveSample::GetDescription() const
 {
-	return TEXT("Remove a blend sample by index from a BlendSpace or AimOffset.");
+	return TEXT("Remove a blend sample by zero-based index from a BlendSpace or AimOffset. Stateless / non-session: immediate-write to the asset by path. Common pitfall: indices shift after removal, so cache them up front when removing multiple samples in sequence on the same asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_BlendSpaceRemoveSample::GetInputSchema() const
@@ -902,8 +899,7 @@ FString ClaireonAnimTool_BlendSpaceEditSample::GetName() const { return TEXT("cl
 
 FString ClaireonAnimTool_BlendSpaceEditSample::GetDescription() const
 {
-	return TEXT("Edit an existing blend sample's position, animation, or rate scale. "
-				"Provide at least one of x, y, animation, or rate_scale to modify.");
+	return TEXT("Edit an existing blend sample's position, animation, or rate scale on a BlendSpace or AimOffset. Stateless / non-session: immediate-write to the asset by path. Provide at least one of x, y, animation, or rate_scale to modify; omitted fields are left unchanged.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_BlendSpaceEditSample::GetInputSchema() const
@@ -1070,8 +1066,7 @@ FString ClaireonAnimTool_BlendSpaceSetAxis::GetName() const { return TEXT("clair
 
 FString ClaireonAnimTool_BlendSpaceSetAxis::GetDescription() const
 {
-	return TEXT("Configure a blend space axis. Set the display name, value range, grid divisions, "
-				"snap-to-grid behavior, and input wrapping. Axis 0 is horizontal (X), axis 1 is vertical (Y).");
+	return TEXT("Configure a blend space axis on a BlendSpace or AimOffset. Stateless / non-session: immediate-write to the asset by path. Set display name, value range, grid divisions, snap-to-grid, and input wrapping. Axis 0 is horizontal (X), axis 1 is vertical (Y); 1D blend spaces only accept axis 0.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_BlendSpaceSetAxis::GetInputSchema() const
@@ -1204,8 +1199,7 @@ FString ClaireonAnimTool_BlendSpaceSetInterpolation::GetName() const { return TE
 
 FString ClaireonAnimTool_BlendSpaceSetInterpolation::GetDescription() const
 {
-	return TEXT("Configure input interpolation (smoothing) for a blend space axis. "
-				"Controls how quickly the blend space transitions between input values.");
+	return TEXT("Configure input interpolation (smoothing) for a blend space axis. Stateless / non-session: immediate-write to the asset by path. Controls how quickly the blend space transitions between input values; tune to match how player input feeds the blend axis at runtime.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_BlendSpaceSetInterpolation::GetInputSchema() const
@@ -1318,11 +1312,7 @@ FString ClaireonAnimTool_BlendSpaceSetProperty::GetName() const { return TEXT("c
 
 FString ClaireonAnimTool_BlendSpaceSetProperty::GetDescription() const
 {
-	return TEXT("Set general blend space properties. Supported keys: loop (bool), notify_trigger_mode "
-				"(AllAnimations|HighestWeightedAnimation|None), target_weight_speed (number), "
-				"target_weight_easing (bool), allow_mesh_space_blending (bool), allow_marker_sync (bool), "
-				"use_grid_interpolation (bool), preferred_triangulation_direction (None|Tangential|Radial), "
-				"axis_to_scale_animation (None|X|Y), scale_animation (bool, BlendSpace1D only).");
+	return TEXT("Set general blend space properties on a BlendSpace or AimOffset. Stateless / non-session: immediate-write to the asset by path. Supported keys: loop, notify_trigger_mode, target_weight_speed/easing, allow_mesh_space_blending, allow_marker_sync, use_grid_interpolation, preferred_triangulation_direction, axis_to_scale_animation, scale_animation (1D only).");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_BlendSpaceSetProperty::GetInputSchema() const
@@ -1548,7 +1538,7 @@ FString ClaireonAnimTool_BlendSpaceAddMetadata::GetName() const { return TEXT("c
 
 FString ClaireonAnimTool_BlendSpaceAddMetadata::GetDescription() const
 {
-	return TEXT("Add a metadata object to a BlendSpace or AimOffset asset by class name.");
+	return TEXT("Add a metadata object to a BlendSpace or AimOffset asset by class name. Stateless / non-session: immediate-write to the asset by path. The metadata_class must be a UAnimMetaData subclass; new entries append to the asset's metadata array. Configure properties on the BlendSpace asset directly post-add.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_BlendSpaceAddMetadata::GetInputSchema() const
@@ -1627,7 +1617,7 @@ FString ClaireonAnimTool_BlendSpaceRemoveMetadata::GetName() const { return TEXT
 
 FString ClaireonAnimTool_BlendSpaceRemoveMetadata::GetDescription() const
 {
-	return TEXT("Remove a metadata object from a BlendSpace or AimOffset by index.");
+	return TEXT("Remove a metadata object from a BlendSpace or AimOffset by zero-based index. Stateless / non-session: immediate-write to the asset by path. Common pitfall: indices shift after removal, so cache them up front when removing multiple metadata entries in sequence on the same asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_BlendSpaceRemoveMetadata::GetInputSchema() const

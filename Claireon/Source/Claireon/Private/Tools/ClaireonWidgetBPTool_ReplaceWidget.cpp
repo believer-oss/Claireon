@@ -22,7 +22,7 @@ FString ClaireonWidgetBPTool_ReplaceWidget::GetName() const
 
 FString ClaireonWidgetBPTool_ReplaceWidget::GetDescription() const
 {
-    return TEXT("Replace a widget with a new class, optionally preserving its children.");
+    return TEXT("Replace a widget with a new class in the open Widget Blueprint editing session, optionally preserving its children. Requires open session_id from claireon.widgetbp_open. Transactional. Common pitfall: properties not present on the new class are dropped; verify with claireon.widgetbp_get_widget_details after.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_ReplaceWidget::GetInputSchema() const
@@ -45,15 +45,6 @@ FToolResult ClaireonWidgetBPTool_ReplaceWidget::Execute(const TSharedPtr<FJsonOb
     {
         return Error;
     }
-    return Operation_ReplaceWidget(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_ReplaceWidget(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	FString WidgetName;
 	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
 	{
@@ -146,7 +137,7 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_ReplaceWidget(const FString&
 	}
 	else if (OldChildren.Num() > 0 && !NewPanel)
 	{
-		UE_LOG(LogClaireon, Warning, TEXT("[EditWidgetBP] Replacement widget '%s' is not a panel — %d children were lost"), *NewWidgetClassStr, OldChildren.Num());
+		UE_LOG(LogClaireon, Warning, TEXT("[EditWidgetBP] Replacement widget '%s' is not a panel -- %d children were lost"), *NewWidgetClassStr, OldChildren.Num());
 	}
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
@@ -162,3 +153,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_ReplaceWidget(const FString&
 
 	return BuildStateResponse(SessionId, Data);
 }
+

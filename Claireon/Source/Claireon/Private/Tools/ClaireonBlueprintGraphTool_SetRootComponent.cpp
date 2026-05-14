@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_SetRootComponent::GetName() const
 
 FString ClaireonBlueprintGraphTool_SetRootComponent::GetDescription() const
 {
-    return TEXT("Designate a scene component as the new root of the Blueprint SCS.");
+    return TEXT("Designate a scene component as the new root of the Blueprint's Simple Construction Script in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: only USceneComponent-derived components can be roots; non-scene components error.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetRootComponent::GetInputSchema() const
@@ -127,11 +127,6 @@ FToolResult ClaireonBlueprintGraphTool_SetRootComponent::Execute(const TSharedPt
     {
         return Error;
     }
-    return Operation_SetRootComponent(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_SetRootComponent(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	if (!Blueprint)
 	{

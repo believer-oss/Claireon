@@ -15,15 +15,28 @@
 #include "Animation/AnimBlueprint.h"
 #include "WidgetBlueprint.h"
 #include "UObject/CoreNetTypes.h"
+#include "GameFramework/Actor.h"
+#include "Components/ActorComponent.h"
 
 FString ClaireonTool_GetBlueprintProperties::GetName() const
 {
 	return TEXT("claireon.blueprint_get_properties");
 }
 
+TArray<FString> ClaireonTool_GetBlueprintProperties::GetSearchKeywords() const
+{
+	return {TEXT("bp"), TEXT("blueprint"), TEXT("get"), TEXT("read"), TEXT("properties"), TEXT("variables"), TEXT("functions"), TEXT("interface")};
+}
+
 FString ClaireonTool_GetBlueprintProperties::GetDescription() const
 {
-	return TEXT("Read a Blueprint asset's public interface: functions, variables, components, parent class, and implemented interfaces. Works with standard Blueprints, Animation Blueprints, Widget Blueprints, and Blueprint Function Libraries. Use this to understand what a Blueprint exposes before inspecting its internal graph structure.");
+	return TEXT(
+		"Read a Blueprint asset's public interface: functions, variables, components, parent class, and implemented interfaces. "
+		"Works with standard Blueprints, Animation Blueprints, Widget Blueprints, and Blueprint Function Libraries. "
+		"By default, the components, variables, and functions arrays only include items declared on this Blueprint (SCS-only for components). "
+		"Pass include_inherited=true to also include items inherited from ancestor Blueprints and (for actor-derived BPs) from native parent CDOs -- this matches what unreal.Actor.get_components_by_class(unreal.ActorComponent) returns when called on the editor CDO. "
+		"Note that native subobjects guarded by WITH_EDITORONLY_DATA only appear in editor builds. "
+		"Every entry in components, variables, and functions always carries is_inherited (bool) and source_class (short class name) fields regardless of include_inherited, providing a stable schema for callers.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_GetBlueprintProperties::GetInputSchema() const
@@ -93,12 +106,26 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 
 	FString BlueprintType = GetBlueprintTypeName(Blueprint);
 
+	// Short name of this BP's generated class. Used as source_class for
+	// "this BP" entries on components/variables/functions to keep the schema
+	// uniform whether or not include_inherited is set.
+	const FString ThisGeneratedClassShortName = Blueprint->GeneratedClass
+		? Blueprint->GeneratedClass->GetName()
+		: FString(TEXT("Unknown"));
+
+	// Track inherited counts so the summary line can report (N inherited).
+	int32 InheritedVariableCount = 0;
+	int32 InheritedFunctionCount = 0;
+	int32 InheritedComponentCount = 0;
+
 	// Build variables array
 	TArray<TSharedPtr<FJsonValue>> VariablesArray;
+	TSet<FName> EmittedVariableNames;
 	for (const FBPVariableDescription& Var : Blueprint->NewVariables)
 	{
 		TSharedPtr<FJsonObject> VarObj = MakeShared<FJsonObject>();
 		VarObj->SetStringField(TEXT("name"), Var.VarName.ToString());
+		VarObj->SetStringField(TEXT("variable_name"), Var.VarName.ToString());
 		VarObj->SetStringField(TEXT("type"), FormatVariableType(Var.VarType));
 		VarObj->SetStringField(TEXT("default_value"), Var.DefaultValue);
 		VarObj->SetBoolField(TEXT("is_exposed"), (Var.PropertyFlags & CPF_BlueprintVisible) != 0);
@@ -157,11 +184,58 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 			VarObj->SetStringField(TEXT("pin_value_category"), Var.VarType.PinValueType.TerminalCategory.ToString());
 		}
 
+		// Stable per-entry schema: is_inherited + source_class on every variable.
+		VarObj->SetBoolField(TEXT("is_inherited"), false);
+		VarObj->SetStringField(TEXT("source_class"), ThisGeneratedClassShortName);
+
+		EmittedVariableNames.Add(Var.VarName);
 		VariablesArray.Add(MakeShared<FJsonValueObject>(VarObj));
+	}
+
+	// Inherited variables (only when requested). Walk FProperty fields on the
+	// generated class with super included; skip anything declared on this BP
+	// (already emitted above). Filter to Blueprint-visible properties to match
+	// the historical FormatVariables intent.
+	if (bIncludeInherited && Blueprint->GeneratedClass)
+	{
+		for (TFieldIterator<FProperty> PropIt(Blueprint->GeneratedClass); PropIt; ++PropIt)
+		{
+			FProperty* Property = *PropIt;
+			if (!Property)
+			{
+				continue;
+			}
+			UClass* OwnerClass = Property->GetOwnerClass();
+			if (!OwnerClass || OwnerClass == Blueprint->GeneratedClass)
+			{
+				continue;
+			}
+			if (!(Property->PropertyFlags & CPF_BlueprintVisible))
+			{
+				continue;
+			}
+			const FName PropertyName = Property->GetFName();
+			if (EmittedVariableNames.Contains(PropertyName))
+			{
+				continue;
+			}
+
+			TSharedPtr<FJsonObject> VarObj = MakeShared<FJsonObject>();
+			VarObj->SetStringField(TEXT("name"), Property->GetName());
+			VarObj->SetStringField(TEXT("type"), Property->GetClass()->GetName());
+			VarObj->SetBoolField(TEXT("is_exposed"), true);
+			VarObj->SetBoolField(TEXT("is_inherited"), true);
+			VarObj->SetStringField(TEXT("source_class"), OwnerClass->GetName());
+
+			EmittedVariableNames.Add(PropertyName);
+			VariablesArray.Add(MakeShared<FJsonValueObject>(VarObj));
+			++InheritedVariableCount;
+		}
 	}
 
 	// Build functions array
 	TArray<TSharedPtr<FJsonValue>> FunctionsArray;
+	TSet<FName> EmittedFunctionNames;
 	for (UEdGraph* Graph : Blueprint->FunctionGraphs)
 	{
 		if (!Graph)
@@ -171,6 +245,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 
 		TSharedPtr<FJsonObject> FuncObj = MakeShared<FJsonObject>();
 		FuncObj->SetStringField(TEXT("name"), Graph->GetName());
+		FuncObj->SetStringField(TEXT("function_name"), Graph->GetName());
 
 		// Find function entry node for signature details
 		UK2Node_FunctionEntry* EntryNode = nullptr;
@@ -219,51 +294,245 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 		FuncObj->SetArrayField(TEXT("parameters"), ParamsArray);
 		FuncObj->SetBoolField(TEXT("is_pure"), bIsPure);
 		FuncObj->SetBoolField(TEXT("is_event"), bIsEvent);
+		FuncObj->SetBoolField(TEXT("is_inherited"), false);
+		FuncObj->SetStringField(TEXT("source_class"), ThisGeneratedClassShortName);
+
+		EmittedFunctionNames.Add(FName(*Graph->GetName()));
 		FunctionsArray.Add(MakeShared<FJsonValueObject>(FuncObj));
 	}
 
-	// Build components array
+	// Inherited functions (only when requested). Walk UFunctions on the
+	// generated class with super included; skip those declared on this BP
+	// (already emitted above). Filter to Blueprint-visible callables/events.
+	// Inherited entries omit rich return_type/parameters detail (parameters: [],
+	// return_type: "void") to keep this PR's scope contained -- see #0000.
+	if (bIncludeInherited && Blueprint->GeneratedClass)
+	{
+		for (TFieldIterator<UFunction> FuncIt(Blueprint->GeneratedClass); FuncIt; ++FuncIt)
+		{
+			UFunction* Function = *FuncIt;
+			if (!Function)
+			{
+				continue;
+			}
+			UClass* OwnerClass = Function->GetOwnerClass();
+			if (!OwnerClass || OwnerClass == Blueprint->GeneratedClass)
+			{
+				continue;
+			}
+			const bool bBlueprintCallable = (Function->FunctionFlags & FUNC_BlueprintCallable) != 0;
+			const bool bBlueprintEvent = (Function->FunctionFlags & FUNC_BlueprintEvent) != 0;
+			if (!bBlueprintCallable && !bBlueprintEvent)
+			{
+				continue;
+			}
+			const FName FunctionName = Function->GetFName();
+			if (EmittedFunctionNames.Contains(FunctionName))
+			{
+				continue;
+			}
+
+			TSharedPtr<FJsonObject> FuncObj = MakeShared<FJsonObject>();
+			FuncObj->SetStringField(TEXT("name"), Function->GetName());
+			FuncObj->SetStringField(TEXT("return_type"), TEXT("void"));
+			FuncObj->SetArrayField(TEXT("parameters"), TArray<TSharedPtr<FJsonValue>>());
+			FuncObj->SetBoolField(TEXT("is_pure"), (Function->FunctionFlags & FUNC_BlueprintPure) != 0);
+			FuncObj->SetBoolField(TEXT("is_event"), bBlueprintEvent);
+			FuncObj->SetBoolField(TEXT("is_inherited"), true);
+			FuncObj->SetStringField(TEXT("source_class"), OwnerClass->GetName());
+
+			EmittedFunctionNames.Add(FunctionName);
+			FunctionsArray.Add(MakeShared<FJsonValueObject>(FuncObj));
+			++InheritedFunctionCount;
+		}
+	}
+
+	// Build components array via a three-source merged walk (#0000):
+	//   A) This BP's SCS roots (always)                       -> is_inherited=false
+	//   B) Ancestor BP SCS chains (only when include_inherited) -> is_inherited=true
+	//   C) Native inherited subobjects (actor-derived only)    -> is_inherited=true
+	//
+	// Dedupe by USCS_Node::GetVariableName() / UActorComponent::GetFName()
+	// (FName-keyed). Source priority A > B > C: a child BP's SCS that shadows
+	// a parent SCS or native subobject wins, and the child entry is the one
+	// emitted (with is_inherited=false).
 	TArray<TSharedPtr<FJsonValue>> ComponentsArray;
+	TSet<FName> EmittedComponentNames;
+
+	auto EmitSCSNode = [&](USCS_Node* Node, USCS_Node* ParentNode, USCS_Node* DefaultRoot, bool bInherited, const FString& InSourceClass)
+	{
+		if (!Node)
+		{
+			return;
+		}
+		const FName VarName = Node->GetVariableName();
+		if (EmittedComponentNames.Contains(VarName))
+		{
+			return;
+		}
+
+		TSharedPtr<FJsonObject> CompObj = MakeShared<FJsonObject>();
+		CompObj->SetStringField(TEXT("name"), VarName.ToString());
+		CompObj->SetStringField(TEXT("component_name"), VarName.ToString());
+		CompObj->SetStringField(TEXT("class"), Node->ComponentClass ? Node->ComponentClass->GetName() : TEXT("Unknown"));
+		CompObj->SetBoolField(TEXT("is_root"), Node == DefaultRoot);
+
+		if (ParentNode)
+		{
+			CompObj->SetStringField(TEXT("parent_component"), ParentNode->GetVariableName().ToString());
+		}
+
+		TArray<TSharedPtr<FJsonValue>> ChildrenArray;
+		for (USCS_Node* ChildNode : Node->GetChildNodes())
+		{
+			ChildrenArray.Add(MakeShared<FJsonValueString>(ChildNode->GetVariableName().ToString()));
+		}
+		CompObj->SetArrayField(TEXT("children"), ChildrenArray);
+
+		CompObj->SetBoolField(TEXT("is_inherited"), bInherited);
+		CompObj->SetStringField(TEXT("source_class"), InSourceClass);
+
+		EmittedComponentNames.Add(VarName);
+		ComponentsArray.Add(MakeShared<FJsonValueObject>(CompObj));
+
+		if (bInherited)
+		{
+			++InheritedComponentCount;
+		}
+	};
+
+	// Source A: this BP's SCS (always).
 	if (Blueprint->SimpleConstructionScript)
 	{
 		USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
 		USCS_Node* DefaultRoot = SCS->GetDefaultSceneRootNode();
 
-		TFunction<void(USCS_Node*, USCS_Node*)> CollectComponents = [&](USCS_Node* Node, USCS_Node* ParentNode)
+		TFunction<void(USCS_Node*, USCS_Node*)> CollectThisSCS = [&](USCS_Node* Node, USCS_Node* ParentNode)
 		{
 			if (!Node)
 			{
 				return;
 			}
-
-			TSharedPtr<FJsonObject> CompObj = MakeShared<FJsonObject>();
-			CompObj->SetStringField(TEXT("name"), Node->GetVariableName().ToString());
-			CompObj->SetStringField(TEXT("class"), Node->ComponentClass ? Node->ComponentClass->GetName() : TEXT("Unknown"));
-			CompObj->SetBoolField(TEXT("is_root"), Node == DefaultRoot);
-
-			if (ParentNode)
-			{
-				CompObj->SetStringField(TEXT("parent_component"), ParentNode->GetVariableName().ToString());
-			}
-
-			TArray<TSharedPtr<FJsonValue>> ChildrenArray;
+			EmitSCSNode(Node, ParentNode, DefaultRoot, /*bInherited=*/false, ThisGeneratedClassShortName);
 			for (USCS_Node* ChildNode : Node->GetChildNodes())
 			{
-				ChildrenArray.Add(MakeShared<FJsonValueString>(ChildNode->GetVariableName().ToString()));
-			}
-			CompObj->SetArrayField(TEXT("children"), ChildrenArray);
-
-			ComponentsArray.Add(MakeShared<FJsonValueObject>(CompObj));
-
-			for (USCS_Node* ChildNode : Node->GetChildNodes())
-			{
-				CollectComponents(ChildNode, Node);
+				CollectThisSCS(ChildNode, Node);
 			}
 		};
 
 		for (USCS_Node* RootNode : SCS->GetRootNodes())
 		{
-			CollectComponents(RootNode, nullptr);
+			CollectThisSCS(RootNode, nullptr);
+		}
+	}
+
+	if (bIncludeInherited)
+	{
+		// Source B: ancestor BP SCS chains. Walk the parent class upward, and
+		// for each UBlueprintGeneratedClass with a non-null SCS, recurse its
+		// roots. Stop at the first non-UBlueprintGeneratedClass ancestor (the
+		// native boundary).
+		UClass* AncestorClass = Blueprint->ParentClass;
+		while (AncestorClass)
+		{
+			UBlueprintGeneratedClass* AncestorBPGC = Cast<UBlueprintGeneratedClass>(AncestorClass);
+			if (!AncestorBPGC)
+			{
+				break;
+			}
+			USimpleConstructionScript* AncestorSCS = AncestorBPGC->SimpleConstructionScript;
+			if (AncestorSCS)
+			{
+				const FString AncestorClassShortName = AncestorBPGC->GetName();
+				USCS_Node* AncestorDefaultRoot = AncestorSCS->GetDefaultSceneRootNode();
+
+				TFunction<void(USCS_Node*, USCS_Node*)> CollectAncestorSCS = [&](USCS_Node* Node, USCS_Node* ParentNode)
+				{
+					if (!Node)
+					{
+						return;
+					}
+					EmitSCSNode(Node, ParentNode, AncestorDefaultRoot, /*bInherited=*/true, AncestorClassShortName);
+					for (USCS_Node* ChildNode : Node->GetChildNodes())
+					{
+						CollectAncestorSCS(ChildNode, Node);
+					}
+				};
+
+				for (USCS_Node* RootNode : AncestorSCS->GetRootNodes())
+				{
+					CollectAncestorSCS(RootNode, nullptr);
+				}
+			}
+			AncestorClass = AncestorBPGC->GetSuperClass();
+		}
+
+		// Source C: native inherited subobjects on actor-derived BPs. Cast the
+		// editor CDO to AActor; if the BP isn't actor-derived (Anim, Widget,
+		// FunctionLibrary, ...), the cast yields nullptr and we skip. For each
+		// native subobject not already emitted, find the deepest native
+		// ancestor whose CDO declares a subobject with the same FName -- that
+		// is the source_class. Emit with is_root=false, no parent_component,
+		// children=[] (no SCS structure to mirror).
+		if (UClass* GeneratedClass = Blueprint->GeneratedClass)
+		{
+			if (AActor* CDOActor = Cast<AActor>(GeneratedClass->GetDefaultObject(/*bCreateIfNeeded=*/false)))
+			{
+				TArray<UActorComponent*> NativeComponents;
+				CDOActor->GetComponents(NativeComponents);
+				for (UActorComponent* Component : NativeComponents)
+				{
+					if (!Component)
+					{
+						continue;
+					}
+					const FName ComponentName = Component->GetFName();
+					if (EmittedComponentNames.Contains(ComponentName))
+					{
+						continue;
+					}
+
+					// Walk the native class chain from the BP's first native
+					// ancestor upward; the deepest class whose CDO has a
+					// subobject with this FName is the declarer.
+					FString NativeSourceClassName;
+					UClass* NativeWalker = GeneratedClass;
+					while (NativeWalker)
+					{
+						if (NativeWalker->IsNative())
+						{
+							UObject* NativeCDO = NativeWalker->GetDefaultObject(/*bCreateIfNeeded=*/false);
+							if (NativeCDO)
+							{
+								if (NativeCDO->GetDefaultSubobjectByName(ComponentName) != nullptr)
+								{
+									NativeSourceClassName = NativeWalker->GetName();
+								}
+							}
+						}
+						NativeWalker = NativeWalker->GetSuperClass();
+					}
+					if (NativeSourceClassName.IsEmpty())
+					{
+						// Fall back to the component's owning class name if
+						// the subobject lookup failed.
+						NativeSourceClassName = Component->GetClass()->GetName();
+					}
+
+					TSharedPtr<FJsonObject> CompObj = MakeShared<FJsonObject>();
+					CompObj->SetStringField(TEXT("name"), ComponentName.ToString());
+					CompObj->SetStringField(TEXT("component_name"), ComponentName.ToString());
+					CompObj->SetStringField(TEXT("class"), Component->GetClass()->GetName());
+					CompObj->SetBoolField(TEXT("is_root"), false);
+					CompObj->SetArrayField(TEXT("children"), TArray<TSharedPtr<FJsonValue>>());
+					CompObj->SetBoolField(TEXT("is_inherited"), true);
+					CompObj->SetStringField(TEXT("source_class"), NativeSourceClassName);
+
+					EmittedComponentNames.Add(ComponentName);
+					ComponentsArray.Add(MakeShared<FJsonValueObject>(CompObj));
+					++InheritedComponentCount;
+				}
+			}
 		}
 	}
 
@@ -324,13 +593,28 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 
 	Data->SetObjectField(TEXT("metadata"), MetadataObj);
 
-	// Extract asset name for summary
+	// Extract asset name for summary. When include_inherited=true and there is
+	// at least one inherited entry of a given kind, append " (N inherited)" to
+	// that count (#0000). Suffix is omitted when the count is zero.
+	auto MakeCountFragment = [](int32 Total, int32 Inherited, const TCHAR* Label) -> FString
+	{
+		if (Inherited > 0)
+		{
+			return FString::Printf(TEXT("%d %s (%d inherited)"), Total, Label, Inherited);
+		}
+		return FString::Printf(TEXT("%d %s"), Total, Label);
+	};
+
+	const FString VariablesFragment = MakeCountFragment(VariablesArray.Num(), InheritedVariableCount, TEXT("variables"));
+	const FString FunctionsFragment = MakeCountFragment(FunctionsArray.Num(), InheritedFunctionCount, TEXT("functions"));
+	const FString ComponentsFragment = MakeCountFragment(ComponentsArray.Num(), InheritedComponentCount, TEXT("components"));
+
 	FString AssetName = FPaths::GetBaseFilename(AssetPath);
-	FString Summary = FString::Printf(TEXT("%s: %d variables, %d functions, %d components (parent: %s)"),
+	FString Summary = FString::Printf(TEXT("%s: %s, %s, %s (parent: %s)"),
 		*AssetName,
-		VariablesArray.Num(),
-		FunctionsArray.Num(),
-		ComponentsArray.Num(),
+		*VariablesFragment,
+		*FunctionsFragment,
+		*ComponentsFragment,
 		*ParentClassName);
 
 	return MakeSuccessResult(Data, Summary);
@@ -348,263 +632,6 @@ UBlueprint* ClaireonTool_GetBlueprintProperties::LoadBlueprintFromPath(const FSt
 	return Blueprint;
 }
 
-
-FString ClaireonTool_GetBlueprintProperties::FormatVariables(const UBlueprint* Blueprint, bool bIncludeInherited)
-{
-	if (!Blueprint)
-	{
-		return FString();
-	}
-
-	TArray<FString> VariableLines;
-
-	// User-defined variables
-	for (const FBPVariableDescription& Var : Blueprint->NewVariables)
-	{
-		FString VarLine = FString::Printf(TEXT("- %s (%s)"),
-			*Var.VarName.ToString(),
-			*FormatVariableType(Var.VarType));
-
-		// Add flags
-		TArray<FString> Flags = ClaireonBlueprintHelpers::FormatPropertyFlags(Var.PropertyFlags);
-
-		if (Flags.Num() > 0)
-		{
-			VarLine += TEXT(" [");
-			VarLine += FString::Join(Flags, TEXT(", "));
-			VarLine += TEXT("]");
-		}
-
-		// Add default value if available
-		if (!Var.DefaultValue.IsEmpty())
-		{
-			VarLine += FString::Printf(TEXT(" Default: %s"), *Var.DefaultValue);
-		}
-
-		// Add category if not empty or "Default"
-		FString CategoryStr = Var.Category.ToString();
-		if (!CategoryStr.IsEmpty() && CategoryStr != TEXT("Default"))
-		{
-			VarLine += FString::Printf(TEXT(" Category: %s"), *CategoryStr);
-		}
-
-		// Add replication info
-		if (Var.PropertyFlags & CPF_Net)
-		{
-			if (Var.PropertyFlags & CPF_RepNotify)
-			{
-				VarLine += TEXT(" Replication: RepNotify");
-				if (Var.RepNotifyFunc != NAME_None)
-				{
-					VarLine += FString::Printf(TEXT(" RepNotifyFunc: %s"), *Var.RepNotifyFunc.ToString());
-				}
-			}
-			else
-			{
-				VarLine += TEXT(" Replication: Replicated");
-			}
-
-			if (Var.ReplicationCondition != COND_None)
-			{
-				const UEnum* CondEnum = StaticEnum<ELifetimeCondition>();
-				if (CondEnum)
-				{
-					FString CondName = CondEnum->GetNameStringByValue(static_cast<int64>(Var.ReplicationCondition));
-					if (!CondName.IsEmpty())
-					{
-						VarLine += FString::Printf(TEXT(" ReplicationCondition: %s"), *CondName);
-					}
-				}
-			}
-		}
-
-		// Add metadata entries
-		if (Var.MetaDataArray.Num() > 0)
-		{
-			TArray<FString> MetaEntries;
-			for (const FBPVariableMetaDataEntry& MetaEntry : Var.MetaDataArray)
-			{
-				MetaEntries.Add(FString::Printf(TEXT("%s=%s"), *MetaEntry.DataKey.ToString(), *MetaEntry.DataValue));
-			}
-			VarLine += FString::Printf(TEXT(" Metadata: {%s}"), *FString::Join(MetaEntries, TEXT(", ")));
-		}
-
-		VariableLines.Add(VarLine);
-	}
-
-	// Inherited variables (if requested)
-	if (bIncludeInherited && Blueprint->GeneratedClass)
-	{
-		UClass* ParentClass = Blueprint->GeneratedClass->GetSuperClass();
-		if (ParentClass && ParentClass != UObject::StaticClass())
-		{
-			for (TFieldIterator<FProperty> PropIt(ParentClass, EFieldIteratorFlags::ExcludeSuper); PropIt; ++PropIt)
-			{
-				FProperty* Property = *PropIt;
-				if (!Property)
-				{
-					continue;
-				}
-
-				// Only show properties that are Blueprint-visible
-				if (!(Property->PropertyFlags & CPF_BlueprintVisible))
-				{
-					continue;
-				}
-
-				FString VarLine = FString::Printf(TEXT("- %s (%s) [Inherited]"),
-					*Property->GetName(),
-					*Property->GetClass()->GetName());
-
-				VariableLines.Add(VarLine);
-			}
-		}
-	}
-
-	if (VariableLines.Num() == 0)
-	{
-		return FString();
-	}
-
-	FString Output = FString::Printf(TEXT("## Variables (%d)\n"), VariableLines.Num());
-	for (const FString& Line : VariableLines)
-	{
-		Output += Line + TEXT("\n");
-	}
-
-	return Output;
-}
-
-FString ClaireonTool_GetBlueprintProperties::FormatFunctions(const UBlueprint* Blueprint, bool bIncludeInherited)
-{
-	if (!Blueprint)
-	{
-		return FString();
-	}
-
-	TArray<FString> FunctionLines;
-
-	// User-defined functions from function graphs
-	for (UEdGraph* Graph : Blueprint->FunctionGraphs)
-	{
-		if (!Graph)
-		{
-			continue;
-		}
-
-		// Find function entry node to get signature
-		UK2Node_FunctionEntry* EntryNode = nullptr;
-		for (UEdGraphNode* Node : Graph->Nodes)
-		{
-			EntryNode = Cast<UK2Node_FunctionEntry>(Node);
-			if (EntryNode)
-			{
-				break;
-			}
-		}
-
-		FString FuncLine = FString::Printf(TEXT("- %s("), *Graph->GetName());
-
-		// Add parameters
-		TArray<FString> Params;
-		if (EntryNode)
-		{
-			for (UEdGraphPin* Pin : EntryNode->Pins)
-			{
-				if (Pin->Direction == EGPD_Output && Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
-				{
-					FString ParamStr = FString::Printf(TEXT("%s %s"),
-						*FormatVariableType(Pin->PinType),
-						*Pin->GetName());
-					Params.Add(ParamStr);
-				}
-			}
-		}
-
-		FuncLine += FString::Join(Params, TEXT(", "));
-		FuncLine += TEXT(")");
-
-		// Add return type
-		if (EntryNode)
-		{
-			for (UEdGraphPin* Pin : EntryNode->Pins)
-			{
-				if (Pin->Direction == EGPD_Input && Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
-				{
-					FuncLine += FString::Printf(TEXT(" -> %s"), *FormatVariableType(Pin->PinType));
-					break;
-				}
-			}
-		}
-
-		// Add flags
-		TArray<FString> Flags;
-		if (EntryNode)
-		{
-			if (EntryNode->MetaData.bCallInEditor)
-			{
-				Flags.Add(TEXT("CallInEditor"));
-			}
-			if (EntryNode->GetFunctionFlags() & FUNC_BlueprintPure)
-			{
-				Flags.Add(TEXT("Pure"));
-			}
-			if (EntryNode->GetFunctionFlags() & FUNC_Const)
-			{
-				Flags.Add(TEXT("Const"));
-			}
-		}
-
-		if (Flags.Num() > 0)
-		{
-			FuncLine += TEXT(" [");
-			FuncLine += FString::Join(Flags, TEXT(", "));
-			FuncLine += TEXT("]");
-		}
-
-		FunctionLines.Add(FuncLine);
-	}
-
-	// Inherited functions (if requested)
-	if (bIncludeInherited && Blueprint->GeneratedClass)
-	{
-		UClass* ParentClass = Blueprint->GeneratedClass->GetSuperClass();
-		if (ParentClass && ParentClass != UObject::StaticClass())
-		{
-			for (TFieldIterator<UFunction> FuncIt(ParentClass, EFieldIteratorFlags::ExcludeSuper); FuncIt; ++FuncIt)
-			{
-				UFunction* Function = *FuncIt;
-				if (!Function)
-				{
-					continue;
-				}
-
-				// Only show Blueprint-accessible functions
-				if (!(Function->FunctionFlags & FUNC_BlueprintCallable) &&
-					!(Function->FunctionFlags & FUNC_BlueprintPure))
-				{
-					continue;
-				}
-
-				FString FuncLine = FString::Printf(TEXT("- %s() [Inherited]"), *Function->GetName());
-				FunctionLines.Add(FuncLine);
-			}
-		}
-	}
-
-	if (FunctionLines.Num() == 0)
-	{
-		return FString();
-	}
-
-	FString Output = FString::Printf(TEXT("## Functions (%d)\n"), FunctionLines.Num());
-	for (const FString& Line : FunctionLines)
-	{
-		Output += Line + TEXT("\n");
-	}
-
-	return Output;
-}
 
 FString ClaireonTool_GetBlueprintProperties::FormatComponents(const UBlueprint* Blueprint)
 {

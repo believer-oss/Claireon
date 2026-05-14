@@ -13,6 +13,11 @@ FString ClaireonTool_AnimGraphInspect::GetName() const
 	return TEXT("claireon.animgraph_inspect");
 }
 
+TArray<FString> ClaireonTool_AnimGraphInspect::GetSearchKeywords() const
+{
+	return {TEXT("anim"), TEXT("animation"), TEXT("animgraph"), TEXT("blueprint"), TEXT("inspect"), TEXT("graph")};
+}
+
 FString ClaireonTool_AnimGraphInspect::GetDescription() const
 {
 	return TEXT("Blueprint-level overview of an Animation Blueprint. Returns class settings (parent class, "

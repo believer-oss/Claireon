@@ -18,9 +18,7 @@ FString ClaireonTool_StateTreeRuntimeInspect::GetName() const
 
 FString ClaireonTool_StateTreeRuntimeInspect::GetDescription() const
 {
-	return TEXT("Query the execution state of running State Tree instances during PIE. "
-				"Shows active states, recent transitions, and context data for a specific actor's State Tree component. "
-				"Requires an active PIE session.");
+	return TEXT("Query the runtime execution state of a running State Tree instance during PIE. Stateless / read-only / non-session: never mutates and requires no open editing session, but does require an active PIE session. Returns active states, recent transitions, and context data for the target actor's State Tree component.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_StateTreeRuntimeInspect::GetInputSchema() const

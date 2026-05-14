@@ -102,9 +102,14 @@ FString ClaireonBlueprintGraphTool_Open::GetName() const
     return TEXT("claireon.blueprint_graph_open");
 }
 
+TArray<FString> ClaireonBlueprintGraphTool_Open::GetSearchKeywords() const
+{
+    return {TEXT("bp"), TEXT("blueprint"), TEXT("graph"), TEXT("open"), TEXT("session"), TEXT("edit"), TEXT("node")};
+}
+
 FString ClaireonBlueprintGraphTool_Open::GetDescription() const
 {
-    return TEXT("Open an existing Blueprint for editing. Creates or reuses a session keyed by the MCP client, and returns the session id plus initial graph state.");
+    return TEXT("Opens a Blueprint for editing in a session-based per-node cycle. Creates or reuses a session keyed by MCP client and returns session_id plus initial graph state. Most-common pitfall: forgetting to close the session via claireon.blueprint_graph_close, which leaks in-session edit state and prevents other clients from acquiring the same Blueprint.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Open::GetInputSchema() const
@@ -128,11 +133,6 @@ FToolResult ClaireonBlueprintGraphTool_Open::Execute(const TSharedPtr<FJsonObjec
             Params = *NestedObj;
         }
     }
-    return Operation_Open(Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_Open(const TSharedPtr<FJsonObject>& Params)
-{
 	// Register delegate on first use
 	if (!bDelegateRegistered)
 	{
@@ -215,11 +215,35 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_Open(const TSharedPtr<
 
 	Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Opened Blueprint %s, Graph %s"), *AssetPath, *GraphName);
 
-	// "open" always returns the full graph regardless of response_mode — gives initial orientation
+	// "open" always returns the full graph regardless of response_mode -- gives initial orientation
 	Data->ResponseMode = TEXT("full");
 	Data->bSuppressOutput = false;
 
 	return BuildStateResponse(SessionId, Data);
+}
+
+// ----------------------------------------------------------------------------
+// P1: hot-path metadata enrichment
+// ----------------------------------------------------------------------------
+
+FString ClaireonBlueprintGraphTool_Open::GetFullDescription() const
+{
+    return TEXT(
+        "Opens a Blueprint for editing in a session-based per-node cycle. "
+        "Creates or reuses a session keyed "
+        "by the MCP client and returns the session_id plus initial graph state. "
+        "Use this as the first call in any incremental authoring loop: open -> "
+        "(add_node/connect_pins/set_pin_value)* -> save (every 1-3 nodes) -> "
+        "close. The session holds the cursor that auto_connect_from_cursor on "
+        "subsequent add_node calls keys off of, so prefer reopening the same "
+        "session rather than running multiple parallel sessions. Sessions are "
+        "released automatically when the editor exits or when claireon.blueprint_graph_close "
+        "is called explicitly.");
+}
+
+FString ClaireonBlueprintGraphTool_Open::GetExampleUsage() const
+{
+    return TEXT("claireon.blueprint_graph_open asset_path=\"/Game/BP/MyActor\"");
 }
 
 #undef LOCTEXT_NAMESPACE

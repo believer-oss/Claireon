@@ -1226,5 +1226,19 @@
     "FLinearColor": "(R=0.0,G=0.66,B=1.0,A=1.0)",
     "FHitResult": "(FaceIndex=...) or any struct dump containing ,Time= and ,Distance= -- translator substitutes FHitResult()",
     "FLatentActionInfo": "(Linkage=-1,UUID=-1,...) -- translator substitutes FLatentActionInfo()"
+  },
+  "field_name_aliases": {
+    "description": "Graph and properties tools emit both prefixed and plain-name keys on identity fields. Writers and readers MUST tolerate both; readers SHOULD prefer the prefixed form for logs (#0000 Item 3).",
+    "graph_tools_emit": {
+      "on_graph_objects": ["graph_name", "name"],
+      "on_node_objects": ["node_title", "title", "node_class", "class", "node_id"],
+      "on_linked_references": ["node_title", "title", "node_guid"]
+    },
+    "properties_tool_emits": {
+      "on_variables": ["name", "variable_name"],
+      "on_functions": ["name", "function_name"],
+      "on_components": ["name", "component_name"]
+    },
+    "component_details_emits": ["name", "component_name"]
   }
 }

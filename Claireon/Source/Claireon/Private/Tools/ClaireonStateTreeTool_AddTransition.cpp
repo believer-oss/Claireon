@@ -21,7 +21,7 @@ FString ClaireonStateTreeTool_AddTransition::GetName() const
 
 FString ClaireonStateTreeTool_AddTransition::GetDescription() const
 {
-	return TEXT("Add a transition to a state.");
+	return TEXT("Add a transition to a state in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Transitions fire on a trigger (OnTaskCompleted, OnEvent, OnStateCompleted, etc.) and route execution to a target state. Returns the new transition GUID.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_AddTransition::GetInputSchema() const
@@ -30,7 +30,7 @@ TSharedPtr<FJsonObject> ClaireonStateTreeTool_AddTransition::GetInputSchema() co
 	Builder.AddSessionParams();
 	Builder.AddString(TEXT("state_id"), TEXT("GUID of the state."), true);
 	Builder.AddString(TEXT("trigger"), TEXT("Trigger: OnStateCompleted, OnStateSucceeded, OnStateFailed, OnTick, OnEvent, None."), true);
-	Builder.AddString(TEXT("target_type"), TEXT("Target type: GotoState, NextState, NextSelectableState, Succeeded, Failed, None."), true);
+	Builder.AddString(TEXT("target_type"), TEXT("target_type: enum (GotoState | NextState | NextSelectableState | Succeeded | Failed | None)"), true);
 	Builder.AddString(TEXT("target_state_id"), TEXT("Target state GUID (required when target_type is GotoState)."));
 	Builder.AddString(TEXT("event_tag"), TEXT("Gameplay tag (used when trigger is OnEvent)."));
 	Builder.AddString(TEXT("priority"), TEXT("Priority: None, Low, Normal, Medium, High, Critical."));
@@ -68,7 +68,25 @@ FToolResult ClaireonStateTreeTool_AddTransition::Execute(const TSharedPtr<FJsonO
 		return MakeErrorResult(TEXT("State not found"));
 
 	EStateTreeTransitionTrigger Trigger = ClaireonStateTreeEditInternal::ParseTransitionTrigger(TriggerStr);
-	EStateTreeTransitionType TransType = ClaireonStateTreeEditInternal::ParseTransitionType(TargetTypeStr);
+	TOptional<EStateTreeTransitionType> ParsedType = ClaireonStateTreeEditInternal::TryParseTransitionType(TargetTypeStr);
+	if (!ParsedType.IsSet())
+	{
+		return MakeErrorResult(FString::Printf(
+			TEXT("Unknown target_type: '%s'. Valid: GotoState, NextState, NextSelectableState, Succeeded, Failed, None"),
+			*TargetTypeStr));
+	}
+	const EStateTreeTransitionType TransType = ParsedType.GetValue();
+
+	// D3: target_state_id only meaningful when target_type=GotoState. Reject silent drop.
+	{
+		FString TargetStateIdProbe;
+		const bool bHasTargetStateId =
+			Arguments->TryGetStringField(TEXT("target_state_id"), TargetStateIdProbe) && !TargetStateIdProbe.IsEmpty();
+		if (bHasTargetStateId && TransType != EStateTreeTransitionType::GotoState)
+		{
+			return MakeErrorResult(TEXT("target_state_id requires target_type=GotoState"));
+		}
+	}
 
 	// Resolve target state if GotoState
 	UStateTreeState* TargetState = nullptr;
@@ -120,5 +138,7 @@ FToolResult ClaireonStateTreeTool_AddTransition::Execute(const TSharedPtr<FJsonO
 
 	Data->FocusedStateId = StateId;
 	Data->LastOperationStatus = FString::Printf(TEXT("add_transition -> Added %s transition to '%s'"), *TriggerStr, *State->Name.ToString());
-	return BuildStateResponse(SessionId, Data);
+
+	const FString NewIdStr = NewTransition.ID.ToString(EGuidFormats::DigitsWithHyphens);
+	return BuildStateResponse(SessionId, Data, FStringView(TEXT("transition_id")), FStringView(NewIdStr));
 }

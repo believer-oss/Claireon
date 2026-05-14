@@ -21,7 +21,7 @@ FString ClaireonStateTreeTool_AddTransitionCondition::GetName() const
 
 FString ClaireonStateTreeTool_AddTransitionCondition::GetDescription() const
 {
-	return TEXT("Add a condition node to a transition.");
+	return TEXT("Add a condition node to a transition in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Transition conditions gate firing of the transition; all conditions must pass at evaluation time. The node_type must be a FStateTreeConditionBase subclass.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_AddTransitionCondition::GetInputSchema() const

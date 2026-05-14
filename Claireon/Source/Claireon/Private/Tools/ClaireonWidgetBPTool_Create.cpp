@@ -26,7 +26,7 @@ FString ClaireonWidgetBPTool_Create::GetName() const
 
 FString ClaireonWidgetBPTool_Create::GetDescription() const
 {
-    return TEXT("Create a new Widget Blueprint asset at the given path and open an editing session.");
+    return TEXT("Create a new Widget Blueprint asset at the given path and open an editing session. Stateless / non-session entry: writes the new .uasset to disk, then returns a session_id ready for further claireon.widgetbp_* operations. Common pitfall: target package directory must already exist.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_Create::GetInputSchema() const
@@ -50,15 +50,6 @@ FToolResult ClaireonWidgetBPTool_Create::Execute(const TSharedPtr<FJsonObject>& 
             Params = *NestedObj;
         }
     }
-    return Operation_Create(Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_Create(const TSharedPtr<FJsonObject>& Params)
-{
 	// Extract asset_path (required)
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
@@ -87,7 +78,7 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_Create(const TSharedPtr<FJso
 		RootWidgetClassStr = TEXT("CanvasPanel");
 	}
 
-	// Resolve parent class â must be a subclass of UUserWidget
+	// Resolve parent class -- must be a subclass of UUserWidget
 	ClaireonNameResolver::FNameResolveResult ParentClassResult;
 	UClass* ParentClass = ClaireonNameResolver::ResolveClassName(ParentClassName, nullptr, ParentClassResult);
 	if (!ParentClass)
@@ -226,3 +217,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_Create(const TSharedPtr<FJso
 
 	return BuildStateResponse(SessionId, LiveData);
 }
+

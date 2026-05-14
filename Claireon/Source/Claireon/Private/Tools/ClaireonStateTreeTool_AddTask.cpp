@@ -21,7 +21,7 @@ FString ClaireonStateTreeTool_AddTask::GetName() const
 
 FString ClaireonStateTreeTool_AddTask::GetDescription() const
 {
-	return TEXT("Add a task node to a state.");
+	return TEXT("Add a task node to a state in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Tasks run while the state is active and produce success/failure/running results. The node_type must be a registered FStateTreeTaskBase subclass.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_AddTask::GetInputSchema() const
@@ -80,6 +80,9 @@ FToolResult ClaireonStateTreeTool_AddTask::Execute(const TSharedPtr<FJsonObject>
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Add Task")));
 	Data->StateTree->Modify();
 
+	// Capture the new task's GUID before MoveTemp consumes the local NewNode.
+	const FString NewIdStr = NewNode.ID.ToString(EGuidFormats::DigitsWithHyphens);
+
 	// Check schema for single vs multiple tasks
 	const UStateTreeSchema* Schema = Data->StateTree->GetSchema();
 	if (Schema && !Schema->AllowMultipleTasks())
@@ -94,5 +97,5 @@ FToolResult ClaireonStateTreeTool_AddTask::Execute(const TSharedPtr<FJsonObject>
 	Data->FocusedStateId = StateId;
 	Data->LastOperationStatus = FString::Printf(TEXT("add_task -> Added %s to '%s'"), *NodeType, *State->Name.ToString());
 
-	return BuildStateResponse(SessionId, Data);
+	return BuildStateResponse(SessionId, Data, FStringView(TEXT("task_id")), FStringView(NewIdStr));
 }

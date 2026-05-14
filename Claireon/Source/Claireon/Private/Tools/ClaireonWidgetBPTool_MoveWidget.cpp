@@ -22,7 +22,7 @@ FString ClaireonWidgetBPTool_MoveWidget::GetName() const
 
 FString ClaireonWidgetBPTool_MoveWidget::GetDescription() const
 {
-    return TEXT("Move a widget to a new parent panel (and optional index) within the widget tree.");
+    return TEXT("Move a widget to a new parent panel (and optional index) within the widget tree in the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Transactional. Common pitfall: the new parent must be a UPanelWidget; non-panel widgets cannot host children.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_MoveWidget::GetInputSchema() const
@@ -45,15 +45,6 @@ FToolResult ClaireonWidgetBPTool_MoveWidget::Execute(const TSharedPtr<FJsonObjec
     {
         return Error;
     }
-    return Operation_MoveWidget(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_MoveWidget(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	FString WidgetName;
 	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
 	{
@@ -121,3 +112,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_MoveWidget(const FString& Se
 
 	return BuildStateResponse(SessionId, Data);
 }
+

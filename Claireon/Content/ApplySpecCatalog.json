@@ -1,0 +1,103 @@
+{
+  "_meta": {
+    "schema_version": 1,
+    "entry_count": 8,
+    "tools_must_match_registered": true
+  },
+  "entries": [
+    {
+      "tool": "claireon.behaviortree_edit",
+      "spec_entry_types": ["nodes[]"],
+      "calling_convention": "params={asset_path, spec}",
+      "creates_asset_if_missing": false,
+      "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+      "gotchas": [
+        "BT property values go through FProperty::ImportText_Direct; FValueOrBBKey_* properties auto-wrap a bare scalar as (DefaultValue=X), so 'WaitTime': '0.5' works",
+        "Class names are fuzzy-resolved (drop U/F prefix; partial matches allowed)",
+        "Spec is additive: applying to a BT that already has a root selector results in two trees under the BT root",
+        "Non-session behaviortree_inspect only walks the primary root child; use session-mode (open->structure->close) to see additions"
+      ]
+    },
+    {
+      "tool": "claireon.blackboard_edit",
+      "spec_entry_types": ["keys[]"],
+      "calling_convention": "params={asset_path, spec}",
+      "creates_asset_if_missing": false,
+      "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+      "gotchas": [
+        "Each key requires id, name, type",
+        "type must be a valid blackboard key type string (Object, Bool, Float, Int, String, Vector, Rotator, Name, Class, Enum)"
+      ]
+    },
+    {
+      "tool": "claireon.blueprint_edit_graph",
+      "spec_entry_types": ["nodes[]", "connections[]", "variables[]"],
+      "calling_convention": "flat: asset_path, spec passed at top-level (matches the existing schema)",
+      "creates_asset_if_missing": true,
+      "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+      "gotchas": [
+        "This is the ONLY apply_spec tool that auto-creates the asset; the other seven require the asset to already exist (duplicate first)",
+        "Connection pin names are fuzzy-resolved: 'exec' (input) and 'then' (output) work without knowing the canonical pin name",
+        "Class names are fuzzy-resolved (drop U/F prefix; partial matches allowed)",
+        "spec.graph names the target graph (e.g. 'EventGraph')"
+      ]
+    },
+    {
+      "tool": "claireon.eqs_edit",
+      "spec_entry_types": ["options[]"],
+      "calling_convention": "params={asset_path, spec}",
+      "creates_asset_if_missing": false,
+      "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+      "gotchas": [
+        "Each option requires id, generator, and tests[]",
+        "Generator and test type strings are fuzzy-resolved (e.g. 'EnvQueryGenerator_SimpleGrid', 'EnvQueryTest_Distance')"
+      ]
+    },
+    {
+      "tool": "claireon.niagara_edit",
+      "spec_entry_types": ["parameters[]"],
+      "calling_convention": "params={asset_path, spec}",
+      "creates_asset_if_missing": false,
+      "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+      "gotchas": [
+        "Niagara emitters[] is NOT yet implemented; only parameters[] mutates the asset (emitter creation requires Niagara template-system integration)",
+        "The applicator returns no error for emitters[] entries today; treat them as a stub",
+        "Each parameter requires id, name, type, value (where type is float, FLinearColor, FVector, etc.)"
+      ]
+    },
+    {
+      "tool": "claireon.pcg_edit",
+      "spec_entry_types": ["nodes[]", "connections[]"],
+      "calling_convention": "params={asset_path, spec}",
+      "creates_asset_if_missing": false,
+      "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+      "gotchas": [
+        "PCG connection pin names are EXACT-match (no fuzzy resolution yet for PCG-specific port aliases)",
+        "Each connection requires source_node, source_pin, target_node, target_pin"
+      ]
+    },
+    {
+      "tool": "claireon.statetree_edit",
+      "spec_entry_types": ["states[]", "transitions[]", "evaluators[]", "global_tasks[]"],
+      "calling_convention": "params={asset_path, spec}",
+      "creates_asset_if_missing": false,
+      "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+      "gotchas": [
+        "Transitions can be authored either per-state (states[i].transitions) or top-level (spec.transitions[]) -- both forms are equivalent and resolve from/to via id_mappings",
+        "Top-level transitions are useful when authoring transitions independently of state definitions",
+        "Each state requires id, name, type, parent (null for root)"
+      ]
+    },
+    {
+      "tool": "claireon.widgetbp_edit",
+      "spec_entry_types": ["widgets[]"],
+      "calling_convention": "params={asset_path, spec}",
+      "creates_asset_if_missing": false,
+      "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+      "gotchas": [
+        "WidgetBP applicator opens existing Widget Blueprints only (no auto-create); duplicate a template and apply against the duplicate",
+        "Each widget requires id, type, parent (null for root), and optional children[] / properties / slot_properties"
+      ]
+    }
+  ]
+}

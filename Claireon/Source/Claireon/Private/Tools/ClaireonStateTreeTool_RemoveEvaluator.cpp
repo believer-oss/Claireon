@@ -19,7 +19,7 @@ FString ClaireonStateTreeTool_RemoveEvaluator::GetName() const
 
 FString ClaireonStateTreeTool_RemoveEvaluator::GetDescription() const
 {
-	return TEXT("Remove a global evaluator from the State Tree.");
+	return TEXT("Remove a global evaluator from the State Tree in the open editing session. Requires open session_id from claireon.statetree_open. Transactional. Common pitfall: any bindings sourced from the evaluator's outputs are dropped; downstream consumers may revert to their authored defaults.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_RemoveEvaluator::GetInputSchema() const

@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_RemoveVariable::GetName() const
 
 FString ClaireonBlueprintGraphTool_RemoveVariable::GetDescription() const
 {
-    return TEXT("Remove a member variable from the Blueprint. Refuses if referenced unless force=true.");
+    return TEXT("Remove a member variable from the Blueprint in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: refuses with an error if the variable is referenced by any node; pass force=true to delete the variable and break the references.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_RemoveVariable::GetInputSchema() const
@@ -130,12 +130,6 @@ FToolResult ClaireonBlueprintGraphTool_RemoveVariable::Execute(const TSharedPtr<
     }
     // remove_variable mutates Blueprint->NewVariables (class-level state), not graph nodes,
     // so skip CheckMutationAffectedNodes (matches the old Execute_Internal arm's comment).
-    return Operation_RemoveVariable(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_RemoveVariable(
-	const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	if (!Blueprint)
 	{

@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_SwitchGraph::GetName() const
 
 FString ClaireonBlueprintGraphTool_SwitchGraph::GetDescription() const
 {
-    return TEXT("Switch the session to a different graph on the same Blueprint. Preserves cursor history.");
+    return TEXT("Switch the open Blueprint editing session to a different graph on the same Blueprint. Requires open session_id from claireon.blueprint_graph_open. Read-only with respect to graph contents (the cursor and graph pointer are session state). Cursor history is preserved across the switch.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SwitchGraph::GetInputSchema() const
@@ -127,11 +127,6 @@ FToolResult ClaireonBlueprintGraphTool_SwitchGraph::Execute(const TSharedPtr<FJs
     {
         return Error;
     }
-    return Operation_SwitchGraph(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_SwitchGraph(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	if (!Data->Blueprint.IsValid())
 	{
 		return MakeErrorResult(TEXT("Blueprint is no longer valid"));

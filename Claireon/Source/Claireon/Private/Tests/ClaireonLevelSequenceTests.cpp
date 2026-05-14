@@ -26,6 +26,10 @@
 #include "Tracks/MovieSceneFloatTrack.h"
 #include "Tracks/MovieSceneCameraCutTrack.h"
 #include "Tracks/MovieSceneAudioTrack.h"
+#include "Tracks/MovieSceneColorTrack.h"
+#include "Animation/MovieSceneMarginTrack.h"
+#include "Animation/MovieScene2DTransformTrack.h"
+#include "Animation/MovieSceneWidgetMaterialTrack.h"
 #include "GameFramework/Actor.h"
 
 // ---------------------------------------------------------------------------
@@ -88,6 +92,12 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_ResolveTrackClass, UNTEST_TIMEOUTMS
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("audio"))      == UMovieSceneAudioTrack::StaticClass());
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("camera_cut")) == UMovieSceneCameraCutTrack::StaticClass());
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("float"))      == UMovieSceneFloatTrack::StaticClass());
+
+	// Widget-common track types (#0000 stage 002)
+	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("color"))           == UMovieSceneColorTrack::StaticClass());
+	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("margin"))          == UMovieSceneMarginTrack::StaticClass());
+	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("2d_transform"))    == UMovieScene2DTransformTrack::StaticClass());
+	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("widget_material")) == UMovieSceneWidgetMaterialTrack::StaticClass());
 
 	// Case-insensitive
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("Transform")) == UMovieScene3DTransformTrack::StaticClass());

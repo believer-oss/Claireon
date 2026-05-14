@@ -16,7 +16,7 @@ FString ClaireonWidgetBPTool_ListMVVMViewModels::GetName() const
 
 FString ClaireonWidgetBPTool_ListMVVMViewModels::GetDescription() const
 {
-    return TEXT("List ViewModel contexts currently registered on the Widget Blueprint's MVVM extension.");
+    return TEXT("List ViewModel contexts currently registered on the Widget Blueprint's MVVM extension in the open editing session. Requires open session_id from claireon.widgetbp_open. Read-only. Returns one entry per viewmodel context with class and name; manage via claireon.widgetbp_add_mvvm_viewmodel and remove counterparts.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_ListMVVMViewModels::GetInputSchema() const
@@ -36,15 +36,6 @@ FToolResult ClaireonWidgetBPTool_ListMVVMViewModels::Execute(const TSharedPtr<FJ
     {
         return Error;
     }
-    return Operation_ListMVVMViewModels(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_ListMVVMViewModels(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
 	if (!WBP)
 	{
@@ -60,3 +51,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_ListMVVMViewModels(const FSt
 
 	return MakeSuccessResult(Result, FString::Printf(TEXT("Found %d MVVM ViewModel context(s)"), Count));
 }
+

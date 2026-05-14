@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_RemoveNode::GetName() const
 
 FString ClaireonBlueprintGraphTool_RemoveNode::GetDescription() const
 {
-    return TEXT("Remove a node from the graph. Session-based when session_id present, stateless otherwise.");
+    return TEXT("Remove a node from the graph. Requires open session_id from claireon.blueprint_graph_open OR pass asset_path for stateless single-shot mode. Transactional. All wires touching the node are dropped; if the node was the cursor target, the cursor is cleared and must be repositioned with claireon.blueprint_graph_select_node.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_RemoveNode::GetInputSchema() const
@@ -141,13 +141,13 @@ FToolResult ClaireonBlueprintGraphTool_RemoveNode::Execute(const TSharedPtr<FJso
         {
             return Error;
         }
-        return CheckMutationAffectedNodes(TEXT("remove_node"), Data, Operation_RemoveNode(SessionId, Data, SessionParams));
+        return CheckMutationAffectedNodes(TEXT("remove_node"), Data, RemoveNode_Impl(SessionId, Data, SessionParams));
     }
 
-    return Operation_RemoveNodeStateless(Params);
+    return RemoveNodeStateless_Impl(Params);
 }
 
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_RemoveNode(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+FToolResult ClaireonBlueprintGraphTool_RemoveNode::RemoveNode_Impl(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
 {
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
@@ -226,7 +226,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_RemoveNode(const FStri
 	return BuildStateResponse(SessionId, Data);
 }
 
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_RemoveNodeStateless(const TSharedPtr<FJsonObject>& Params)
+FToolResult ClaireonBlueprintGraphTool_RemoveNode::RemoveNodeStateless_Impl(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath, GraphName, NodeGuidStr;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))

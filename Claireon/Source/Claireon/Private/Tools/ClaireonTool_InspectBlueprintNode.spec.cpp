@@ -217,3 +217,134 @@ bool FInspectBlueprintNodeTest_AnimGraphRedirectStatelessPath::RunTest(const FSt
 		"covered by manual exercise against live AnimBPs."));
 	return true;
 }
+
+// =====================================================================================
+// ITEM_03 Test 2: serializer alias coverage. The serializer (used by inspect_node)
+// emits BOTH node_title/title and node_class/class. Equal values.
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FInspectBlueprintNodeTest_FieldAliases_SerializerAliases,
+	"Claireon.InspectBlueprintNode.FieldAliases.SerializerAliases",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FInspectBlueprintNodeTest_FieldAliases_SerializerAliases::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_SerializerAliases");
+
+	FString SessionId;
+	FString PrintStringGuid;
+	FString GraphName;
+	{
+		ClaireonBlueprintGraphTool_Create CreateTool;
+		TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
+		CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
+		CreateArgs->SetStringField(TEXT("parent_class"), TEXT("Actor"));
+		auto CR = CreateTool.Execute(CreateArgs);
+		if (CR.bIsError)
+		{
+			AddError(FString::Printf(TEXT("Create BP failed: %s"), *CR.GetContentAsString()));
+			return false;
+		}
+		SessionId = InspectBPSpec_ExtractSessionId(CR.GetContentAsString());
+		if (SessionId.IsEmpty()) { AddError(TEXT("No session id")); return false; }
+
+		ClaireonBlueprintGraphTool_AddNode AddTool;
+		TSharedPtr<FJsonObject> AddArgs = MakeShared<FJsonObject>();
+		AddArgs->SetStringField(TEXT("session_id"), SessionId);
+		AddArgs->SetStringField(TEXT("node_type"), TEXT("CallFunction"));
+		AddArgs->SetStringField(TEXT("function_name"), TEXT("PrintString"));
+		AddArgs->SetStringField(TEXT("function_class"), TEXT("KismetSystemLibrary"));
+		AddArgs->SetStringField(TEXT("response_mode"), TEXT("full"));
+		auto AR = AddTool.Execute(AddArgs);
+		if (AR.bIsError) { AddError(TEXT("add_node failed")); return false; }
+		PrintStringGuid = InspectBPSpec_ExtractCursorNodeGuid(AR.GetContentAsString());
+		GraphName = TEXT("EventGraph");
+
+		ClaireonBlueprintGraphTool_Compile CompileTool;
+		TSharedPtr<FJsonObject> CompileArgs = MakeShared<FJsonObject>();
+		CompileArgs->SetStringField(TEXT("session_id"), SessionId);
+		CompileTool.Execute(CompileArgs);
+
+		ClaireonBlueprintGraphTool_Close CloseTool;
+		TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
+		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
+		CloseTool.Execute(CloseArgs);
+	}
+	if (PrintStringGuid.IsEmpty()) { AddError(TEXT("No node guid")); return false; }
+
+	ClaireonTool_InspectBlueprintNode InspectTool;
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("asset_path"), AssetPath);
+	Args->SetStringField(TEXT("graph_name"), GraphName);
+	Args->SetStringField(TEXT("node_guid"), PrintStringGuid);
+
+	auto Result = InspectTool.Execute(Args);
+	if (Result.bIsError)
+	{
+		AddError(FString::Printf(TEXT("inspect_node failed: %s"), *Result.GetContentAsString()));
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> Payload;
+	auto Reader = TJsonReaderFactory<>::Create(Result.GetContentAsString());
+	if (!FJsonSerializer::Deserialize(Reader, Payload) || !Payload.IsValid())
+	{
+		AddError(TEXT("Payload failed to parse as JSON"));
+		return false;
+	}
+
+	FString Title, TitleAlias, Class, ClassAlias;
+	if (!Payload->TryGetStringField(TEXT("node_title"), Title) ||
+		!Payload->TryGetStringField(TEXT("title"), TitleAlias))
+	{
+		AddError(TEXT("Payload missing node_title or title alias")); return false;
+	}
+	if (Title != TitleAlias)
+	{
+		AddError(FString::Printf(TEXT("node_title '%s' != title '%s'"), *Title, *TitleAlias));
+		return false;
+	}
+	if (!Payload->TryGetStringField(TEXT("node_class"), Class) ||
+		!Payload->TryGetStringField(TEXT("class"), ClassAlias))
+	{
+		AddError(TEXT("Payload missing node_class or class alias")); return false;
+	}
+	if (Class != ClassAlias)
+	{
+		AddError(FString::Printf(TEXT("node_class '%s' != class '%s'"), *Class, *ClassAlias));
+		return false;
+	}
+
+	// If there are any 'pins' with 'linked_to' refs, assert title aliases on linked refs too.
+	const TArray<TSharedPtr<FJsonValue>>* Pins = nullptr;
+	if (Payload->TryGetArrayField(TEXT("pins"), Pins))
+	{
+		for (const TSharedPtr<FJsonValue>& PV : *Pins)
+		{
+			const TSharedPtr<FJsonObject>* P = nullptr;
+			if (!PV->TryGetObject(P) || !P) { continue; }
+			const TArray<TSharedPtr<FJsonValue>>* LinkedTo = nullptr;
+			if (!(*P)->TryGetArrayField(TEXT("linked_to"), LinkedTo) || !LinkedTo) { continue; }
+			for (const TSharedPtr<FJsonValue>& LV : *LinkedTo)
+			{
+				const TSharedPtr<FJsonObject>* L = nullptr;
+				if (!LV->TryGetObject(L) || !L) { continue; }
+				FString LT, LTa;
+				if ((*L)->TryGetStringField(TEXT("node_title"), LT))
+				{
+					if (!(*L)->TryGetStringField(TEXT("title"), LTa))
+					{
+						AddError(TEXT("Linked ref missing 'title' alias")); return false;
+					}
+					if (LT != LTa)
+					{
+						AddError(FString::Printf(TEXT("linked_to node_title '%s' != title '%s'"), *LT, *LTa));
+						return false;
+					}
+				}
+			}
+		}
+	}
+
+	return true;
+}

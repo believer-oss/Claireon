@@ -18,6 +18,9 @@ public:
 	virtual TSharedPtr<FJsonObject> GetInputSchema() const override;
 	virtual FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;
 
+	// P3: synonym/abbreviation keywords for tools_search ranking
+	virtual TArray<FString> GetSearchKeywords() const override;
+
 	/**
 	 * Install the tool-catalog binding PyCFunctions (_tool_catalog_build,
 	 * _tool_catalog_nearest) into the given Python 'unreal' module dict.

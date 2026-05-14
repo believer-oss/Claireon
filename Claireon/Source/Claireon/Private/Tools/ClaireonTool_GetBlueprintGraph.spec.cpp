@@ -7,6 +7,7 @@
 // (ClaireonTool_GetBlueprintGraph) is untouched.
 
 #include "Tools/ClaireonTool_GetBlueprintGraph.h"
+#include "Tools/ClaireonTool_ApplyBlueprintGraph.h"
 #include "Tools/ClaireonBlueprintGraphTool_Create.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddNode.h"
 #include "Tools/ClaireonBlueprintGraphTool_MoveNode.h"
@@ -20,6 +21,8 @@
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
 #include "Internationalization/Regex.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 
 namespace
 {
@@ -505,3 +508,465 @@ bool FGetBlueprintGraphTest_OutlineFormat_PositionParsesSigned::RunTest(const FS
 	CloseSession(SessionId);
 	return true;
 }
+
+// =====================================================================================
+// ITEM_02 Test 1: GUID self-heal + DigitsWithHyphens format regression guard.
+// Adds nodes via in-session tools then invokes get_graph with format='full'. Every
+// emitted node_id must parse with EGuidFormats::DigitsWithHyphens AND be non-zero AND
+// contain hyphens. Guards against the "node_id=None on Python side" symptom caused by
+// emitting EGuidFormats::Digits (no hyphens), plus the zero-GUID factory regression.
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetBlueprintGraphTest_NodeIdSelfHealHyphenated,
+	"Claireon.GetBlueprintGraph.NodeId.SelfHealHyphenated",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGetBlueprintGraphTest_NodeIdSelfHealHyphenated::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_NodeIdSelfHeal");
+
+	const FString SessionId = CreateBlueprintSession(*this, AssetPath);
+	if (SessionId.IsEmpty()) { return false; }
+
+	// Add a mix of typed CallFunction nodes and a Branch to cover >1 node factory paths.
+	TArray<FString> AddedGuids;
+	for (int32 i = 0; i < 3; ++i)
+	{
+		const FString PrintGuid = AddPrintStringNode(*this, SessionId);
+		if (PrintGuid.IsEmpty()) { CloseSession(SessionId); return false; }
+		AddedGuids.Add(PrintGuid);
+	}
+	const FString BranchGuid = AddBranchNode(*this, SessionId);
+	if (BranchGuid.IsEmpty()) { CloseSession(SessionId); return false; }
+	AddedGuids.Add(BranchGuid);
+
+	// Invoke get_graph format='json' node_detail_level='full' on the asset.
+	ClaireonTool_GetBlueprintGraph GetTool;
+	TSharedPtr<FJsonObject> GetArgs = MakeShared<FJsonObject>();
+	GetArgs->SetStringField(TEXT("asset_path"), AssetPath);
+	GetArgs->SetStringField(TEXT("node_detail_level"), TEXT("full"));
+	GetArgs->SetStringField(TEXT("format"), TEXT("json"));
+	auto GR = GetTool.Execute(GetArgs);
+	if (GR.bIsError)
+	{
+		AddError(FString::Printf(TEXT("get_graph failed: %s"), *GR.GetContentAsString()));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	if (!GR.Data.IsValid())
+	{
+		AddError(TEXT("get_graph returned null Data"));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* GraphsArr = nullptr;
+	if (!GR.Data->TryGetArrayField(TEXT("graphs"), GraphsArr) || !GraphsArr)
+	{
+		AddError(TEXT("get_graph Data missing 'graphs' array"));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	int32 NodeInspected = 0;
+	for (const TSharedPtr<FJsonValue>& GV : *GraphsArr)
+	{
+		const TSharedPtr<FJsonObject>* GO = nullptr;
+		if (!GV->TryGetObject(GO) || !GO) { continue; }
+		const TArray<TSharedPtr<FJsonValue>>* NodesArr = nullptr;
+		if (!(*GO)->TryGetArrayField(TEXT("nodes"), NodesArr) || !NodesArr) { continue; }
+
+		for (const TSharedPtr<FJsonValue>& NV : *NodesArr)
+		{
+			const TSharedPtr<FJsonObject>* NO = nullptr;
+			if (!NV->TryGetObject(NO) || !NO) { continue; }
+			FString NodeIdStr;
+			if (!(*NO)->TryGetStringField(TEXT("node_id"), NodeIdStr))
+			{
+				AddError(TEXT("Node object missing 'node_id' field"));
+				CloseSession(SessionId);
+				return false;
+			}
+			// verifies: DigitsWithHyphens format shipped (matches ITEM_02 contract).
+			if (!NodeIdStr.Contains(TEXT("-")))
+			{
+				AddError(FString::Printf(TEXT("node_id '%s' missing hyphens; expected DigitsWithHyphens format"), *NodeIdStr));
+				CloseSession(SessionId);
+				return false;
+			}
+			FGuid OutGuid;
+			// verifies: the strict ParseExact + non-zero check (bare Parse() succeeds on zero GUID).
+			if (!FGuid::ParseExact(NodeIdStr, EGuidFormats::DigitsWithHyphens, OutGuid))
+			{
+				AddError(FString::Printf(TEXT("node_id '%s' failed ParseExact(DigitsWithHyphens)"), *NodeIdStr));
+				CloseSession(SessionId);
+				return false;
+			}
+			if (!OutGuid.IsValid())
+			{
+				AddError(FString::Printf(TEXT("node_id '%s' parsed to zero GUID (the symptom we are guarding)"), *NodeIdStr));
+				CloseSession(SessionId);
+				return false;
+			}
+			++NodeInspected;
+		}
+	}
+
+	if (NodeInspected <= 0)
+	{
+		AddError(TEXT("No nodes inspected; expected at least the added nodes plus default Event BeginPlay."));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	CloseSession(SessionId);
+	return true;
+}
+
+// =====================================================================================
+// ITEM_02 Test 2: cross-tool handoff. get_graph's node_id is usable directly as
+// inspect_node's node_guid argument without format translation -- verifies the
+// serializer + get_graph emit the same DigitsWithHyphens format.
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetBlueprintGraphTest_NodeIdCrossToolHandoff,
+	"Claireon.GetBlueprintGraph.NodeId.CrossToolHandoff",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGetBlueprintGraphTest_NodeIdCrossToolHandoff::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_NodeIdHandoff");
+
+	const FString SessionId = CreateBlueprintSession(*this, AssetPath);
+	if (SessionId.IsEmpty()) { return false; }
+
+	const FString PrintGuid = AddPrintStringNode(*this, SessionId);
+	if (PrintGuid.IsEmpty()) { CloseSession(SessionId); return false; }
+
+	ClaireonTool_GetBlueprintGraph GetTool;
+	TSharedPtr<FJsonObject> GetArgs = MakeShared<FJsonObject>();
+	GetArgs->SetStringField(TEXT("asset_path"), AssetPath);
+	GetArgs->SetStringField(TEXT("node_detail_level"), TEXT("full"));
+	GetArgs->SetStringField(TEXT("format"), TEXT("json"));
+	auto GR = GetTool.Execute(GetArgs);
+	if (GR.bIsError || !GR.Data.IsValid())
+	{
+		AddError(FString::Printf(TEXT("get_graph failed or null: %s"), *GR.GetContentAsString()));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	// Pick any node_id from the graphs array.
+	FString AnyNodeId;
+	const TArray<TSharedPtr<FJsonValue>>* GraphsArr = nullptr;
+	if (GR.Data->TryGetArrayField(TEXT("graphs"), GraphsArr) && GraphsArr)
+	{
+		for (const TSharedPtr<FJsonValue>& GV : *GraphsArr)
+		{
+			const TSharedPtr<FJsonObject>* GO = nullptr;
+			if (!GV->TryGetObject(GO) || !GO) { continue; }
+			const TArray<TSharedPtr<FJsonValue>>* NodesArr = nullptr;
+			if (!(*GO)->TryGetArrayField(TEXT("nodes"), NodesArr) || !NodesArr) { continue; }
+			for (const TSharedPtr<FJsonValue>& NV : *NodesArr)
+			{
+				const TSharedPtr<FJsonObject>* NO = nullptr;
+				if (!NV->TryGetObject(NO) || !NO) { continue; }
+				if ((*NO)->TryGetStringField(TEXT("node_id"), AnyNodeId) && !AnyNodeId.IsEmpty())
+				{
+					break;
+				}
+			}
+			if (!AnyNodeId.IsEmpty()) { break; }
+		}
+	}
+
+	if (AnyNodeId.IsEmpty())
+	{
+		AddError(TEXT("Could not pick any node_id from get_graph output"));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	// verifies: get_graph and inspect_node agree on GUID format.
+	// The inspect_node path goes through ClaireonBlueprintNodeSerializer, which also emits
+	// DigitsWithHyphens; a ParseExact on get_graph's output round-trips into the graph.
+	UEdGraph* EventGraph = GetEventGraphFromAsset(AssetPath);
+	if (!EventGraph)
+	{
+		AddError(TEXT("Failed to resolve EventGraph for handoff check"));
+		CloseSession(SessionId);
+		return false;
+	}
+	FGuid Parsed;
+	if (!FGuid::ParseExact(AnyNodeId, EGuidFormats::DigitsWithHyphens, Parsed))
+	{
+		AddError(FString::Printf(TEXT("get_graph node_id '%s' not ParseExact(DigitsWithHyphens)"), *AnyNodeId));
+		CloseSession(SessionId);
+		return false;
+	}
+	UEdGraphNode* Found = ClaireonBlueprintHelpers::FindNodeByGuid(EventGraph, Parsed);
+	if (!Found)
+	{
+		AddError(FString::Printf(TEXT("get_graph node_id '%s' does not resolve to a node in EventGraph"), *AnyNodeId));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	CloseSession(SessionId);
+	return true;
+}
+
+// =====================================================================================
+// ITEM_02 Test 3: apply_graph id_map format. After apply_graph creates nodes, every
+// value in the returned id_map must be in DigitsWithHyphens format (hyphenated) and
+// parse via FGuid::ParseExact(DigitsWithHyphens). Closes the third emission site
+// referenced by ITEM_02.
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetBlueprintGraphTest_ApplyGraphIdMapFormat,
+	"Claireon.GetBlueprintGraph.NodeId.ApplyGraphIdMapFormat",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGetBlueprintGraphTest_ApplyGraphIdMapFormat::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_ApplyGraphIdMap");
+
+	const FString SessionId = CreateBlueprintSession(*this, AssetPath);
+	if (SessionId.IsEmpty()) { return false; }
+
+	// Build minimal apply_graph payload: two CallFunction nodes by local-id.
+	TSharedPtr<FJsonObject> ApplyArgs = MakeShared<FJsonObject>();
+	ApplyArgs->SetStringField(TEXT("session_id"), SessionId);
+
+	TArray<TSharedPtr<FJsonValue>> Nodes;
+	for (int32 i = 0; i < 2; ++i)
+	{
+		TSharedPtr<FJsonObject> N = MakeShared<FJsonObject>();
+		N->SetStringField(TEXT("id"), FString::Printf(TEXT("local_%d"), i));
+		N->SetStringField(TEXT("node_type"), TEXT("CallFunction"));
+		N->SetStringField(TEXT("function_name"), TEXT("PrintString"));
+		N->SetStringField(TEXT("function_class"), TEXT("KismetSystemLibrary"));
+		Nodes.Add(MakeShared<FJsonValueObject>(N));
+	}
+	ApplyArgs->SetArrayField(TEXT("nodes"), Nodes);
+
+	ClaireonTool_ApplyBlueprintGraph ApplyTool;
+	auto AR = ApplyTool.Execute(ApplyArgs);
+	if (AR.bIsError)
+	{
+		AddError(FString::Printf(TEXT("apply_graph failed: %s"), *AR.GetContentAsString()));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	if (!AR.Data.IsValid())
+	{
+		AddError(TEXT("apply_graph returned null Data"));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	const TSharedPtr<FJsonObject>* IdMapObj = nullptr;
+	if (!AR.Data->TryGetObjectField(TEXT("id_map"), IdMapObj) || !IdMapObj || !(*IdMapObj).IsValid())
+	{
+		AddError(TEXT("apply_graph Data missing 'id_map' object"));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	int32 Checked = 0;
+	for (const TPair<FString, TSharedPtr<FJsonValue>>& Kv : (*IdMapObj)->Values)
+	{
+		FString GuidStr;
+		if (!Kv.Value.IsValid() || !Kv.Value->TryGetString(GuidStr))
+		{
+			AddError(FString::Printf(TEXT("id_map['%s'] not a string"), *Kv.Key));
+			CloseSession(SessionId);
+			return false;
+		}
+		// verifies: id_map entries are DigitsWithHyphens (hyphenated) -- ITEM_02 edit 3.
+		if (!GuidStr.Contains(TEXT("-")))
+		{
+			AddError(FString::Printf(TEXT("id_map['%s']='%s' missing hyphens; expected DigitsWithHyphens"), *Kv.Key, *GuidStr));
+			CloseSession(SessionId);
+			return false;
+		}
+		FGuid Parsed;
+		if (!FGuid::ParseExact(GuidStr, EGuidFormats::DigitsWithHyphens, Parsed) || !Parsed.IsValid())
+		{
+			AddError(FString::Printf(TEXT("id_map['%s']='%s' ParseExact(DigitsWithHyphens) failed or zero GUID"), *Kv.Key, *GuidStr));
+			CloseSession(SessionId);
+			return false;
+		}
+		++Checked;
+	}
+
+	if (Checked < 2)
+	{
+		AddError(FString::Printf(TEXT("Expected at least 2 id_map entries, got %d"), Checked));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	CloseSession(SessionId);
+	return true;
+}
+
+// =====================================================================================
+// ITEM_03 Test 1: graph-tools alias coverage. Every graph has BOTH graph_name and name;
+// every node has BOTH node_title and title, node_class and class. Equal values.
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetBlueprintGraphTest_FieldAliases_GraphAndNodeObjects,
+	"Claireon.GetBlueprintGraph.FieldAliases.GraphAndNodeObjects",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGetBlueprintGraphTest_FieldAliases_GraphAndNodeObjects::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_FieldAliasesGraph");
+
+	const FString SessionId = CreateBlueprintSession(*this, AssetPath);
+	if (SessionId.IsEmpty()) { return false; }
+
+	AddPrintStringNode(*this, SessionId);
+	AddBranchNode(*this, SessionId);
+
+	ClaireonTool_GetBlueprintGraph GetTool;
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("asset_path"), AssetPath);
+	Args->SetStringField(TEXT("node_detail_level"), TEXT("full"));
+	Args->SetStringField(TEXT("format"), TEXT("json"));
+	auto R = GetTool.Execute(Args);
+	if (R.bIsError || !R.Data.IsValid())
+	{
+		AddError(FString::Printf(TEXT("get_graph failed: %s"), *R.GetContentAsString()));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* Graphs = nullptr;
+	if (!R.Data->TryGetArrayField(TEXT("graphs"), Graphs) || !Graphs || Graphs->Num() == 0)
+	{
+		AddError(TEXT("get_graph returned no 'graphs'"));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	for (const TSharedPtr<FJsonValue>& GV : *Graphs)
+	{
+		const TSharedPtr<FJsonObject>* G = nullptr;
+		if (!GV->TryGetObject(G) || !G) { continue; }
+		FString GraphName, NameAlias;
+		if (!(*G)->TryGetStringField(TEXT("graph_name"), GraphName) || GraphName.IsEmpty())
+		{
+			AddError(TEXT("Graph object missing graph_name")); CloseSession(SessionId); return false;
+		}
+		if (!(*G)->TryGetStringField(TEXT("name"), NameAlias) || NameAlias.IsEmpty())
+		{
+			AddError(TEXT("Graph object missing 'name' alias")); CloseSession(SessionId); return false;
+		}
+		if (GraphName != NameAlias)
+		{
+			AddError(FString::Printf(TEXT("graph_name '%s' != name '%s'"), *GraphName, *NameAlias));
+			CloseSession(SessionId); return false;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Nodes = nullptr;
+		if (!(*G)->TryGetArrayField(TEXT("nodes"), Nodes) || !Nodes) { continue; }
+		for (const TSharedPtr<FJsonValue>& NV : *Nodes)
+		{
+			const TSharedPtr<FJsonObject>* N = nullptr;
+			if (!NV->TryGetObject(N) || !N) { continue; }
+
+			FString Title, TitleAlias;
+			if (!(*N)->TryGetStringField(TEXT("node_title"), Title))
+			{
+				AddError(TEXT("Node missing node_title")); CloseSession(SessionId); return false;
+			}
+			if (!(*N)->TryGetStringField(TEXT("title"), TitleAlias))
+			{
+				AddError(TEXT("Node missing 'title' alias")); CloseSession(SessionId); return false;
+			}
+			if (Title != TitleAlias)
+			{
+				AddError(FString::Printf(TEXT("node_title '%s' != title '%s'"), *Title, *TitleAlias));
+				CloseSession(SessionId); return false;
+			}
+
+			FString Class, ClassAlias;
+			if (!(*N)->TryGetStringField(TEXT("node_class"), Class))
+			{
+				AddError(TEXT("Node missing node_class")); CloseSession(SessionId); return false;
+			}
+			if (!(*N)->TryGetStringField(TEXT("class"), ClassAlias))
+			{
+				AddError(TEXT("Node missing 'class' alias")); CloseSession(SessionId); return false;
+			}
+			if (Class != ClassAlias)
+			{
+				AddError(FString::Printf(TEXT("node_class '%s' != class '%s'"), *Class, *ClassAlias));
+				CloseSession(SessionId); return false;
+			}
+		}
+	}
+
+	CloseSession(SessionId);
+	return true;
+}
+
+// =====================================================================================
+// ITEM_03 Test 5: response-size smoke. Synthesize a 100-node graph; assert
+// blueprint_get_graph(format='full') returns under 256 KB and no error.
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetBlueprintGraphTest_FieldAliases_ResponseSizeSmoke,
+	"Claireon.GetBlueprintGraph.FieldAliases.ResponseSizeSmoke",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGetBlueprintGraphTest_FieldAliases_ResponseSizeSmoke::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_FieldAliasesSize");
+
+	const FString SessionId = CreateBlueprintSession(*this, AssetPath);
+	if (SessionId.IsEmpty()) { return false; }
+
+	for (int32 i = 0; i < 100; ++i)
+	{
+		const FString G = AddPrintStringNode(*this, SessionId);
+		if (G.IsEmpty()) { CloseSession(SessionId); return false; }
+	}
+
+	ClaireonTool_GetBlueprintGraph GetTool;
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("asset_path"), AssetPath);
+	Args->SetStringField(TEXT("node_detail_level"), TEXT("full"));
+	Args->SetStringField(TEXT("format"), TEXT("json"));
+	Args->SetNumberField(TEXT("max_nodes"), 0); // unlimited
+	auto R = GetTool.Execute(Args);
+	if (R.bIsError)
+	{
+		AddError(FString::Printf(TEXT("get_graph failed: %s"), *R.GetContentAsString()));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	// Serialize Data to JSON string and assert size <= 256 KB.
+	FString Serialized;
+	if (R.Data.IsValid())
+	{
+		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Serialized);
+		FJsonSerializer::Serialize(R.Data.ToSharedRef(), Writer);
+	}
+	const int32 MaxBytes = 256 * 1024;
+	if (Serialized.Len() > MaxBytes)
+	{
+		AddError(FString::Printf(TEXT("Response size %d exceeds 256 KB cap"), Serialized.Len()));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	CloseSession(SessionId);
+	return true;
+}
+

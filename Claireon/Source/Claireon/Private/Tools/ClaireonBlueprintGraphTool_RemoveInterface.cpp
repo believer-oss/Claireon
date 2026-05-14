@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_RemoveInterface::GetName() const
 
 FString ClaireonBlueprintGraphTool_RemoveInterface::GetDescription() const
 {
-    return TEXT("Remove an interface from the Blueprint's ImplementedInterfaces and compile.");
+    return TEXT("Remove an interface from the Blueprint's ImplementedInterfaces in the open editing session and compile. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: any function-override graphs implementing the interface are deleted with it.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_RemoveInterface::GetInputSchema() const
@@ -127,12 +127,6 @@ FToolResult ClaireonBlueprintGraphTool_RemoveInterface::Execute(const TSharedPtr
     {
         return Error;
     }
-    return Operation_RemoveInterface(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_RemoveInterface(
-	const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	FString InterfaceClassName;
 	if (!Params->TryGetStringField(TEXT("interface_class"), InterfaceClassName) || InterfaceClassName.IsEmpty())
 	{

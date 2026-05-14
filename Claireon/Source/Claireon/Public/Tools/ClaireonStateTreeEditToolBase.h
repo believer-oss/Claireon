@@ -94,8 +94,17 @@ protected:
 		FStateTreeEditToolData*& OutData,
 		FString& OutError);
 
-	/** Builds the standard state response with State Tree info. */
-	FToolResult BuildStateResponse(const FString& SessionId, FStateTreeEditToolData* Data);
+	/**
+	 * Builds the standard state response with State Tree info.
+	 * When both ExtraField and ExtraValue are non-empty, appends a `data.<ExtraField> = ExtraValue`
+	 * scalar to the response (e.g. `data.state_id = <new GUID>`). When either is empty, the
+	 * response shape is byte-identical to the no-extra form.
+	 */
+	FToolResult BuildStateResponse(
+		const FString& SessionId,
+		FStateTreeEditToolData* Data,
+		FStringView ExtraField = {},
+		FStringView ExtraValue = {});
 };
 
 // Macro to reduce declaration boilerplate for individual statetree tool classes.

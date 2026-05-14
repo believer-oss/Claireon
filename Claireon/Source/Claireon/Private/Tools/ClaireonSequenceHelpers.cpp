@@ -21,6 +21,10 @@
 #include "Tracks/MovieSceneAudioTrack.h"
 #include "Tracks/MovieSceneCameraCutTrack.h"
 #include "Tracks/MovieSceneFloatTrack.h"
+#include "Tracks/MovieSceneColorTrack.h"
+#include "Animation/MovieSceneMarginTrack.h"
+#include "Animation/MovieScene2DTransformTrack.h"
+#include "Animation/MovieSceneWidgetMaterialTrack.h"
 #include "Sections/MovieSceneEventSectionBase.h"
 #include "Channels/MovieSceneEvent.h"
 #include "Dom/JsonObject.h"
@@ -108,6 +112,25 @@ UClass* FClaireonSequenceHelpers::ResolveTrackClass(const FString& TypeName)
 	if (TypeName.Equals(TEXT("float"), ESearchCase::IgnoreCase))
 	{
 		return UMovieSceneFloatTrack::StaticClass();
+	}
+	// Widget-common track types (#0000 stage 002). camera_cut is intentionally not
+	// gated here -- UMovieScene::AddTrack routes through the owning sequence's
+	// ETrackSupport callback, which rejects camera_cut on UWidgetAnimation.
+	if (TypeName.Equals(TEXT("color"), ESearchCase::IgnoreCase))
+	{
+		return UMovieSceneColorTrack::StaticClass();
+	}
+	if (TypeName.Equals(TEXT("margin"), ESearchCase::IgnoreCase))
+	{
+		return UMovieSceneMarginTrack::StaticClass();
+	}
+	if (TypeName.Equals(TEXT("2d_transform"), ESearchCase::IgnoreCase))
+	{
+		return UMovieScene2DTransformTrack::StaticClass();
+	}
+	if (TypeName.Equals(TEXT("widget_material"), ESearchCase::IgnoreCase))
+	{
+		return UMovieSceneWidgetMaterialTrack::StaticClass();
 	}
 	return nullptr;
 }

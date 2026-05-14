@@ -14,7 +14,7 @@ FString ClaireonWidgetBPTool_GetState::GetName() const
 
 FString ClaireonWidgetBPTool_GetState::GetDescription() const
 {
-    return TEXT("Return the current state of an open Widget Blueprint editing session (widget tree, focused widget, modified flag).");
+    return TEXT("Return the current state of the open Widget Blueprint editing session: widget tree, focused widget, and modified flag. Requires open session_id from claireon.widgetbp_open. Read-only. Use to verify pending changes before claireon.widgetbp_save and to discover widget names for downstream operations.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_GetState::GetInputSchema() const
@@ -34,14 +34,6 @@ FToolResult ClaireonWidgetBPTool_GetState::Execute(const TSharedPtr<FJsonObject>
     {
         return Error;
     }
-    return Operation_GetState(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_GetState(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	return BuildStateResponse(SessionId, Data);
 }
+

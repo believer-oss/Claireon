@@ -102,9 +102,14 @@ FString ClaireonBlueprintGraphTool_Close::GetName() const
     return TEXT("claireon.blueprint_graph_close");
 }
 
+TArray<FString> ClaireonBlueprintGraphTool_Close::GetSearchKeywords() const
+{
+    return {TEXT("bp"), TEXT("close"), TEXT("end"), TEXT("release"), TEXT("session"), TEXT("graph")};
+}
+
 FString ClaireonBlueprintGraphTool_Close::GetDescription() const
 {
-    return TEXT("Close the editing session.");
+    return TEXT("Closes the current Blueprint editing session, releasing the lock and clearing the in-session cursor. Implicitly compiles and saves before closing. Most-common pitfall: calling close on a session_id that does not exist (returns an error rather than a no-op); look up session ids via claireon.list_sessions if unsure.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Close::GetInputSchema() const
@@ -130,11 +135,27 @@ FToolResult ClaireonBlueprintGraphTool_Close::Execute(const TSharedPtr<FJsonObje
     return MakeSuccessResult(nullptr, TEXT("Session closed successfully"));
 }
 
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_Close(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+// ----------------------------------------------------------------------------
+// P1: hot-path metadata enrichment
+// ----------------------------------------------------------------------------
+
+FString ClaireonBlueprintGraphTool_Close::GetFullDescription() const
 {
-	FClaireonSessionManager::Get().CloseSession(SessionId);
-	// ToolData cleanup happens via HandleSessionClosed delegate
-	return MakeSuccessResult(nullptr, TEXT("Session closed successfully"));
+    return TEXT(
+        "Closes the current Blueprint editing session, releases the in-session "
+        "lock, clears the per-session cursor used by auto_connect_from_cursor, "
+        "and triggers an implicit compile + save before tearing down. Always "
+        "the last call in the per-node cycle. The session_id becomes invalid "
+        "after close; subsequent calls to any "
+        "claireon.blueprint_graph_* tool with the same id will return an error. "
+        "If you want to keep editing, do NOT close -- subsequent open calls "
+        "with the same asset_path will reuse the existing session. Use "
+        "claireon.list_sessions to enumerate live sessions if unsure.");
+}
+
+FString ClaireonBlueprintGraphTool_Close::GetExampleUsage() const
+{
+    return TEXT("claireon.blueprint_graph_close session_id=\"...\"");
 }
 
 #undef LOCTEXT_NAMESPACE

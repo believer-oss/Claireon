@@ -15,6 +15,11 @@ FString ClaireonNiagaraTool_Open::GetName() const
 	return TEXT("claireon.niagara_open");
 }
 
+TArray<FString> ClaireonNiagaraTool_Open::GetSearchKeywords() const
+{
+	return {TEXT("niagara"), TEXT("niag"), TEXT("vfx"), TEXT("fx"), TEXT("particles"), TEXT("effect"), TEXT("emitter"), TEXT("open")};
+}
+
 FString ClaireonNiagaraTool_Open::GetDescription() const
 {
 	return TEXT("Open a Niagara System asset for editing. Returns a session_id for subsequent operations.");

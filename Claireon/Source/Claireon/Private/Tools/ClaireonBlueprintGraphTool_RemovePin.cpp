@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_RemovePin::GetName() const
 
 FString ClaireonBlueprintGraphTool_RemovePin::GetDescription() const
 {
-    return TEXT("Remove a dynamic pin from a node (Sequence/MakeArray/Switch/etc.).");
+    return TEXT("Remove a dynamic pin from a node (Sequence/MakeArray/Switch/etc.) in the open Blueprint editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Connections to the removed pin are dropped; non-dynamic pins error out unmodified.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_RemovePin::GetInputSchema() const
@@ -129,10 +129,13 @@ FToolResult ClaireonBlueprintGraphTool_RemovePin::Execute(const TSharedPtr<FJson
     {
         return Error;
     }
-    return CheckMutationAffectedNodes(TEXT("remove_pin"), Data, Operation_RemovePin(SessionId, Data, Params));
+    return CheckMutationAffectedNodes(TEXT("remove_pin"), Data, RemovePin_Impl(SessionId, Data, Params));
 }
 
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_RemovePin(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+FToolResult ClaireonBlueprintGraphTool_RemovePin::RemovePin_Impl(
+    const FString& SessionId,
+    FBlueprintEditToolData* Data,
+    const TSharedPtr<FJsonObject>& Params)
 {
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
@@ -154,7 +157,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_RemovePin(const FStrin
 		return MakeErrorResult(FString::Printf(TEXT("Node not found with GUID: %s.\n%s"), *NodeGuidStr, *AvailableNodes));
 	}
 
-	// Find the pin to remove — by name or by index
+	// Find the pin to remove -- by name or by index
 	FString PinName;
 	UEdGraphPin* TargetPin = nullptr;
 

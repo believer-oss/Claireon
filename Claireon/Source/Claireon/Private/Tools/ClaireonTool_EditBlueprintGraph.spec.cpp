@@ -31,6 +31,7 @@
 
 // Still-monolithic BlueprintCompile tool (exercised by CompileRemoveUnused test).
 #include "Tools/ClaireonTool_BlueprintCompile.h"
+#include "Tools/ClaireonTool_ApplyBlueprintGraph.h"
 
 // Decomposed blueprint-graph tools (one include per operation exercised here).
 #include "Tools/IClaireonTool.h"
@@ -5821,8 +5822,8 @@ bool FEditBlueprintGraphTest_SessionIdContract::RunTest(const FString& Parameter
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ApplyGraphRollback,
-    "Claireon.EditBlueprintGraph.ApplyGraphRollback",
-    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	"Claireon.EditBlueprintGraph.ApplyGraphRollback",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_ApplyGraphRollback::RunTest(const FString& Parameters)
 {
@@ -5956,5 +5957,1077 @@ bool FEditBlueprintGraphTest_ApplyGraphRollback::RunTest(const FString& Paramete
 		}
 	}
 
+	return true;
+}
+
+// =====================================================================================
+// ITEM_01 Test A: inspect_node by node_title resolves the event node. Verifies the new
+// ResolveTargetNode helper path: schema advertises node_title, body honors it.
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ResolveByTitle_InspectEventBeginPlay,
+	"Claireon.EditBlueprintGraph.ResolveByTitle.InspectEventBeginPlay",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_ResolveByTitle_InspectEventBeginPlay::RunTest(const FString& Parameters)
+{
+	FString SessionId;
+	FString PrintStringGuid;
+	if (!SetupInspectNodeFixture(*this, TEXT("/Game/__MCPTests/BP_ResolveByTitleInspect"), SessionId, PrintStringGuid))
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("operation"), TEXT("inspect_node"));
+	Args->SetStringField(TEXT("session_id"), SessionId);
+	Args->SetStringField(TEXT("node_title"), TEXT("Event BeginPlay"));
+
+	auto Result = DispatchLegacyEnvelope(Args);
+	if (Result.bIsError)
+	{
+		AddError(FString::Printf(TEXT("inspect_node by title failed: %s"), *Result.GetContentAsString()));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	const FString Payload = Result.GetContentAsString();
+	TSharedPtr<FJsonObject> PayloadObj = ParsePayload(Payload);
+	if (!PayloadObj.IsValid())
+	{
+		AddError(FString::Printf(TEXT("inspect_node payload not JSON: %s"), *Payload));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	FString NodeIdStr;
+	if (!PayloadObj->TryGetStringField(TEXT("node_id"), NodeIdStr))
+	{
+		AddError(TEXT("Payload missing 'node_id'"));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+	FGuid Out;
+	if (!FGuid::ParseExact(NodeIdStr, EGuidFormats::DigitsWithHyphens, Out) || !Out.IsValid())
+	{
+		AddError(FString::Printf(TEXT("Resolved node_id '%s' not a valid GUID"), *NodeIdStr));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	CloseInspectNodeFixture(SessionId);
+	return true;
+}
+
+// =====================================================================================
+// ITEM_01 Test B: ambiguous node_title produces error listing both GUIDs.
+// Adds two PrintString nodes (same title), then asks inspect_node for that title.
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ResolveByTitle_AmbiguousListsGuids,
+	"Claireon.EditBlueprintGraph.ResolveByTitle.AmbiguousListsGuids",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_ResolveByTitle_AmbiguousListsGuids::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_ResolveByTitleAmbig");
+
+	FString SessionId;
+	FString FirstPrintGuid;
+	if (!SetupInspectNodeFixture(*this, AssetPath, SessionId, FirstPrintGuid))
+	{
+		return false;
+	}
+
+	// Add a second PrintString so two nodes share the ListView title.
+	TSharedPtr<FJsonObject> Add2 = MakeShared<FJsonObject>();
+	Add2->SetStringField(TEXT("operation"), TEXT("add_node"));
+	Add2->SetStringField(TEXT("session_id"), SessionId);
+	Add2->SetStringField(TEXT("node_type"), TEXT("CallFunction"));
+	Add2->SetStringField(TEXT("function_name"), TEXT("PrintString"));
+	Add2->SetStringField(TEXT("function_class"), TEXT("KismetSystemLibrary"));
+	Add2->SetStringField(TEXT("response_mode"), TEXT("full"));
+	auto AddResult = DispatchLegacyEnvelope(Add2);
+	if (AddResult.bIsError)
+	{
+		AddError(FString::Printf(TEXT("Second add_node failed: %s"), *AddResult.GetContentAsString()));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("operation"), TEXT("inspect_node"));
+	Args->SetStringField(TEXT("session_id"), SessionId);
+	Args->SetStringField(TEXT("node_title"), TEXT("Print String"));
+
+	auto Result = DispatchLegacyEnvelope(Args);
+	if (!Result.bIsError)
+	{
+		AddError(TEXT("Expected error for ambiguous title"));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	const FString Msg = Result.GetContentAsString();
+	if (!Msg.Contains(TEXT("Ambiguous node title 'Print String'")))
+	{
+		AddError(FString::Printf(TEXT("Error message missing ambiguous-title phrase: %s"), *Msg));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+	// The error must contain both matching GUIDs in DigitsWithHyphens form.
+	int32 HyphenatedCount = 0;
+	int32 Pos = 0;
+	while (true)
+	{
+		int32 Found = Msg.Find(TEXT("-"), ESearchCase::IgnoreCase, ESearchDir::FromStart, Pos);
+		if (Found == INDEX_NONE) break;
+		Pos = Found + 1;
+		++HyphenatedCount;
+	}
+	// A DigitsWithHyphens GUID has 4 hyphens. Two GUIDs => 8 hyphens minimum.
+	if (HyphenatedCount < 8)
+	{
+		AddError(FString::Printf(TEXT("Error message should list >=2 GUIDs (>=8 hyphens); got %d: %s"), HyphenatedCount, *Msg));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	CloseInspectNodeFixture(SessionId);
+	return true;
+}
+
+// =====================================================================================
+// ITEM_01 Test C: neither node_guid nor node_title produces the canonical error string.
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ResolveByTitle_MissingBothFields,
+	"Claireon.EditBlueprintGraph.ResolveByTitle.MissingBothFields",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_ResolveByTitle_MissingBothFields::RunTest(const FString& Parameters)
+{
+	FString SessionId;
+	FString PrintStringGuid;
+	if (!SetupInspectNodeFixture(*this, TEXT("/Game/__MCPTests/BP_ResolveByTitleMissing"), SessionId, PrintStringGuid))
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("operation"), TEXT("inspect_node"));
+	Args->SetStringField(TEXT("session_id"), SessionId);
+
+	auto Result = DispatchLegacyEnvelope(Args);
+	if (!Result.bIsError)
+	{
+		AddError(TEXT("Expected error when neither node_guid nor node_title provided"));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	const FString Msg = Result.GetContentAsString();
+	if (Msg != TEXT("Missing required field: node_guid or node_title"))
+	{
+		AddError(FString::Printf(TEXT("Expected exact error 'Missing required field: node_guid or node_title', got '%s'"), *Msg));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	CloseInspectNodeFixture(SessionId);
+	return true;
+}
+
+// =====================================================================================
+// ITEM_01 Test D: positive-path coverage for at least one of the other four tools.
+// move_node accepts node_title and moves the node. Covers the shared-helper parity for
+// AddPin/DisconnectPin/MoveNode/RecombinePin via mechanical parity.
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ResolveByTitle_MoveNodeByTitle,
+	"Claireon.EditBlueprintGraph.ResolveByTitle.MoveNodeByTitle",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_ResolveByTitle_MoveNodeByTitle::RunTest(const FString& Parameters)
+{
+	FString SessionId;
+	FString PrintStringGuid;
+	if (!SetupInspectNodeFixture(*this, TEXT("/Game/__MCPTests/BP_ResolveByTitleMove"), SessionId, PrintStringGuid))
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("operation"), TEXT("move_node"));
+	Args->SetStringField(TEXT("session_id"), SessionId);
+	Args->SetStringField(TEXT("node_title"), TEXT("Event BeginPlay"));
+	TSharedPtr<FJsonObject> Pos = MakeShared<FJsonObject>();
+	Pos->SetNumberField(TEXT("x"), 256);
+	Pos->SetNumberField(TEXT("y"), 128);
+	Args->SetObjectField(TEXT("position"), Pos);
+
+	auto Result = DispatchLegacyEnvelope(Args);
+	if (Result.bIsError)
+	{
+		AddError(FString::Printf(TEXT("move_node by title failed: %s"), *Result.GetContentAsString()));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	CloseInspectNodeFixture(SessionId);
+	return true;
+}
+
+// =====================================================================================
+// ITEM_01 Test E: unknown title produces 'not found' error with 'Available nodes:'.
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ResolveByTitle_UnknownTitle,
+	"Claireon.EditBlueprintGraph.ResolveByTitle.UnknownTitle",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_ResolveByTitle_UnknownTitle::RunTest(const FString& Parameters)
+{
+	FString SessionId;
+	FString PrintStringGuid;
+	if (!SetupInspectNodeFixture(*this, TEXT("/Game/__MCPTests/BP_ResolveByTitleUnknown"), SessionId, PrintStringGuid))
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("operation"), TEXT("inspect_node"));
+	Args->SetStringField(TEXT("session_id"), SessionId);
+	Args->SetStringField(TEXT("node_title"), TEXT("DoesNotExist"));
+
+	auto Result = DispatchLegacyEnvelope(Args);
+	if (!Result.bIsError)
+	{
+		AddError(TEXT("Expected error for unknown title"));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	const FString Msg = Result.GetContentAsString();
+	if (!Msg.Contains(TEXT("Node not found by title 'DoesNotExist'")))
+	{
+		AddError(FString::Printf(TEXT("Error missing 'Node not found by title' phrase: %s"), *Msg));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+	if (!Msg.Contains(TEXT("Available nodes:")))
+	{
+		AddError(FString::Printf(TEXT("Error missing 'Available nodes:' substring: %s"), *Msg));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	CloseInspectNodeFixture(SessionId);
+	return true;
+}
+
+// =====================================================================================
+// ITEM_03 Test 4: component-details alias coverage. get_component_details response
+// Details object carries BOTH 'name' and 'component_name', equal values. This test is
+// unconditional (Stage 004 preserves the aliases when restructuring the payload).
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_FieldAliases_ComponentDetailsAliases,
+	"Claireon.EditBlueprintGraph.FieldAliases.ComponentDetailsAliases",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_FieldAliases_ComponentDetailsAliases::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_ComponentAliases");
+
+	// Create session.
+	TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
+	CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
+	CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
+	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("Actor"));
+	auto CR = DispatchLegacyEnvelope(CreateArgs);
+	if (CR.bIsError)
+	{
+		AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
+		return false;
+	}
+	const FString SessionId = ExtractSessionIdFromResponse(CR.GetContentAsString());
+	if (SessionId.IsEmpty()) { AddError(TEXT("No session id")); return false; }
+
+	// Add a component so there is a target for get_component_details.
+	TSharedPtr<FJsonObject> AddArgs = MakeShared<FJsonObject>();
+	AddArgs->SetStringField(TEXT("operation"), TEXT("add_component"));
+	AddArgs->SetStringField(TEXT("session_id"), SessionId);
+	AddArgs->SetStringField(TEXT("component_name"), TEXT("TestStaticMesh"));
+	AddArgs->SetStringField(TEXT("component_class"), TEXT("/Script/Engine.StaticMeshComponent"));
+	auto AR = DispatchLegacyEnvelope(AddArgs);
+	if (AR.bIsError)
+	{
+		AddError(FString::Printf(TEXT("add_component failed: %s"), *AR.GetContentAsString()));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> GetArgs = MakeShared<FJsonObject>();
+	GetArgs->SetStringField(TEXT("operation"), TEXT("get_component_details"));
+	GetArgs->SetStringField(TEXT("session_id"), SessionId);
+	GetArgs->SetStringField(TEXT("component_name"), TEXT("TestStaticMesh"));
+	auto GR = DispatchLegacyEnvelope(GetArgs);
+	if (GR.bIsError)
+	{
+		AddError(FString::Printf(TEXT("get_component_details failed: %s"), *GR.GetContentAsString()));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	// The Details object is surfaced inside the tool's response data. Check both on the
+	// legacy summary (if present in content) AND the data.component path (Stage 004).
+	bool bFoundAlias = false;
+	if (GR.Data.IsValid())
+	{
+		// Direct lookup: data.component (Stage 004 pattern) or top-level fields (legacy).
+		const TSharedPtr<FJsonObject>* Comp = nullptr;
+		TSharedPtr<FJsonObject> Target = GR.Data;
+		if (GR.Data->TryGetObjectField(TEXT("component"), Comp) && Comp && (*Comp).IsValid())
+		{
+			Target = *Comp;
+		}
+		FString Name, Alias;
+		if (Target->TryGetStringField(TEXT("name"), Name) &&
+			Target->TryGetStringField(TEXT("component_name"), Alias))
+		{
+			if (Name != Alias)
+			{
+				AddError(FString::Printf(TEXT("component 'name' '%s' != 'component_name' '%s'"), *Name, *Alias));
+				CloseInspectNodeFixture(SessionId);
+				return false;
+			}
+			bFoundAlias = true;
+		}
+	}
+
+	// Fallback: payload may be string-encoded in the summary. Parse and check.
+	if (!bFoundAlias)
+	{
+		const FString Payload = GR.GetContentAsString();
+		TSharedPtr<FJsonObject> PayloadObj;
+		auto Reader = TJsonReaderFactory<>::Create(Payload);
+		if (FJsonSerializer::Deserialize(Reader, PayloadObj) && PayloadObj.IsValid())
+		{
+			FString Name, Alias;
+			if (PayloadObj->TryGetStringField(TEXT("name"), Name) &&
+				PayloadObj->TryGetStringField(TEXT("component_name"), Alias) &&
+				Name == Alias)
+			{
+				bFoundAlias = true;
+			}
+		}
+	}
+
+	if (!bFoundAlias)
+	{
+		AddError(FString::Printf(TEXT("Could not find 'name' + 'component_name' alias pair on component details response: %s"),
+			*GR.GetContentAsString()));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	CloseInspectNodeFixture(SessionId);
+	return true;
+}
+
+// =====================================================================================
+// ITEM_05 Test 1: structured data lives on data.component; summary is a one-liner.
+// - data.component must be a JSON object (not a string).
+// - data.component.class is non-empty.
+// - data.component.properties is an array.
+// - summary matches the one-liner shape; summary contains no '{' (regression guard for
+//   accidental pretty-JSON leak).
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ComponentDetails_StructuredShape,
+	"Claireon.EditBlueprintGraph.ComponentDetails.StructuredShape",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_ComponentDetails_StructuredShape::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_CompDetailsStructured");
+
+	// Create session.
+	TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
+	CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
+	CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
+	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("Actor"));
+	auto CR = DispatchLegacyEnvelope(CreateArgs);
+	if (CR.bIsError)
+	{
+		AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
+		return false;
+	}
+	const FString SessionId = ExtractSessionIdFromResponse(CR.GetContentAsString());
+	if (SessionId.IsEmpty()) { AddError(TEXT("No session id")); return false; }
+
+	TSharedPtr<FJsonObject> AddArgs = MakeShared<FJsonObject>();
+	AddArgs->SetStringField(TEXT("operation"), TEXT("add_component"));
+	AddArgs->SetStringField(TEXT("session_id"), SessionId);
+	AddArgs->SetStringField(TEXT("component_name"), TEXT("TestStaticMesh"));
+	AddArgs->SetStringField(TEXT("component_class"), TEXT("/Script/Engine.StaticMeshComponent"));
+	auto AR = DispatchLegacyEnvelope(AddArgs);
+	if (AR.bIsError)
+	{
+		AddError(FString::Printf(TEXT("add_component failed: %s"), *AR.GetContentAsString()));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("operation"), TEXT("get_component_details"));
+	Args->SetStringField(TEXT("session_id"), SessionId);
+	Args->SetStringField(TEXT("component_name"), TEXT("TestStaticMesh"));
+	Args->SetStringField(TEXT("response_mode"), TEXT("status"));
+	auto R = DispatchLegacyEnvelope(Args);
+	if (R.bIsError)
+	{
+		AddError(FString::Printf(TEXT("get_component_details failed: %s"), *R.GetContentAsString()));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	if (!R.Data.IsValid())
+	{
+		AddError(TEXT("Null Data on get_component_details response"));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	// data.component must be a JSON object.
+	const TSharedPtr<FJsonObject>* CompObj = nullptr;
+	if (!R.Data->TryGetObjectField(TEXT("component"), CompObj) || !CompObj || !(*CompObj).IsValid())
+	{
+		AddError(TEXT("Missing data.component as JSON object"));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	FString ClassName;
+	if (!(*CompObj)->TryGetStringField(TEXT("class"), ClassName) || ClassName.IsEmpty())
+	{
+		AddError(TEXT("data.component.class missing or empty"));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* PropsArr = nullptr;
+	if (!(*CompObj)->TryGetArrayField(TEXT("properties"), PropsArr))
+	{
+		AddError(TEXT("data.component.properties missing (expected array)"));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	// Summary: status mode prefix is "ok: ". Expected body: "Component '<name>' (class=..., parent=...)"
+	const FString Summary = R.Summary;
+	if (!Summary.Contains(TEXT("Component 'TestStaticMesh'")))
+	{
+		AddError(FString::Printf(TEXT("Summary missing one-liner shape: %s"), *Summary));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+	if (!Summary.Contains(TEXT("class=")))
+	{
+		AddError(FString::Printf(TEXT("Summary missing class= token: %s"), *Summary));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+	if (Summary.Contains(TEXT("{")))
+	{
+		AddError(FString::Printf(TEXT("Summary contains '{' (stray JSON body regression): %s"), *Summary));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	CloseInspectNodeFixture(SessionId);
+	return true;
+}
+
+// =====================================================================================
+// ITEM_05 Test 4: response mode behavior. data.component must survive through both
+// status and full response modes (the mutation after BuildStateResponse is mode-
+// agnostic; this test guards against someone re-adding a mode branch that drops it).
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ComponentDetails_ResponseModeSurvival,
+	"Claireon.EditBlueprintGraph.ComponentDetails.ResponseModeSurvival",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_ComponentDetails_ResponseModeSurvival::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_CompDetailsMode");
+
+	TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
+	CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
+	CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
+	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("Actor"));
+	auto CR = DispatchLegacyEnvelope(CreateArgs);
+	if (CR.bIsError)
+	{
+		AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
+		return false;
+	}
+	const FString SessionId = ExtractSessionIdFromResponse(CR.GetContentAsString());
+	if (SessionId.IsEmpty()) { return false; }
+
+	TSharedPtr<FJsonObject> AddArgs = MakeShared<FJsonObject>();
+	AddArgs->SetStringField(TEXT("operation"), TEXT("add_component"));
+	AddArgs->SetStringField(TEXT("session_id"), SessionId);
+	AddArgs->SetStringField(TEXT("component_name"), TEXT("TestStaticMesh"));
+	AddArgs->SetStringField(TEXT("component_class"), TEXT("/Script/Engine.StaticMeshComponent"));
+	DispatchLegacyEnvelope(AddArgs);
+
+	auto CheckMode = [&](const FString& Mode) -> bool
+	{
+		TSharedPtr<FJsonObject> A = MakeShared<FJsonObject>();
+		A->SetStringField(TEXT("operation"), TEXT("get_component_details"));
+		A->SetStringField(TEXT("session_id"), SessionId);
+		A->SetStringField(TEXT("component_name"), TEXT("TestStaticMesh"));
+		A->SetStringField(TEXT("response_mode"), Mode);
+		auto R = DispatchLegacyEnvelope(A);
+		if (R.bIsError)
+		{
+			AddError(FString::Printf(TEXT("get_component_details (%s) failed: %s"), *Mode, *R.GetContentAsString()));
+			return false;
+		}
+		if (!R.Data.IsValid())
+		{
+			AddError(FString::Printf(TEXT("Null Data in mode '%s'"), *Mode));
+			return false;
+		}
+		const TSharedPtr<FJsonObject>* Comp = nullptr;
+		if (!R.Data->TryGetObjectField(TEXT("component"), Comp) || !Comp)
+		{
+			AddError(FString::Printf(TEXT("Missing data.component in mode '%s'"), *Mode));
+			return false;
+		}
+		return true;
+	};
+
+	const bool bOkStatus = CheckMode(TEXT("status"));
+	const bool bOkFull = CheckMode(TEXT("full"));
+
+	CloseInspectNodeFixture(SessionId);
+	return bOkStatus && bOkFull;
+}
+
+// =====================================================================================
+// ITEM_04 Test 1 / 2 / 3: node position round-trip through apply_graph + get_state.
+// Uses the factual position preservation across ReconstructNode in the factory
+// (implementer choice: ambiguities[1] option 3, narrowed to bWroteProperties path).
+// Parses summary lines by GUID (not title) per Item 4 test-strategy guidance.
+// =====================================================================================
+
+namespace
+{
+	// Scan the get_state summary body for the line containing a given GUID fragment
+	// (short GUID or full). Returns the matched line or empty. The summary format at
+	// ClaireonBlueprintGraphEditToolBase.cpp:363 does not embed GUID in the visible line,
+	// so tests verify by reading NodePosX/Y on the live graph instead. This helper is
+	// retained for callers that inspect summary text.
+	bool ExtractLineContainingTitle(const FString& Summary, const FString& Title, FString& OutLine)
+	{
+		TArray<FString> Lines;
+		Summary.ParseIntoArray(Lines, TEXT("\n"), true);
+		for (const FString& L : Lines)
+		{
+			if (L.Contains(Title))
+			{
+				OutLine = L;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// Parse "@ (x, y)" from a summary line. Returns true if matched.
+	bool ParsePositionFromLine(const FString& Line, int32& OutX, int32& OutY)
+	{
+		int32 AtIdx = Line.Find(TEXT("@ ("));
+		if (AtIdx == INDEX_NONE) { return false; }
+		int32 OpenParen = AtIdx + 2;
+		int32 CloseParen = Line.Find(TEXT(")"), ESearchCase::IgnoreCase, ESearchDir::FromStart, OpenParen);
+		if (CloseParen == INDEX_NONE) { return false; }
+		const FString Inner = Line.Mid(OpenParen + 1, CloseParen - OpenParen - 1);
+		TArray<FString> XY;
+		Inner.ParseIntoArray(XY, TEXT(","), true);
+		if (XY.Num() != 2) { return false; }
+		OutX = FCString::Atoi(*XY[0].TrimStartAndEnd());
+		OutY = FCString::Atoi(*XY[1].TrimStartAndEnd());
+		return true;
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_GetStatePositions_SingleNode,
+	"Claireon.EditBlueprintGraph.GetStatePositions.SingleNode",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_GetStatePositions_SingleNode::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_GetStatePosSingle");
+
+	// Create session.
+	TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
+	CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
+	CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
+	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("Actor"));
+	auto CR = DispatchLegacyEnvelope(CreateArgs);
+	if (CR.bIsError)
+	{
+		AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
+		return false;
+	}
+	const FString SessionId = ExtractSessionIdFromResponse(CR.GetContentAsString());
+	if (SessionId.IsEmpty()) { return false; }
+
+	// apply_graph with one PrintString node at (-1200, -800).
+	{
+		TSharedPtr<FJsonObject> ApplyArgs = MakeShared<FJsonObject>();
+		ApplyArgs->SetStringField(TEXT("session_id"), SessionId);
+		TArray<TSharedPtr<FJsonValue>> Nodes;
+		TSharedPtr<FJsonObject> N = MakeShared<FJsonObject>();
+		N->SetStringField(TEXT("id"), TEXT("a"));
+		N->SetStringField(TEXT("node_type"), TEXT("CallFunction"));
+		N->SetStringField(TEXT("function_name"), TEXT("PrintString"));
+		N->SetStringField(TEXT("function_class"), TEXT("KismetSystemLibrary"));
+		TSharedPtr<FJsonObject> Pos = MakeShared<FJsonObject>();
+		Pos->SetNumberField(TEXT("x"), -1200);
+		Pos->SetNumberField(TEXT("y"), -800);
+		N->SetObjectField(TEXT("position"), Pos);
+		Nodes.Add(MakeShared<FJsonValueObject>(N));
+		ApplyArgs->SetArrayField(TEXT("nodes"), Nodes);
+
+		ClaireonTool_ApplyBlueprintGraph ApplyTool;
+		auto AR = ApplyTool.Execute(ApplyArgs);
+		if (AR.bIsError)
+		{
+			AddError(FString::Printf(TEXT("apply_graph failed: %s"), *AR.GetContentAsString()));
+			CloseInspectNodeFixture(SessionId);
+			return false;
+		}
+	}
+
+	// get_state in full mode (summary includes the @ (x, y) lines).
+	TSharedPtr<FJsonObject> StateArgs = MakeShared<FJsonObject>();
+	StateArgs->SetStringField(TEXT("operation"), TEXT("get_state"));
+	StateArgs->SetStringField(TEXT("session_id"), SessionId);
+	StateArgs->SetStringField(TEXT("response_mode"), TEXT("full"));
+	auto SR = DispatchLegacyEnvelope(StateArgs);
+	if (SR.bIsError)
+	{
+		AddError(FString::Printf(TEXT("get_state failed: %s"), *SR.GetContentAsString()));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	const FString Summary = SR.GetContentAsString();
+
+	// Test 3 exclusivity: find the PrintString line; it must have either real coords
+	// or the fallback label -- exactly one.
+	FString PrintLine;
+	if (!ExtractLineContainingTitle(Summary, TEXT("Print String"), PrintLine))
+	{
+		AddError(FString::Printf(TEXT("Could not find PrintString line in summary: %s"), *Summary));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	int32 X = 0, Y = 0;
+	const bool bHasRealPosition = ParsePositionFromLine(PrintLine, X, Y);
+	const bool bHasFallbackLabel = PrintLine.Contains(TEXT("(position not tracked in this response mode)"));
+
+	if (bHasRealPosition == bHasFallbackLabel)
+	{
+		AddError(FString::Printf(TEXT("Expected exactly one of real-position or fallback-label on line: %s"), *PrintLine));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	// verifies: primary fix (real coordinates). Skipped if fallback shipped.
+	if (bHasRealPosition)
+	{
+		if (X != -1200 || Y != -800)
+		{
+			AddError(FString::Printf(TEXT("Expected (-1200, -800), got (%d, %d) on line: %s"), X, Y, *PrintLine));
+			CloseInspectNodeFixture(SessionId);
+			return false;
+		}
+	}
+
+	CloseInspectNodeFixture(SessionId);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_GetStatePositions_MultiNode,
+	"Claireon.EditBlueprintGraph.GetStatePositions.MultiNode",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_GetStatePositions_MultiNode::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_GetStatePosMulti");
+
+	TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
+	CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
+	CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
+	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("Actor"));
+	auto CR = DispatchLegacyEnvelope(CreateArgs);
+	if (CR.bIsError)
+	{
+		AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
+		return false;
+	}
+	const FString SessionId = ExtractSessionIdFromResponse(CR.GetContentAsString());
+	if (SessionId.IsEmpty()) { return false; }
+
+	// Three Branch nodes at distinct positions. Branch has a stable ListView title
+	// ("Branch") but we key on position presence only via NodePosX/Y via live graph lookup.
+	TArray<TPair<int32, int32>> Positions = { {0, 0}, {500, 0}, {-1200, -800} };
+
+	TSharedPtr<FJsonObject> ApplyArgs = MakeShared<FJsonObject>();
+	ApplyArgs->SetStringField(TEXT("session_id"), SessionId);
+	TArray<TSharedPtr<FJsonValue>> Nodes;
+	for (int32 i = 0; i < Positions.Num(); ++i)
+	{
+		TSharedPtr<FJsonObject> N = MakeShared<FJsonObject>();
+		N->SetStringField(TEXT("id"), FString::Printf(TEXT("n%d"), i));
+		N->SetStringField(TEXT("node_type"), TEXT("Branch"));
+		TSharedPtr<FJsonObject> Pos = MakeShared<FJsonObject>();
+		Pos->SetNumberField(TEXT("x"), Positions[i].Key);
+		Pos->SetNumberField(TEXT("y"), Positions[i].Value);
+		N->SetObjectField(TEXT("position"), Pos);
+		Nodes.Add(MakeShared<FJsonValueObject>(N));
+	}
+	ApplyArgs->SetArrayField(TEXT("nodes"), Nodes);
+
+	ClaireonTool_ApplyBlueprintGraph ApplyTool;
+	auto AR = ApplyTool.Execute(ApplyArgs);
+	if (AR.bIsError)
+	{
+		AddError(FString::Printf(TEXT("apply_graph failed: %s"), *AR.GetContentAsString()));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	if (!AR.Data.IsValid())
+	{
+		AddError(TEXT("apply_graph returned null Data")); CloseInspectNodeFixture(SessionId); return false;
+	}
+
+	// Load the blueprint and check live NodePosX/Y on each Branch node: the primary-fix
+	// path keeps coordinates through ReconstructNode; the multi-node test verifies all
+	// three are tracked independently.
+	UBlueprint* BP = LoadObject<UBlueprint>(nullptr, *AssetPath);
+	if (!BP)
+	{
+		AddError(TEXT("Failed to load blueprint for live-state check")); CloseInspectNodeFixture(SessionId); return false;
+	}
+	UEdGraph* EventGraph = nullptr;
+	for (UEdGraph* G : BP->UbergraphPages)
+	{
+		if (G && G->GetName() == TEXT("EventGraph")) { EventGraph = G; break; }
+	}
+	if (!EventGraph) { AddError(TEXT("No EventGraph")); CloseInspectNodeFixture(SessionId); return false; }
+
+	TSet<TPair<int32, int32>> ExpectedSet;
+	for (const auto& P : Positions) { ExpectedSet.Add(P); }
+
+	// Collect Branch node positions from the live graph.
+	TArray<TPair<int32, int32>> FoundPositions;
+	for (UEdGraphNode* Node : EventGraph->Nodes)
+	{
+		if (!Node) { continue; }
+		if (Node->GetClass()->GetName() == TEXT("K2Node_IfThenElse"))
+		{
+			FoundPositions.Add(TPair<int32, int32>(Node->NodePosX, Node->NodePosY));
+		}
+	}
+
+	if (FoundPositions.Num() < Positions.Num())
+	{
+		AddError(FString::Printf(TEXT("Expected >= %d Branch nodes in live graph, got %d"), Positions.Num(), FoundPositions.Num()));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	for (const TPair<int32, int32>& Wanted : Positions)
+	{
+		bool bFound = false;
+		for (const TPair<int32, int32>& Got : FoundPositions)
+		{
+			if (Got.Key == Wanted.Key && Got.Value == Wanted.Value) { bFound = true; break; }
+		}
+		if (!bFound)
+		{
+			AddError(FString::Printf(TEXT("Expected Branch at (%d, %d) not found in live positions"), Wanted.Key, Wanted.Value));
+			CloseInspectNodeFixture(SessionId);
+			return false;
+		}
+	}
+
+	CloseInspectNodeFixture(SessionId);
+	return true;
+}
+
+// =====================================================================================
+// ITEM_06 Test 1: session_hint fires at 6 consecutive asset_path calls with the new
+// asset-led phrasing and canonical inline-tag shape.
+// =====================================================================================
+
+namespace
+{
+	// Invoke list_graphs (a read-only, cheap, no-mutation op) via asset_path; each call
+	// increments Data->ConsecutiveAssetPathCalls. Returns the full FToolResult via the
+	// legacy envelope dispatcher.
+	IClaireonTool::FToolResult CallListGraphsByAssetPath(const FString& AssetPath)
+	{
+		TSharedPtr<FJsonObject> A = MakeShared<FJsonObject>();
+		A->SetStringField(TEXT("operation"), TEXT("list_graphs"));
+		A->SetStringField(TEXT("asset_path"), AssetPath);
+		return DispatchLegacyEnvelope(A);
+	}
+
+	IClaireonTool::FToolResult CallListGraphsBySessionId(const FString& SessionId)
+	{
+		TSharedPtr<FJsonObject> A = MakeShared<FJsonObject>();
+		A->SetStringField(TEXT("operation"), TEXT("list_graphs"));
+		A->SetStringField(TEXT("session_id"), SessionId);
+		return DispatchLegacyEnvelope(A);
+	}
+
+	FString CreateHintFixtureBlueprint(FAutomationTestBase& Test, const FString& AssetPath)
+	{
+		TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
+		CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
+		CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
+		CreateArgs->SetStringField(TEXT("parent_class"), TEXT("Actor"));
+		auto CR = DispatchLegacyEnvelope(CreateArgs);
+		if (CR.bIsError)
+		{
+			Test.AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
+			return FString();
+		}
+		const FString SessionId = ExtractSessionIdFromResponse(CR.GetContentAsString());
+
+		// Close the session so subsequent asset_path calls trigger auto-open + counter increment.
+		TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
+		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
+		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
+		DispatchLegacyEnvelope(CloseArgs);
+
+		return SessionId;
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SessionHint_FiresAtSix,
+	"Claireon.EditBlueprintGraph.SessionHint.FiresAtSix",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_SessionHint_FiresAtSix::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_SessionHintFire");
+
+	if (CreateHintFixtureBlueprint(*this, AssetPath).IsEmpty())
+	{
+		return false;
+	}
+
+	// Five calls -- no hint expected.
+	for (int32 i = 0; i < 5; ++i)
+	{
+		auto R = CallListGraphsByAssetPath(AssetPath);
+		if (R.bIsError)
+		{
+			AddError(FString::Printf(TEXT("Call %d failed: %s"), i + 1, *R.GetContentAsString()));
+			return false;
+		}
+		if (R.Data.IsValid() && R.Data->HasField(TEXT("session_hint")))
+		{
+			AddError(FString::Printf(TEXT("Unexpected session_hint on call %d"), i + 1));
+			return false;
+		}
+	}
+
+	// Sixth call -- hint should fire.
+	auto R6 = CallListGraphsByAssetPath(AssetPath);
+	if (R6.bIsError || !R6.Data.IsValid())
+	{
+		AddError(FString::Printf(TEXT("Call 6 failed or null Data: %s"), *R6.GetContentAsString()));
+		return false;
+	}
+
+	FString Hint;
+	if (!R6.Data->TryGetStringField(TEXT("session_hint"), Hint))
+	{
+		AddError(TEXT("session_hint not emitted on call 6"));
+		return false;
+	}
+
+	// Required substrings per ITEM_06 Test 1.
+	if (!Hint.StartsWith(TEXT("You've called tools on '")))
+	{
+		AddError(FString::Printf(TEXT("Hint should start with \"You've called tools on '\". Got: %s"), *Hint));
+		return false;
+	}
+	if (!Hint.Contains(AssetPath))
+	{
+		AddError(FString::Printf(TEXT("Hint should contain asset path '%s'. Got: %s"), *AssetPath, *Hint));
+		return false;
+	}
+	if (!Hint.Contains(TEXT("(no session_id)")))
+	{
+		AddError(FString::Printf(TEXT("Hint should contain '(no session_id)'. Got: %s"), *Hint));
+		return false;
+	}
+	if (!Hint.Contains(TEXT("operation='close'")))
+	{
+		AddError(FString::Printf(TEXT("Hint should mention \"operation='close'\". Got: %s"), *Hint));
+		return false;
+	}
+
+	// Inline tag: summary must contain the canonical prefix and asset-path anchor.
+	const FString Summary = R6.GetContentAsString();
+	if (!Summary.Contains(TEXT("[hint] session_hint: reuse session_id for '")))
+	{
+		AddError(FString::Printf(TEXT("Summary missing canonical inline tag prefix. Summary: %s"), *Summary));
+		return false;
+	}
+
+	return true;
+}
+
+// =====================================================================================
+// ITEM_06 Test 2: inline tag compactness. The [hint] fragment is short (<200 chars).
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SessionHint_InlineTagCompact,
+	"Claireon.EditBlueprintGraph.SessionHint.InlineTagCompact",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_SessionHint_InlineTagCompact::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_SessionHintCompact");
+
+	if (CreateHintFixtureBlueprint(*this, AssetPath).IsEmpty())
+	{
+		return false;
+	}
+
+	for (int32 i = 0; i < 5; ++i)
+	{
+		CallListGraphsByAssetPath(AssetPath);
+	}
+	auto R = CallListGraphsByAssetPath(AssetPath);
+	const FString Summary = R.GetContentAsString();
+
+	int32 Start = Summary.Find(TEXT("[hint]"));
+	if (Start == INDEX_NONE)
+	{
+		AddError(TEXT("No [hint] tag on call 6"));
+		return false;
+	}
+	const FString Tag = Summary.Mid(Start);
+	if (Tag.Len() >= 200)
+	{
+		AddError(FString::Printf(TEXT("Inline [hint] tag too long: %d chars"), Tag.Len()));
+		return false;
+	}
+	return true;
+}
+
+// =====================================================================================
+// ITEM_06 Test 3: passing session_id resets the counter; dropping it does not revive
+// the prior count (counter climbs from 0 on fresh asset_path sequence).
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SessionHint_SessionIdResetsCounter,
+	"Claireon.EditBlueprintGraph.SessionHint.SessionIdResetsCounter",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_SessionHint_SessionIdResetsCounter::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_SessionHintReset");
+
+	const FString InitialSessionId = CreateHintFixtureBlueprint(*this, AssetPath);
+	if (InitialSessionId.IsEmpty()) { return false; }
+
+	// Climb to 6 via asset_path.
+	for (int32 i = 0; i < 5; ++i) { CallListGraphsByAssetPath(AssetPath); }
+	auto R6 = CallListGraphsByAssetPath(AssetPath);
+	FString SessionId6;
+	if (R6.Data.IsValid()) { R6.Data->TryGetStringField(TEXT("session_id"), SessionId6); }
+	if (SessionId6.IsEmpty())
+	{
+		AddError(TEXT("Could not extract session_id from call 6"));
+		return false;
+	}
+
+	// Call with explicit session_id. Counter resets.
+	auto R7 = CallListGraphsBySessionId(SessionId6);
+	if (R7.Data.IsValid() && R7.Data->HasField(TEXT("session_hint")))
+	{
+		AddError(TEXT("session_hint should NOT be emitted when session_id is passed"));
+		return false;
+	}
+
+	// Five more session_id calls, no hint.
+	for (int32 i = 0; i < 5; ++i)
+	{
+		auto RN = CallListGraphsBySessionId(SessionId6);
+		if (RN.Data.IsValid() && RN.Data->HasField(TEXT("session_hint")))
+		{
+			AddError(FString::Printf(TEXT("Unexpected session_hint on session_id call %d"), i + 2));
+			return false;
+		}
+	}
+
+	// Drop session_id; 5 asset_path calls, no hint (counter 1..5).
+	for (int32 i = 0; i < 5; ++i)
+	{
+		auto RN = CallListGraphsByAssetPath(AssetPath);
+		if (RN.Data.IsValid() && RN.Data->HasField(TEXT("session_hint")))
+		{
+			AddError(FString::Printf(TEXT("Unexpected session_hint on asset_path call %d after reset"), i + 1));
+			return false;
+		}
+	}
+
+	return true;
+}
+
+// =====================================================================================
+// ITEM_06 Test 4: single asset_path call does NOT fire the hint.
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SessionHint_BelowThresholdNoFire,
+	"Claireon.EditBlueprintGraph.SessionHint.BelowThresholdNoFire",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_SessionHint_BelowThresholdNoFire::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_SessionHintBelow");
+
+	if (CreateHintFixtureBlueprint(*this, AssetPath).IsEmpty())
+	{
+		return false;
+	}
+
+	auto R = CallListGraphsByAssetPath(AssetPath);
+	if (R.bIsError)
+	{
+		AddError(FString::Printf(TEXT("call failed: %s"), *R.GetContentAsString()));
+		return false;
+	}
+	if (R.Data.IsValid() && R.Data->HasField(TEXT("session_hint")))
+	{
+		AddError(TEXT("session_hint should NOT fire at count 1"));
+		return false;
+	}
 	return true;
 }

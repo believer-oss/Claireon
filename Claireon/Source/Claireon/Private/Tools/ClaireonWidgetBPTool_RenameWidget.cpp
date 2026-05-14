@@ -21,7 +21,7 @@ FString ClaireonWidgetBPTool_RenameWidget::GetName() const
 
 FString ClaireonWidgetBPTool_RenameWidget::GetDescription() const
 {
-    return TEXT("Rename a widget within the widget tree.");
+    return TEXT("Rename a widget within the widget tree in the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Transactional. The new name must be unique across the widget tree. Bindings and references to the old name are auto-fixed where possible during the rename.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_RenameWidget::GetInputSchema() const
@@ -43,15 +43,6 @@ FToolResult ClaireonWidgetBPTool_RenameWidget::Execute(const TSharedPtr<FJsonObj
     {
         return Error;
     }
-    return Operation_RenameWidget(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_RenameWidget(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	FString WidgetName;
 	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
 	{
@@ -106,3 +97,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_RenameWidget(const FString& 
 
 	return BuildStateResponse(SessionId, Data);
 }
+

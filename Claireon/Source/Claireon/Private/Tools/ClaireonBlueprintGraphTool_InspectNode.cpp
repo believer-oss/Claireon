@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_InspectNode::GetName() const
 
 FString ClaireonBlueprintGraphTool_InspectNode::GetDescription() const
 {
-    return TEXT("Return a single node in full fidelity (structured JSON) without dumping the whole graph. Read-only.");
+    return TEXT("Return a single node in full fidelity (structured JSON) from the open Blueprint editing session without dumping the whole graph. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Read-only. Pair with claireon.blueprint_graph_get_state to navigate, then drill in here for property-level detail.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_InspectNode::GetInputSchema() const
@@ -128,36 +128,17 @@ FToolResult ClaireonBlueprintGraphTool_InspectNode::Execute(const TSharedPtr<FJs
     {
         return Error;
     }
-    return Operation_InspectNode(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_InspectNode(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UEdGraph* Graph = Data->Graph.Get();
 	if (!Graph)
 	{
 		return MakeErrorResult(TEXT("Graph is no longer valid"));
 	}
 
-	FString NodeGuidStr;
-	if (!Params->TryGetStringField(TEXT("node_guid"), NodeGuidStr))
+	UEdGraphNode* Node = nullptr;
+	FToolResult ResolveError;
+	if (!ResolveTargetNode(Params, Graph, Node, ResolveError))
 	{
-		return MakeErrorResult(TEXT("Missing required field: node_guid"));
-	}
-
-	FGuid NodeGuid;
-	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
-	{
-		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
-	}
-
-	UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
-	if (!Node)
-	{
-		const FString Available = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
-		return MakeErrorResult(FString::Printf(
-			TEXT("Node %s not found in graph '%s'. Available nodes: %s"),
-			*NodeGuidStr, *Graph->GetName(), *Available));
+		return ResolveError;
 	}
 
 	if (Cast<UAnimGraphNode_Base>(Node))

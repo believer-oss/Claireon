@@ -20,7 +20,7 @@ FString ClaireonWidgetBPTool_RemoveMVVMBinding::GetName() const
 
 FString ClaireonWidgetBPTool_RemoveMVVMBinding::GetDescription() const
 {
-    return TEXT("Remove an MVVM binding by id.");
+    return TEXT("Remove an MVVM binding by id from the Widget Blueprint in the open editing session. Requires open session_id from claireon.widgetbp_open. Transactional. Common pitfall: the binding_id must match the id returned by claireon.widgetbp_list_mvvm_bindings; deleting a binding does not affect the viewmodel context itself.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_RemoveMVVMBinding::GetInputSchema() const
@@ -41,15 +41,6 @@ FToolResult ClaireonWidgetBPTool_RemoveMVVMBinding::Execute(const TSharedPtr<FJs
     {
         return Error;
     }
-    return Operation_RemoveMVVMBinding(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_RemoveMVVMBinding(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
 	if (!WBP)
 	{
@@ -92,3 +83,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_RemoveMVVMBinding(const FStr
 
 	return MakeSuccessResult(ResultObj, FString::Printf(TEXT("Removed MVVM binding '%s'"), *BindingIdStr));
 }
+

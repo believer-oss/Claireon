@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonSpecApplicator_StateTree.h"
 #include "Tools/ClaireonStateTreeHelpers.h"
+#include "Tools/ClaireonStateTreeEditInternal.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSessionManager.h"
 #include "ClaireonSafeExec.h"
@@ -16,6 +17,49 @@
 #include "StateTreeState.h"
 #include "StateTreeEditingSubsystem.h"
 #include "StateTreeCompilerLog.h"
+#include "GameplayTagContainer.h"
+
+namespace
+{
+	// Reads optional transition fields from a spec JSON object and applies them to NewTransition.
+	// Mirrors ClaireonStateTreeTool_AddTransition's parsing and additionally handles
+	// consume_event_on_select for the gap-#1 payload-routing pattern.
+	void ApplySpecTransitionFields(
+		const TSharedPtr<FJsonObject>& TransitionJson,
+		FStateTreeTransition& NewTransition)
+	{
+		FString EventTag;
+		if (TransitionJson->TryGetStringField(TEXT("event_tag"), EventTag) && !EventTag.IsEmpty())
+		{
+			NewTransition.RequiredEvent.Tag = FGameplayTag::RequestGameplayTag(FName(*EventTag), /*ErrorIfNotFound=*/false);
+		}
+
+		FString PriorityStr;
+		if (TransitionJson->TryGetStringField(TEXT("priority"), PriorityStr) && !PriorityStr.IsEmpty())
+		{
+			NewTransition.Priority = ClaireonStateTreeEditInternal::ParseTransitionPriority(PriorityStr);
+		}
+
+		bool bEnabled = true;
+		if (TransitionJson->TryGetBoolField(TEXT("enabled"), bEnabled))
+		{
+			NewTransition.bTransitionEnabled = bEnabled;
+		}
+
+		double DelaySeconds = 0.0;
+		if (TransitionJson->TryGetNumberField(TEXT("delay"), DelaySeconds) && DelaySeconds > 0.0)
+		{
+			NewTransition.bDelayTransition = true;
+			NewTransition.DelayDuration = static_cast<float>(DelaySeconds);
+		}
+
+		bool bConsumeEvent = true;
+		if (TransitionJson->TryGetBoolField(TEXT("consume_event_on_select"), bConsumeEvent))
+		{
+			NewTransition.RequiredEvent.bConsumeEventOnSelect = bConsumeEvent;
+		}
+	}
+}
 
 bool FClaireonSpecApplicator_StateTree::ValidateToolSpec(const TSharedPtr<FJsonObject>& Spec, TArray<FString>& OutErrors)
 {
@@ -26,7 +70,19 @@ bool FClaireonSpecApplicator_StateTree::ValidateToolSpec(const TSharedPtr<FJsonO
 	if (Spec->TryGetArrayField(TEXT("states"), StatesArray) && StatesArray)
 	{
 		bHasContent = true;
-		int32 RootCount = 0;
+
+		// Build the spec-internal id set first so parent references can be resolved.
+		TSet<FString> SpecStateIds;
+		for (const TSharedPtr<FJsonValue>& Val : *StatesArray)
+		{
+			if (!Val.IsValid() || Val->Type != EJson::Object) continue;
+			const TSharedPtr<FJsonObject>& Obj = Val->AsObject();
+			FString Id;
+			if (Obj->TryGetStringField(TEXT("id"), Id) && !Id.IsEmpty())
+			{
+				SpecStateIds.Add(Id);
+			}
+		}
 
 		for (int32 i = 0; i < StatesArray->Num(); ++i)
 		{
@@ -44,16 +100,27 @@ bool FClaireonSpecApplicator_StateTree::ValidateToolSpec(const TSharedPtr<FJsonO
 				OutErrors.Add(FString::Printf(TEXT("states[%d]: missing or empty 'name'"), i));
 			}
 
-			// Check parent
-			if (!StateObj->HasField(TEXT("parent")) || StateObj->GetField<EJson::None>(TEXT("parent"))->IsNull())
+			// Parent validation: null/missing => root (allowed). Non-null must be either
+			// a spec-internal id (forward reference) or a parseable FGuid (external parent
+			// in the existing tree). Editor data is not yet loaded at validate-time, so
+			// the FGuid path defers existence checks to Pass 1.
+			if (StateObj->HasField(TEXT("parent")) && !StateObj->GetField<EJson::None>(TEXT("parent"))->IsNull())
 			{
-				RootCount++;
-			}
-		}
+				FString ParentId;
+				if (!StateObj->TryGetStringField(TEXT("parent"), ParentId) || ParentId.IsEmpty())
+				{
+					OutErrors.Add(FString::Printf(TEXT("states[%d]: 'parent' must be a non-empty string or null"), i));
+					continue;
+				}
+				if (SpecStateIds.Contains(ParentId)) continue;
 
-		if (RootCount == 0)
-		{
-			OutErrors.Add(TEXT("StateTree spec must have at least one root state (parent: null)"));
+				FGuid ParentGuid;
+				if (FGuid::Parse(ParentId, ParentGuid)) continue;
+
+				OutErrors.Add(FString::Printf(
+					TEXT("states[%d]: parent '%s' is neither in spec id_map nor a parseable FGuid"),
+					i, *ParentId));
+			}
 		}
 	}
 
@@ -206,19 +273,34 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass1_CreateEntities(const FString&
 			UStateTreeState* ParentState = nullptr;
 			if (bHasParent)
 			{
-				FString ParentActualId = ResolveId(ParentId);
-				if (ParentActualId.IsEmpty())
+				// Try id_map first (spec-internal forward reference); fall back to
+				// external GUID lookup in the existing editor data.
+				const FString ParentActualId = ResolveId(ParentId);
+				if (!ParentActualId.IsEmpty())
 				{
-					RecordEntryFailure(StateId, FString::Printf(TEXT("Parent '%s' was not created"), *ParentId));
-					continue;
+					FGuid ParentGuid;
+					FGuid::Parse(ParentActualId, ParentGuid);
+					ParentState = ClaireonStateTreeHelpers::FindStateById(ED, ParentGuid);
+					if (!ParentState)
+					{
+						RecordEntryFailure(StateId, FString::Printf(TEXT("Parent state not found in editor data")));
+						continue;
+					}
 				}
-				FGuid ParentGuid;
-				FGuid::Parse(ParentActualId, ParentGuid);
-				ParentState = ClaireonStateTreeHelpers::FindStateById(ED, ParentGuid);
-				if (!ParentState)
+				else
 				{
-					RecordEntryFailure(StateId, FString::Printf(TEXT("Parent state not found in editor data")));
-					continue;
+					FGuid ParentGuid;
+					if (FGuid::Parse(ParentId, ParentGuid))
+					{
+						ParentState = ClaireonStateTreeHelpers::FindStateById(ED, ParentGuid);
+					}
+					if (!ParentState)
+					{
+						RecordEntryFailure(StateId, FString::Printf(
+							TEXT("parent '%s' is neither in spec id_map nor in the existing tree"),
+							*ParentId));
+						continue;
+					}
 				}
 			}
 
@@ -489,6 +571,8 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass2_WireRelationships(const FStri
 					}
 				}
 
+				ApplySpecTransitionFields(TransObj, NewTransition);
+
 				FString TransGuidStr = NewTransition.ID.ToString(EGuidFormats::DigitsWithHyphensLower);
 				State->Transitions.Add(MoveTemp(NewTransition));
 				RegisterIdMapping(TransId, TransGuidStr);
@@ -609,6 +693,8 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass2_WireRelationships(const FStri
 					NewTransition.State = TargetState->GetLinkToState();
 				}
 			}
+
+			ApplySpecTransitionFields(TransObj, NewTransition);
 
 			FString TransGuidStr = NewTransition.ID.ToString(EGuidFormats::DigitsWithHyphensLower);
 			FromState->Transitions.Add(MoveTemp(NewTransition));

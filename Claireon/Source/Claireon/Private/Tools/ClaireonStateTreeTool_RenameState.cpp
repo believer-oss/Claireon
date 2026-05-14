@@ -19,7 +19,7 @@ FString ClaireonStateTreeTool_RenameState::GetName() const
 
 FString ClaireonStateTreeTool_RenameState::GetDescription() const
 {
-	return TEXT("Rename an existing state.");
+	return TEXT("Rename an existing state in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. The new name must be unique among siblings on the same parent. The state's GUID is unchanged so transitions and bindings continue to resolve.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_RenameState::GetInputSchema() const

@@ -654,6 +654,11 @@ FString ClaireonTool_BlueprintDiff::GetName() const
 	return TEXT("claireon.blueprint_diff");
 }
 
+TArray<FString> ClaireonTool_BlueprintDiff::GetSearchKeywords() const
+{
+	return {TEXT("bp"), TEXT("blueprint"), TEXT("diff"), TEXT("compare"), TEXT("comparison"), TEXT("difference"), TEXT("git")};
+}
+
 FString ClaireonTool_BlueprintDiff::GetDescription() const
 {
 	return TEXT("Full Blueprint comparison: graphs, CDO properties, and SCS components. "

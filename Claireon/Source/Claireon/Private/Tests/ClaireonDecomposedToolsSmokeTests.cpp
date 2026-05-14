@@ -61,6 +61,18 @@
 #include "Tools/ClaireonWidgetBPTool_Save.h"
 #include "Tools/ClaireonWidgetBPTool_Close.h"
 
+// Widget BP animation tools (#0000)
+#include "Tools/ClaireonWidgetBPTool_CreateAnimation.h"
+#include "Tools/ClaireonWidgetBPTool_DeleteAnimation.h"
+#include "Tools/ClaireonWidgetBPTool_DuplicateAnimation.h"
+#include "Tools/ClaireonWidgetBPTool_RenameAnimation.h"
+#include "Tools/ClaireonWidgetBPTool_GetAnimationDetails.h"
+#include "Tools/ClaireonWidgetBPTool_AddAnimationBinding.h"
+#include "Tools/ClaireonWidgetBPTool_AddAnimationTrack.h"
+#include "Tools/ClaireonWidgetBPTool_AddAnimationKeyframe.h"
+#include "Tools/ClaireonWidgetBPTool_RemoveAnimationKeyframe.h"
+#include "Tools/ClaireonWidgetBPTool_SetAnimationProperty.h"
+
 // Chooser decomposition (#0000 cohort 1)
 #include "Tools/ClaireonChooserTool_SetResultType.h"
 #include "Tools/ClaireonChooserTool_SetOutputClass.h"
@@ -214,6 +226,22 @@ UNTEST_UNIT(Claireon, DecomposedToolsSmoke, ProxyTableDecomposedToolsExposeDisco
 	using namespace DecomposedToolsSmokeHelpers;
 	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonTool_ProxyTableAddInherit>(TEXT("proxytable_add_inherit")));
 	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonTool_ProxyTableRemoveInherit>(TEXT("proxytable_remove_inherit")));
+	co_return;
+}
+
+UNTEST_UNIT(Claireon, DecomposedToolsSmoke, WidgetBPAnimationToolsExposeDiscoverableSurface)
+{
+	using namespace DecomposedToolsSmokeHelpers;
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonWidgetBPTool_CreateAnimation>(TEXT("widgetbp_create_animation")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonWidgetBPTool_DeleteAnimation>(TEXT("widgetbp_delete_animation")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonWidgetBPTool_DuplicateAnimation>(TEXT("widgetbp_duplicate_animation")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonWidgetBPTool_RenameAnimation>(TEXT("widgetbp_rename_animation")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonWidgetBPTool_GetAnimationDetails>(TEXT("widgetbp_get_animation_details")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonWidgetBPTool_AddAnimationBinding>(TEXT("widgetbp_add_animation_binding")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonWidgetBPTool_AddAnimationTrack>(TEXT("widgetbp_add_animation_track")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonWidgetBPTool_AddAnimationKeyframe>(TEXT("widgetbp_add_animation_keyframe")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonWidgetBPTool_RemoveAnimationKeyframe>(TEXT("widgetbp_remove_animation_keyframe")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonWidgetBPTool_SetAnimationProperty>(TEXT("widgetbp_set_animation_property")));
 	co_return;
 }
 

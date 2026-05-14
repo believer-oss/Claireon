@@ -661,6 +661,11 @@ namespace ClaireonBlueprintNodeFactory
 		// AllocateDefaultPins already builds the pin from the FProperty lookup,
 		// and ReconstructNode would be a no-op there. See T4 for per-branch
 		// commentary.
+		//
+		// #0000 Item 4: some K2Node ReconstructNode overrides reset NodePosX/Y to 0
+		// by calling AllocateDefaultPins on a freshly-constructed inner node.
+		// Snapshot + restore positions so get_state summary reports the authored
+		// coordinates rather than (0, 0).
 		const bool bReconstructForTypedBranch =
 			   NewNode->IsA<UK2Node_CallFunction>()          // includes CallArray / CallDataTable / CallMaterialParameterCollection / CommutativeAssociativeBinaryOperator subclasses
 			|| NewNode->IsA<UK2Node_DynamicCast>()
@@ -672,7 +677,11 @@ namespace ClaireonBlueprintNodeFactory
 
 		if (bWroteProperties || bReconstructForTypedBranch)
 		{
+			const int32 PrevX = NewNode->NodePosX;
+			const int32 PrevY = NewNode->NodePosY;
 			NewNode->ReconstructNode();
+			NewNode->NodePosX = PrevX;
+			NewNode->NodePosY = PrevY;
 		}
 
 		// -------- Dynamic pins --------

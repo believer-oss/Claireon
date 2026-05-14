@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_SplitPin::GetName() const
 
 FString ClaireonBlueprintGraphTool_SplitPin::GetDescription() const
 {
-    return TEXT("Split a struct pin into its component sub-pins.");
+    return TEXT("Split a struct pin into its component sub-pins in the open Blueprint editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: only struct-typed pins are splittable; non-struct pins error. Existing connections to the parent pin are dropped.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SplitPin::GetInputSchema() const
@@ -128,10 +128,13 @@ FToolResult ClaireonBlueprintGraphTool_SplitPin::Execute(const TSharedPtr<FJsonO
     {
         return Error;
     }
-    return CheckMutationAffectedNodes(TEXT("split_pin"), Data, Operation_SplitPin(SessionId, Data, Params));
+    return CheckMutationAffectedNodes(TEXT("split_pin"), Data, SplitPin_Impl(SessionId, Data, Params));
 }
 
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_SplitPin(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+FToolResult ClaireonBlueprintGraphTool_SplitPin::SplitPin_Impl(
+    const FString& SessionId,
+    FBlueprintEditToolData* Data,
+    const TSharedPtr<FJsonObject>& Params)
 {
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();

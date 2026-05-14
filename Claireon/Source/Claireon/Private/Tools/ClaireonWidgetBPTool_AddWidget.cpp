@@ -22,7 +22,7 @@ FString ClaireonWidgetBPTool_AddWidget::GetName() const
 
 FString ClaireonWidgetBPTool_AddWidget::GetDescription() const
 {
-    return TEXT("Add a new widget of a given class into the widget tree. Requires widget_class; optional parent_name, widget_name, index.");
+    return TEXT("Add a new widget of a given class into the widget tree in the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Transactional. Provide widget_class (required) and optional parent_name, widget_name, index. Returns the new widget's name for downstream operations.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_AddWidget::GetInputSchema() const
@@ -47,15 +47,6 @@ FToolResult ClaireonWidgetBPTool_AddWidget::Execute(const TSharedPtr<FJsonObject
     {
         return Error;
     }
-    return Operation_AddWidget(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_AddWidget(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	// Extract required widget_class
 	FString WidgetClassStr;
 	if (!Params->TryGetStringField(TEXT("widget_class"), WidgetClassStr))
@@ -148,8 +139,8 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_AddWidget(const FString& Ses
 			{
 				for (auto& Pair : SlotProperties->Values)
 				{
-					FString Error;
-					ClaireonWidgetHelpers::WriteSlotProperty(Slot, Pair.Key, Pair.Value->AsString(), Error);
+					FString SlotError;
+					ClaireonWidgetHelpers::WriteSlotProperty(Slot, Pair.Key, Pair.Value->AsString(), SlotError);
 				}
 			}
 		}
@@ -167,3 +158,4 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_AddWidget(const FString& Ses
 
 	return BuildStateResponse(SessionId, Data);
 }
+

@@ -10,6 +10,11 @@
 
 FString ClaireonTool_ProxyAssetInspect::GetName() const { return TEXT("claireon.proxyasset_inspect"); }
 
+TArray<FString> ClaireonTool_ProxyAssetInspect::GetSearchKeywords() const
+{
+	return {TEXT("proxyasset"), TEXT("proxy"), TEXT("asset"), TEXT("inspect"), TEXT("result"), TEXT("context"), TEXT("parameter")};
+}
+
 FString ClaireonTool_ProxyAssetInspect::GetDescription() const
 {
 	return TEXT("Inspect a ProxyAsset. Returns the proxy's type, result type, GUID, "

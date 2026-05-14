@@ -102,9 +102,14 @@ FString ClaireonBlueprintGraphTool_AddNode::GetName() const
     return TEXT("claireon.blueprint_graph_add_node");
 }
 
+TArray<FString> ClaireonBlueprintGraphTool_AddNode::GetSearchKeywords() const
+{
+    return {TEXT("bp"), TEXT("node"), TEXT("add"), TEXT("create"), TEXT("graph"), TEXT("auto_connect"), TEXT("cursor")};
+}
+
 FString ClaireonBlueprintGraphTool_AddNode::GetDescription() const
 {
-    return TEXT("Add a node to the current graph. Supports CallFunction, VariableGet/Set, control flow, macros, delegates, etc.");
+    return TEXT("Adds a node to the current session's graph (CallFunction, VariableGet/Set, control flow, macros, delegates, etc.). Pass auto_connect_from_cursor=true to route the new node's exec pin through the cursor pin when compatible. Most-common pitfall: forgetting to save every 1-3 nodes via claireon.blueprint_graph_save, which loses progress on editor crash.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddNode::GetInputSchema() const
@@ -140,10 +145,13 @@ FToolResult ClaireonBlueprintGraphTool_AddNode::Execute(const TSharedPtr<FJsonOb
     {
         return Error;
     }
-    return CheckMutationAffectedNodes(TEXT("add_node"), Data, Operation_AddNode(SessionId, Data, Params));
+    return CheckMutationAffectedNodes(TEXT("add_node"), Data, AddNode_Impl(SessionId, Data, Params));
 }
 
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_AddNode(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+FToolResult ClaireonBlueprintGraphTool_AddNode::AddNode_Impl(
+    const FString& SessionId,
+    FBlueprintEditToolData* Data,
+    const TSharedPtr<FJsonObject>& Params)
 {
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
@@ -610,7 +618,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_AddNode(const FString&
 		}
 		else
 		{
-			// Named alias — NodeType IS the macro name
+			// Named alias -- NodeType IS the macro name
 			MacroName = NodeType;
 		}
 
@@ -1037,7 +1045,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_AddNode(const FString&
 		if (!TimelineTemplate)
 		{
 			return MakeErrorResult(FString::Printf(
-				TEXT("Failed to create timeline '%s' — Blueprint may not support timelines"),
+				TEXT("Failed to create timeline '%s' -- Blueprint may not support timelines"),
 				*TimelineName));
 		}
 
@@ -1603,6 +1611,44 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_AddNode(const FString&
 	FToolResult AddNodeResult = BuildStateResponse(SessionId, Data);
 	AddNodeResult.Warnings.Append(ResolutionWarnings);
 	return AddNodeResult;
+}
+
+// ----------------------------------------------------------------------------
+// P1: hot-path metadata enrichment
+// ----------------------------------------------------------------------------
+
+FString ClaireonBlueprintGraphTool_AddNode::GetFullDescription() const
+{
+    return TEXT(
+        "Adds a node to the current session's graph. Supports CallFunction, "
+        "VariableGet/VariableSet, control flow (Branch/Sequence/ForEach), "
+        "macros, delegates, custom events, casts, and timeline nodes. The "
+        "preferred wiring path is auto_connect_from_cursor=true: when the "
+        "session cursor sits on a pin compatible with the new node's exec "
+        "input, the connection is made automatically without requiring a "
+        "follow-up claireon.blueprint_graph_connect_pins call. As part of the "
+        "incremental per-node cycle, call claireon.blueprint_graph_save every "
+        "1-3 add_node calls to flush in-session edits to the asset and protect "
+        "against editor-crash data loss.");
+}
+
+FString ClaireonBlueprintGraphTool_AddNode::GetExampleUsage() const
+{
+    return TEXT(
+        "claireon.blueprint_graph_add_node session_id=\"...\" "
+        "node_class=\"K2Node_CallFunction\" function=\"PrintString\" "
+        "auto_connect_from_cursor=true");
+}
+
+TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddNode::GetParameterTooltips() const
+{
+    TSharedPtr<FJsonObject> T = MakeShared<FJsonObject>();
+    T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by claireon.blueprint_graph_open or _create. Optional if asset_path is supplied."));
+    T->SetStringField(TEXT("asset_path"), TEXT("Blueprint asset path (alternative to session_id; auto-opens the session)."));
+    T->SetStringField(TEXT("node_class"), TEXT("Fully qualified UClass name of the K2Node to add (e.g. K2Node_CallFunction, K2Node_IfThenElse). Fuzzy-resolved (drop U prefix; partial matches allowed)."));
+    T->SetStringField(TEXT("function"), TEXT("For K2Node_CallFunction: the function name (or Class.Function) to call. Resolved against UFUNCTION metadata."));
+    T->SetStringField(TEXT("auto_connect_from_cursor"), TEXT("If true, route the new node's exec pin through the cursor pin when compatible. Preferred over a follow-up claireon.blueprint_graph_connect_pins call."));
+    return T;
 }
 
 #undef LOCTEXT_NAMESPACE

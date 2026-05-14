@@ -20,7 +20,7 @@ FString ClaireonStateTreeTool_RemoveTransitionCondition::GetName() const
 
 FString ClaireonStateTreeTool_RemoveTransitionCondition::GetDescription() const
 {
-	return TEXT("Remove a condition node from a transition.");
+	return TEXT("Remove a condition node from a transition in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Bindings targeting the removed condition's properties are dropped. Transition behavior may relax (firing more often) since one fewer gate must pass.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_RemoveTransitionCondition::GetInputSchema() const

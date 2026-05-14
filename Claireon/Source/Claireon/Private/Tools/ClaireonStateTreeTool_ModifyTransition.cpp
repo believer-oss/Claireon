@@ -21,7 +21,7 @@ FString ClaireonStateTreeTool_ModifyTransition::GetName() const
 
 FString ClaireonStateTreeTool_ModifyTransition::GetDescription() const
 {
-	return TEXT("Modify an existing transition's trigger, target, priority, enabled state, or event tag.");
+	return TEXT("Modify an existing transition's trigger, target, priority, enabled state, or event tag in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Omitted fields are left unchanged. Common pitfall: target_state_id must reference an existing state on the same tree.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_ModifyTransition::GetInputSchema() const
@@ -34,7 +34,7 @@ TSharedPtr<FJsonObject> ClaireonStateTreeTool_ModifyTransition::GetInputSchema()
 	Builder.AddString(TEXT("event_tag"), TEXT("Optional gameplay tag."));
 	Builder.AddString(TEXT("priority"), TEXT("Optional priority."));
 	Builder.AddBoolean(TEXT("enabled"), TEXT("Optional enabled flag."));
-	Builder.AddString(TEXT("target_type"), TEXT("Optional target type."));
+	Builder.AddString(TEXT("target_type"), TEXT("target_type: enum (GotoState | NextState | NextSelectableState | Succeeded | Failed | None)"));
 	Builder.AddString(TEXT("target_state_id"), TEXT("Optional target state GUID (when target_type is GotoState)."));
 	return Builder.Build();
 }
@@ -67,6 +67,36 @@ FToolResult ClaireonStateTreeTool_ModifyTransition::Execute(const TSharedPtr<FJs
 	if (!Trans)
 		return MakeErrorResult(TEXT("Transition not found"));
 
+	// Parse target_type up front (strict) and apply D3 check before mutating state.
+	FString TargetTypeStr;
+	const bool bHasTargetType = Arguments->TryGetStringField(TEXT("target_type"), TargetTypeStr);
+	TOptional<EStateTreeTransitionType> ParsedType;
+	if (bHasTargetType)
+	{
+		ParsedType = ClaireonStateTreeEditInternal::TryParseTransitionType(TargetTypeStr);
+		if (!ParsedType.IsSet())
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("Unknown target_type: '%s'. Valid: GotoState, NextState, NextSelectableState, Succeeded, Failed, None"),
+				*TargetTypeStr));
+		}
+	}
+
+	{
+		FString TargetStateIdProbe;
+		const bool bHasTargetStateId =
+			Arguments->TryGetStringField(TEXT("target_state_id"), TargetStateIdProbe) && !TargetStateIdProbe.IsEmpty();
+		if (bHasTargetStateId)
+		{
+			// D3: target_state_id only meaningful when target_type=GotoState was supplied
+			// alongside it. There is intentionally no accept-if-existing-is-GotoState path.
+			if (!ParsedType.IsSet() || ParsedType.GetValue() != EStateTreeTransitionType::GotoState)
+			{
+				return MakeErrorResult(TEXT("target_state_id requires target_type=GotoState"));
+			}
+		}
+	}
+
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Modify Transition")));
 	Data->StateTree->Modify();
 
@@ -95,10 +125,9 @@ FToolResult ClaireonStateTreeTool_ModifyTransition::Execute(const TSharedPtr<FJs
 	}
 
 #if WITH_EDITORONLY_DATA
-	FString TargetTypeStr;
-	if (Arguments->TryGetStringField(TEXT("target_type"), TargetTypeStr))
+	if (bHasTargetType)
 	{
-		Trans->State.LinkType = ClaireonStateTreeEditInternal::ParseTransitionType(TargetTypeStr);
+		Trans->State.LinkType = ParsedType.GetValue();
 
 		if (Trans->State.LinkType == EStateTreeTransitionType::GotoState)
 		{

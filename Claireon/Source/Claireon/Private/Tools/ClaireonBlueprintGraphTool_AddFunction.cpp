@@ -28,7 +28,7 @@ FString ClaireonBlueprintGraphTool_AddFunction::GetName() const
 
 FString ClaireonBlueprintGraphTool_AddFunction::GetDescription() const
 {
-	return TEXT("Create a new user-defined function graph on the Blueprint (parity with claireon.animgraph_add_function for regular BPs).");
+	return TEXT("Create a new user-defined function graph on the Blueprint in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Parity with claireon.animgraph_add_function for regular Blueprints. The function_name must be unique on the BP.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddFunction::GetInputSchema() const
@@ -60,11 +60,13 @@ FToolResult ClaireonBlueprintGraphTool_AddFunction::Execute(const TSharedPtr<FJs
 	{
 		return Error;
 	}
-	return CheckMutationAffectedNodes(TEXT("add_function"), Data, Operation_AddFunction(SessionId, Data, Params));
+	return CheckMutationAffectedNodes(TEXT("add_function"), Data, AddFunction_Impl(SessionId, Data, Params));
 }
 
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_AddFunction(
-	const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
+FToolResult ClaireonBlueprintGraphTool_AddFunction::AddFunction_Impl(
+	const FString& SessionId,
+	FBlueprintEditToolData* Data,
+	const TSharedPtr<FJsonObject>& Params)
 {
 	// === 1. Required: function_name ===
 	FString FunctionName;

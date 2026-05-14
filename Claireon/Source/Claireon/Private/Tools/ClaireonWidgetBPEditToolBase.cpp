@@ -123,7 +123,7 @@ FToolResult ClaireonWidgetBPEditToolBase::BuildStateResponse(const FString& Sess
 		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&ResponseString);
 	FJsonSerializer::Serialize(ResponseObj.ToSharedRef(), Writer);
 
-	return MakeErrorResult(ResponseString);
+	return MakeSuccessResult(ResponseObj, ResponseString);
 }
 
 #undef LOCTEXT_NAMESPACE

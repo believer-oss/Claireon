@@ -19,7 +19,7 @@ FString ClaireonWidgetBPTool_Compile::GetName() const
 
 FString ClaireonWidgetBPTool_Compile::GetDescription() const
 {
-    return TEXT("Compile the Widget Blueprint associated with a session. Returns compilation diagnostics.");
+    return TEXT("Compile the Widget Blueprint in the open editing session and return compilation diagnostics. Requires open session_id from claireon.widgetbp_open. Read-only with respect to authoring data (compilation only writes derived runtime data). Run after structural edits to verify the asset is valid before save.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_Compile::GetInputSchema() const
@@ -39,15 +39,6 @@ FToolResult ClaireonWidgetBPTool_Compile::Execute(const TSharedPtr<FJsonObject>&
     {
         return Error;
     }
-    return Operation_Compile(SessionId, Data, Params);
-}
-
-// ============================================================================
-// Operation body (relocated from ClaireonWidgetBPEditToolBase.cpp in stage 024)
-// ============================================================================
-
-FToolResult ClaireonWidgetBPEditToolBase::Operation_Compile(const FString& SessionId, FWidgetBPEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
 	if (!WBP)
 	{
@@ -69,5 +60,10 @@ FToolResult ClaireonWidgetBPEditToolBase::Operation_Compile(const FString& Sessi
 	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ResultString);
 	FJsonSerializer::Serialize(ResultJson.ToSharedRef(), Writer);
 
-	return MakeErrorResult(ResultString);
+	if (!bCompileSuccess)
+	{
+		return MakeErrorResult(ResultString);
+	}
+	return MakeSuccessResult(ResultJson, ResultString);
 }
+

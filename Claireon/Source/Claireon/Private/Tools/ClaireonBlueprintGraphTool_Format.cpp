@@ -102,9 +102,14 @@ FString ClaireonBlueprintGraphTool_Format::GetName() const
     return TEXT("claireon.blueprint_graph_format");
 }
 
+TArray<FString> ClaireonBlueprintGraphTool_Format::GetSearchKeywords() const
+{
+    return {TEXT("bp"), TEXT("format"), TEXT("layout"), TEXT("arrange"), TEXT("pretty"), TEXT("graph")};
+}
+
 FString ClaireonBlueprintGraphTool_Format::GetDescription() const
 {
-    return TEXT("Auto-layout the current graph's nodes.");
+    return TEXT("Auto-layouts the current session's graph nodes. This is the IN-SESSION formatter (claireon.blueprint_graph_format), distinct from the standalone claireon.blueprint_format_graph which operates on a closed asset path. Most-common pitfall: confusing the two -- use this one inside a session, the standalone one for one-off cleanup of an unopened asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Format::GetInputSchema() const
@@ -126,11 +131,6 @@ FToolResult ClaireonBlueprintGraphTool_Format::Execute(const TSharedPtr<FJsonObj
     {
         return Error;
     }
-    return Operation_Format(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_Format(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
 
@@ -206,6 +206,32 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_Format(const FString& 
 
 	Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Formatted graph (simple layout, %d nodes positioned)"), RootNodes.Num());
 	return BuildStateResponse(SessionId, Data);
+}
+
+// ----------------------------------------------------------------------------
+// P1: hot-path metadata enrichment
+// ----------------------------------------------------------------------------
+
+FString ClaireonBlueprintGraphTool_Format::GetFullDescription() const
+{
+    return TEXT(
+        "Auto-layouts the current session's graph nodes using a simple "
+        "left-to-right exec-flow layout. This is the IN-SESSION formatter: "
+        "claireon.blueprint_graph_format requires an open session and operates "
+        "on the in-session graph state. The STANDALONE formatter, "
+        "claireon.blueprint_format_graph (note swapped word order), takes an "
+        "asset_path and operates on a closed asset. The two are easy to "
+        "confuse: the in-session form is what you use inside the per-node "
+        "incremental cycle before calling "
+        "claireon.blueprint_graph_save; the standalone form is for one-off "
+        "cleanup of an unopened Blueprint outside a session. If "
+        "BlueprintAssist plugin is present, the layout uses BA's smart "
+        "routing; otherwise a deterministic fallback grid layout is used.");
+}
+
+FString ClaireonBlueprintGraphTool_Format::GetExampleUsage() const
+{
+    return TEXT("claireon.blueprint_graph_format session_id=\"...\"");
 }
 
 #undef LOCTEXT_NAMESPACE

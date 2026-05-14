@@ -20,6 +20,11 @@ FString ClaireonTool_BlueprintCompile::GetName() const
 	return TEXT("claireon.blueprint_compile");
 }
 
+TArray<FString> ClaireonTool_BlueprintCompile::GetSearchKeywords() const
+{
+	return {TEXT("bp"), TEXT("blueprint"), TEXT("compile"), TEXT("build"), TEXT("validate"), TEXT("check")};
+}
+
 FString ClaireonTool_BlueprintCompile::GetDescription() const
 {
 	return TEXT("Compile Blueprints by asset path or content folder. Each entry in paths is auto-detected: "

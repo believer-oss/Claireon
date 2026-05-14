@@ -17,6 +17,11 @@ FString ClaireonBehaviorTreeTool_Open::GetName() const
 	return TEXT("claireon.behaviortree_open");
 }
 
+TArray<FString> ClaireonBehaviorTreeTool_Open::GetSearchKeywords() const
+{
+	return {TEXT("bt"), TEXT("ai"), TEXT("behavior"), TEXT("tree"), TEXT("behaviortree"), TEXT("open"), TEXT("session")};
+}
+
 FString ClaireonBehaviorTreeTool_Open::GetDescription() const
 {
 	return TEXT("Open a Behavior Tree asset for editing. Returns a session_id for subsequent operations.");

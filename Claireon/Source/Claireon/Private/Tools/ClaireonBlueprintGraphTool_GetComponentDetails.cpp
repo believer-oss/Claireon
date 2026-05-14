@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_GetComponentDetails::GetName() const
 
 FString ClaireonBlueprintGraphTool_GetComponentDetails::GetDescription() const
 {
-    return TEXT("Inspect a component on the Blueprint's SCS and return its properties.");
+    return TEXT("Inspect a component on the Blueprint's Simple Construction Script and return its properties in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Read-only. Returns property name, type, and current value tuples for the component template.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_GetComponentDetails::GetInputSchema() const
@@ -127,11 +127,6 @@ FToolResult ClaireonBlueprintGraphTool_GetComponentDetails::Execute(const TShare
     {
         return Error;
     }
-    return Operation_GetComponentDetails(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_GetComponentDetails(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	if (!Blueprint)
 	{
@@ -171,6 +166,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_GetComponentDetails(co
 	// Build component details JSON
 	TSharedPtr<FJsonObject> Details = MakeShared<FJsonObject>();
 	Details->SetStringField(TEXT("name"), Node->GetVariableName().ToString());
+	Details->SetStringField(TEXT("component_name"), Node->GetVariableName().ToString());
 	Details->SetStringField(TEXT("class"), ComponentTemplate->GetClass()->GetName());
 
 	// is_root: check against scene root
@@ -254,13 +250,29 @@ FToolResult ClaireonBlueprintGraphEditToolBase::Operation_GetComponentDetails(co
 	}
 	Details->SetArrayField(TEXT("properties"), PropertiesArray);
 
-	// Serialize the details JSON to a string and embed in BuildStateResponse
-	FString DetailsString;
-	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&DetailsString);
-	FJsonSerializer::Serialize(Details.ToSharedRef(), Writer);
+	// Structured payload goes on data.component; the summary becomes a compact one-liner
+	// for log-readability. Consumers that previously parsed the pretty-JSON body should
+	// read data.component instead (see #0000 Item 5). Consumer audit found no in-repo
+	// dependencies on the legacy summary body, so no legacy_summary flag shipped.
+	const FString ComponentClassName = ComponentTemplate->GetClass()->GetName();
+	FString ParentDisplay = TEXT("(root)");
+	if (Details->HasField(TEXT("parent")))
+	{
+		Details->TryGetStringField(TEXT("parent"), ParentDisplay);
+	}
 
-	Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Component details for '%s':\n%s"), *ComponentName, *DetailsString);
-	return BuildStateResponse(SessionId, Data);
+	Data->Cursor.LastOperationStatus = FString::Printf(
+		TEXT("Component '%s' (class=%s, parent=%s)"),
+		*ComponentName,
+		*ComponentClassName,
+		*ParentDisplay);
+
+	FToolResult Result = BuildStateResponse(SessionId, Data);
+	if (Result.Data.IsValid())
+	{
+		Result.Data->SetObjectField(TEXT("component"), Details);
+	}
+	return Result;
 }
 
 #undef LOCTEXT_NAMESPACE

@@ -355,7 +355,7 @@ FToolResult ClaireonTool_ApplyBlueprintGraph::Execute(const TSharedPtr<FJsonObje
 			}
 
 			LocalIdMap.Add(LocalId, R.Node);
-			IdMapJson->SetStringField(LocalId, R.Node->NodeGuid.ToString());
+			IdMapJson->SetStringField(LocalId, R.Node->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
 			Data->LastOperationAffectedNodes.Add(R.Node->NodeGuid);
 			CreatedNodesThisCall.Add(R.Node);
 

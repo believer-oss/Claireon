@@ -104,7 +104,7 @@ FString ClaireonBlueprintGraphTool_SelectNode::GetName() const
 
 FString ClaireonBlueprintGraphTool_SelectNode::GetDescription() const
 {
-    return TEXT("Move the cursor to a specific node by GUID.");
+    return TEXT("Move the cursor to a specific node by GUID in the open Blueprint editing session. Requires open session_id from claireon.blueprint_graph_open. Read-only with respect to graph contents (cursor is session state). The node_id must be the exact GUID returned by claireon.blueprint_graph_get_state or claireon.blueprint_graph_add_node.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SelectNode::GetInputSchema() const
@@ -127,11 +127,6 @@ FToolResult ClaireonBlueprintGraphTool_SelectNode::Execute(const TSharedPtr<FJso
     {
         return Error;
     }
-    return Operation_SelectNode(SessionId, Data, Params);
-}
-
-FToolResult ClaireonBlueprintGraphEditToolBase::Operation_SelectNode(const FString& SessionId, FBlueprintEditToolData* Data, const TSharedPtr<FJsonObject>& Params)
-{
 	UEdGraph* Graph = Data->Graph.Get();
 
 	if (!Graph)
