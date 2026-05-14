@@ -589,12 +589,15 @@ UNTEST_UNIT_OPTS(Claireon, SetBlueprintCDOProperty, ChildBlueprintInheritance_Ov
 
 namespace
 {
-	// MyGameplayAbility::DefaultTargetingInstance is the canonical MyGame
-	// UPROPERTY(Instanced) UObject* slot. Tests skip if MyGame / FSTargeting
-	// are not loaded in the test process.
-	static const TCHAR* InstancedBPParentClassPath  = TEXT("/Script/MyGame.MyGameplayAbility");
-	static const TCHAR* InstancedSubObjectClassPath = TEXT("/Script/FSTargeting.FSTargetingInstance_Modular");
-	static const TCHAR* InstancedPropertyName       = TEXT("DefaultTargetingInstance");
+	// The test fixture is project-specific: pick a parent class that has a
+	// UPROPERTY(Instanced) UObject* slot and a subobject class that derives
+	// from the slot's required base. The default values below leave the
+	// fixture skip-when-absent so the test does not fail on stock projects.
+	// Override these via your fork's test config when wiring up the round-trip
+	// fixture for your project's instanced-UObject schema.
+	static const TCHAR* InstancedBPParentClassPath  = TEXT("/Script/Engine.Actor");
+	static const TCHAR* InstancedSubObjectClassPath = TEXT("/Script/Engine.SceneComponent");
+	static const TCHAR* InstancedPropertyName       = TEXT("RootComponent");
 	static const TCHAR* InstancedTestBPPath         = TEXT("/Game/__MCPTests/BP_SetCDOProp_Instanced");
 
 	UBlueprint* CreateInstancedTestBlueprint()

@@ -164,19 +164,20 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, KismetSystemLibrary_PrintSt
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins,
-    FSFlowprintAwait_Delay_AsyncAction_HasOnComplete, UNTEST_TIMEOUTMS(30000))
+    FlowprintAwait_Delay_AsyncAction_HasOnComplete, UNTEST_TIMEOUTMS(30000))
 {
 	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
 	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
 	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
 
-	// MyGame referenced by string only -- no #include, no Build.cs edge.
+	// Custom latent-factory referenced by string only -- no #include, no
+	// Build.cs edge. The test skips if the named class is not loaded.
 	TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
 	Node->SetStringField(TEXT("id"), TEXT("delay1"));
 	Node->SetStringField(TEXT("node_type"), TEXT("CallFunction"));
 	Node->SetStringField(TEXT("function_name"), TEXT("AwaitDelay"));
 	Node->SetStringField(TEXT("function_class"),
-		TEXT("/Script/MyGame.FSFlowprintAwait_Delay"));
+		TEXT("/Script/Engine.AsyncActionLoadPrimaryAsset"));
 
 	ClaireonTool_ApplyBlueprintGraph Tool;
 	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));

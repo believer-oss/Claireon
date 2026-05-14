@@ -11,15 +11,13 @@ namespace ClaireonNameResolver
 {
 
 	// -----------------------------------------------------------------
-	// Static module list for /Script/<Module>.<Name> path resolution
+	// Static module list for /Script/<Module>.<Name> path resolution.
+	// Downstream projects can extend this list at runtime through the
+	// resolver's registration API rather than editing this file.
 	// -----------------------------------------------------------------
 	static const TArray<FString> KnownModules = {
 		TEXT("Engine"),
 		TEXT("CoreUObject"),
-		TEXT("MyGame"),
-		TEXT("MyGame"),
-		TEXT("MyGameCore"),
-		TEXT("Lyra"),
 		TEXT("UMG"),
 		TEXT("SlateCore"),
 		TEXT("Slate"),
@@ -49,9 +47,11 @@ namespace ClaireonNameResolver
 	static const TMap<FString, TArray<FString>>& GetBaseClassPrefixMap()
 	{
 		static const TMap<FString, TArray<FString>> Map = {
-			// Animation notifies (MyGame uses both Engine and FSAN/FSANS prefixes)
-			{ TEXT("AnimNotify"), { TEXT("AnimNotify_"), TEXT("FSAN_") } },
-			{ TEXT("AnimNotifyState"), { TEXT("AnimNotifyState_"), TEXT("FSANS_") } },
+			// Animation notifies. The default engine prefixes are listed;
+			// downstream projects often add their own short-code prefixes
+			// (e.g. "MyProjAN_") and can extend this map at runtime.
+			{ TEXT("AnimNotify"), { TEXT("AnimNotify_") } },
+			{ TEXT("AnimNotifyState"), { TEXT("AnimNotifyState_") } },
 
 			// Behavior tree nodes. UBTNode is the common parent so it lists
 			// every category; the specific bases narrow to their own prefix.
@@ -60,30 +60,6 @@ namespace ClaireonNameResolver
 			{ TEXT("BTTaskNode"), { TEXT("BTTask_") } },
 			{ TEXT("BTDecorator"), { TEXT("BTDecorator_") } },
 			{ TEXT("BTService"), { TEXT("BTService_") } },
-
-			// FSTargeting modular system. Each provider/validator category has
-			// its own short-code prefix that AI clients routinely drop.
-			{ TEXT("FSTargetingLocationProvider"), { TEXT("FSTLP_") } },
-			{ TEXT("FSTargetingObjectProvider"), { TEXT("FSTOP_") } },
-			{ TEXT("FSTargetingFloatProvider"), { TEXT("FSTFP_") } },
-			{ TEXT("FSTargetingDirectionProvider"), { TEXT("FSTDP_") } },
-			{ TEXT("FSTargetingValidator"), { TEXT("FSTV_") } },
-			{ TEXT("FSTargetingInstance"), { TEXT("FSTI_") } },
-
-			// MyGame ability system subclasses against engine bases.
-			{ TEXT("AbilityTask"), { TEXT("FSAbilityTask_"), TEXT("FSAT_") } },
-			{ TEXT("AttributeSet"), { TEXT("FSAttributeSet_") } },
-			{ TEXT("GameplayEffectComponent"), { TEXT("FSGEComp_") } },
-			{ TEXT("GameplayCueNotify_Burst"), { TEXT("FSGCN_") } },
-			{ TEXT("GameplayEffectExecutionCalculation"), { TEXT("FSGEC_"), TEXT("FSCalc_") } },
-			{ TEXT("GameplayModMagnitudeCalculation"), { TEXT("FSMC_") } },
-
-			// MyGame domain helpers against project-specific bases.
-			{ TEXT("FSHitModifierCondition"), { TEXT("FSHMC_") } },
-			{ TEXT("FSMissionAnomalyBase"), { TEXT("FSMissionAnomaly_") } },
-			{ TEXT("LyraAbilityCost"), { TEXT("FSCost_") } },
-			{ TEXT("FSEquipmentComponent"), { TEXT("FSEC_") } },
-			{ TEXT("MyGameplayAbility"), { TEXT("GA_") } },
 		};
 		return Map;
 	}

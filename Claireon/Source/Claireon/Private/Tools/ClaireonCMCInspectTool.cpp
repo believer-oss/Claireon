@@ -331,9 +331,10 @@ IClaireonTool::FToolResult ClaireonTool_CMCInspectState::Execute(const TSharedPt
 		Data->SetObjectField(TEXT("currentFloor"), BuildFloorJson(CMC->CurrentFloor));
 	}
 
-	// FS-specific custom fields, nested under fsCustom to prevent collisions. Detected by
-	// walking the parent class chain by name to avoid taking an MyGame module dependency
-	// (mirrors ClaireonTool_AnimInvariantsCheck.cpp:119-120 pattern).
+	// Project-specific custom fields, nested under fsCustom to prevent collisions. Detected by
+	// walking the parent class chain by name so this tool does not need to link the
+	// project's character-movement module. Replace "FSCharacterMovementComponent" with your
+	// project's subclass name to surface its custom UPROPERTYs in the snapshot.
 	auto DerivesFromFSCMC = [](const UClass* Class) -> bool
 	{
 		for (const UClass* Cur = Class; Cur != nullptr; Cur = Cur->GetSuperClass())
@@ -351,8 +352,8 @@ IClaireonTool::FToolResult ClaireonTool_CMCInspectState::Execute(const TSharedPt
 		TSharedPtr<FJsonObject> FsCustom = MakeShared<FJsonObject>();
 		UClass* CMCClass = CMC->GetClass();
 
-		// Read AscendingGravityScale and DescendingGravityScale via reflection. Defined as
-		// public UPROPERTY at Source/MyGame/Public/Character/FSCharacterMovementComponent.h:894,:897.
+		// Read AscendingGravityScale and DescendingGravityScale via reflection. These are
+		// example project-specific UPROPERTYs; the call is a no-op if they are absent.
 		auto ReadFloatProp = [CMC](FName PropName, const TSharedPtr<FJsonObject>& Out, const FString& OutKey)
 		{
 			if (FProperty* P = CMC->GetClass()->FindPropertyByName(PropName))
@@ -372,9 +373,9 @@ IClaireonTool::FToolResult ClaireonTool_CMCInspectState::Execute(const TSharedPt
 		ReadFloatProp(TEXT("AscendingGravityScale"), FsCustom, TEXT("ascendingGravityScale"));
 		ReadFloatProp(TEXT("DescendingGravityScale"), FsCustom, TEXT("descendingGravityScale"));
 
-		// Discover any additional FS-specific Custom_-prefixed UPROPERTYs via reflection.
-		// Walk class metadata in full (the FS hierarchy may have multiple levels above
-		// UFSCharacterMovementComponent that contribute Custom_ properties).
+		// Discover any additional project-specific Custom_-prefixed UPROPERTYs via reflection.
+		// Walk class metadata in full so multi-level subclass chains that contribute
+		// Custom_ properties are picked up.
 		for (TFieldIterator<FProperty> PropIt(CMCClass); PropIt; ++PropIt)
 		{
 			const FProperty* Prop = *PropIt;
@@ -410,8 +411,8 @@ IClaireonTool::FToolResult ClaireonTool_CMCInspectState::Execute(const TSharedPt
 			}
 		}
 
-		// Previous known floor (FS-specific). Reflected via FStructProperty since we don't
-		// have direct C++ access without the MyGame dependency.
+		// Previous known floor (project-specific). Reflected via FStructProperty so this
+		// tool does not need a direct C++ dependency on the project's movement module.
 		if (bIncludePrevFloor)
 		{
 			if (FProperty* PrevFloorProp = CMCClass->FindPropertyByName(TEXT("PreviousKnownFloor")))

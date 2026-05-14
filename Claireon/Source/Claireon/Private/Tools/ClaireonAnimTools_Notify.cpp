@@ -27,7 +27,7 @@ TSharedPtr<FJsonObject> ClaireonAnimTool_AddNotify::GetInputSchema() const
 {
 	FToolSchemaBuilder S;
 	S.AddSessionParams();
-	S.AddString(TEXT("notify_type"), TEXT("'skeleton' for skeleton notifies, or a class name (e.g. 'AnimNotify_PlaySound', 'FSANS_ComboWindow')"), true);
+	S.AddString(TEXT("notify_type"), TEXT("'skeleton' for skeleton notifies, or a class name (e.g. 'AnimNotify_PlaySound')"), true);
 	S.AddNumber(TEXT("time"), TEXT("Time in seconds where the notify starts"), true);
 	S.AddString(TEXT("notify_name"), TEXT("Name for skeleton notifies (required when notify_type='skeleton')"));
 	S.AddNumber(TEXT("duration"), TEXT("Duration in seconds (for state notifies)"));
@@ -97,7 +97,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddNotify::Execute(const TSharedPtr<
 	}
 	else
 	{
-		bool bIsState = NotifyType.Contains(TEXT("State")) || NotifyType.StartsWith(TEXT("FSANS_")) || NotifyType.StartsWith(TEXT("ANS_"));
+		bool bIsState = NotifyType.Contains(TEXT("State")) || NotifyType.StartsWith(TEXT("ANS_")) || NotifyType.StartsWith(TEXT("AnimNotifyState_"));
 		UClass* NotifyClass = ClaireonAnimHelpers::ResolveNotifyClass(NotifyType, bIsState, OpError);
 		if (!NotifyClass)
 		{

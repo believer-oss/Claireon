@@ -956,7 +956,7 @@ TSharedPtr<FJsonObject> ClaireonTool_BlueprintTranslateScaffold::GetInputSchema(
 	TSharedPtr<FJsonObject> ModuleProp = MakeShared<FJsonObject>();
 	ModuleProp->SetStringField(TEXT("type"), TEXT("string"));
 	ModuleProp->SetStringField(TEXT("description"),
-		TEXT("UE module name for generated code (e.g., \"MyGame\"). Used for API macro."));
+		TEXT("UE module name for generated code (e.g., \"MyGameModule\"). Used for API macro."));
 	Properties->SetObjectField(TEXT("target_module"), ModuleProp);
 
 	TSharedPtr<FJsonObject> DirProp = MakeShared<FJsonObject>();

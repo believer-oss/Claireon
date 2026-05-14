@@ -642,7 +642,7 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleInitialize(const FMCPRequestConte
 	Result->SetObjectField(TEXT("capabilities"), Capabilities);
 	Result->SetObjectField(TEXT("serverInfo"), ServerInfo);
 	Result->SetStringField(TEXT("instructions"),
-		TEXT("MCP server running inside the MyGame Unreal Editor. Call tools/list for the full tool catalog."));
+		TEXT("MCP server running inside the Unreal Editor. Call tools/list for the full tool catalog."));
 
 	UE_LOG(LogClaireon, Display, TEXT("[MCP] Initialize handshake completed"));
 

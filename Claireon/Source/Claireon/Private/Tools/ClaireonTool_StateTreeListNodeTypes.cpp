@@ -254,8 +254,10 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeListNodeTypes::Execute(const TS
 		FString SchemaStr = Schema ? FString::Printf(TEXT(" (filtered by schema: %s)"), *Schema->GetClass()->GetName()) : TEXT("");
 		Output += FString::Printf(TEXT("=== Available %s%s ===\n"), *CatInfo.Name, *SchemaStr);
 
-		// Output in a consistent group order
-		TArray<FString> GroupOrder = { TEXT("Engine"), TEXT("MyGame"), TEXT("MyGame Sample"), TEXT("MyGame Mob Sample") };
+		// Output in a consistent group order. Default groups Engine first; the
+		// GetNodeGroup helper returns "Engine" for everything by default so this
+		// is the only group surfaced unless a fork customises the grouping.
+		TArray<FString> GroupOrder = { TEXT("Engine") };
 		for (const FString& GroupName : GroupOrder)
 		{
 			const TArray<TSharedPtr<FStateTreeNodeClassData>>* GroupClasses = GroupedClasses.Find(GroupName);

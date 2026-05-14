@@ -131,7 +131,7 @@ UNTEST_UNIT_OPTS(Claireon, StateTreeSetStateProperty, HappyDotPathTag, UNTEST_TI
 	// Use ImportText format expected by FGameplayTag.
 	const bool bOk = ClaireonStateTreeHelpers::SetStateProperty(
 		*State, TEXT("RequiredEventToEnter.Tag"),
-		TEXT("(TagName=\"Sample.Event.Puppet.MoveTo.Request\")"),
+		TEXT("(TagName=\"Demo.Event.MoveTo.Request\")"),
 		Error);
 	// Tag may not be registered in test environments; the importer still
 	// succeeds even when the tag is unregistered (it stores the raw name).

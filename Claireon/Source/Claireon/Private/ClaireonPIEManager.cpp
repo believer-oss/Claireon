@@ -226,7 +226,7 @@ FString FClaireonPIEManager::RegisterDamageListener(AActor* Actor)
 
 		// Check for common health component patterns:
 		// - ULyraHealthComponent (Lyra)
-		// - UFSHealthComponent (MyGame)
+		// - UFSHealthComponent (project-specific example)
 		// - Any component with "Health" in its name
 		if (ClassName.Contains(TEXT("Health")))
 		{
