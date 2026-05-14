@@ -12,14 +12,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_RemoveState::GetName() const
-{
-	return TEXT("claireon.statetree_remove_state");
-}
+FString ClaireonStateTreeTool_RemoveState::GetOperation() const { return TEXT("remove_state"); }
 
 FString ClaireonStateTreeTool_RemoveState::GetDescription() const
 {
-	return TEXT("Remove an existing state and its entire subtree from the State Tree in the open editing session. Requires open session_id from claireon.statetree_open. Transactional. Common pitfall: transitions targeting any removed state from elsewhere in the tree are silently broken; verify with claireon.statetree_inspect.");
+	return TEXT("Remove an existing state and its entire subtree from the State Tree in the open editing session. Requires open session_id from statetree_open. Transactional. Common pitfall: transitions targeting any removed state from elsewhere in the tree are silently broken; verify with statetree_inspect.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_RemoveState::GetInputSchema() const

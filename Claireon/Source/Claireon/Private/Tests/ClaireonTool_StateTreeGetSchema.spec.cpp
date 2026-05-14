@@ -1,7 +1,7 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 //
-// Spec tests for claireon.statetree_get_schema (#0000 / F3).
+// Spec tests for statetree_get_schema (#0000 / F3).
 // Smoke-level: verify the tool surface registers cleanly. Asset-backed
 // integration tests are exercised manually via the editor.
 
@@ -14,7 +14,7 @@
 UNTEST_UNIT_OPTS(Claireon, StateTreeGetSchema, ToolSurface, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_StateTreeGetSchema Tool;
-	UNTEST_ASSERT_STREQ(*Tool.GetName(), TEXT("claireon.statetree_get_schema"));
+	UNTEST_ASSERT_STREQ(*Tool.GetName(), TEXT("statetree_get_schema"));
 	UNTEST_ASSERT_TRUE(!Tool.GetDescription().IsEmpty());
 	const TSharedPtr<FJsonObject> Schema = Tool.GetInputSchema();
 	UNTEST_ASSERT_TRUE(Schema.IsValid());

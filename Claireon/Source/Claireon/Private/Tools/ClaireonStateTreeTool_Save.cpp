@@ -10,14 +10,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_Save::GetName() const
-{
-	return TEXT("claireon.statetree_save");
-}
+FString ClaireonStateTreeTool_Save::GetOperation() const { return TEXT("save"); }
 
 FString ClaireonStateTreeTool_Save::GetDescription() const
 {
-	return TEXT("Save the State Tree asset to disk from the open editing session. Requires open session_id from claireon.statetree_open. Immediate-write to the .uasset on disk. Compiles before saving and reports compile errors. Run save periodically during long edit sessions so changes survive editor crashes.");
+	return TEXT("Save the State Tree asset to disk from the open editing session. Requires open session_id from statetree_open. Immediate-write to the .uasset on disk. Compiles before saving and reports compile errors. Run save periodically during long edit sessions so changes survive editor crashes.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_Save::GetInputSchema() const

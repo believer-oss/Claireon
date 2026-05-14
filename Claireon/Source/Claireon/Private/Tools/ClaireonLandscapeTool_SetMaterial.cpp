@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLandscapeTool_SetMaterial::GetName() const
-{
-	return TEXT("claireon.landscape_set_material");
-}
+FString ClaireonLandscapeTool_SetMaterial::GetOperation() const { return TEXT("set_material"); }
 
 FString ClaireonLandscapeTool_SetMaterial::GetDescription() const
 {

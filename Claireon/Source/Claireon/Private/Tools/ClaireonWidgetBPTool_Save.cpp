@@ -13,14 +13,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_Save::GetName() const
-{
-    return TEXT("claireon.widgetbp_save");
-}
+FString ClaireonWidgetBPTool_Save::GetOperation() const { return TEXT("save"); }
 
 FString ClaireonWidgetBPTool_Save::GetDescription() const
 {
-    return TEXT("Save the Widget Blueprint in the open editing session to disk. Requires open session_id from claireon.widgetbp_open. Immediate-write to the .uasset on disk. Compiles before saving and reports compile errors. Run save periodically during long edit sessions so changes survive editor crashes.");
+    return TEXT("Save the Widget Blueprint in the open editing session to disk. Requires open session_id from widgetbp_open. Immediate-write to the .uasset on disk. Compiles before saving and reports compile errors. Run save periodically during long edit sessions so changes survive editor crashes.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_Save::GetInputSchema() const

@@ -6,10 +6,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonMaterialInstanceTool_Status::GetName() const
-{
-	return TEXT("claireon.material_instance_status");
-}
+FString ClaireonMaterialInstanceTool_Status::GetOperation() const { return TEXT("instance_status"); }
 
 FString ClaireonMaterialInstanceTool_Status::GetDescription() const
 {

@@ -7,10 +7,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonPCGGraphTool_ApplySpec::GetName() const
-{
-	return TEXT("claireon.pcg_apply_spec");
-}
+FString ClaireonPCGGraphTool_ApplySpec::GetOperation() const { return TEXT("apply_spec"); }
 
 FString ClaireonPCGGraphTool_ApplySpec::GetDescription() const
 {

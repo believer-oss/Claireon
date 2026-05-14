@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonNiagaraTool_SetParameterValue::GetName() const
-{
-	return TEXT("claireon.niagara_set_parameter_value");
-}
+FString ClaireonNiagaraTool_SetParameterValue::GetOperation() const { return TEXT("set_parameter_value"); }
 
 FString ClaireonNiagaraTool_SetParameterValue::GetDescription() const
 {

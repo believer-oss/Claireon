@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_DeleteAnimation::GetName() const
-{
-    return TEXT("claireon.widgetbp_delete_animation");
-}
+FString ClaireonWidgetBPTool_DeleteAnimation::GetOperation() const { return TEXT("delete_animation"); }
 
 FString ClaireonWidgetBPTool_DeleteAnimation::GetDescription() const
 {

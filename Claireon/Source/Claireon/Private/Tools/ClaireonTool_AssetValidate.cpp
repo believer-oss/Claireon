@@ -9,10 +9,8 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
 
-FString ClaireonTool_AssetValidate::GetName() const
-{
-	return TEXT("claireon.asset_validate");
-}
+FString ClaireonTool_AssetValidate::GetCategory() const { return TEXT("asset"); }
+FString ClaireonTool_AssetValidate::GetOperation() const { return TEXT("validate"); }
 
 FString ClaireonTool_AssetValidate::GetDescription() const
 {

@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBlackboardTool_Save::GetName() const
-{
-	return TEXT("claireon.blackboard_save");
-}
+FString ClaireonBlackboardTool_Save::GetOperation() const { return TEXT("save"); }
 
 FString ClaireonBlackboardTool_Save::GetDescription() const
 {

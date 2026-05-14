@@ -11,14 +11,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_ListAnimations::GetName() const
-{
-    return TEXT("claireon.widgetbp_list_animations");
-}
+FString ClaireonWidgetBPTool_ListAnimations::GetOperation() const { return TEXT("list_animations"); }
 
 FString ClaireonWidgetBPTool_ListAnimations::GetDescription() const
 {
-    return TEXT("List UWidgetAnimation entries on the Widget Blueprint in the open editing session, with start/end times. Requires open session_id from claireon.widgetbp_open. Read-only. Returns animation names and durations; pair with claireon.widgetbp_get_animation_details for per-animation track and binding detail.");
+    return TEXT("List UWidgetAnimation entries on the Widget Blueprint in the open editing session, with start/end times. Requires open session_id from widgetbp_open. Read-only. Returns animation names and durations; pair with widgetbp_get_animation_details for per-animation track and binding detail.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_ListAnimations::GetInputSchema() const

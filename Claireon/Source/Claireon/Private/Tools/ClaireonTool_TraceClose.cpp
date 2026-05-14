@@ -5,10 +5,8 @@
 #include "ClaireonLog.h"
 #include "ClaireonTraceSession.h"
 
-FString ClaireonTool_TraceClose::GetName() const
-{
-	return TEXT("claireon.trace_close");
-}
+FString ClaireonTool_TraceClose::GetCategory() const { return TEXT("trace"); }
+FString ClaireonTool_TraceClose::GetOperation() const { return TEXT("close"); }
 
 FString ClaireonTool_TraceClose::GetDescription() const
 {

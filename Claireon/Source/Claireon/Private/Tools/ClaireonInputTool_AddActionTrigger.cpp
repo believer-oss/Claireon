@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonInputTool_AddActionTrigger::GetName() const
-{
-	return TEXT("claireon.input_add_action_trigger");
-}
+FString ClaireonInputTool_AddActionTrigger::GetOperation() const { return TEXT("add_action_trigger"); }
 
 FString ClaireonInputTool_AddActionTrigger::GetDescription() const
 {

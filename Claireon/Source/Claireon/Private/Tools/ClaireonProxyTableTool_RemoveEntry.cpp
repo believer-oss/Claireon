@@ -8,7 +8,8 @@
 #include "ScopedTransaction.h"
 #include "Dom/JsonObject.h"
 
-FString ClaireonTool_ProxyTableRemoveEntry::GetName() const { return TEXT("claireon.proxytable_remove_entry"); }
+FString ClaireonTool_ProxyTableRemoveEntry::GetCategory() const { return TEXT("proxytable"); }
+FString ClaireonTool_ProxyTableRemoveEntry::GetOperation() const { return TEXT("remove_entry"); }
 
 FString ClaireonTool_ProxyTableRemoveEntry::GetDescription() const
 {

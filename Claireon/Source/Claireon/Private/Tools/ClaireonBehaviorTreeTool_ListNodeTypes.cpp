@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBehaviorTreeTool_ListNodeTypes::GetName() const
-{
-	return TEXT("claireon.behaviortree_list_node_types");
-}
+FString ClaireonBehaviorTreeTool_ListNodeTypes::GetOperation() const { return TEXT("list_node_types"); }
 
 FString ClaireonBehaviorTreeTool_ListNodeTypes::GetDescription() const
 {

@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonPCGGraphTool_Focus::GetName() const
-{
-	return TEXT("claireon.pcg_focus");
-}
+FString ClaireonPCGGraphTool_Focus::GetOperation() const { return TEXT("focus"); }
 
 FString ClaireonPCGGraphTool_Focus::GetDescription() const
 {

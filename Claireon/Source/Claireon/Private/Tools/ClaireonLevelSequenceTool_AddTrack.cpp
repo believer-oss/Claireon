@@ -15,10 +15,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_AddTrack::GetName() const
-{
-	return TEXT("claireon.level_sequence_add_track");
-}
+FString ClaireonLevelSequenceTool_AddTrack::GetOperation() const { return TEXT("sequence_add_track"); }
 
 FString ClaireonLevelSequenceTool_AddTrack::GetDescription() const
 {
@@ -29,7 +26,7 @@ TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_AddTrack::GetInputSchema() con
 {
 	FToolSchemaBuilder Builder;
 	Builder.AddString(TEXT("session_id"), TEXT("Session identifier from open."), true);
-	Builder.AddString(TEXT("track_type"), TEXT("Track type (e.g. transform, visibility, event, float). See claireon.level_sequence_list_track_types."), true);
+	Builder.AddString(TEXT("track_type"), TEXT("Track type (e.g. transform, visibility, event, float). See level_sequence_list_track_types."), true);
 	Builder.AddBoolean(TEXT("suppress_output"), TEXT("If true, returns brief status instead of full state."));
 	return Builder.Build();
 }

@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonPCGGraphTool_AddNode::GetName() const
-{
-	return TEXT("claireon.pcg_add_node");
-}
+FString ClaireonPCGGraphTool_AddNode::GetOperation() const { return TEXT("add_node"); }
 
 FString ClaireonPCGGraphTool_AddNode::GetDescription() const
 {

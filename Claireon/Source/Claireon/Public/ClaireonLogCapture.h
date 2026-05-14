@@ -9,7 +9,15 @@
 /**
  * RAII guard: attaches to GLog on construction, detaches on destruction.
  * Captures Error and Warning messages emitted during its lifetime.
- * Thread-safe via FCriticalSection since GLog can fire from any thread.
+ *
+ * Threading contract:
+ * - The critical section (CaptureCS) guards ONLY the mutable message buffer
+ *   (CapturedMessages, TotalTextBytes, bCapExceeded).
+ * - ExcludedCategoriesSnapshot is const and lock-free post-construction;
+ *   safety relies on the release fence provided by GLog->AddOutputDevice
+ *   at the end of the constructor.
+ * - MinVerbosity is read-only after construction and is intentionally not
+ *   under the lock.
  */
 class FClaireonLogCapture : public FOutputDevice
 {
@@ -49,13 +57,16 @@ private:
 	};
 
 	TArray<FCapturedMessage> CapturedMessages;
+	// Read-only after construction; not guarded by CaptureCS.
 	ELogVerbosity::Type MinVerbosity;
 	int32 TotalTextBytes = 0;
 	bool bCapExceeded = false;
+	// Guards ONLY the mutable message buffer (CapturedMessages, TotalTextBytes, bCapExceeded).
 	mutable FCriticalSection CaptureCS;
 
 	// Snapshot of the user denylist at construction time. Captured here so
 	// that off-thread log emissions (AnimBP compile, async loading, etc.) can
 	// still be filtered without touching the UObject CDO from a worker thread.
-	TSet<FName> ExcludedCategoriesSnapshot;
+	// const + lock-free post-construction; safety via GLog->AddOutputDevice release fence.
+	const TSet<FName> ExcludedCategoriesSnapshot;
 };

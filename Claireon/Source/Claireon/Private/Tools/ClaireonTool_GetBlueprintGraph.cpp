@@ -15,10 +15,8 @@
 #include "AnimationGraphSchema.h"
 #include "WidgetBlueprint.h"
 
-FString ClaireonTool_GetBlueprintGraph::GetName() const
-{
-	return TEXT("claireon.blueprint_get_graph");
-}
+FString ClaireonTool_GetBlueprintGraph::GetCategory() const { return TEXT("blueprint"); }
+FString ClaireonTool_GetBlueprintGraph::GetOperation() const { return TEXT("get_graph"); }
 
 TArray<FString> ClaireonTool_GetBlueprintGraph::GetSearchKeywords() const
 {
@@ -33,15 +31,15 @@ FString ClaireonTool_GetBlueprintGraph::GetDescription() const
 FString ClaireonTool_GetBlueprintGraph::GetFullDescription() const
 {
 	return TEXT("Read the internal graph structure of a Blueprint.\n"
-				"Default output: JSON summary at 'exec' detail level â node titles, classes, GUIDs, positions, exec-pin connections, and compact data-pin counts. Suitable for surveying large graphs without token overflow.\n\n"
+				"Default output: JSON summary at 'exec' detail level Ã¢Â€Â” node titles, classes, GUIDs, positions, exec-pin connections, and compact data-pin counts. Suitable for surveying large graphs without token overflow.\n\n"
 				"Parameters:\n"
 				"  asset_path (required): Unreal content path of the Blueprint (e.g., /Game/Characters/BP_PlayerCharacter).\n"
 				"  graph_name (optional): Name of a specific graph to export (e.g., 'EventGraph', 'TakeDamage'). Omit to export all graphs.\n"
 				"  format (optional, default='json'): 'json' for structured summary, 't3d' for Unreal text export (clipboard copy/paste), 'both' for both. T3D is opt-in.\n"
 				"  node_detail_level (optional, default='exec'):\n"
-				"    'exec' â compact view: title, class, GUID, position, exec-pin connections, and compact data-pin count. Best for large graphs.\n"
-				"    'full' â all pin details and defaults.\n"
-				"    'summary' â node types and connections only (no pin defaults).\n"
+				"    'exec' Ã¢Â€Â” compact view: title, class, GUID, position, exec-pin connections, and compact data-pin count. Best for large graphs.\n"
+				"    'full' Ã¢Â€Â” all pin details and defaults.\n"
+				"    'summary' Ã¢Â€Â” node types and connections only (no pin defaults).\n"
 				"    'outline' - one line per node, parseable by a single regex. No embedded newlines.\n"
 				"      Grammar: '<index>. <node_class> <guid8>  <clean_title>  @ (x, y)'\n"
 				"      Regex:   ^\\s*(\\d+)\\.\\s+(\\w+)\\s+([0-9a-fA-F]{8})\\s{2}(.+?)\\s{2}@\\s+\\((-?\\d+),\\s*(-?\\d+)\\)\\s*$\n"
@@ -113,9 +111,9 @@ TSharedPtr<FJsonObject> ClaireonTool_GetBlueprintGraph::GetInputSchema() const
 	DetailEnum.Add(MakeShared<FJsonValueString>(TEXT("outline")));
 	DetailProp->SetArrayField(TEXT("enum"), DetailEnum);
 	DetailProp->SetStringField(TEXT("description"), TEXT("Level of detail for node output. Default: 'exec'.\n"
-														 "'exec' â compact view: node title, class, GUID, position, exec-pin connections only, and a compact data pin count (N data pins). Best for surveying large graphs.\n"
-														 "'full' â all pin details and defaults.\n"
-														 "'summary' â node types and connections only (no pin defaults).\n"
+														 "'exec' Ã¢Â€Â” compact view: node title, class, GUID, position, exec-pin connections only, and a compact data pin count (N data pins). Best for surveying large graphs.\n"
+														 "'full' Ã¢Â€Â” all pin details and defaults.\n"
+														 "'summary' Ã¢Â€Â” node types and connections only (no pin defaults).\n"
 														 "'outline' - one line per node; see full description for grammar and regex."));
 	Properties->SetObjectField(TEXT("node_detail_level"), DetailProp);
 
@@ -556,13 +554,13 @@ FString ClaireonTool_GetBlueprintGraph::BuildGraphJsonSummary(const UEdGraph* Gr
 		return TEXT("Error: Invalid graph");
 	}
 
-	// AnimBP graphs don't use PC_Exec pins â fall back to "summary" detail
+	// AnimBP graphs don't use PC_Exec pins Ã¢Â€Â” fall back to "summary" detail
 	FString EffectiveDetailLevel = DetailLevel;
 	FString AnimBPFallbackNote;
 	if (DetailLevel == TEXT("exec") && Graph->Schema && Graph->Schema->IsChildOf(UAnimationGraphSchema::StaticClass()))
 	{
 		EffectiveDetailLevel = TEXT("summary");
-		AnimBPFallbackNote = TEXT("\n(exec detail not available for AnimBP graphs â showing summary)");
+		AnimBPFallbackNote = TEXT("\n(exec detail not available for AnimBP graphs Ã¢Â€Â” showing summary)");
 	}
 
 	FString Output;
@@ -693,7 +691,7 @@ FString ClaireonTool_GetBlueprintGraph::BuildGraphJsonSummary(const UEdGraph* Gr
 				}
 
 				FString AnchorTitle = GetNodeTitle(AnchorNode);
-				Output += FString::Printf(TEXT("\n(Anchor node [%s] has no exec connections â showing data-pin neighbors instead.)"), *AnchorTitle);
+				Output += FString::Printf(TEXT("\n(Anchor node [%s] has no exec connections Ã¢Â€Â” showing data-pin neighbors instead.)"), *AnchorTitle);
 				Output += AnimBPFallbackNote;
 				return Output;
 			}
@@ -713,7 +711,7 @@ FString ClaireonTool_GetBlueprintGraph::BuildGraphJsonSummary(const UEdGraph* Gr
 		FString AnchorTitle = GetNodeTitle(AnchorNode);
 		FString DepthStr = (TraversalDepth >= 0) ? FString::FromInt(TraversalDepth) : TEXT("unlimited");
 		Output += FString::Printf(
-			TEXT("\n(Showing %d of %d nodes â anchored at [%s], depth %s.\n %d nodes not shown. Use anchor_node_guid=<guid> to navigate to a different section.)"),
+			TEXT("\n(Showing %d of %d nodes Ã¢Â€Â” anchored at [%s], depth %s.\n %d nodes not shown. Use anchor_node_guid=<guid> to navigate to a different section.)"),
 			ShownNodes, TotalNodes, *AnchorTitle, *DepthStr, NotShown);
 		Output += AnimBPFallbackNote;
 		return Output;

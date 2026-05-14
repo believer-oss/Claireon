@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonFoliageTool_Paint::GetName() const
-{
-	return TEXT("claireon.foliage_paint");
-}
+FString ClaireonFoliageTool_Paint::GetOperation() const { return TEXT("paint"); }
 
 FString ClaireonFoliageTool_Paint::GetDescription() const
 {

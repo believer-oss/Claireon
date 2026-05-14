@@ -97,14 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_SetProperty::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_set_property");
-}
+FString ClaireonBlueprintGraphTool_SetProperty::GetOperation() const { return TEXT("graph_set_property"); }
 
 FString ClaireonBlueprintGraphTool_SetProperty::GetDescription() const
 {
-    return TEXT("Set a property on a component template or the Blueprint CDO in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: property_name must match the UPROPERTY name on the target class; nested property paths use dot notation.");
+    return TEXT("Set a property on a component template or the Blueprint CDO in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: property_name must match the UPROPERTY name on the target class; nested property paths use dot notation.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetProperty::GetInputSchema() const

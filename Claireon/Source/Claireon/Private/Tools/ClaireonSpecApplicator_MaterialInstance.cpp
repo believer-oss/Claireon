@@ -21,7 +21,7 @@
 namespace
 {
 	/** Accepted parameter type strings. */
-	static bool IsAcceptedMICParameterType(const FString& Type)
+	static bool SpecApplicatorMaterialInstance_IsAcceptedMICParameterType(const FString& Type)
 	{
 		return Type.Equals(TEXT("scalar"), ESearchCase::IgnoreCase)
 			|| Type.Equals(TEXT("vector"), ESearchCase::IgnoreCase)
@@ -31,7 +31,7 @@ namespace
 	}
 
 	/** Map a parameter_type string to EMaterialParameterType. Returns false if unknown. */
-	static bool ParseParameterType(const FString& Type, EMaterialParameterType& OutType)
+	static bool SpecApplicatorMaterialInstance_ParseParameterType(const FString& Type, EMaterialParameterType& OutType)
 	{
 		if (Type.Equals(TEXT("scalar"), ESearchCase::IgnoreCase))
 		{
@@ -105,7 +105,7 @@ bool FClaireonSpecApplicator_MaterialInstance::ValidateToolSpec(const TSharedPtr
 				OutErrors.Add(FString::Printf(TEXT("parameters[%d]: missing or empty 'type'"), i));
 				continue;
 			}
-			if (!IsAcceptedMICParameterType(ParamType))
+			if (!SpecApplicatorMaterialInstance_IsAcceptedMICParameterType(ParamType))
 			{
 				OutErrors.Add(FString::Printf(TEXT("parameters[%d]: unknown type '%s' (expected scalar|vector|texture|static_switch|static_component_mask)"), i, *ParamType));
 				continue;
@@ -154,7 +154,7 @@ bool FClaireonSpecApplicator_MaterialInstance::ValidateToolSpec(const TSharedPtr
 			{
 				OutErrors.Add(FString::Printf(TEXT("clear_overrides[%d]: missing or empty 'type'"), i));
 			}
-			else if (!IsAcceptedMICParameterType(Type))
+			else if (!SpecApplicatorMaterialInstance_IsAcceptedMICParameterType(Type))
 			{
 				OutErrors.Add(FString::Printf(TEXT("clear_overrides[%d]: unknown type '%s'"), i, *Type));
 			}
@@ -188,7 +188,7 @@ bool FClaireonSpecApplicator_MaterialInstance::OpenOrCreateAsset(const FString& 
 
 	const FString InstancePathName = LoadedInstance->GetPathName();
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
-		InstancePathName, TEXT("claireon.material_instance_edit"));
+		InstancePathName, TEXT("material_instance_edit"));
 
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{
@@ -431,7 +431,7 @@ bool FClaireonSpecApplicator_MaterialInstance::ApplyPass2_WireRelationships(cons
 				i, *Name, *TypeStr);
 
 			EMaterialParameterType ParamType;
-			if (!ParseParameterType(TypeStr, ParamType))
+			if (!SpecApplicatorMaterialInstance_ParseParameterType(TypeStr, ParamType))
 			{
 				RecordEntryFailure(EntryKey, FString::Printf(TEXT("unknown type '%s'"), *TypeStr));
 				continue;

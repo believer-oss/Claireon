@@ -17,14 +17,14 @@
 #include "Dom/JsonValue.h"
 
 // ============================================================================
-// claireon.anim_add_section
+// anim_add_section
 // ============================================================================
 
-FString ClaireonAnimTool_AddSection::GetName() const { return TEXT("claireon.anim_add_section"); }
+FString ClaireonAnimTool_AddSection::GetOperation() const { return TEXT("add_section"); }
 
 FString ClaireonAnimTool_AddSection::GetDescription() const
 {
-	return TEXT("Add a section to the montage at a specific time in the open editing session. Requires open session_id from claireon.anim_open. Transactional. The section_name must be unique within the montage; section ordering is determined by start_time. Errors if start_time falls outside the asset duration.");
+	return TEXT("Add a section to the montage at a specific time in the open editing session. Requires open session_id from anim_open. Transactional. The section_name must be unique within the montage; section ordering is determined by start_time. Errors if start_time falls outside the asset duration.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_AddSection::GetInputSchema() const
@@ -70,14 +70,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddSection::Execute(const TSharedPtr
 }
 
 // ============================================================================
-// claireon.anim_remove_section
+// anim_remove_section
 // ============================================================================
 
-FString ClaireonAnimTool_RemoveSection::GetName() const { return TEXT("claireon.anim_remove_section"); }
+FString ClaireonAnimTool_RemoveSection::GetOperation() const { return TEXT("remove_section"); }
 
 FString ClaireonAnimTool_RemoveSection::GetDescription() const
 {
-	return TEXT("Remove a section from the montage in the open animation editing session. Requires open session_id from claireon.anim_open. Transactional. Removing the only section is allowed but leaves the montage unplayable until a replacement is added. Other sections that linked to this one have their next-section link cleared.");
+	return TEXT("Remove a section from the montage in the open animation editing session. Requires open session_id from anim_open. Transactional. Removing the only section is allowed but leaves the montage unplayable until a replacement is added. Other sections that linked to this one have their next-section link cleared.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_RemoveSection::GetInputSchema() const
@@ -118,14 +118,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_RemoveSection::Execute(const TShared
 }
 
 // ============================================================================
-// claireon.anim_set_section_link
+// anim_set_section_link
 // ============================================================================
 
-FString ClaireonAnimTool_SetSectionLink::GetName() const { return TEXT("claireon.anim_set_section_link"); }
+FString ClaireonAnimTool_SetSectionLink::GetOperation() const { return TEXT("set_section_link"); }
 
 FString ClaireonAnimTool_SetSectionLink::GetDescription() const
 {
-	return TEXT("Set which section plays next after a given section in the open montage editing session. Requires open session_id from claireon.anim_open. Transactional. Pass next_section_name='' to clear the link (the section ends at its boundary). The next section name must reference an existing section.");
+	return TEXT("Set which section plays next after a given section in the open montage editing session. Requires open session_id from anim_open. Transactional. Pass next_section_name='' to clear the link (the section ends at its boundary). The next section name must reference an existing section.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_SetSectionLink::GetInputSchema() const
@@ -171,14 +171,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_SetSectionLink::Execute(const TShare
 }
 
 // ============================================================================
-// claireon.anim_set_section_link_method
+// anim_set_section_link_method
 // ============================================================================
 
-FString ClaireonAnimTool_SetSectionLinkMethod::GetName() const { return TEXT("claireon.anim_set_section_link_method"); }
+FString ClaireonAnimTool_SetSectionLinkMethod::GetOperation() const { return TEXT("set_section_link_method"); }
 
 FString ClaireonAnimTool_SetSectionLinkMethod::GetDescription() const
 {
-	return TEXT("Set the link method for a montage section in the open animation editing session. Requires open session_id from claireon.anim_open. Transactional. Link method controls how playback transitions to the next section (e.g. absolute, relative, proportional). Common pitfall: section_name must match an existing section exactly.");
+	return TEXT("Set the link method for a montage section in the open animation editing session. Requires open session_id from anim_open. Transactional. Link method controls how playback transitions to the next section (e.g. absolute, relative, proportional). Common pitfall: section_name must match an existing section exactly.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_SetSectionLinkMethod::GetInputSchema() const
@@ -251,14 +251,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_SetSectionLinkMethod::Execute(const 
 }
 
 // ============================================================================
-// claireon.anim_add_segment
+// anim_add_segment
 // ============================================================================
 
-FString ClaireonAnimTool_AddSegment::GetName() const { return TEXT("claireon.anim_add_segment"); }
+FString ClaireonAnimTool_AddSegment::GetOperation() const { return TEXT("add_segment"); }
 
 FString ClaireonAnimTool_AddSegment::GetDescription() const
 {
-	return TEXT("Add an animation segment to a montage slot in the open editing session. Requires open session_id from claireon.anim_open. Transactional. The animation_path must point to a compatible AnimSequence using the same skeleton as the montage. New segments append to the end of the slot timeline.");
+	return TEXT("Add an animation segment to a montage slot in the open editing session. Requires open session_id from anim_open. Transactional. The animation_path must point to a compatible AnimSequence using the same skeleton as the montage. New segments append to the end of the slot timeline.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_AddSegment::GetInputSchema() const
@@ -373,14 +373,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddSegment::Execute(const TSharedPtr
 }
 
 // ============================================================================
-// claireon.anim_remove_segment
+// anim_remove_segment
 // ============================================================================
 
-FString ClaireonAnimTool_RemoveSegment::GetName() const { return TEXT("claireon.anim_remove_segment"); }
+FString ClaireonAnimTool_RemoveSegment::GetOperation() const { return TEXT("remove_segment"); }
 
 FString ClaireonAnimTool_RemoveSegment::GetDescription() const
 {
-	return TEXT("Remove a segment from a montage slot in the open animation editing session. Requires open session_id from claireon.anim_open. Transactional. Common pitfall: segment indices shift after removal, so cache them up front when removing multiple segments in sequence on the same slot.");
+	return TEXT("Remove a segment from a montage slot in the open animation editing session. Requires open session_id from anim_open. Transactional. Common pitfall: segment indices shift after removal, so cache them up front when removing multiple segments in sequence on the same slot.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_RemoveSegment::GetInputSchema() const
@@ -436,14 +436,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_RemoveSegment::Execute(const TShared
 }
 
 // ============================================================================
-// claireon.anim_set_segment_property
+// anim_set_segment_property
 // ============================================================================
 
-FString ClaireonAnimTool_SetSegmentProperty::GetName() const { return TEXT("claireon.anim_set_segment_property"); }
+FString ClaireonAnimTool_SetSegmentProperty::GetOperation() const { return TEXT("set_segment_property"); }
 
 FString ClaireonAnimTool_SetSegmentProperty::GetDescription() const
 {
-	return TEXT("Set a property on a montage segment in the open animation editing session. Requires open session_id from claireon.anim_open. Transactional. Supports start_pos, end_pos, play_rate, animation_path, and loop_count. Common pitfall: changing animation_path validates skeleton compatibility before mutating.");
+	return TEXT("Set a property on a montage segment in the open animation editing session. Requires open session_id from anim_open. Transactional. Supports start_pos, end_pos, play_rate, animation_path, and loop_count. Common pitfall: changing animation_path validates skeleton compatibility before mutating.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_SetSegmentProperty::GetInputSchema() const
@@ -541,14 +541,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_SetSegmentProperty::Execute(const TS
 }
 
 // ============================================================================
-// claireon.anim_add_slot
+// anim_add_slot
 // ============================================================================
 
-FString ClaireonAnimTool_AddSlot::GetName() const { return TEXT("claireon.anim_add_slot"); }
+FString ClaireonAnimTool_AddSlot::GetOperation() const { return TEXT("add_slot"); }
 
 FString ClaireonAnimTool_AddSlot::GetDescription() const
 {
-	return TEXT("Add a new slot track to the montage in the open editing session. Requires open session_id from claireon.anim_open. Transactional. The slot_name must match a slot defined on the target skeleton (e.g. 'DefaultSlot', 'UpperBody'). Errors if the slot is unknown to the skeleton's slot tree.");
+	return TEXT("Add a new slot track to the montage in the open editing session. Requires open session_id from anim_open. Transactional. The slot_name must match a slot defined on the target skeleton (e.g. 'DefaultSlot', 'UpperBody'). Errors if the slot is unknown to the skeleton's slot tree.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_AddSlot::GetInputSchema() const
@@ -588,14 +588,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddSlot::Execute(const TSharedPtr<FJ
 }
 
 // ============================================================================
-// claireon.anim_remove_slot
+// anim_remove_slot
 // ============================================================================
 
-FString ClaireonAnimTool_RemoveSlot::GetName() const { return TEXT("claireon.anim_remove_slot"); }
+FString ClaireonAnimTool_RemoveSlot::GetOperation() const { return TEXT("remove_slot"); }
 
 FString ClaireonAnimTool_RemoveSlot::GetDescription() const
 {
-	return TEXT("Remove a slot track from the montage in the open editing session. Requires open session_id from claireon.anim_open. Transactional. Common pitfall: removing the last slot is rejected because every montage requires at least one slot for playback. All segments on the removed slot are deleted with it.");
+	return TEXT("Remove a slot track from the montage in the open editing session. Requires open session_id from anim_open. Transactional. Common pitfall: removing the last slot is rejected because every montage requires at least one slot for playback. All segments on the removed slot are deleted with it.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_RemoveSlot::GetInputSchema() const
@@ -643,14 +643,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_RemoveSlot::Execute(const TSharedPtr
 }
 
 // ============================================================================
-// claireon.anim_set_slot_property
+// anim_set_slot_property
 // ============================================================================
 
-FString ClaireonAnimTool_SetSlotProperty::GetName() const { return TEXT("claireon.anim_set_slot_property"); }
+FString ClaireonAnimTool_SetSlotProperty::GetOperation() const { return TEXT("set_slot_property"); }
 
 FString ClaireonAnimTool_SetSlotProperty::GetDescription() const
 {
-	return TEXT("Rename a montage slot in the open animation editing session. Requires open session_id from claireon.anim_open. Transactional. The new slot name must exist in the skeleton slot tree. Common pitfall: this only updates the slot's identifier; it does not migrate existing animation segments between named slots.");
+	return TEXT("Rename a montage slot in the open animation editing session. Requires open session_id from anim_open. Transactional. The new slot name must exist in the skeleton slot tree. Common pitfall: this only updates the slot's identifier; it does not migrate existing animation segments between named slots.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_SetSlotProperty::GetInputSchema() const
@@ -699,14 +699,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_SetSlotProperty::Execute(const TShar
 }
 
 // ============================================================================
-// claireon.anim_inspect_segment
+// anim_inspect_segment
 // ============================================================================
 
-FString ClaireonAnimTool_InspectSegment::GetName() const { return TEXT("claireon.anim_inspect_segment"); }
+FString ClaireonAnimTool_InspectSegment::GetOperation() const { return TEXT("inspect_segment"); }
 
 FString ClaireonAnimTool_InspectSegment::GetDescription() const
 {
-	return TEXT("Get detailed info about a montage segment in the open animation editing session. Requires open session_id from claireon.anim_open. Read-only. Returns segment timing, animation_path, play_rate, loop_count, and the list of notifies that fall inside the segment's time range.");
+	return TEXT("Get detailed info about a montage segment in the open animation editing session. Requires open session_id from anim_open. Read-only. Returns segment timing, animation_path, play_rate, loop_count, and the list of notifies that fall inside the segment's time range.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_InspectSegment::GetInputSchema() const
@@ -802,14 +802,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_InspectSegment::Execute(const TShare
 }
 
 // ============================================================================
-// claireon.anim_retime_segment
+// anim_retime_segment
 // ============================================================================
 
-FString ClaireonAnimTool_RetimeSegment::GetName() const { return TEXT("claireon.anim_retime_segment"); }
+FString ClaireonAnimTool_RetimeSegment::GetOperation() const { return TEXT("retime_segment"); }
 
 FString ClaireonAnimTool_RetimeSegment::GetDescription() const
 {
-	return TEXT("Change the timing of a montage segment in the open animation editing session. Requires open session_id from claireon.anim_open. Transactional. Pass retime_notifies=true to scale notify times that fall inside the segment by the same factor; otherwise notify times are left as-is and may end up outside the new segment range.");
+	return TEXT("Change the timing of a montage segment in the open animation editing session. Requires open session_id from anim_open. Transactional. Pass retime_notifies=true to scale notify times that fall inside the segment by the same factor; otherwise notify times are left as-is and may end up outside the new segment range.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_RetimeSegment::GetInputSchema() const
@@ -974,10 +974,10 @@ IClaireonTool::FToolResult ClaireonAnimTool_RetimeSegment::Execute(const TShared
 }
 
 // ============================================================================
-// claireon.anim_batch_retime
+// anim_batch_retime
 // ============================================================================
 
-FString ClaireonAnimTool_BatchRetimeAnimation::GetName() const { return TEXT("claireon.anim_batch_retime"); }
+FString ClaireonAnimTool_BatchRetimeAnimation::GetOperation() const { return TEXT("batch_retime"); }
 
 FString ClaireonAnimTool_BatchRetimeAnimation::GetDescription() const
 {

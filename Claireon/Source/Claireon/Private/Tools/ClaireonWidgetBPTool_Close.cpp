@@ -10,14 +10,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_Close::GetName() const
-{
-    return TEXT("claireon.widgetbp_close");
-}
+FString ClaireonWidgetBPTool_Close::GetOperation() const { return TEXT("close"); }
 
 FString ClaireonWidgetBPTool_Close::GetDescription() const
 {
-    return TEXT("Close an open Widget Blueprint editing session and release its asset lock. Requires open session_id from claireon.widgetbp_open. Transactional with respect to any final save. Run claireon.widgetbp_save first if you want unsaved changes flushed before close; otherwise pending changes are discarded.");
+    return TEXT("Close an open Widget Blueprint editing session and release its asset lock. Requires open session_id from widgetbp_open. Transactional with respect to any final save. Run widgetbp_save first if you want unsaved changes flushed before close; otherwise pending changes are discarded.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_Close::GetInputSchema() const

@@ -14,14 +14,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_AddTask::GetName() const
-{
-	return TEXT("claireon.statetree_add_task");
-}
+FString ClaireonStateTreeTool_AddTask::GetOperation() const { return TEXT("add_task"); }
 
 FString ClaireonStateTreeTool_AddTask::GetDescription() const
 {
-	return TEXT("Add a task node to a state in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Tasks run while the state is active and produce success/failure/running results. The node_type must be a registered FStateTreeTaskBase subclass.");
+	return TEXT("Add a task node to a state in the open State Tree editing session. Requires open session_id from statetree_open. Transactional. Tasks run while the state is active and produce success/failure/running results. The node_type must be a registered FStateTreeTaskBase subclass.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_AddTask::GetInputSchema() const

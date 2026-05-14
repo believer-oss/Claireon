@@ -13,10 +13,8 @@
 #include "Misc/OutputDeviceRedirector.h"
 #include "Misc/Paths.h"
 
-FString ClaireonTool_LogTail::GetName() const
-{
-	return TEXT("claireon.log_tail");
-}
+FString ClaireonTool_LogTail::GetCategory() const { return TEXT("log"); }
+FString ClaireonTool_LogTail::GetOperation() const { return TEXT("tail"); }
 
 FString ClaireonTool_LogTail::GetDescription() const
 {

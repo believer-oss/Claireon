@@ -12,14 +12,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_Compile::GetName() const
-{
-    return TEXT("claireon.widgetbp_compile");
-}
+FString ClaireonWidgetBPTool_Compile::GetOperation() const { return TEXT("compile"); }
 
 FString ClaireonWidgetBPTool_Compile::GetDescription() const
 {
-    return TEXT("Compile the Widget Blueprint in the open editing session and return compilation diagnostics. Requires open session_id from claireon.widgetbp_open. Read-only with respect to authoring data (compilation only writes derived runtime data). Run after structural edits to verify the asset is valid before save.");
+    return TEXT("Compile the Widget Blueprint in the open editing session and return compilation diagnostics. Requires open session_id from widgetbp_open. Read-only with respect to authoring data (compilation only writes derived runtime data). Run after structural edits to verify the asset is valid before save.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_Compile::GetInputSchema() const

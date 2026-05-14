@@ -8,10 +8,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLandscapeSplineTool_ApplyToLandscape::GetName() const
-{
-	return TEXT("claireon.landscape_spline_apply_to_landscape");
-}
+FString ClaireonLandscapeSplineTool_ApplyToLandscape::GetOperation() const { return TEXT("spline_apply_to_landscape"); }
 
 FString ClaireonLandscapeSplineTool_ApplyToLandscape::GetDescription() const
 {

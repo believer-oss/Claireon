@@ -6,10 +6,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLandscapeTool_Status::GetName() const
-{
-	return TEXT("claireon.landscape_status");
-}
+FString ClaireonLandscapeTool_Status::GetOperation() const { return TEXT("status"); }
 
 FString ClaireonLandscapeTool_Status::GetDescription() const
 {

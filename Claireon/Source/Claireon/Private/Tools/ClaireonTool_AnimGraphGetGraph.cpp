@@ -10,10 +10,8 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_AnimGraphGetGraph::GetName() const
-{
-	return TEXT("claireon.animgraph_get_graph");
-}
+FString ClaireonTool_AnimGraphGetGraph::GetCategory() const { return TEXT("animgraph"); }
+FString ClaireonTool_AnimGraphGetGraph::GetOperation() const { return TEXT("get_graph"); }
 
 FString ClaireonTool_AnimGraphGetGraph::GetDescription() const
 {

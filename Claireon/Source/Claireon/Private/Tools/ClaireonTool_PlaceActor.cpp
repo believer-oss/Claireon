@@ -20,10 +20,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonTool_PlaceActor::GetName() const
-{
-	return TEXT("claireon.place_actor");
-}
+FString ClaireonTool_PlaceActor::GetOperation() const { return TEXT("place_actor"); }
 
 FString ClaireonTool_PlaceActor::GetCategory() const
 {
@@ -101,7 +98,7 @@ TSharedPtr<FJsonObject> ClaireonTool_PlaceActor::GetInputSchema() const
 
 namespace
 {
-	FVector ParseVector(const TSharedPtr<FJsonObject>& Obj, double DefaultX = 0.0, double DefaultY = 0.0, double DefaultZ = 0.0)
+	FVector PlaceActor_ParseVector(const TSharedPtr<FJsonObject>& Obj, double DefaultX = 0.0, double DefaultY = 0.0, double DefaultZ = 0.0)
 	{
 		double X = DefaultX, Y = DefaultY, Z = DefaultZ;
 		if (Obj.IsValid())
@@ -113,7 +110,7 @@ namespace
 		return FVector(X, Y, Z);
 	}
 
-	FRotator ParseRotator(const TSharedPtr<FJsonObject>& Obj)
+	FRotator PlaceActor_ParseRotator(const TSharedPtr<FJsonObject>& Obj)
 	{
 		double Pitch = 0.0, Yaw = 0.0, Roll = 0.0;
 		if (Obj.IsValid())
@@ -190,15 +187,15 @@ FToolResult ClaireonTool_PlaceActor::Execute(const TSharedPtr<FJsonObject>& Argu
 		// Parse transform fields
 		const TSharedPtr<FJsonObject>* LocationObj = nullptr;
 		Spec->TryGetObjectField(TEXT("location"), LocationObj);
-		FVector Location = ParseVector(LocationObj ? *LocationObj : nullptr);
+		FVector Location = PlaceActor_ParseVector(LocationObj ? *LocationObj : nullptr);
 
 		const TSharedPtr<FJsonObject>* RotationObj = nullptr;
 		Spec->TryGetObjectField(TEXT("rotation"), RotationObj);
-		FRotator Rotation = ParseRotator(RotationObj ? *RotationObj : nullptr);
+		FRotator Rotation = PlaceActor_ParseRotator(RotationObj ? *RotationObj : nullptr);
 
 		const TSharedPtr<FJsonObject>* ScaleObj = nullptr;
 		Spec->TryGetObjectField(TEXT("scale"), ScaleObj);
-		FVector Scale = ParseVector(ScaleObj ? *ScaleObj : nullptr, 1.0, 1.0, 1.0);
+		FVector Scale = PlaceActor_ParseVector(ScaleObj ? *ScaleObj : nullptr, 1.0, 1.0, 1.0);
 
 		FString Label;
 		Spec->TryGetStringField(TEXT("label"), Label);

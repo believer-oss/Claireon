@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBehaviorTreeTool_Save::GetName() const
-{
-	return TEXT("claireon.behaviortree_save");
-}
+FString ClaireonBehaviorTreeTool_Save::GetOperation() const { return TEXT("save"); }
 
 FString ClaireonBehaviorTreeTool_Save::GetDescription() const
 {

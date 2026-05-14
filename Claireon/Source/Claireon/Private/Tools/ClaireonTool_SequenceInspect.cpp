@@ -15,10 +15,8 @@
 #include "Dom/JsonValue.h"
 #include "Misc/Paths.h"
 
-FString ClaireonTool_SequenceInspect::GetName() const
-{
-	return TEXT("claireon.level_sequence_inspect");
-}
+FString ClaireonTool_SequenceInspect::GetCategory() const { return TEXT("level"); }
+FString ClaireonTool_SequenceInspect::GetOperation() const { return TEXT("sequence_inspect"); }
 
 FString ClaireonTool_SequenceInspect::GetDescription() const
 {

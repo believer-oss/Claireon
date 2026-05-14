@@ -6,10 +6,8 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_ReleaseSessions::GetName() const
-{
-	return TEXT("claireon.session_release");
-}
+FString ClaireonTool_ReleaseSessions::GetCategory() const { return TEXT("session"); }
+FString ClaireonTool_ReleaseSessions::GetOperation() const { return TEXT("release"); }
 
 FString ClaireonTool_ReleaseSessions::GetDescription() const
 {

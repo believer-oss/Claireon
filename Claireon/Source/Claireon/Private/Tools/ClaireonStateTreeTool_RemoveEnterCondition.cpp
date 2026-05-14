@@ -13,14 +13,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_RemoveEnterCondition::GetName() const
-{
-	return TEXT("claireon.statetree_remove_enter_condition");
-}
+FString ClaireonStateTreeTool_RemoveEnterCondition::GetOperation() const { return TEXT("remove_enter_condition"); }
 
 FString ClaireonStateTreeTool_RemoveEnterCondition::GetDescription() const
 {
-	return TEXT("Remove an enter-condition node from a state in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Bindings targeting the removed condition's properties are dropped. After removal the state's entry is unblocked relative to that condition.");
+	return TEXT("Remove an enter-condition node from a state in the open State Tree editing session. Requires open session_id from statetree_open. Transactional. Bindings targeting the removed condition's properties are dropped. After removal the state's entry is unblocked relative to that condition.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_RemoveEnterCondition::GetInputSchema() const

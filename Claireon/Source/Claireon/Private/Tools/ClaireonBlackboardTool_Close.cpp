@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBlackboardTool_Close::GetName() const
-{
-	return TEXT("claireon.blackboard_close");
-}
+FString ClaireonBlackboardTool_Close::GetOperation() const { return TEXT("close"); }
 
 FString ClaireonBlackboardTool_Close::GetDescription() const
 {

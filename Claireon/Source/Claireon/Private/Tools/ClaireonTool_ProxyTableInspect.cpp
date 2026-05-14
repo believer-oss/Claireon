@@ -35,7 +35,8 @@ namespace
 	}
 }
 
-FString ClaireonTool_ProxyTableInspect::GetName() const { return TEXT("claireon.proxytable_inspect"); }
+FString ClaireonTool_ProxyTableInspect::GetCategory() const { return TEXT("proxytable"); }
+FString ClaireonTool_ProxyTableInspect::GetOperation() const { return TEXT("inspect"); }
 
 TArray<FString> ClaireonTool_ProxyTableInspect::GetSearchKeywords() const
 {

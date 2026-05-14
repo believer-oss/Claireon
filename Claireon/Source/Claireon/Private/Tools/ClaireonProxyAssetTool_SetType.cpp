@@ -8,7 +8,8 @@
 #include "ScopedTransaction.h"
 #include "Dom/JsonObject.h"
 
-FString ClaireonTool_ProxyAssetSetType::GetName() const { return TEXT("claireon.proxyasset_set_type"); }
+FString ClaireonTool_ProxyAssetSetType::GetCategory() const { return TEXT("proxyasset"); }
+FString ClaireonTool_ProxyAssetSetType::GetOperation() const { return TEXT("set_type"); }
 
 FString ClaireonTool_ProxyAssetSetType::GetDescription() const
 {

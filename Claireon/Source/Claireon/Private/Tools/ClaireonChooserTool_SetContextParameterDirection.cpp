@@ -9,7 +9,8 @@
 #include "Dom/JsonObject.h"
 #include "StructUtils/InstancedStruct.h"
 
-FString ClaireonTool_ChooserSetContextParameterDirection::GetName() const { return TEXT("claireon.chooser_set_context_parameter_direction"); }
+FString ClaireonTool_ChooserSetContextParameterDirection::GetCategory() const { return TEXT("chooser"); }
+FString ClaireonTool_ChooserSetContextParameterDirection::GetOperation() const { return TEXT("set_context_parameter_direction"); }
 
 FString ClaireonTool_ChooserSetContextParameterDirection::GetDescription() const
 {

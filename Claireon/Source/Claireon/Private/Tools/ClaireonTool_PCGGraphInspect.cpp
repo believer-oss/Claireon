@@ -8,10 +8,8 @@
 #include "PCGGraph.h"
 #include "PCGNode.h"
 
-FString ClaireonTool_PCGGraphInspect::GetName() const
-{
-	return TEXT("claireon.pcg_inspect");
-}
+FString ClaireonTool_PCGGraphInspect::GetCategory() const { return TEXT("pcg"); }
+FString ClaireonTool_PCGGraphInspect::GetOperation() const { return TEXT("inspect"); }
 
 FString ClaireonTool_PCGGraphInspect::GetDescription() const
 {

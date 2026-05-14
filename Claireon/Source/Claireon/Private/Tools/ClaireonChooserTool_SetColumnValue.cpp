@@ -10,7 +10,8 @@
 #include "Dom/JsonValue.h"
 #include "StructUtils/InstancedStruct.h"
 
-FString ClaireonTool_ChooserSetColumnValue::GetName() const { return TEXT("claireon.chooser_set_column_value"); }
+FString ClaireonTool_ChooserSetColumnValue::GetCategory() const { return TEXT("chooser"); }
+FString ClaireonTool_ChooserSetColumnValue::GetOperation() const { return TEXT("set_column_value"); }
 
 FString ClaireonTool_ChooserSetColumnValue::GetDescription() const
 {
@@ -20,6 +21,7 @@ FString ClaireonTool_ChooserSetColumnValue::GetDescription() const
 		"Bool: 'true'/'false'/'any'; "
 		"Enum: {\"value\": \"Name\", \"comparison\": \"MatchEqual\"} or just the value name; "
 		"FloatRange: {\"min\": N, \"max\": N, \"no_min\": bool, \"no_max\": bool}; "
+		"Object: asset path string (defaults Comparison=MatchEqual) or {\"value\": \"/Game/...\", \"comparison\": \"MatchEqual|MatchNotEqual|MatchAny\"}; "
 		"OutputStruct: {field_name: value, ...}; "
 		"OutputObject: asset path string.");
 }

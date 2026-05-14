@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 #if WITH_UNTESTED
 
@@ -142,7 +142,7 @@ UNTEST_UNIT(Claireon, OutputGate, SmallGenericDataStaysInline)
 
 	IClaireonTool::FToolResult R = MakeGenericDataResult(/*TargetBytes=*/64);
 	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
-		MoveTemp(R), TEXT("claireon.asset_search"), TEXT("test_conv"),
+		MoveTemp(R), TEXT("asset_search"), TEXT("test_conv"),
 		EClaireonSpillStreamSet::GenericData);
 
 	// No spill: Data should not carry __mcp_spilled__; original "payload" field preserved.
@@ -186,7 +186,7 @@ UNTEST_UNIT(Claireon, OutputGate, LargeGenericDataSpillsAsData)
 	// Construct a payload guaranteed to exceed threshold once serialised.
 	IClaireonTool::FToolResult R = MakeGenericDataResult(Threshold * 2);
 	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
-		MoveTemp(R), TEXT("claireon.asset_search"), TEXT("test_conv"),
+		MoveTemp(R), TEXT("asset_search"), TEXT("test_conv"),
 		EClaireonSpillStreamSet::GenericData);
 
 	UNTEST_ASSERT_TRUE(Routed.Data.IsValid());
@@ -231,7 +231,7 @@ UNTEST_UNIT(Claireon, OutputGate, PythonStdoutSpillsOnly)
 
 	IClaireonTool::FToolResult R = MakePythonResult(Big, Small);
 	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
-		MoveTemp(R), TEXT("claireon.python_execute"), TEXT("test_conv"),
+		MoveTemp(R), TEXT("python_execute"), TEXT("test_conv"),
 		EClaireonSpillStreamSet::PythonStdoutAndUELog);
 
 	UNTEST_ASSERT_TRUE(Routed.Data.IsValid());
@@ -274,7 +274,7 @@ UNTEST_UNIT(Claireon, OutputGate, PythonBothStreamsSpill)
 
 	IClaireonTool::FToolResult R = MakePythonResult(BigStdout, BigUELog);
 	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
-		MoveTemp(R), TEXT("claireon.python_execute"), TEXT("test_conv"),
+		MoveTemp(R), TEXT("python_execute"), TEXT("test_conv"),
 		EClaireonSpillStreamSet::PythonStdoutAndUELog);
 
 	const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
@@ -361,7 +361,7 @@ UNTEST_UNIT(Claireon, OutputGate, BinaryDataSpillsAsBin)
 	FString Payload = FString::ChrN(Threshold * 2, TEXT('A'));
 	IClaireonTool::FToolResult R = MakePythonResult(Payload, TEXT(""));
 	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
-		MoveTemp(R), TEXT("claireon.python_execute"), TEXT("test_conv"),
+		MoveTemp(R), TEXT("python_execute"), TEXT("test_conv"),
 		EClaireonSpillStreamSet::PythonStdoutAndUELog);
 
 	TSharedPtr<FJsonObject> Stream = FindStream(Routed.Data, TEXT("stdout"));
@@ -401,7 +401,7 @@ UNTEST_UNIT(Claireon, OutputGate, WriteFailureIsCaptured)
 
 	IClaireonTool::FToolResult R = MakeGenericDataResult(Threshold * 2);
 	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
-		MoveTemp(R), TEXT("claireon.asset_search"), TEXT("test_conv"),
+		MoveTemp(R), TEXT("asset_search"), TEXT("test_conv"),
 		EClaireonSpillStreamSet::GenericData);
 
 	// bIsError MUST NOT be set -- the gate failing to spill is a non-fatal event.
@@ -459,7 +459,7 @@ UNTEST_UNIT_OPTS(Claireon, OutputGate, GenericDataOverCeilingTruncates, UNTEST_T
 
 	IClaireonTool::FToolResult R = MakeGenericDataResult(Ceiling + 1024);
 	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
-		MoveTemp(R), TEXT("claireon.asset_search"), TEXT("test_conv"),
+		MoveTemp(R), TEXT("asset_search"), TEXT("test_conv"),
 		EClaireonSpillStreamSet::GenericData);
 
 	TSharedPtr<FJsonObject> DataStream = FindStream(Routed.Data, TEXT("data"));
@@ -502,7 +502,7 @@ UNTEST_UNIT_OPTS(Claireon, OutputGate, PythonUELogOverCeiling, UNTEST_TIMEOUTMS(
 
 	IClaireonTool::FToolResult R = MakePythonResult(Stdout, Big);
 	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
-		MoveTemp(R), TEXT("claireon.python_execute"), TEXT("test_conv"),
+		MoveTemp(R), TEXT("python_execute"), TEXT("test_conv"),
 		EClaireonSpillStreamSet::PythonStdoutAndUELog);
 
 	TSharedPtr<FJsonObject> UELog = FindStream(Routed.Data, TEXT("uelog"));

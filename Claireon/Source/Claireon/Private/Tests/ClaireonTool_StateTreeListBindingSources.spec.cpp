@@ -1,7 +1,7 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 //
-// Spec tests for claireon.statetree_list_binding_sources (#0000 / F5).
+// Spec tests for statetree_list_binding_sources (#0000 / F5).
 // Surface-level: real walks require a loaded asset, exercised manually.
 
 #if WITH_UNTESTED
@@ -13,7 +13,7 @@
 UNTEST_UNIT_OPTS(Claireon, StateTreeListBindingSources, ToolSurface, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_StateTreeListBindingSources Tool;
-	UNTEST_ASSERT_STREQ(*Tool.GetName(), TEXT("claireon.statetree_list_binding_sources"));
+	UNTEST_ASSERT_STREQ(*Tool.GetName(), TEXT("statetree_list_binding_sources"));
 	UNTEST_ASSERT_TRUE(!Tool.GetDescription().IsEmpty());
 	const TSharedPtr<FJsonObject> Schema = Tool.GetInputSchema();
 	UNTEST_ASSERT_TRUE(Schema.IsValid());

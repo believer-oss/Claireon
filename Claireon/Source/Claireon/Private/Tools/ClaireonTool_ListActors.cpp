@@ -11,10 +11,8 @@
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
 
-FString ClaireonTool_ListActors::GetName() const
-{
-	return TEXT("claireon.level_list_actors");
-}
+FString ClaireonTool_ListActors::GetCategory() const { return TEXT("level"); }
+FString ClaireonTool_ListActors::GetOperation() const { return TEXT("list_actors"); }
 
 FString ClaireonTool_ListActors::GetDescription() const
 {

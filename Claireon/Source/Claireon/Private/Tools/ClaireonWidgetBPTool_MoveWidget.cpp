@@ -15,14 +15,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_MoveWidget::GetName() const
-{
-    return TEXT("claireon.widgetbp_move_widget");
-}
+FString ClaireonWidgetBPTool_MoveWidget::GetOperation() const { return TEXT("move_widget"); }
 
 FString ClaireonWidgetBPTool_MoveWidget::GetDescription() const
 {
-    return TEXT("Move a widget to a new parent panel (and optional index) within the widget tree in the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Transactional. Common pitfall: the new parent must be a UPanelWidget; non-panel widgets cannot host children.");
+    return TEXT("Move a widget to a new parent panel (and optional index) within the widget tree in the open Widget Blueprint editing session. Requires open session_id from widgetbp_open. Transactional. Common pitfall: the new parent must be a UPanelWidget; non-panel widgets cannot host children.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_MoveWidget::GetInputSchema() const

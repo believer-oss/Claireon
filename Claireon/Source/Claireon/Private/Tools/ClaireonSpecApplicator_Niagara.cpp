@@ -84,7 +84,7 @@ bool FClaireonSpecApplicator_Niagara::OpenOrCreateAsset(const FString& AssetPath
 
 	const FString NSPathName = NS->GetPathName();
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
-		NSPathName, TEXT("claireon.niagara_edit"));
+		NSPathName, TEXT("niagara_edit"));
 
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{

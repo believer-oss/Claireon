@@ -11,10 +11,8 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_DataTableSearch::GetName() const
-{
-	return TEXT("claireon.datatable_search");
-}
+FString ClaireonTool_DataTableSearch::GetCategory() const { return TEXT("datatable"); }
+FString ClaireonTool_DataTableSearch::GetOperation() const { return TEXT("search"); }
 
 FString ClaireonTool_DataTableSearch::GetDescription() const
 {

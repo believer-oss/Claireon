@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonEQSTool_Open::GetName() const
-{
-	return TEXT("claireon.eqs_open");
-}
+FString ClaireonEQSTool_Open::GetOperation() const { return TEXT("open"); }
 
 TArray<FString> ClaireonEQSTool_Open::GetSearchKeywords() const
 {

@@ -12,10 +12,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBehaviorTreeTool_Open::GetName() const
-{
-	return TEXT("claireon.behaviortree_open");
-}
+FString ClaireonBehaviorTreeTool_Open::GetOperation() const { return TEXT("open"); }
 
 TArray<FString> ClaireonBehaviorTreeTool_Open::GetSearchKeywords() const
 {

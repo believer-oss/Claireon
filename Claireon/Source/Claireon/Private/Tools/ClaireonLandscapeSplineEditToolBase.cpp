@@ -13,7 +13,7 @@ using FToolResult = IClaireonTool::FToolResult;
 // Static members
 // ============================================================================
 
-const TCHAR* ClaireonLandscapeSplineEditToolBase::LandscapeSplineSessionToolName = TEXT("claireon.landscape_spline_edit");
+const TCHAR* ClaireonLandscapeSplineEditToolBase::LandscapeSplineSessionToolName = TEXT("landscape_spline_edit");
 TMap<FString, FLandscapeSplineEditToolData> ClaireonLandscapeSplineEditToolBase::ToolData;
 bool ClaireonLandscapeSplineEditToolBase::bDelegateRegistered = false;
 

@@ -97,10 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_SelectPin::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_select_pin");
-}
+FString ClaireonBlueprintGraphTool_SelectPin::GetOperation() const { return TEXT("graph_select_pin"); }
 
 TArray<FString> ClaireonBlueprintGraphTool_SelectPin::GetSearchKeywords() const
 {
@@ -109,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_SelectPin::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_SelectPin::GetDescription() const
 {
-    return TEXT("Moves the session cursor to a specific pin on a node. Subsequent claireon.blueprint_graph_add_node calls with auto_connect_from_cursor=true will wire to this pin if compatible. Most-common pitfall: the cursor is per-session, so re-running select_pin between sessions is a no-op for any session you already closed.");
+    return TEXT("Moves the session cursor to a specific pin on a node. Subsequent blueprint_graph_add_node calls with auto_connect_from_cursor=true will wire to this pin if compatible. Most-common pitfall: the cursor is per-session, so re-running select_pin between sessions is a no-op for any session you already closed.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SelectPin::GetInputSchema() const
@@ -204,19 +201,19 @@ FString ClaireonBlueprintGraphTool_SelectPin::GetFullDescription() const
 {
     return TEXT(
         "Moves the session cursor to a specific pin on a node. The cursor is "
-        "the anchor that auto_connect_from_cursor on claireon.blueprint_graph_add_node "
+        "the anchor that auto_connect_from_cursor on blueprint_graph_add_node "
         "uses to decide where to wire each new node. Use select_pin when you "
         "are about to chain a sequence of add_node calls and want them to "
         "auto-wire from a known starting point (e.g. the 'then' output of a "
         "Branch's True pin), or when the cursor has drifted onto a node where "
         "the next add_node should not auto-connect. The cursor is per-session "
-        "and resets when claireon.blueprint_graph_close is called.");
+        "and resets when blueprint_graph_close is called.");
 }
 
 FString ClaireonBlueprintGraphTool_SelectPin::GetExampleUsage() const
 {
     return TEXT(
-        "claireon.blueprint_graph_select_pin session_id=\"...\" "
+        "blueprint_graph_select_pin session_id=\"...\" "
         "node=\"Branch_0\" pin=\"True\"");
 }
 

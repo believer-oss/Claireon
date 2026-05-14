@@ -14,10 +14,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonMaterialInstanceTool_Create::GetName() const
-{
-	return TEXT("claireon.material_instance_create");
-}
+FString ClaireonMaterialInstanceTool_Create::GetOperation() const { return TEXT("instance_create"); }
 
 FString ClaireonMaterialInstanceTool_Create::GetDescription() const
 {

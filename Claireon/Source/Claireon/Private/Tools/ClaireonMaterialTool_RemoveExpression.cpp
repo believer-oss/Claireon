@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonMaterialTool_RemoveExpression::GetName() const
-{
-	return TEXT("claireon.material_remove_expression");
-}
+FString ClaireonMaterialTool_RemoveExpression::GetOperation() const { return TEXT("remove_expression"); }
 
 FString ClaireonMaterialTool_RemoveExpression::GetDescription() const
 {

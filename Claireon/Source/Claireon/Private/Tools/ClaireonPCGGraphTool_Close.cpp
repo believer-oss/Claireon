@@ -13,10 +13,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonPCGGraphTool_Close::GetName() const
-{
-	return TEXT("claireon.pcg_close");
-}
+FString ClaireonPCGGraphTool_Close::GetOperation() const { return TEXT("close"); }
 
 FString ClaireonPCGGraphTool_Close::GetDescription() const
 {

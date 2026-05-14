@@ -11,22 +11,20 @@
 #include "EdGraph/EdGraphNode.h"
 #include "Engine/Blueprint.h"
 
-FString ClaireonTool_InspectBlueprintNode::GetName() const
-{
-	return TEXT("claireon.blueprint_inspect_node");
-}
+FString ClaireonTool_InspectBlueprintNode::GetCategory() const { return TEXT("blueprint"); }
+FString ClaireonTool_InspectBlueprintNode::GetOperation() const { return TEXT("inspect_node"); }
 
 FString ClaireonTool_InspectBlueprintNode::GetDescription() const
 {
 	return TEXT("Returns a single Blueprint node in full fidelity as structured JSON. "
 		"Requires asset_path, graph_name, and node_guid. AnimGraph nodes are redirected "
-		"to claireon.animgraph_get_node.");
+		"to animgraph_get_node.");
 }
 
 FString ClaireonTool_InspectBlueprintNode::GetFullDescription() const
 {
 	return TEXT(
-		"claireon.blueprint_inspect_node - Stateless read of a single Blueprint node.\n"
+		"blueprint_inspect_node - Stateless read of a single Blueprint node.\n"
 		"\n"
 		"Required arguments:\n"
 		"  asset_path (string): full /Game/... path to a Blueprint.\n"
@@ -48,10 +46,10 @@ FString ClaireonTool_InspectBlueprintNode::GetFullDescription() const
 		"(default_value_truncated flag when exceeded).\n"
 		"\n"
 		"AnimGraph redirect: nodes derived from UAnimGraphNode_Base return an error pointing at\n"
-		"claireon.animgraph_get_node rather than a degraded generic payload.\n"
+		"animgraph_get_node rather than a degraded generic payload.\n"
 		"\n"
 		"Use this tool when you already know the asset_path + graph_name + node_guid. For cursor-\n"
-		"based navigation, use claireon.blueprint_edit_graph with operation='inspect_node' instead.");
+		"based navigation, use blueprint_edit_graph with operation='inspect_node' instead.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_InspectBlueprintNode::GetInputSchema() const
@@ -158,7 +156,7 @@ IClaireonTool::FToolResult ClaireonTool_InspectBlueprintNode::Execute(const TSha
 	if (Cast<UAnimGraphNode_Base>(Node))
 	{
 		return MakeErrorResult(FString::Printf(
-			TEXT("Node %s is an AnimGraph node; use claireon.animgraph_get_node to inspect AnimGraph nodes."),
+			TEXT("Node %s is an AnimGraph node; use animgraph_get_node to inspect AnimGraph nodes."),
 			*Node->NodeGuid.ToString(EGuidFormats::Digits)));
 	}
 

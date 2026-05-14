@@ -6,10 +6,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonFoliageTool_Status::GetName() const
-{
-	return TEXT("claireon.foliage_status");
-}
+FString ClaireonFoliageTool_Status::GetOperation() const { return TEXT("status"); }
 
 FString ClaireonFoliageTool_Status::GetDescription() const
 {

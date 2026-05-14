@@ -8,10 +8,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonMaterialTool_Compile::GetName() const
-{
-	return TEXT("claireon.material_compile");
-}
+FString ClaireonMaterialTool_Compile::GetOperation() const { return TEXT("compile"); }
 
 FString ClaireonMaterialTool_Compile::GetDescription() const
 {

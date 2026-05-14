@@ -18,10 +18,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_RemoveAnimationKeyframe::GetName() const
-{
-    return TEXT("claireon.widgetbp_remove_animation_keyframe");
-}
+FString ClaireonWidgetBPTool_RemoveAnimationKeyframe::GetOperation() const { return TEXT("remove_animation_keyframe"); }
 
 FString ClaireonWidgetBPTool_RemoveAnimationKeyframe::GetDescription() const
 {

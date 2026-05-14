@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBlackboardTool_SetKeyType::GetName() const
-{
-	return TEXT("claireon.blackboard_set_key_type");
-}
+FString ClaireonBlackboardTool_SetKeyType::GetOperation() const { return TEXT("set_key_type"); }
 
 FString ClaireonBlackboardTool_SetKeyType::GetDescription() const
 {

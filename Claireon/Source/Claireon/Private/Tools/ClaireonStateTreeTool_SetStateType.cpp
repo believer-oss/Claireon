@@ -12,14 +12,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_SetStateType::GetName() const
-{
-	return TEXT("claireon.statetree_set_state_type");
-}
+FString ClaireonStateTreeTool_SetStateType::GetOperation() const { return TEXT("set_state_type"); }
 
 FString ClaireonStateTreeTool_SetStateType::GetDescription() const
 {
-	return TEXT("Set the type of a state (State, Group, Linked, LinkedAsset, Subtree) in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Common pitfall: switching from a leaf type to Group type may invalidate task/condition placements that don't apply to the new type.");
+	return TEXT("Set the type of a state (State, Group, Linked, LinkedAsset, Subtree) in the open State Tree editing session. Requires open session_id from statetree_open. Transactional. Common pitfall: switching from a leaf type to Group type may invalidate task/condition placements that don't apply to the new type.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_SetStateType::GetInputSchema() const

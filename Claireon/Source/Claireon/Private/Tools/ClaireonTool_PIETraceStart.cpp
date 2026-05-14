@@ -9,10 +9,8 @@
 #include "Misc/DateTime.h"
 #include "HAL/PlatformFileManager.h"
 
-FString ClaireonTool_PIETraceStart::GetName() const
-{
-	return TEXT("claireon.pie_trace_start");
-}
+FString ClaireonTool_PIETraceStart::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_PIETraceStart::GetOperation() const { return TEXT("trace_start"); }
 
 FString ClaireonTool_PIETraceStart::GetDescription() const
 {

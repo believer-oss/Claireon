@@ -6,10 +6,8 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_ListSessions::GetName() const
-{
-	return TEXT("claireon.session_list");
-}
+FString ClaireonTool_ListSessions::GetCategory() const { return TEXT("session"); }
+FString ClaireonTool_ListSessions::GetOperation() const { return TEXT("list"); }
 
 FString ClaireonTool_ListSessions::GetDescription() const
 {
@@ -28,7 +26,7 @@ TSharedPtr<FJsonObject> ClaireonTool_ListSessions::GetInputSchema() const
 	TSharedPtr<FJsonObject> ToolNameProp = MakeShared<FJsonObject>();
 	ToolNameProp->SetStringField(TEXT("type"), TEXT("string"));
 	ToolNameProp->SetStringField(TEXT("description"),
-		TEXT("Optional tool name filter (e.g. 'claireon.niagara_edit'). If omitted, returns all sessions."));
+		TEXT("Optional tool name filter (e.g. 'niagara_edit'). If omitted, returns all sessions."));
 	Properties->SetObjectField(TEXT("tool_name"), ToolNameProp);
 
 	Schema->SetObjectField(TEXT("properties"), Properties);

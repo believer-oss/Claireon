@@ -140,7 +140,7 @@ bool FClaireonSpecApplicator_WidgetBP::OpenOrCreateAsset(const FString& AssetPat
 
 	const FString WBPPathName = WBP->GetPathName();
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
-		WBPPathName, TEXT("claireon.widgetbp_edit"));
+		WBPPathName, TEXT("widgetbp_edit"));
 
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{

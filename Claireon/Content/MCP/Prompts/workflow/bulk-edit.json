@@ -1,5 +1,5 @@
 {
   "description": "Workflow: search for assets, iterate, apply changes with transactions",
   "role": "user",
-  "text": "Step 1: Use claireon.asset_search() to find all assets matching your criteria\nStep 2: Review the list and confirm the scope of changes\nStep 3: For each asset in the result set:\n  a. Begin a transaction with claireon.transaction('begin', 'batch edit: {description}')\n  b. Apply the change using the appropriate edit tool\n  c. End the transaction with claireon.transaction('end')\nStep 4: Verify a sample of edited assets to confirm correctness"
+  "text": "Step 1: Use asset_search() to find all assets matching your criteria\nStep 2: Review the list and confirm the scope of changes\nStep 3: For each asset in the result set:\n  a. Begin a transaction with transaction_begin_group('batch edit: {description}')\n  b. Apply the change using the appropriate edit tool\n  c. End the transaction with transaction_end_group()\nStep 4: Verify a sample of edited assets to confirm correctness"
 }

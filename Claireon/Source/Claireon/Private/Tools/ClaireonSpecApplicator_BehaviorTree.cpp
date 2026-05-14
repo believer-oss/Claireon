@@ -154,7 +154,7 @@ bool FClaireonSpecApplicator_BehaviorTree::OpenOrCreateAsset(const FString& Asse
 	// Open session
 	const FString ResolvedAssetPath = BT->GetPathName();
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
-		ResolvedAssetPath, TEXT("claireon.behaviortree_edit"));
+		ResolvedAssetPath, TEXT("behaviortree_edit"));
 
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{

@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonNiagaraTool_Open::GetName() const
-{
-	return TEXT("claireon.niagara_open");
-}
+FString ClaireonNiagaraTool_Open::GetOperation() const { return TEXT("open"); }
 
 TArray<FString> ClaireonNiagaraTool_Open::GetSearchKeywords() const
 {

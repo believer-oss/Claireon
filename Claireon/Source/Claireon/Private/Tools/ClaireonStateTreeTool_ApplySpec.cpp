@@ -7,14 +7,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_ApplySpec::GetName() const
-{
-	return TEXT("claireon.statetree_apply_spec");
-}
+FString ClaireonStateTreeTool_ApplySpec::GetOperation() const { return TEXT("apply_spec"); }
 
 FString ClaireonStateTreeTool_ApplySpec::GetDescription() const
 {
-	return TEXT("Apply a declarative JSON specification to a State Tree asset atomically. Requires open session_id from claireon.statetree_open OR pass asset_path to auto-open a temporary session. Transactional. The spec runs as one rollback unit; partial failures revert all spec operations together. Saves on success.");
+	return TEXT("Apply a declarative JSON specification to a State Tree asset atomically. Requires open session_id from statetree_open OR pass asset_path to auto-open a temporary session. Transactional. The spec runs as one rollback unit; partial failures revert all spec operations together. Saves on success.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_ApplySpec::GetInputSchema() const

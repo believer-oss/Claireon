@@ -14,14 +14,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_AddBinding::GetName() const
-{
-    return TEXT("claireon.widgetbp_add_binding");
-}
+FString ClaireonWidgetBPTool_AddBinding::GetOperation() const { return TEXT("add_binding"); }
 
 FString ClaireonWidgetBPTool_AddBinding::GetDescription() const
 {
-    return TEXT("Bind a widget property to a Blueprint function (legacy UMG property binding) in the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Transactional. Common pitfall: prefer claireon.widgetbp_add_mvvm_binding for new code; legacy bindings exist for compatibility with older UMG patterns.");
+    return TEXT("Bind a widget property to a Blueprint function (legacy UMG property binding) in the open Widget Blueprint editing session. Requires open session_id from widgetbp_open. Transactional. Common pitfall: prefer widgetbp_add_mvvm_binding for new code; legacy bindings exist for compatibility with older UMG patterns.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_AddBinding::GetInputSchema() const

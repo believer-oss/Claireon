@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLandscapeTool_Sculpt::GetName() const
-{
-	return TEXT("claireon.landscape_sculpt");
-}
+FString ClaireonLandscapeTool_Sculpt::GetOperation() const { return TEXT("sculpt"); }
 
 FString ClaireonLandscapeTool_Sculpt::GetDescription() const
 {

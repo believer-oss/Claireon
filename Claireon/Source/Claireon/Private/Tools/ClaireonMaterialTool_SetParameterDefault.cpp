@@ -12,10 +12,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonMaterialTool_SetParameterDefault::GetName() const
-{
-	return TEXT("claireon.material_set_parameter_default");
-}
+FString ClaireonMaterialTool_SetParameterDefault::GetOperation() const { return TEXT("set_parameter_default"); }
 
 FString ClaireonMaterialTool_SetParameterDefault::GetDescription() const
 {

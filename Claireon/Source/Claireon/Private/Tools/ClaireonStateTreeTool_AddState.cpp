@@ -12,14 +12,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_AddState::GetName() const
-{
-	return TEXT("claireon.statetree_add_state");
-}
+FString ClaireonStateTreeTool_AddState::GetOperation() const { return TEXT("add_state"); }
 
 FString ClaireonStateTreeTool_AddState::GetDescription() const
 {
-	return TEXT("Add a child state to an existing parent state in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. By default the new state is appended as the last child; use index / insert_before / insert_after to control placement. Returns the new state's GUID for downstream operations.");
+	return TEXT("Add a child state to an existing parent state in the open State Tree editing session. Requires open session_id from statetree_open. Transactional. By default the new state is appended as the last child; use index / insert_before / insert_after to control placement. Returns the new state's GUID for downstream operations.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_AddState::GetInputSchema() const

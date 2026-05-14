@@ -252,10 +252,7 @@ namespace
 	}
 }
 
-FString ClaireonTool_ReplaceStructUsage::GetName() const
-{
-	return TEXT("claireon.blueprint_replace_struct_usage");
-}
+FString ClaireonTool_ReplaceStructUsage::GetOperation() const { return TEXT("replace_struct_usage"); }
 
 FString ClaireonTool_ReplaceStructUsage::GetDescription() const
 {

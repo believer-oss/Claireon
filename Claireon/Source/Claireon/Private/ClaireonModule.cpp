@@ -492,7 +492,6 @@
 
 // Animation MCP tools
 #include "Tools/ClaireonTool_AnimInspect.h"
-#include "Tools/ClaireonTool_AnimInvariantsCheck.h"
 #include "Tools/ClaireonAnimTools_Session.h"
 #include "Tools/ClaireonAnimTools_Create.h"
 #include "Tools/ClaireonAnimTools_Notify.h"
@@ -714,7 +713,7 @@ namespace ClaireonLaunch
 	 * Resolve a PowerShell executable using canonical Windows install paths first,
 	 * with a PATH-search fallback. Canonical paths are reliable even when the editor
 	 * process inherits a stripped or non-default PATH (which can happen when launched
-	 * by tooling like Launcher or as a child of a non-shell parent).
+	 * by external tooling or as a child of a non-shell parent).
 	 *
 	 * Order: PowerShell 7 (preferred) -> Windows PowerShell 5.1 (always in-box on Win10+).
 	 */
@@ -854,7 +853,7 @@ namespace ClaireonLaunch
 	{
 		const FString ProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 
-		// Launcher-launched editors don't pass -StartMCPServer, so the MCP
+		// External-launcher-spawned editors don't pass -StartMCPServer, so the MCP
 		// server is dormant until the user explicitly asks for Claude. Starting
 		// it here means clicking "Claude Code" is sufficient -- the user does not
 		// need to first open the diagnostics tab to bring the server up.
@@ -1080,7 +1079,6 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_AssetFixupRedirectors>());
 	Tools.Add(MakeShared<ClaireonTool_OpenAssetEditor>());
 	Tools.Add(MakeShared<ClaireonTool_AnimInspect>());
-	Tools.Add(MakeShared<ClaireonTool_AnimInvariantsCheck>());
 	// Animation editing tools (individual operations with focused inputSchema)
 	Tools.Add(MakeShared<ClaireonAnimTool_Open>());
 	Tools.Add(MakeShared<ClaireonAnimTool_Close>());

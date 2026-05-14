@@ -13,14 +13,11 @@
 #include "Subsystems/AssetEditorSubsystem.h"
 #include "Containers/Ticker.h"
 
-FString ClaireonTool_OpenAssetEditor::GetName() const
-{
-	return TEXT("claireon.open_asset_editor");
-}
+FString ClaireonTool_OpenAssetEditor::GetOperation() const { return TEXT("open_asset"); }
 
 FString ClaireonTool_OpenAssetEditor::GetCategory() const
 {
-	return TEXT("assets");
+	return TEXT("editor");
 }
 
 FString ClaireonTool_OpenAssetEditor::GetDescription() const

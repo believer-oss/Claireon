@@ -26,10 +26,8 @@
 
 #define LOCTEXT_NAMESPACE "Claireon"
 
-FString ClaireonTool_FormatBlueprintGraph::GetName() const
-{
-	return TEXT("claireon.blueprint_format_graph");
-}
+FString ClaireonTool_FormatBlueprintGraph::GetCategory() const { return TEXT("blueprint"); }
+FString ClaireonTool_FormatBlueprintGraph::GetOperation() const { return TEXT("format_graph"); }
 
 TArray<FString> ClaireonTool_FormatBlueprintGraph::GetSearchKeywords() const
 {
@@ -104,23 +102,22 @@ IClaireonTool::FToolResult ClaireonTool_FormatBlueprintGraph::Execute(const TSha
 		return MakeErrorResult(FString::Printf(TEXT("Graph '%s' not found in Blueprint %s"), *GraphName, *AssetPath));
 	}
 
+	// Require Blueprint Assist
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Format Blueprint Graph")));
 #if WITH_BLUEPRINT_ASSIST
 	if (!FModuleManager::Get().IsModuleLoaded(TEXT("BlueprintAssist")))
 	{
-		return MakeErrorResult(TEXT("Blueprint Assist module is not loaded. This tool requires the Blueprint Assist plugin."));
+		return MakeErrorResult(TEXT("Blueprint Assist plugin is installed but the module is not loaded. Restart the editor."));
 	}
 
+	FString FormatterUsed = TEXT("Blueprint Assist");
 	bool bSuccess = FormatWithBlueprintAssist(Blueprint, Graph, Error);
 	if (!bSuccess)
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Blueprint Assist formatting failed: %s"), *Error));
 	}
-
-	FString FormatterUsed = TEXT("Blueprint Assist");
 #else
-	return MakeErrorResult(TEXT("Blueprint Assist is not available (WITH_BLUEPRINT_ASSIST=0). This tool requires the Blueprint Assist plugin."));
-	FString FormatterUsed = TEXT("None");  // unreachable, satisfies compiler
+	return MakeErrorResult(TEXT("Blueprint Assist plugin required for graph formatting. Install the BlueprintAssist plugin to Plugins/BlueprintAssist/."));
 #endif
 
 	// Mark Blueprint as modified and compile
@@ -141,6 +138,7 @@ IClaireonTool::FToolResult ClaireonTool_FormatBlueprintGraph::Execute(const TSha
 	ResultJson->SetStringField(TEXT("formatter_used"), FormatterUsed);
 	ResultJson->SetNumberField(TEXT("node_count"), NodeCount);
 
+	// Create text result with structured data and the success message
 	return MakeSuccessResult(ResultJson, ResultMessage);
 }
 

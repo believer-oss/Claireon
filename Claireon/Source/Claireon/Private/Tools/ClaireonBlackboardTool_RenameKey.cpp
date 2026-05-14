@@ -8,10 +8,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBlackboardTool_RenameKey::GetName() const
-{
-	return TEXT("claireon.blackboard_rename_key");
-}
+FString ClaireonBlackboardTool_RenameKey::GetOperation() const { return TEXT("rename_key"); }
 
 FString ClaireonBlackboardTool_RenameKey::GetDescription() const
 {

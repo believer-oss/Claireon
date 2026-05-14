@@ -102,10 +102,7 @@ static UEdGraphPin* FindPinOnNode(UEdGraphNode* Node, const FString& PinName, FS
 // ClaireonAnimGraphTool_ApplyGraph
 // ============================================================================
 
-FString ClaireonAnimGraphTool_ApplyGraph::GetName() const
-{
-	return TEXT("claireon.animgraph_apply_graph");
-}
+FString ClaireonAnimGraphTool_ApplyGraph::GetOperation() const { return TEXT("apply_graph"); }
 
 FString ClaireonAnimGraphTool_ApplyGraph::GetDescription() const
 {

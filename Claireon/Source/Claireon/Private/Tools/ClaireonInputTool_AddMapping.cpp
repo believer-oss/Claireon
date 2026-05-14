@@ -13,10 +13,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonInputTool_AddMapping::GetName() const
-{
-	return TEXT("claireon.input_add_mapping");
-}
+FString ClaireonInputTool_AddMapping::GetOperation() const { return TEXT("add_mapping"); }
 
 FString ClaireonInputTool_AddMapping::GetDescription() const
 {

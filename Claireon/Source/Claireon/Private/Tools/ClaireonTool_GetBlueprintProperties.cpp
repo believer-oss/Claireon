@@ -18,10 +18,8 @@
 #include "GameFramework/Actor.h"
 #include "Components/ActorComponent.h"
 
-FString ClaireonTool_GetBlueprintProperties::GetName() const
-{
-	return TEXT("claireon.blueprint_get_properties");
-}
+FString ClaireonTool_GetBlueprintProperties::GetCategory() const { return TEXT("blueprint"); }
+FString ClaireonTool_GetBlueprintProperties::GetOperation() const { return TEXT("get_properties"); }
 
 TArray<FString> ClaireonTool_GetBlueprintProperties::GetSearchKeywords() const
 {

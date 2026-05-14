@@ -16,10 +16,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonInputTool_Create::GetName() const
-{
-	return TEXT("claireon.input_create");
-}
+FString ClaireonInputTool_Create::GetOperation() const { return TEXT("create"); }
 
 FString ClaireonInputTool_Create::GetDescription() const
 {

@@ -12,14 +12,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_AddGlobalTask::GetName() const
-{
-	return TEXT("claireon.statetree_add_global_task");
-}
+FString ClaireonStateTreeTool_AddGlobalTask::GetOperation() const { return TEXT("add_global_task"); }
 
 FString ClaireonStateTreeTool_AddGlobalTask::GetDescription() const
 {
-	return TEXT("Add a global task to the State Tree in the open editing session. Requires open session_id from claireon.statetree_open. Transactional. Global tasks run for the lifetime of the State Tree instance regardless of selected state. The node_type must be a registered FStateTreeTaskBase subclass.");
+	return TEXT("Add a global task to the State Tree in the open editing session. Requires open session_id from statetree_open. Transactional. Global tasks run for the lifetime of the State Tree instance regardless of selected state. The node_type must be a registered FStateTreeTaskBase subclass.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_AddGlobalTask::GetInputSchema() const

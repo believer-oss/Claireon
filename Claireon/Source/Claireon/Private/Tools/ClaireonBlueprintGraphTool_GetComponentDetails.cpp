@@ -97,14 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_GetComponentDetails::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_get_component_details");
-}
+FString ClaireonBlueprintGraphTool_GetComponentDetails::GetOperation() const { return TEXT("graph_get_component_details"); }
 
 FString ClaireonBlueprintGraphTool_GetComponentDetails::GetDescription() const
 {
-    return TEXT("Inspect a component on the Blueprint's Simple Construction Script and return its properties in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Read-only. Returns property name, type, and current value tuples for the component template.");
+    return TEXT("Inspect a component on the Blueprint's Simple Construction Script and return its properties in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Read-only. Returns property name, type, and current value tuples for the component template.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_GetComponentDetails::GetInputSchema() const

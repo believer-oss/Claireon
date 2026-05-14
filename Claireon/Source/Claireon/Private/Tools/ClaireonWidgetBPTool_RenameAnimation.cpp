@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_RenameAnimation::GetName() const
-{
-    return TEXT("claireon.widgetbp_rename_animation");
-}
+FString ClaireonWidgetBPTool_RenameAnimation::GetOperation() const { return TEXT("rename_animation"); }
 
 FString ClaireonWidgetBPTool_RenameAnimation::GetDescription() const
 {

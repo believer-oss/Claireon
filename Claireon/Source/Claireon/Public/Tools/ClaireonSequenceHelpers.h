@@ -17,7 +17,7 @@ struct FMovieSceneChannelProxy;
 
 /**
  * Event endpoint signature used when creating Director Blueprint endpoints
- * via claireon.sequence_edit.create_event_endpoint (F5 -- stage 013).
+ * via sequence_edit.create_event_endpoint (F5 -- stage 013).
  *
  * NOTE: This is a plain C++ enum (not UENUM) because this header has no
  * .generated.h; the enum is only referenced from C++ API signatures.

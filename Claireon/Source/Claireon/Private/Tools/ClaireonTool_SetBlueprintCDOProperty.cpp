@@ -11,11 +11,9 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Tools/ClaireonPropertyUtils.h"
+#include "UObject/UnrealType.h"
 
-FString ClaireonTool_SetBlueprintCDOProperty::GetName() const
-{
-	return TEXT("claireon.set_blueprint_cdo_property");
-}
+FString ClaireonTool_SetBlueprintCDOProperty::GetOperation() const { return TEXT("set_cdo_property"); }
 
 FString ClaireonTool_SetBlueprintCDOProperty::GetCategory() const
 {
@@ -171,6 +169,23 @@ IClaireonTool::FToolResult ClaireonTool_SetBlueprintCDOProperty::Execute(const T
 		// ReadError deliberately swallowed; treated as non-fatal. Do not return MakeErrorResult here.
 	}
 
+	// Step 7b: Detect a UPROPERTY(Instanced) FObjectProperty leaf. ImportText_Direct on such a
+	// slot interprets a class-path string as a class *reference* and silently reverts to None,
+	// so we redirect those writes to SetInstancedSubObject which constructs an embedded sub-object
+	// of the requested class. Read-only peek -- no transaction required.
+	bool bInstancedLeaf = false;
+	{
+		void* PeekContainer = nullptr;
+		FString PeekError;
+		FProperty* LeafProp = ClaireonPropertyUtils::ResolvePropertyByPath(
+			TargetObject, Resolved.RemainingPath, PeekContainer, PeekError);
+		if (LeafProp)
+		{
+			FObjectProperty* ObjProp = CastField<FObjectProperty>(LeafProp);
+			bInstancedLeaf = ObjProp && ObjProp->HasAnyPropertyFlags(CPF_InstancedReference);
+		}
+	}
+
 	// Step 8: Open transaction + Modify() cluster.
 	// FScopedTransaction + CDO->Modify() capture the whole object's serialized state so
 	// in-place array element writes performed by FScriptArrayHelper::GetRawPtr inside
@@ -187,12 +202,70 @@ IClaireonTool::FToolResult ClaireonTool_SetBlueprintCDOProperty::Execute(const T
 		TargetObject->Modify();
 	}
 
-	// Step 9: Delegate the write to ClaireonPropertyUtils. Error strings come from the helper
-	// (ParsePathSegments / ResolvePath / ImportText_Direct) -- do not invent new strings here.
-	FString WriteError;
-	if (!ClaireonPropertyUtils::WritePropertyByPath(TargetObject, Resolved.RemainingPath, Value, WriteError))
+	// Step 9: Write. For Instanced FObjectProperty leaves, route through SetInstancedSubObject
+	// (value == class path constructs the sub-object; value == "None"/empty clears the slot).
+	// Everything else goes through the generic ImportText path.
+	FString InstancedNote;
+	if (bInstancedLeaf)
 	{
-		return MakeErrorResult(WriteError);
+		void* SlotContainer = nullptr;
+		FString SlotError;
+		FProperty* LeafProp = ClaireonPropertyUtils::ResolvePropertyByPath(
+			TargetObject, Resolved.RemainingPath, SlotContainer, SlotError);
+		FObjectProperty* ObjectProp = CastField<FObjectProperty>(LeafProp);
+		if (!ObjectProp)
+		{
+			return MakeErrorResult(SlotError.IsEmpty()
+				? TEXT("Internal error: instanced leaf resolution lost FObjectProperty")
+				: SlotError);
+		}
+
+		if (Value.IsEmpty() || Value.Equals(TEXT("None"), ESearchCase::IgnoreCase))
+		{
+			void* SlotPtr = ObjectProp->ContainerPtrToValuePtr<void>(SlotContainer);
+			if (UObject* PrevValue = ObjectProp->GetObjectPropertyValue(SlotPtr))
+			{
+				PrevValue->MarkAsGarbage();
+			}
+			ObjectProp->SetObjectPropertyValue(SlotPtr, nullptr);
+			InstancedNote = TEXT("cleared instanced sub-object slot");
+		}
+		else
+		{
+			UClass* SubObjectClass = LoadClass<UObject>(nullptr, *Value);
+			if (!SubObjectClass)
+			{
+				// Blueprint generated classes resolve with a trailing "_C" suffix.
+				SubObjectClass = LoadClass<UObject>(nullptr, *(Value + TEXT("_C")));
+			}
+			if (!SubObjectClass)
+			{
+				return MakeErrorResult(FString::Printf(
+					TEXT("'%s' is UPROPERTY(Instanced); value must be a class path or 'None' to clear. Failed to load class from '%s'."),
+					*CombinedPath, *Value));
+			}
+
+			FString WriteError;
+			UObject* NewSubObject = ClaireonPropertyUtils::SetInstancedSubObject(
+				TargetObject, SubObjectClass, Resolved.RemainingPath, WriteError);
+			if (!NewSubObject)
+			{
+				return MakeErrorResult(WriteError);
+			}
+			InstancedNote = FString::Printf(
+				TEXT("auto-constructed instanced sub-object of class '%s' via SetInstancedSubObject"),
+				*SubObjectClass->GetName());
+		}
+	}
+	else
+	{
+		// Delegate the write to ClaireonPropertyUtils. Error strings come from the helper
+		// (ParsePathSegments / ResolvePath / ImportText_Direct) -- do not invent new strings here.
+		FString WriteError;
+		if (!ClaireonPropertyUtils::WritePropertyByPath(TargetObject, Resolved.RemainingPath, Value, WriteError))
+		{
+			return MakeErrorResult(WriteError);
+		}
 	}
 
 	// Step 10: Mark the Blueprint package dirty so editor save/cook picks up the change.
@@ -212,9 +285,21 @@ IClaireonTool::FToolResult ClaireonTool_SetBlueprintCDOProperty::Execute(const T
 	{
 		Data->SetStringField(TEXT("resolved_on"), Resolved.ResolvedOn);
 	}
-	if (!Resolved.Note.IsEmpty())
+	FString CombinedNote = Resolved.Note;
+	if (!InstancedNote.IsEmpty())
 	{
-		Data->SetStringField(TEXT("note"), Resolved.Note);
+		if (CombinedNote.IsEmpty())
+		{
+			CombinedNote = InstancedNote;
+		}
+		else
+		{
+			CombinedNote += TEXT("; ") + InstancedNote;
+		}
+	}
+	if (!CombinedNote.IsEmpty())
+	{
+		Data->SetStringField(TEXT("note"), CombinedNote);
 	}
 
 	const FString Summary = FString::Printf(

@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonMaterialTool_Open::GetName() const
-{
-	return TEXT("claireon.material_open");
-}
+FString ClaireonMaterialTool_Open::GetOperation() const { return TEXT("open"); }
 
 FString ClaireonMaterialTool_Open::GetDescription() const
 {

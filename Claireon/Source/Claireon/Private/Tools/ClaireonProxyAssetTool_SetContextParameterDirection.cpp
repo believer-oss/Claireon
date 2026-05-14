@@ -10,7 +10,8 @@
 #include "Dom/JsonObject.h"
 #include "StructUtils/InstancedStruct.h"
 
-FString ClaireonTool_ProxyAssetSetContextParameterDirection::GetName() const { return TEXT("claireon.proxyasset_set_context_parameter_direction"); }
+FString ClaireonTool_ProxyAssetSetContextParameterDirection::GetCategory() const { return TEXT("proxyasset"); }
+FString ClaireonTool_ProxyAssetSetContextParameterDirection::GetOperation() const { return TEXT("set_context_parameter_direction"); }
 
 FString ClaireonTool_ProxyAssetSetContextParameterDirection::GetDescription() const
 {

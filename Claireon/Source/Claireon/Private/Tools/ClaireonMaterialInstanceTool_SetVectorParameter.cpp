@@ -8,10 +8,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonMaterialInstanceTool_SetVectorParameter::GetName() const
-{
-	return TEXT("claireon.material_instance_set_vector_parameter");
-}
+FString ClaireonMaterialInstanceTool_SetVectorParameter::GetOperation() const { return TEXT("instance_set_vector_parameter"); }
 
 FString ClaireonMaterialInstanceTool_SetVectorParameter::GetDescription() const
 {

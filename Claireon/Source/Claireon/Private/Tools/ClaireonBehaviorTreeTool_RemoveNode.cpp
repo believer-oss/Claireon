@@ -13,10 +13,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBehaviorTreeTool_RemoveNode::GetName() const
-{
-	return TEXT("claireon.behaviortree_remove_node");
-}
+FString ClaireonBehaviorTreeTool_RemoveNode::GetOperation() const { return TEXT("remove_node"); }
 
 FString ClaireonBehaviorTreeTool_RemoveNode::GetDescription() const
 {

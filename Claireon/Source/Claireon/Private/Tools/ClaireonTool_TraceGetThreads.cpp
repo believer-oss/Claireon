@@ -7,10 +7,8 @@
 #include "TraceServices/Model/AnalysisSession.h"
 #include "TraceServices/Model/Threads.h"
 
-FString ClaireonTool_TraceGetThreads::GetName() const
-{
-	return TEXT("claireon.trace_get_threads");
-}
+FString ClaireonTool_TraceGetThreads::GetCategory() const { return TEXT("trace"); }
+FString ClaireonTool_TraceGetThreads::GetOperation() const { return TEXT("get_threads"); }
 
 FString ClaireonTool_TraceGetThreads::GetDescription() const
 {

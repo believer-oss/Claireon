@@ -11,14 +11,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_Close::GetName() const
-{
-	return TEXT("claireon.statetree_close");
-}
+FString ClaireonStateTreeTool_Close::GetOperation() const { return TEXT("close"); }
 
 FString ClaireonStateTreeTool_Close::GetDescription() const
 {
-	return TEXT("Close the open State Tree editing session and release its asset lock. Requires open session_id from claireon.statetree_open. Transactional with respect to any final save. Pass save_first=true to flush changes to disk before close; otherwise unsaved changes are discarded.");
+	return TEXT("Close the open State Tree editing session and release its asset lock. Requires open session_id from statetree_open. Transactional with respect to any final save. Pass save_first=true to flush changes to disk before close; otherwise unsaved changes are discarded.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_Close::GetInputSchema() const

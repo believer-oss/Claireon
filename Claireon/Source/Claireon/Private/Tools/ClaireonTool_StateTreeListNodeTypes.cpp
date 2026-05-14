@@ -17,10 +17,8 @@
 #include "StateTreeNodeBase.h"
 #include "Modules/ModuleManager.h"
 
-FString ClaireonTool_StateTreeListNodeTypes::GetName() const
-{
-	return TEXT("claireon.statetree_list_node_types");
-}
+FString ClaireonTool_StateTreeListNodeTypes::GetCategory() const { return TEXT("statetree"); }
+FString ClaireonTool_StateTreeListNodeTypes::GetOperation() const { return TEXT("list_node_types"); }
 
 FString ClaireonTool_StateTreeListNodeTypes::GetDescription() const
 {
@@ -125,10 +123,9 @@ namespace
 
 	FString GetNodeGroup(const FString& StructName)
 	{
-		if (StructName.StartsWith(TEXT("FFS")))
-		{
-			return TEXT("Project");
-		}
+		// Generic StateTree node grouping. The default returns "Engine" so all
+		// authored nodes appear under that bucket; downstream projects can
+		// patch this to surface project-specific node families.
 		return TEXT("Engine");
 	}
 } // namespace
@@ -258,7 +255,7 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeListNodeTypes::Execute(const TS
 		Output += FString::Printf(TEXT("=== Available %s%s ===\n"), *CatInfo.Name, *SchemaStr);
 
 		// Output in a consistent group order
-		TArray<FString> GroupOrder = { TEXT("Engine"), TEXT("Project") };
+		TArray<FString> GroupOrder = { TEXT("Engine"), TEXT("MyGame"), TEXT("MyGame Sample"), TEXT("MyGame Mob Sample") };
 		for (const FString& GroupName : GroupOrder)
 		{
 			const TArray<TSharedPtr<FStateTreeNodeClassData>>* GroupClasses = GroupedClasses.Find(GroupName);

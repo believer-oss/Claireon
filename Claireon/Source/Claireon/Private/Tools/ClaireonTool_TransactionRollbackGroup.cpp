@@ -8,10 +8,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonTool_TransactionRollbackGroup::GetName() const
-{
-	return TEXT("claireon.transaction_rollback_group");
-}
+FString ClaireonTool_TransactionRollbackGroup::GetOperation() const { return TEXT("rollback_group"); }
 
 FString ClaireonTool_TransactionRollbackGroup::GetDescription() const
 {

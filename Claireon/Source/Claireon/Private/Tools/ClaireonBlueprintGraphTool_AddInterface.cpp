@@ -98,14 +98,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_AddInterface::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_add_interface");
-}
+FString ClaireonBlueprintGraphTool_AddInterface::GetOperation() const { return TEXT("graph_add_interface"); }
 
 FString ClaireonBlueprintGraphTool_AddInterface::GetDescription() const
 {
-    return TEXT("Add an interface to the Blueprint's ImplementedInterfaces in the open editing session and compile. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: interface_path must reference a UInterface-derived BlueprintType class.");
+    return TEXT("Add an interface to the Blueprint's ImplementedInterfaces in the open editing session and compile. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: interface_path must reference a UInterface-derived BlueprintType class.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddInterface::GetInputSchema() const

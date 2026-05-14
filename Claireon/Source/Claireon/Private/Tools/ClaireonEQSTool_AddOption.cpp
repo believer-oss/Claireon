@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonEQSTool_AddOption::GetName() const
-{
-	return TEXT("claireon.eqs_add_option");
-}
+FString ClaireonEQSTool_AddOption::GetOperation() const { return TEXT("add_option"); }
 
 FString ClaireonEQSTool_AddOption::GetDescription() const
 {

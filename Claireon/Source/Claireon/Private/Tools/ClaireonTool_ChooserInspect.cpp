@@ -69,7 +69,8 @@ namespace
 	}
 }
 
-FString ClaireonTool_ChooserInspect::GetName() const { return TEXT("claireon.chooser_inspect"); }
+FString ClaireonTool_ChooserInspect::GetCategory() const { return TEXT("chooser"); }
+FString ClaireonTool_ChooserInspect::GetOperation() const { return TEXT("inspect"); }
 
 TArray<FString> ClaireonTool_ChooserInspect::GetSearchKeywords() const
 {
@@ -83,7 +84,7 @@ FString ClaireonTool_ChooserInspect::GetDescription() const
 		"(fields=[...]) and row paging (row_offset/row_limit) to keep payloads small. Sub-chooser "
 		"handling is controlled by include_subchoosers: 'none' omits, 'refs' (default) returns "
 		"compact per-nested triage info (name/path/row_count/etc.) without recursing into bodies, "
-		"'recursive' inlines the full nested tree. Use claireon.chooser_walk for tree traversal "
+		"'recursive' inlines the full nested tree. Use chooser_walk for tree traversal "
 		"instead of include_subchoosers='recursive' on deep trees.");
 }
 
@@ -282,8 +283,8 @@ IClaireonTool::FToolResult ClaireonTool_ChooserInspect::Execute(const TSharedPtr
 				if (bSubRefs || (!bSubRecursive))
 				{
 					// Default: refs only — name/path/counts/result_type/fanout per nested.
-					// Use claireon.chooser_walk for tree traversal; targeted
-					// claireon.chooser_inspect on a specific nested for full body.
+					// Use chooser_walk for tree traversal; targeted
+					// chooser_inspect on a specific nested for full body.
 					for (const auto& Nested : Chooser->NestedChoosers)
 					{
 						if (!Nested) { continue; }

@@ -12,14 +12,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_MoveState::GetName() const
-{
-	return TEXT("claireon.statetree_move_state");
-}
+FString ClaireonStateTreeTool_MoveState::GetOperation() const { return TEXT("move_state"); }
 
 FString ClaireonStateTreeTool_MoveState::GetDescription() const
 {
-	return TEXT("Move an existing state under a different parent in the open State Tree editing session, optionally specifying placement among the new parent's children. Requires open session_id from claireon.statetree_open. Transactional. Common pitfall: cycles are rejected; the new parent must not be the state itself or any of its descendants.");
+	return TEXT("Move an existing state under a different parent in the open State Tree editing session, optionally specifying placement among the new parent's children. Requires open session_id from statetree_open. Transactional. Common pitfall: cycles are rejected; the new parent must not be the state itself or any of its descendants.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_MoveState::GetInputSchema() const

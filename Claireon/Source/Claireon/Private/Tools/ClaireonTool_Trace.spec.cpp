@@ -314,25 +314,25 @@ bool FTraceToolTest_ToolMetadata::RunTest(const FString& Parameters)
 	};
 
 	ClaireonTool_TraceOpen OpenTool;
-	VerifyTool(OpenTool, TEXT("claireon.trace_open"));
+	VerifyTool(OpenTool, TEXT("trace_open"));
 
 	ClaireonTool_TraceClose CloseTool;
-	VerifyTool(CloseTool, TEXT("claireon.trace_close"));
+	VerifyTool(CloseTool, TEXT("trace_close"));
 
 	ClaireonTool_TraceGetSessionInfo SessionInfoTool;
-	VerifyTool(SessionInfoTool, TEXT("claireon.trace_get_session_info"));
+	VerifyTool(SessionInfoTool, TEXT("trace_get_session_info"));
 
 	ClaireonTool_TraceGetFrameStats FrameStatsTool;
-	VerifyTool(FrameStatsTool, TEXT("claireon.trace_get_frame_stats"));
+	VerifyTool(FrameStatsTool, TEXT("trace_get_frame_stats"));
 
 	ClaireonTool_TraceGetTopScopes TopScopesTool;
-	VerifyTool(TopScopesTool, TEXT("claireon.trace_get_top_scopes"));
+	VerifyTool(TopScopesTool, TEXT("trace_get_top_scopes"));
 
 	ClaireonTool_TraceGetScopeDetails ScopeDetailsTool;
-	VerifyTool(ScopeDetailsTool, TEXT("claireon.trace_get_scope_details"));
+	VerifyTool(ScopeDetailsTool, TEXT("trace_get_scope_details"));
 
 	ClaireonTool_TraceGetThreads ThreadsTool;
-	VerifyTool(ThreadsTool, TEXT("claireon.trace_get_threads"));
+	VerifyTool(ThreadsTool, TEXT("trace_get_threads"));
 
 	// Verify specific schema properties for TraceOpen
 	{

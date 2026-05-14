@@ -13,14 +13,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_SetWidgetProperty::GetName() const
-{
-    return TEXT("claireon.widgetbp_set_widget_property");
-}
+FString ClaireonWidgetBPTool_SetWidgetProperty::GetOperation() const { return TEXT("set_widget_property"); }
 
 FString ClaireonWidgetBPTool_SetWidgetProperty::GetDescription() const
 {
-    return TEXT("Set a property on a widget by name in the open Widget Blueprint editing session (top-level widget property, not slot property). Requires open session_id from claireon.widgetbp_open. Transactional. Common pitfall: slot properties (Anchors, Offsets, Size) live on the slot, not the widget; use claireon.widgetbp_set_slot_property for those.");
+    return TEXT("Set a property on a widget by name in the open Widget Blueprint editing session (top-level widget property, not slot property). Requires open session_id from widgetbp_open. Transactional. Common pitfall: slot properties (Anchors, Offsets, Size) live on the slot, not the widget; use widgetbp_set_slot_property for those.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_SetWidgetProperty::GetInputSchema() const

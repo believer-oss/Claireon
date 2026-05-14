@@ -8,10 +8,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_ApplySpec::GetName() const
-{
-    return TEXT("claireon.widgetbp_apply_spec");
-}
+FString ClaireonWidgetBPTool_ApplySpec::GetOperation() const { return TEXT("apply_spec"); }
 
 FString ClaireonWidgetBPTool_ApplySpec::GetDescription() const
 {

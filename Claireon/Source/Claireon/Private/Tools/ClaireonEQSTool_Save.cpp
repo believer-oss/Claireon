@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonEQSTool_Save::GetName() const
-{
-	return TEXT("claireon.eqs_save");
-}
+FString ClaireonEQSTool_Save::GetOperation() const { return TEXT("save"); }
 
 FString ClaireonEQSTool_Save::GetDescription() const
 {

@@ -15,10 +15,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_AddAnimationBinding::GetName() const
-{
-    return TEXT("claireon.widgetbp_add_animation_binding");
-}
+FString ClaireonWidgetBPTool_AddAnimationBinding::GetOperation() const { return TEXT("add_animation_binding"); }
 
 FString ClaireonWidgetBPTool_AddAnimationBinding::GetDescription() const
 {

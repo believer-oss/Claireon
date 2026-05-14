@@ -108,7 +108,7 @@ bool FClaireonSpecApplicator_Blackboard::OpenOrCreateAsset(const FString& AssetP
 
 	const FString BBPathName = BB->GetPathName();
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
-		BBPathName, TEXT("claireon.blackboard_edit"));
+		BBPathName, TEXT("blackboard_edit"));
 
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{

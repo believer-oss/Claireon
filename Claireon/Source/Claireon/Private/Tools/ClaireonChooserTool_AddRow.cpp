@@ -11,7 +11,8 @@
 #include "Dom/JsonObject.h"
 #include "StructUtils/InstancedStruct.h"
 
-FString ClaireonTool_ChooserAddRow::GetName() const { return TEXT("claireon.chooser_add_row"); }
+FString ClaireonTool_ChooserAddRow::GetCategory() const { return TEXT("chooser"); }
+FString ClaireonTool_ChooserAddRow::GetOperation() const { return TEXT("add_row"); }
 
 FString ClaireonTool_ChooserAddRow::GetDescription() const
 {

@@ -8,10 +8,8 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_DataTableExportJson::GetName() const
-{
-	return TEXT("claireon.datatable_export_json");
-}
+FString ClaireonTool_DataTableExportJson::GetCategory() const { return TEXT("datatable"); }
+FString ClaireonTool_DataTableExportJson::GetOperation() const { return TEXT("export_json"); }
 
 FString ClaireonTool_DataTableExportJson::GetDescription() const
 {

@@ -97,14 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_RemoveNode::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_remove_node");
-}
+FString ClaireonBlueprintGraphTool_RemoveNode::GetOperation() const { return TEXT("graph_remove_node"); }
 
 FString ClaireonBlueprintGraphTool_RemoveNode::GetDescription() const
 {
-    return TEXT("Remove a node from the graph. Requires open session_id from claireon.blueprint_graph_open OR pass asset_path for stateless single-shot mode. Transactional. All wires touching the node are dropped; if the node was the cursor target, the cursor is cleared and must be repositioned with claireon.blueprint_graph_select_node.");
+    return TEXT("Remove a node from the graph. Requires open session_id from blueprint_graph_open OR pass asset_path for stateless single-shot mode. Transactional. All wires touching the node are dropped; if the node was the cursor target, the cursor is cleared and must be repositioned with blueprint_graph_select_node.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_RemoveNode::GetInputSchema() const

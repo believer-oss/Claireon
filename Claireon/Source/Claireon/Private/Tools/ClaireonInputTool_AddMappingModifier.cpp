@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonInputTool_AddMappingModifier::GetName() const
-{
-	return TEXT("claireon.input_add_mapping_modifier");
-}
+FString ClaireonInputTool_AddMappingModifier::GetOperation() const { return TEXT("add_mapping_modifier"); }
 
 FString ClaireonInputTool_AddMappingModifier::GetDescription() const
 {

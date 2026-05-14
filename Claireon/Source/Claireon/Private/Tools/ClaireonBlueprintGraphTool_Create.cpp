@@ -97,10 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_Create::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_create");
-}
+FString ClaireonBlueprintGraphTool_Create::GetOperation() const { return TEXT("graph_create"); }
 
 FString ClaireonBlueprintGraphTool_Create::GetDescription() const
 {
@@ -244,7 +241,7 @@ FToolResult ClaireonBlueprintGraphTool_Create::Execute(const TSharedPtr<FJsonObj
 	// Open session via the manager (handles locking)
 	double TimeoutMinutes = 60.0;
 	Params->TryGetNumberField(TEXT("timeout_minutes"), TimeoutMinutes);
-	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(Blueprint->GetPathName(), TEXT("claireon.blueprint_edit_graph"), TimeoutMinutes);
+	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(Blueprint->GetPathName(), TEXT("blueprint_edit_graph"), TimeoutMinutes);
 
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{

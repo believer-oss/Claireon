@@ -8,14 +8,12 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_DataTableGetInfo::GetName() const
-{
-	return TEXT("claireon.datatable_get_info");
-}
+FString ClaireonTool_DataTableGetInfo::GetCategory() const { return TEXT("datatable"); }
+FString ClaireonTool_DataTableGetInfo::GetOperation() const { return TEXT("get_info"); }
 
 FString ClaireonTool_DataTableGetInfo::GetDescription() const
 {
-	return TEXT("Get structural metadata about a data table â row struct, column definitions, row count");
+	return TEXT("Get structural metadata about a data table Ã¢Â€Â” row struct, column definitions, row count");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_DataTableGetInfo::GetInputSchema() const

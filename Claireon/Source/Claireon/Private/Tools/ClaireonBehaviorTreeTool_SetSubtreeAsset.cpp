@@ -13,10 +13,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBehaviorTreeTool_SetSubtreeAsset::GetName() const
-{
-	return TEXT("claireon.behaviortree_set_subtree_asset");
-}
+FString ClaireonBehaviorTreeTool_SetSubtreeAsset::GetOperation() const { return TEXT("set_subtree_asset"); }
 
 FString ClaireonBehaviorTreeTool_SetSubtreeAsset::GetDescription() const
 {

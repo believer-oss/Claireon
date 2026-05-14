@@ -8,10 +8,8 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_BehaviorTreeInspectBlackboard::GetName() const
-{
-	return TEXT("claireon.behaviortree_inspect_blackboard");
-}
+FString ClaireonTool_BehaviorTreeInspectBlackboard::GetCategory() const { return TEXT("behaviortree"); }
+FString ClaireonTool_BehaviorTreeInspectBlackboard::GetOperation() const { return TEXT("inspect_blackboard"); }
 
 FString ClaireonTool_BehaviorTreeInspectBlackboard::GetDescription() const
 {

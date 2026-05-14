@@ -62,7 +62,8 @@ namespace
 	}
 }
 
-FString ClaireonTool_ChooserWalk::GetName() const { return TEXT("claireon.chooser_walk"); }
+FString ClaireonTool_ChooserWalk::GetCategory() const { return TEXT("chooser"); }
+FString ClaireonTool_ChooserWalk::GetOperation() const { return TEXT("walk"); }
 
 FString ClaireonTool_ChooserWalk::GetDescription() const
 {
@@ -72,7 +73,7 @@ FString ClaireonTool_ChooserWalk::GetDescription() const
 		"outer_path/outer_name to disambiguate same-named sub-objects with different parents. "
 		"Sub-objects in the asset's flat NestedChoosers registry that are NOT reached via row-result "
 		"traversal are emitted in a separate 'orphans' array — these are dead-code sub-choosers. "
-		"Use claireon.chooser_traverse for row-by-row inspection of the dispatcher chain.");
+		"Use chooser_traverse for row-by-row inspection of the dispatcher chain.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ChooserWalk::GetInputSchema() const

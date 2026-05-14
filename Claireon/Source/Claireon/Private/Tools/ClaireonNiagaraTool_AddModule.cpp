@@ -13,10 +13,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonNiagaraTool_AddModule::GetName() const
-{
-	return TEXT("claireon.niagara_add_module");
-}
+FString ClaireonNiagaraTool_AddModule::GetOperation() const { return TEXT("add_module"); }
 
 FString ClaireonNiagaraTool_AddModule::GetDescription() const
 {

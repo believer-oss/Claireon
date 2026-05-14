@@ -59,10 +59,7 @@ static UAnimGraphNode_Base* FindAnimNodeByGuid(UEdGraph* Graph, const FString& G
 // ClaireonAnimGraphTool_ExposePin
 // ============================================================================
 
-FString ClaireonAnimGraphTool_ExposePin::GetName() const
-{
-	return TEXT("claireon.animgraph_expose_pin");
-}
+FString ClaireonAnimGraphTool_ExposePin::GetOperation() const { return TEXT("expose_pin"); }
 
 FString ClaireonAnimGraphTool_ExposePin::GetDescription() const
 {
@@ -147,10 +144,7 @@ FToolResult ClaireonAnimGraphTool_ExposePin::Execute(const TSharedPtr<FJsonObjec
 // ClaireonAnimGraphTool_HidePin
 // ============================================================================
 
-FString ClaireonAnimGraphTool_HidePin::GetName() const
-{
-	return TEXT("claireon.animgraph_hide_pin");
-}
+FString ClaireonAnimGraphTool_HidePin::GetOperation() const { return TEXT("hide_pin"); }
 
 FString ClaireonAnimGraphTool_HidePin::GetDescription() const
 {
@@ -224,10 +218,7 @@ FToolResult ClaireonAnimGraphTool_HidePin::Execute(const TSharedPtr<FJsonObject>
 // ClaireonAnimGraphTool_SetBinding
 // ============================================================================
 
-FString ClaireonAnimGraphTool_SetBinding::GetName() const
-{
-	return TEXT("claireon.animgraph_set_binding");
-}
+FString ClaireonAnimGraphTool_SetBinding::GetOperation() const { return TEXT("set_binding"); }
 
 FString ClaireonAnimGraphTool_SetBinding::GetDescription() const
 {
@@ -329,10 +320,7 @@ FToolResult ClaireonAnimGraphTool_SetBinding::Execute(const TSharedPtr<FJsonObje
 // ClaireonAnimGraphTool_RemoveBinding
 // ============================================================================
 
-FString ClaireonAnimGraphTool_RemoveBinding::GetName() const
-{
-	return TEXT("claireon.animgraph_remove_binding");
-}
+FString ClaireonAnimGraphTool_RemoveBinding::GetOperation() const { return TEXT("remove_binding"); }
 
 FString ClaireonAnimGraphTool_RemoveBinding::GetDescription() const
 {
@@ -388,10 +376,7 @@ FToolResult ClaireonAnimGraphTool_RemoveBinding::Execute(const TSharedPtr<FJsonO
 // ClaireonAnimGraphTool_BindFunction
 // ============================================================================
 
-FString ClaireonAnimGraphTool_BindFunction::GetName() const
-{
-	return TEXT("claireon.animgraph_bind_function");
-}
+FString ClaireonAnimGraphTool_BindFunction::GetOperation() const { return TEXT("bind_function"); }
 
 FString ClaireonAnimGraphTool_BindFunction::GetDescription() const
 {

@@ -12,10 +12,8 @@
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 
-FString ClaireonTool_PIERegisterDamageListener::GetName() const
-{
-	return TEXT("claireon.pie_register_damage_listener");
-}
+FString ClaireonTool_PIERegisterDamageListener::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_PIERegisterDamageListener::GetOperation() const { return TEXT("register_damage_listener"); }
 
 FString ClaireonTool_PIERegisterDamageListener::GetDescription() const
 {

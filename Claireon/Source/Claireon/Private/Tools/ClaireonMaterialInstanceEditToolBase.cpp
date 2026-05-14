@@ -13,7 +13,7 @@ using FToolResult = IClaireonTool::FToolResult;
 // Static members
 // ============================================================================
 
-const TCHAR* ClaireonMaterialInstanceEditToolBase::MaterialInstanceSessionToolName = TEXT("claireon.material_instance_edit");
+const TCHAR* ClaireonMaterialInstanceEditToolBase::MaterialInstanceSessionToolName = TEXT("material_instance_edit");
 TMap<FString, FMaterialInstanceEditToolData> ClaireonMaterialInstanceEditToolBase::ToolData;
 bool ClaireonMaterialInstanceEditToolBase::bDelegateRegistered = false;
 

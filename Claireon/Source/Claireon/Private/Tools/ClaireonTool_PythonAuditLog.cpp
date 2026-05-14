@@ -10,10 +10,8 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
-FString ClaireonTool_PythonAuditLog::GetName() const
-{
-	return TEXT("claireon.python_audit_log");
-}
+FString ClaireonTool_PythonAuditLog::GetCategory() const { return TEXT("python"); }
+FString ClaireonTool_PythonAuditLog::GetOperation() const { return TEXT("audit_log"); }
 
 FString ClaireonTool_PythonAuditLog::GetDescription() const
 {

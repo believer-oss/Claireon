@@ -16,7 +16,7 @@ using FToolResult = IClaireonTool::FToolResult;
 // Static members
 // ============================================================================
 
-const TCHAR* ClaireonEQSEditToolBase::EQSSessionToolName = TEXT("claireon.eqs_edit");
+const TCHAR* ClaireonEQSEditToolBase::EQSSessionToolName = TEXT("eqs_edit");
 TMap<FString, FEQSEditToolData> ClaireonEQSEditToolBase::ToolData;
 bool ClaireonEQSEditToolBase::bDelegateRegistered = false;
 

@@ -14,10 +14,11 @@
 #include "Dom/JsonObject.h"
 
 // ============================================================================
-// claireon.chooser_create
+// chooser_create
 // ============================================================================
 
-FString ClaireonTool_ChooserCreate::GetName() const { return TEXT("claireon.chooser_create"); }
+FString ClaireonTool_ChooserCreate::GetCategory() const { return TEXT("chooser"); }
+FString ClaireonTool_ChooserCreate::GetOperation() const { return TEXT("create"); }
 
 FString ClaireonTool_ChooserCreate::GetDescription() const
 {
@@ -103,10 +104,11 @@ IClaireonTool::FToolResult ClaireonTool_ChooserCreate::Execute(const TSharedPtr<
 }
 
 // ============================================================================
-// claireon.chooser_duplicate
+// chooser_duplicate
 // ============================================================================
 
-FString ClaireonTool_ChooserDuplicate::GetName() const { return TEXT("claireon.chooser_duplicate"); }
+FString ClaireonTool_ChooserDuplicate::GetCategory() const { return TEXT("chooser"); }
+FString ClaireonTool_ChooserDuplicate::GetOperation() const { return TEXT("duplicate"); }
 
 FString ClaireonTool_ChooserDuplicate::GetDescription() const
 {

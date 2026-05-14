@@ -5,10 +5,8 @@
 
 #include "ClaireonBPTranslateSession.h"
 
-FString ClaireonTool_BlueprintTranslateStatus::GetName() const
-{
-	return TEXT("claireon.blueprint_translate_status");
-}
+FString ClaireonTool_BlueprintTranslateStatus::GetCategory() const { return TEXT("blueprint"); }
+FString ClaireonTool_BlueprintTranslateStatus::GetOperation() const { return TEXT("translate_status"); }
 
 FString ClaireonTool_BlueprintTranslateStatus::GetDescription() const
 {

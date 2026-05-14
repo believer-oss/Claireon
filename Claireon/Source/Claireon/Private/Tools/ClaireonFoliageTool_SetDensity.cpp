@@ -6,10 +6,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonFoliageTool_SetDensity::GetName() const
-{
-	return TEXT("claireon.foliage_set_density");
-}
+FString ClaireonFoliageTool_SetDensity::GetOperation() const { return TEXT("set_density"); }
 
 FString ClaireonFoliageTool_SetDensity::GetDescription() const
 {

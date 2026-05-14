@@ -12,10 +12,8 @@
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 
-FString ClaireonTool_MapStatus::GetName() const
-{
-	return TEXT("claireon.map_status");
-}
+FString ClaireonTool_MapStatus::GetCategory() const { return TEXT("map"); }
+FString ClaireonTool_MapStatus::GetOperation() const { return TEXT("status"); }
 
 FString ClaireonTool_MapStatus::GetDescription() const
 {

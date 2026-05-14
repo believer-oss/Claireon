@@ -13,10 +13,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_Open::GetName() const
-{
-    return TEXT("claireon.widgetbp_open");
-}
+FString ClaireonWidgetBPTool_Open::GetOperation() const { return TEXT("open"); }
 
 TArray<FString> ClaireonWidgetBPTool_Open::GetSearchKeywords() const
 {
@@ -25,7 +22,7 @@ TArray<FString> ClaireonWidgetBPTool_Open::GetSearchKeywords() const
 
 FString ClaireonWidgetBPTool_Open::GetDescription() const
 {
-    return TEXT("Open an existing Widget Blueprint for editing and acquire an asset lock. Creates or reuses a session keyed by the MCP client and returns the session_id plus initial widget tree. Transactional. The session must be closed via claireon.widgetbp_close to release the lock.");
+    return TEXT("Open an existing Widget Blueprint for editing and acquire an asset lock. Creates or reuses a session keyed by the MCP client and returns the session_id plus initial widget tree. Transactional. The session must be closed via widgetbp_close to release the lock.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_Open::GetInputSchema() const
@@ -80,7 +77,7 @@ FToolResult ClaireonWidgetBPTool_Open::Execute(const TSharedPtr<FJsonObject>& Ar
 	FString CanonicalPath = WBP->GetPathName();
 
 	// Open session (acts as exclusive lock)
-	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(CanonicalPath, TEXT("claireon.widgetbp_edit"));
+	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(CanonicalPath, TEXT("widgetbp_edit"));
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{
 		const FMCPSession& Blocker = OpenResult.BlockingSession.GetValue();

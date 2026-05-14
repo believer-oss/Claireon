@@ -12,10 +12,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonNiagaraTool_SetRendererProperty::GetName() const
-{
-	return TEXT("claireon.niagara_set_renderer_property");
-}
+FString ClaireonNiagaraTool_SetRendererProperty::GetOperation() const { return TEXT("set_renderer_property"); }
 
 FString ClaireonNiagaraTool_SetRendererProperty::GetDescription() const
 {

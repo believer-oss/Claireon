@@ -9,14 +9,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_ListMVVMBindings::GetName() const
-{
-    return TEXT("claireon.widgetbp_list_mvvm_bindings");
-}
+FString ClaireonWidgetBPTool_ListMVVMBindings::GetOperation() const { return TEXT("list_mvvm_bindings"); }
 
 FString ClaireonWidgetBPTool_ListMVVMBindings::GetDescription() const
 {
-    return TEXT("List MVVM bindings on the Widget Blueprint in the open editing session: source/destination paths, mode, conversion function, and binding id. Requires open session_id from claireon.widgetbp_open. Read-only. Returns one entry per binding; the id is the handle for claireon.widgetbp_edit_mvvm_binding and remove.");
+    return TEXT("List MVVM bindings on the Widget Blueprint in the open editing session: source/destination paths, mode, conversion function, and binding id. Requires open session_id from widgetbp_open. Read-only. Returns one entry per binding; the id is the handle for widgetbp_edit_mvvm_binding and remove.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_ListMVVMBindings::GetInputSchema() const

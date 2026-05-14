@@ -13,7 +13,7 @@ using FToolResult = IClaireonTool::FToolResult;
 // Static members
 // ============================================================================
 
-const TCHAR* ClaireonPCGGraphEditToolBase::PCGSessionToolName = TEXT("claireon.pcg_edit");
+const TCHAR* ClaireonPCGGraphEditToolBase::PCGSessionToolName = TEXT("pcg_edit");
 TMap<FString, FPCGGraphEditToolData> ClaireonPCGGraphEditToolBase::ToolData;
 bool ClaireonPCGGraphEditToolBase::bDelegateRegistered = false;
 

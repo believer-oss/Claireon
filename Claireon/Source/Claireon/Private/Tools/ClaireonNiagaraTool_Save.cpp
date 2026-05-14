@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonNiagaraTool_Save::GetName() const
-{
-	return TEXT("claireon.niagara_save");
-}
+FString ClaireonNiagaraTool_Save::GetOperation() const { return TEXT("save"); }
 
 FString ClaireonNiagaraTool_Save::GetDescription() const
 {

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 #if WITH_UNTESTED
 
@@ -240,7 +240,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_CoerceKeyframeUnsupportedFails, UNT
 }
 
 // ============================================================================
-// F1: claireon.sequence_inspect
+// F1: sequence_inspect
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_InspectMissingAssetPath, UNTEST_TIMEOUTMS(5000))
@@ -305,7 +305,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_InspectHappyPath, UNTEST_TIMEOUTMS(
 	UNTEST_EXPECT_TRUE(bFoundAssetPath);
 
 	// Description / full description / category sanity
-	UNTEST_EXPECT_TRUE(Tool.GetName() == TEXT("claireon.sequence_inspect"));
+	UNTEST_EXPECT_TRUE(Tool.GetName() == TEXT("sequence_inspect"));
 	UNTEST_EXPECT_TRUE(Tool.GetCategory() == TEXT("sequence"));
 	UNTEST_EXPECT_FALSE(Tool.GetDescription().IsEmpty());
 	UNTEST_EXPECT_FALSE(Tool.GetFullDescription().IsEmpty());
@@ -314,7 +314,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_InspectHappyPath, UNTEST_TIMEOUTMS(
 }
 
 // ============================================================================
-// F3: claireon.sequence_list_track_types
+// F3: sequence_list_track_types
 // ============================================================================
 //
 // NOTE: stage-008 test mode is build_time_only_deferred_to_021. These Untest
@@ -443,7 +443,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F3_MetadataAndSchema, UNTEST_TIMEOUTMS
 {
 	ClaireonTool_SequenceListTrackTypes Tool;
 
-	UNTEST_EXPECT_TRUE(Tool.GetName() == TEXT("claireon.sequence_list_track_types"));
+	UNTEST_EXPECT_TRUE(Tool.GetName() == TEXT("sequence_list_track_types"));
 	UNTEST_EXPECT_FALSE(Tool.GetDescription().IsEmpty());
 	UNTEST_EXPECT_FALSE(Tool.GetFullDescription().IsEmpty());
 	UNTEST_EXPECT_FALSE(Tool.RequiresNoPIE());
@@ -469,7 +469,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F3_MetadataAndSchema, UNTEST_TIMEOUTMS
 }
 
 // ============================================================================
-// F4: claireon.sequence_actor_place
+// F4: sequence_actor_place
 // ============================================================================
 //
 // NOTE: stage-010 test mode is build_time_only_deferred_to_021. These Untest
@@ -478,7 +478,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F3_MetadataAndSchema, UNTEST_TIMEOUTMS
 // executed until the aggregate stage-021 final-validation run. Mirrors the F1,
 // F7, and F3 deferral pattern for this feature set.
 //
-// Happy-path / PlaybackSettings reflection / save_map opt-in /
+// Happy-path / replicated / PlaybackSettings reflection / save_map opt-in /
 // PIE-guard behaviour requires a real map + editor world and is exercised via
 // MCP end-to-end in stage 010 step 2 (real MCP call) and re-run in stage 021.
 // These build-time blocks assert tool metadata + schema shape to catch drift.
@@ -487,7 +487,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F4_MetadataAndSchema, UNTEST_TIMEOUTMS
 {
 	ClaireonTool_SequenceActorPlace Tool;
 
-	UNTEST_EXPECT_TRUE(Tool.GetName() == TEXT("claireon.sequence_actor_place"));
+	UNTEST_EXPECT_TRUE(Tool.GetName() == TEXT("sequence_actor_place"));
 	UNTEST_EXPECT_TRUE(Tool.GetCategory() == TEXT("sequence"));
 	UNTEST_EXPECT_FALSE(Tool.GetDescription().IsEmpty());
 	UNTEST_EXPECT_FALSE(Tool.GetFullDescription().IsEmpty());
@@ -509,6 +509,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F4_MetadataAndSchema, UNTEST_TIMEOUTMS
 	UNTEST_EXPECT_TRUE((*PropertiesObj)->HasField(TEXT("map_path")));
 	UNTEST_EXPECT_TRUE((*PropertiesObj)->HasField(TEXT("sequence_asset")));
 	UNTEST_EXPECT_TRUE((*PropertiesObj)->HasField(TEXT("actor_label")));
+	UNTEST_EXPECT_TRUE((*PropertiesObj)->HasField(TEXT("replicated")));
 	UNTEST_EXPECT_TRUE((*PropertiesObj)->HasField(TEXT("playback_settings")));
 	UNTEST_EXPECT_TRUE((*PropertiesObj)->HasField(TEXT("save_map")));
 
@@ -528,7 +529,8 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F4_MetadataAndSchema, UNTEST_TIMEOUTMS
 	UNTEST_EXPECT_TRUE(RequiredSet.Contains(TEXT("map_path")));
 	UNTEST_EXPECT_TRUE(RequiredSet.Contains(TEXT("sequence_asset")));
 	UNTEST_EXPECT_TRUE(RequiredSet.Contains(TEXT("actor_label")));
-	// playback_settings/save_map are optional.
+	// replicated/playback_settings/save_map are optional.
+	UNTEST_EXPECT_FALSE(RequiredSet.Contains(TEXT("replicated")));
 	UNTEST_EXPECT_FALSE(RequiredSet.Contains(TEXT("playback_settings")));
 	UNTEST_EXPECT_FALSE(RequiredSet.Contains(TEXT("save_map")));
 	co_return;
@@ -586,6 +588,9 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F4_ClassResolutionSanity, UNTEST_TIMEO
 	// Verifies the Level Sequence actor classes used in Execute resolve at runtime,
 	// so refactors/relocations in the engine don't silently break F4 spawning.
 	UNTEST_EXPECT_TRUE(ALevelSequenceActor::StaticClass() != nullptr);
+	UNTEST_EXPECT_TRUE(AReplicatedLevelSequenceActor::StaticClass() != nullptr);
+	UNTEST_EXPECT_TRUE(AReplicatedLevelSequenceActor::StaticClass()->IsChildOf(
+		ALevelSequenceActor::StaticClass()));
 
 	// PlaybackSettings struct + key fields must be discoverable via reflection.
 	UScriptStruct* SettingsStruct = FMovieSceneSequencePlaybackSettings::StaticStruct();
@@ -601,7 +606,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F4_ClassResolutionSanity, UNTEST_TIMEO
 }
 
 // ============================================================================
-// F2: claireon.sequence_edit
+// F2: sequence_edit
 // ============================================================================
 //
 // NOTE: stage-012 test mode is build_time_only_deferred_to_021. These Untest
@@ -617,7 +622,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F4_ClassResolutionSanity, UNTEST_TIMEO
 // blocks assert tool metadata, schema shape, and error-path behaviour to catch
 // drift.
 
-// Stage 026: claireon.sequence_edit was decomposed into 20 claireon.level_sequence_*
+// Stage 026: sequence_edit was decomposed into 20 level_sequence_*
 // tools. The monolith-envelope tests below predate decomposition; they will be
 // rewritten against the decomposed tools in a follow-up (mirrors stages 023/024
 // BP + WidgetBP monolith test rewrite). Disabled here to keep the build green.
@@ -626,7 +631,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_MetadataAndSchema, UNTEST_TIMEOUTMS
 {
 	ClaireonTool_SequenceEdit Tool;
 
-	UNTEST_EXPECT_TRUE(Tool.GetName() == TEXT("claireon.sequence_edit"));
+	UNTEST_EXPECT_TRUE(Tool.GetName() == TEXT("sequence_edit"));
 	UNTEST_EXPECT_TRUE(Tool.GetCategory() == TEXT("sequence"));
 	UNTEST_EXPECT_FALSE(Tool.GetDescription().IsEmpty());
 	UNTEST_EXPECT_FALSE(Tool.GetFullDescription().IsEmpty());
@@ -819,7 +824,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_CursorHistoryCap, UNTEST_TIMEOUTMS(
 }
 
 // ============================================================================
-// F5: claireon.sequence_edit.create_event_endpoint
+// F5: sequence_edit.create_event_endpoint
 // ============================================================================
 //
 // NOTE: stage-014 test mode is build_time_only_deferred_to_021. These Untest
@@ -879,7 +884,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_CreateEventEndpointEmptyName, UNTES
 	co_return;
 }
 
-#if 0 // MONOLITH_ENVELOPE_TESTS -- stage 026 decomposed claireon.sequence_edit
+#if 0 // MONOLITH_ENVELOPE_TESTS -- stage 026 decomposed sequence_edit
 UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_DispatcherUnknownSignature, UNTEST_TIMEOUTMS(5000))
 {
 	// create_event_endpoint with an unknown signature string must error with a
@@ -958,7 +963,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_DispatcherAdvertisesOp, UNTEST_TIME
 #endif // MONOLITH_ENVELOPE_TESTS
 
 // ============================================================================
-// F6: claireon.sequence_edit.apply_spec (FClaireonSpecApplicator_LevelSequence)
+// F6: sequence_edit.apply_spec (FClaireonSpecApplicator_LevelSequence)
 // ============================================================================
 //
 // NOTE: stage-016 test mode is build_time_only_deferred_to_021. These Untest
@@ -984,7 +989,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6_ValidateSpecEmpty, UNTEST_TIMEOUTMS
 	co_return;
 }
 
-#if 0 // MONOLITH_ENVELOPE_TESTS -- stage 026 decomposed claireon.sequence_edit
+#if 0 // MONOLITH_ENVELOPE_TESTS -- stage 026 decomposed sequence_edit
 UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6_DispatcherAdvertisesApplySpec, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_SequenceEdit Tool;

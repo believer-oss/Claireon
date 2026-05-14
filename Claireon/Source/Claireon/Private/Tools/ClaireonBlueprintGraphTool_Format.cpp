@@ -97,10 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_Format::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_format");
-}
+FString ClaireonBlueprintGraphTool_Format::GetOperation() const { return TEXT("graph_format"); }
 
 TArray<FString> ClaireonBlueprintGraphTool_Format::GetSearchKeywords() const
 {
@@ -109,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_Format::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_Format::GetDescription() const
 {
-    return TEXT("Auto-layouts the current session's graph nodes. This is the IN-SESSION formatter (claireon.blueprint_graph_format), distinct from the standalone claireon.blueprint_format_graph which operates on a closed asset path. Most-common pitfall: confusing the two -- use this one inside a session, the standalone one for one-off cleanup of an unopened asset.");
+    return TEXT("Auto-layouts the current session's graph nodes. This is the IN-SESSION formatter (blueprint_graph_format), distinct from the standalone blueprint_format_graph which operates on a closed asset path. Most-common pitfall: confusing the two -- use this one inside a session, the standalone one for one-off cleanup of an unopened asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Format::GetInputSchema() const
@@ -217,13 +214,13 @@ FString ClaireonBlueprintGraphTool_Format::GetFullDescription() const
     return TEXT(
         "Auto-layouts the current session's graph nodes using a simple "
         "left-to-right exec-flow layout. This is the IN-SESSION formatter: "
-        "claireon.blueprint_graph_format requires an open session and operates "
+        "blueprint_graph_format requires an open session and operates "
         "on the in-session graph state. The STANDALONE formatter, "
-        "claireon.blueprint_format_graph (note swapped word order), takes an "
+        "blueprint_format_graph (note swapped word order), takes an "
         "asset_path and operates on a closed asset. The two are easy to "
         "confuse: the in-session form is what you use inside the per-node "
-        "incremental cycle before calling "
-        "claireon.blueprint_graph_save; the standalone form is for one-off "
+        "cycle from the per-tool authoring guidance before calling "
+        "blueprint_graph_save; the standalone form is for one-off "
         "cleanup of an unopened Blueprint outside a session. If "
         "BlueprintAssist plugin is present, the layout uses BA's smart "
         "routing; otherwise a deterministic fallback grid layout is used.");
@@ -231,7 +228,7 @@ FString ClaireonBlueprintGraphTool_Format::GetFullDescription() const
 
 FString ClaireonBlueprintGraphTool_Format::GetExampleUsage() const
 {
-    return TEXT("claireon.blueprint_graph_format session_id=\"...\"");
+    return TEXT("blueprint_graph_format session_id=\"...\"");
 }
 
 #undef LOCTEXT_NAMESPACE

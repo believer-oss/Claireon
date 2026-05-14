@@ -139,7 +139,8 @@ namespace
 	}
 }
 
-FString ClaireonTool_ChooserFindRows::GetName() const { return TEXT("claireon.chooser_find_rows"); }
+FString ClaireonTool_ChooserFindRows::GetCategory() const { return TEXT("chooser"); }
+FString ClaireonTool_ChooserFindRows::GetOperation() const { return TEXT("find_rows"); }
 
 FString ClaireonTool_ChooserFindRows::GetDescription() const
 {

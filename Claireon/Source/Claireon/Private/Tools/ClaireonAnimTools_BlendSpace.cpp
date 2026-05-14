@@ -36,7 +36,7 @@
 
 namespace
 {
-	bool ValidateNewBlendSpacePath(const FString& InPath, FString& OutCanonPath, FString& OutAssetName, FString& OutError)
+	bool AnimToolsBlendSpace_ValidateNewBlendSpacePath(const FString& InPath, FString& OutCanonPath, FString& OutAssetName, FString& OutError)
 	{
 		OutCanonPath = FClaireonSessionManager::CanonicalizePath(InPath);
 		if (OutCanonPath.IsEmpty())
@@ -53,7 +53,7 @@ namespace
 		return true;
 	}
 
-	bool SaveBlendSpaceAsset(UObject* Asset, FString& OutError)
+	bool AnimToolsBlendSpace_SaveBlendSpaceAsset(UObject* Asset, FString& OutError)
 	{
 		UPackage* Package = Asset->GetOutermost();
 		Package->FullyLoad();
@@ -97,7 +97,7 @@ namespace
 		return BlendSpace;
 	}
 
-	FString DetectBlendSpaceType(const UBlendSpace* BlendSpace)
+	FString AnimToolsBlendSpace_DetectBlendSpaceType(const UBlendSpace* BlendSpace)
 	{
 		// Check most-specific first
 		if (Cast<UAimOffsetBlendSpace1D>(BlendSpace))
@@ -115,12 +115,12 @@ namespace
 		return TEXT("BlendSpace");
 	}
 
-	bool Is1DBlendSpace(const UBlendSpace* BlendSpace)
+	bool AnimToolsBlendSpace_Is1DBlendSpace(const UBlendSpace* BlendSpace)
 	{
 		return Cast<const UBlendSpace1D>(BlendSpace) != nullptr;
 	}
 
-	FString FormatSmoothingType(EFilterInterpolationType Type)
+	FString AnimToolsBlendSpace_FormatSmoothingType(EFilterInterpolationType Type)
 	{
 		switch (Type)
 		{
@@ -134,14 +134,14 @@ namespace
 		}
 	}
 
-	FString FormatBlendParameter(const FBlendParameter& Param, const FInterpolationParameter& Interp, int32 Index)
+	FString AnimToolsBlendSpace_FormatBlendParameter(const FBlendParameter& Param, const FInterpolationParameter& Interp, int32 Index)
 	{
 		FString Result = FString::Printf(TEXT("  Axis %d: \"%s\"\n"), Index, *Param.DisplayName);
 		Result += FString::Printf(TEXT("    Range: [%.2f .. %.2f]\n"), Param.Min, Param.Max);
 		Result += FString::Printf(TEXT("    Grid Divisions: %d\n"), Param.GridNum);
 		Result += FString::Printf(TEXT("    Snap to Grid: %s\n"), Param.bSnapToGrid ? TEXT("Yes") : TEXT("No"));
 		Result += FString::Printf(TEXT("    Wrap Input: %s\n"), Param.bWrapInput ? TEXT("Yes") : TEXT("No"));
-		Result += FString::Printf(TEXT("    Smoothing Type: %s\n"), *FormatSmoothingType(Interp.InterpolationType));
+		Result += FString::Printf(TEXT("    Smoothing Type: %s\n"), *AnimToolsBlendSpace_FormatSmoothingType(Interp.InterpolationType));
 		if (Interp.InterpolationTime > 0.f)
 		{
 			Result += FString::Printf(TEXT("    Smoothing Time: %.3f\n"), Interp.InterpolationTime);
@@ -161,7 +161,7 @@ namespace
 		return Result;
 	}
 
-	FString FormatNotifyTriggerMode(ENotifyTriggerMode::Type Mode)
+	FString AnimToolsBlendSpace_FormatNotifyTriggerMode(ENotifyTriggerMode::Type Mode)
 	{
 		switch (Mode)
 		{
@@ -172,10 +172,10 @@ namespace
 		}
 	}
 
-	FString FormatBlendSpaceInspection(const UBlendSpace* BlendSpace, bool bFullDetail)
+	FString AnimToolsBlendSpace_FormatBlendSpaceInspection(const UBlendSpace* BlendSpace, bool bFullDetail)
 	{
-		FString TypeStr = DetectBlendSpaceType(BlendSpace);
-		bool bIs1D = Is1DBlendSpace(BlendSpace);
+		FString TypeStr = AnimToolsBlendSpace_DetectBlendSpaceType(BlendSpace);
+		bool bIs1D = AnimToolsBlendSpace_Is1DBlendSpace(BlendSpace);
 
 		FString Result;
 		Result += FString::Printf(TEXT("=== %s: %s ===\n"), *TypeStr, *BlendSpace->GetName());
@@ -187,11 +187,11 @@ namespace
 		// Axes (with per-axis interpolation inline)
 		Result += TEXT("\n--- Axes ---\n");
 		const FBlendParameter& Param0 = BlendSpace->GetBlendParameter(0);
-		Result += FormatBlendParameter(Param0, BlendSpace->InterpolationParam[0], 0);
+		Result += AnimToolsBlendSpace_FormatBlendParameter(Param0, BlendSpace->InterpolationParam[0], 0);
 		if (!bIs1D)
 		{
 			const FBlendParameter& Param1 = BlendSpace->GetBlendParameter(1);
-			Result += FormatBlendParameter(Param1, BlendSpace->InterpolationParam[1], 1);
+			Result += AnimToolsBlendSpace_FormatBlendParameter(Param1, BlendSpace->InterpolationParam[1], 1);
 		}
 
 		// Samples
@@ -225,7 +225,7 @@ namespace
 
 		// Settings
 		Result += TEXT("\n--- Settings ---\n");
-		Result += FString::Printf(TEXT("  Notify Trigger Mode: %s\n"), *FormatNotifyTriggerMode(BlendSpace->NotifyTriggerMode));
+		Result += FString::Printf(TEXT("  Notify Trigger Mode: %s\n"), *AnimToolsBlendSpace_FormatNotifyTriggerMode(BlendSpace->NotifyTriggerMode));
 		Result += FString::Printf(TEXT("  Loop: %s\n"), BlendSpace->bLoop ? TEXT("Yes") : TEXT("No"));
 		Result += FString::Printf(TEXT("  Allow Marker Sync: %s\n"), BlendSpace->bAllowMarkerBasedSync ? TEXT("Yes") : TEXT("No"));
 		Result += FString::Printf(TEXT("  Use Grid Interpolation: %s\n"), BlendSpace->bInterpolateUsingGrid ? TEXT("Yes") : TEXT("No"));
@@ -284,9 +284,9 @@ namespace
 		return Result;
 	}
 
-	bool ValidateAxisIndex(const UBlendSpace* BlendSpace, int32 AxisIndex, FString& OutError)
+	bool AnimToolsBlendSpace_ValidateAxisIndex(const UBlendSpace* BlendSpace, int32 AxisIndex, FString& OutError)
 	{
-		bool bIs1D = Is1DBlendSpace(BlendSpace);
+		bool bIs1D = AnimToolsBlendSpace_Is1DBlendSpace(BlendSpace);
 		int32 MaxAxis = bIs1D ? 0 : 1;
 		if (AxisIndex < 0 || AxisIndex > MaxAxis)
 		{
@@ -321,10 +321,10 @@ namespace
 }
 
 // ============================================================================
-// claireon.blendspace_create
+// blendspace_create
 // ============================================================================
 
-FString ClaireonAnimTool_BlendSpaceCreate::GetName() const { return TEXT("claireon.blendspace_create"); }
+FString ClaireonAnimTool_BlendSpaceCreate::GetOperation() const { return TEXT("create"); }
 
 FString ClaireonAnimTool_BlendSpaceCreate::GetDescription() const
 {
@@ -365,7 +365,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceCreate::Execute(const TSha
 
 	// Validate target path
 	FString CanonPath, AssetName, Error;
-	if (!ValidateNewBlendSpacePath(Path, CanonPath, AssetName, Error))
+	if (!AnimToolsBlendSpace_ValidateNewBlendSpacePath(Path, CanonPath, AssetName, Error))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -475,7 +475,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceCreate::Execute(const TSha
 	FAssetRegistryModule::AssetCreated(NewBlendSpace);
 
 	FString SaveError;
-	if (!SaveBlendSpaceAsset(NewBlendSpace, SaveError))
+	if (!AnimToolsBlendSpace_SaveBlendSpaceAsset(NewBlendSpace, SaveError))
 	{
 		return MakeErrorResult(SaveError);
 	}
@@ -484,7 +484,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceCreate::Execute(const TSha
 	Result->SetStringField(TEXT("path"), NewBlendSpace->GetPathName());
 	Result->SetStringField(TEXT("asset_type"), TypeStr);
 	Result->SetStringField(TEXT("skeleton"), Skeleton->GetPathName());
-	Result->SetStringField(TEXT("notify_trigger_mode"), FormatNotifyTriggerMode(NewBlendSpace->NotifyTriggerMode));
+	Result->SetStringField(TEXT("notify_trigger_mode"), AnimToolsBlendSpace_FormatNotifyTriggerMode(NewBlendSpace->NotifyTriggerMode));
 
 	int32 MetaCount = NewBlendSpace->GetMetaData().Num();
 	if (MetaCount > 0)
@@ -496,10 +496,10 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceCreate::Execute(const TSha
 }
 
 // ============================================================================
-// claireon.blendspace_duplicate
+// blendspace_duplicate
 // ============================================================================
 
-FString ClaireonAnimTool_BlendSpaceDuplicate::GetName() const { return TEXT("claireon.blendspace_duplicate"); }
+FString ClaireonAnimTool_BlendSpaceDuplicate::GetOperation() const { return TEXT("duplicate"); }
 
 FString ClaireonAnimTool_BlendSpaceDuplicate::GetDescription() const
 {
@@ -562,12 +562,12 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceDuplicate::Execute(const T
 
 	// Save the new package
 	FString SaveError;
-	if (!SaveBlendSpaceAsset(NewAsset, SaveError))
+	if (!AnimToolsBlendSpace_SaveBlendSpaceAsset(NewAsset, SaveError))
 	{
 		return MakeErrorResult(SaveError);
 	}
 
-	FString TypeStr = DetectBlendSpaceType(SourceBS);
+	FString TypeStr = AnimToolsBlendSpace_DetectBlendSpaceType(SourceBS);
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("source_path"), SourceBS->GetPathName());
@@ -578,10 +578,10 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceDuplicate::Execute(const T
 }
 
 // ============================================================================
-// claireon.blendspace_delete
+// blendspace_delete
 // ============================================================================
 
-FString ClaireonAnimTool_BlendSpaceDelete::GetName() const { return TEXT("claireon.blendspace_delete"); }
+FString ClaireonAnimTool_BlendSpaceDelete::GetOperation() const { return TEXT("delete"); }
 
 FString ClaireonAnimTool_BlendSpaceDelete::GetDescription() const
 {
@@ -618,7 +618,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceDelete::Execute(const TSha
 		return MakeErrorResult(LoadError);
 	}
 
-	FString TypeStr = DetectBlendSpaceType(BlendSpace);
+	FString TypeStr = AnimToolsBlendSpace_DetectBlendSpaceType(BlendSpace);
 	FString AssetName = BlendSpace->GetName();
 	FString FullPath = BlendSpace->GetPathName();
 
@@ -647,10 +647,10 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceDelete::Execute(const TSha
 }
 
 // ============================================================================
-// claireon.blendspace_inspect
+// blendspace_inspect
 // ============================================================================
 
-FString ClaireonAnimTool_BlendSpaceInspect::GetName() const { return TEXT("claireon.blendspace_inspect"); }
+FString ClaireonAnimTool_BlendSpaceInspect::GetOperation() const { return TEXT("inspect"); }
 
 FString ClaireonAnimTool_BlendSpaceInspect::GetDescription() const
 {
@@ -685,22 +685,22 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceInspect::Execute(const TSh
 		return MakeErrorResult(LoadError);
 	}
 
-	FString InspectText = FormatBlendSpaceInspection(BlendSpace, bFullDetail);
+	FString InspectText = AnimToolsBlendSpace_FormatBlendSpaceInspection(BlendSpace, bFullDetail);
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("asset_path"), BlendSpace->GetPathName());
-	Result->SetStringField(TEXT("asset_type"), DetectBlendSpaceType(BlendSpace));
+	Result->SetStringField(TEXT("asset_type"), AnimToolsBlendSpace_DetectBlendSpaceType(BlendSpace));
 	Result->SetStringField(TEXT("inspection"), InspectText);
 	Result->SetNumberField(TEXT("sample_count"), BlendSpace->GetBlendSamples().Num());
 
-	return MakeSuccessResult(Result, FString::Printf(TEXT("Inspected %s '%s'"), *DetectBlendSpaceType(BlendSpace), *BlendSpace->GetName()));
+	return MakeSuccessResult(Result, FString::Printf(TEXT("Inspected %s '%s'"), *AnimToolsBlendSpace_DetectBlendSpaceType(BlendSpace), *BlendSpace->GetName()));
 }
 
 // ============================================================================
-// claireon.blendspace_add_sample
+// blendspace_add_sample
 // ============================================================================
 
-FString ClaireonAnimTool_BlendSpaceAddSample::GetName() const { return TEXT("claireon.blendspace_add_sample"); }
+FString ClaireonAnimTool_BlendSpaceAddSample::GetOperation() const { return TEXT("add_sample"); }
 
 FString ClaireonAnimTool_BlendSpaceAddSample::GetDescription() const
 {
@@ -769,7 +769,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceAddSample::Execute(const T
 	}
 
 	// For 1D blend spaces, Y must be 0
-	bool bIs1D = Is1DBlendSpace(BlendSpace);
+	bool bIs1D = AnimToolsBlendSpace_Is1DBlendSpace(BlendSpace);
 	FVector SampleValue(X, bIs1D ? 0.0 : Y, 0.0);
 
 	FScopedTransaction Transaction(NSLOCTEXT("Claireon", "BSAddSample", "MCP: Add BlendSpace Sample"));
@@ -816,10 +816,10 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceAddSample::Execute(const T
 }
 
 // ============================================================================
-// claireon.blendspace_remove_sample
+// blendspace_remove_sample
 // ============================================================================
 
-FString ClaireonAnimTool_BlendSpaceRemoveSample::GetName() const { return TEXT("claireon.blendspace_remove_sample"); }
+FString ClaireonAnimTool_BlendSpaceRemoveSample::GetOperation() const { return TEXT("remove_sample"); }
 
 FString ClaireonAnimTool_BlendSpaceRemoveSample::GetDescription() const
 {
@@ -892,10 +892,10 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceRemoveSample::Execute(cons
 }
 
 // ============================================================================
-// claireon.blendspace_edit_sample
+// blendspace_edit_sample
 // ============================================================================
 
-FString ClaireonAnimTool_BlendSpaceEditSample::GetName() const { return TEXT("claireon.blendspace_edit_sample"); }
+FString ClaireonAnimTool_BlendSpaceEditSample::GetOperation() const { return TEXT("edit_sample"); }
 
 FString ClaireonAnimTool_BlendSpaceEditSample::GetDescription() const
 {
@@ -954,7 +954,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceEditSample::Execute(const 
 		return MakeErrorResult(TEXT("At least one of x, y, animation, or rate_scale must be provided"));
 	}
 
-	bool bIs1D = Is1DBlendSpace(BlendSpace);
+	bool bIs1D = AnimToolsBlendSpace_Is1DBlendSpace(BlendSpace);
 	TArray<FString> Changes;
 
 	FScopedTransaction Transaction(NSLOCTEXT("Claireon", "BSEditSample", "MCP: Edit BlendSpace Sample"));
@@ -1059,10 +1059,10 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceEditSample::Execute(const 
 }
 
 // ============================================================================
-// claireon.blendspace_set_axis
+// blendspace_set_axis
 // ============================================================================
 
-FString ClaireonAnimTool_BlendSpaceSetAxis::GetName() const { return TEXT("claireon.blendspace_set_axis"); }
+FString ClaireonAnimTool_BlendSpaceSetAxis::GetOperation() const { return TEXT("set_axis"); }
 
 FString ClaireonAnimTool_BlendSpaceSetAxis::GetDescription() const
 {
@@ -1107,7 +1107,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceSetAxis::Execute(const TSh
 
 	// Validate axis
 	FString AxisError;
-	if (!ValidateAxisIndex(BlendSpace, AxisIndex, AxisError))
+	if (!AnimToolsBlendSpace_ValidateAxisIndex(BlendSpace, AxisIndex, AxisError))
 	{
 		return MakeErrorResult(AxisError);
 	}
@@ -1192,10 +1192,10 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceSetAxis::Execute(const TSh
 }
 
 // ============================================================================
-// claireon.blendspace_set_interpolation
+// blendspace_set_interpolation
 // ============================================================================
 
-FString ClaireonAnimTool_BlendSpaceSetInterpolation::GetName() const { return TEXT("claireon.blendspace_set_interpolation"); }
+FString ClaireonAnimTool_BlendSpaceSetInterpolation::GetOperation() const { return TEXT("set_interpolation"); }
 
 FString ClaireonAnimTool_BlendSpaceSetInterpolation::GetDescription() const
 {
@@ -1305,10 +1305,10 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceSetInterpolation::Execute(
 }
 
 // ============================================================================
-// claireon.blendspace_set_property
+// blendspace_set_property
 // ============================================================================
 
-FString ClaireonAnimTool_BlendSpaceSetProperty::GetName() const { return TEXT("claireon.blendspace_set_property"); }
+FString ClaireonAnimTool_BlendSpaceSetProperty::GetOperation() const { return TEXT("set_property"); }
 
 FString ClaireonAnimTool_BlendSpaceSetProperty::GetDescription() const
 {
@@ -1531,10 +1531,10 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceSetProperty::Execute(const
 }
 
 // ============================================================================
-// claireon.blendspace_add_metadata
+// blendspace_add_metadata
 // ============================================================================
 
-FString ClaireonAnimTool_BlendSpaceAddMetadata::GetName() const { return TEXT("claireon.blendspace_add_metadata"); }
+FString ClaireonAnimTool_BlendSpaceAddMetadata::GetOperation() const { return TEXT("add_metadata"); }
 
 FString ClaireonAnimTool_BlendSpaceAddMetadata::GetDescription() const
 {
@@ -1610,10 +1610,10 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceAddMetadata::Execute(const
 }
 
 // ============================================================================
-// claireon.blendspace_remove_metadata
+// blendspace_remove_metadata
 // ============================================================================
 
-FString ClaireonAnimTool_BlendSpaceRemoveMetadata::GetName() const { return TEXT("claireon.blendspace_remove_metadata"); }
+FString ClaireonAnimTool_BlendSpaceRemoveMetadata::GetOperation() const { return TEXT("remove_metadata"); }
 
 FString ClaireonAnimTool_BlendSpaceRemoveMetadata::GetDescription() const
 {

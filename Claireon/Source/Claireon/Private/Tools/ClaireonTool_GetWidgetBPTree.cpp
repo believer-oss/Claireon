@@ -9,14 +9,12 @@
 #include "Serialization/JsonWriter.h"
 #include "Serialization/JsonSerializer.h"
 
-FString ClaireonTool_GetWidgetBPTree::GetName() const
-{
-	return TEXT("claireon.widgetbp_get_tree");
-}
+FString ClaireonTool_GetWidgetBPTree::GetCategory() const { return TEXT("widgetbp"); }
+FString ClaireonTool_GetWidgetBPTree::GetOperation() const { return TEXT("get_tree"); }
 
 FString ClaireonTool_GetWidgetBPTree::GetDescription() const
 {
-	return TEXT("Inspect a Widget Blueprint's widget tree hierarchy by asset_path. Stateless / read-only / non-session: never mutates and requires no open session. Returns widget names, classes, slot properties, and optionally full widget properties, bindings, MVVM bindings, and animations. Use the in-session claireon.widgetbp_get_state when an editing session is already open.");
+	return TEXT("Inspect a Widget Blueprint's widget tree hierarchy by asset_path. Stateless / read-only / non-session: never mutates and requires no open session. Returns widget names, classes, slot properties, and optionally full widget properties, bindings, MVVM bindings, and animations. Use the in-session widgetbp_get_state when an editing session is already open.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_GetWidgetBPTree::GetInputSchema() const

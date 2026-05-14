@@ -14,14 +14,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_GetWidgetDetails::GetName() const
-{
-    return TEXT("claireon.widgetbp_get_widget_details");
-}
+FString ClaireonWidgetBPTool_GetWidgetDetails::GetOperation() const { return TEXT("get_widget_details"); }
 
 FString ClaireonWidgetBPTool_GetWidgetDetails::GetDescription() const
 {
-    return TEXT("Return detailed information about a single widget in the open Widget Blueprint editing session: class, parent, children, editable properties, slot properties. Requires open session_id from claireon.widgetbp_open. Read-only. Pair with claireon.widgetbp_get_state to discover names, then drill in here for property detail.");
+    return TEXT("Return detailed information about a single widget in the open Widget Blueprint editing session: class, parent, children, editable properties, slot properties. Requires open session_id from widgetbp_open. Read-only. Pair with widgetbp_get_state to discover names, then drill in here for property detail.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_GetWidgetDetails::GetInputSchema() const

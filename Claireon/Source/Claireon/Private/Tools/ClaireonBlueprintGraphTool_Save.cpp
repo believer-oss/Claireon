@@ -97,10 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_Save::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_save");
-}
+FString ClaireonBlueprintGraphTool_Save::GetOperation() const { return TEXT("graph_save"); }
 
 TArray<FString> ClaireonBlueprintGraphTool_Save::GetSearchKeywords() const
 {
@@ -188,21 +185,21 @@ FString ClaireonBlueprintGraphTool_Save::GetFullDescription() const
 {
     return TEXT(
         "Compiles and saves the Blueprint package to disk for the current "
-        "session. As part of the per-node incremental cycle, "
-        "call claireon.blueprint_graph_save every 1-3 add_node operations rather "
+        "session. Per the per-node cycle in the per-tool authoring guidance, "
+        "call blueprint_graph_save every 1-3 add_node operations rather "
         "than batching dozens of edits before a single save. This protects "
         "against editor crashes (which would otherwise drop in-session edits) "
         "and ensures git diffs stay scoped per logical authoring unit. The "
         "tool internally calls FKismetEditorUtilities::CompileBlueprint and "
         "then UEditorAssetLibrary::SaveLoadedAsset on the package; if compile "
         "errors are present, save still proceeds (the asset is saved with "
-        "compile errors recorded). Use claireon.blueprint_graph_compile to "
+        "compile errors recorded). Use blueprint_graph_compile to "
         "fetch the structured error list.");
 }
 
 FString ClaireonBlueprintGraphTool_Save::GetExampleUsage() const
 {
-    return TEXT("claireon.blueprint_graph_save session_id=\"...\"");
+    return TEXT("blueprint_graph_save session_id=\"...\"");
 }
 
 #undef LOCTEXT_NAMESPACE

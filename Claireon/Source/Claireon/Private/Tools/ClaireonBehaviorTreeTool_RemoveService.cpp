@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBehaviorTreeTool_RemoveService::GetName() const
-{
-	return TEXT("claireon.behaviortree_remove_service");
-}
+FString ClaireonBehaviorTreeTool_RemoveService::GetOperation() const { return TEXT("remove_service"); }
 
 FString ClaireonBehaviorTreeTool_RemoveService::GetDescription() const
 {

@@ -10,10 +10,8 @@
 #include "GameFramework/Actor.h"
 #include "Components/ActorComponent.h"
 
-FString ClaireonTool_StateTreeRuntimeSendEvent::GetName() const
-{
-	return TEXT("claireon.statetree_runtime_send_event");
-}
+FString ClaireonTool_StateTreeRuntimeSendEvent::GetCategory() const { return TEXT("statetree"); }
+FString ClaireonTool_StateTreeRuntimeSendEvent::GetOperation() const { return TEXT("runtime_send_event"); }
 
 FString ClaireonTool_StateTreeRuntimeSendEvent::GetDescription() const
 {

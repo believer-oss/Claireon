@@ -13,10 +13,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_SetTrackProperty::GetName() const
-{
-	return TEXT("claireon.level_sequence_set_track_property");
-}
+FString ClaireonLevelSequenceTool_SetTrackProperty::GetOperation() const { return TEXT("sequence_set_track_property"); }
 
 FString ClaireonLevelSequenceTool_SetTrackProperty::GetDescription() const
 {

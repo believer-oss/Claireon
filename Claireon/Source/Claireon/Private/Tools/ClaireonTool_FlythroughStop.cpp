@@ -4,10 +4,8 @@
 #include "Tools/ClaireonTool_FlythroughStop.h"
 #include "Tools/ClaireonFlythroughManager.h"
 
-FString ClaireonTool_FlythroughStop::GetName() const
-{
-	return TEXT("claireon.pie_flythrough_stop");
-}
+FString ClaireonTool_FlythroughStop::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_FlythroughStop::GetOperation() const { return TEXT("flythrough_stop"); }
 
 FString ClaireonTool_FlythroughStop::GetDescription() const
 {

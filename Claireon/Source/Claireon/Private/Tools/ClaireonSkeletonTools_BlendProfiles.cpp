@@ -44,15 +44,15 @@ namespace
 }
 
 // ============================================================================
-// claireon.skeleton_add_blend_profile
+// skeleton_add_blend_profile
 // ============================================================================
 
-FString ClaireonSkeletonTool_AddBlendProfile::GetName() const { return TEXT("claireon.skeleton_add_blend_profile"); }
+FString ClaireonSkeletonTool_AddBlendProfile::GetOperation() const { return TEXT("add_blend_profile"); }
 
 FString ClaireonSkeletonTool_AddBlendProfile::GetDescription() const
 {
 	return TEXT("Add a new blend profile with the given name and mode. Mode must be 'TimeFactor' or 'WeightFactor'. "
-				"For blend masks use claireon.skeleton_add_blend_mask instead.");
+				"For blend masks use skeleton_add_blend_mask instead.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_AddBlendProfile::GetInputSchema() const
@@ -85,7 +85,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_AddBlendProfile::Execute(const T
 	}
 	if (Mode == EBlendProfileMode::BlendMask)
 	{
-		return MakeErrorResult(TEXT("Use claireon.skeleton_add_blend_mask to create a blend mask (mode=BlendMask not allowed here)."));
+		return MakeErrorResult(TEXT("Use skeleton_add_blend_mask to create a blend mask (mode=BlendMask not allowed here)."));
 	}
 
 	const FName ProfileName(*ProfileNameStr);
@@ -111,15 +111,15 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_AddBlendProfile::Execute(const T
 }
 
 // ============================================================================
-// claireon.skeleton_remove_blend_profile
+// skeleton_remove_blend_profile
 // ============================================================================
 
-FString ClaireonSkeletonTool_RemoveBlendProfile::GetName() const { return TEXT("claireon.skeleton_remove_blend_profile"); }
+FString ClaireonSkeletonTool_RemoveBlendProfile::GetOperation() const { return TEXT("remove_blend_profile"); }
 
 FString ClaireonSkeletonTool_RemoveBlendProfile::GetDescription() const
 {
 	return TEXT("Remove a blend profile (TimeFactor / WeightFactor). For blend masks removal is disallowed — "
-				"see claireon.skeleton_remove_blend_mask for the engine-bug explanation.");
+				"see skeleton_remove_blend_mask for the engine-bug explanation.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RemoveBlendProfile::GetInputSchema() const
@@ -157,14 +157,14 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RemoveBlendProfile::Execute(cons
 }
 
 // ============================================================================
-// claireon.skeleton_rename_blend_profile
+// skeleton_rename_blend_profile
 // ============================================================================
 
-FString ClaireonSkeletonTool_RenameBlendProfile::GetName() const { return TEXT("claireon.skeleton_rename_blend_profile"); }
+FString ClaireonSkeletonTool_RenameBlendProfile::GetOperation() const { return TEXT("rename_blend_profile"); }
 
 FString ClaireonSkeletonTool_RenameBlendProfile::GetDescription() const
 {
-	return TEXT("Rename a blend profile (TimeFactor / WeightFactor). For blend masks use claireon.skeleton_rename_blend_mask.");
+	return TEXT("Rename a blend profile (TimeFactor / WeightFactor). For blend masks use skeleton_rename_blend_mask.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RenameBlendProfile::GetInputSchema() const
@@ -211,10 +211,10 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RenameBlendProfile::Execute(cons
 }
 
 // ============================================================================
-// claireon.skeleton_set_blend_profile_mode
+// skeleton_set_blend_profile_mode
 // ============================================================================
 
-FString ClaireonSkeletonTool_SetBlendProfileMode::GetName() const { return TEXT("claireon.skeleton_set_blend_profile_mode"); }
+FString ClaireonSkeletonTool_SetBlendProfileMode::GetOperation() const { return TEXT("set_blend_profile_mode"); }
 
 FString ClaireonSkeletonTool_SetBlendProfileMode::GetDescription() const
 {
@@ -271,10 +271,10 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_SetBlendProfileMode::Execute(con
 }
 
 // ============================================================================
-// claireon.skeleton_set_blend_profile_bone_scale
+// skeleton_set_blend_profile_bone_scale
 // ============================================================================
 
-FString ClaireonSkeletonTool_SetBlendProfileBoneScale::GetName() const { return TEXT("claireon.skeleton_set_blend_profile_bone_scale"); }
+FString ClaireonSkeletonTool_SetBlendProfileBoneScale::GetOperation() const { return TEXT("set_blend_profile_bone_scale"); }
 
 FString ClaireonSkeletonTool_SetBlendProfileBoneScale::GetDescription() const
 {
@@ -338,10 +338,10 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_SetBlendProfileBoneScale::Execut
 }
 
 // ============================================================================
-// claireon.skeleton_clear_blend_profile_bone_scale
+// skeleton_clear_blend_profile_bone_scale
 // ============================================================================
 
-FString ClaireonSkeletonTool_ClearBlendProfileBoneScale::GetName() const { return TEXT("claireon.skeleton_clear_blend_profile_bone_scale"); }
+FString ClaireonSkeletonTool_ClearBlendProfileBoneScale::GetOperation() const { return TEXT("clear_blend_profile_bone_scale"); }
 
 FString ClaireonSkeletonTool_ClearBlendProfileBoneScale::GetDescription() const
 {
@@ -404,7 +404,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_ClearBlendProfileBoneScale::Exec
 
 // --- add_blend_mask ---------------------------------------------------------
 
-FString ClaireonSkeletonTool_AddBlendMask::GetName() const { return TEXT("claireon.skeleton_add_blend_mask"); }
+FString ClaireonSkeletonTool_AddBlendMask::GetOperation() const { return TEXT("add_blend_mask"); }
 
 FString ClaireonSkeletonTool_AddBlendMask::GetDescription() const
 {
@@ -455,7 +455,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_AddBlendMask::Execute(const TSha
 
 // --- rename_blend_mask ------------------------------------------------------
 
-FString ClaireonSkeletonTool_RenameBlendMask::GetName() const { return TEXT("claireon.skeleton_rename_blend_mask"); }
+FString ClaireonSkeletonTool_RenameBlendMask::GetOperation() const { return TEXT("rename_blend_mask"); }
 
 FString ClaireonSkeletonTool_RenameBlendMask::GetDescription() const
 {
@@ -507,7 +507,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RenameBlendMask::Execute(const T
 
 // --- set_blend_mask_bone_weight ---------------------------------------------
 
-FString ClaireonSkeletonTool_SetBlendMaskBoneWeight::GetName() const { return TEXT("claireon.skeleton_set_blend_mask_bone_weight"); }
+FString ClaireonSkeletonTool_SetBlendMaskBoneWeight::GetOperation() const { return TEXT("set_blend_mask_bone_weight"); }
 
 FString ClaireonSkeletonTool_SetBlendMaskBoneWeight::GetDescription() const
 {
@@ -572,7 +572,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_SetBlendMaskBoneWeight::Execute(
 
 // --- clear_blend_mask_bone_weight -------------------------------------------
 
-FString ClaireonSkeletonTool_ClearBlendMaskBoneWeight::GetName() const { return TEXT("claireon.skeleton_clear_blend_mask_bone_weight"); }
+FString ClaireonSkeletonTool_ClearBlendMaskBoneWeight::GetOperation() const { return TEXT("clear_blend_mask_bone_weight"); }
 
 FString ClaireonSkeletonTool_ClearBlendMaskBoneWeight::GetDescription() const
 {
@@ -628,16 +628,16 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_ClearBlendMaskBoneWeight::Execut
 }
 
 // ============================================================================
-// claireon.skeleton_remove_blend_mask — INTENTIONAL STUB (engine bug)
+// skeleton_remove_blend_mask — INTENTIONAL STUB (engine bug)
 // ============================================================================
 
-FString ClaireonSkeletonTool_RemoveBlendMask::GetName() const { return TEXT("claireon.skeleton_remove_blend_mask"); }
+FString ClaireonSkeletonTool_RemoveBlendMask::GetOperation() const { return TEXT("remove_blend_mask"); }
 
 FString ClaireonSkeletonTool_RemoveBlendMask::GetDescription() const
 {
-	return TEXT("DISABLED. Removing a blend mask corrupts ALL other blend masks on the skeleton due to an engine bug. "
-				"This tool is registered only to document that and will always return an error. "
-				"If deletion is truly required, delete the mask manually in Persona, "
+	return TEXT("DISABLED. Removing a blend mask corrupts ALL other blend masks on the skeleton due to an engine bug "
+				"in the current engine release. This tool is registered only to document that and will always return an error. "
+				"If deletion is truly required, delete the mask manually in Persona while the team tracks the engine fix, "
 				"and verify every remaining mask is still intact before saving.");
 }
 
@@ -655,9 +655,9 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RemoveBlendMask::Execute(const T
 	Arguments->TryGetStringField(TEXT("mask_name"), MaskNameStr);
 
 	return MakeErrorResult(FString::Printf(
-		TEXT("DISABLED: claireon.skeleton_remove_blend_mask is an intentional no-op. Removing a blend mask "
-			 "('%s' requested) corrupts all other blend masks on the skeleton due to an engine bug. "
-			 "Asset is unchanged. If deletion is truly required, do it manually in Persona, "
-			 "and verify all remaining masks survive before saving."),
+		TEXT("DISABLED: skeleton_remove_blend_mask is an intentional no-op. Removing a blend mask "
+			 "('%s' requested) corrupts all other blend masks on the skeleton due to an engine bug in the current engine release. "
+			 "Asset is unchanged. If deletion is truly required, do it manually in Persona while the team tracks the "
+			 "engine fix, and verify all remaining masks survive before saving."),
 		MaskNameStr.IsEmpty() ? TEXT("<none>") : *MaskNameStr));
 }

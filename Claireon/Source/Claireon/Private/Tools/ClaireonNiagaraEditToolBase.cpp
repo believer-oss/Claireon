@@ -12,7 +12,7 @@ using FToolResult = IClaireonTool::FToolResult;
 // Static members
 // ============================================================================
 
-const TCHAR* ClaireonNiagaraEditToolBase::NiagaraSessionToolName = TEXT("claireon.niagara_edit");
+const TCHAR* ClaireonNiagaraEditToolBase::NiagaraSessionToolName = TEXT("niagara_edit");
 TMap<FString, FNiagaraEditToolData> ClaireonNiagaraEditToolBase::ToolData;
 bool ClaireonNiagaraEditToolBase::bDelegateRegistered = false;
 

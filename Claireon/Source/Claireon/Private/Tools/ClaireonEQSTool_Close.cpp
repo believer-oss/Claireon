@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonEQSTool_Close::GetName() const
-{
-	return TEXT("claireon.eqs_close");
-}
+FString ClaireonEQSTool_Close::GetOperation() const { return TEXT("close"); }
 
 FString ClaireonEQSTool_Close::GetDescription() const
 {

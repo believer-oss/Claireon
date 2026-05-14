@@ -14,14 +14,14 @@
 #include "Misc/Paths.h"
 
 // ============================================================================
-// claireon.anim_open
+// anim_open
 // ============================================================================
 
-FString ClaireonAnimTool_Open::GetName() const { return TEXT("claireon.anim_open"); }
+FString ClaireonAnimTool_Open::GetOperation() const { return TEXT("open"); }
 
 FString ClaireonAnimTool_Open::GetDescription() const
 {
-	return TEXT("Open an animation asset (AnimSequence, AnimMontage, or AnimComposite) for editing and return a session_id used by all subsequent claireon.anim_* operations. The session reuses an existing one for the same asset path; close it with claireon.anim_close to release the lock.");
+	return TEXT("Open an animation asset (AnimSequence, AnimMontage, or AnimComposite) for editing and return a session_id used by all subsequent anim_* operations. The session reuses an existing one for the same asset path; close it with anim_close to release the lock.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_Open::GetInputSchema() const
@@ -93,14 +93,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_Open::Execute(const TSharedPtr<FJson
 }
 
 // ============================================================================
-// claireon.anim_close
+// anim_close
 // ============================================================================
 
-FString ClaireonAnimTool_Close::GetName() const { return TEXT("claireon.anim_close"); }
+FString ClaireonAnimTool_Close::GetOperation() const { return TEXT("close"); }
 
 FString ClaireonAnimTool_Close::GetDescription() const
 {
-	return TEXT("Close an animation editing session and release the asset lock. Pass save=true to persist outstanding changes before closing. Common pitfall: closing without save discards in-flight edits silently; call claireon.anim_save first when changes must survive.");
+	return TEXT("Close an animation editing session and release the asset lock. Pass save=true to persist outstanding changes before closing. Common pitfall: closing without save discards in-flight edits silently; call anim_save first when changes must survive.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_Close::GetInputSchema() const
@@ -143,14 +143,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_Close::Execute(const TSharedPtr<FJso
 }
 
 // ============================================================================
-// claireon.anim_get_state
+// anim_get_state
 // ============================================================================
 
-FString ClaireonAnimTool_GetState::GetName() const { return TEXT("claireon.anim_get_state"); }
+FString ClaireonAnimTool_GetState::GetOperation() const { return TEXT("get_state"); }
 
 FString ClaireonAnimTool_GetState::GetDescription() const
 {
-	return TEXT("Get the current state of an animation editing session. Requires open session_id from claireon.anim_open. Read-only. Returns notifies, curves, sections, segments, slots, and asset metadata so the caller can re-anchor after a series of edits without round-tripping the asset.");
+	return TEXT("Get the current state of an animation editing session. Requires open session_id from anim_open. Read-only. Returns notifies, curves, sections, segments, slots, and asset metadata so the caller can re-anchor after a series of edits without round-tripping the asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_GetState::GetInputSchema() const
@@ -197,14 +197,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_GetState::Execute(const TSharedPtr<F
 }
 
 // ============================================================================
-// claireon.anim_save
+// anim_save
 // ============================================================================
 
-FString ClaireonAnimTool_Save::GetName() const { return TEXT("claireon.anim_save"); }
+FString ClaireonAnimTool_Save::GetOperation() const { return TEXT("save"); }
 
 FString ClaireonAnimTool_Save::GetDescription() const
 {
-	return TEXT("Save the animation asset to disk in the open editing session. Requires open session_id from claireon.anim_open. Immediate-write to the package; the session itself remains open for further edits. Common pitfall: save does not validate the asset; chain claireon.asset_validate when stricter checks are required.");
+	return TEXT("Save the animation asset to disk in the open editing session. Requires open session_id from anim_open. Immediate-write to the package; the session itself remains open for further edits. Common pitfall: save does not validate the asset; chain asset_validate when stricter checks are required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_Save::GetInputSchema() const

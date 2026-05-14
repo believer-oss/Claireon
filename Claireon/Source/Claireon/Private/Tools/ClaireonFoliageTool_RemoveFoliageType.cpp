@@ -8,10 +8,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonFoliageTool_RemoveFoliageType::GetName() const
-{
-	return TEXT("claireon.foliage_remove_foliage_type");
-}
+FString ClaireonFoliageTool_RemoveFoliageType::GetOperation() const { return TEXT("remove_foliage_type"); }
 
 FString ClaireonFoliageTool_RemoveFoliageType::GetDescription() const
 {

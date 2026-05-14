@@ -10,10 +10,8 @@
 #include "TraceServices/Model/Threads.h"
 #include "TraceServices/Containers/Tables.h"
 
-FString ClaireonTool_TraceGetTopScopes::GetName() const
-{
-	return TEXT("claireon.trace_get_top_scopes");
-}
+FString ClaireonTool_TraceGetTopScopes::GetCategory() const { return TEXT("trace"); }
+FString ClaireonTool_TraceGetTopScopes::GetOperation() const { return TEXT("get_top_scopes"); }
 
 FString ClaireonTool_TraceGetTopScopes::GetDescription() const
 {
@@ -181,6 +179,7 @@ IClaireonTool::FToolResult ClaireonTool_TraceGetTopScopes::Execute(const TShared
 			TraceServices::FCreateAggreationParams Params;
 			Params.IntervalStart = IntervalStart;
 			Params.IntervalEnd = IntervalEnd;
+			Params.IncludeGpu = bIncludeGpu;
 
 			if (!ThreadFilter.IsEmpty())
 			{

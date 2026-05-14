@@ -25,16 +25,15 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonTool_SequenceActorPlace::GetName() const
-{
-	return TEXT("claireon.level_sequence_actor_place");
-}
+FString ClaireonTool_SequenceActorPlace::GetCategory() const { return TEXT("level"); }
+FString ClaireonTool_SequenceActorPlace::GetOperation() const { return TEXT("sequence_actor_place"); }
 
 FString ClaireonTool_SequenceActorPlace::GetDescription() const
 {
-	return TEXT("Place an ALevelSequenceActor into the currently-open map and bind it to a "
-				"Level Sequence asset. Applies PlaybackSettings via reflection, marks the map "
-				"package dirty, and optionally saves the map (opt-in via save_map).");
+	return TEXT("Place an ALevelSequenceActor (or AReplicatedLevelSequenceActor) into the "
+				"currently-open map and bind it to a Level Sequence asset. Applies "
+				"PlaybackSettings via reflection, marks the map package dirty, and optionally "
+				"saves the map (opt-in via save_map).");
 }
 
 FString ClaireonTool_SequenceActorPlace::GetFullDescription() const
@@ -49,13 +48,15 @@ FString ClaireonTool_SequenceActorPlace::GetFullDescription() const
 		"map is saved after placement.\n"
 		"\n"
 		"Required: map_path, sequence_asset, actor_label.\n"
-		"Optional: playback_settings (object), save_map (default false).\n"
+		"Optional: replicated (default false), playback_settings (object), save_map\n"
+		"(default false).\n"
 		"\n"
 		"Example input:\n"
 		"  {\n"
 		"    \"map_path\": \"/Game/Maps/Cinematic/Intro.Intro\",\n"
 		"    \"sequence_asset\": \"/Game/Cinematics/LS_Intro.LS_Intro\",\n"
 		"    \"actor_label\": \"LSA_Intro\",\n"
+		"    \"replicated\": false,\n"
 		"    \"playback_settings\": { \"bAutoPlay\": true, \"PlayRate\": 1.0 },\n"
 		"    \"save_map\": false\n"
 		"  }\n"
@@ -97,6 +98,13 @@ TSharedPtr<FJsonObject> ClaireonTool_SequenceActorPlace::GetInputSchema() const
 		TEXT("Actor label to apply via AActor::SetActorLabel."));
 	Properties->SetObjectField(TEXT("actor_label"), ActorLabelProp);
 
+	TSharedPtr<FJsonObject> ReplicatedProp = MakeShared<FJsonObject>();
+	ReplicatedProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	ReplicatedProp->SetStringField(TEXT("description"),
+		TEXT("If true, spawn AReplicatedLevelSequenceActor; otherwise ALevelSequenceActor. "
+			 "Default: false."));
+	Properties->SetObjectField(TEXT("replicated"), ReplicatedProp);
+
 	TSharedPtr<FJsonObject> PlaybackSettingsProp = MakeShared<FJsonObject>();
 	PlaybackSettingsProp->SetStringField(TEXT("type"), TEXT("object"));
 	PlaybackSettingsProp->SetStringField(TEXT("description"),
@@ -108,7 +116,7 @@ TSharedPtr<FJsonObject> ClaireonTool_SequenceActorPlace::GetInputSchema() const
 	SaveMapProp->SetStringField(TEXT("type"), TEXT("boolean"));
 	SaveMapProp->SetStringField(TEXT("description"),
 		TEXT("If true, call UEditorLoadingAndSavingUtils::SaveMap after placement. Default: false. "
-			 "Without this, the map package is marked dirty (parity with claireon.place_actor)."));
+			 "Without this, the map package is marked dirty (parity with place_actor)."));
 	Properties->SetObjectField(TEXT("save_map"), SaveMapProp);
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
@@ -175,6 +183,9 @@ FToolResult ClaireonTool_SequenceActorPlace::Execute(const TSharedPtr<FJsonObjec
 		return MakeErrorResult(TEXT("Missing required field: actor_label"));
 	}
 
+	bool bReplicated = false;
+	Arguments->TryGetBoolField(TEXT("replicated"), bReplicated);
+
 	bool bSaveMap = false;
 	Arguments->TryGetBoolField(TEXT("save_map"), bSaveMap);
 
@@ -236,7 +247,9 @@ FToolResult ClaireonTool_SequenceActorPlace::Execute(const TSharedPtr<FJsonObjec
 	}
 
 	// --- Resolve spawn class ------------------------------------------------------
-	UClass* ActorClass = ALevelSequenceActor::StaticClass();
+	UClass* ActorClass = bReplicated
+		? AReplicatedLevelSequenceActor::StaticClass()
+		: ALevelSequenceActor::StaticClass();
 
 	// --- Spawn + configure under a scoped transaction ----------------------------
 	UEditorActorSubsystem* EditorActorSubsystem = GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
@@ -341,7 +354,7 @@ FToolResult ClaireonTool_SequenceActorPlace::Execute(const TSharedPtr<FJsonObjec
 			}
 		}
 
-		// --- MarkPackageDirty (parity with claireon.place_actor) ------------------
+		// --- MarkPackageDirty (parity with place_actor) ------------------
 		if (UPackage* OuterPackage = CurrentWorld->GetOutermost())
 		{
 			OuterPackage->MarkPackageDirty();

@@ -8,7 +8,8 @@
 #include "ScopedTransaction.h"
 #include "Dom/JsonObject.h"
 
-FString ClaireonTool_ChooserSetResultType::GetName() const { return TEXT("claireon.chooser_set_result_type"); }
+FString ClaireonTool_ChooserSetResultType::GetCategory() const { return TEXT("chooser"); }
+FString ClaireonTool_ChooserSetResultType::GetOperation() const { return TEXT("set_result_type"); }
 
 FString ClaireonTool_ChooserSetResultType::GetDescription() const
 {

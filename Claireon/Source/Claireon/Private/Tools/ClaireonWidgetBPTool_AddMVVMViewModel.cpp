@@ -16,14 +16,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_AddMVVMViewModel::GetName() const
-{
-    return TEXT("claireon.widgetbp_add_mvvm_viewmodel");
-}
+FString ClaireonWidgetBPTool_AddMVVMViewModel::GetOperation() const { return TEXT("add_mvvm_viewmodel"); }
 
 FString ClaireonWidgetBPTool_AddMVVMViewModel::GetDescription() const
 {
-    return TEXT("Add an MVVM ViewModel context to the Widget Blueprint in the open editing session. Requires open session_id from claireon.widgetbp_open. Transactional. The viewmodel_class must be a UMVVMViewModelBase subclass. Once added, bindings sourced from this viewmodel resolve via claireon.widgetbp_add_mvvm_binding.");
+    return TEXT("Add an MVVM ViewModel context to the Widget Blueprint in the open editing session. Requires open session_id from widgetbp_open. Transactional. The viewmodel_class must be a UMVVMViewModelBase subclass. Once added, bindings sourced from this viewmodel resolve via widgetbp_add_mvvm_binding.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_AddMVVMViewModel::GetInputSchema() const

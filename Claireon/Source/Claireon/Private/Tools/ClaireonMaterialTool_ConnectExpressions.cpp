@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonMaterialTool_ConnectExpressions::GetName() const
-{
-	return TEXT("claireon.material_connect_expressions");
-}
+FString ClaireonMaterialTool_ConnectExpressions::GetOperation() const { return TEXT("connect_expressions"); }
 
 FString ClaireonMaterialTool_ConnectExpressions::GetDescription() const
 {

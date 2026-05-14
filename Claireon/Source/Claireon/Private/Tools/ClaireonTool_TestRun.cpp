@@ -16,10 +16,8 @@
 #include "Misc/FilterCollection.h"
 #include "Misc/Paths.h"
 
-FString ClaireonTool_TestRun::GetName() const
-{
-	return TEXT("claireon.test_run");
-}
+FString ClaireonTool_TestRun::GetCategory() const { return TEXT("test"); }
+FString ClaireonTool_TestRun::GetOperation() const { return TEXT("run"); }
 
 FString ClaireonTool_TestRun::GetDescription() const
 {

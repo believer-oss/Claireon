@@ -14,10 +14,8 @@
 #include "Dom/JsonValue.h"
 #include "Misc/Paths.h"
 
-FString ClaireonTool_AnimInspect::GetName() const
-{
-	return TEXT("claireon.anim_inspect");
-}
+FString ClaireonTool_AnimInspect::GetCategory() const { return TEXT("anim"); }
+FString ClaireonTool_AnimInspect::GetOperation() const { return TEXT("inspect"); }
 
 FString ClaireonTool_AnimInspect::GetDescription() const
 {

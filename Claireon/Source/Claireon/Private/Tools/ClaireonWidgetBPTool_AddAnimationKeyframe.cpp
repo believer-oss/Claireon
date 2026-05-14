@@ -18,10 +18,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_AddAnimationKeyframe::GetName() const
-{
-    return TEXT("claireon.widgetbp_add_animation_keyframe");
-}
+FString ClaireonWidgetBPTool_AddAnimationKeyframe::GetOperation() const { return TEXT("add_animation_keyframe"); }
 
 FString ClaireonWidgetBPTool_AddAnimationKeyframe::GetDescription() const
 {

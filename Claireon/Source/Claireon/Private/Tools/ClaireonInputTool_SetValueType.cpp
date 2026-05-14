@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonInputTool_SetValueType::GetName() const
-{
-	return TEXT("claireon.input_set_value_type");
-}
+FString ClaireonInputTool_SetValueType::GetOperation() const { return TEXT("set_value_type"); }
 
 FString ClaireonInputTool_SetValueType::GetDescription() const
 {

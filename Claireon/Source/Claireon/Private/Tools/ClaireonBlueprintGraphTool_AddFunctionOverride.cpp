@@ -97,14 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_AddFunctionOverride::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_add_function_override");
-}
+FString ClaireonBlueprintGraphTool_AddFunctionOverride::GetOperation() const { return TEXT("graph_add_function_override"); }
 
 FString ClaireonBlueprintGraphTool_AddFunctionOverride::GetDescription() const
 {
-    return TEXT("Create a function-override graph for a BlueprintNativeEvent or BlueprintImplementableEvent in the open editing session. Requires open session_id from claireon.blueprint_graph_open (or pass asset_path to auto-open). Transactional. The override target must be declared on the parent class or a UFUNCTION-marked interface.");
+    return TEXT("Create a function-override graph for a BlueprintNativeEvent or BlueprintImplementableEvent in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. The override target must be declared on the parent class or a UFUNCTION-marked interface.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddFunctionOverride::GetInputSchema() const

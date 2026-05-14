@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonFoliageTool_AddFoliageType::GetName() const
-{
-	return TEXT("claireon.foliage_add_foliage_type");
-}
+FString ClaireonFoliageTool_AddFoliageType::GetOperation() const { return TEXT("add_foliage_type"); }
 
 FString ClaireonFoliageTool_AddFoliageType::GetDescription() const
 {

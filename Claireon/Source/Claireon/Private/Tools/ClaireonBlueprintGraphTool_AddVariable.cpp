@@ -97,10 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_AddVariable::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_add_variable");
-}
+FString ClaireonBlueprintGraphTool_AddVariable::GetOperation() const { return TEXT("graph_add_variable"); }
 
 TArray<FString> ClaireonBlueprintGraphTool_AddVariable::GetSearchKeywords() const
 {
@@ -109,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_AddVariable::GetSearchKeywords() cons
 
 FString ClaireonBlueprintGraphTool_AddVariable::GetDescription() const
 {
-    return TEXT("Add a member variable to the Blueprint in the open editing session. Requires open session_id from claireon.blueprint_graph_open. Transactional. Pass variable_type for primitives/classes/structs, or variable_type_spec (base + signature_function/subtype) for delegate/multicast/soft-class/soft-object/instanced-struct. Common pitfall: plain delegate names in variable_type silently fail.");
+    return TEXT("Add a member variable to the Blueprint in the open editing session. Requires open session_id from blueprint_graph_open. Transactional. Pass variable_type for primitives/classes/structs, or variable_type_spec (base + signature_function/subtype) for delegate/multicast/soft-class/soft-object/instanced-struct. Common pitfall: plain delegate names in variable_type silently fail.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddVariable::GetInputSchema() const
@@ -228,12 +225,28 @@ FToolResult ClaireonBlueprintGraphTool_AddVariable::Execute(const TSharedPtr<FJs
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Add Blueprint Variable")));
 	Blueprint->Modify();
 
-	// Create new variable
+	// Default flags mirror the editor's "+" button: CPF_Edit (visible in Class Defaults)
+	// + CPF_BlueprintVisible (visible in the My Blueprint Variables panel and Get/Set
+	// available in graphs). Callers can override via instance_editable / blueprint_read_only
+	// / clear_flags.
 	FBPVariableDescription NewVar;
 	NewVar.VarName = FName(*VarName);
 	NewVar.VarType = PinType;
 	NewVar.FriendlyName = VarName;
 	NewVar.Category = FText::FromString(TEXT("Default"));
+	NewVar.PropertyFlags = CPF_Edit | CPF_BlueprintVisible;
+
+	bool bInstanceEditable = true;
+	if (Params->TryGetBoolField(TEXT("instance_editable"), bInstanceEditable) && !bInstanceEditable)
+	{
+		NewVar.PropertyFlags |= CPF_DisableEditOnInstance;
+	}
+
+	bool bBlueprintReadOnly = false;
+	if (Params->TryGetBoolField(TEXT("blueprint_read_only"), bBlueprintReadOnly) && bBlueprintReadOnly)
+	{
+		NewVar.PropertyFlags |= CPF_BlueprintReadOnly;
+	}
 
 	// Set default value if provided
 	if (!DefaultValue.IsEmpty())
@@ -292,9 +305,9 @@ FString ClaireonBlueprintGraphTool_AddVariable::GetFullDescription() const
         "instanced-struct variables). When both are provided, variable_type_spec "
         "takes precedence -- this is a deliberate ergonomics choice so you can "
         "pass a fallback type alongside the structured form during refactors. "
-        "Plain delegate names in variable_type silently fail; always use "
-        "variable_type_spec with base='Delegate' for delegate variables. "
-        "Setting replication='RepNotify' "
+        "Note: plain delegate names in "
+        "variable_type silently fail; always use variable_type_spec with "
+        "base='Delegate' for delegate variables. Setting replication='RepNotify' "
         "auto-creates the OnRep_<Name> handler function graph; pass "
         "rep_notify_func to customize the function name.");
 }
@@ -302,14 +315,14 @@ FString ClaireonBlueprintGraphTool_AddVariable::GetFullDescription() const
 FString ClaireonBlueprintGraphTool_AddVariable::GetExampleUsage() const
 {
     return TEXT(
-        "claireon.blueprint_graph_add_variable session_id=\"...\" "
+        "blueprint_graph_add_variable session_id=\"...\" "
         "name=\"MaxHealth\" variable_type=\"float\" replication=\"RepNotify\"");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddVariable::GetParameterTooltips() const
 {
     TSharedPtr<FJsonObject> T = MakeShared<FJsonObject>();
-    T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by claireon.blueprint_graph_open or _create."));
+    T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by blueprint_graph_open or _create."));
     T->SetStringField(TEXT("name"), TEXT("Variable name (also member name on the generated CDO)."));
     T->SetStringField(TEXT("variable_type"), TEXT("Simple type form: primitive name, class path, or struct path. Use variable_type_spec for delegate/soft-class/soft-object/instanced-struct types."));
     T->SetStringField(TEXT("variable_type_spec"), TEXT("Structured type form: { base: 'Delegate'|'MulticastDelegate'|'SoftClass'|'SoftObject'|'InstancedStruct', signature_function: '...', subtype: '...' }. Takes precedence over variable_type when both are provided."));

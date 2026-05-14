@@ -10,10 +10,8 @@
 #include "TraceServices/Model/Threads.h"
 #include "TraceServices/Containers/Timelines.h"
 
-FString ClaireonTool_TraceGetScopeDetails::GetName() const
-{
-	return TEXT("claireon.trace_get_scope_details");
-}
+FString ClaireonTool_TraceGetScopeDetails::GetCategory() const { return TEXT("trace"); }
+FString ClaireonTool_TraceGetScopeDetails::GetOperation() const { return TEXT("get_scope_details"); }
 
 FString ClaireonTool_TraceGetScopeDetails::GetDescription() const
 {
@@ -133,6 +131,7 @@ IClaireonTool::FToolResult ClaireonTool_TraceGetScopeDetails::Execute(const TSha
 			TraceServices::FCreateAggreationParams Params;
 			Params.IntervalStart = IntervalStart;
 			Params.IntervalEnd = IntervalEnd;
+			Params.IncludeGpu = false;
 			Params.CpuThreadFilter = [](uint32) -> bool { return true; };
 
 			TraceServices::ITable<TraceServices::FTimingProfilerAggregatedStats>* AggTable = TimingProvider->CreateAggregation(Params);

@@ -15,10 +15,8 @@
 #include "GameFramework/Actor.h"
 #include "GameFramework/Pawn.h"
 
-FString ClaireonTool_PIEAITargetInfo::GetName() const
-{
-	return TEXT("claireon.pie_get_ai_target_info");
-}
+FString ClaireonTool_PIEAITargetInfo::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_PIEAITargetInfo::GetOperation() const { return TEXT("get_ai_target_info"); }
 
 FString ClaireonTool_PIEAITargetInfo::GetDescription() const
 {

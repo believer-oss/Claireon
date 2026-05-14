@@ -14,14 +14,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_ModifyTransition::GetName() const
-{
-	return TEXT("claireon.statetree_modify_transition");
-}
+FString ClaireonStateTreeTool_ModifyTransition::GetOperation() const { return TEXT("modify_transition"); }
 
 FString ClaireonStateTreeTool_ModifyTransition::GetDescription() const
 {
-	return TEXT("Modify an existing transition's trigger, target, priority, enabled state, or event tag in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Omitted fields are left unchanged. Common pitfall: target_state_id must reference an existing state on the same tree.");
+	return TEXT("Modify an existing transition's trigger, target, priority, enabled state, or event tag in the open State Tree editing session. Requires open session_id from statetree_open. Transactional. Omitted fields are left unchanged. Common pitfall: target_state_id must reference an existing state on the same tree.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_ModifyTransition::GetInputSchema() const

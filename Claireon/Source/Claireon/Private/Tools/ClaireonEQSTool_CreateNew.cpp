@@ -16,10 +16,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonEQSTool_CreateNew::GetName() const
-{
-	return TEXT("claireon.eqs_create_new");
-}
+FString ClaireonEQSTool_CreateNew::GetOperation() const { return TEXT("create_new"); }
 
 FString ClaireonEQSTool_CreateNew::GetDescription() const
 {

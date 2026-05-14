@@ -78,10 +78,8 @@ namespace
 	}
 } // anonymous namespace
 
-FString ClaireonTool_EQSInspect::GetName() const
-{
-	return TEXT("claireon.eqs_inspect");
-}
+FString ClaireonTool_EQSInspect::GetCategory() const { return TEXT("eqs"); }
+FString ClaireonTool_EQSInspect::GetOperation() const { return TEXT("inspect"); }
 
 FString ClaireonTool_EQSInspect::GetDescription() const
 {

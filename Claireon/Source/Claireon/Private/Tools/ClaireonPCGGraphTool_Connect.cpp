@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonPCGGraphTool_Connect::GetName() const
-{
-	return TEXT("claireon.pcg_connect");
-}
+FString ClaireonPCGGraphTool_Connect::GetOperation() const { return TEXT("connect"); }
 
 FString ClaireonPCGGraphTool_Connect::GetDescription() const
 {

@@ -8,10 +8,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonMaterialInstanceTool_SetScalarParameter::GetName() const
-{
-	return TEXT("claireon.material_instance_set_scalar_parameter");
-}
+FString ClaireonMaterialInstanceTool_SetScalarParameter::GetOperation() const { return TEXT("instance_set_scalar_parameter"); }
 
 FString ClaireonMaterialInstanceTool_SetScalarParameter::GetDescription() const
 {

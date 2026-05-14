@@ -6,10 +6,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonPCGGraphTool_GetState::GetName() const
-{
-	return TEXT("claireon.pcg_get_state");
-}
+FString ClaireonPCGGraphTool_GetState::GetOperation() const { return TEXT("get_state"); }
 
 FString ClaireonPCGGraphTool_GetState::GetDescription() const
 {

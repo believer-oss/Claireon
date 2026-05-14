@@ -32,10 +32,7 @@ using FToolResult = IClaireonTool::FToolResult;
 // ClaireonAnimGraphTool_Create
 // ============================================================================
 
-FString ClaireonAnimGraphTool_Create::GetName() const
-{
-	return TEXT("claireon.animgraph_create");
-}
+FString ClaireonAnimGraphTool_Create::GetOperation() const { return TEXT("create"); }
 
 FString ClaireonAnimGraphTool_Create::GetDescription() const
 {
@@ -242,10 +239,7 @@ FToolResult ClaireonAnimGraphTool_Create::Execute(const TSharedPtr<FJsonObject>&
 // ClaireonAnimGraphTool_CreateChild
 // ============================================================================
 
-FString ClaireonAnimGraphTool_CreateChild::GetName() const
-{
-	return TEXT("claireon.animgraph_create_child");
-}
+FString ClaireonAnimGraphTool_CreateChild::GetOperation() const { return TEXT("create_child"); }
 
 FString ClaireonAnimGraphTool_CreateChild::GetDescription() const
 {
@@ -397,10 +391,7 @@ FToolResult ClaireonAnimGraphTool_CreateChild::Execute(const TSharedPtr<FJsonObj
 // ClaireonAnimGraphTool_Duplicate
 // ============================================================================
 
-FString ClaireonAnimGraphTool_Duplicate::GetName() const
-{
-	return TEXT("claireon.animgraph_duplicate");
-}
+FString ClaireonAnimGraphTool_Duplicate::GetOperation() const { return TEXT("duplicate"); }
 
 FString ClaireonAnimGraphTool_Duplicate::GetDescription() const
 {

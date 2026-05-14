@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLandscapeTool_PunchHole::GetName() const
-{
-	return TEXT("claireon.landscape_punch_hole");
-}
+FString ClaireonLandscapeTool_PunchHole::GetOperation() const { return TEXT("punch_hole"); }
 
 FString ClaireonLandscapeTool_PunchHole::GetDescription() const
 {

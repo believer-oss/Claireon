@@ -12,14 +12,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_SetTransitionProperty::GetName() const
-{
-	return TEXT("claireon.statetree_set_transition_property");
-}
+FString ClaireonStateTreeTool_SetTransitionProperty::GetOperation() const { return TEXT("set_transition_property"); }
 
 FString ClaireonStateTreeTool_SetTransitionProperty::GetDescription() const
 {
-	return TEXT("Set a struct field on an FStateTreeTransition (e.g. bConsumeEventOnSelect, bDelayTransition, DelayDuration, DelayRandomVariance, Priority, bTransitionEnabled, RequiredEvent.Tag, RequiredEvent.PayloadStruct). Bare bConsumeEventOnSelect is normalized to RequiredEvent.bConsumeEventOnSelect. Refuses Target/State/StateLink (those belong to claireon.statetree_modify_transition). Requires open session_id from claireon.statetree_open. Transactional.");
+	return TEXT("Set a struct field on an FStateTreeTransition (e.g. bConsumeEventOnSelect, bDelayTransition, DelayDuration, DelayRandomVariance, Priority, bTransitionEnabled, RequiredEvent.Tag, RequiredEvent.PayloadStruct). Bare bConsumeEventOnSelect is normalized to RequiredEvent.bConsumeEventOnSelect. Refuses Target/State/StateLink (those belong to statetree_modify_transition). Requires open session_id from statetree_open. Transactional.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_SetTransitionProperty::GetInputSchema() const

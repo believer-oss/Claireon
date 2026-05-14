@@ -12,14 +12,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_RemoveEvaluator::GetName() const
-{
-	return TEXT("claireon.statetree_remove_evaluator");
-}
+FString ClaireonStateTreeTool_RemoveEvaluator::GetOperation() const { return TEXT("remove_evaluator"); }
 
 FString ClaireonStateTreeTool_RemoveEvaluator::GetDescription() const
 {
-	return TEXT("Remove a global evaluator from the State Tree in the open editing session. Requires open session_id from claireon.statetree_open. Transactional. Common pitfall: any bindings sourced from the evaluator's outputs are dropped; downstream consumers may revert to their authored defaults.");
+	return TEXT("Remove a global evaluator from the State Tree in the open editing session. Requires open session_id from statetree_open. Transactional. Common pitfall: any bindings sourced from the evaluator's outputs are dropped; downstream consumers may revert to their authored defaults.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_RemoveEvaluator::GetInputSchema() const

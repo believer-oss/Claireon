@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBlackboardTool_SetParent::GetName() const
-{
-	return TEXT("claireon.blackboard_set_parent");
-}
+FString ClaireonBlackboardTool_SetParent::GetOperation() const { return TEXT("set_parent"); }
 
 FString ClaireonBlackboardTool_SetParent::GetDescription() const
 {

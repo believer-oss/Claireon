@@ -1,7 +1,7 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Functional tests for claireon.apply_spec_help (P2). Validates that the
+// Functional tests for apply_spec_help (P2). Validates that the
 // tool loads ApplySpecCatalog.json correctly, returns the expected entry
 // shape, every cataloged tool name is also a registered Claireon tool, and
 // the loader reads from disk freshly each invocation.
@@ -161,15 +161,15 @@ UNTEST_UNIT(Claireon, ApplySpecHelp, SpecEntryTypesMatchMarkdownTable)
 		ByTool.Add(ToolName, MoveTemp(Types));
 	}
 
-	// Cross-reference the canonical apply_spec table for each tool.
+	// Cross-reference the per-tool apply_spec table.
 	{
-		const TArray<FString>* Got = ByTool.Find(TEXT("claireon.behaviortree_edit"));
+		const TArray<FString>* Got = ByTool.Find(TEXT("behaviortree_edit"));
 		UNTEST_ASSERT_TRUE(Got != nullptr);
 		UNTEST_ASSERT_EQ(Got->Num(), 1);
 		UNTEST_EXPECT_EQ((*Got)[0], FString(TEXT("nodes[]")));
 	}
 	{
-		const TArray<FString>* Got = ByTool.Find(TEXT("claireon.blueprint_edit_graph"));
+		const TArray<FString>* Got = ByTool.Find(TEXT("blueprint_edit_graph"));
 		UNTEST_ASSERT_TRUE(Got != nullptr);
 		UNTEST_ASSERT_EQ(Got->Num(), 3);
 		UNTEST_EXPECT_TRUE(Got->Contains(TEXT("nodes[]")));
@@ -177,7 +177,7 @@ UNTEST_UNIT(Claireon, ApplySpecHelp, SpecEntryTypesMatchMarkdownTable)
 		UNTEST_EXPECT_TRUE(Got->Contains(TEXT("variables[]")));
 	}
 	{
-		const TArray<FString>* Got = ByTool.Find(TEXT("claireon.statetree_edit"));
+		const TArray<FString>* Got = ByTool.Find(TEXT("statetree_edit"));
 		UNTEST_ASSERT_TRUE(Got != nullptr);
 		UNTEST_ASSERT_TRUE(Got->Num() >= 1);
 		UNTEST_EXPECT_TRUE(Got->Contains(TEXT("states[]")));

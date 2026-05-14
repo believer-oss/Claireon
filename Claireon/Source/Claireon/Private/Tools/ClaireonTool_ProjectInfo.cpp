@@ -13,10 +13,8 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
-FString ClaireonTool_ProjectInfo::GetName() const
-{
-	return TEXT("claireon.project_info");
-}
+FString ClaireonTool_ProjectInfo::GetCategory() const { return TEXT("project"); }
+FString ClaireonTool_ProjectInfo::GetOperation() const { return TEXT("info"); }
 
 FString ClaireonTool_ProjectInfo::GetDescription() const
 {

@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonInputTool_RemoveActionModifier::GetName() const
-{
-	return TEXT("claireon.input_remove_action_modifier");
-}
+FString ClaireonInputTool_RemoveActionModifier::GetOperation() const { return TEXT("remove_action_modifier"); }
 
 FString ClaireonInputTool_RemoveActionModifier::GetDescription() const
 {

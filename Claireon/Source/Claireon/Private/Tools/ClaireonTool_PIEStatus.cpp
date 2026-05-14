@@ -11,10 +11,8 @@
 #include "Engine/World.h"
 #include "GameFramework/GameModeBase.h"
 
-FString ClaireonTool_PIEStatus::GetName() const
-{
-	return TEXT("claireon.pie_status");
-}
+FString ClaireonTool_PIEStatus::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_PIEStatus::GetOperation() const { return TEXT("status"); }
 
 FString ClaireonTool_PIEStatus::GetDescription() const
 {

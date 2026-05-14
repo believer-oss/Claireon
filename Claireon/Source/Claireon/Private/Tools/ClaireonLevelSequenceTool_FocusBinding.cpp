@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_FocusBinding::GetName() const
-{
-	return TEXT("claireon.level_sequence_focus_binding");
-}
+FString ClaireonLevelSequenceTool_FocusBinding::GetOperation() const { return TEXT("sequence_focus_binding"); }
 
 FString ClaireonLevelSequenceTool_FocusBinding::GetDescription() const
 {

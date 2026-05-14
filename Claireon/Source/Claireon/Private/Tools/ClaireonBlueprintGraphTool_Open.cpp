@@ -97,10 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_Open::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_open");
-}
+FString ClaireonBlueprintGraphTool_Open::GetOperation() const { return TEXT("graph_open"); }
 
 TArray<FString> ClaireonBlueprintGraphTool_Open::GetSearchKeywords() const
 {
@@ -109,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_Open::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_Open::GetDescription() const
 {
-    return TEXT("Opens a Blueprint for editing in a session-based per-node cycle. Creates or reuses a session keyed by MCP client and returns session_id plus initial graph state. Most-common pitfall: forgetting to close the session via claireon.blueprint_graph_close, which leaks in-session edit state and prevents other clients from acquiring the same Blueprint.");
+    return TEXT("Opens a Blueprint for editing in a session-based per-node cycle. Creates or reuses a session keyed by MCP client and returns session_id plus initial graph state. Most-common pitfall: forgetting to close the session via blueprint_graph_close, which leaks in-session edit state and prevents other clients from acquiring the same Blueprint.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Open::GetInputSchema() const
@@ -179,7 +176,7 @@ FToolResult ClaireonBlueprintGraphTool_Open::Execute(const TSharedPtr<FJsonObjec
 	// Open session via the manager (handles locking)
 	double TimeoutMinutes = 60.0;
 	Params->TryGetNumberField(TEXT("timeout_minutes"), TimeoutMinutes);
-	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(AssetPath, TEXT("claireon.blueprint_edit_graph"), TimeoutMinutes);
+	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(AssetPath, TEXT("blueprint_edit_graph"), TimeoutMinutes);
 
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{
@@ -237,13 +234,13 @@ FString ClaireonBlueprintGraphTool_Open::GetFullDescription() const
         "close. The session holds the cursor that auto_connect_from_cursor on "
         "subsequent add_node calls keys off of, so prefer reopening the same "
         "session rather than running multiple parallel sessions. Sessions are "
-        "released automatically when the editor exits or when claireon.blueprint_graph_close "
+        "released automatically when the editor exits or when blueprint_graph_close "
         "is called explicitly.");
 }
 
 FString ClaireonBlueprintGraphTool_Open::GetExampleUsage() const
 {
-    return TEXT("claireon.blueprint_graph_open asset_path=\"/Game/BP/MyActor\"");
+    return TEXT("blueprint_graph_open asset_path=\"/Game/BP/MyActor\"");
 }
 
 #undef LOCTEXT_NAMESPACE

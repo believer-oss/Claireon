@@ -13,14 +13,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_RemoveMVVMViewModel::GetName() const
-{
-    return TEXT("claireon.widgetbp_remove_mvvm_viewmodel");
-}
+FString ClaireonWidgetBPTool_RemoveMVVMViewModel::GetOperation() const { return TEXT("remove_mvvm_viewmodel"); }
 
 FString ClaireonWidgetBPTool_RemoveMVVMViewModel::GetDescription() const
 {
-    return TEXT("Remove an MVVM ViewModel context from the Widget Blueprint in the open editing session. Requires open session_id from claireon.widgetbp_open. Transactional. Common pitfall: bindings sourced from this viewmodel become unresolvable; remove or retarget them first via claireon.widgetbp_list_mvvm_bindings.");
+    return TEXT("Remove an MVVM ViewModel context from the Widget Blueprint in the open editing session. Requires open session_id from widgetbp_open. Transactional. Common pitfall: bindings sourced from this viewmodel become unresolvable; remove or retarget them first via widgetbp_list_mvvm_bindings.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_RemoveMVVMViewModel::GetInputSchema() const

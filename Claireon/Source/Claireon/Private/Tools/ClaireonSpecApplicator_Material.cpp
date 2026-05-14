@@ -22,7 +22,7 @@
 namespace
 {
 	/** Accepted parameter_type strings for parameter_defaults entries. */
-	static bool IsAcceptedParameterType(const FString& Type)
+	static bool SpecApplicatorMaterial_IsAcceptedParameterType(const FString& Type)
 	{
 		return Type.Equals(TEXT("scalar"), ESearchCase::IgnoreCase)
 			|| Type.Equals(TEXT("vector"), ESearchCase::IgnoreCase)
@@ -32,7 +32,7 @@ namespace
 	}
 
 	/** Parse a shading-model string (e.g. "MSM_DefaultLit") via UEnum. */
-	static bool ParseShadingModel(const FString& Str, EMaterialShadingModel& OutModel)
+	static bool SpecApplicatorMaterial_ParseShadingModel(const FString& Str, EMaterialShadingModel& OutModel)
 	{
 		const UEnum* Enum = StaticEnum<EMaterialShadingModel>();
 		if (!Enum)
@@ -49,7 +49,7 @@ namespace
 	}
 
 	/** Parse a blend-mode string (e.g. "BLEND_Opaque") via UEnum. */
-	static bool ParseBlendMode(const FString& Str, EBlendMode& OutMode)
+	static bool SpecApplicatorMaterial_ParseBlendMode(const FString& Str, EBlendMode& OutMode)
 	{
 		const UEnum* Enum = StaticEnum<EBlendMode>();
 		if (!Enum)
@@ -66,7 +66,7 @@ namespace
 	}
 
 	/** Accepted attribute strings for attribute_connections (legacy + Substrate). */
-	static bool IsKnownAttribute(const FString& Attr)
+	static bool SpecApplicatorMaterial_IsKnownAttribute(const FString& Attr)
 	{
 		static const TSet<FString> Known = {
 			TEXT("BaseColor"), TEXT("Metallic"), TEXT("Specular"), TEXT("Roughness"),
@@ -171,7 +171,7 @@ bool FClaireonSpecApplicator_Material::ValidateToolSpec(const TSharedPtr<FJsonOb
 				OutErrors.Add(FString::Printf(TEXT("attribute_connections[%d]: missing 'attribute'"), i));
 				continue;
 			}
-			if (!IsKnownAttribute(Attribute))
+			if (!SpecApplicatorMaterial_IsKnownAttribute(Attribute))
 			{
 				OutErrors.Add(FString::Printf(TEXT("attribute_connections[%d]: unknown attribute '%s'"), i, *Attribute));
 				continue;
@@ -199,7 +199,7 @@ bool FClaireonSpecApplicator_Material::ValidateToolSpec(const TSharedPtr<FJsonOb
 				OutErrors.Add(FString::Printf(TEXT("parameter_defaults[%d]: missing 'parameter_name'"), i));
 			if (!Obj->TryGetStringField(TEXT("parameter_type"), ParamType) || ParamType.IsEmpty())
 				OutErrors.Add(FString::Printf(TEXT("parameter_defaults[%d]: missing 'parameter_type'"), i));
-			else if (!IsAcceptedParameterType(ParamType))
+			else if (!SpecApplicatorMaterial_IsAcceptedParameterType(ParamType))
 				OutErrors.Add(FString::Printf(TEXT("parameter_defaults[%d]: unknown parameter_type '%s' (expected scalar|vector|texture|static_switch|static_component_mask)"), i, *ParamType));
 
 			if (!Obj->HasField(TEXT("value")))
@@ -213,7 +213,7 @@ bool FClaireonSpecApplicator_Material::ValidateToolSpec(const TSharedPtr<FJsonOb
 	{
 		bHasContent = true;
 		EMaterialShadingModel SM;
-		if (!ParseShadingModel(ShadingModelStr, SM))
+		if (!SpecApplicatorMaterial_ParseShadingModel(ShadingModelStr, SM))
 		{
 			OutErrors.Add(FString::Printf(TEXT("shading_model: '%s' is not a valid EMaterialShadingModel"), *ShadingModelStr));
 		}
@@ -225,7 +225,7 @@ bool FClaireonSpecApplicator_Material::ValidateToolSpec(const TSharedPtr<FJsonOb
 	{
 		bHasContent = true;
 		EBlendMode BM;
-		if (!ParseBlendMode(BlendModeStr, BM))
+		if (!SpecApplicatorMaterial_ParseBlendMode(BlendModeStr, BM))
 		{
 			OutErrors.Add(FString::Printf(TEXT("blend_mode: '%s' is not a valid EBlendMode"), *BlendModeStr));
 		}
@@ -258,7 +258,7 @@ bool FClaireonSpecApplicator_Material::OpenOrCreateAsset(const FString& AssetPat
 
 	const FString MaterialPathName = LoadedMaterial->GetPathName();
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
-		MaterialPathName, TEXT("claireon.material_edit"));
+		MaterialPathName, TEXT("material_edit"));
 
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{
@@ -624,7 +624,7 @@ bool FClaireonSpecApplicator_Material::ApplyPass2_WireRelationships(const FStrin
 	if (Spec->TryGetStringField(TEXT("shading_model"), ShadingModelStr) && !ShadingModelStr.IsEmpty())
 	{
 		EMaterialShadingModel SM;
-		if (!ParseShadingModel(ShadingModelStr, SM))
+		if (!SpecApplicatorMaterial_ParseShadingModel(ShadingModelStr, SM))
 		{
 			AddError(FString::Printf(TEXT("shading_model: invalid value '%s'"), *ShadingModelStr));
 		}
@@ -643,7 +643,7 @@ bool FClaireonSpecApplicator_Material::ApplyPass2_WireRelationships(const FStrin
 	if (Spec->TryGetStringField(TEXT("blend_mode"), BlendModeStr) && !BlendModeStr.IsEmpty())
 	{
 		EBlendMode BM;
-		if (!ParseBlendMode(BlendModeStr, BM))
+		if (!SpecApplicatorMaterial_ParseBlendMode(BlendModeStr, BM))
 		{
 			AddError(FString::Printf(TEXT("blend_mode: invalid value '%s'"), *BlendModeStr));
 		}

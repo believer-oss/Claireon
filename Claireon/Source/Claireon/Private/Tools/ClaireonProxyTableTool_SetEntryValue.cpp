@@ -10,7 +10,8 @@
 #include "Dom/JsonObject.h"
 #include "StructUtils/InstancedStruct.h"
 
-FString ClaireonTool_ProxyTableSetEntryValue::GetName() const { return TEXT("claireon.proxytable_set_entry_value"); }
+FString ClaireonTool_ProxyTableSetEntryValue::GetCategory() const { return TEXT("proxytable"); }
+FString ClaireonTool_ProxyTableSetEntryValue::GetOperation() const { return TEXT("set_entry_value"); }
 
 FString ClaireonTool_ProxyTableSetEntryValue::GetDescription() const
 {

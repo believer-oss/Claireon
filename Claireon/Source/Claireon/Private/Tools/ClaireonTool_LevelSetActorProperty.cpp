@@ -15,10 +15,8 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonTool_LevelSetActorProperty::GetName() const
-{
-	return TEXT("claireon.level_set_actor_property");
-}
+FString ClaireonTool_LevelSetActorProperty::GetCategory() const { return TEXT("level"); }
+FString ClaireonTool_LevelSetActorProperty::GetOperation() const { return TEXT("set_actor_property"); }
 
 FString ClaireonTool_LevelSetActorProperty::GetDescription() const
 {

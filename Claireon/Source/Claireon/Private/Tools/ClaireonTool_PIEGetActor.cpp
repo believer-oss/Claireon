@@ -12,10 +12,8 @@
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 
-FString ClaireonTool_PIEGetActor::GetName() const
-{
-	return TEXT("claireon.pie_get_actor");
-}
+FString ClaireonTool_PIEGetActor::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_PIEGetActor::GetOperation() const { return TEXT("get_actor"); }
 
 FString ClaireonTool_PIEGetActor::GetDescription() const
 {

@@ -11,10 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonMaterialInstanceTool_SetParent::GetName() const
-{
-	return TEXT("claireon.material_instance_set_parent");
-}
+FString ClaireonMaterialInstanceTool_SetParent::GetOperation() const { return TEXT("instance_set_parent"); }
 
 FString ClaireonMaterialInstanceTool_SetParent::GetDescription() const
 {

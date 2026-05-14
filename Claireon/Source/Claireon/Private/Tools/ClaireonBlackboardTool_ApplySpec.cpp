@@ -7,10 +7,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonBlackboardTool_ApplySpec::GetName() const
-{
-	return TEXT("claireon.blackboard_apply_spec");
-}
+FString ClaireonBlackboardTool_ApplySpec::GetOperation() const { return TEXT("apply_spec"); }
 
 FString ClaireonBlackboardTool_ApplySpec::GetDescription() const
 {

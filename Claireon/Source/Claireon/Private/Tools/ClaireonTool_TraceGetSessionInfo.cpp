@@ -8,10 +8,8 @@
 #include "TraceServices/Model/Frames.h"
 #include "TraceServices/Model/Threads.h"
 
-FString ClaireonTool_TraceGetSessionInfo::GetName() const
-{
-	return TEXT("claireon.trace_get_session_info");
-}
+FString ClaireonTool_TraceGetSessionInfo::GetCategory() const { return TEXT("trace"); }
+FString ClaireonTool_TraceGetSessionInfo::GetOperation() const { return TEXT("get_session_info"); }
 
 FString ClaireonTool_TraceGetSessionInfo::GetDescription() const
 {

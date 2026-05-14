@@ -10,10 +10,8 @@
 #include "Dom/JsonValue.h"
 #include "Editor.h"
 
-FString ClaireonTool_PIEStop::GetName() const
-{
-	return TEXT("claireon.pie_stop_async");
-}
+FString ClaireonTool_PIEStop::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_PIEStop::GetOperation() const { return TEXT("stop_async"); }
 
 FString ClaireonTool_PIEStop::GetDescription() const
 {

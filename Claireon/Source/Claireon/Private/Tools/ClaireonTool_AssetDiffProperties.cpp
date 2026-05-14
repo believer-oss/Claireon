@@ -10,10 +10,8 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_AssetDiffProperties::GetName() const
-{
-	return TEXT("claireon.asset_diff");
-}
+FString ClaireonTool_AssetDiffProperties::GetCategory() const { return TEXT("asset"); }
+FString ClaireonTool_AssetDiffProperties::GetOperation() const { return TEXT("diff"); }
 
 FString ClaireonTool_AssetDiffProperties::GetDescription() const
 {

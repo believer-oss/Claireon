@@ -26,7 +26,7 @@ namespace
 
 // --- add -------------------------------------------------------------------
 
-FString ClaireonSkeletonTool_AddAnimationNotify::GetName() const { return TEXT("claireon.skeleton_add_animation_notify"); }
+FString ClaireonSkeletonTool_AddAnimationNotify::GetOperation() const { return TEXT("add_animation_notify"); }
 
 FString ClaireonSkeletonTool_AddAnimationNotify::GetDescription() const
 {
@@ -70,7 +70,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_AddAnimationNotify::Execute(cons
 
 // --- remove -----------------------------------------------------------------
 
-FString ClaireonSkeletonTool_RemoveAnimationNotify::GetName() const { return TEXT("claireon.skeleton_remove_animation_notify"); }
+FString ClaireonSkeletonTool_RemoveAnimationNotify::GetOperation() const { return TEXT("remove_animation_notify"); }
 
 FString ClaireonSkeletonTool_RemoveAnimationNotify::GetDescription() const
 {
@@ -117,7 +117,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RemoveAnimationNotify::Execute(c
 
 // --- rename -----------------------------------------------------------------
 
-FString ClaireonSkeletonTool_RenameAnimationNotify::GetName() const { return TEXT("claireon.skeleton_rename_animation_notify"); }
+FString ClaireonSkeletonTool_RenameAnimationNotify::GetOperation() const { return TEXT("rename_animation_notify"); }
 
 FString ClaireonSkeletonTool_RenameAnimationNotify::GetDescription() const
 {
@@ -172,12 +172,12 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RenameAnimationNotify::Execute(c
 
 // --- add -------------------------------------------------------------------
 
-FString ClaireonSkeletonTool_AddCurveMetadata::GetName() const { return TEXT("claireon.skeleton_add_curve_metadata"); }
+FString ClaireonSkeletonTool_AddCurveMetadata::GetOperation() const { return TEXT("add_curve_metadata"); }
 
 FString ClaireonSkeletonTool_AddCurveMetadata::GetDescription() const
 {
 	return TEXT("Add a curve metadata entry on the skeleton. Creates an entry with default flags (not material, not morph target, no linked bones, MaxLOD=0xff). "
-				"Use claireon.skeleton_set_curve_metadata_flags to configure it after creation.");
+				"Use skeleton_set_curve_metadata_flags to configure it after creation.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_AddCurveMetadata::GetInputSchema() const
@@ -216,7 +216,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_AddCurveMetadata::Execute(const 
 
 // --- remove -----------------------------------------------------------------
 
-FString ClaireonSkeletonTool_RemoveCurveMetadata::GetName() const { return TEXT("claireon.skeleton_remove_curve_metadata"); }
+FString ClaireonSkeletonTool_RemoveCurveMetadata::GetOperation() const { return TEXT("remove_curve_metadata"); }
 
 FString ClaireonSkeletonTool_RemoveCurveMetadata::GetDescription() const
 {
@@ -262,7 +262,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RemoveCurveMetadata::Execute(con
 
 // --- rename -----------------------------------------------------------------
 
-FString ClaireonSkeletonTool_RenameCurveMetadata::GetName() const { return TEXT("claireon.skeleton_rename_curve_metadata"); }
+FString ClaireonSkeletonTool_RenameCurveMetadata::GetOperation() const { return TEXT("rename_curve_metadata"); }
 
 FString ClaireonSkeletonTool_RenameCurveMetadata::GetDescription() const
 {
@@ -312,7 +312,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RenameCurveMetadata::Execute(con
 
 // --- set_flags --------------------------------------------------------------
 
-FString ClaireonSkeletonTool_SetCurveMetadataFlags::GetName() const { return TEXT("claireon.skeleton_set_curve_metadata_flags"); }
+FString ClaireonSkeletonTool_SetCurveMetadataFlags::GetOperation() const { return TEXT("set_curve_metadata_flags"); }
 
 FString ClaireonSkeletonTool_SetCurveMetadataFlags::GetDescription() const
 {

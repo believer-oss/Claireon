@@ -10,7 +10,8 @@
 #include "Dom/JsonObject.h"
 #include "StructUtils/InstancedStruct.h"
 
-FString ClaireonTool_ProxyAssetRemoveContextParameter::GetName() const { return TEXT("claireon.proxyasset_remove_context_parameter"); }
+FString ClaireonTool_ProxyAssetRemoveContextParameter::GetCategory() const { return TEXT("proxyasset"); }
+FString ClaireonTool_ProxyAssetRemoveContextParameter::GetOperation() const { return TEXT("remove_context_parameter"); }
 
 FString ClaireonTool_ProxyAssetRemoveContextParameter::GetDescription() const
 {

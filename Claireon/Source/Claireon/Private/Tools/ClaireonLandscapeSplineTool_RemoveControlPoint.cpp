@@ -9,10 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLandscapeSplineTool_RemoveControlPoint::GetName() const
-{
-	return TEXT("claireon.landscape_spline_remove_control_point");
-}
+FString ClaireonLandscapeSplineTool_RemoveControlPoint::GetOperation() const { return TEXT("spline_remove_control_point"); }
 
 FString ClaireonLandscapeSplineTool_RemoveControlPoint::GetDescription() const
 {

@@ -37,7 +37,7 @@ namespace
 {
 	// Canonicalize a JSON value to a stable string for value-equality comparisons
 	// of keyframe payloads. Mirrors the serialization F2 uses on the input side.
-	FString CanonicalizeValue(const TSharedPtr<FJsonValue>& Val)
+	FString SpecApplicatorLevelSequence_CanonicalizeValue(const TSharedPtr<FJsonValue>& Val)
 	{
 		if (!Val.IsValid())
 		{
@@ -74,7 +74,7 @@ namespace
 	}
 
 	// Strip a /Game-style path to the package name and asset name.
-	void SplitPackageAndAsset(const FString& Path, FString& OutPackage, FString& OutAsset)
+	void SpecApplicatorLevelSequence_SplitPackageAndAsset(const FString& Path, FString& OutPackage, FString& OutAsset)
 	{
 		int32 Dot = INDEX_NONE;
 		if (Path.FindChar(TEXT('.'), Dot))
@@ -100,7 +100,7 @@ namespace
 	ULevelSequence* CreateLevelSequenceAtPath(const FString& PackagePath, FString& OutError)
 	{
 		FString PkgName, AssetName;
-		SplitPackageAndAsset(PackagePath, PkgName, AssetName);
+		SpecApplicatorLevelSequence_SplitPackageAndAsset(PackagePath, PkgName, AssetName);
 		if (PkgName.IsEmpty() || AssetName.IsEmpty())
 		{
 			OutError = FString::Printf(TEXT("invalid package path: %s"), *PackagePath);
@@ -128,7 +128,7 @@ namespace
 
 	// Index-identity of a section within a track, matching the spec's identity rule
 	// (row_index, start_frame). Returns INDEX_NONE if no matching section exists.
-	int32 FindSectionIndexByIdentity(const UMovieSceneTrack* Track, int32 RowIndex, int32 StartFrame)
+	int32 SpecApplicatorLevelSequence_FindSectionIndexByIdentity(const UMovieSceneTrack* Track, int32 RowIndex, int32 StartFrame)
 	{
 		if (!Track)
 		{
@@ -251,7 +251,7 @@ bool FClaireonSpecApplicator_LevelSequence::OpenOrCreateAsset(const FString& Ass
 
 	const FString FullPath = LS->GetPathName();
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
-		FullPath, TEXT("claireon.sequence_edit"));
+		FullPath, TEXT("sequence_edit"));
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{
 		const FMCPSession& Blocker = OpenResult.BlockingSession.GetValue();
@@ -574,7 +574,7 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 					SObj->TryGetNumberField(TEXT("end_frame"), End);
 					SObj->TryGetNumberField(TEXT("row_index"), Row);
 
-					int32 SecIdx = FindSectionIndexByIdentity(Track, Row, Start);
+					int32 SecIdx = SpecApplicatorLevelSequence_FindSectionIndexByIdentity(Track, Row, Start);
 					UMovieSceneSection* Section = nullptr;
 					if (SecIdx == INDEX_NONE)
 					{
@@ -686,7 +686,7 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 
 							// Generic value payload.
 							TSharedPtr<FJsonValue> Val = KObj->TryGetField(TEXT("value"));
-							FString ValueJson = CanonicalizeValue(Val);
+							FString ValueJson = SpecApplicatorLevelSequence_CanonicalizeValue(Val);
 							if (ValueJson.IsEmpty())
 							{
 								RecordEntryFailure(

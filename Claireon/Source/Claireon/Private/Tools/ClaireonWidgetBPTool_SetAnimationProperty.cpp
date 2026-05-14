@@ -14,10 +14,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_SetAnimationProperty::GetName() const
-{
-    return TEXT("claireon.widgetbp_set_animation_property");
-}
+FString ClaireonWidgetBPTool_SetAnimationProperty::GetOperation() const { return TEXT("set_animation_property"); }
 
 FString ClaireonWidgetBPTool_SetAnimationProperty::GetDescription() const
 {

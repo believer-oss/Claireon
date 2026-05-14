@@ -9,10 +9,8 @@
 #include "Dom/JsonValue.h"
 #include "Editor.h"
 
-FString ClaireonTool_PIEGetDamageEvents::GetName() const
-{
-	return TEXT("claireon.pie_get_damage_events");
-}
+FString ClaireonTool_PIEGetDamageEvents::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_PIEGetDamageEvents::GetOperation() const { return TEXT("get_damage_events"); }
 
 FString ClaireonTool_PIEGetDamageEvents::GetDescription() const
 {

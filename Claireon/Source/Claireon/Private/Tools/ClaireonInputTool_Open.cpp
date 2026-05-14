@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonInputTool_Open::GetName() const
-{
-	return TEXT("claireon.input_open");
-}
+FString ClaireonInputTool_Open::GetOperation() const { return TEXT("open"); }
 
 FString ClaireonInputTool_Open::GetDescription() const
 {

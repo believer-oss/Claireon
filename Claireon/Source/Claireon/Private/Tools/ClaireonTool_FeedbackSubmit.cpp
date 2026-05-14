@@ -4,10 +4,8 @@
 #include "Tools/ClaireonTool_FeedbackSubmit.h"
 #include "ClaireonFeedbackLog.h"
 
-FString ClaireonTool_FeedbackSubmit::GetName() const
-{
-	return TEXT("claireon.feedback_submit");
-}
+FString ClaireonTool_FeedbackSubmit::GetCategory() const { return TEXT("feedback"); }
+FString ClaireonTool_FeedbackSubmit::GetOperation() const { return TEXT("submit"); }
 
 FString ClaireonTool_FeedbackSubmit::GetDescription() const
 {
@@ -72,9 +70,25 @@ TSharedPtr<FJsonObject> ClaireonTool_FeedbackSubmit::GetInputSchema() const
 IClaireonTool::FToolResult ClaireonTool_FeedbackSubmit::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
 	FString Text;
-	if (!Arguments.IsValid() || !Arguments->TryGetStringField(TEXT("text"), Text) || Text.IsEmpty())
+	if (!Arguments.IsValid())
 	{
 		return MakeErrorResult(TEXT("'text' is required and must be non-empty."));
+	}
+
+	// Prefer the documented 'text' field; fall back to 'feedback' as an alias
+	// when callers (e.g. some clients that mirror the tool name) supply it instead.
+	// The published JSON schema still lists only 'text' as required.
+	if (!Arguments->TryGetStringField(TEXT("text"), Text) || Text.IsEmpty())
+	{
+		FString FeedbackAlias;
+		if (Arguments->TryGetStringField(TEXT("feedback"), FeedbackAlias) && !FeedbackAlias.IsEmpty())
+		{
+			Text = MoveTemp(FeedbackAlias);
+		}
+		else
+		{
+			return MakeErrorResult(TEXT("'text' is required and must be non-empty."));
+		}
 	}
 
 	bool bIsBug = false;

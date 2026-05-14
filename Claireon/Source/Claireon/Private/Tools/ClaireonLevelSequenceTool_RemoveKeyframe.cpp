@@ -12,10 +12,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_RemoveKeyframe::GetName() const
-{
-	return TEXT("claireon.level_sequence_remove_keyframe");
-}
+FString ClaireonLevelSequenceTool_RemoveKeyframe::GetOperation() const { return TEXT("sequence_remove_keyframe"); }
 
 FString ClaireonLevelSequenceTool_RemoveKeyframe::GetDescription() const
 {

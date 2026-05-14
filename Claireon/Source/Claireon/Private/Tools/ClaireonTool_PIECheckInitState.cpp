@@ -17,10 +17,8 @@
 #include "Character/LyraPawnExtensionComponent.h"
 #endif
 
-FString ClaireonTool_PIECheckInitState::GetName() const
-{
-	return TEXT("claireon.pie_check_init_state");
-}
+FString ClaireonTool_PIECheckInitState::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_PIECheckInitState::GetOperation() const { return TEXT("check_init_state"); }
 
 FString ClaireonTool_PIECheckInitState::GetDescription() const
 {
@@ -95,7 +93,7 @@ namespace
 	 *  Checks from highest to lowest and returns the first match. */
 	FString DetermineCurrentInitState(const ULyraPawnExtensionComponent* PawnExt)
 	{
-		// Check in descending order â return the highest reached state
+		// Check in descending order Ã¢Â€Â” return the highest reached state
 		if (PawnExt->HasReachedInitState(LyraGameplayTags::InitState_GameplayReady))
 		{
 			return TEXT("InitState.GameplayReady");

@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLandscapeSplineTool_Save::GetName() const
-{
-	return TEXT("claireon.landscape_spline_save");
-}
+FString ClaireonLandscapeSplineTool_Save::GetOperation() const { return TEXT("spline_save"); }
 
 FString ClaireonLandscapeSplineTool_Save::GetDescription() const
 {

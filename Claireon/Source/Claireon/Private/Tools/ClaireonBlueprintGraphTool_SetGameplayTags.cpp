@@ -97,10 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_SetGameplayTags::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_set_gameplay_tags");
-}
+FString ClaireonBlueprintGraphTool_SetGameplayTags::GetOperation() const { return TEXT("graph_set_gameplay_tags"); }
 
 FString ClaireonBlueprintGraphTool_SetGameplayTags::GetDescription() const
 {

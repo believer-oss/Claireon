@@ -1,11 +1,11 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Tests for blueprint_graph_* metadata overrides. Asserts
+// Tests for blueprint_graph_* metadata overrides (P1, Stage 007). Asserts
 // that each of the 10 hot-path tools returns rich GetFullDescription /
 // GetExampleUsage, that the 4 spec'd tools return GetParameterTooltips,
-// and that the per-node incremental workflow rules surface in the
-// literal text.
+// and that the workflow rules from the per-tool authoring guidance
+// surface in the literal text.
 
 #if WITH_UNTESTED
 
@@ -92,13 +92,13 @@ UNTEST_UNIT(Claireon, BlueprintGraphMetadata, AddNodeFullDescriptionMentionsAuto
 
 // ---------------------------------------------------------------------------
 // 4: format-tool gotcha surfaces -- the in-session formatter mentions the
-// standalone twin claireon.blueprint_format_graph.
+// standalone twin blueprint_format_graph.
 // ---------------------------------------------------------------------------
 UNTEST_UNIT(Claireon, BlueprintGraphMetadata, FormatFullDescriptionMentionsStandaloneTwin)
 {
 	ClaireonBlueprintGraphTool_Format Tool;
 	const FString Full = Tool.GetFullDescription();
-	UNTEST_EXPECT_TRUE(Full.Contains(TEXT("claireon.blueprint_format_graph")));
+	UNTEST_EXPECT_TRUE(Full.Contains(TEXT("blueprint_format_graph")));
 	co_return;
 }
 

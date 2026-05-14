@@ -7,10 +7,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonFoliageTool_Close::GetName() const
-{
-	return TEXT("claireon.foliage_close");
-}
+FString ClaireonFoliageTool_Close::GetOperation() const { return TEXT("close"); }
 
 FString ClaireonFoliageTool_Close::GetDescription() const
 {

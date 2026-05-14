@@ -14,14 +14,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_RenameWidget::GetName() const
-{
-    return TEXT("claireon.widgetbp_rename_widget");
-}
+FString ClaireonWidgetBPTool_RenameWidget::GetOperation() const { return TEXT("rename_widget"); }
 
 FString ClaireonWidgetBPTool_RenameWidget::GetDescription() const
 {
-    return TEXT("Rename a widget within the widget tree in the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Transactional. The new name must be unique across the widget tree. Bindings and references to the old name are auto-fixed where possible during the rename.");
+    return TEXT("Rename a widget within the widget tree in the open Widget Blueprint editing session. Requires open session_id from widgetbp_open. Transactional. The new name must be unique across the widget tree. Bindings and references to the old name are auto-fixed where possible during the rename.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_RenameWidget::GetInputSchema() const

@@ -8,10 +8,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLandscapeSplineTool_SetSegmentProperty::GetName() const
-{
-	return TEXT("claireon.landscape_spline_set_segment_property");
-}
+FString ClaireonLandscapeSplineTool_SetSegmentProperty::GetOperation() const { return TEXT("spline_set_segment_property"); }
 
 FString ClaireonLandscapeSplineTool_SetSegmentProperty::GetDescription() const
 {

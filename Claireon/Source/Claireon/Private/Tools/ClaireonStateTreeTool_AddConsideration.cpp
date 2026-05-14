@@ -13,14 +13,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonStateTreeTool_AddConsideration::GetName() const
-{
-	return TEXT("claireon.statetree_add_consideration");
-}
+FString ClaireonStateTreeTool_AddConsideration::GetOperation() const { return TEXT("add_consideration"); }
 
 FString ClaireonStateTreeTool_AddConsideration::GetDescription() const
 {
-	return TEXT("Add a utility consideration to a state in the open State Tree editing session. Requires open session_id from claireon.statetree_open. Transactional. Considerations score the state for utility-based selection; configure properties via claireon.statetree_set_node_property after the consideration is added.");
+	return TEXT("Add a utility consideration to a state in the open State Tree editing session. Requires open session_id from statetree_open. Transactional. Considerations score the state for utility-based selection; configure properties via statetree_set_node_property after the consideration is added.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_AddConsideration::GetInputSchema() const

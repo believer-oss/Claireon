@@ -24,7 +24,7 @@
 
 namespace
 {
-	bool ValidateNewAssetPath(const FString& InPath, FString& OutCanonPath, FString& OutAssetName, FString& OutError)
+	bool AnimToolsCreate_ValidateNewAssetPath(const FString& InPath, FString& OutCanonPath, FString& OutAssetName, FString& OutError)
 	{
 		OutCanonPath = FClaireonSessionManager::CanonicalizePath(InPath);
 		if (OutCanonPath.IsEmpty())
@@ -41,7 +41,7 @@ namespace
 		return true;
 	}
 
-	bool SaveNewAsset(UObject* Asset, FString& OutError)
+	bool AnimToolsCreate_SaveNewAsset(UObject* Asset, FString& OutError)
 	{
 		UPackage* Package = Asset->GetOutermost();
 		Package->MarkPackageDirty();
@@ -59,10 +59,10 @@ namespace
 }
 
 // ============================================================================
-// claireon.anim_create_montage
+// anim_create_montage
 // ============================================================================
 
-FString ClaireonAnimTool_CreateMontage::GetName() const { return TEXT("claireon.anim_create_montage"); }
+FString ClaireonAnimTool_CreateMontage::GetOperation() const { return TEXT("create_montage"); }
 
 FString ClaireonAnimTool_CreateMontage::GetDescription() const
 {
@@ -94,7 +94,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_CreateMontage::Execute(const TShared
 
 	// Validate target path
 	FString CanonPath, AssetName, Error;
-	if (!ValidateNewAssetPath(Path, CanonPath, AssetName, Error))
+	if (!AnimToolsCreate_ValidateNewAssetPath(Path, CanonPath, AssetName, Error))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -155,7 +155,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_CreateMontage::Execute(const TShared
 	FAssetRegistryModule::AssetCreated(Montage);
 
 	FString SaveError;
-	if (!SaveNewAsset(Montage, SaveError))
+	if (!AnimToolsCreate_SaveNewAsset(Montage, SaveError))
 	{
 		return MakeErrorResult(SaveError);
 	}
@@ -175,10 +175,10 @@ IClaireonTool::FToolResult ClaireonAnimTool_CreateMontage::Execute(const TShared
 }
 
 // ============================================================================
-// claireon.anim_create_composite
+// anim_create_composite
 // ============================================================================
 
-FString ClaireonAnimTool_CreateComposite::GetName() const { return TEXT("claireon.anim_create_composite"); }
+FString ClaireonAnimTool_CreateComposite::GetOperation() const { return TEXT("create_composite"); }
 
 FString ClaireonAnimTool_CreateComposite::GetDescription() const
 {
@@ -209,7 +209,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_CreateComposite::Execute(const TShar
 
 	// Validate target path
 	FString CanonPath, AssetName, Error;
-	if (!ValidateNewAssetPath(Path, CanonPath, AssetName, Error))
+	if (!AnimToolsCreate_ValidateNewAssetPath(Path, CanonPath, AssetName, Error))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -271,7 +271,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_CreateComposite::Execute(const TShar
 	FAssetRegistryModule::AssetCreated(Composite);
 
 	FString SaveError;
-	if (!SaveNewAsset(Composite, SaveError))
+	if (!AnimToolsCreate_SaveNewAsset(Composite, SaveError))
 	{
 		return MakeErrorResult(SaveError);
 	}
@@ -290,10 +290,10 @@ IClaireonTool::FToolResult ClaireonAnimTool_CreateComposite::Execute(const TShar
 }
 
 // ============================================================================
-// claireon.anim_duplicate_asset
+// anim_duplicate_asset
 // ============================================================================
 
-FString ClaireonAnimTool_DuplicateAsset::GetName() const { return TEXT("claireon.anim_duplicate_asset"); }
+FString ClaireonAnimTool_DuplicateAsset::GetOperation() const { return TEXT("duplicate_asset"); }
 
 FString ClaireonAnimTool_DuplicateAsset::GetDescription() const
 {
@@ -367,7 +367,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_DuplicateAsset::Execute(const TShare
 
 	// Save the new package
 	FString SaveError;
-	if (!SaveNewAsset(NewAsset, SaveError))
+	if (!AnimToolsCreate_SaveNewAsset(NewAsset, SaveError))
 	{
 		return MakeErrorResult(SaveError);
 	}

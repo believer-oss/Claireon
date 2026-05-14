@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonPCGGraphTool_DisconnectAll::GetName() const
-{
-	return TEXT("claireon.pcg_disconnect_all");
-}
+FString ClaireonPCGGraphTool_DisconnectAll::GetOperation() const { return TEXT("disconnect_all"); }
 
 FString ClaireonPCGGraphTool_DisconnectAll::GetDescription() const
 {

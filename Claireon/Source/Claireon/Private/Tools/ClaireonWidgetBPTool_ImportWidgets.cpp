@@ -17,14 +17,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonWidgetBPTool_ImportWidgets::GetName() const
-{
-    return TEXT("claireon.widgetbp_import_widgets");
-}
+FString ClaireonWidgetBPTool_ImportWidgets::GetOperation() const { return TEXT("import_widgets"); }
 
 FString ClaireonWidgetBPTool_ImportWidgets::GetDescription() const
 {
-    return TEXT("Import widgets from a UE clipboard/text payload into the open Widget Blueprint editing session. Requires open session_id from claireon.widgetbp_open. Transactional. The text format is the same as claireon.widgetbp_export_widgets emits; widgets paste under the requested parent with new names.");
+    return TEXT("Import widgets from a UE clipboard/text payload into the open Widget Blueprint editing session. Requires open session_id from widgetbp_open. Transactional. The text format is the same as widgetbp_export_widgets emits; widgets paste under the requested parent with new names.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_ImportWidgets::GetInputSchema() const

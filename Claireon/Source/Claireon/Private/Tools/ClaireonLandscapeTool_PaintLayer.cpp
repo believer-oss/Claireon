@@ -10,10 +10,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLandscapeTool_PaintLayer::GetName() const
-{
-	return TEXT("claireon.landscape_paint_layer");
-}
+FString ClaireonLandscapeTool_PaintLayer::GetOperation() const { return TEXT("paint_layer"); }
 
 FString ClaireonLandscapeTool_PaintLayer::GetDescription() const
 {

@@ -25,7 +25,8 @@
 #include "ObjectColumn.h"
 #include "RandomizeColumn.h"
 
-FString ClaireonTool_ChooserAddColumn::GetName() const { return TEXT("claireon.chooser_add_column"); }
+FString ClaireonTool_ChooserAddColumn::GetCategory() const { return TEXT("chooser"); }
+FString ClaireonTool_ChooserAddColumn::GetOperation() const { return TEXT("add_column"); }
 
 FString ClaireonTool_ChooserAddColumn::GetDescription() const
 {
@@ -184,8 +185,11 @@ IClaireonTool::FToolResult ClaireonTool_ChooserAddColumn::Execute(const TSharedP
 		return MakeErrorResult(FString::Printf(TEXT("Unknown column type: '%s'"), *ColumnType));
 	}
 
-	// Set up the property binding if provided
-	if (PropertyChain.Num() > 0)
+	// Set up the property binding when either a path or a non-default context_index is provided.
+	// A non-default context_index alone is meaningful for OutputStruct columns that write the
+	// whole output context parameter (root binding, empty PropertyChain).
+	const bool bExplicitContextIndex = Arguments->HasTypedField<EJson::Number>(TEXT("context_index"));
+	if (PropertyChain.Num() > 0 || bExplicitContextIndex)
 	{
 		SetupColumnBinding(NewColumn, PropertyChain, ContextIndex);
 	}
