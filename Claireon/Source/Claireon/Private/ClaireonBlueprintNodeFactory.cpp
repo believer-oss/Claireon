@@ -12,6 +12,7 @@
 
 // K2Node includes — mirrors Operation_AddNode's include set
 #include "K2Node.h"
+#include "K2Node_AsyncAction.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_CallArrayFunction.h"
 #include "K2Node_CallDataTableFunction.h"
@@ -271,22 +272,37 @@ namespace ClaireonBlueprintNodeFactory
 			}
 
 			UClass* NodeClass = ClaireonBlueprintHelpers::PickK2NodeClassForFunction(ResolvedFunction);
-			UK2Node_CallFunction* N = NewObject<UK2Node_CallFunction>(Graph, NodeClass);
 
-			if (ResolvedOwnerClass)
+			if (NodeClass && NodeClass->IsChildOf(UK2Node_BaseAsyncTask::StaticClass()))
 			{
-				N->FunctionReference.SetExternalMember(FName(*FunctionName), ResolvedOwnerClass);
+				// AsyncAction branch: helper guarantees ResolvedFunction is a valid
+				// UBlueprintAsyncActionBase factory (Fracture 01, conjunct 4). No
+				// FunctionReference set; InitializeProxyFromFunction populates the
+				// proxy fields directly.
+				UK2Node_AsyncAction* AsyncNode = NewObject<UK2Node_AsyncAction>(Graph);
+				AsyncNode->InitializeProxyFromFunction(ResolvedFunction);
+				NewNode = AsyncNode;
+				Desc = FString::Printf(TEXT("AsyncAction: %s (%s)"), *FunctionName, *NodeClass->GetName());
 			}
 			else
 			{
-				// Either function_class was empty or it failed to resolve. Either
-				// way, route through SetSelfMember so functions on the blueprint's
-				// skeleton class (card repro: SetHiddenInGame self-bound on
-				// SceneComponent-owning actor) get their UFunction reference.
-				N->FunctionReference.SetSelfMember(FName(*FunctionName));
+				UK2Node_CallFunction* N = NewObject<UK2Node_CallFunction>(Graph, NodeClass);
+
+				if (ResolvedOwnerClass)
+				{
+					N->FunctionReference.SetExternalMember(FName(*FunctionName), ResolvedOwnerClass);
+				}
+				else
+				{
+					// Either function_class was empty or it failed to resolve. Either
+					// way, route through SetSelfMember so functions on the blueprint's
+					// skeleton class (card repro: SetHiddenInGame self-bound on
+					// SceneComponent-owning actor) get their UFunction reference.
+					N->FunctionReference.SetSelfMember(FName(*FunctionName));
+				}
+				NewNode = N;
+				Desc = FString::Printf(TEXT("CallFunction: %s (%s)"), *FunctionName, *NodeClass->GetName());
 			}
-			NewNode = N;
-			Desc = FString::Printf(TEXT("CallFunction: %s (%s)"), *FunctionName, *NodeClass->GetName());
 		}
 		else if (NodeType == TEXT("CallParentFunction"))
 		{
@@ -625,7 +641,7 @@ namespace ClaireonBlueprintNodeFactory
 		{
 			Out.Error = FString::Printf(
 				TEXT("Unsupported node_type '%s' in factory. Use 'Generic' with 'class_name' for custom types, "
-				     "or Operation_AddNode (claireon.blueprint_edit_graph) for typed support not yet in the factory "
+				     "or Operation_AddNode (blueprint_edit_graph) for typed support not yet in the factory "
 				     "(SpawnActor variants, Delegate nodes, Timeline, EventOverride)."), *NodeType);
 			return Out;
 		}
@@ -666,6 +682,10 @@ namespace ClaireonBlueprintNodeFactory
 		// by calling AllocateDefaultPins on a freshly-constructed inner node.
 		// Snapshot + restore positions so get_state summary reports the authored
 		// coordinates rather than (0, 0).
+		// UK2Node_BaseAsyncTask intentionally omitted: AllocateDefaultPins is sufficient
+		// for the AsyncAction family (it builds delegate exec pins and parameter pins from
+		// the proxy fields populated by InitializeProxyFromFunction). The bWroteProperties
+		// branch above still reconstructs when node_properties writes proxy fields directly.
 		const bool bReconstructForTypedBranch =
 			   NewNode->IsA<UK2Node_CallFunction>()          // includes CallArray / CallDataTable / CallMaterialParameterCollection / CommutativeAssociativeBinaryOperator subclasses
 			|| NewNode->IsA<UK2Node_DynamicCast>()

@@ -84,6 +84,22 @@ public:
 	FMCPOpenSessionResult OpenSession(const FString& AssetPath, const FString& ToolName, double TimeoutMinutes = 60.0);
 
 	/**
+	 * Open the editor-wide session. Returns BlockedByOtherTool (with BlockingSession
+	 * populated) immediately if any per-asset session OR another editor-wide session
+	 * is already held. Mirrors OpenSession's return shape.
+	 *
+	 * Acquire-time policy is FAIL-FAST: no queue, no wait, no force-release.
+	 * Operators can call session_release on the blocking session id to recover.
+	 */
+	FMCPOpenSessionResult OpenEditorWideSession(const FString& ToolName, double TimeoutMinutes = 60.0);
+
+	/** Close the editor-wide session by id. Returns true if the supplied id matched the active editor-wide session. */
+	bool CloseEditorWideSession(const FString& SessionId);
+
+	/** Returns true if an editor-wide session is currently held. */
+	bool IsEditorWideSessionHeld() const;
+
+	/**
 	 * Find an active session by ID. Returns nullptr if not found or expired.
 	 * The returned pointer is valid until the next manager call that modifies state.
 	 */
@@ -125,6 +141,7 @@ private:
 
 	TMap<FString, FMCPSession> Sessions; // SessionId -> Session
 	TMap<FString, FString> AssetLocks;	 // CanonicalAssetPath -> SessionId
+	TOptional<FMCPSession> EditorWideSession; // Single sentinel slot; AssetPath is "<editor-wide>".
 	mutable FCriticalSection CriticalSection;
 	FOnMCPSessionClosed OnSessionClosedDelegate;
 	FTSTicker::FDelegateHandle CleanupTickerHandle;

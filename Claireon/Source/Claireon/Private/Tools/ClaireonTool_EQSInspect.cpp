@@ -88,7 +88,7 @@ FString ClaireonTool_EQSInspect::GetDescription() const
 	return TEXT("Read the structure of an Environment Query System (EQS) asset. "
 				"Displays all options (generators + tests), context class references, "
 				"scoring functions, and filter settings. Useful for identifying "
-				"blackboard-based vs Sample-based context references.");
+				"blackboard-based vs custom-context context references.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_EQSInspect::GetInputSchema() const

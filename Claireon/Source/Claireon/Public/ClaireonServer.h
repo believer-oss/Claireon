@@ -6,6 +6,7 @@
 #include "CoreMinimal.h"
 #include "HttpRouteHandle.h"
 #include "HttpServerRequest.h"
+#include "TimerManager.h"
 #include "ClaireonTypes.h"
 
 class IClaireonTool;
@@ -28,8 +29,56 @@ public:
 	 * Start the server on the given port.
 	 * @param Port - The port to bind to. If binding fails, retries with incremented ports.
 	 * @return true if the server started successfully
+	 *
+	 * Stage 010: prefer TryStart / StartEphemeral. Start(uint32) survives as a
+	 * thin wrapper around TryStart(Port, bExclusive=false) for legacy
+	 * callers that want the historical "incremental retry" behaviour; new
+	 * callers (FClaireonModule::StartServer + the smoke test) take the
+	 * explicit single-attempt path so EADDRINUSE can be detected and the
+	 * editor can decide whether to auto-promote into proxy-attached mode.
 	 */
 	bool Start(uint32 Port);
+
+	/**
+	 * Stage 010 (D3 + direct-connect): single-attempt bind on the given port.
+	 *
+	 * @param Port The port to bind. Typically the per-worktree SHA port
+	 *             returned by Claireon::DeriveDefaultMcpPort.
+	 * @return true if the server bound and is now listening on `Port`.
+	 *         false on bind failure (EADDRINUSE or otherwise); the caller
+	 *         decides whether to abort, retry, or auto-promote.
+	 *
+	 * Note on SO_EXCLUSIVEADDRUSE: UE's IHttpRouter owns the underlying
+	 * listener, so the editor cannot directly set socket options. Stage 009's
+	 * proxy-side bind already enforces exclusivity for the SHA port (the
+	 * proxy holds it whenever it runs). For the editor's direct-connect
+	 * branch, the ordering of "TryStart -> EADDRINUSE -> probe 43017 ->
+	 * auto-promote" is what guarantees we don't double-bind by accident.
+	 */
+	bool TryStart(uint16 Port);
+
+	/**
+	 * Stage 010 (auto-promote): bind a local listener on a kernel-picked
+	 * ephemeral port (port 0). Returns the port the listener actually bound
+	 * to, or 0 on failure. Used by the auto-promote path in StartServer
+	 * when the proxy already owns the SHA port.
+	 */
+	uint16 StartEphemeral();
+
+	/**
+	 * Set the per-session bearer token required by every incoming HTTP request.
+	 * Generated fresh at each StartServer call (see module wiring) and passed
+	 * to the proxy via /editor/register. Empty token disables gating and is
+	 * ONLY permitted for command-line overrides / direct-connect scenarios
+	 * where the proxy is bypassed (logged as a warning on Start).
+	 *
+	 * Called by FClaireonModule before Start(); MUST be called from the
+	 * game thread.
+	 */
+	void SetSessionToken(const FString& Token) { SessionToken = Token; }
+
+	/** Return the active session token (empty when gating is disabled). */
+	const FString& GetSessionToken() const { return SessionToken; }
 
 	/** Stop the server and clean up routes */
 	void Stop();
@@ -174,6 +223,14 @@ private:
 	/** Validate Origin and Host headers for localhost-only access */
 	bool ValidateRequestHeaders(const FHttpServerRequest& Request) const;
 
+	/**
+	 * Constant-time bearer-token check against SessionToken.
+	 * Returns true when:
+	 *   - SessionToken is empty (gating disabled), OR
+	 *   - Request carries Authorization: Bearer <SessionToken>.
+	 */
+	bool ValidateBearerToken(const FHttpServerRequest& Request) const;
+
 	/** Serialize a JSON object to a UTF-8 string */
 	static FString SerializeJson(const TSharedPtr<FJsonObject>& JsonObject);
 
@@ -206,6 +263,14 @@ private:
 
 	/** The port the server is bound to */
 	uint32 BoundPort = 0;
+
+	/**
+	 * Bearer token required on inbound requests. Set by the module before
+	 * Start(). Empty = gating disabled (dev-only direct-connect path). Never
+	 * logged. Regenerated per StartServer call so a torn-down + restarted
+	 * editor does not share credentials with its predecessor.
+	 */
+	FString SessionToken;
 
 	/** Whether the server is running */
 	bool bIsRunning = false;
@@ -251,7 +316,7 @@ private:
 	/** Whether the feedback nudge has already been sent this session */
 	bool bFeedbackNudgeSent = false;
 
-	/** Whether claireon.feedback_submit was called this session */
+	/** Whether feedback_submit was called this session */
 	bool bFeedbackSubmittedThisSession = false;
 
 	/** Thresholds that trigger a feedback nudge */

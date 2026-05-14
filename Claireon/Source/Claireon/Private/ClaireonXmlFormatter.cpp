@@ -32,21 +32,21 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 		else if (ErrorMsg.Contains(TEXT("NameError")))
 		{
 			ErrorCode = TEXT("name_error");
-			Suggestion = TEXT("Variable or function not defined. Use claireon.tools_search() to discover available tools, or check variable names.");
+			Suggestion = TEXT("Variable or function not defined. Use tool_search() to discover available tools, or check variable names.");
 		}
 		else if (ErrorMsg.Contains(TEXT("KeyError")))
 		{
 			ErrorCode = TEXT("key_error");
-			Suggestion = TEXT("Dictionary key not found. Check the structure of the returned data with claireon.tools_search().");
+			Suggestion = TEXT("Dictionary key not found. Check the structure of the returned data with tool_search().");
 		}
 		else if (ErrorMsg.Contains(TEXT("AttributeError")))
 		{
 			ErrorCode = TEXT("attribute_error");
-			Suggestion = TEXT("Object does not have the requested attribute. Use claireon.tools_search() to discover available tool names.");
+			Suggestion = TEXT("Object does not have the requested attribute. Use tool_search() to discover available tool names.");
 		}
 		else
 		{
-			Suggestion = TEXT("Review the error message and logs. Use claireon.tools_search() to discover available tools.");
+			Suggestion = TEXT("Review the error message and logs. Use tool_search() to discover available tools.");
 		}
 
 		Xml = FormatErrorResult(Result.ErrorMessage, ErrorCode, Suggestion, Result.Logs, Result.UELog);
@@ -116,7 +116,7 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 
 			// Structured data payload (if the tool produced one).
 			// Without this block the MCP transport only delivers the summary text
-			// to the caller, so tools that return rich Data (e.g. tools_search,
+			// to the caller, so tools that return rich Data (e.g. search,
 			// which returns a categories/tools catalog) appear empty on the wire.
 			if (Result.Data.IsValid())
 			{
@@ -379,7 +379,7 @@ FString FClaireonXmlFormatter::GenerateCategorySummary(const TMap<FString, TShar
 	{
 		const TSharedPtr<IClaireonTool>& Tool = Pair.Value;
 		const FString Name = Tool->GetName();
-		if (Name == TEXT("claireon.python_execute") || Name == TEXT("claireon.tools_search"))
+		if (Name == TEXT("python_execute") || Name == TEXT("tool_search"))
 		{
 			continue;
 		}
@@ -392,7 +392,7 @@ FString FClaireonXmlFormatter::GenerateCategorySummary(const TMap<FString, TShar
 
 	constexpr int32 MaxExamples = 3;
 
-	FString Summary = TEXT("Available tool categories (use claireon.tools_search() to discover full signatures):\n");
+	FString Summary = TEXT("Available tool categories (use tool_search() to discover full signatures):\n");
 	for (const FString& Category : Categories)
 	{
 		TArray<FString>& Names = Grouped[Category];
@@ -414,4 +414,23 @@ FString FClaireonXmlFormatter::GenerateCategorySummary(const TMap<FString, TShar
 	}
 
 	return Summary;
+}
+
+// Returns just the category names, comma-joined, with no per-category
+// example tools. Used by HandleToolsList / BuildToolDefinitions to keep
+// the python_execute description small.
+FString FClaireonXmlFormatter::GenerateCategoryList(const TMap<FString, TSharedPtr<IClaireonTool>>& Tools)
+{
+	TSet<FString> Categories;
+	for (const auto& Pair : Tools)
+	{
+		const FString& Name = Pair.Key;
+		const TSharedPtr<IClaireonTool>& Tool = Pair.Value;
+		if (!Tool.IsValid()) { continue; }
+		if (Name == TEXT("python_execute") || Name == TEXT("tool_search")) { continue; }
+		Categories.Add(Tool->GetCategory());
+	}
+	TArray<FString> SortedCategories = Categories.Array();
+	SortedCategories.Sort();
+	return FString::Join(SortedCategories, TEXT(", "));
 }

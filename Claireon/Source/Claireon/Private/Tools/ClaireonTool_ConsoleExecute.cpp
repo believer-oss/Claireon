@@ -11,16 +11,16 @@
 #include "GameFramework/PlayerController.h"
 #include "Misc/OutputDeviceHelper.h"
 
-FString ClaireonTool_ConsoleExecute::GetName() const
-{
-	return TEXT("claireon.console_execute");
-}
+FString ClaireonTool_ConsoleExecute::GetCategory() const { return TEXT("console"); }
+FString ClaireonTool_ConsoleExecute::GetOperation() const { return TEXT("execute"); }
 
 FString ClaireonTool_ConsoleExecute::GetDescription() const
 {
 	return TEXT("Execute an Unreal console command and return its output. "
 				"In PIE context, commands route through APlayerController::ConsoleCommand so "
-				"cheat manager commands (e.g. God, Slomo, custom exec functions) work correctly.");
+				"cheat manager commands (e.g. God, Slomo, custom exec functions) work correctly. "
+				"Bypass-mode tool: the bridge will refuse this call if any other Claireon session "
+				"(per-asset or editor-wide) is currently held. Call session_release first if needed.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ConsoleExecute::GetInputSchema() const

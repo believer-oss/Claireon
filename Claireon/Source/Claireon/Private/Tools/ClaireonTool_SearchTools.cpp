@@ -15,10 +15,35 @@
 #include "Serialization/JsonReader.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 
-FString ClaireonTool_SearchTools::GetName() const
+static TArray<FString> SplitWholeWordCaseInsensitive(const FString& In, const TCHAR* Word)
 {
-	return TEXT("claireon.tools_search");
+	TArray<FString> Out;
+	int32 Cursor = 0;
+	const FString InLower = In.ToLower();
+	const FString WordLower = FString(Word).ToLower();
+	const int32 WordLen = WordLower.Len();
+	while (Cursor < In.Len())
+	{
+		const int32 Hit = InLower.Find(WordLower, ESearchCase::CaseSensitive, ESearchDir::FromStart, Cursor);
+		if (Hit == INDEX_NONE) { Out.Add(In.Mid(Cursor)); break; }
+		const bool LeftBoundary = (Hit == 0) || !FChar::IsAlnum(In[Hit-1]);
+		const bool RightBoundary = (Hit + WordLen >= In.Len()) || !FChar::IsAlnum(In[Hit + WordLen]);
+		if (LeftBoundary && RightBoundary)
+		{
+			Out.Add(In.Mid(Cursor, Hit - Cursor));
+			Cursor = Hit + WordLen;
+		}
+		else
+		{
+			// Not a whole-word match; skip past this hit and keep scanning.
+			Cursor = Hit + WordLen;
+		}
+	}
+	return Out;
 }
+
+FString ClaireonTool_SearchTools::GetCategory() const { return TEXT("tool"); }
+FString ClaireonTool_SearchTools::GetOperation() const { return TEXT("search"); }
 
 TArray<FString> ClaireonTool_SearchTools::GetSearchKeywords() const
 {
@@ -27,10 +52,10 @@ TArray<FString> ClaireonTool_SearchTools::GetSearchKeywords() const
 
 FString ClaireonTool_SearchTools::GetDescription() const
 {
-	return TEXT("Search available tools by query string and/or category. "
-		"Uses fuzzy matching with synonym expansion (e.g. 'bp' matches 'blueprint', "
-		"'dt' matches 'data table') and semantic search when available. "
-		"Returns matching tools grouped by category with descriptions and type signatures.");
+	return TEXT("Search and inspect tools. Always call this before invoking a non-trivial tool through python_execute -- "
+		"pass `tool_name=\"<name>\"` to get the tool's exact input schema, parameter tooltips, and example usage. "
+		"Without `tool_name`, returns a list of tools matching `query` (fuzzy, per-word union ranking; understands "
+		"abbreviations like 'bp' for blueprint, 'dt' for data table). Filter by `category` if you already know the area.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_SearchTools::GetInputSchema() const
@@ -96,8 +121,11 @@ TSharedPtr<FJsonObject> ClaireonTool_SearchTools::GetInputSchema() const
 	TSharedPtr<FJsonObject> ToolNameProp = MakeShared<FJsonObject>();
 	ToolNameProp->SetStringField(TEXT("type"), TEXT("string"));
 	ToolNameProp->SetStringField(TEXT("description"),
-		TEXT("When provided, return deep inspection of that exact tool name (bypasses search ranking). "
-			"Forces include_schema=true and include_examples=true for the matched tool."));
+		TEXT("RECOMMENDED PRE-FLIGHT before any python_execute call. When provided, returns the exact input schema, "
+			"parameter tooltips, example usage, and full description for that tool name (bypasses search ranking). "
+			"Forces include_schema=true and include_examples=true for the matched tool. "
+			"Pass the bare tool name (e.g. 'blueprint_compile'); this is the same name used in `claireon.<name>(...)` "
+			"from inside python_execute."));
 	ToolNameProp->SetStringField(TEXT("default"), TEXT(""));
 	Properties->SetObjectField(TEXT("tool_name"), ToolNameProp);
 
@@ -130,7 +158,7 @@ bool ClaireonTool_SearchTools::RebuildCatalog()
 		const FString ToolName = Tool->GetName();
 
 		// Skip meta tools
-		if (ToolName == TEXT("claireon.python_execute") || ToolName == TEXT("claireon.tools_search"))
+		if (ToolName == TEXT("python_execute") || ToolName == TEXT("tool_search"))
 		{
 			continue;
 		}
@@ -319,6 +347,21 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 	Category = Category.TrimStartAndEnd();
 	InspectToolName = InspectToolName.TrimStartAndEnd();
 
+	// Strip boolean operators and quote/paren punctuation so callers that write
+	// pseudo-boolean queries ("blueprint AND chooser") still benefit from per-word
+	// union ranking. The C++ matcher's tokeniser drops <2-char tokens, so any
+	// residual single chars are harmless.
+	{
+		static const TCHAR* const BoolOps[] = { TEXT("AND"), TEXT("OR"), TEXT("NOT") };
+		for (const TCHAR* Op : BoolOps)
+		{
+			Query = FString::Join(SplitWholeWordCaseInsensitive(Query, Op), TEXT(" "));
+		}
+		Query = Query.Replace(TEXT("("), TEXT(" "), ESearchCase::CaseSensitive);
+		Query = Query.Replace(TEXT(")"), TEXT(" "), ESearchCase::CaseSensitive);
+		Query = Query.Replace(TEXT("\""), TEXT(" "), ESearchCase::CaseSensitive);
+	}
+
 	const TMap<FString, TSharedPtr<IClaireonTool>>& ToolsMap = Server->GetTools();
 
 	// --- Deep-inspect bypass: when tool_name is provided, return that tool's full metadata. ---
@@ -419,6 +462,7 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 		FString ExampleUsage;
 	};
 	TArray<FMatchEntry> MatchingTools;
+	TMap<FString, int32> MatchCountByName;
 
 	const FString QueryLower = Query.ToLower();
 	const FString CategoryLower = Category.ToLower();
@@ -429,7 +473,7 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 		const FString ToolName = Tool->GetName();
 
 		// Skip meta tools
-		if (ToolName == TEXT("claireon.python_execute") || ToolName == TEXT("claireon.tools_search"))
+		if (ToolName == TEXT("python_execute") || ToolName == TEXT("tool_search"))
 		{
 			continue;
 		}
@@ -455,26 +499,28 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 			}
 			else
 			{
-				// Fallback: substring matching (all query words must match somewhere)
+				// Fallback: substring matching (UNION semantics; rank by per-tool match count).
+				// A tool is included if at least one query word substring-matches name OR description.
 				TArray<FString> QueryWords;
 				QueryLower.ParseIntoArray(QueryWords, TEXT(" "), true);
 
 				const FString NameLower = ToolName.ToLower();
 				const FString DescLower = Tool->GetDescription().ToLower();
 
-				bool bAllWordsMatch = true;
+				int32 MatchCount = 0;
 				for (const FString& Word : QueryWords)
 				{
-					if (!NameLower.Contains(Word) && !DescLower.Contains(Word))
+					if (NameLower.Contains(Word) || DescLower.Contains(Word))
 					{
-						bAllWordsMatch = false;
-						break;
+						++MatchCount;
 					}
 				}
-				if (!bAllWordsMatch)
+				if (MatchCount == 0)
 				{
 					continue;
 				}
+				// Stash MatchCount on the entry so the post-loop sort can rank by it.
+				MatchCountByName.Add(ToolName, MatchCount);
 			}
 		}
 
@@ -539,8 +585,16 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 	}
 	else
 	{
-		MatchingTools.Sort([](const FMatchEntry& A, const FMatchEntry& B)
+		MatchingTools.Sort([&MatchCountByName](const FMatchEntry& A, const FMatchEntry& B)
 		{
+			const int32* CountAPtr = MatchCountByName.Find(A.Name);
+			const int32* CountBPtr = MatchCountByName.Find(B.Name);
+			const int32 CountA = CountAPtr ? *CountAPtr : 0;
+			const int32 CountB = CountBPtr ? *CountBPtr : 0;
+			if (CountA != CountB)
+			{
+				return CountA > CountB;
+			}
 			if (A.Category != B.Category)
 			{
 				return A.Category < B.Category;

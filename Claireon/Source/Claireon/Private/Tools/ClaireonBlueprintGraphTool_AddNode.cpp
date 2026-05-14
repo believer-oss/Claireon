@@ -15,6 +15,7 @@
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraphSchema_K2.h"
+#include "K2Node_AsyncAction.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_CallArrayFunction.h"
 #include "K2Node_CallDataTableFunction.h"
@@ -97,10 +98,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_AddNode::GetName() const
-{
-    return TEXT("claireon.blueprint_graph_add_node");
-}
+FString ClaireonBlueprintGraphTool_AddNode::GetOperation() const { return TEXT("graph_add_node"); }
 
 TArray<FString> ClaireonBlueprintGraphTool_AddNode::GetSearchKeywords() const
 {
@@ -109,7 +107,7 @@ TArray<FString> ClaireonBlueprintGraphTool_AddNode::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_AddNode::GetDescription() const
 {
-    return TEXT("Adds a node to the current session's graph (CallFunction, VariableGet/Set, control flow, macros, delegates, etc.). Pass auto_connect_from_cursor=true to route the new node's exec pin through the cursor pin when compatible. Most-common pitfall: forgetting to save every 1-3 nodes via claireon.blueprint_graph_save, which loses progress on editor crash.");
+    return TEXT("Adds a node to the current session's graph (CallFunction, VariableGet/Set, control flow, macros, delegates, etc.). Pass auto_connect_from_cursor=true to route the new node's exec pin through the cursor pin when compatible. Most-common pitfall: forgetting to save every 1-3 nodes via blueprint_graph_save, which loses progress on editor crash.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddNode::GetInputSchema() const
@@ -295,20 +293,35 @@ FToolResult ClaireonBlueprintGraphTool_AddNode::AddNode_Impl(
 		// UBlueprintFunctionNodeSpawner::Create for the canonical order.
 		UClass* NodeClass = ClaireonBlueprintHelpers::PickK2NodeClassForFunction(ResolvedFunction);
 
-		UK2Node_CallFunction* CallFuncNode = NewObject<UK2Node_CallFunction>(Graph, NodeClass);
-
-		if (ResolvedOwnerClass)
+		if (NodeClass && NodeClass->IsChildOf(UK2Node_BaseAsyncTask::StaticClass()))
 		{
-			CallFuncNode->FunctionReference.SetExternalMember(FName(*FunctionName), ResolvedOwnerClass);
+			// AsyncAction branch: helper guarantees ResolvedFunction is a valid
+			// UBlueprintAsyncActionBase factory (Fracture 01, conjunct 4). No
+			// FunctionReference set; InitializeProxyFromFunction populates the
+			// proxy fields directly.
+			UK2Node_AsyncAction* AsyncNode = NewObject<UK2Node_AsyncAction>(Graph);
+			AsyncNode->InitializeProxyFromFunction(ResolvedFunction);
+			NewNode = AsyncNode;
+			NodeDescription = FString::Printf(TEXT("AsyncAction: %s (%s)"),
+				*FunctionName, *NodeClass->GetName());
 		}
 		else
 		{
-			CallFuncNode->FunctionReference.SetSelfMember(FName(*FunctionName));
-		}
+			UK2Node_CallFunction* CallFuncNode = NewObject<UK2Node_CallFunction>(Graph, NodeClass);
 
-		NewNode = CallFuncNode;
-		NodeDescription = FString::Printf(TEXT("CallFunction: %s (%s)"),
-			*FunctionName, *NodeClass->GetName());
+			if (ResolvedOwnerClass)
+			{
+				CallFuncNode->FunctionReference.SetExternalMember(FName(*FunctionName), ResolvedOwnerClass);
+			}
+			else
+			{
+				CallFuncNode->FunctionReference.SetSelfMember(FName(*FunctionName));
+			}
+
+			NewNode = CallFuncNode;
+			NodeDescription = FString::Printf(TEXT("CallFunction: %s (%s)"),
+				*FunctionName, *NodeClass->GetName());
+		}
 	}
 	else if (NodeType == TEXT("VariableGet"))
 	{
@@ -1626,16 +1639,16 @@ FString ClaireonBlueprintGraphTool_AddNode::GetFullDescription() const
         "preferred wiring path is auto_connect_from_cursor=true: when the "
         "session cursor sits on a pin compatible with the new node's exec "
         "input, the connection is made automatically without requiring a "
-        "follow-up claireon.blueprint_graph_connect_pins call. As part of the "
-        "incremental per-node cycle, call claireon.blueprint_graph_save every "
-        "1-3 add_node calls to flush in-session edits to the asset and protect "
-        "against editor-crash data loss.");
+        "follow-up blueprint_graph_connect_pins call. As part of the "
+        "incremental per-node cycle, save every "
+        "1-3 add_node calls via blueprint_graph_save to flush in-session "
+        "edits to the asset and protect against editor-crash data loss.");
 }
 
 FString ClaireonBlueprintGraphTool_AddNode::GetExampleUsage() const
 {
     return TEXT(
-        "claireon.blueprint_graph_add_node session_id=\"...\" "
+        "blueprint_graph_add_node session_id=\"...\" "
         "node_class=\"K2Node_CallFunction\" function=\"PrintString\" "
         "auto_connect_from_cursor=true");
 }
@@ -1643,11 +1656,11 @@ FString ClaireonBlueprintGraphTool_AddNode::GetExampleUsage() const
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddNode::GetParameterTooltips() const
 {
     TSharedPtr<FJsonObject> T = MakeShared<FJsonObject>();
-    T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by claireon.blueprint_graph_open or _create. Optional if asset_path is supplied."));
+    T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by blueprint_graph_open or _create. Optional if asset_path is supplied."));
     T->SetStringField(TEXT("asset_path"), TEXT("Blueprint asset path (alternative to session_id; auto-opens the session)."));
     T->SetStringField(TEXT("node_class"), TEXT("Fully qualified UClass name of the K2Node to add (e.g. K2Node_CallFunction, K2Node_IfThenElse). Fuzzy-resolved (drop U prefix; partial matches allowed)."));
     T->SetStringField(TEXT("function"), TEXT("For K2Node_CallFunction: the function name (or Class.Function) to call. Resolved against UFUNCTION metadata."));
-    T->SetStringField(TEXT("auto_connect_from_cursor"), TEXT("If true, route the new node's exec pin through the cursor pin when compatible. Preferred over a follow-up claireon.blueprint_graph_connect_pins call."));
+    T->SetStringField(TEXT("auto_connect_from_cursor"), TEXT("If true, route the new node's exec pin through the cursor pin when compatible. Preferred over a follow-up blueprint_graph_connect_pins call."));
     return T;
 }
 

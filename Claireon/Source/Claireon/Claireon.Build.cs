@@ -20,7 +20,7 @@ public class Claireon : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
-			"Projects",          // IPluginManager for plugin content directory resolution
+			"Projects",          // IPluginManager for plugin content-dir lookup
 			"UnrealEd",
 			"Slate",
 			"SlateCore",
@@ -71,6 +71,7 @@ public class Claireon : ModuleRules
 
 			// Asset management tools dependencies
 			"AssetTools",        // IAssetTools, FAssetToolsModule (redirector fixup)
+			"MessageLog",        // FMessageLogModule, IMessageLogListing, FMessageLogListingViewModel for ClaireonTool_MessageLogGet
 
 			// Test/parsing tools dependencies
 			"XmlParser",         // FXmlFile for JUnit XML parsing
@@ -90,6 +91,7 @@ public class Claireon : ModuleRules
 			// Animation tools dependencies
 			"AnimationModifiers",          // UAnimationModifier (anim modifier inspection/resolution)
 			"AnimationBlueprintLibrary",   // Required by AnimationModifier.h
+			"MotionWarping",               // Required by ClaireonTool_AnimInspectMotionWarping (URootMotionModifier, FMotionWarpingTarget)
 
 			// Niagara tools dependencies
 			"Niagara",           // UNiagaraSystem, UNiagaraEmitter, UNiagaraRendererProperties
@@ -119,6 +121,15 @@ public class Claireon : ModuleRules
 			// Chooser / Proxy Table tools dependencies
 			"Chooser",           // UChooserTable, FChooserColumnBase, FObjectChooserBase
 			"ProxyTable",        // UProxyTable, UProxyAsset, FProxyEntry
+
+			// Audio tools dependencies
+			"AudioExtensions",   // USoundAttenuation core types, FSoundAttenuationSettings
+			"AudioEditor",       // Editor-only SoundCueGraph / USoundCueGraphNode support (D1 keeps EdGraph in sync)
+			"MetasoundEngine",   // UMetaSoundSource, UMetaSoundSourceBuilder, IMetaSoundDocumentInterface
+			"MetasoundFrontend", // FMetaSoundFrontendDocumentBuilder + Metasound::Frontend graph handle API
+
+			// Camera asset tools dependencies
+			"GameplayCameras",       // UCameraAsset, UCameraNode, UCameraRigAsset, UArrayCameraNode, BuildCamera, FCameraBuildLog, IObjectTreeGraphObject
 
 		});
 

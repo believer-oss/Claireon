@@ -75,4 +75,77 @@ namespace ClaireonPropertyUtils
 	 * @return The created sub-object, or nullptr on failure
 	 */
 	CLAIREON_API UObject* CreateInstancedSubObject(UObject* Outer, UClass* SubObjectClass, const FString& ArrayPath, FString& OutError);
+
+	/**
+	 * Resolve a dotted property path on a UObject down to the leaf FProperty plus the
+	 * container pointer that property lives on. The caller can then use
+	 * FProperty::ContainerPtrToValuePtr<T>(OutContainer) to access or write the value.
+	 *
+	 * Path syntax: same as ReadPropertyByPath / WritePropertyByPath
+	 * (e.g. "PropertyName", "Struct.Member", "Array[0].Member").
+	 *
+	 * @param Object       - Root UObject to start path resolution from
+	 * @param PropertyPath - Dotted (possibly indexed) property path
+	 * @param OutContainer - On success, the container pointer the leaf property lives on
+	 *                       (may be the Object itself, a struct interior, or an inner
+	 *                       sub-object). Set to nullptr on failure.
+	 * @param OutError     - Populated on failure with a diagnostic
+	 * @return The leaf FProperty, or nullptr on failure
+	 */
+	CLAIREON_API FProperty* ResolvePropertyByPath(
+		UObject*       Object,
+		const FString& PropertyPath,
+		void*&         OutContainer,
+		FString&       OutError);
+
+	/**
+	 * Append a new RF_Transactional inline (EditInline / Instanced) sub-object to a
+	 * TArray<UObject*> property reached by ArrayPath, including paths that traverse
+	 * nested USTRUCT array elements (e.g. "Operations[0].TargetGameplayActions").
+	 *
+	 * Verifies that the array's inner property is FObjectProperty AND has
+	 * CPF_InstancedReference. SubObjectClass must be a subclass of the inner type.
+	 * The Outer of the new UObject is the supplied Outer (caller-owned). The new
+	 * object is created with RF_Transactional so editor undo of the array mutation
+	 * properly tracks it.
+	 *
+	 * Caller responsibilities (this helper does NOT do these):
+	 *   - Open an FScopedTransaction
+	 *   - Call Outer->Modify() before invoking this helper
+	 *
+	 * @param Outer          - UObject that owns the array (used as Outer for NewObject)
+	 * @param SubObjectClass - Concrete UClass to instantiate
+	 * @param ArrayPath      - Dotted path to the TArray<UObject*> property
+	 * @param OutError       - Populated on failure
+	 * @return The newly created sub-object, or nullptr on failure
+	 */
+	CLAIREON_API UObject* CreateInstancedArrayElement(
+		UObject*       Outer,
+		UClass*        SubObjectClass,
+		const FString& ArrayPath,
+		FString&       OutError);
+
+	/**
+	 * Replace the value of a singular UPROPERTY(EditAnywhere, Instanced) UObject*
+	 * slot with a fresh RF_Transactional inline sub-object. If the slot already
+	 * contained a value the previous object is MarkAsGarbage()'d.
+	 *
+	 * Verifies that the leaf property is FObjectProperty AND has
+	 * CPF_InstancedReference. SubObjectClass must be a subclass of the slot type.
+	 *
+	 * Caller responsibilities (this helper does NOT do these):
+	 *   - Open an FScopedTransaction
+	 *   - Call Outer->Modify() before invoking this helper
+	 *
+	 * @param Outer          - UObject that owns the slot (used as Outer for NewObject)
+	 * @param SubObjectClass - Concrete UClass to instantiate
+	 * @param ObjectPath     - Dotted path to the UObject* slot
+	 * @param OutError       - Populated on failure
+	 * @return The newly created sub-object, or nullptr on failure
+	 */
+	CLAIREON_API UObject* SetInstancedSubObject(
+		UObject*       Outer,
+		UClass*        SubObjectClass,
+		const FString& ObjectPath,
+		FString&       OutError);
 }

@@ -5,7 +5,7 @@
 // Validates two acceptance criteria:
 //   1. Each of the 30 picklist tools returns >= 3 search keywords.
 //   2. Representative synonyms appear in the documented target tool's
-//      keyword list, so the tools_search ranker has the vocabulary it
+//      keyword list, so the tool_search ranker has the vocabulary it
 //      needs to surface the target. (Direct ranker invocation is covered
 //      by ClaireonToolCatalogMatcherTests; here we assert the source data.)
 
@@ -141,7 +141,7 @@ UNTEST_UNIT(Claireon, SearchKeywords, TierB_BlueprintGraphSlate)
 UNTEST_UNIT(Claireon, SearchKeywords, TierC_ReadInspectDiscovery)
 {
 	using namespace SearchKeywordsTestHelpers;
-	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_SearchTools>(TEXT("tools_search")));
+	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_SearchTools>(TEXT("tool_search")));
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_ExecutePython>(TEXT("python_execute")));
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_ProxyTableInspect>(TEXT("proxytable_inspect")));
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_ChooserInspect>(TEXT("chooser_inspect")));
@@ -165,7 +165,7 @@ UNTEST_UNIT(Claireon, SearchKeywords, TierC_ReadInspectDiscovery)
 // from the synonym phrase is sufficient for top-N rank.
 //
 // Substitutions vs. P3:
-//   - 'bt task' -> claireon.behaviortree_open (P3 cited claireon.behaviortree_edit
+//   - 'bt task' -> behaviortree_open (P3 cited behaviortree_edit
 //      which is a session-name constant, not a registered tool; nearest
 //      registered representative is _open).
 //   - 'VB chain' / 'upperbody' synonyms target skeleton/anim tools outside
@@ -183,7 +183,7 @@ UNTEST_UNIT(Claireon, SearchKeywords, AnimgraphSynonymMapsToAnimGraphInspect)
 UNTEST_UNIT(Claireon, SearchKeywords, BpVariableSynonymMapsToAddVariable)
 {
 	using namespace SearchKeywordsTestHelpers;
-	// 'bp variable' -> claireon.blueprint_graph_add_variable
+	// 'bp variable' -> blueprint_graph_add_variable
 	UNTEST_EXPECT_TRUE(KeywordsContain<ClaireonBlueprintGraphTool_AddVariable>(TEXT("bp")));
 	UNTEST_EXPECT_TRUE(KeywordsContain<ClaireonBlueprintGraphTool_AddVariable>(TEXT("variable")));
 	co_return;
@@ -192,7 +192,7 @@ UNTEST_UNIT(Claireon, SearchKeywords, BpVariableSynonymMapsToAddVariable)
 UNTEST_UNIT(Claireon, SearchKeywords, BtTaskSynonymMapsToBehaviorTreeOpen)
 {
 	using namespace SearchKeywordsTestHelpers;
-	// 'bt task' -> claireon.behaviortree_open (substituted from P3 _edit per registry)
+	// 'bt task' -> behaviortree_open (substituted from P3 _edit per registry)
 	UNTEST_EXPECT_TRUE(KeywordsContain<ClaireonBehaviorTreeTool_Open>(TEXT("bt")));
 	UNTEST_EXPECT_TRUE(KeywordsContain<ClaireonBehaviorTreeTool_Open>(TEXT("tree")));
 	co_return;
@@ -201,15 +201,15 @@ UNTEST_UNIT(Claireon, SearchKeywords, BtTaskSynonymMapsToBehaviorTreeOpen)
 UNTEST_UNIT(Claireon, SearchKeywords, AbbreviationSynonymsHonoredOnSessionEntryPoints)
 {
 	using namespace SearchKeywordsTestHelpers;
-	// 'st' -> claireon.statetree_open
+	// 'st' -> statetree_open
 	UNTEST_EXPECT_TRUE(KeywordsContain<ClaireonStateTreeTool_Open>(TEXT("st")));
-	// 'eqs' -> claireon.eqs_open
+	// 'eqs' -> eqs_open
 	UNTEST_EXPECT_TRUE(KeywordsContain<ClaireonEQSTool_Open>(TEXT("eqs")));
-	// 'pcg' -> claireon.pcg_open
+	// 'pcg' -> pcg_open
 	UNTEST_EXPECT_TRUE(KeywordsContain<ClaireonPCGGraphTool_Open>(TEXT("pcg")));
-	// 'umg' -> claireon.widgetbp_open
+	// 'umg' -> widgetbp_open
 	UNTEST_EXPECT_TRUE(KeywordsContain<ClaireonWidgetBPTool_Open>(TEXT("umg")));
-	// 'bb' -> claireon.blackboard_open
+	// 'bb' -> blackboard_open
 	UNTEST_EXPECT_TRUE(KeywordsContain<ClaireonBlackboardTool_Open>(TEXT("bb")));
 	co_return;
 }

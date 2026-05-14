@@ -19,6 +19,7 @@
 #include "Policies/CondensedJsonPrintPolicy.h"
 #include "Async/Async.h"
 #include "Interfaces/IHttpBase.h"
+#include "Modules/ModuleManager.h"
 
 FClaireonAnthropicClient::FClaireonAnthropicClient(
 	FClaireonServer* InServer, TSharedPtr<FClaireonREPLLogger> InLogger)
@@ -683,15 +684,10 @@ bool FClaireonAnthropicClient::ExecuteToolUses(
 		if (ContentType != TEXT("tool_use"))
 			continue;
 
-		FString SanitizedToolName, ToolUseId;
-		ContentObj->TryGetStringField(TEXT("name"), SanitizedToolName);
+		FString ToolName, ToolUseId;
+		ContentObj->TryGetStringField(TEXT("name"), ToolName);
 		ContentObj->TryGetStringField(TEXT("id"), ToolUseId);
 		TSharedPtr<FJsonObject> ToolInput = ContentObj->GetObjectField(TEXT("input"));
-
-		// Reverse-map from the sanitized API name back to the original registered name.
-		// Claude returns the name exactly as we sent it (dots replaced with underscores).
-		const FString* OriginalNamePtr = SanitizedToOriginalToolName.Find(SanitizedToolName);
-		FString ToolName = OriginalNamePtr ? *OriginalNamePtr : SanitizedToolName;
 
 		// Check cancel before each tool
 		if (CancelToken.IsValid() && *CancelToken)
@@ -746,7 +742,7 @@ bool FClaireonAnthropicClient::ExecuteToolUses(
 		bool bFoundTool = false;
 
 		// Propagate the active conversation id to the bridge so downstream spill paths
-		// (generic gate + claireon.python_execute internal gate) bucket spill files by
+		// (generic gate + python_execute internal gate) bucket spill files by
 		// conv_NNN rather than "default".
 		FClaireonBridge::SetCurrentConversationId(CurrentConversationId);
 
@@ -761,8 +757,8 @@ bool FClaireonAnthropicClient::ExecuteToolUses(
 				ToolResult = (*FoundTool)->Execute(ToolInput);
 
 				// Route generic-tool results through the disk-spill gate (per D6).
-				// claireon.python_execute routes its own stdout/uelog streams internally.
-				if (!ToolResult.bIsError && ToolName != TEXT("claireon.python_execute"))
+				// python_execute routes its own stdout/uelog streams internally.
+				if (!ToolResult.bIsError && ToolName != TEXT("python_execute"))
 				{
 					ToolResult = FClaireonOutputGate::RouteResult(
 						MoveTemp(ToolResult),
@@ -899,46 +895,41 @@ TArray<TSharedPtr<FJsonValue>> FClaireonAnthropicClient::BuildToolDefinitions() 
 		return ToolDefs;
 	}
 
-	SanitizedToOriginalToolName.Reset();
 	const TMap<FString, TSharedPtr<IClaireonTool>>& Tools = CurrentServer->GetTools();
 
-	// Code Mode: only expose claireon.python_execute + claireon.tools_search.
+	// Code Mode: only expose python_execute + tool_search.
 	// All other tools are available via the claireon.* Python bridge inside python_execute.
 
-	// 1. claireon.python_execute — with embedded type stubs for all tools
+	// 1. python_execute — with embedded type stubs for all tools
 	{
-		const TSharedPtr<IClaireonTool>* ExecuteTool = Tools.Find(TEXT("claireon.python_execute"));
+		const TSharedPtr<IClaireonTool>* ExecuteTool = Tools.Find(TEXT("python_execute"));
 		if (ExecuteTool && ExecuteTool->IsValid())
 		{
 			FString CategorySummary = FClaireonXmlFormatter::GenerateCategorySummary(Tools);
 			FString Description = TEXT(
-				"Run Python code with access to the claireon.* namespace. "
-				"All MCP tools are callable as claireon.<name>(...). "
-				"The code runs in the Unreal Editor Python environment with the 'unreal' module available.\n\n")
+									  "Run Python code with access to the claireon.* namespace. "
+									  "All MCP tools are callable as claireon.<name>(...). "
+									  "The code runs in the Unreal Editor Python environment with the 'unreal' module available.\n\n")
 				+ CategorySummary;
 
 			TSharedPtr<FJsonObject> ToolDef = MakeShared<FJsonObject>();
-			ToolDef->SetStringField(TEXT("name"), TEXT("claireon.python_execute"));
+			ToolDef->SetStringField(TEXT("name"), TEXT("python_execute"));
 			ToolDef->SetStringField(TEXT("description"), Description);
 			ToolDef->SetObjectField(TEXT("input_schema"), (*ExecuteTool)->GetInputSchema());
 			ToolDefs.Add(MakeShared<FJsonValueObject>(ToolDef));
-
-			SanitizedToOriginalToolName.Add(TEXT("claireon.python_execute"), TEXT("claireon.python_execute"));
 		}
 	}
 
-	// 2. claireon.tools_search — for dynamic discovery
+	// 2. tool_search — for dynamic discovery
 	{
-		const TSharedPtr<IClaireonTool>* SearchTool = Tools.Find(TEXT("claireon.tools_search"));
+		const TSharedPtr<IClaireonTool>* SearchTool = Tools.Find(TEXT("tool_search"));
 		if (SearchTool && SearchTool->IsValid())
 		{
 			TSharedPtr<FJsonObject> ToolDef = MakeShared<FJsonObject>();
-			ToolDef->SetStringField(TEXT("name"), TEXT("claireon.tools_search"));
+			ToolDef->SetStringField(TEXT("name"), TEXT("tool_search"));
 			ToolDef->SetStringField(TEXT("description"), (*SearchTool)->GetDescription());
 			ToolDef->SetObjectField(TEXT("input_schema"), (*SearchTool)->GetInputSchema());
 			ToolDefs.Add(MakeShared<FJsonValueObject>(ToolDef));
-
-			SanitizedToOriginalToolName.Add(TEXT("claireon.tools_search"), TEXT("claireon.tools_search"));
 		}
 	}
 

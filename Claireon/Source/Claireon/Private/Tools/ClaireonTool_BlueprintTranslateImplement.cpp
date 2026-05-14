@@ -5,19 +5,18 @@
 
 #include "ClaireonBPTranslateSession.h"
 #include "ClaireonLog.h"
+#include "ClaireonScopedAssetLock.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
-FString ClaireonTool_BlueprintTranslateImplement::GetName() const
-{
-	return TEXT("claireon.blueprint_translate_implement");
-}
+FString ClaireonTool_BlueprintTranslateImplement::GetCategory() const { return TEXT("blueprint"); }
+FString ClaireonTool_BlueprintTranslateImplement::GetOperation() const { return TEXT("translate_implement"); }
 
 FString ClaireonTool_BlueprintTranslateImplement::GetDescription() const
 {
 	return TEXT("Interactive implementation of scaffolded BP-to-C++ code regions. Phase 2 tool that supports "
 		"inspect, implement, force_implement, skip, and mark_complete actions on individual nodes "
-		"within a translation session created by claireon.blueprint_translate_scaffold.");
+		"within a translation session created by blueprint_translate_scaffold.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_BlueprintTranslateImplement::GetInputSchema() const
@@ -292,6 +291,14 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateImplement::Execute(con
 	if (NodeGuid.IsEmpty())
 	{
 		return MakeErrorResult(TEXT("'node_guid' is required for this action."));
+	}
+
+	// Acquire per-asset lock on the blueprint path for actions that may mutate it.
+	// inspect is read-only but locking it costs little and prevents racing readers.
+	FClaireonScopedAssetLock Lock(BlueprintPath, GetName());
+	if (!Lock.IsAcquired())
+	{
+		return Lock.GetError();
 	}
 
 	// Look up blueprint state

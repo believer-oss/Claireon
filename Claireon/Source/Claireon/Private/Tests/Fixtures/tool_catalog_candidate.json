@@ -4,7 +4,7 @@
     "capture_procedure": [
       "1. Check out this branch with S4 landed (python removals complete).",
       "2. Launch UnrealEditor with the Claireon plugin loaded.",
-      "3. Open the Claireon REPL / diagnostics widget and trigger claireon.tools_search once to warm the C++ matcher.",
+      "3. Open the Claireon REPL / diagnostics widget and trigger tool_search once to warm the C++ matcher.",
       "4. For each non-blank, non-comment line in tool_catalog_ab_queries.txt, execute:",
       "   from mcp_tool_catalog import search as _s",
       "   import json",

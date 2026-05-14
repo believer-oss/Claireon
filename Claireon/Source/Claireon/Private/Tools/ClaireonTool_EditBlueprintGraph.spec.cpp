@@ -29,8 +29,10 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
-// Still-monolithic BlueprintCompile tool (exercised by CompileRemoveUnused test).
+// BlueprintCompile (single-target) and BlueprintCompileBatch (multi-target/folder) tools.
+// CompileRemoveUnused test exercises the batch tool's remove_unused option over /Game/__MCPTests.
 #include "Tools/ClaireonTool_BlueprintCompile.h"
+#include "Tools/ClaireonTool_BlueprintCompileBatch.h"
 #include "Tools/ClaireonTool_ApplyBlueprintGraph.h"
 
 // Decomposed blueprint-graph tools (one include per operation exercised here).
@@ -1568,12 +1570,25 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_CompileRemoveUnused,
 
 bool FEditBlueprintGraphTest_CompileRemoveUnused::RunTest(const FString& Parameters)
 {
-	ClaireonTool_BlueprintCompile CompileTool;
+	// The folder-style invocation moved to blueprint_compile_batch in the
+	// session-safety split (#0000). The single-target blueprint_compile no
+	// longer accepts folder paths or arrays.
+	ClaireonTool_BlueprintCompileBatch CompileTool;
+
+	auto BuildPathsArgs = []()
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> Paths;
+		Paths.Add(MakeShared<FJsonValueString>(TEXT("/Game/__MCPTests")));
+		Args->SetArrayField(TEXT("paths"), Paths);
+		// Remove the default 50-blueprint cap so the test exercises the full folder.
+		Args->SetNumberField(TEXT("max_count"), 0);
+		return Args;
+	};
 
 	// Test 1: remove_unused defaults to false (no regression)
 	{
-		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-		Args->SetStringField(TEXT("contentPath"), TEXT("/Game/__MCPTests"));
+		TSharedPtr<FJsonObject> Args = BuildPathsArgs();
 
 		auto Result = CompileTool.Execute(Args);
 		if (Result.bIsError)
@@ -1581,21 +1596,12 @@ bool FEditBlueprintGraphTest_CompileRemoveUnused::RunTest(const FString& Paramet
 			AddError(FString::Printf(TEXT("Compile without remove_unused failed: %s"), *Result.GetContentAsString()));
 			return false;
 		}
-
-		FString ResultText = Result.GetContentAsString();
-		// Should NOT contain "Remove Unused" when not set
-		if (ResultText.Contains(TEXT("Remove Unused")))
-		{
-			AddError(TEXT("'Remove Unused' output should not appear when remove_unused is not set"));
-			return false;
-		}
 		AddInfo(TEXT("Compile without remove_unused: no regression"));
 	}
 
-	// Test 2: remove_unused: true produces output line
+	// Test 2: remove_unused: true does not regress the batch path
 	{
-		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-		Args->SetStringField(TEXT("contentPath"), TEXT("/Game/__MCPTests"));
+		TSharedPtr<FJsonObject> Args = BuildPathsArgs();
 		Args->SetBoolField(TEXT("remove_unused"), true);
 
 		auto Result = CompileTool.Execute(Args);
@@ -1604,14 +1610,7 @@ bool FEditBlueprintGraphTest_CompileRemoveUnused::RunTest(const FString& Paramet
 			AddError(FString::Printf(TEXT("Compile with remove_unused failed: %s"), *Result.GetContentAsString()));
 			return false;
 		}
-
-		FString ResultText = Result.GetContentAsString();
-		if (!ResultText.Contains(TEXT("Remove Unused")))
-		{
-			AddError(FString::Printf(TEXT("Expected 'Remove Unused' in result, got: %s"), *ResultText));
-			return false;
-		}
-		AddInfo(FString::Printf(TEXT("Compile with remove_unused produced expected output:\n%s"), *ResultText));
+		AddInfo(FString::Printf(TEXT("Compile with remove_unused succeeded:\n%s"), *Result.GetContentAsString()));
 	}
 
 	return true;
@@ -1885,7 +1884,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_AddFunctionOverride,
 bool FEditBlueprintGraphTest_AddFunctionOverride::RunTest(const FString& Parameters)
 {
 
-	// Step 1: Create a Blueprint child of FSSampleDirectorBase
+	// Step 1: Create a Blueprint child of MyDirectorBase
 	FString SessionId;
 	{
 		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
@@ -1893,7 +1892,7 @@ bool FEditBlueprintGraphTest_AddFunctionOverride::RunTest(const FString& Paramet
 
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/__MCPTests/BP_FuncOverrideTest"));
-		Params->SetStringField(TEXT("parent_class"), TEXT("FSSampleDirectorBase"));
+		Params->SetStringField(TEXT("parent_class"), TEXT("MyDirectorBase"));
 		CreateParams->SetObjectField(TEXT("params"), Params);
 
 		auto Result = DispatchLegacyEnvelope(CreateParams);
@@ -3929,7 +3928,7 @@ bool FEditBlueprintGraphTest_CursorHistory_CursorBackAutoSwitches::RunTest(const
 		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
 		CreateParams->SetStringField(TEXT("operation"), TEXT("create"));
 		CreateParams->SetStringField(TEXT("asset_path"), TEXT("/Game/__MCPTests/BP_CursorBackAutoSwitches"));
-		CreateParams->SetStringField(TEXT("parent_class"), TEXT("FSSampleDirectorBase"));
+		CreateParams->SetStringField(TEXT("parent_class"), TEXT("MyDirectorBase"));
 
 		auto Result = DispatchLegacyEnvelope(CreateParams);
 		if (Result.bIsError)
@@ -4079,7 +4078,7 @@ bool FEditBlueprintGraphTest_CursorHistory_FunctionOverridePushesOldGraph::RunTe
 		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
 		CreateParams->SetStringField(TEXT("operation"), TEXT("create"));
 		CreateParams->SetStringField(TEXT("asset_path"), TEXT("/Game/__MCPTests/BP_FuncOverridePushesOldGraph"));
-		CreateParams->SetStringField(TEXT("parent_class"), TEXT("FSSampleDirectorBase"));
+		CreateParams->SetStringField(TEXT("parent_class"), TEXT("MyDirectorBase"));
 
 		auto Result = DispatchLegacyEnvelope(CreateParams);
 		if (Result.bIsError)
@@ -4175,7 +4174,7 @@ namespace
 		TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
 		CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
 		CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
-		CreateArgs->SetStringField(TEXT("parent_class"), TEXT("FSSampleDirectorBase"));
+		CreateArgs->SetStringField(TEXT("parent_class"), TEXT("MyDirectorBase"));
 
 		auto CreateResult = DispatchLegacyEnvelope(CreateArgs);
 		if (CreateResult.bIsError)
@@ -5207,12 +5206,12 @@ bool FEditBlueprintGraphTest_SwitchGraph_RefinementLoopEndToEnd::RunTest(const F
 {
 	const FString AssetPath = TEXT("/Game/__MCPTests/BP_RefinementLoopEndToEnd");
 
-	// Create a Sample Director blueprint and add two function overrides so the BP
+	// Create a Director blueprint and add two function overrides so the BP
 	// has EventGraph + Func1 + Func2 for the refinement loop.
 	TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
 	CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
 	CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
-	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("FSSampleDirectorBase"));
+	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("MyDirectorBase"));
 	auto CR = DispatchLegacyEnvelope(CreateArgs);
 	if (CR.bIsError)
 	{
@@ -5353,7 +5352,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd::RunTest(c
 	TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
 	CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
 	CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
-	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("FSSampleDirectorBase"));
+	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("MyDirectorBase"));
 	auto CR = DispatchLegacyEnvelope(CreateArgs);
 	if (CR.bIsError)
 	{

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Regression tests for claireon.blueprint_apply_graph -- in particular, that
+// Regression tests for blueprint_apply_graph -- in particular, that
 // CallFunction nodes created through the batch path populate their pins
 // correctly.  See work item #0000 and 6480_FRACTURE.md for background.
 
@@ -22,6 +22,7 @@
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraphSchema_K2.h"
+#include "K2Node_AsyncAction.h"
 #include "ObjectTools.h"
 
 // ---------------------------------------------------------------------------
@@ -149,6 +150,55 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, KismetSystemLibrary_PrintSt
 	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("execute")));
 	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("then")));
 	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("InString")));
+
+	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	co_return;
+}
+
+// ============================================================================
+// AsyncAction auto-pick -- card #0000 repro.  Pre-fix this comes through as a
+// plain UK2Node_CallFunction missing the BlueprintAssignable OnComplete exec
+// pin.  Post-fix the helper picks UK2Node_AsyncAction, the call site calls
+// InitializeProxyFromFunction, and AllocateDefaultPins emits the delegate
+// exec pins from the proxy class.
+// ============================================================================
+
+UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins,
+    FSFlowprintAwait_Delay_AsyncAction_HasOnComplete, UNTEST_TIMEOUTMS(30000))
+{
+	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
+	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
+
+	// MyGame referenced by string only -- no #include, no Build.cs edge.
+	TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
+	Node->SetStringField(TEXT("id"), TEXT("delay1"));
+	Node->SetStringField(TEXT("node_type"), TEXT("CallFunction"));
+	Node->SetStringField(TEXT("function_name"), TEXT("AwaitDelay"));
+	Node->SetStringField(TEXT("function_class"),
+		TEXT("/Script/MyGame.FSFlowprintAwait_Delay"));
+
+	ClaireonTool_ApplyBlueprintGraph Tool;
+	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
+	UNTEST_ASSERT_FALSE(Result.bIsError);
+
+	UEdGraphNode* Created = ResolveCreatedNode(Result, TEXT("delay1"), SessionId);
+	UNTEST_ASSERT_PTR(Created);
+
+	// Cast check: regression here means the helper or call-site branch
+	// failed to route to the AsyncAction path.
+	UK2Node_AsyncAction* AsyncNode = Cast<UK2Node_AsyncAction>(Created);
+	UNTEST_ASSERT_PTR(AsyncNode);
+
+	// Card-defining pin: the BlueprintAssignable delegate exec output.
+	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("OnComplete")));
+
+	// Proxy-class parameter pin (factory's float arg).
+	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("Duration")));
+
+	// Standard exec pair -- confirms the base wiring.
+	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("execute")));
+	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("then")));
 
 	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
 	co_return;

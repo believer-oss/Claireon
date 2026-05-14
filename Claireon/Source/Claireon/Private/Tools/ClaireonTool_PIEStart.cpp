@@ -17,15 +17,16 @@
 #include "FileHelpers.h"
 #include "Settings/LevelEditorPlaySettings.h"
 
-FString ClaireonTool_PIEStart::GetName() const
-{
-	return TEXT("claireon.pie_start_async");
-}
+FString ClaireonTool_PIEStart::GetCategory() const { return TEXT("pie"); }
+FString ClaireonTool_PIEStart::GetOperation() const { return TEXT("start_async"); }
 
 FString ClaireonTool_PIEStart::GetDescription() const
 {
 	return TEXT("Start a Play In Editor (PIE) session, optionally loading a map first. "
-		"The PIE start is deferred until after the current script finishes.");
+		"The PIE start is deferred until after the current script finishes. "
+		"If mapPath is supplied, a leaked-World guard runs before the pre-PIE map load: "
+		"a leaked World aborts the PIE start with a structured error -- "
+		"use duplicate_and_open_map_async if you need to PIE into a freshly-duplicated map.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PIEStart::GetInputSchema() const
@@ -86,7 +87,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEStart::Execute(const TSharedPtr<FJson
 	FClaireonPIEManager& PIEManager = FClaireonPIEManager::Get();
 	if (PIEManager.GetActiveSession() != nullptr)
 	{
-		return MakeErrorResult(TEXT("A PIE session is already active. Stop it first with claireon.pie_stop_async."));
+		return MakeErrorResult(TEXT("A PIE session is already active. Stop it first with pie_stop_async."));
 	}
 
 	// Determine net mode (validate now, execute later)
@@ -162,9 +163,26 @@ void ClaireonTool_PIEStart::ExecuteDeferredPIEStart(const FString& Payload)
 	FString NetModeStr;
 	PayloadObj->TryGetStringField(TEXT("netMode"), NetModeStr);
 
-	// Optional: load a map first
+	// Optional: load a map first. Run the leaked-World guard BEFORE
+	// LoadMap so a duplicate-asset leak crashes loud-and-clean instead
+	// of fatally asserting in EditorDestroyWorld(). [RESOLVED] D1.
 	if (!MapPath.IsEmpty())
 	{
+		// Match the deferred-tick barrier already run by
+		// ClaireonTool_ExecutePython before this dispatch -- the second
+		// pass catches anything orphaned between the post-execute
+		// barrier and this site.
+		FClaireonBridge::RunWorldTransitionBarrier();
+
+		TArray<FClaireonLeakedWorld> Remaining;
+		if (!FClaireonBridge::EnsureNoLeakedWorlds(Remaining))
+		{
+			const FString Msg = FClaireonBridge::FormatLeakedWorldError(Remaining);
+			UE_LOG(LogClaireon, Error, TEXT("%s"), *Msg);
+			FClaireonBridge::ReportDeferredActionAbort(Msg);
+			return; // do NOT load map and do NOT start PIE
+		}
+
 		FEditorFileUtils::LoadMap(MapPath);
 	}
 

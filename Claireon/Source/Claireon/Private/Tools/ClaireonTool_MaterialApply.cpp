@@ -4,6 +4,7 @@
 #include "Tools/ClaireonTool_MaterialApply.h"
 
 #include "ClaireonLog.h"
+#include "ClaireonScopedAssetLock.h"
 
 #include "Materials/MaterialInterface.h"
 #include "Components/MeshComponent.h"
@@ -98,10 +99,8 @@ namespace
 	}
 }
 
-FString ClaireonTool_MaterialApply::GetName() const
-{
-	return TEXT("claireon.material_apply");
-}
+FString ClaireonTool_MaterialApply::GetCategory() const { return TEXT("material"); }
+FString ClaireonTool_MaterialApply::GetOperation() const { return TEXT("apply"); }
 
 FString ClaireonTool_MaterialApply::GetDescription() const
 {
@@ -191,10 +190,16 @@ FToolResult ClaireonTool_MaterialApply::Execute(const TSharedPtr<FJsonObject>& A
 	UBlueprint* Blueprint = nullptr;
 	AActor* Actor = nullptr;
 
+	// Resolve the per-asset lock target based on target.kind. The actor branch locks the
+	// editor world's level package; the blueprint branch locks the supplied blueprint path.
+	FString LockPath;
+	UWorld* ResolvedWorld = nullptr;
+	FString ResolvedBlueprintPath;
+	FString ResolvedActorName;
+
 	if (Kind.Equals(TEXT("actor"), ESearchCase::IgnoreCase))
 	{
-		FString ActorName;
-		if (!TargetObj->TryGetStringField(TEXT("actor_name"), ActorName) || ActorName.IsEmpty())
+		if (!TargetObj->TryGetStringField(TEXT("actor_name"), ResolvedActorName) || ResolvedActorName.IsEmpty())
 		{
 			return MakeErrorResult(TEXT("target.actor_name is required when kind == 'actor'"));
 		}
@@ -202,15 +207,38 @@ FToolResult ClaireonTool_MaterialApply::Execute(const TSharedPtr<FJsonObject>& A
 		{
 			return MakeErrorResult(TEXT("GEditor is unavailable"));
 		}
-		UWorld* World = GEditor->GetEditorWorldContext().World();
-		if (!World)
+		ResolvedWorld = GEditor->GetEditorWorldContext().World();
+		if (!ResolvedWorld)
 		{
 			return MakeErrorResult(TEXT("No editor world available"));
 		}
-		Actor = FindActorInEditorWorld(World, ActorName);
+		LockPath = ResolvedWorld->GetOutermost()->GetName();
+	}
+	else if (Kind.Equals(TEXT("blueprint"), ESearchCase::IgnoreCase))
+	{
+		if (!TargetObj->TryGetStringField(TEXT("blueprint_path"), ResolvedBlueprintPath) || ResolvedBlueprintPath.IsEmpty())
+		{
+			return MakeErrorResult(TEXT("target.blueprint_path is required when kind == 'blueprint'"));
+		}
+		LockPath = ResolvedBlueprintPath;
+	}
+	else
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Unknown target.kind '%s' (expected 'actor' or 'blueprint')"), *Kind));
+	}
+
+	FClaireonScopedAssetLock Lock(LockPath, GetName());
+	if (!Lock.IsAcquired())
+	{
+		return Lock.GetError();
+	}
+
+	if (Kind.Equals(TEXT("actor"), ESearchCase::IgnoreCase))
+	{
+		Actor = FindActorInEditorWorld(ResolvedWorld, ResolvedActorName);
 		if (!Actor)
 		{
-			return MakeErrorResult(FString::Printf(TEXT("Actor not found in editor world: '%s'"), *ActorName));
+			return MakeErrorResult(FString::Printf(TEXT("Actor not found in editor world: '%s'"), *ResolvedActorName));
 		}
 		MeshComponent = FindMeshComponentOnActor(Actor, ComponentName);
 		if (!MeshComponent)
@@ -220,34 +248,25 @@ FToolResult ClaireonTool_MaterialApply::Execute(const TSharedPtr<FJsonObject>& A
 		}
 		TargetLabel = FString::Printf(TEXT("actor %s"), *Actor->GetActorLabel());
 	}
-	else if (Kind.Equals(TEXT("blueprint"), ESearchCase::IgnoreCase))
+	else // blueprint
 	{
-		FString BlueprintPath;
-		if (!TargetObj->TryGetStringField(TEXT("blueprint_path"), BlueprintPath) || BlueprintPath.IsEmpty())
-		{
-			return MakeErrorResult(TEXT("target.blueprint_path is required when kind == 'blueprint'"));
-		}
-		Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
+		Blueprint = LoadObject<UBlueprint>(nullptr, *ResolvedBlueprintPath);
 		if (!Blueprint)
 		{
-			FSoftObjectPath SoftBP(BlueprintPath);
+			FSoftObjectPath SoftBP(ResolvedBlueprintPath);
 			Blueprint = Cast<UBlueprint>(SoftBP.TryLoad());
 		}
 		if (!Blueprint)
 		{
-			return MakeErrorResult(FString::Printf(TEXT("Failed to load blueprint '%s'"), *BlueprintPath));
+			return MakeErrorResult(FString::Printf(TEXT("Failed to load blueprint '%s'"), *ResolvedBlueprintPath));
 		}
 		MeshComponent = FindMeshComponentOnBlueprint(Blueprint, ComponentName);
 		if (!MeshComponent)
 		{
 			return MakeErrorResult(FString::Printf(TEXT("UMeshComponent SCS node '%s' not found on blueprint '%s'"),
-				*ComponentName, *BlueprintPath));
+				*ComponentName, *ResolvedBlueprintPath));
 		}
-		TargetLabel = FString::Printf(TEXT("blueprint %s"), *BlueprintPath);
-	}
-	else
-	{
-		return MakeErrorResult(FString::Printf(TEXT("Unknown target.kind '%s' (expected 'actor' or 'blueprint')"), *Kind));
+		TargetLabel = FString::Printf(TEXT("blueprint %s"), *ResolvedBlueprintPath);
 	}
 
 	const int32 SlotCount = MeshComponent->GetNumMaterials();
@@ -384,7 +403,7 @@ FToolResult ClaireonTool_MaterialApply::Execute(const TSharedPtr<FJsonObject>& A
 	const FString Summary = FString::Printf(TEXT("Applied %s to %s.%s slot %s"),
 		*Material->GetName(), *TargetLabel, *ComponentName, *SlotLabel);
 
-	UE_LOG(LogClaireon, Log, TEXT("[claireon.material_apply] %s"), *Summary);
+	UE_LOG(LogClaireon, Log, TEXT("[material_apply] %s"), *Summary);
 
 	FToolResult Result = MakeSuccessResult(Data, Output);
 	return Result;

@@ -27,14 +27,10 @@ public:
     /** Get the singleton. Safe to call from game thread. */
     static const UClaireonSettings* Get();
 
-    // --- Server ---
-
-    /** TCP port for the MCP HTTP server. Requires server restart to take effect. */
-    UPROPERTY(Config, EditAnywhere, Category="Server",
-        meta=(DisplayName="Server Port", ClampMin=1024, ClampMax=65535))
-    uint32 ServerPort = 8017;
-
     // --- Connection ---
+    // (Stage 012) Server > Server Port deleted. The editor's MCP listener
+    // binds the per-worktree SHA port computed by Claireon::DeriveDefaultMcpPort
+    // (Stage 010); there is no editor-facing port setting any more.
 
     /** Anthropic API key. Get one at https://console.anthropic.com/settings/keys */
     UPROPERTY(Config, EditAnywhere, Category="Connection",
@@ -256,6 +252,38 @@ public:
     UPROPERTY(Config, EditAnywhere, Category="Claude Code Launch",
         meta=(DisplayName="Skip Permission Prompts on Launch"))
     bool bLaunchSkipPermissions = false;
+
+    // --- MCP Proxy ---
+
+    /** Whether to front this editor with the always-on MCP proxy.
+     *  Default is false: the editor runs in direct-connect mode (Claude talks
+     *  directly to the editor's MCP port, no proxy) unless explicitly opted in.
+     *  Opting in spawns-or-attaches to the proxy and registers; the proxy
+     *  becomes the sole ingress for MCP traffic.
+     *  Command-line override: `-EnableMCPProxy` forces this to true regardless of the setting.
+     *
+     *  Note (Stage 010): even with bEnableProxy=false, the editor auto-promotes
+     *  into proxy-attached mode when the SHA port is already held by a Claireon
+     *  proxy on 43017. This keeps the Claude Code button transparent across
+     *  modes; this setting now only controls whether StartServer proactively
+     *  spawns the proxy. */
+    UPROPERTY(Config, EditAnywhere, Category="MCP Proxy",
+        meta=(DisplayName="Enable MCP Proxy"))
+    bool bEnableProxy = false;
+
+    // (Stage 012) ProxyIdleTimeoutSeconds deleted. Stage 009 (D2) removed the
+    // proxy's idle-exit; the singleton runs until SIGINT/SIGTERM, so the
+    // setting has no consumer.
+
+    /** Extra arguments appended to the proxy spawn command line (whitespace-separated). */
+    UPROPERTY(Config, EditAnywhere, Category="MCP Proxy",
+        meta=(DisplayName="Proxy Extra Python Args"))
+    FString ProxyExtraPythonArgs;
+
+    /** HTTP forward timeout (seconds) the plugin uses when sending MCP traffic to the proxy. */
+    UPROPERTY(Config, EditAnywhere, Category="MCP Proxy",
+        meta=(DisplayName="Proxy Forward Timeout (seconds)", ClampMin=5, ClampMax=3600))
+    int32 ProxyForwardTimeoutSeconds = 600;
 
     // --- Helpers ---
 

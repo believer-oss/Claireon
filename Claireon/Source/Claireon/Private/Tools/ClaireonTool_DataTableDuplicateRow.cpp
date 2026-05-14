@@ -4,16 +4,15 @@
 #include "Tools/ClaireonTool_DataTableDuplicateRow.h"
 #include "Tools/ClaireonDataTableHelpers.h"
 #include "ClaireonLog.h"
+#include "ClaireonScopedAssetLock.h"
 #include "Engine/DataTable.h"
 #include "DataTableEditorUtils.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "ScopedTransaction.h"
 
-FString ClaireonTool_DataTableDuplicateRow::GetName() const
-{
-	return TEXT("claireon.datatable_duplicate_row");
-}
+FString ClaireonTool_DataTableDuplicateRow::GetCategory() const { return TEXT("datatable"); }
+FString ClaireonTool_DataTableDuplicateRow::GetOperation() const { return TEXT("duplicate_row"); }
 
 FString ClaireonTool_DataTableDuplicateRow::GetDescription() const
 {
@@ -63,6 +62,12 @@ IClaireonTool::FToolResult ClaireonTool_DataTableDuplicateRow::Execute(const TSh
 	if (!Arguments->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return MakeErrorResult(TEXT("Missing required parameter: asset_path"));
+	}
+
+	FClaireonScopedAssetLock Lock(AssetPath, GetName());
+	if (!Lock.IsAcquired())
+	{
+		return Lock.GetError();
 	}
 
 	FString SourceRow;

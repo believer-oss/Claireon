@@ -12,7 +12,7 @@
 // argument: Unit_* vs Functional_* to allow test-name filtering.
 //
 // Test skip policy:
-//  - The acceptance-case test targets /Game/Sample/Mobs/TerminusTick/BP_TerminusTick
+//  - The acceptance-case test targets /Game/Sandbox/BP_Example
 //    which is a product path that may drift; if the asset is absent the test logs a
 //    note and early-returns success rather than failing.
 //  - Branch-2 IsChildOf<UBlueprint> requires a concrete UBlueprint-derived class
@@ -441,14 +441,14 @@ UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_RenameDependenciesTrue
 UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_AcceptanceCaseMatchesParentProposal, UNTEST_TIMEOUTMS(60000))
 {
 	// Parent proposal acceptance case:
-	//   claireon.blueprint_duplicate('/Game/Sample/Mobs/TerminusTick/BP_TerminusTick',
-	//                              '/Game/Sandbox/BP_TerminusTick_Clone')
+	//   claireon.blueprint_duplicate('/Game/Sandbox/BP_Example',
+	//                              '/Game/Sandbox/BP_Example_Clone')
 	// Skip (pass) if the acceptance-case source asset has moved or is absent.
 
-	const FString SourcePackage = TEXT("/Game/Sample/Mobs/TerminusTick/BP_TerminusTick");
-	const FString SourceObject = SourcePackage + TEXT(".BP_TerminusTick");
-	const FString DestPackage = TEXT("/Game/Sandbox/BP_TerminusTick_Clone");
-	const FString DestObject = DestPackage + TEXT(".BP_TerminusTick_Clone");
+	const FString SourcePackage = TEXT("/Game/Sandbox/BP_Example");
+	const FString SourceObject = SourcePackage + TEXT(".BP_Example");
+	const FString DestPackage = TEXT("/Game/Sandbox/BP_Example_Clone");
+	const FString DestObject = DestPackage + TEXT(".BP_Example_Clone");
 
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 	FAssetData SourceData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(SourceObject));

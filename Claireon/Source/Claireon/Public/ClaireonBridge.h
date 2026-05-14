@@ -29,6 +29,22 @@ struct FClaireonDeferredAction
 	FString Payload;
 };
 
+/** Description of a leaked World package returned by EnsureNoLeakedWorlds. */
+struct FClaireonLeakedWorld
+{
+	/** Long package name of the leaked World, e.g. /Game/Maps/L_MyLevel_Copy. */
+	FString PackageName;
+
+	/** True if EnsureNoLeakedWorlds attempted to unload this package. */
+	bool bUnloadAttempted = false;
+
+	/** True if the unload attempt succeeded (only meaningful when bUnloadAttempted). */
+	bool bUnloadSucceeded = false;
+
+	/** True if the package was dirty and thus skipped (never passed to UnloadPackages). */
+	bool bDirty = false;
+};
+
 /**
  * C++-to-Python bridge using CPython C API.
  * Registers C++ functions callable from Python via the claireon.* namespace.
@@ -57,7 +73,7 @@ public:
 	 *  TEXT("default") for direct invocations (diagnostics widget, test harness). */
 	static void SetCurrentConversationId(const FString& InConversationId);
 
-	/** Read the current conversation id (for non-REPL call sites like claireon.python_execute). */
+	/** Read the current conversation id (for non-REPL call sites like python_execute). */
 	static const FString& GetCurrentConversationId();
 
 	/**
@@ -87,6 +103,48 @@ public:
 	 */
 	static void RunWorldTransitionBarrier();
 
+	/**
+	 * Find any UWorld objects loaded in memory that are NOT the editor
+	 * world, an active PIE/preview world, or a streaming sublevel of the
+	 * editor world. Attempt to unload their packages (skipping dirty
+	 * ones), run GC, and return any leaks that remain in OutRemaining.
+	 *
+	 * Returns true iff zero leaks remain (safe to transition).
+	 *
+	 * Logs every leaked World it touches to LogClaireon regardless of
+	 * outcome. Caller is responsible for surfacing the structured error
+	 * (see FormatLeakedWorldError + ReportDeferredActionAbort).
+	 *
+	 * Dirty leaked Worlds are NOT force-unloaded -- they are recorded in
+	 * OutRemaining with bDirty=true (see [RESOLVED] D2).
+	 */
+	static bool EnsureNoLeakedWorlds(TArray<FClaireonLeakedWorld>& OutRemaining);
+
+	/**
+	 * Build the human-readable error string for a guard abort. Names
+	 * every leaked package, separating dirty (save-or-discard) from
+	 * pinned (still-referenced after unload). Single-line if zero
+	 * leaks; multi-line otherwise. Prefixed with "[MCP Guard] ..."
+	 * style so it is searchable in logs.
+	 */
+	static FString FormatLeakedWorldError(const TArray<FClaireonLeakedWorld>& Leaks);
+
+	/**
+	 * Append a deferred-action abort message to the bridge-side
+	 * accumulator. Called from EnsureNoLeakedWorlds callers when the
+	 * guard refuses a transition. Multiple aborts in one
+	 * python_execute are joined newline-separated by the dispatcher.
+	 */
+	static void ReportDeferredActionAbort(const FString& Message);
+
+	/**
+	 * Drain and return all reported deferred-action aborts since the
+	 * last drain. Empties the accumulator. Called by
+	 * ClaireonTool_ExecutePython::Execute after the per-action dispatch
+	 * loop.
+	 */
+	static TArray<FString> DrainDeferredActionAborts();
+
 	/** Rebuild the claireon Python module from the current tool registry. Called when bClaireonModuleStale is set. */
 	static void RebuildClaireonModule();
 
@@ -109,9 +167,18 @@ private:
 	/** Stores the OnToolsChanged delegate subscription */
 	static FDelegateHandle ToolsChangedHandle;
 
-	/** Build the tool catalog JSON and run the Python bootstrap to populate sys.modules['claireon']. */
+	/** Build the per-namespace tool catalog and run the Python bootstrap to populate
+	 *  sys.modules['<ns>'] for every namespace observed in the registry. */
 	static void BuildAndRunBootstrap();
 
 	/** Active conversation id (see SetCurrentConversationId).  Defaults to "default". */
 	static FString GCurrentConversationId;
+
+	/** Set of namespaces materialised by the previous bootstrap pass. Used by
+	 *  RebuildClaireonModule to delete sys.modules entries for namespaces that
+	 *  no longer have any tools (e.g. after a provider unregister). */
+	static TSet<FString> PreviousNamespaces;
+
+	/** Accumulator for deferred-action abort messages (drained per python_execute). */
+	static TArray<FString> GDeferredActionAborts;
 };

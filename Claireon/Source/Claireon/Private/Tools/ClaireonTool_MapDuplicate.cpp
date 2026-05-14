@@ -23,10 +23,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonTool_MapDuplicate::GetName() const
-{
-	return TEXT("claireon.duplicate_and_open_map_async");
-}
+FString ClaireonTool_MapDuplicate::GetOperation() const { return TEXT("duplicate_map_async"); }
 
 FString ClaireonTool_MapDuplicate::GetCategory() const
 {
@@ -38,7 +35,11 @@ FString ClaireonTool_MapDuplicate::GetDescription() const
 	return TEXT("Duplicate a map asset and open the copy in the editor. "
 				"The duplication and map open are deferred until after the current script finishes "
 				"(world transition). Do not depend on the new map being loaded in subsequent lines "
-				"of the same execute() call.");
+				"of the same execute() call. "
+				"If you need to duplicate a map and then open it, ALWAYS use this tool -- "
+				"do not chain unreal.EditorAssetLibrary.duplicate_asset() followed by "
+				"map_open_async; the duplicated World will remain loaded in memory "
+				"and the leaked-World guard will abort the next world transition.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_MapDuplicate::GetInputSchema() const
@@ -216,6 +217,19 @@ void ClaireonTool_MapDuplicate::ExecuteDeferredDuplicateAndOpenMap(const FString
 			FTickerDelegate::CreateLambda([MapPath](float) -> bool
 		{
 			FClaireonBridge::RunWorldTransitionBarrier();
+
+			// Belt-and-suspenders: Phase 1 already unloaded the duplicated
+			// package, but if any World is still loaded here we must abort
+			// rather than crash in EditorDestroyWorld(). [RESOLVED] D1.
+			TArray<FClaireonLeakedWorld> Remaining;
+			if (!FClaireonBridge::EnsureNoLeakedWorlds(Remaining))
+			{
+				const FString Msg = FClaireonBridge::FormatLeakedWorldError(Remaining);
+				UE_LOG(LogClaireon, Error, TEXT("%s"), *Msg);
+				FClaireonBridge::ReportDeferredActionAbort(Msg);
+				return false; // do NOT call LoadMap
+			}
+
 			FEditorFileUtils::LoadMap(MapPath);
 			return false;
 		}),

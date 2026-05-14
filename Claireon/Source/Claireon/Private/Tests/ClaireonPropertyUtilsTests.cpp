@@ -5,10 +5,12 @@
 #include "Untest.h"
 #include "Tools/ClaireonPropertyUtils.h"
 #include "Tools/ClaireonAssetUtils.h"
+#include "ClaireonTestTypes.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "ScopedTransaction.h"
 #include "Editor.h"
+#include "UObject/Package.h"
 
 // Discover test assets dynamically. Tests that modify assets use undo to restore.
 
@@ -167,6 +169,32 @@ UNTEST_UNIT(Claireon, PropertyUtils_GetAll, NullObjectReturnsEmpty)
 	TSharedPtr<FJsonObject> Props = ClaireonPropertyUtils::GetAllProperties(nullptr);
 	UNTEST_ASSERT_PTR(Props.Get());
 	UNTEST_EXPECT_EQ(Props->Values.Num(), 0);
+	co_return;
+}
+
+// ---------------------------------------------------------------------------
+// CreateInstancedArrayElement -- generic guard tests (#0000)
+// ---------------------------------------------------------------------------
+
+UNTEST_UNIT(Claireon, PropertyUtils_Create, RejectsNonInstancedInner)
+{
+	UClaireonTestNonInstancedHolder* Holder =
+		NewObject<UClaireonTestNonInstancedHolder>(GetTransientPackage());
+	UNTEST_ASSERT_PTR(Holder);
+
+	FString Err;
+	UObject* New = ClaireonPropertyUtils::CreateInstancedArrayElement(
+		Holder,
+		UObject::StaticClass(),
+		TEXT("NonInstancedArray"),
+		Err);
+
+	UNTEST_EXPECT_TRUE(New == nullptr);
+	UNTEST_EXPECT_FALSE(Err.IsEmpty());
+	UNTEST_EXPECT_TRUE(
+		Err.Contains(TEXT("Instanced")) ||
+		Err.Contains(TEXT("CPF_InstancedReference")));
+	UNTEST_EXPECT_TRUE(Holder->NonInstancedArray.Num() == 0);
 	co_return;
 }
 

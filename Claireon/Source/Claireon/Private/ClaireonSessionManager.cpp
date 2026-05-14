@@ -29,8 +29,9 @@ FClaireonSessionManager::~FClaireonSessionManager()
 
 FMCPOpenSessionResult FClaireonSessionManager::OpenSession(const FString& AssetPath, const FString& ToolName, double InTimeoutMinutes)
 {
-	ensureMsgf(ToolName.StartsWith(TEXT("claireon.")), TEXT("Tool name must start with 'claireon.': %s"), *ToolName);
-
+	// Per Spec E (#0000): bare-name validation lives in the bridge bootstrap
+	// (FClaireonBridge::BuildAndRunBootstrap, IsValidPyIdentifier). The session
+	// manager has no business policing tool naming; both forms are accepted.
 	const FString CanonicalPath = CanonicalizePath(AssetPath);
 	if (CanonicalPath.IsEmpty())
 	{
@@ -41,6 +42,14 @@ FMCPOpenSessionResult FClaireonSessionManager::OpenSession(const FString& AssetP
 
 	// Opportunistic cleanup
 	CleanupExpiredInternal();
+
+	// Block if an editor-wide session is held -- mutually exclusive with per-asset.
+	if (EditorWideSession.IsSet())
+	{
+		FMCPSession BlockingCopy = EditorWideSession.GetValue();
+		UE_LOG(LogClaireon, Warning, TEXT("Per-asset session blocked by editor-wide session held by tool '%s'"), *BlockingCopy.ToolName);
+		return { EOpenSessionResult::BlockedByOtherTool, TEXT(""), TOptional<FMCPSession>(MoveTemp(BlockingCopy)) };
+	}
 
 	const FString* ExistingSessionId = AssetLocks.Find(CanonicalPath);
 	if (ExistingSessionId)
@@ -134,6 +143,19 @@ FMCPSession* FClaireonSessionManager::FindSession(const FString& SessionId)
 
 bool FClaireonSessionManager::CloseSession(const FString& SessionId)
 {
+	// Editor-wide sessions are stored separately; delegate.
+	{
+		bool bIsEditorWide = false;
+		{
+			FScopeLock ScopeLock(&CriticalSection);
+			bIsEditorWide = EditorWideSession.IsSet() && EditorWideSession->SessionId == SessionId;
+		}
+		if (bIsEditorWide)
+		{
+			return CloseEditorWideSession(SessionId);
+		}
+	}
+
 	FMCPSessionClosedInfo ClosedInfo;
 
 	{
@@ -182,6 +204,11 @@ TArray<FMCPSession> FClaireonSessionManager::ListSessions(const FString& ToolNam
 		{
 			Result.Add(Pair.Value);
 		}
+	}
+
+	if (EditorWideSession.IsSet() && (ToolName.IsEmpty() || EditorWideSession->ToolName == ToolName))
+	{
+		Result.Add(EditorWideSession.GetValue());
 	}
 
 	return Result;
@@ -241,7 +268,7 @@ int32 FClaireonSessionManager::ForceReleaseAll()
 	{
 		FScopeLock ScopeLock(&CriticalSection);
 
-		ClosedSessions.Reserve(Sessions.Num());
+		ClosedSessions.Reserve(Sessions.Num() + (EditorWideSession.IsSet() ? 1 : 0));
 		for (const auto& Pair : Sessions)
 		{
 			FMCPSessionClosedInfo Info;
@@ -249,6 +276,16 @@ int32 FClaireonSessionManager::ForceReleaseAll()
 			Info.AssetPath = Pair.Value.AssetPath;
 			Info.ToolName = Pair.Value.ToolName;
 			ClosedSessions.Add(MoveTemp(Info));
+		}
+
+		if (EditorWideSession.IsSet())
+		{
+			FMCPSessionClosedInfo Info;
+			Info.SessionId = EditorWideSession->SessionId;
+			Info.AssetPath = EditorWideSession->AssetPath;
+			Info.ToolName = EditorWideSession->ToolName;
+			ClosedSessions.Add(MoveTemp(Info));
+			EditorWideSession.Reset();
 		}
 
 		Sessions.Empty();
@@ -312,7 +349,83 @@ TArray<FMCPSessionClosedInfo> FClaireonSessionManager::CleanupExpiredInternal()
 		Sessions.Remove(ExpiredId);
 	}
 
+	// Also expire the editor-wide session if past its timeout.
+	if (EditorWideSession.IsSet() && EditorWideSession->IsExpired())
+	{
+		FMCPSessionClosedInfo Info;
+		Info.SessionId = EditorWideSession->SessionId;
+		Info.AssetPath = EditorWideSession->AssetPath;
+		Info.ToolName = EditorWideSession->ToolName;
+		Removed.Add(MoveTemp(Info));
+		EditorWideSession.Reset();
+	}
+
 	return Removed;
+}
+
+FMCPOpenSessionResult FClaireonSessionManager::OpenEditorWideSession(const FString& ToolName, double InTimeoutMinutes)
+{
+	// Per Spec E (#0000): naming-contract validation belongs at bootstrap
+	// time, not session-manager time. Drop the legacy assert.
+	FScopeLock ScopeLock(&CriticalSection);
+	CleanupExpiredInternal();
+
+	// Block if another editor-wide session is held.
+	if (EditorWideSession.IsSet())
+	{
+		FMCPSession BlockingCopy = EditorWideSession.GetValue();
+		UE_LOG(LogClaireon, Warning, TEXT("Editor-wide session blocked by editor-wide session held by tool '%s'"), *BlockingCopy.ToolName);
+		return { EOpenSessionResult::BlockedByOtherTool, TEXT(""), TOptional<FMCPSession>(MoveTemp(BlockingCopy)) };
+	}
+
+	// Block if any per-asset session is held -- editor-wide is mutually exclusive.
+	if (Sessions.Num() > 0)
+	{
+		const auto& AnyPair = *Sessions.CreateConstIterator();
+		FMCPSession BlockingCopy = AnyPair.Value;
+		UE_LOG(LogClaireon, Warning, TEXT("Editor-wide session blocked by per-asset session held by tool '%s' on '%s'"), *BlockingCopy.ToolName, *BlockingCopy.AssetPath);
+		return { EOpenSessionResult::BlockedByOtherTool, TEXT(""), TOptional<FMCPSession>(MoveTemp(BlockingCopy)) };
+	}
+
+	const FString NewSessionId = FGuid::NewGuid().ToString(EGuidFormats::Short);
+	const FDateTime Now = FDateTime::UtcNow();
+
+	FMCPSession NewSession;
+	NewSession.SessionId = NewSessionId;
+	NewSession.ToolName = ToolName;
+	NewSession.AssetPath = TEXT("<editor-wide>");
+	NewSession.CreatedTime = Now;
+	NewSession.LastAccessTime = Now;
+	NewSession.TimeoutMinutes = InTimeoutMinutes;
+
+	EditorWideSession = NewSession;
+	UE_LOG(LogClaireon, Verbose, TEXT("Opened editor-wide session %s for tool '%s'"), *NewSessionId, *ToolName);
+	return { EOpenSessionResult::Success, NewSessionId, {} };
+}
+
+bool FClaireonSessionManager::CloseEditorWideSession(const FString& SessionId)
+{
+	FMCPSessionClosedInfo ClosedInfo;
+	{
+		FScopeLock ScopeLock(&CriticalSection);
+		if (!EditorWideSession.IsSet() || EditorWideSession->SessionId != SessionId)
+		{
+			return false;
+		}
+		ClosedInfo.SessionId = EditorWideSession->SessionId;
+		ClosedInfo.AssetPath = EditorWideSession->AssetPath;
+		ClosedInfo.ToolName = EditorWideSession->ToolName;
+		EditorWideSession.Reset();
+	}
+	UE_LOG(LogClaireon, Verbose, TEXT("Closed editor-wide session %s"), *ClosedInfo.SessionId);
+	OnSessionClosedDelegate.Broadcast(ClosedInfo);
+	return true;
+}
+
+bool FClaireonSessionManager::IsEditorWideSessionHeld() const
+{
+	FScopeLock ScopeLock(&CriticalSection);
+	return EditorWideSession.IsSet();
 }
 
 FOnMCPSessionClosed& FClaireonSessionManager::OnSessionClosed()

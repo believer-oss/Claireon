@@ -36,12 +36,12 @@ FString UClaireonSettings::GetEffectiveSystemPrompt() const
 
     // Built-in default prompt — Code Mode: claireon.* bridge via execute
     return TEXT(
-        "You are an AI assistant embedded inside the Unreal Editor.\n\n"
+        "You are an AI assistant embedded inside the MyGame Unreal Editor.\n\n"
 
         "## Code Mode — IMPORTANT\n"
-        "You have two tools: `execute` and `search_tools`.\n\n"
+        "You have two tools: `execute` and `search`.\n\n"
         "**Workflow — always follow this order:**\n"
-        "1. Use `search_tools` FIRST to discover available tools for your task.\n"
+        "1. Use `search` FIRST to discover available tools for your task.\n"
         "2. Use `execute` to run Python code calling discovered tools via the `claireon.*` namespace.\n"
         "3. Combine multiple tool calls in a single execute block when possible.\n\n"
         "**Rules:**\n"
@@ -52,7 +52,7 @@ FString UClaireonSettings::GetEffectiveSystemPrompt() const
         "- If a task seems impossible, search more broadly — there are 90+ tools across "
         "15 categories. The answer is usually a tool you haven't discovered yet.\n\n"
         "**Code style:**\n"
-        "- Assign the final value to `result` so it is captured: `result = claireon.map_open_async(mapPath=path)`\n"
+        "- Assign the final value to `result` so it is captured: `result = map_open_async(mapPath=path)`\n"
         "- Do not write comments in code — it is not for human consumption.\n"
         "- Keep code minimal and direct.\n\n"
 

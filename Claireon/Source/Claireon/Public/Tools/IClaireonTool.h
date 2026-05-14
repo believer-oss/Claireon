@@ -10,6 +10,29 @@
 struct FPythonLogOutputEntry;
 
 /**
+ * Per-tool session-acquisition contract enforced by the Claireon bridge.
+ *
+ * - ReadOnly: no FClaireonSessionManager interaction; bridge forwards unconditionally.
+ * - RequiresSession: tool (or its RAII helper) calls OpenSession on the asset(s)
+ *   it mutates and surfaces BlockedByOtherTool on contention.
+ * - Bypass: bridge consults FClaireonSessionManager::ListSessions() first and
+ *   refuses if any session is held by a different tool. Carve-outs:
+ *   session_release and session_list are always allowed.
+ * - EditorWide: bridge calls OpenEditorWideSession before forwarding and
+ *   CloseEditorWideSession after (RAII at the bridge layer).
+ *
+ * Static per descriptor. If a tool needs both single-target (RequiresSession)
+ * and batch (EditorWide) shapes, split into two descriptors.
+ */
+enum class EClaireonToolSessionMode : uint8
+{
+	ReadOnly,
+	RequiresSession,
+	Bypass,
+	EditorWide
+};
+
+/**
  * Interface for MCP tools that can be registered with the server.
  * Each tool provides a name, description, input schema, and an Execute method.
  */
@@ -18,14 +41,38 @@ class CLAIREON_API IClaireonTool
 public:
 	virtual ~IClaireonTool() = default;
 
-	/** Returns the tool name used in tools/list and tools/call */
-	virtual FString GetName() const = 0;
+	/** Returns the tool's category/domain (e.g. "gas", "audio", "blueprint").
+	 *  Authoritative -- composed with GetOperation() to produce GetName().
+	 *  Must be a bare Python identifier (no dot, non-empty). */
+	virtual FString GetCategory() const = 0;
 
-	/** Whether this tool must be blocked while a Play-In-Editor session is active.
-	 *  Tools that mutate assets should override this to return true. */
-	virtual bool RequiresNoPIE() const { return false; }
+	/** Returns the verb/operation portion of the tool name (e.g. "set_property",
+	 *  "inspect"). Composed with GetCategory() to produce GetName().
+	 *  Must be a bare Python identifier (no dot, non-empty). */
+	virtual FString GetOperation() const = 0;
 
-	virtual bool RequiresEditorWorld() const { return false; }
+	/** Composed wire name: `<category>_<operation>`. Sealed -- a tool's name
+	 *  is derived from GetCategory() + GetOperation() so the two cannot
+	 *  disagree by construction. To rename a tool, change GetCategory() or
+	 *  GetOperation(); never override GetName() in a subclass. */
+	virtual FString GetName() const final
+	{
+		return GetCategory() + TEXT("_") + GetOperation();
+	}
+
+	/** Returns the bare namespace this tool lives under in the Python bridge.
+	 *  Default: "claireon". Override to publish under a separate namespace
+	 *  (e.g. "fs" for project-private tools). The namespace must be a
+	 *  Python-identifier-safe bare token; '.' is disallowed. The bridge
+	 *  composes it with GetName() as sys.modules['<namespace>'].<name>.
+	 *
+	 *  Strict separation contract:
+	 *    - GetName() is composed from GetCategory() + "_" + GetOperation();
+	 *      both must be bare Python identifiers and the composed result also
+	 *      contains no '.'.
+	 *    - GetNamespace() must also be a bare identifier (no dot, non-empty).
+	 *    - There is no first-dot-split fallback in dispatch. */
+	virtual FString GetNamespace() const { return TEXT("claireon"); }
 
 	/** Returns a human-readable description of what the tool does (standard tier, ~150-300 chars) */
 	virtual FString GetDescription() const = 0;
@@ -52,27 +99,6 @@ public:
 
 	/** Returns the JSON Schema for the tool's input parameters */
 	virtual TSharedPtr<FJsonObject> GetInputSchema() const = 0;
-
-	/** Returns the tool category for registry grouping and search_tools.
-	 *  Default: auto-derived from GetName() by stripping "claireon." prefix and returning
-	 *  everything before the first underscore. E.g. "claireon.asset_search" → "asset".
-	 *  Override only if the auto-derived category is incorrect. */
-	virtual FString GetCategory() const
-	{
-		FString Name = GetName();
-		// Strip "claireon." prefix
-		if (Name.StartsWith(TEXT("claireon.")))
-		{
-			Name.RightChopInline(7);
-		}
-		// Return everything before the first underscore
-		int32 UnderscorePos;
-		if (Name.FindChar(TEXT('_'), UnderscorePos))
-		{
-			return Name.Left(UnderscorePos);
-		}
-		return Name;
-	}
 
 	/** Result of a tool execution */
 	struct FToolResult
@@ -114,9 +140,17 @@ public:
 	 * @param Arguments - The parsed arguments from the tools/call request
 	 * @return The tool result with structured data and error status
 	 */
+	/** Whether this tool requires that PIE is NOT running. Default: false (most tools are read-only). */
+	virtual bool RequiresNoPIE() const { return false; }
+
+	virtual bool RequiresEditorWorld() const { return false; }
+
+	/** Session-acquisition contract for this tool. Default: ReadOnly. Override on mutating tools. */
+	virtual EClaireonToolSessionMode GetSessionMode() const { return EClaireonToolSessionMode::ReadOnly; }
+
 	virtual FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) = 0;
 
-	/** Optional example usage string shown in deep-inspect / tools_search output. Default: empty. */
+	/** Optional example usage string shown in deep-inspect / search output. Default: empty. */
 	virtual FString GetExampleUsage() const { return FString(); }
 
 	/** Optional per-parameter tooltip map (parameter name -> tooltip string). Default: null. */

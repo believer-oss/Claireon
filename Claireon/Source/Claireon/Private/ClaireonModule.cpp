@@ -8,6 +8,8 @@
 #include "ClaireonToolbarStyle.h"
 #include "Styling/SlateStyle.h" // Full definition of FSlateStyleSet (ClaireonToolbarStyle.h forward-declares only)
 #include "ClaireonServer.h"
+#include "ClaireonProxyClient.h"
+#include "ClaireonPortDerivation.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/Images/SImage.h"
 #include "Widgets/Input/SButton.h"
@@ -18,6 +20,7 @@
 #include "ClaireonDiagnosticsWidget.h"
 #include "ClaireonSettings.h"
 #include "IClaireonToolProvider.h"
+#include "IPythonScriptPlugin.h"
 #include "Modules/ModuleManager.h"
 #include "Features/IModularFeatures.h"
 #include "ToolMenus.h"
@@ -25,7 +28,9 @@
 #include "Framework/Docking/TabManager.h"
 #include "Framework/Notifications/NotificationManager.h"
 #include "Widgets/Notifications/SNotificationList.h"
+#include "Misc/App.h"
 #include "Misc/CommandLine.h"
+#include "Misc/Guid.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Misc/FileHelper.h"
@@ -63,6 +68,7 @@
 #include "Tools/ClaireonBlueprintGraphTool_ConnectPins.h"
 #include "Tools/ClaireonBlueprintGraphTool_DisconnectPin.h"
 #include "Tools/ClaireonBlueprintGraphTool_SetPinValue.h"
+#include "Tools/ClaireonBlueprintGraphTool_SetNodeProperty.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddPin.h"
 #include "Tools/ClaireonBlueprintGraphTool_RemovePin.h"
 #include "Tools/ClaireonBlueprintGraphTool_SplitPin.h"
@@ -124,12 +130,14 @@
 #include "Tools/ClaireonTool_AssetValidate.h"
 #include "Tools/ClaireonTool_AssetFixupRedirectors.h"
 #include "Tools/ClaireonTool_BlueprintCompile.h"
+#include "Tools/ClaireonTool_BlueprintCompileBatch.h"
 #include "Tools/ClaireonTool_BlueprintDuplicate.h"
 #include "Tools/ClaireonTool_CommandletRun.h"
 #include "Tools/ClaireonTool_AssetResave.h"
 #include "Tools/ClaireonTool_AssetCook.h"
 #include "Tools/ClaireonTool_LogTail.h"
 #include "Tools/ClaireonTool_LogSearch.h"
+#include "Tools/ClaireonTool_MessageLogGet.h"
 #include "Tools/ClaireonTool_TestRun.h"
 #include "Tools/ClaireonTool_TestList.h"
 // State Tree MCP tools
@@ -198,6 +206,7 @@
 
 // Blueprint CDO tools
 #include "Tools/ClaireonTool_SetBlueprintCDOProperty.h"
+#include "Tools/ClaireonTool_AppendBlueprintCDOArrayInstanced.h"
 #include "Tools/ClaireonTool_SetBlueprintMetadata.h"
 
 // Meta tools
@@ -387,6 +396,67 @@
 #include "Tools/ClaireonMaterialInstanceTool_SetStaticComponentMaskParameter.h"
 #include "Tools/ClaireonMaterialInstanceTool_ClearParameterOverride.h"
 
+// Audio MCP tools
+#include "Tools/ClaireonTool_AudioInspect.h"
+#include "Tools/ClaireonTool_AudioApply.h"
+
+// Audio decomposed tools (42)
+#include "Tools/ClaireonSoundCueTool_Open.h"
+#include "Tools/ClaireonSoundCueTool_Close.h"
+#include "Tools/ClaireonSoundCueTool_Status.h"
+#include "Tools/ClaireonSoundCueTool_Save.h"
+#include "Tools/ClaireonSoundCueTool_AddNode.h"
+#include "Tools/ClaireonSoundCueTool_RemoveNode.h"
+#include "Tools/ClaireonSoundCueTool_ConnectNodes.h"
+#include "Tools/ClaireonSoundCueTool_DisconnectNodes.h"
+#include "Tools/ClaireonSoundCueTool_SetNodeProperty.h"
+#include "Tools/ClaireonSoundCueTool_SetNodePosition.h"
+#include "Tools/ClaireonSoundCueTool_SetFocusedNode.h"
+#include "Tools/ClaireonSoundCueTool_Create.h"
+#include "Tools/ClaireonSoundCueTool_ListNodeTypes.h"
+#include "Tools/ClaireonSoundCueTool_ApplySpec.h"
+#include "Tools/ClaireonMetaSoundTool_Open.h"
+#include "Tools/ClaireonMetaSoundTool_Close.h"
+#include "Tools/ClaireonMetaSoundTool_Status.h"
+#include "Tools/ClaireonMetaSoundTool_Save.h"
+#include "Tools/ClaireonMetaSoundTool_AddInput.h"
+#include "Tools/ClaireonMetaSoundTool_AddOutput.h"
+#include "Tools/ClaireonMetaSoundTool_AddNode.h"
+#include "Tools/ClaireonMetaSoundTool_SetDefault.h"
+#include "Tools/ClaireonMetaSoundTool_ConnectPins.h"
+#include "Tools/ClaireonMetaSoundTool_Create.h"
+#include "Tools/ClaireonMetaSoundTool_ApplySpec.h"
+#include "Tools/ClaireonCameraAssetTool_Create.h"
+#include "Tools/ClaireonCameraAssetTool_Duplicate.h"
+#include "Tools/ClaireonCameraAssetTool_Save.h"
+#include "Tools/ClaireonCameraAssetTool_Compile.h"
+#include "Tools/ClaireonCameraAssetTool_ListRigs.h"
+#include "Tools/ClaireonCameraAssetTool_AddRig.h"
+#include "Tools/ClaireonCameraAssetTool_ListNodes.h"
+#include "Tools/ClaireonCameraAssetTool_ListNodeClasses.h"
+#include "Tools/ClaireonCameraAssetTool_AddNode.h"
+#include "Tools/ClaireonCameraAssetTool_RemoveNode.h"
+#include "Tools/ClaireonCameraAssetTool_MoveNode.h"
+#include "Tools/ClaireonCameraAssetTool_GetNodeProperty.h"
+#include "Tools/ClaireonCameraAssetTool_SetNodeProperty.h"
+#include "Tools/ClaireonSoundClassTool_SetProperty.h"
+#include "Tools/ClaireonSoundClassTool_AddChild.h"
+#include "Tools/ClaireonSoundClassTool_RemoveChild.h"
+#include "Tools/ClaireonSoundClassTool_Create.h"
+#include "Tools/ClaireonSoundClassTool_ApplySpec.h"
+#include "Tools/ClaireonSoundMixTool_AddClassAdjuster.h"
+#include "Tools/ClaireonSoundMixTool_RemoveClassAdjuster.h"
+#include "Tools/ClaireonSoundMixTool_SetClassAdjusterProperty.h"
+#include "Tools/ClaireonSoundMixTool_SetEnvelope.h"
+#include "Tools/ClaireonSoundMixTool_Create.h"
+#include "Tools/ClaireonSoundMixTool_ApplySpec.h"
+#include "Tools/ClaireonAttenuationTool_SetProperty.h"
+#include "Tools/ClaireonAttenuationTool_Create.h"
+#include "Tools/ClaireonAttenuationTool_ApplySpec.h"
+#include "Tools/ClaireonConcurrencyTool_SetProperty.h"
+#include "Tools/ClaireonConcurrencyTool_Create.h"
+#include "Tools/ClaireonConcurrencyTool_ApplySpec.h"
+
 // Data Table MCP tools
 #include "Tools/ClaireonTool_DataTableSearch.h"
 #include "Tools/ClaireonTool_DataTableGetInfo.h"
@@ -415,8 +485,14 @@
 // Asset editor tool
 #include "Tools/ClaireonTool_OpenAssetEditor.h"
 
+// Runtime Diagnostics (snapshot CMC / anim / motion-warp / tick state on a paused-PIE pawn)
+#include "Tools/ClaireonAnimInspectTool.h"
+#include "Tools/ClaireonCMCInspectTool.h"
+#include "Tools/ClaireonComponentTickInspectTool.h"
+
 // Animation MCP tools
 #include "Tools/ClaireonTool_AnimInspect.h"
+#include "Tools/ClaireonTool_AnimInvariantsCheck.h"
 #include "Tools/ClaireonAnimTools_Session.h"
 #include "Tools/ClaireonAnimTools_Create.h"
 #include "Tools/ClaireonAnimTools_Notify.h"
@@ -638,7 +714,7 @@ namespace ClaireonLaunch
 	 * Resolve a PowerShell executable using canonical Windows install paths first,
 	 * with a PATH-search fallback. Canonical paths are reliable even when the editor
 	 * process inherits a stripped or non-default PATH (which can happen when launched
-	 * by external tooling or as a child of a non-shell parent).
+	 * by tooling like Launcher or as a child of a non-shell parent).
 	 *
 	 * Order: PowerShell 7 (preferred) -> Windows PowerShell 5.1 (always in-box on Win10+).
 	 */
@@ -778,6 +854,16 @@ namespace ClaireonLaunch
 	{
 		const FString ProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 
+		// Launcher-launched editors don't pass -StartMCPServer, so the MCP
+		// server is dormant until the user explicitly asks for Claude. Starting
+		// it here means clicking "Claude Code" is sufficient -- the user does not
+		// need to first open the diagnostics tab to bring the server up.
+		FClaireonModule& Module = FClaireonModule::Get();
+		if (!Module.IsServerRunning())
+		{
+			Module.StartServer();
+		}
+
 		const uint32 Port = ResolveLivePort();
 		const FString ConfigPath = WriteTransientMcpConfig(Port);
 		if (ConfigPath.IsEmpty())
@@ -915,6 +1001,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_ConnectPins>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_DisconnectPin>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SetPinValue>());
+	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SetNodeProperty>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_AddPin>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_RemovePin>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SplitPin>());
@@ -976,6 +1063,15 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_FlythroughStop>());
 	Tools.Add(MakeShared<ClaireonTool_FlythroughStatus>());
 	Tools.Add(MakeShared<ClaireonTool_PIEScreenshot>());
+
+	// Runtime Diagnostics (snapshot CMC / anim / motion-warp / tick state on a paused-PIE pawn)
+	Tools.Add(MakeShared<ClaireonTool_CMCInspectState>());
+	Tools.Add(MakeShared<ClaireonTool_CMCInspectRootMotion>());
+	Tools.Add(MakeShared<ClaireonTool_CMCInspectPredictionData>());
+	Tools.Add(MakeShared<ClaireonTool_AnimInspectMontages>());
+	Tools.Add(MakeShared<ClaireonTool_AnimInspectMotionWarping>());
+	Tools.Add(MakeShared<ClaireonTool_ComponentTickInspect>());
+
 	Tools.Add(MakeShared<ClaireonTool_PIETraceStart>());
 	Tools.Add(MakeShared<ClaireonTool_PIETraceStop>());
 	Tools.Add(MakeShared<ClaireonTool_ConsoleExecute>());
@@ -984,6 +1080,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_AssetFixupRedirectors>());
 	Tools.Add(MakeShared<ClaireonTool_OpenAssetEditor>());
 	Tools.Add(MakeShared<ClaireonTool_AnimInspect>());
+	Tools.Add(MakeShared<ClaireonTool_AnimInvariantsCheck>());
 	// Animation editing tools (individual operations with focused inputSchema)
 	Tools.Add(MakeShared<ClaireonAnimTool_Open>());
 	Tools.Add(MakeShared<ClaireonAnimTool_Close>());
@@ -1072,12 +1169,14 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonSkeletonTool_ClearBlendMaskBoneWeight>());
 	Tools.Add(MakeShared<ClaireonSkeletonTool_RemoveBlendMask>()); // Intentional stub — always errors (engine bug)
 	Tools.Add(MakeShared<ClaireonTool_BlueprintCompile>());
+	Tools.Add(MakeShared<ClaireonTool_BlueprintCompileBatch>());
 	Tools.Add(MakeShared<ClaireonTool_BlueprintDuplicate>());
 	Tools.Add(MakeShared<ClaireonTool_CommandletRun>());
 	Tools.Add(MakeShared<ClaireonTool_AssetResave>());
 	Tools.Add(MakeShared<ClaireonTool_AssetCook>());
 	Tools.Add(MakeShared<ClaireonTool_LogTail>());
 	Tools.Add(MakeShared<ClaireonTool_LogSearch>());
+	Tools.Add(MakeShared<ClaireonTool_MessageLogGet>());
 	Tools.Add(MakeShared<ClaireonTool_TestRun>());
 	Tools.Add(MakeShared<ClaireonTool_TestList>());
 	// State Tree MCP tools
@@ -1328,6 +1427,74 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonMaterialInstanceTool_SetStaticComponentMaskParameter>());
 	Tools.Add(MakeShared<ClaireonMaterialInstanceTool_ClearParameterOverride>());
 
+	// Audio MCP tools
+	Tools.Add(MakeShared<FClaireonTool_AudioInspect>());
+	Tools.Add(MakeShared<FClaireonTool_AudioApply>());
+
+	// Audio decomposed tools (42; replaces the bundled audio_edit umbrella)
+	// SoundCue (14)
+	Tools.Add(MakeShared<FClaireonSoundCueTool_Open>());
+	Tools.Add(MakeShared<FClaireonSoundCueTool_Close>());
+	Tools.Add(MakeShared<FClaireonSoundCueTool_Status>());
+	Tools.Add(MakeShared<FClaireonSoundCueTool_Save>());
+	Tools.Add(MakeShared<FClaireonSoundCueTool_AddNode>());
+	Tools.Add(MakeShared<FClaireonSoundCueTool_RemoveNode>());
+	Tools.Add(MakeShared<FClaireonSoundCueTool_ConnectNodes>());
+	Tools.Add(MakeShared<FClaireonSoundCueTool_DisconnectNodes>());
+	Tools.Add(MakeShared<FClaireonSoundCueTool_SetNodeProperty>());
+	Tools.Add(MakeShared<FClaireonSoundCueTool_SetNodePosition>());
+	Tools.Add(MakeShared<FClaireonSoundCueTool_SetFocusedNode>());
+	Tools.Add(MakeShared<FClaireonSoundCueTool_Create>());
+	Tools.Add(MakeShared<FClaireonSoundCueTool_ListNodeTypes>());
+	Tools.Add(MakeShared<FClaireonSoundCueTool_ApplySpec>());
+	// MetaSound (11)
+	Tools.Add(MakeShared<FClaireonMetaSoundTool_Open>());
+	Tools.Add(MakeShared<FClaireonMetaSoundTool_Close>());
+	Tools.Add(MakeShared<FClaireonMetaSoundTool_Status>());
+	Tools.Add(MakeShared<FClaireonMetaSoundTool_Save>());
+	Tools.Add(MakeShared<FClaireonMetaSoundTool_AddInput>());
+	Tools.Add(MakeShared<FClaireonMetaSoundTool_AddOutput>());
+	Tools.Add(MakeShared<FClaireonMetaSoundTool_AddNode>());
+	Tools.Add(MakeShared<FClaireonMetaSoundTool_SetDefault>());
+	Tools.Add(MakeShared<FClaireonMetaSoundTool_ConnectPins>());
+	Tools.Add(MakeShared<FClaireonMetaSoundTool_Create>());
+	Tools.Add(MakeShared<FClaireonMetaSoundTool_ApplySpec>());
+	// Camera Asset (13)
+	Tools.Add(MakeShared<FClaireonCameraAssetTool_Create>());
+	Tools.Add(MakeShared<FClaireonCameraAssetTool_Duplicate>());
+	Tools.Add(MakeShared<FClaireonCameraAssetTool_Save>());
+	Tools.Add(MakeShared<FClaireonCameraAssetTool_Compile>());
+	Tools.Add(MakeShared<FClaireonCameraAssetTool_ListRigs>());
+	Tools.Add(MakeShared<FClaireonCameraAssetTool_AddRig>());
+	Tools.Add(MakeShared<FClaireonCameraAssetTool_ListNodes>());
+	Tools.Add(MakeShared<FClaireonCameraAssetTool_ListNodeClasses>());
+	Tools.Add(MakeShared<FClaireonCameraAssetTool_AddNode>());
+	Tools.Add(MakeShared<FClaireonCameraAssetTool_RemoveNode>());
+	Tools.Add(MakeShared<FClaireonCameraAssetTool_MoveNode>());
+	Tools.Add(MakeShared<FClaireonCameraAssetTool_GetNodeProperty>());
+	Tools.Add(MakeShared<FClaireonCameraAssetTool_SetNodeProperty>());
+	// SoundClass (5)
+	Tools.Add(MakeShared<FClaireonSoundClassTool_SetProperty>());
+	Tools.Add(MakeShared<FClaireonSoundClassTool_AddChild>());
+	Tools.Add(MakeShared<FClaireonSoundClassTool_RemoveChild>());
+	Tools.Add(MakeShared<FClaireonSoundClassTool_Create>());
+	Tools.Add(MakeShared<FClaireonSoundClassTool_ApplySpec>());
+	// SoundMix (6)
+	Tools.Add(MakeShared<FClaireonSoundMixTool_AddClassAdjuster>());
+	Tools.Add(MakeShared<FClaireonSoundMixTool_RemoveClassAdjuster>());
+	Tools.Add(MakeShared<FClaireonSoundMixTool_SetClassAdjusterProperty>());
+	Tools.Add(MakeShared<FClaireonSoundMixTool_SetEnvelope>());
+	Tools.Add(MakeShared<FClaireonSoundMixTool_Create>());
+	Tools.Add(MakeShared<FClaireonSoundMixTool_ApplySpec>());
+	// Attenuation (3)
+	Tools.Add(MakeShared<FClaireonAttenuationTool_SetProperty>());
+	Tools.Add(MakeShared<FClaireonAttenuationTool_Create>());
+	Tools.Add(MakeShared<FClaireonAttenuationTool_ApplySpec>());
+	// Concurrency (3)
+	Tools.Add(MakeShared<FClaireonConcurrencyTool_SetProperty>());
+	Tools.Add(MakeShared<FClaireonConcurrencyTool_Create>());
+	Tools.Add(MakeShared<FClaireonConcurrencyTool_ApplySpec>());
+
 	// PCG Graph MCP tools
 	Tools.Add(MakeShared<ClaireonTool_PCGGraphInspect>());
 
@@ -1428,6 +1595,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 
 	// Blueprint CDO tools
 	Tools.Add(MakeShared<ClaireonTool_SetBlueprintCDOProperty>());
+	Tools.Add(MakeShared<ClaireonTool_AppendBlueprintCDOArrayInstanced>());
 	Tools.Add(MakeShared<ClaireonTool_SetBlueprintMetadata>());
 
 	// Meta tools
@@ -1577,6 +1745,9 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 // FClaireonModule
 // ---------------------------------------------------------------------------
 
+FClaireonModule::FClaireonModule() = default;
+FClaireonModule::~FClaireonModule() = default;
+
 void FClaireonModule::StartupModule()
 {
 	if (!GIsEditor || IsRunningCommandlet())
@@ -1603,11 +1774,52 @@ void FClaireonModule::StartupModule()
 	IModularFeatures::Get().RegisterModularFeature(
 		IClaireonToolProvider::FeatureName, BuiltinToolProvider.Get());
 
+	// Construct the in-process tool registry eagerly so the Python bridge can
+	// be bootstrapped from OnPythonInitialized (Spec D) without depending on
+	// whether the HTTP listener has been brought up yet. After this point,
+	// Server.IsValid() means "registry constructed"; Server->IsRunning() means
+	// "HTTP listener is up". Place this BEFORE the modular-feature listener
+	// hooks so any registration callbacks that fire during StartupModule see
+	// a valid Server pointer.
+	Server = MakeShared<FClaireonServer>();
+	FClaireonBridge::SetToolRegistry(Server.Get());
+	CollectToolsFromProviders();
+
 	// Listen for modular feature registration/unregistration
 	IModularFeatures::Get().OnModularFeatureRegistered().AddRaw(
 		this, &FClaireonModule::OnModularFeatureRegistered);
 	IModularFeatures::Get().OnModularFeatureUnregistered().AddRaw(
 		this, &FClaireonModule::OnModularFeatureUnregistered);
+
+	// Bootstrap the Claireon Python bridge as early as Python permits, so that
+	// any user Python (init_unreal.py, deferred slate-tick imports) sees a
+	// fully populated `claireon` (and other namespaces') module on first import.
+	// Replaces the previous 1.0s FTSTicker deferral that lost the import race.
+	//
+	// We rely exclusively on IPythonScriptPlugin::OnPythonInitialized rather
+	// than IPythonScriptPlugin::IsPythonAvailable(): the latter can return
+	// true while CPython's gilstate machinery is still uninitialised
+	// (autoTSSkey null), which crashes PyGILState_Ensure at offset 0x28.
+	// OnPythonInitialized only fires after the interpreter is fully usable
+	// and BEFORE init_unreal.py runs. If the delegate has already fired by
+	// the time we reach this point (very rare; we load at PostEngineInit),
+	// the existing lazy `EnsureRegistered()` call on first MCP tool call
+	// covers us.
+	if (IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get())
+	{
+		PythonInitHandle = PythonPlugin->OnPythonInitialized().AddLambda([]()
+		{
+			FClaireonBridge::EnsureRegistered();
+		});
+	}
+	else
+	{
+		// Python plugin unavailable in this configuration (unlikely for editor
+		// builds). The bridge will register lazily via the existing
+		// EnsureRegistered call sites if Python is brought up later.
+		UE_LOG(LogClaireon, Verbose,
+			TEXT("[MCP Bootstrap] IPythonScriptPlugin not available at module load -- bridge will register lazily."));
+	}
 
 	// Check for -StartMCPServer command-line flag
 	if (FParse::Param(FCommandLine::Get(), TEXT("StartMCPServer")))
@@ -1630,6 +1842,16 @@ void FClaireonModule::ShutdownModule()
 	IModularFeatures::Get().OnModularFeatureRegistered().RemoveAll(this);
 	IModularFeatures::Get().OnModularFeatureUnregistered().RemoveAll(this);
 
+	// Unsubscribe from Python initialisation delegate (Spec D).
+	if (PythonInitHandle.IsValid())
+	{
+		if (IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get())
+		{
+			PythonPlugin->OnPythonInitialized().Remove(PythonInitHandle);
+		}
+		PythonInitHandle.Reset();
+	}
+
 	// Unsubscribe from settings changes
 	if (SettingsChangedHandle.IsValid())
 	{
@@ -1644,6 +1866,15 @@ void FClaireonModule::ShutdownModule()
 	}
 
 	StopServer();
+
+	// Detach the bridge from the registry pointer before destroying Server.
+	// (The bridge captures Server.Get(); leaving a dangling pointer in the
+	// bridge until the next module load is unsafe if any callsite probes it.)
+	FClaireonBridge::SetToolRegistry(nullptr);
+
+	// Final tear-down of the Server registry that StartupModule constructed.
+	Server.Reset();
+
 	SClaireonDiagnosticsWidget::UnregisterTabSpawner();
 
 	// Unregister built-in tool provider
@@ -1657,98 +1888,250 @@ void FClaireonModule::ShutdownModule()
 
 void FClaireonModule::StartServer()
 {
-	if (Server.IsValid() && Server->IsRunning())
+	if (!Server.IsValid())
+	{
+		// StartupModule constructs Server. This branch indicates a misuse
+		// (StartServer called before StartupModule, or in a configuration
+		// where StartupModule short-circuited via the GIsEditor/commandlet
+		// guard). Log and bail; do NOT lazy-construct here -- the bridge has
+		// already been wired against the StartupModule-time registry pointer.
+		UE_LOG(LogClaireon, Error, TEXT("[MCP] StartServer called before Server was constructed (StartupModule did not run?)."));
+		return;
+	}
+	if (Server->IsRunning())
 	{
 		UE_LOG(LogClaireon, Warning, TEXT("[MCP] Server is already running"));
 		return;
 	}
 
-	Server = MakeShared<FClaireonServer>();
-
-	// Set the bridge's tool registry pointer so Python can dispatch tool calls
-	FClaireonBridge::SetToolRegistry(Server.Get());
-
-	// Defer bridge registration + Python import pre-warming to next tick.
-	// Python may not be fully initialized yet during StartupModule, and calling
-	// CPython C API too early causes access violations. Deferring to next tick
-	// ensures Python is ready, and pre-warming avoids blocking the game thread
-	// for >6s during the first execute call (which triggers UE's audio mixer abort).
-	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda(
-											 [](float) -> bool
+	// Decide whether to front this editor with the always-on MCP proxy. When
+	// enabled, the editor generates a fresh per-session bearer token, hands it
+	// to the server, then asks the proxy client to spawn (or attach) and
+	// register. The proxy becomes the sole ingress for MCP traffic; direct
+	// connections are rejected with 401.
+	//
+	// The proxy is OFF by default and must be explicitly opted into. The
+	// previous always-on default caused a child python.exe to inherit handles
+	// from the launching shell and hold a lock on the worktree, which blocked
+	// `git pull` / dispatch sync until the proxy was killed.
+	//
+	// Decision precedence (resolved at StartServer time):
+	//   1. `-EnableMCPProxy` command-line flag -> force enabled (overrides settings).
+	//   2. UClaireonSettings::bEnableProxy (default false).
+	const bool bProxyEnabledByCLI = FParse::Param(FCommandLine::Get(), TEXT("EnableMCPProxy"));
+	bool bEnableProxy = false;
+	if (const UClaireonSettings* Settings = UClaireonSettings::Get())
 	{
-		FClaireonBridge::EnsureRegistered();
-		return false; // one-shot
-	}),
-		1.0f);
-
-	// Collect tools from all registered providers
-	CollectToolsFromProviders();
-
-	// Determine port: command-line override > settings > hardcoded default
-	uint32 Port = 8017;
-	FString PortStr;
-	if (FParse::Value(FCommandLine::Get(), TEXT("-MCPServerPort="), PortStr))
+		bEnableProxy = Settings->bEnableProxy;
+	}
+	if (bProxyEnabledByCLI)
 	{
-		Port = FCString::Atoi(*PortStr);
-		if (Port == 0)
+		bEnableProxy = true;
+	}
+
+	FString SessionToken;
+	if (bEnableProxy)
+	{
+		// Two guids concatenated give us 64 hex chars sans the braces, well
+		// above the 32-char minimum required by /editor/register. Never
+		// persisted to disk; lives only in this process and inside the proxy's
+		// active_session dict.
+		SessionToken = FGuid::NewGuid().ToString(EGuidFormats::Digits)
+			+ FGuid::NewGuid().ToString(EGuidFormats::Digits);
+		Server->SetSessionToken(SessionToken);
+	}
+
+	// Bridge registration is now driven by IPythonScriptPlugin::OnPythonInitialized
+	// from StartupModule (Spec D). The previous 1.0s FTSTicker deferral was
+	// removed because it lost the import race with init_unreal.py's
+	// deferred-tick callbacks.
+
+	// Stage 010 (direct-connect SHA port + auto-promote): the editor's MCP
+	// listener binds the per-worktree SHA-256-derived port -- the same port
+	// .mcp.json points Claude at -- not the legacy Settings::ServerPort.
+	//
+	// Decision tree:
+	//   1. Compute SHA port from this worktree's canonical realpath.
+	//   2. If bEnableProxy was opted in, kick the proxy spawn first so the
+	//      auto-promote branch lands cleanly in the EADDRINUSE path below.
+	//   3. TryStart on the SHA port:
+	//        - Success: DirectConnect mode; we are the SHA-port owner.
+	//        - Failure + proxy reachable on /admin/health: auto-promote
+	//          (bind ephemeral, register with the proxy).
+	//        - Failure + no Claireon proxy: surface and abort (some other
+	//          process holds the port; the operator must clean up).
+	//
+	// -MCPServerPort= command-line override is preserved as a developer
+	// escape hatch. Settings::ServerPort is no longer read (Stage 012
+	// deletes the property; Stage 010 stops reading it here).
+	const FString WorktreeRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+	uint16 PreferredPort = Claireon::DeriveDefaultMcpPort(WorktreeRoot);
+
+	FString CmdPortStr;
+	if (FParse::Value(FCommandLine::Get(), TEXT("-MCPServerPort="), CmdPortStr))
+	{
+		const uint32 Override = static_cast<uint32>(FCString::Atoi(*CmdPortStr));
+		if (Override > 0 && Override <= 65535)
 		{
-			UE_LOG(LogClaireon, Warning, TEXT("[MCP] Invalid port from command line, using default"));
-			Port = 8017;
-		}
-		else
-		{
+			PreferredPort = static_cast<uint16>(Override);
 			bPortOverriddenByCommandLine = true;
+			UE_LOG(LogClaireon, Display,
+				TEXT("[MCP] -MCPServerPort= override active; binding %u instead of SHA port"),
+				static_cast<uint32>(PreferredPort));
 		}
 	}
-	else if (const UClaireonSettings* Settings = UClaireonSettings::Get())
+
+	// Build-id: use the engine's changelist + compile-config string as a
+	// lightweight opaque identifier. The proxy treats this as opaque.
+	auto MakeBuildId = []() -> FString
 	{
-		Port = Settings->ServerPort;
+		return FString::Printf(TEXT("%s-%s"),
+			FApp::GetBuildVersion(),
+			FApp::GetBuildConfiguration() == EBuildConfiguration::Debug ? TEXT("Debug")
+				: FApp::GetBuildConfiguration() == EBuildConfiguration::DebugGame ? TEXT("DebugGame")
+				: FApp::GetBuildConfiguration() == EBuildConfiguration::Development ? TEXT("Development")
+				: FApp::GetBuildConfiguration() == EBuildConfiguration::Shipping ? TEXT("Shipping")
+				: TEXT("Test"));
+	};
+
+	// Spawning hint: when bEnableProxy is opted in, bring the proxy up first
+	// so the SHA port is held by the singleton when we try to bind below.
+	// EnsureProxyRunning is idempotent (attaches if already up).
+	//
+	// EnsureProxyRunning() only gets the listener up; it does NOT make the
+	// proxy claim our worktree's SHA port. A proxy spawned by some other
+	// worktree only holds its own SHA port, and proxy startup logs
+	// "Awaiting /admin/ensure_worktree" -- the proxy binds per-worktree MCP
+	// ports lazily on that endpoint. Without an explicit EnsureWorktreeBound,
+	// TryStart(PreferredPort) below succeeds because nothing holds our port,
+	// the auto-promote branch never fires, and the editor lands in
+	// DirectConnect mode while still token-gated -- causing Claude Code's
+	// requests to be rejected as 401 because the proxy is not in the path.
+	// EnsureWorktreeBound makes the proxy bind PreferredPort first, so the
+	// editor's TryStart EADDRINUSEs out into the auto-promote branch, which
+	// is what bEnableProxy is supposed to mean.
+	bool bProxyHoldsOurPort = false;
+	if (bEnableProxy)
+	{
+		ProxyClient = MakeUnique<FClaireonProxyClient>();
+		if (ProxyClient->EnsureProxyRunning() && !bPortOverriddenByCommandLine)
+		{
+			bProxyHoldsOurPort = ProxyClient->EnsureWorktreeBound(
+				WorktreeRoot, static_cast<int32>(PreferredPort));
+		}
 	}
 
-	if (!Server->Start(Port))
+	// Skip TryStart on the SHA port when the proxy has already claimed it.
+	// UE's HTTP server binds 0.0.0.0 while the proxy binds 127.0.0.1 -- on
+	// Windows those two binds do NOT conflict, so a naive TryStart would
+	// succeed even though the proxy already owns the port. The editor would
+	// then land in DirectConnect mode, the proxy would forward incoming
+	// traffic to "127.0.0.1:<SHA>" and loop back into itself (the proxy is
+	// what's listening there), producing "Editor connection failed".
+	// Instead, when EnsureWorktreeBound returned true we go straight to
+	// the auto-promote path: bind an ephemeral listener and let the proxy
+	// forward to it.
+	if (!bProxyHoldsOurPort && Server->TryStart(PreferredPort))
 	{
-		UE_LOG(LogClaireon, Error, TEXT("[MCP] Failed to start server"));
-		Server.Reset();
+		// DirectConnect mode -- we own the SHA port. The proxy (if any) is
+		// not in the path; .mcp.json still points Claude at this port.
+		CurrentMcpMode = EClaireonMcpMode::DirectConnect;
+		UE_LOG(LogClaireon, Display,
+			TEXT("[MCP] Bound port %u for worktree %s (DirectConnect mode)"),
+			static_cast<uint32>(PreferredPort), *WorktreeRoot);
+		// If the operator opted in to bEnableProxy we still register so the
+		// proxy can route to us later if it spawns; today we are the SHA-
+		// port owner, but the editor-side state machine remains valid.
+		if (bEnableProxy && ProxyClient.IsValid())
+		{
+			ProxyClient->BeginRetryRegister(
+				static_cast<int32>(Server->GetPort()), SessionToken, MakeBuildId());
+		}
 		return;
 	}
 
-	// Subscribe to settings changes for runtime port reconfiguration
-	if (!SettingsChangedHandle.IsValid())
+	if (bProxyHoldsOurPort)
 	{
-		UClaireonSettings* MutableSettings = GetMutableDefault<UClaireonSettings>();
-		SettingsChangedHandle = MutableSettings->OnSettingsChanged.AddLambda([this]()
-		{
-			if (bPortOverriddenByCommandLine)
-			{
-				UE_LOG(LogClaireon, Warning,
-					TEXT("[MCP] Port change in settings ignored -- overridden by -MCPServerPort command line"));
-				return;
-			}
-
-			const UClaireonSettings* Settings = UClaireonSettings::Get();
-			if (!Settings || !Server.IsValid() || !Server->IsRunning())
-			{
-				return;
-			}
-
-			const uint32 NewPort = Settings->ServerPort;
-			if (NewPort != Server->GetPort())
-			{
-				UE_LOG(LogClaireon, Display,
-					TEXT("[MCP] Port changed from %u to %u -- restarting server"), Server->GetPort(), NewPort);
-				StopServer();
-				StartServer();
-			}
-		});
+		UE_LOG(LogClaireon, Display,
+			TEXT("[MCP] Proxy is fronting port %u for worktree %s; binding ephemeral editor listener."),
+			static_cast<uint32>(PreferredPort), *WorktreeRoot);
 	}
+	else
+	{
+		// EADDRINUSE on the SHA port. Probe 43017 to decide between auto-
+		// promote and abort.
+		UE_LOG(LogClaireon, Display,
+			TEXT("[MCP] Port %u busy; probing 43017 for an existing Claireon proxy."),
+			static_cast<uint32>(PreferredPort));
+	}
+
+	if (!ProxyClient.IsValid())
+	{
+		ProxyClient = MakeUnique<FClaireonProxyClient>();
+	}
+
+	if (!ProxyClient->PingProxyHealth())
+	{
+		UE_LOG(LogClaireon, Error,
+			TEXT("[MCP] Port %u is held by an unknown process and no Claireon ")
+			TEXT("proxy is running on 43017. Free the port (or run ")
+			TEXT("Scripts/Utilities/Invoke-MultiWorktreeProxyMigration.ps1) ")
+			TEXT("and relaunch the editor."),
+			static_cast<uint32>(PreferredPort));
+		Server.Reset();
+		ProxyClient.Reset();
+		return;
+	}
+
+	// Auto-promote: a Claireon proxy already holds the SHA port. Bind an
+	// ephemeral local listener and register through the proxy.
+	const uint16 EphemeralPort = Server->StartEphemeral();
+	if (EphemeralPort == 0)
+	{
+		UE_LOG(LogClaireon, Error,
+			TEXT("[MCP] Failed to bind ephemeral listener for proxy mode."));
+		Server.Reset();
+		ProxyClient.Reset();
+		return;
+	}
+
+	// The proxy needs a session token even in auto-promote, since /editor/
+	// register requires a 32-char token. Generate one if we did not already
+	// (i.e. when bEnableProxy was false but auto-promote fired).
+	if (SessionToken.IsEmpty())
+	{
+		SessionToken = FGuid::NewGuid().ToString(EGuidFormats::Digits)
+			+ FGuid::NewGuid().ToString(EGuidFormats::Digits);
+		Server->SetSessionToken(SessionToken);
+	}
+
+	CurrentMcpMode = EClaireonMcpMode::ProxyAttached;
+	ProxyClient->BeginRetryRegister(
+		static_cast<int32>(Server->GetPort()), SessionToken, MakeBuildId());
+	UE_LOG(LogClaireon, Display,
+		TEXT("[MCP] Joined proxy session despite bEnableProxy=%s because a ")
+		TEXT("Claireon proxy was already running (pid=%u). Editor MCP listener bound on %u."),
+		bEnableProxy ? TEXT("true") : TEXT("false"),
+		ProxyClient->GetCachedProxyPid(),
+		static_cast<uint32>(EphemeralPort));
 }
 
 void FClaireonModule::StopServer()
 {
+	// Unregister from the proxy first so it stops sending MCP traffic at
+	// our port before we tear down the listener. The proxy process itself
+	// keeps running -- next editor launch attaches to the same proxy.
+	if (ProxyClient.IsValid())
+	{
+		ProxyClient->Unregister();
+		ProxyClient.Reset();
+	}
+
 	if (Server.IsValid())
 	{
 		Server->Stop();
-		Server.Reset();
+		// Do NOT reset Server -- the registry must remain valid across
+		// stop/start cycles (post-Spec-C). ShutdownModule fully tears it down.
 	}
 }
 

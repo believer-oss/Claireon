@@ -597,4 +597,174 @@ UObject* CreateInstancedSubObject(UObject* Outer, UClass* SubObjectClass, const 
 	return NewObj;
 }
 
+// ---------------------------------------------------------------------------
+// Inline (EditInline / Instanced) sub-object helpers (#0000)
+// ---------------------------------------------------------------------------
+
+FProperty* ResolvePropertyByPath(
+	UObject* Object,
+	const FString& PropertyPath,
+	void*& OutContainer,
+	FString& OutError)
+{
+	OutContainer = nullptr;
+
+	if (!Object)
+	{
+		OutError = TEXT("Null object");
+		return nullptr;
+	}
+
+	TArray<FPathSegment> Segments;
+	if (!ParsePathSegments(PropertyPath, Segments, OutError))
+	{
+		return nullptr;
+	}
+
+	FProperty* OutProperty = nullptr;
+	if (!ResolvePath(Object->GetClass(), Object, Segments, OutProperty, OutContainer, OutError))
+	{
+		return nullptr;
+	}
+
+	return OutProperty;
+}
+
+UObject* CreateInstancedArrayElement(
+	UObject* Outer,
+	UClass* SubObjectClass,
+	const FString& ArrayPath,
+	FString& OutError)
+{
+	if (!Outer)
+	{
+		OutError = TEXT("Null outer object");
+		return nullptr;
+	}
+	if (!SubObjectClass)
+	{
+		OutError = TEXT("Null sub-object class");
+		return nullptr;
+	}
+
+	FArrayProperty* ArrayProp = nullptr;
+	void* Container = nullptr;
+	if (!ResolveArrayPath(Outer, ArrayPath, ArrayProp, Container, OutError))
+	{
+		return nullptr;
+	}
+
+	FObjectProperty* InnerObjProp = CastField<FObjectProperty>(ArrayProp->Inner);
+	if (!InnerObjProp)
+	{
+		OutError = FString::Printf(
+			TEXT("'%s' inner is not an FObjectProperty (CPF_InstancedReference required)"),
+			*ArrayPath);
+		return nullptr;
+	}
+
+	if ((InnerObjProp->PropertyFlags & CPF_InstancedReference) == 0)
+	{
+		OutError = FString::Printf(
+			TEXT("'%s' is not declared UPROPERTY(Instanced) (CPF_InstancedReference required)"),
+			*ArrayPath);
+		return nullptr;
+	}
+
+	if (!SubObjectClass->IsChildOf(InnerObjProp->PropertyClass))
+	{
+		OutError = FString::Printf(
+			TEXT("'%s' is not a subclass of '%s'"),
+			*SubObjectClass->GetName(), *InnerObjProp->PropertyClass->GetName());
+		return nullptr;
+	}
+
+	EObjectFlags Flags = RF_Transactional;
+	Flags |= (Outer->GetFlags() & (RF_Public | RF_ArchetypeObject));
+
+	UObject* NewObj = NewObject<UObject>(Outer, SubObjectClass, NAME_None, Flags);
+	if (!NewObj)
+	{
+		OutError = FString::Printf(
+			TEXT("Failed to create object of class '%s'"), *SubObjectClass->GetName());
+		return nullptr;
+	}
+
+	FScriptArrayHelper Helper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(Container));
+	const int32 NewIndex = Helper.AddValue();
+	InnerObjProp->SetObjectPropertyValue(Helper.GetRawPtr(NewIndex), NewObj);
+
+	return NewObj;
+}
+
+UObject* SetInstancedSubObject(
+	UObject* Outer,
+	UClass* SubObjectClass,
+	const FString& ObjectPath,
+	FString& OutError)
+{
+	if (!Outer)
+	{
+		OutError = TEXT("Null outer object");
+		return nullptr;
+	}
+	if (!SubObjectClass)
+	{
+		OutError = TEXT("Null sub-object class");
+		return nullptr;
+	}
+
+	void* Container = nullptr;
+	FProperty* Resolved = ResolvePropertyByPath(Outer, ObjectPath, Container, OutError);
+	if (!Resolved)
+	{
+		return nullptr;
+	}
+
+	FObjectProperty* ObjectProp = CastField<FObjectProperty>(Resolved);
+	if (!ObjectProp)
+	{
+		OutError = FString::Printf(
+			TEXT("'%s' does not resolve to an FObjectProperty"), *ObjectPath);
+		return nullptr;
+	}
+
+	if ((ObjectProp->PropertyFlags & CPF_InstancedReference) == 0)
+	{
+		OutError = FString::Printf(
+			TEXT("'%s' is not declared UPROPERTY(Instanced) (CPF_InstancedReference required)"),
+			*ObjectPath);
+		return nullptr;
+	}
+
+	if (!SubObjectClass->IsChildOf(ObjectProp->PropertyClass))
+	{
+		OutError = FString::Printf(
+			TEXT("'%s' is not a subclass of '%s'"),
+			*SubObjectClass->GetName(), *ObjectProp->PropertyClass->GetName());
+		return nullptr;
+	}
+
+	void* SlotPtr = ObjectProp->ContainerPtrToValuePtr<void>(Container);
+	UObject* PrevValue = ObjectProp->GetObjectPropertyValue(SlotPtr);
+	if (PrevValue)
+	{
+		PrevValue->MarkAsGarbage();
+	}
+
+	EObjectFlags Flags = RF_Transactional;
+	Flags |= (Outer->GetFlags() & (RF_Public | RF_ArchetypeObject));
+
+	UObject* NewObj = NewObject<UObject>(Outer, SubObjectClass, NAME_None, Flags);
+	if (!NewObj)
+	{
+		OutError = FString::Printf(
+			TEXT("Failed to create object of class '%s'"), *SubObjectClass->GetName());
+		return nullptr;
+	}
+
+	ObjectProp->SetObjectPropertyValue(SlotPtr, NewObj);
+	return NewObj;
+}
+
 } // namespace ClaireonPropertyUtils

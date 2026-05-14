@@ -4,7 +4,7 @@
     "capture_procedure": [
       "1. Check out this branch (llm/<user>/<workspace>/<task>) at HEAD of S3 implementation (pre-S4).",
       "2. Launch UnrealEditor with the Claireon plugin loaded.",
-      "3. Open the Claireon REPL / diagnostics widget and ensure the tool catalog is rebuilt (trigger a claireon.tools_search once to warm the catalog).",
+      "3. Open the Claireon REPL / diagnostics widget and ensure the tool catalog is rebuilt (trigger a tool_search once to warm the catalog).",
       "4. For each non-blank, non-comment line in tool_catalog_ab_queries.txt, execute Python in the REPL:",
       "   from mcp_tool_catalog import search as _s",
       "   import json",

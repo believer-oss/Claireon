@@ -31,7 +31,7 @@ public:
 
 	/**
 	 * Generate a Python-style type signature from a tool's input schema.
-	 * e.g. "claireon.asset_search(search_dir: str, class_filter: str = \"\", ...) -> dict"
+	 * e.g. "asset_search(search_dir: str, class_filter: str = \"\", ...) -> dict"
 	 */
 	static FString GenerateTypeSignature(const FString& ToolName, const TSharedPtr<FJsonObject>& InputSchema);
 
@@ -43,7 +43,7 @@ public:
 	 * truncated / over-ceiling / error).
 	 *
 	 * Per-tool-class stream membership (D6): generic tools produce at most one
-	 * <stream name="data"> child; claireon.python_execute produces at most one each
+	 * <stream name="data"> child; python_execute produces at most one each
 	 * of <stream name="stdout"> and <stream name="uelog">, never <stream name="data">.
 	 *
 	 * @param Summary      One-line human summary injected into <summary>.
@@ -59,7 +59,14 @@ public:
 
 	/**
 	 * Generate a compact category summary with tool counts and example names.
-	 * Compact summary (~1-2k chars) directing Claude to use search_tools for full signatures.
+	 * Compact summary (~1-2k chars) directing Claude to use `search` for full signatures.
 	 */
 	static FString GenerateCategorySummary(const TMap<FString, TSharedPtr<IClaireonTool>>& Tools);
+
+	/**
+	 * Returns just the category names, comma-joined, with no per-category
+	 * example tools. Used by HandleToolsList / BuildToolDefinitions to keep
+	 * the python_execute description small.
+	 */
+	static FString GenerateCategoryList(const TMap<FString, TSharedPtr<IClaireonTool>>& Tools);
 };

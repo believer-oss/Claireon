@@ -178,10 +178,8 @@ void ClaireonTool_ExecutePython::RegisterToolCatalogBindings(void* UnrealModuleD
 	UE_LOG(LogClaireon, Display, TEXT("[MCP Bridge] Registered _tool_catalog_build / _tool_catalog_nearest in unreal module"));
 }
 
-FString ClaireonTool_ExecutePython::GetName() const
-{
-	return TEXT("claireon.python_execute");
-}
+FString ClaireonTool_ExecutePython::GetCategory() const { return TEXT("python"); }
+FString ClaireonTool_ExecutePython::GetOperation() const { return TEXT("execute"); }
 
 TArray<FString> ClaireonTool_ExecutePython::GetSearchKeywords() const
 {
@@ -190,11 +188,13 @@ TArray<FString> ClaireonTool_ExecutePython::GetSearchKeywords() const
 
 FString ClaireonTool_ExecutePython::GetDescription() const
 {
-	return TEXT("Execute Python code in Code Mode with access to the claireon.* bridge. "
-				"The code runs in the Unreal Editor's Python environment with the 'unreal' module "
-				"and the 'claireon' module available for calling other MCP tools. "
-				"Use 'import claireon' to access tool functions. Call tools as claireon.<tool_name>(...). "
-				"Run dir(claireon) to list available tools, or help(claireon.<tool_name>) for usage details.");
+	return TEXT("Run Python code in the Unreal Editor. The `claireon.*` Python module exposes hundreds of tools "
+				"across many categories -- write Python like `import claireon; claireon.<tool_name>(arg=...)`. "
+				"Before calling a non-trivial tool, use `tool_search(tool_name=\"<name>\")` to fetch its exact "
+				"input schema and example usage so you don't pass the wrong arguments. "
+				"Run `dir(claireon)` to list available tools or `help(claireon.<tool_name>)` for usage details. "
+				"Bypass-mode tool: the bridge will refuse this call if any other Claireon session "
+				"(per-asset or editor-wide) is currently held. Call session_release first if needed.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ExecutePython::GetInputSchema() const
@@ -395,6 +395,10 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 		}
 	}
 
+	// Step 7c: Drain any deferred-action aborts (e.g. leaked-World
+	// guard refused a map transition). [RESOLVED] D3 of #0000.
+	TArray<FString> DeferredAborts = FClaireonBridge::DrainDeferredActionAborts();
+
 	// Step 8: Capture logs (Python stdout/stderr and engine UE_LOG)
 	FString Logs = FToolResult::BuildLogString(PythonCommand.LogOutput);
 	FString EngineOutput = EngineLogCapture.GetCapturedOutput();
@@ -464,6 +468,25 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 		}
 		FinalResult.ErrorMessage = ErrorMsg;
 	}
+	else if (DeferredAborts.Num() > 0)
+	{
+		// [RESOLVED] D3 of #0000: a deferred world-transition action was
+		// refused by the leaked-World guard. python_execute MUST NOT
+		// report success for this case.
+		FinalResult.bIsError = true;
+		const FString Joined = FString::Join(DeferredAborts, TEXT("\n"));
+		FinalResult.ErrorMessage = TEXT("Deferred action aborted: ") + Joined;
+
+		// Mirror the same string into UELog so log-tailers and
+		// engine-log audit readers also surface the abort, not just
+		// JSON consumers.
+		if (!FinalResult.UELog.IsEmpty()
+			&& !FinalResult.UELog.EndsWith(TEXT("\n")))
+		{
+			FinalResult.UELog += TEXT("\n");
+		}
+		FinalResult.UELog += Joined;
+	}
 	else
 	{
 		// Success -- logs are the primary output
@@ -495,11 +518,11 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 		ToolCallCount);
 
 	// Route stdout ("Logs") and uelog streams through the disk-spill gate (per D6).
-	// claireon.python_execute has no structured "data" stream.  The conversation id comes
+	// python_execute has no structured "data" stream.  The conversation id comes
 	// from FClaireonBridge::GetCurrentConversationId(), set by the REPL before dispatch.
 	return FClaireonOutputGate::RouteResult(
 		MoveTemp(FinalResult),
-		TEXT("claireon.python_execute"),
+		TEXT("python_execute"),
 		FClaireonBridge::GetCurrentConversationId(),
 		EClaireonSpillStreamSet::PythonStdoutAndUELog);
 }

@@ -4,6 +4,7 @@
 #include "Tools/ClaireonTool_DataTableSetRowValues.h"
 #include "Tools/ClaireonDataTableHelpers.h"
 #include "ClaireonLog.h"
+#include "ClaireonScopedAssetLock.h"
 #include "Engine/DataTable.h"
 #include "DataTableEditorUtils.h"
 #include "UObject/UnrealType.h"
@@ -11,10 +12,8 @@
 #include "Dom/JsonValue.h"
 #include "ScopedTransaction.h"
 
-FString ClaireonTool_DataTableSetRowValues::GetName() const
-{
-	return TEXT("claireon.datatable_set_row_values");
-}
+FString ClaireonTool_DataTableSetRowValues::GetCategory() const { return TEXT("datatable"); }
+FString ClaireonTool_DataTableSetRowValues::GetOperation() const { return TEXT("set_row_values"); }
 
 FString ClaireonTool_DataTableSetRowValues::GetDescription() const
 {
@@ -63,6 +62,12 @@ IClaireonTool::FToolResult ClaireonTool_DataTableSetRowValues::Execute(const TSh
 	if (!Arguments->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return MakeErrorResult(TEXT("Missing required parameter: asset_path"));
+	}
+
+	FClaireonScopedAssetLock Lock(AssetPath, GetName());
+	if (!Lock.IsAcquired())
+	{
+		return Lock.GetError();
 	}
 
 	FString RowNameStr;

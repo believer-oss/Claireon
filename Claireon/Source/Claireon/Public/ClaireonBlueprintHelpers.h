@@ -168,7 +168,7 @@ struct FBlueprintEditToolData
 	// Snapshotted before each mutation op; consumed by BuildStateResponse in "changed" mode.
 	TMap<FGuid, TMap<FName, TArray<FString>>> PreOpPinConnections;
 
-	// GUID corrections from the current operation (stale GUID -> current GUID).
+	// GUID corrections from the current operation (stale GUID → current GUID).
 	// Populated by FindNodeByGuid's A-field fallback when a blueprint was recompiled
 	// between get and edit calls.  Surfaced in BuildStateResponse so the MCP client
 	// can update its references.
@@ -398,15 +398,18 @@ namespace ClaireonBlueprintHelpers
 	TArray<UEdGraphNode*> FindNodesByClassAndTitle(UEdGraph* Graph, const FString& ClassName, const FString& Title);
 
 	/**
-	 * Pick the specialized UK2Node_CallFunction subclass for a resolved UFunction
-	 * by inspecting its metadata. Canonical order mirrors
-	 * UBlueprintFunctionNodeSpawner::Create (BlueprintFunctionNodeSpawner.cpp):
-	 *   CommutativeAssociativeBinaryOperator (pure)
+	 * Pick the specialized K2Node subclass for a resolved UFunction by inspecting
+	 * its metadata. Canonical order mirrors UBlueprintFunctionNodeSpawner::Create
+	 * (BlueprintFunctionNodeSpawner.cpp) plus an AsyncAction prefix:
+	 *   AsyncAction (UBlueprintAsyncActionBase factory + 4-conjunct guard)
+	 *     -> CommutativeAssociativeBinaryOperator (pure)
 	 *     -> MaterialParameterCollectionFunction
 	 *     -> CallDataTableFunction
 	 *     -> CallArrayFunction
 	 *     -> plain UK2Node_CallFunction.
 	 * Returns UK2Node_CallFunction::StaticClass() when Function is null.
+	 * Note: UK2Node_AsyncAction is the only return value that is NOT a
+	 * UK2Node_CallFunction subclass; callers must branch on the result type.
 	 */
 	UClass* PickK2NodeClassForFunction(const UFunction* Function);
 

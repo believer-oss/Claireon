@@ -14,16 +14,19 @@
 #include "FileHelpers.h"
 #include "Containers/Ticker.h"
 
-FString ClaireonTool_MapOpen::GetName() const
-{
-	return TEXT("claireon.map_open_async");
-}
+FString ClaireonTool_MapOpen::GetCategory() const { return TEXT("map"); }
+FString ClaireonTool_MapOpen::GetOperation() const { return TEXT("open_async"); }
 
 FString ClaireonTool_MapOpen::GetDescription() const
 {
 	return TEXT("Open a map (level) in the editor by asset path. "
 		"The map load is deferred until after the current script finishes — "
-		"do not depend on the map being loaded in subsequent lines of the same execute() call.");
+		"do not depend on the map being loaded in subsequent lines of the same execute() call. "
+		"A leaked-World guard runs immediately before the load: if any non-editor "
+		"UWorld is still loaded in memory (e.g. you called "
+		"unreal.EditorAssetLibrary.duplicate_asset() on a .umap), the load is aborted "
+		"and python_execute returns bIsError with the leaked package name(s). "
+		"Use duplicate_and_open_map_async to duplicate+open a map atomically.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_MapOpen::GetInputSchema() const
@@ -113,6 +116,18 @@ void ClaireonTool_MapOpen::ExecuteDeferredLoadMap(const FString& MapPath)
 			// the post-execution barrier and this tick (e.g. from prior execute()
 			// calls whose private namespaces haven't been GC'd yet).
 			FClaireonBridge::RunWorldTransitionBarrier();
+
+			// Leaked-World guard (#0000): refuse the transition if any non-editor
+			// UWorld remains loaded after the barrier. Without this, LoadMap's
+			// Map_Load assertion fires fatally at EditorServer.cpp:1934.
+			TArray<FClaireonLeakedWorld> Remaining;
+			if (!FClaireonBridge::EnsureNoLeakedWorlds(Remaining))
+			{
+				const FString Msg = FClaireonBridge::FormatLeakedWorldError(Remaining);
+				UE_LOG(LogClaireon, Error, TEXT("%s"), *Msg);
+				FClaireonBridge::ReportDeferredActionAbort(Msg);
+				return false; // do NOT call LoadMap
+			}
 
 			FEditorFileUtils::LoadMap(CapturedPath);
 			return false; // one-shot

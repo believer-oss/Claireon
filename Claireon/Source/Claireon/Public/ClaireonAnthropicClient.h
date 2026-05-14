@@ -85,7 +85,7 @@ public:
 	/** Get approximate token count for context indicator (messages + system prompt + tool definitions). */
 	int32 GetApproximateTokenCount() const;
 
-	/** Number of tools sent to the API (Code Mode: 2 — execute + search_tools). */
+	/** Number of tools sent to the API (Code Mode: 2 — execute + search). */
 	int32 GetAPIToolCount() const;
 
 	/** Delegate broadcast for every REPL event (for live display). */
@@ -155,15 +155,6 @@ private:
 
 	/** Clean up after a turn completes or is cancelled. */
 	void FinalizeTurn();
-
-	/**
-	 * Anthropic API requires tool names matching ^[a-zA-Z0-9_-]{1,128}$.
-	 * Our MCP tools use dot-separated names (e.g. "editor.assets.list").
-	 * This map translates sanitized API names (dots→underscores) back to
-	 * the original registered tool name for lookup during execution.
-	 * Rebuilt on every BuildToolDefinitions() call.
-	 */
-	mutable TMap<FString, FString> SanitizedToOriginalToolName;
 
 	/** Stored pointer (may be null if tab was opened before server started — use GetCurrentServer()). */
 	FClaireonServer* Server = nullptr;

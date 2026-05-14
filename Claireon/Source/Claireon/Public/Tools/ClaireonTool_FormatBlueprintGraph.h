@@ -9,7 +9,7 @@
  * MCP tool that auto-formats Blueprint graphs using Blueprint Assist.
  *
  * This tool provides automatic layout of Blueprint nodes in a graph, organizing them
- * into a readable structure. Requires the Blueprint Assist plugin to be enabled.
+ * into a readable structure. Requires the Blueprint Assist plugin to be installed.
  *
  * Input Parameters:
  * - asset_path (string, required): Path to the Blueprint asset (must start with /Game/)
@@ -22,13 +22,14 @@
 class ClaireonTool_FormatBlueprintGraph : public IClaireonTool
 {
 public:
-	virtual FString GetName() const override;
+	virtual FString GetCategory() const override;
+	virtual FString GetOperation() const override;
 	virtual bool RequiresNoPIE() const override { return true; }
 	virtual FString GetDescription() const override;
 	virtual TSharedPtr<FJsonObject> GetInputSchema() const override;
 	virtual FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;
 
-	// P3: synonym/abbreviation keywords for tools_search ranking
+	// P3: synonym/abbreviation keywords for search ranking
 	virtual TArray<FString> GetSearchKeywords() const override;
 
 private:

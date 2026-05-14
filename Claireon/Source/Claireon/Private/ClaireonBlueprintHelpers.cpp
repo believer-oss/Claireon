@@ -12,11 +12,13 @@
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraphSchema_K2.h"
+#include "K2Node_AsyncAction.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_CallArrayFunction.h"
 #include "K2Node_CallDataTableFunction.h"
 #include "K2Node_CallMaterialParameterCollectionFunction.h"
 #include "K2Node_CommutativeAssociativeBinaryOperator.h"
+#include "Kismet/BlueprintAsyncActionBase.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Toolkits/AssetEditorToolkit.h"
@@ -24,6 +26,7 @@
 #include "BlueprintEditor.h"
 #include "GameplayTagContainer.h"
 #include "StructUtils/InstancedStruct.h"
+#include "Tools/ClaireonBlueprintGraphEditToolBase_Internal.h"
 #include "UObject/UObjectGlobals.h"
 
 // FScopedBlueprintEditor Implementation
@@ -1261,11 +1264,13 @@ namespace ClaireonBlueprintHelpers
 				{
 					FBlueprintEditorUtils::SetBlueprintOnlyEditableFlag(Blueprint, VarName, false);
 					FBlueprintEditorUtils::SetBlueprintPropertyReadOnlyFlag(Blueprint, VarName, true);
+					VarDesc->PropertyFlags |= CPF_BlueprintVisible;
 				}
 				else if (Flag == TEXT("BlueprintReadWrite"))
 				{
 					FBlueprintEditorUtils::SetBlueprintOnlyEditableFlag(Blueprint, VarName, true);
 					FBlueprintEditorUtils::SetBlueprintPropertyReadOnlyFlag(Blueprint, VarName, false);
+					VarDesc->PropertyFlags |= CPF_BlueprintVisible;
 				}
 				else if (bReplicationFieldProvided && (Flag == TEXT("Net") || Flag == TEXT("Replicated") || Flag == TEXT("RepNotify")))
 				{
@@ -1427,6 +1432,27 @@ namespace ClaireonBlueprintHelpers
 		const bool bIsMaterialParamCollectionFunc = Function->HasMetaData(FBlueprintMetadata::MD_MaterialParameterCollectionFunction);
 		const bool bIsDataTableFunc = Function->HasMetaData(FBlueprintMetadata::MD_DataTablePin);
 
+		// AsyncAction detection: mirror UK2Node_AsyncAction::GetMenuActions filter.
+		// Functions whose owning class carries HasDedicatedAsyncNode metadata fall
+		// through to the plain UK2Node_CallFunction path (today's behavior). Routing
+		// those to dedicated nodes (e.g. UK2Node_LatentAbilityCall) is a follow-up;
+		// tracked in proposal R3.
+		if (const UClass* OwnerClass = Function->GetOwnerClass())
+		{
+			if (OwnerClass->IsChildOf(UBlueprintAsyncActionBase::StaticClass())
+				&& !OwnerClass->HasMetaData(TEXT("HasDedicatedAsyncNode")))
+			{
+				if (const FObjectProperty* ReturnProp = CastField<FObjectProperty>(Function->GetReturnProperty()))
+				{
+					if (ReturnProp->PropertyClass
+						&& ReturnProp->PropertyClass->IsChildOf(UBlueprintAsyncActionBase::StaticClass()))
+					{
+						return UK2Node_AsyncAction::StaticClass();
+					}
+				}
+			}
+		}
+
 		if (bIsCommutativeAssociativeBinaryOp && bIsPure)
 		{
 			return UK2Node_CommutativeAssociativeBinaryOperator::StaticClass();
@@ -1444,5 +1470,10 @@ namespace ClaireonBlueprintHelpers
 			return UK2Node_CallArrayFunction::StaticClass();
 		}
 		return UK2Node_CallFunction::StaticClass();
+	}
+
+	FString GetNodeTypeAliasForClass(const UClass* NodeClass)
+	{
+		return ::ClaireonNodeTypeAlias::GetAliasForNodeClass(NodeClass);
 	}
 } // namespace ClaireonBlueprintHelpers

@@ -6,6 +6,7 @@
 #include "ClaireonBlueprintHelpers.h"
 #include "ClaireonLog.h"
 #include "ClaireonPathResolver.h"
+#include "ClaireonScopedAssetLock.h"
 
 #include "AssetRegistry/AssetData.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -31,10 +32,8 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonTool_BlueprintDuplicate::GetName() const
-{
-	return TEXT("claireon.blueprint_duplicate");
-}
+FString ClaireonTool_BlueprintDuplicate::GetCategory() const { return TEXT("blueprint"); }
+FString ClaireonTool_BlueprintDuplicate::GetOperation() const { return TEXT("duplicate"); }
 
 FString ClaireonTool_BlueprintDuplicate::GetDescription() const
 {
@@ -251,6 +250,13 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintDuplicate::Execute(const TShare
 		}
 		DestPath = DstResolve.ResolvedPath.Path;
 		DestPackagePath = DstResolve.ResolvedPath.PackagePath;
+	}
+
+	// Acquire per-asset lock on the source path before reading/duplicating.
+	FClaireonScopedAssetLock Lock(SourcePath, GetName());
+	if (!Lock.IsAcquired())
+	{
+		return Lock.GetError();
 	}
 
 	// 8. Asset registry lookup for source

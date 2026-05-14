@@ -15,7 +15,9 @@
 class ClaireonTool_MaterialApply : public IClaireonTool
 {
 public:
-	virtual FString GetName() const override;
+	virtual FString GetCategory() const override;
+	virtual FString GetOperation() const override;
+	virtual EClaireonToolSessionMode GetSessionMode() const override { return EClaireonToolSessionMode::RequiresSession; }
 	virtual FString GetDescription() const override;
 	virtual TSharedPtr<FJsonObject> GetInputSchema() const override;
 	virtual FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;

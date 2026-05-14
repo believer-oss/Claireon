@@ -4,15 +4,14 @@
 #include "Tools/ClaireonTool_DataTableImportJson.h"
 #include "Tools/ClaireonDataTableHelpers.h"
 #include "ClaireonLog.h"
+#include "ClaireonScopedAssetLock.h"
 #include "Engine/DataTable.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "ScopedTransaction.h"
 
-FString ClaireonTool_DataTableImportJson::GetName() const
-{
-	return TEXT("claireon.datatable_import_json");
-}
+FString ClaireonTool_DataTableImportJson::GetCategory() const { return TEXT("datatable"); }
+FString ClaireonTool_DataTableImportJson::GetOperation() const { return TEXT("import_json"); }
 
 FString ClaireonTool_DataTableImportJson::GetDescription() const
 {
@@ -52,6 +51,12 @@ IClaireonTool::FToolResult ClaireonTool_DataTableImportJson::Execute(const TShar
 	if (!Arguments->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return MakeErrorResult(TEXT("Missing required parameter: asset_path"));
+	}
+
+	FClaireonScopedAssetLock Lock(AssetPath, GetName());
+	if (!Lock.IsAcquired())
+	{
+		return Lock.GetError();
 	}
 
 	FString JsonInput;
