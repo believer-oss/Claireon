@@ -240,6 +240,23 @@ public:
         meta=(DisplayName="Excluded Engine Log Categories"))
     TSet<FName> ExcludedEngineLogCategories;
 
+    // --- Claude Code Launch ---
+
+    /** Initial prompt sent to Claude Code on launch (typically a slash command).
+     *  Empty = no initial prompt; engineer types their own.
+     *  Example: "/mcp-connect-claireon" to auto-fire the worktree-init skill. */
+    UPROPERTY(Config, EditAnywhere, Category="Claude Code Launch",
+        meta=(DisplayName="Initial Prompt"))
+    FString LaunchInitialPrompt;
+
+    /** When true, the launch button passes --dangerously-skip-permissions to Claude Code,
+     *  auto-approving every tool call for the entire session. Convenient for engineer
+     *  workflows where the initial-prompt skill needs to run unattended (e.g., worktree
+     *  init via Bash). All security caveats of skipping permissions apply. */
+    UPROPERTY(Config, EditAnywhere, Category="Claude Code Launch",
+        meta=(DisplayName="Skip Permission Prompts on Launch"))
+    bool bLaunchSkipPermissions = false;
+
     // --- Helpers ---
 
     /** Returns the effective system prompt (override if set, else built-in default). */

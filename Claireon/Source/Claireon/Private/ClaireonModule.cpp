@@ -23,8 +23,18 @@
 #include "ToolMenus.h"
 #include "Styling/AppStyle.h"
 #include "Framework/Docking/TabManager.h"
+#include "Framework/Notifications/NotificationManager.h"
+#include "Widgets/Notifications/SNotificationList.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Misc/Paths.h"
+#include "Misc/FileHelper.h"
+#include "HAL/PlatformFileManager.h"
+#include "HAL/PlatformProcess.h"
+#include "HAL/PlatformMisc.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 #include "Containers/Ticker.h"
 #include "Async/Async.h"
 #include "Tools/ClaireonTool_AssetReferences.h"
@@ -587,6 +597,281 @@ DEFINE_LOG_CATEGORY(LogClaireon);
 const FName IClaireonToolProvider::FeatureName = TEXT("ClaireonToolProvider");
 
 #define LOCTEXT_NAMESPACE "ClaireonModule"
+
+// ---------------------------------------------------------------------------
+// Launch Claude Code helper -- spawns a terminal at the project root with
+// `claude` running against the live MCP server. Engineers click this to
+// drop into a Claude Code session that already knows about Claireon's tools.
+// ---------------------------------------------------------------------------
+namespace ClaireonLaunch
+{
+	/** Search PATH for an executable. Returns full path if found, empty otherwise. */
+	static FString FindOnPath(const FString& ExeName)
+	{
+		const FString PathEnv = FPlatformMisc::GetEnvironmentVariable(TEXT("PATH"));
+		if (PathEnv.IsEmpty())
+		{
+			return FString();
+		}
+
+		TArray<FString> Dirs;
+		PathEnv.ParseIntoArray(Dirs, TEXT(";"), /*InCullEmpty=*/true);
+
+		IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
+		for (const FString& RawDir : Dirs)
+		{
+			const FString Dir = RawDir.TrimStartAndEnd();
+			if (Dir.IsEmpty())
+			{
+				continue;
+			}
+			FString Candidate = FPaths::Combine(Dir, ExeName);
+			if (PF.FileExists(*Candidate))
+			{
+				return Candidate;
+			}
+		}
+		return FString();
+	}
+
+	/**
+	 * Resolve a PowerShell executable using canonical Windows install paths first,
+	 * with a PATH-search fallback. Canonical paths are reliable even when the editor
+	 * process inherits a stripped or non-default PATH (which can happen when launched
+	 * by external tooling or as a child of a non-shell parent).
+	 *
+	 * Order: PowerShell 7 (preferred) -> Windows PowerShell 5.1 (always in-box on Win10+).
+	 */
+	static FString ResolveShell()
+	{
+		IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
+
+		// 1. PowerShell 7 in its default install location (system-wide).
+		FString ProgramFiles = FPlatformMisc::GetEnvironmentVariable(TEXT("ProgramFiles"));
+		if (ProgramFiles.IsEmpty())
+		{
+			ProgramFiles = TEXT("C:\\Program Files");
+		}
+		const FString Pwsh7 = FPaths::Combine(ProgramFiles, TEXT("PowerShell"), TEXT("7"), TEXT("pwsh.exe"));
+		if (PF.FileExists(*Pwsh7))
+		{
+			return Pwsh7;
+		}
+
+		// 2. PATH search for `pwsh.exe` (per-user installs, scoop, etc.).
+		FString FromPathPwsh = FindOnPath(TEXT("pwsh.exe"));
+		if (!FromPathPwsh.IsEmpty())
+		{
+			return FromPathPwsh;
+		}
+
+		// 3. In-box Windows PowerShell 5.1 -- always present on Win10+, fixed path.
+		FString SystemRoot = FPlatformMisc::GetEnvironmentVariable(TEXT("SystemRoot"));
+		if (SystemRoot.IsEmpty())
+		{
+			SystemRoot = TEXT("C:\\Windows");
+		}
+		const FString WinPS = FPaths::Combine(
+			SystemRoot, TEXT("System32"), TEXT("WindowsPowerShell"), TEXT("v1.0"), TEXT("powershell.exe"));
+		if (PF.FileExists(*WinPS))
+		{
+			return WinPS;
+		}
+
+		// 4. PATH search for `powershell.exe` as a last resort.
+		return FindOnPath(TEXT("powershell.exe"));
+	}
+
+	/** Show a transient editor notification. */
+	static void Notify(const FText& Message, float Duration = 5.0f)
+	{
+		FNotificationInfo Info(Message);
+		Info.ExpireDuration = Duration;
+		FSlateNotificationManager::Get().AddNotification(Info);
+	}
+
+	/** Escape a value for safe interpolation into a PowerShell single-quoted string. */
+	static FString EscapeForPwshSingle(const FString& In)
+	{
+		return In.Replace(TEXT("'"), TEXT("''"));
+	}
+
+	/**
+	 * Resolve the live MCP port: prefer the in-process server, fall back to
+	 * Saved/MCPServer.json (in case the diagnostics tab hasn't auto-started yet),
+	 * fall back to the default 8017.
+	 */
+	static uint32 ResolveLivePort()
+	{
+		FClaireonModule& Module = FClaireonModule::Get();
+		if (Module.IsServerRunning())
+		{
+			if (FClaireonServer* Server = Module.GetServer())
+			{
+				return Server->GetPort();
+			}
+		}
+
+		const FString PortFile = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("MCPServer.json"));
+		FString Contents;
+		if (FFileHelper::LoadFileToString(Contents, *PortFile))
+		{
+			TSharedPtr<FJsonObject> Json;
+			TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Contents);
+			if (FJsonSerializer::Deserialize(Reader, Json) && Json.IsValid())
+			{
+				int32 ParsedPort = 0;
+				if (Json->TryGetNumberField(TEXT("port"), ParsedPort) && ParsedPort > 0)
+				{
+					return static_cast<uint32>(ParsedPort);
+				}
+			}
+		}
+
+		return 8017;
+	}
+
+	/**
+	 * Write a per-launch MCP config to Saved/Claireon/claude-code-mcp.json so we
+	 * pin Claude Code to the live port without touching the committed .mcp.json.
+	 * Returns the absolute path on success, empty on failure.
+	 */
+	static FString WriteTransientMcpConfig(uint32 Port)
+	{
+		const FString McpUrl = FString::Printf(TEXT("http://127.0.0.1:%u/mcp"), Port);
+
+		const TSharedRef<FJsonObject> UnrealServer = MakeShared<FJsonObject>();
+		UnrealServer->SetStringField(TEXT("type"), TEXT("http"));
+		UnrealServer->SetStringField(TEXT("url"), McpUrl);
+
+		const TSharedRef<FJsonObject> Servers = MakeShared<FJsonObject>();
+		Servers->SetObjectField(TEXT("unreal-editor"), UnrealServer);
+
+		const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetObjectField(TEXT("mcpServers"), Servers);
+
+		FString Out;
+		const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Out);
+		if (!FJsonSerializer::Serialize(Root, Writer))
+		{
+			return FString();
+		}
+
+		const FString ConfigPath = FPaths::ConvertRelativePathToFull(
+			FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Claireon"), TEXT("claude-code-mcp.json")));
+
+		if (!FFileHelper::SaveStringToFile(Out, *ConfigPath))
+		{
+			UE_LOG(LogClaireon, Warning, TEXT("[MCP] Failed to write transient MCP config to %s"), *ConfigPath);
+			return FString();
+		}
+
+		return ConfigPath;
+	}
+
+	/**
+	 * Launch Claude Code in a terminal at the project root, configured to
+	 * talk to the running MCP server. Tries Windows Terminal first, falls
+	 * back to PowerShell. Surfaces failures via Slate notification.
+	 */
+	static bool LaunchClaudeCodeFromProjectDir()
+	{
+		const FString ProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+
+		const uint32 Port = ResolveLivePort();
+		const FString ConfigPath = WriteTransientMcpConfig(Port);
+		if (ConfigPath.IsEmpty())
+		{
+			Notify(LOCTEXT("ClaireonLaunchConfigFailed",
+				"Could not write MCP config under Saved/Claireon/. Check filesystem permissions."));
+			return false;
+		}
+
+		const FString ProjectDirEsc = EscapeForPwshSingle(ProjectDir);
+		const FString ConfigPathEsc = EscapeForPwshSingle(ConfigPath);
+
+		// Optional flags driven by UClaireonSettings (configurable per-user via
+		// Editor Preferences > Plugins > Claireon > Claude Code Launch, or per-project
+		// via Config/DefaultEditorPerProjectUserSettings.ini).
+		FString ExtraFlags;
+		FString InitialPromptArg;
+		if (const UClaireonSettings* LaunchSettings = UClaireonSettings::Get())
+		{
+			if (LaunchSettings->bLaunchSkipPermissions)
+			{
+				ExtraFlags += TEXT(" --dangerously-skip-permissions");
+			}
+
+			const FString Trimmed = LaunchSettings->LaunchInitialPrompt.TrimStartAndEnd();
+			if (!Trimmed.IsEmpty())
+			{
+				InitialPromptArg = FString::Printf(TEXT(" '%s'"), *EscapeForPwshSingle(Trimmed));
+			}
+		}
+
+		// Inner PowerShell command. Using `claude` from PATH; if it isn't installed
+		// the engineer sees a clear "claude : The term ... is not recognized" message
+		// in the terminal we just opened -- a better UX than a silent failure here.
+		const FString PwshInner = FString::Printf(
+			TEXT("Set-Location '%s'; claude --mcp-config '%s'%s%s"),
+			*ProjectDirEsc, *ConfigPathEsc, *ExtraFlags, *InitialPromptArg);
+
+		// Resolve a shell via canonical Windows install paths (with PATH fallback).
+		// We deliberately do NOT shell through `wt.exe`: when Windows Terminal
+		// launches a child shell name that isn't installed, it surfaces a cryptic
+		// "file not found" referencing the inner command line. Launching the shell
+		// directly is reliable, and on Windows 11 with Terminal set as the default
+		// console host the user still gets the Terminal UI.
+		const FString Shell = ResolveShell();
+		if (Shell.IsEmpty())
+		{
+			Notify(LOCTEXT("ClaireonLaunchNoShell",
+				"Could not locate PowerShell. Install PowerShell 7, or verify that Windows PowerShell exists at %SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe."));
+			return false;
+		}
+
+		const FString Exe = Shell;
+		// -NoProfile skips the user's PowerShell profile (e.g.
+		// %USERPROFILE%\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1).
+		// User profiles routinely define a `claude` function or alias whose internals
+		// (claude.ps1 path, npm prefix, etc.) drift over time and break this launch.
+		// Skipping the profile keeps the shim invocation reproducible across machines.
+		const FString Args = FString::Printf(TEXT("-NoProfile -NoExit -Command \"%s\""), *PwshInner);
+
+		UE_LOG(LogClaireon, Display,
+			TEXT("[MCP] LaunchClaudeCode resolved shell: %s"), *Exe);
+
+		// bLaunchDetached MUST be false here. Setting it true causes UE to OR together
+		// DETACHED_PROCESS | CREATE_NEW_CONSOLE in the Windows CreateProcess flags --
+		// which are mutually exclusive per the Win32 docs, and Windows picks
+		// DETACHED_PROCESS, so PowerShell spawns with no console and runs invisibly.
+		// With bLaunchDetached=false the child gets a proper new console (rendered
+		// via Windows Terminal on Win11 if that's the default console host).
+		// We CloseProc the handle immediately, so the editor never waits on the child.
+		const bool bLaunchDetached = false;
+		const bool bLaunchHidden = false;
+		const bool bLaunchReallyHidden = false;
+		FProcHandle Handle = FPlatformProcess::CreateProc(
+			*Exe, *Args, bLaunchDetached, bLaunchHidden, bLaunchReallyHidden,
+			/*OutProcessID=*/nullptr, /*PriorityModifier=*/0,
+			*ProjectDir, /*PipeWriteChild=*/nullptr, /*PipeReadChild=*/nullptr);
+
+		if (!Handle.IsValid())
+		{
+			Notify(FText::Format(
+				LOCTEXT("ClaireonLaunchSpawnFailed", "Failed to launch terminal: {0}"),
+				FText::FromString(Exe)));
+			return false;
+		}
+		FPlatformProcess::CloseProc(Handle);
+
+		UE_LOG(LogClaireon, Display,
+			TEXT("[MCP] Launched Claude Code (exe=%s, cwd=%s, port=%u)"),
+			*Exe, *ProjectDir, Port);
+
+		return true;
+	}
+}
 
 // ---------------------------------------------------------------------------
 // FClaireonBuiltinToolProvider -- private class that provides all built-in tools
@@ -1695,6 +1980,21 @@ void FClaireonModule::RegisterMenus()
 	AIChatEntry.StyleNameOverride = "CalloutToolbar";
 	Section.AddEntry(AIChatEntry);
 
+	FToolMenuEntry LaunchClaudeCodeEntry = FToolMenuEntry::InitToolBarButton(
+		TEXT("LaunchClaudeCode"),
+		FUIAction(FExecuteAction::CreateLambda([]()
+	{
+		ClaireonLaunch::LaunchClaudeCodeFromProjectDir();
+	})),
+		LOCTEXT("LaunchClaudeCodeLabel", "Claude Code"),
+		LOCTEXT("LaunchClaudeCodeTooltip",
+			"Open a terminal at the project root and start Claude Code, pre-configured to talk to this editor's MCP server. "
+			"Inference is billed against your Claude.ai subscription, not the Anthropic API."),
+		FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Console")),
+		EUserInterfaceActionType::Button);
+	LaunchClaudeCodeEntry.StyleNameOverride = "CalloutToolbar";
+	Section.AddEntry(LaunchClaudeCodeEntry);
+
 	// Window > AI Chat menu entry for discoverability
 	{
 		UToolMenu* WindowMenu = UToolMenus::Get()->ExtendMenu(
@@ -1710,6 +2010,17 @@ void FClaireonModule::RegisterMenus()
 				FUIAction(FExecuteAction::CreateLambda([]()
 			{
 				FGlobalTabmanager::Get()->TryInvokeTab(SClaireonDiagnosticsWidget::TabId);
+			})));
+
+			WindowSection.AddMenuEntry(
+				TEXT("LaunchClaudeCode"),
+				LOCTEXT("WindowLaunchClaudeCodeLabel", "Launch Claude Code"),
+				LOCTEXT("WindowLaunchClaudeCodeTooltip",
+					"Open a terminal at the project root and start Claude Code against this editor's MCP server."),
+				FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Console")),
+				FUIAction(FExecuteAction::CreateLambda([]()
+			{
+				ClaireonLaunch::LaunchClaudeCodeFromProjectDir();
 			})));
 		}
 	}
