@@ -10,9 +10,9 @@
 namespace ClaireonToolCatalogMatcherInternal
 {
 	/** Module-static catalog + inverted index.  Guarded by GMatcherLock. */
-	static TArray<FClaireonToolCatalogEntry>  GCatalogEntries;
-	static TMap<FString, TArray<int32>>     GInvertedIndex;
-	static FCriticalSection                 GMatcherLock;
+	static TArray<FClaireonToolCatalogEntry>                          GCatalogEntries;
+	static TMap<FString, TArray<TPair<int32, EFieldMask>>>           GInvertedIndex;
+	static FCriticalSection                                          GMatcherLock;
 
 	/** Tokenise: lowercase + split on whitespace + common punctuation + drop tokens < 2 chars. */
 	static void Tokenise(const FString& In, TArray<FString>& OutTokens)
@@ -70,59 +70,19 @@ namespace ClaireonToolCatalogMatcherInternal
 	}
 
 	/**
-	 * Bounded Levenshtein distance with early-exit at MaxDistance.  Returns
-	 * MaxDistance + 1 as a sentinel when the true distance exceeds the bound.
-	 * Standard DP with two rolling rows.
+	 * Tokenise the entry's per-field text strings and merge the postings into
+	 * the inverted index, OR-ing field-mask bits for tokens that appear in
+	 * multiple fields for the same entry.
 	 */
-	static int32 LevenshteinBounded(const FString& A, const FString& B, int32 MaxDistance)
+	static void IndexField(int32 EntryIdx, const FString& FieldText, EFieldMask FieldBit, TMap<FString, EFieldMask>& OutTokenMaskForEntry)
 	{
-		const int32 LenA = A.Len();
-		const int32 LenB = B.Len();
-
-		// Early exit on gross length mismatch.
-		if (FMath::Abs(LenA - LenB) > MaxDistance)
+		TArray<FString> Tokens;
+		Tokenise(FieldText, Tokens);
+		for (const FString& Tok : Tokens)
 		{
-			return MaxDistance + 1;
+			EFieldMask& Existing = OutTokenMaskForEntry.FindOrAdd(Tok, EFieldMask::None);
+			Existing |= FieldBit;
 		}
-		if (LenA == 0) { return LenB; }
-		if (LenB == 0) { return LenA; }
-
-		TArray<int32> Prev;
-		TArray<int32> Curr;
-		Prev.SetNumUninitialized(LenB + 1);
-		Curr.SetNumUninitialized(LenB + 1);
-
-		for (int32 j = 0; j <= LenB; ++j)
-		{
-			Prev[j] = j;
-		}
-
-		for (int32 i = 1; i <= LenA; ++i)
-		{
-			Curr[0] = i;
-			int32 RowMin = Curr[0];
-			const TCHAR Ca = A[i - 1];
-			for (int32 j = 1; j <= LenB; ++j)
-			{
-				const TCHAR Cb = B[j - 1];
-				const int32 Cost = (Ca == Cb) ? 0 : 1;
-				const int32 Del = Prev[j] + 1;
-				const int32 Ins = Curr[j - 1] + 1;
-				const int32 Sub = Prev[j - 1] + Cost;
-				int32 V = Del < Ins ? Del : Ins;
-				if (Sub < V) { V = Sub; }
-				Curr[j] = V;
-				if (V < RowMin) { RowMin = V; }
-			}
-			if (RowMin > MaxDistance)
-			{
-				// No cell in this row can descend below MaxDistance -> give up.
-				return MaxDistance + 1;
-			}
-			Swap(Prev, Curr);
-		}
-
-		return Prev[LenB];
 	}
 }
 
@@ -135,29 +95,100 @@ void FClaireonToolCatalogMatcher::BuildCatalog(const TArray<FClaireonToolCatalog
 	GCatalogEntries = Entries;
 	GInvertedIndex.Reset();
 
-	TArray<FString> Tokens;
 	for (int32 EntryIdx = 0; EntryIdx < GCatalogEntries.Num(); ++EntryIdx)
 	{
-		Tokenise(GCatalogEntries[EntryIdx].EnrichedText, Tokens);
+		const FClaireonToolCatalogEntry& E = GCatalogEntries[EntryIdx];
 
-		// Deduplicate per-entry so an entry only appears once per unique token.
-		TSet<FString> Seen;
-		Seen.Reserve(Tokens.Num());
-		for (const FString& Tok : Tokens)
+		// Tokenise each field separately; OR the bits when a token appears in multiple fields.
+		TMap<FString, EFieldMask> TokenMaskForEntry;
+		IndexField(EntryIdx, E.NameText,        EFieldMask::Name,        TokenMaskForEntry);
+		IndexField(EntryIdx, E.CategoryText,    EFieldMask::Category,    TokenMaskForEntry);
+		IndexField(EntryIdx, E.KeywordsText,    EFieldMask::Keywords,    TokenMaskForEntry);
+		IndexField(EntryIdx, E.OperationText,   EFieldMask::Operation,   TokenMaskForEntry);
+		IndexField(EntryIdx, E.DescriptionText, EFieldMask::Description, TokenMaskForEntry);
+
+		for (const TPair<FString, EFieldMask>& KV : TokenMaskForEntry)
 		{
-			bool bWasInSet = false;
-			Seen.Add(Tok, &bWasInSet);
-			if (bWasInSet)
-			{
-				continue;
-			}
-			GInvertedIndex.FindOrAdd(Tok).Add(EntryIdx);
+			GInvertedIndex.FindOrAdd(KV.Key).Add(TPair<int32, EFieldMask>(EntryIdx, KV.Value));
 		}
 	}
 
 	UE_LOG(LogClaireon, Verbose,
 		TEXT("[ToolCatalogMatcher] BuildCatalog: %d entries, %d unique tokens"),
 		GCatalogEntries.Num(), GInvertedIndex.Num());
+}
+
+int32 FClaireonToolCatalogMatcher::DistanceBounded(const FString& A, const FString& B, int32 MaxDistance)
+{
+	const int32 LenA = A.Len();
+	const int32 LenB = B.Len();
+
+	// Early exit on gross length mismatch.
+	if (FMath::Abs(LenA - LenB) > MaxDistance)
+	{
+		return MaxDistance + 1;
+	}
+	if (LenA == 0) { return LenB; }
+	if (LenB == 0) { return LenA; }
+
+	TArray<int32> Prev;
+	TArray<int32> Curr;
+	Prev.SetNumUninitialized(LenB + 1);
+	Curr.SetNumUninitialized(LenB + 1);
+
+	for (int32 j = 0; j <= LenB; ++j)
+	{
+		Prev[j] = j;
+	}
+
+	for (int32 i = 1; i <= LenA; ++i)
+	{
+		Curr[0] = i;
+		int32 RowMin = Curr[0];
+		const TCHAR Ca = A[i - 1];
+		for (int32 j = 1; j <= LenB; ++j)
+		{
+			const TCHAR Cb = B[j - 1];
+			const int32 Cost = (Ca == Cb) ? 0 : 1;
+			const int32 Del = Prev[j] + 1;
+			const int32 Ins = Curr[j - 1] + 1;
+			const int32 Sub = Prev[j - 1] + Cost;
+			int32 V = Del < Ins ? Del : Ins;
+			if (Sub < V) { V = Sub; }
+			Curr[j] = V;
+			if (V < RowMin) { RowMin = V; }
+		}
+		if (RowMin > MaxDistance)
+		{
+			// No cell in this row can descend below MaxDistance -> give up.
+			return MaxDistance + 1;
+		}
+		Swap(Prev, Curr);
+	}
+
+	return Prev[LenB];
+}
+
+namespace ClaireonToolCatalogMatcherInternal
+{
+	// Field weights compiled in for v1.
+	static constexpr float WeightName        = 8.0f;
+	static constexpr float WeightCategory    = 4.0f;
+	static constexpr float WeightKeywords    = 3.0f;
+	static constexpr float WeightOperation   = 3.0f;
+	static constexpr float WeightDescription = 1.0f;
+
+	/** Return the MAX of compiled-in field weights for every bit set in Mask. */
+	static float MaxFieldWeight(EFieldMask Mask)
+	{
+		float Best = 0.0f;
+		if (EnumHasAnyFlags(Mask, EFieldMask::Name))        { Best = FMath::Max(Best, WeightName); }
+		if (EnumHasAnyFlags(Mask, EFieldMask::Category))    { Best = FMath::Max(Best, WeightCategory); }
+		if (EnumHasAnyFlags(Mask, EFieldMask::Keywords))    { Best = FMath::Max(Best, WeightKeywords); }
+		if (EnumHasAnyFlags(Mask, EFieldMask::Operation))   { Best = FMath::Max(Best, WeightOperation); }
+		if (EnumHasAnyFlags(Mask, EFieldMask::Description)) { Best = FMath::Max(Best, WeightDescription); }
+		return Best;
+	}
 }
 
 TArray<FClaireonToolCatalogMatch> FClaireonToolCatalogMatcher::FindNearest(const FString& Query, int32 MaxResults)
@@ -177,8 +208,20 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolCatalogMatcher::FindNearest(const
 		return Out;
 	}
 
-	TArray<FString> RawQueryTokens;
-	Tokenise(Query, RawQueryTokens);
+	TArray<FString> TokeniseRawTokens;
+	Tokenise(Query, TokeniseRawTokens);
+
+	// Query-side min-length cutoff: drop fuzzy-match terms of length <= 2
+	// unless every token in the query is short. The asymmetry vs the index
+	// (which keeps 2-char tokens) is intentional -- short tokens like `ing`
+	// would otherwise match hundreds of unrelated tools.
+	TArray<FString> KeptTokens;
+	TArray<FString> DroppedTokens;
+	for (const FString& T : TokeniseRawTokens)
+	{
+		(T.Len() > 2 ? KeptTokens : DroppedTokens).Add(T);
+	}
+	const TArray<FString>& RawQueryTokens = (KeptTokens.Num() > 0) ? KeptTokens : DroppedTokens;
 
 	// Unique-ify query tokens (preserving stable iteration order).
 	TArray<FString> QueryTokens;
@@ -201,54 +244,61 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolCatalogMatcher::FindNearest(const
 		return Out;
 	}
 
-	// Per-entry per-query-token hit counts, accumulated into raw score at end.
-	// Using parallel arrays indexed by entry index.
-	TArray<int32> ExactHits;  ExactHits.Init(0, GCatalogEntries.Num());
-	TArray<int32> PrefixHits; PrefixHits.Init(0, GCatalogEntries.Num());
-	TArray<int32> FuzzyHits;  FuzzyHits.Init(0, GCatalogEntries.Num());
+	// Per-entry weighted score accumulator + distinct-query-tokens-matched
+	// counter. Each per-token contribution = MAX_OVER_FIELDS(weight) * hit-class
+	// multiplier (exact 2.0, prefix 1.0, fuzzy 0.5). "Name prefix = 4.0" falls
+	// out naturally as Name's exact weight (8) * the prefix multiplier (0.5).
+	TArray<float> WeightedScore; WeightedScore.Init(0.0f, GCatalogEntries.Num());
+	TArray<int32> DistinctTokenHits; DistinctTokenHits.Init(0, GCatalogEntries.Num());
 
 	for (const FString& QToken : QueryTokens)
 	{
-		// (a) exact matches
-		TArray<int32>* ExactEntries = GInvertedIndex.Find(QToken);
-		TSet<int32> TokenMatchedEntries; // entries this token already credited
+		// Track which entries this query token has contributed to, and with
+		// which best (per-entry) max-field weight, so a token that hits the
+		// same entry via exact AND prefix only counts once (the higher class).
+		TMap<int32, float> EntryBestContribution;
 
-		if (ExactEntries)
+		auto Credit = [&](int32 Idx, float Contribution)
 		{
-			for (int32 Idx : *ExactEntries)
+			float& Existing = EntryBestContribution.FindOrAdd(Idx, 0.0f);
+			if (Contribution > Existing)
 			{
-				if (!TokenMatchedEntries.Contains(Idx))
-				{
-					++ExactHits[Idx];
-					TokenMatchedEntries.Add(Idx);
-				}
+				Existing = Contribution;
+			}
+		};
+
+		// (a) exact matches: per posting, MAX over set fields * 2.0.
+		if (TArray<TPair<int32, EFieldMask>>* ExactEntries = GInvertedIndex.Find(QToken))
+		{
+			for (const TPair<int32, EFieldMask>& Posting : *ExactEntries)
+			{
+				const float Contribution = MaxFieldWeight(Posting.Value) * 2.0f;
+				Credit(Posting.Key, Contribution);
 			}
 		}
 
-		// (b) prefix matches: any index token that StartsWith(QToken) and != QToken
+		// (b) prefix matches: strict prefix, * 1.0.
 		for (const auto& Pair : GInvertedIndex)
 		{
 			const FString& IndexTok = Pair.Key;
 			if (IndexTok.Len() <= QToken.Len())
 			{
-				continue; // strict prefix requires IndexTok longer than QToken, and StartsWith already excludes equality when combined with !=.
+				continue;
 			}
 			if (!IndexTok.StartsWith(QToken, ESearchCase::CaseSensitive))
 			{
 				continue;
 			}
-			for (int32 Idx : Pair.Value)
+			for (const TPair<int32, EFieldMask>& Posting : Pair.Value)
 			{
-				if (!TokenMatchedEntries.Contains(Idx))
-				{
-					++PrefixHits[Idx];
-					TokenMatchedEntries.Add(Idx);
-				}
+				const float Contribution = MaxFieldWeight(Posting.Value) * 1.0f;
+				Credit(Posting.Key, Contribution);
 			}
 		}
 
-		// (c) fuzzy Levenshtein pass only when neither exact nor prefix produced credit.
-		if (TokenMatchedEntries.Num() == 0)
+		// (c) fuzzy Levenshtein pass only when neither exact nor prefix
+		// produced credit for this query token. * 0.5.
+		if (EntryBestContribution.Num() == 0)
 		{
 			const int32 QLen = QToken.Len();
 			if (QLen >= 4)
@@ -265,20 +315,24 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolCatalogMatcher::FindNearest(const
 					{
 						continue;
 					}
-					const int32 Dist = LevenshteinBounded(QToken, IndexTok, 2);
+					const int32 Dist = FClaireonToolCatalogMatcher::DistanceBounded(QToken, IndexTok, 2);
 					if (Dist <= 2)
 					{
-						for (int32 Idx : Pair.Value)
+						for (const TPair<int32, EFieldMask>& Posting : Pair.Value)
 						{
-							if (!TokenMatchedEntries.Contains(Idx))
-							{
-								++FuzzyHits[Idx];
-								TokenMatchedEntries.Add(Idx);
-							}
+							const float Contribution = MaxFieldWeight(Posting.Value) * 0.5f;
+							Credit(Posting.Key, Contribution);
 						}
 					}
 				}
 			}
+		}
+
+		// Fold this token's contributions into per-entry accumulators.
+		for (const TPair<int32, float>& KV : EntryBestContribution)
+		{
+			WeightedScore[KV.Key] += KV.Value;
+			DistinctTokenHits[KV.Key] += 1;
 		}
 	}
 
@@ -288,23 +342,18 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolCatalogMatcher::FindNearest(const
 	{
 		int32  EntryIdx;
 		float  Score;
+		int32  DistinctTokens;
 	};
 	TArray<FScoredEntry> Scored;
 	Scored.Reserve(GCatalogEntries.Num());
 
 	for (int32 i = 0; i < GCatalogEntries.Num(); ++i)
 	{
-		const int32 E = ExactHits[i];
-		const int32 P = PrefixHits[i];
-		const int32 F = FuzzyHits[i];
-		if (E == 0 && P == 0 && F == 0)
+		if (DistinctTokenHits[i] == 0)
 		{
 			continue;
 		}
-		const float Raw = (static_cast<float>(E) * 2.0f)
-		                + (static_cast<float>(P) * 1.0f)
-		                + (static_cast<float>(F) * 0.5f);
-		Scored.Add({ i, Raw * InvDenom });
+		Scored.Add({ i, WeightedScore[i] * InvDenom, DistinctTokenHits[i] });
 	}
 
 	if (Scored.Num() == 0)
@@ -314,10 +363,17 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolCatalogMatcher::FindNearest(const
 
 	Scored.Sort([](const FScoredEntry& A, const FScoredEntry& B)
 	{
+		// 1st: more distinct query tokens hit wins.
+		if (A.DistinctTokens != B.DistinctTokens)
+		{
+			return A.DistinctTokens > B.DistinctTokens;
+		}
+		// 2nd: higher score wins.
 		if (A.Score != B.Score)
 		{
 			return A.Score > B.Score;
 		}
+		// 3rd: name ascending for cross-platform determinism.
 		return FCString::Strcmp(*GCatalogEntries[A.EntryIdx].Name, *GCatalogEntries[B.EntryIdx].Name) < 0;
 	});
 
@@ -330,6 +386,11 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolCatalogMatcher::FindNearest(const
 		M.Name = Entry.Name;
 		M.Category = Entry.Category;
 		M.Score = Scored[i].Score;
+		// Distinct query tokens that produced any exact/prefix/fuzzy hit for
+		// this entry. Surfaced to the tool_search JSON payload as
+		// `query_tokens_matched` so future zero-result regressions are
+		// diagnosable without re-running the matcher.
+		M.TokensMatched = Scored[i].DistinctTokens;
 		Out.Add(MoveTemp(M));
 	}
 

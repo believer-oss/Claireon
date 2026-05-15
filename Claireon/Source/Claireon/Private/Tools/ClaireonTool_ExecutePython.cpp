@@ -88,11 +88,18 @@ namespace ClaireonToolCatalogBindings
 			Obj->TryGetStringField(TEXT("name"), Entry.Name);
 			Obj->TryGetStringField(TEXT("description"), Entry.Description);
 			Obj->TryGetStringField(TEXT("category"), Entry.Category);
-			Obj->TryGetStringField(TEXT("enriched_text"), Entry.EnrichedText);
-			if (Entry.EnrichedText.IsEmpty())
+			Obj->TryGetStringField(TEXT("name_text"),        Entry.NameText);
+			Obj->TryGetStringField(TEXT("category_text"),    Entry.CategoryText);
+			Obj->TryGetStringField(TEXT("keywords_text"),    Entry.KeywordsText);
+			Obj->TryGetStringField(TEXT("operation_text"),   Entry.OperationText);
+			Obj->TryGetStringField(TEXT("description_text"), Entry.DescriptionText);
+			if (Entry.NameText.IsEmpty() && Entry.CategoryText.IsEmpty()
+				&& Entry.KeywordsText.IsEmpty() && Entry.OperationText.IsEmpty()
+				&& Entry.DescriptionText.IsEmpty())
 			{
-				// Fallback: synthesise from the other fields so a caller that forgot enriched_text still indexes something.
-				Entry.EnrichedText = Entry.Name + TEXT(" ") + Entry.Description + TEXT(" ") + Entry.Category;
+				UE_LOG(LogClaireon, Warning,
+					TEXT("[ToolCatalogBindings] Entry '%s' has no per-field text strings; nothing will be indexed for it."),
+					*Entry.Name);
 			}
 			Entries.Add(MoveTemp(Entry));
 		}
@@ -115,7 +122,11 @@ namespace ClaireonToolCatalogBindings
 
 		TArray<FClaireonToolCatalogMatch> Matches = FClaireonToolCatalogMatcher::FindNearest(Query, K);
 
-		// Serialise to JSON array of { name, category, score }.
+		// Serialise to JSON array of { name, category, score, tokens_matched }.
+		// `tokens_matched` is the count of distinct query tokens that produced
+		// any exact/prefix/fuzzy hit; consumed by ClaireonTool_SearchTools::Execute
+		// to surface `query_tokens_matched` per result and to detect pathological
+		// fuzzy responses that warrant a substring-fallback merge.
 		TArray<TSharedPtr<FJsonValue>> OutArr;
 		OutArr.Reserve(Matches.Num());
 		for (const FClaireonToolCatalogMatch& M : Matches)
@@ -124,6 +135,7 @@ namespace ClaireonToolCatalogBindings
 			Obj->SetStringField(TEXT("name"), M.Name);
 			Obj->SetStringField(TEXT("category"), M.Category);
 			Obj->SetNumberField(TEXT("score"), M.Score);
+			Obj->SetNumberField(TEXT("tokens_matched"), M.TokensMatched);
 			OutArr.Add(MakeShared<FJsonValueObject>(Obj));
 		}
 
