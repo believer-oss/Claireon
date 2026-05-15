@@ -11,7 +11,7 @@ class FProperty;
 
 /**
  * Reflection helpers for inspecting USTRUCTs (native and Blueprint user-defined).
- * Used by claireon.struct_inspect and by chooser / blueprint migration workflows
+ * Used by struct_inspect and by chooser / blueprint migration workflows
  * that need to introspect struct shapes programmatically.
  */
 namespace ClaireonStructReflection
@@ -75,4 +75,30 @@ namespace ClaireonStructReflection
 		UScriptStruct* ScriptStruct,
 		bool bIncludeDefaults,
 		bool bIncludeMetadata);
+
+	/**
+	 * Recursively serialize a single FProperty's value at the given memory address.
+	 * Handles container, struct, text, and object recursion internally. Used by tools
+	 * that need a per-property typed JSON value (datatable rows, chooser outputs).
+	 * The shape is independent of any schema flag.
+	 */
+	CLAIREON_API TSharedPtr<FJsonValue>  SerializePropertyValue(const FProperty* Property, const void* ValuePtr);
+
+	/**
+	 * Recursively serialize an entire struct instance to a JSON object keyed by the
+	 * friendly property name (GUID-stripped for BP user-defined structs). Delegates
+	 * each field to SerializePropertyValue. Used at the row-struct entry point and
+	 * for nested struct values / struct map keys.
+	 */
+	CLAIREON_API TSharedPtr<FJsonObject> SerializeStructInstance(const UScriptStruct* Struct, const void* InstancePtr);
+
+	/**
+	 * Warnings-capable overload of SerializeStructInstance. Truncation events (recursion
+	 * cap, friendly-name collision) push one entry into OutWarnings each. Tools that
+	 * want to surface non-fatal issues via FToolResult::Warnings should call this form.
+	 */
+	CLAIREON_API TSharedPtr<FJsonObject> SerializeStructInstance(
+		const UScriptStruct* Struct,
+		const void* InstancePtr,
+		TArray<FString>& OutWarnings);
 }
