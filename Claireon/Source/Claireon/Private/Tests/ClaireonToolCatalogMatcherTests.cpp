@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 #if WITH_UNTESTED
 
@@ -9,26 +9,39 @@
 // ===========================================================================
 // Matcher tests (ClaireonToolCatalogMatcherTests)
 // ===========================================================================
-// Cases 3a-3e per CLAIREON_DISK_RESULTS/test-plan.md section 3.  Uses a fixed
-// 20-tool fixture built in-test as a TArray<FClaireonToolCatalogEntry>.  The
-// fixture seeds at least one entry per shape called out in the plan
-// (asset_search, blueprint_*, data_table_*, python_execute, pie_start) plus
-// one ability_system_* entry so the "gas" abbreviation target exists.
+// Uses a fixed 20-tool fixture built in-test as a TArray<FClaireonToolCatalogEntry>.
+// The fixture seeds at least one entry per shape (asset_search, blueprint_*,
+// data_table_*, python_execute, pie_start) plus one ability_system_* entry so
+// the "gas" abbreviation target exists.
 // ===========================================================================
 
 namespace ClaireonToolCatalogMatcherTestsHelpers
 {
+	/** Per-field fixture builder mirroring the Python harness's _build_field_text:
+	 *  NameText receives both the raw name and its dot/underscore-tokenised form so
+	 *  multi-part names contribute their components as separate index tokens. */
+	static FClaireonToolCatalogEntry MakeEntry(const TCHAR* Name, const TCHAR* Desc, const TCHAR* Cat,
+		const TCHAR* Operation = TEXT(""), const TCHAR* Keywords = TEXT(""))
+	{
+		FClaireonToolCatalogEntry X;
+		X.Name = Name;
+		X.Description = Desc;
+		X.Category = Cat;
+		const FString NameStr(Name);
+		X.NameText = NameStr + TEXT(" ") + NameStr.Replace(TEXT("."), TEXT(" ")).Replace(TEXT("_"), TEXT(" "));
+		X.CategoryText = Cat;
+		X.DescriptionText = Desc;
+		X.KeywordsText = Keywords;
+		X.OperationText = Operation;
+		return X;
+	}
+
 	/** Build the shared 20-entry fixture.  Keep this deterministic for test stability. */
 	static TArray<FClaireonToolCatalogEntry> BuildFixtureTwenty()
 	{
 		const auto E = [](const TCHAR* Name, const TCHAR* Desc, const TCHAR* Cat)
 		{
-			FClaireonToolCatalogEntry X;
-			X.Name = Name;
-			X.Description = Desc;
-			X.Category = Cat;
-			X.EnrichedText = FString::Printf(TEXT("%s %s %s"), Name, Desc, Cat);
-			return X;
+			return MakeEntry(Name, Desc, Cat);
 		};
 
 		TArray<FClaireonToolCatalogEntry> F;
@@ -69,7 +82,7 @@ namespace ClaireonToolCatalogMatcherTestsHelpers
 }
 
 // ===========================================================================
-// Case 3a: Build -> FindNearest returns a non-empty result
+// Build -> FindNearest returns a non-empty result
 // ===========================================================================
 
 UNTEST_UNIT(Claireon, ToolCatalogMatcher, BuildAndFindNearestNonEmpty)
@@ -86,7 +99,7 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, BuildAndFindNearestNonEmpty)
 }
 
 // ===========================================================================
-// Case 3b: exact-name query returns the tool at rank 0 with the highest score
+// Exact-name query returns the tool at rank 0 with the highest score
 // ===========================================================================
 
 UNTEST_UNIT(Claireon, ToolCatalogMatcher, ExactNameMatchRanksFirst)
@@ -110,7 +123,7 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, ExactNameMatchRanksFirst)
 }
 
 // ===========================================================================
-// Case 3c: abbreviation queries surface tools of the expected category
+// Abbreviation queries surface tools of the expected category
 // ===========================================================================
 
 UNTEST_UNIT(Claireon, ToolCatalogMatcher, AbbreviationQueriesSurfaceCategory)
@@ -120,12 +133,10 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, AbbreviationQueriesSurfaceCategory)
 	FClaireonToolCatalogMatcher::Clear();
 	FClaireonToolCatalogMatcher::BuildCatalog(BuildFixtureTwenty());
 
-	// "bp" should surface at least one blueprint_* tool inside the top-5.
+	// "blueprint" should surface at least one blueprint_* tool inside the top-5.
 	// NB: abbreviation expansion is performed Python-side by _ABBREVIATIONS in
 	// mcp_tool_catalog.py.  At the C++ matcher level "bp" is a literal 2-char
-	// token; we therefore also accept matches on "bp" as a token present in
-	// the enriched text OR any blueprint_* tool in the top-5 via substring
-	// overlap.  This test documents the C++ surface; the end-to-end "bp ->
+	// token; we therefore exercise the full-form here.  The end-to-end "bp ->
 	// blueprint_*" pipeline is covered by the Python harness tests.
 	{
 		TArray<FClaireonToolCatalogMatch> Top = FClaireonToolCatalogMatcher::FindNearest(TEXT("blueprint"), 5);
@@ -175,7 +186,7 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, AbbreviationQueriesSurfaceCategory)
 }
 
 // ===========================================================================
-// Case 3d: Clear() empties the catalog
+// Clear() empties the catalog
 // ===========================================================================
 
 UNTEST_UNIT(Claireon, ToolCatalogMatcher, ClearEmptiesCatalog)
@@ -193,7 +204,7 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, ClearEmptiesCatalog)
 }
 
 // ===========================================================================
-// Case 3e: rebuild determinism -- identical rankings across clear-and-rebuild
+// Rebuild determinism -- identical rankings across clear-and-rebuild
 // ===========================================================================
 
 UNTEST_UNIT(Claireon, ToolCatalogMatcher, RebuildIsDeterministic)
@@ -221,8 +232,7 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, RebuildIsDeterministic)
 // ===========================================================================
 // Union ranking: query "blueprint chooser proxy" must surface tools that
 // match only one of the three tokens (not just tools that match all three).
-// Locks in the per-word independent scoring described in PLAN.md section
-// "tool_search union-ranking semantics" / F08 item 8.
+// Locks in the per-word independent scoring semantics.
 // ===========================================================================
 
 UNTEST_UNIT(Claireon, ToolCatalogMatcher, UnionRankedReturnsDisjointTokenMatches)
@@ -233,12 +243,7 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, UnionRankedReturnsDisjointTokenMatches
 	// can assert union semantics: the result set must include all three.
 	const auto E = [](const TCHAR* Name, const TCHAR* Desc, const TCHAR* Cat)
 	{
-		FClaireonToolCatalogEntry X;
-		X.Name = Name;
-		X.Description = Desc;
-		X.Category = Cat;
-		X.EnrichedText = FString::Printf(TEXT("%s %s %s"), Name, Desc, Cat);
-		return X;
+		return MakeEntry(Name, Desc, Cat);
 	};
 	TArray<FClaireonToolCatalogEntry> F;
 	F.Add(E(TEXT("blueprint_compile"), TEXT("compile a blueprint asset"), TEXT("blueprint")));
@@ -266,6 +271,81 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, UnionRankedReturnsDisjointTokenMatches
 	UNTEST_EXPECT_TRUE(bSawBlueprint);
 	UNTEST_EXPECT_TRUE(bSawChooser);
 	UNTEST_EXPECT_TRUE(bSawProxy);
+
+	co_return;
+}
+
+// ===========================================================================
+// Query-side >2-char cutoff -- short tokens drop unless every token is short.
+// ===========================================================================
+
+UNTEST_UNIT(Claireon, ToolCatalogMatcher, ThreeCharMinTermCutoff)
+{
+	using namespace ClaireonToolCatalogMatcherTestsHelpers;
+
+	TArray<FClaireonToolCatalogEntry> F;
+	F.Add(MakeEntry(TEXT("asset_create"),          TEXT("create a new asset"),      TEXT("asset")));
+	F.Add(MakeEntry(TEXT("ai_decisions_inspect"),  TEXT("inspect ai decisions"),    TEXT("ai")));
+	F.Add(MakeEntry(TEXT("blueprint_compile"),     TEXT("compile a blueprint"),     TEXT("blueprint")));
+
+	FClaireonToolCatalogMatcher::Clear();
+	FClaireonToolCatalogMatcher::BuildCatalog(F);
+
+	// Sub-case A: query "ai create" -- "ai" is <=2 chars and must be dropped
+	// in favour of "create"; asset_create matches (via NameText "create"
+	// posting), ai_decisions_inspect must NOT (no "create" token in any of
+	// its fields).
+	{
+		TArray<FClaireonToolCatalogMatch> Top = FClaireonToolCatalogMatcher::FindNearest(TEXT("ai create"), 5);
+		bool bSawAssetCreate = false;
+		bool bSawAiDecisions = false;
+		for (const FClaireonToolCatalogMatch& M : Top)
+		{
+			if (M.Name == TEXT("asset_create"))         { bSawAssetCreate = true; }
+			if (M.Name == TEXT("ai_decisions_inspect")) { bSawAiDecisions = true; }
+		}
+		UNTEST_EXPECT_TRUE(bSawAssetCreate);
+		UNTEST_EXPECT_FALSE(bSawAiDecisions);
+	}
+
+	// Sub-case B: query "ai" alone -- all tokens are <=2 chars, so the kept-
+	// empty fallback fires and "ai" is used. ai_decisions_inspect must surface.
+	{
+		TArray<FClaireonToolCatalogMatch> Top = FClaireonToolCatalogMatcher::FindNearest(TEXT("ai"), 5);
+		bool bSawAiDecisions = false;
+		for (const FClaireonToolCatalogMatch& M : Top)
+		{
+			if (M.Name == TEXT("ai_decisions_inspect")) { bSawAiDecisions = true; }
+		}
+		UNTEST_EXPECT_TRUE(bSawAiDecisions);
+	}
+
+	co_return;
+}
+
+// ===========================================================================
+// Operation field participates in ranking with weight equal to Keywords (3).
+// Tool A's Operation hit (weight 3) outranks Tool B's Description hit (weight 1).
+// ===========================================================================
+
+UNTEST_UNIT(Claireon, ToolCatalogMatcher, OperationFieldParticipatesInRanking)
+{
+	using namespace ClaireonToolCatalogMatcherTestsHelpers;
+
+	TArray<FClaireonToolCatalogEntry> F;
+	// Tool A: Operation = "create"; Description has no "create" token.
+	F.Add(MakeEntry(TEXT("tool_a"), TEXT("does nothing of interest"), TEXT("alpha"),
+		/*Operation=*/TEXT("create"), /*Keywords=*/TEXT("")));
+	// Tool B: Operation = "inspect"; Description = "creates a thing" (Description hit).
+	F.Add(MakeEntry(TEXT("tool_b"), TEXT("creates a thing"), TEXT("beta"),
+		/*Operation=*/TEXT("inspect"), /*Keywords=*/TEXT("")));
+
+	FClaireonToolCatalogMatcher::Clear();
+	FClaireonToolCatalogMatcher::BuildCatalog(F);
+
+	TArray<FClaireonToolCatalogMatch> Top = FClaireonToolCatalogMatcher::FindNearest(TEXT("create"), 5);
+	UNTEST_ASSERT_TRUE(Top.Num() >= 2);
+	UNTEST_EXPECT_STREQ(*Top[0].Name, TEXT("tool_a"));
 
 	co_return;
 }

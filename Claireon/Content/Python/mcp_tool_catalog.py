@@ -4,9 +4,9 @@ This harness is a thin shim around two C++ bindings:
     claireon._tool_catalog_build(entries_json: str) -> None
     claireon._tool_catalog_nearest(query: str, max_results: int) -> str (JSON)
 
-It keeps the _ABBREVIATIONS synonym table plus the _enrich_text / _expand_query
-helpers so abbreviated queries (``bp``, ``dt``, ``gas``) still match.  The
-consumer surface (``rebuild`` and ``search``) is unchanged -- see
+It keeps the _ABBREVIATIONS synonym table plus the _build_field_text /
+_expand_query helpers so abbreviated queries (``bp``, ``dt``, ``gas``) still
+match.  The consumer surface (``rebuild`` and ``search``) is unchanged -- see
 ClaireonTool_SearchTools.cpp for the call sites.
 """
 # Copyright (c) 2026 The Claireon Contributors
@@ -144,37 +144,45 @@ _catalog_version: int = 0  # bumped on each rebuild
 _catalog_tool_count: int = 0
 
 
-def _enrich_text(name: str, description: str, category: str) -> str:
-    """Build a rich searchable document for a single tool.
+def _abbreviations_for(text: str) -> list:
+    """Return abbreviation expansion strings matching tokens in ``text``.
 
-    Includes the tool name (with dots/underscores replaced by spaces),
-    description, category, and all matching synonym expansions so that
-    abbreviated queries like ``bp`` or ``dt`` can match the right tools.
+        - Reverse-map: when the field text contains a canonical term
+          (``blueprint``), append the abbreviations that expand to it
+          (``bp``) so a query for ``bp`` still hits this tool.
+        - Forward-map: when the field text contains an abbreviation
+          (``gas``), append the canonical expansion (``gameplay ability
+          system``).
     """
-    # Tokenize the name: "edit_blueprint_graph" -> "edit blueprint graph"
-    name_tokens = name.replace(".", " ").replace("_", " ")
-
-    parts = [name, name_tokens, category, description]
-
-    # Collect all words from the tool's text
-    all_text_lower = " ".join(parts).lower()
-
-    # Add abbreviation synonyms: if tool text contains "blueprint",
-    # also add "bp" so searching "bp" finds it.
+    out = []
+    lower = text.lower()
     added = set()
     for term, abbrevs in _REVERSE_MAP.items():
-        if term in all_text_lower:
+        if term in lower:
             for abbr in abbrevs:
                 if abbr not in added:
-                    parts.append(abbr)
+                    out.append(abbr)
                     added.add(abbr)
-
-    # Also add forward expansions for any abbreviations already in the name
-    for token in all_text_lower.split():
+    for token in lower.split():
         if token in _ABBREVIATIONS and token not in added:
-            parts.append(_ABBREVIATIONS[token])
+            out.append(_ABBREVIATIONS[token])
             added.add(token)
+    return out
 
+
+def _build_field_text(field_value: str) -> str:
+    """Build a per-field searchable string with abbreviation expansions appended.
+
+    The matcher tokenises this string on whitespace + common punctuation and
+    stamps the appropriate EFieldMask bit on each posting.
+    """
+    if not field_value:
+        return ""
+    # Tokenise dots/underscores out so multi-part names ("edit_blueprint_graph")
+    # contribute their components as separate index tokens.
+    tokens_view = field_value.replace(".", " ").replace("_", " ")
+    parts = [field_value, tokens_view]
+    parts.extend(_abbreviations_for(tokens_view))
     return " ".join(parts)
 
 
@@ -222,7 +230,8 @@ def _get_binding(name: str):
 def rebuild(tools_json: str) -> dict:
     """Rebuild the tool catalog from a JSON array of tool metadata.
 
-    Expected format: ``[{"name": "...", "description": "...", "category": "..."}, ...]``.
+    Expected format: ``[{"name": "...", "description": "...", "category": "...",
+    "operation": "...", "keywords": [...]}, ...]``.
 
     Returns a dict with index creation stats.
     """
@@ -242,11 +251,19 @@ def rebuild(tools_json: str) -> dict:
         name = tool.get("name", "")
         description = tool.get("description", "")
         category = tool.get("category", "uncategorized")
+        operation = tool.get("operation", "")
+        keywords = tool.get("keywords", []) or []
+        keywords_joined = " ".join(str(k) for k in keywords)
+
         entries.append({
             "name": name,
             "description": description,
             "category": category,
-            "enriched_text": _enrich_text(name, description, category),
+            "name_text": _build_field_text(name),
+            "category_text": _build_field_text(category),
+            "keywords_text": _build_field_text(keywords_joined),
+            "operation_text": _build_field_text(operation),
+            "description_text": _build_field_text(description),
         })
 
     build_fn(json.dumps(entries))
@@ -308,6 +325,10 @@ def search(query: str, max_results: int = 20, method: str = "hybrid") -> list:
             "tool_name": tool_name,
             "category": hit.get("category", ""),
             "score": hit.get("score", 0.0),
+            # Surface distinct query-token-hit count so the C++ caller can flag
+            # pathological fuzzy responses and emit a per-tool
+            # `query_tokens_matched` diagnostic field.
+            "tokens_matched": int(hit.get("tokens_matched", 0)),
         })
 
     return results

@@ -30,8 +30,13 @@ private:
 	bool RebuildCatalog();
 
 	/** Search using the Python catalog; returns ranked tool names or empty on failure.
-	 *  Includes GetSearchKeywords() output from each tool as additional match material. */
-	TArray<FString> FuzzySearch(const FString& Query, int32 MaxResults);
+	 *  Includes GetSearchKeywords() output from each tool as additional match material.
+	 *
+	 *  Out parameter OutTokensMatchedByName: for each returned tool name,
+	 *  the count of distinct query tokens that produced any exact/prefix/fuzzy hit
+	 *  for that entry, as reported by FClaireonToolCatalogMatcher::FindNearest. Used
+	 *  by Execute() to surface `query_tokens_matched` per result. */
+	TArray<FString> FuzzySearch(const FString& Query, int32 MaxResults, TMap<FString, int32>& OutTokensMatchedByName);
 
 	/** Number of tools at last catalog rebuild (used for staleness detection) */
 	int32 LastCatalogToolCount = 0;

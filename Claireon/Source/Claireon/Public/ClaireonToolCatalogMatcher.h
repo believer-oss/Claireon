@@ -4,13 +4,33 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Misc/EnumClassFlags.h"
 
 /**
- * One entry in the tool catalog.  The Python harness builds EnrichedText via
- * _enrich_text() (concatenation + synonym expansion) before passing the array
- * across the binding boundary.
+ * Bitmask identifying which catalog field(s) produced an inverted-index posting
+ * for a given token.  A single token can belong to multiple fields for the
+ * same entry (e.g. `create` appearing in both NameText and OperationText for
+ * `chooser_create`); the matcher then credits the MAX of contributing field
+ * weights.
+ */
+enum class EFieldMask : uint8
+{
+	None        = 0,
+	Name        = 1 << 0,
+	Category    = 1 << 1,
+	Keywords    = 1 << 2,
+	Operation   = 1 << 3,
+	Description = 1 << 4,
+};
+ENUM_CLASS_FLAGS(EFieldMask);
+
+/**
+ * One entry in the tool catalog.  The Python harness builds the per-field
+ * text strings (name_text / category_text / keywords_text / operation_text /
+ * description_text) before passing the array across the binding boundary.
  *
- * See CLAIREON_DISK_RESULTS/tool-catalog-rewrite.md for the full specification.
+ * Each per-field string is tokenised separately in BuildCatalog so the
+ * matcher can apply per-field weights and the MAX-over-fields aggregation.
  */
 struct FClaireonToolCatalogEntry
 {
@@ -18,8 +38,12 @@ struct FClaireonToolCatalogEntry
 	FString Description;
 	FString Category;
 
-	/** Built Python-side by _enrich_text(name, description, category). */
-	FString EnrichedText;
+	/** Per-field tokenisation sources. */
+	FString NameText;        // Tool->GetName() with `.`/`_` -> space, plus name-derived abbreviations.
+	FString CategoryText;    // Tool->GetCategory(), plus category-derived abbreviations.
+	FString KeywordsText;    // Space-joined Tool->GetSearchKeywords(), plus keyword-derived abbreviations.
+	FString OperationText;   // Tool->GetOperation(), plus operation-derived abbreviations.
+	FString DescriptionText; // Tool->GetDescription(), plus description-derived abbreviations.
 };
 
 /**
@@ -32,18 +56,22 @@ struct FClaireonToolCatalogMatch
 	FString Name;
 	FString Category;
 	float   Score = 0.0f;
+	/** Count of distinct query tokens that contributed any hit to this entry. */
+	int32   TokensMatched = 0;
 };
 
 /**
  * Dependency-free BM25-lite nearest-string matcher for the tool catalog.
  * Replaces the previous hybrid FTS5 + semantic-embedding search path.
  *
- * Scoring per tool-catalog-rewrite.md:
- *   raw_score       = (exact_hits * 2) + (prefix_hits * 1) + (fuzzy_hits * 0.5)
- *   normalised_score = raw_score / max(1, unique_query_token_count)
+ * Scoring:
+ *   Per-hit contribution = MAX_OVER_FIELDS(weight_for_field) * (exact?2.0 : prefix?1.0 : fuzzy?0.5)
+ *   Field weights: Name=8, Category=4, Keywords=3, Operation=3, Description=1.
+ *   Final entry score is the sum over all distinct query tokens that contributed,
+ *   normalised by max(1, unique_query_token_count).
  *
- * Tie-break: Score desc, then Name asc (byte-wise FString::Compare) for
- * cross-platform determinism.
+ * Tie-break: DistinctQueryTokensMatched desc, then Score desc, then Name asc
+ * (byte-wise FString::Compare) for cross-platform determinism.
  *
  * All public methods are expected to be called on the game thread; an
  * internal FCriticalSection is held as belt-and-suspenders because the
@@ -54,16 +82,25 @@ struct FClaireonToolCatalogMatch
 class CLAIREON_API FClaireonToolCatalogMatcher
 {
 public:
-	/** Replace the catalog atomically.  Tokenises each entry's EnrichedText and rebuilds the inverted index. */
+	/** Replace the catalog atomically.  Tokenises each entry's per-field text strings and rebuilds the inverted index. */
 	static void BuildCatalog(const TArray<FClaireonToolCatalogEntry>& Entries);
 
 	/**
 	 * Rank catalog entries against Query.  Returns at most MaxResults matches,
-	 * sorted by Score desc then Name asc.  Returns an empty array when the
-	 * catalog is empty or when no candidate entries matched any query token.
+	 * sorted by DistinctQueryTokensMatched desc, then Score desc, then Name asc.
+	 * Returns an empty array when the catalog is empty or when no candidate
+	 * entries matched any query token.
 	 */
 	static TArray<FClaireonToolCatalogMatch> FindNearest(const FString& Query, int32 MaxResults);
 
 	/** Empty the catalog and inverted index. */
 	static void Clear();
+
+	/**
+	 * Bounded Levenshtein distance with early-exit at MaxDistance.  Returns
+	 * MaxDistance + 1 as a sentinel when the true distance exceeds the bound.
+	 * Exposed publicly so ClaireonTool_SearchTools::Execute can implement
+	 * near-exact-name precedence without re-deriving the helper.
+	 */
+	static int32 DistanceBounded(const FString& A, const FString& B, int32 MaxDistance);
 };
