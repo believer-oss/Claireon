@@ -52,6 +52,14 @@ public:
 	/** Reset the tool call counter (called before each execute) */
 	static void ResetToolCallCount();
 
+	/** Set the conversation id propagated to FClaireonOutputGate::RouteResult for spill
+	 *  file paths.  Called by the Anthropic REPL client before invoking a tool; pass
+	 *  TEXT("default") for direct invocations (diagnostics widget, test harness). */
+	static void SetCurrentConversationId(const FString& InConversationId);
+
+	/** Read the current conversation id (for non-REPL call sites like claireon.python_execute). */
+	static const FString& GetCurrentConversationId();
+
 	/**
 	 * CPython C function: dispatches claireon.* calls to C++ tool registry.
 	 * Signature: _mcp_call_tool(tool_name: str, args_json: str) -> str
@@ -103,4 +111,7 @@ private:
 
 	/** Build the tool catalog JSON and run the Python bootstrap to populate sys.modules['claireon']. */
 	static void BuildAndRunBootstrap();
+
+	/** Active conversation id (see SetCurrentConversationId).  Defaults to "default". */
+	static FString GCurrentConversationId;
 };

@@ -7,6 +7,7 @@
 #include "ClaireonPathResolver.h"
 #include "ClaireonLog.h"
 #include "Engine/Blueprint.h"
+#include "Engine/MemberReference.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
@@ -16,6 +17,9 @@
 #include "Toolkits/AssetEditorToolkit.h"
 #include "Subsystems/AssetEditorSubsystem.h"
 #include "BlueprintEditor.h"
+#include "GameplayTagContainer.h"
+#include "StructUtils/InstancedStruct.h"
+#include "UObject/UObjectGlobals.h"
 
 // FScopedBlueprintEditor Implementation
 
@@ -368,121 +372,550 @@ namespace ClaireonBlueprintHelpers
 		return CompatiblePins;
 	}
 
-	FEdGraphPinType ParseVariableType(const FString& TypeString)
+	namespace
 	{
-		FEdGraphPinType PinType;
+		// Returns true if TypeString begins with Prefix (case-insensitive) and either
+		// ends immediately at Prefix.Len() or continues with characters (used for StartsWith tests).
+		bool StartsWithI(const FString& TypeString, const TCHAR* Prefix)
+		{
+			return TypeString.StartsWith(Prefix, ESearchCase::IgnoreCase);
+		}
 
-		// Simple types
-		if (TypeString == TEXT("float"))
+		// Scan TypeString for a matching '>' starting at OpenIndex (which must point at '<').
+		// Returns the index of the matching '>' with balanced <...> nesting, or INDEX_NONE on
+		// unbalanced input.
+		int32 FindMatchingAngle(const FString& TypeString, int32 OpenIndex)
+		{
+			if (!TypeString.IsValidIndex(OpenIndex) || TypeString[OpenIndex] != TEXT('<'))
+			{
+				return INDEX_NONE;
+			}
+			int32 Depth = 0;
+			for (int32 i = OpenIndex; i < TypeString.Len(); ++i)
+			{
+				const TCHAR C = TypeString[i];
+				if (C == TEXT('<'))
+				{
+					++Depth;
+				}
+				else if (C == TEXT('>'))
+				{
+					--Depth;
+					if (Depth == 0)
+					{
+						return i;
+					}
+				}
+			}
+			return INDEX_NONE;
+		}
+
+		// Split Inner at the first top-level comma (depth 0). Nested generics are ignored.
+		// Returns true iff exactly one top-level comma splits Inner into two non-empty parts.
+		bool SplitMapInnerAtTopLevelComma(const FString& Inner, FString& OutKey, FString& OutValue, FString& OutError)
+		{
+			int32 Depth = 0;
+			int32 CommaIndex = INDEX_NONE;
+			int32 TopLevelCommaCount = 0;
+			for (int32 i = 0; i < Inner.Len(); ++i)
+			{
+				const TCHAR C = Inner[i];
+				if (C == TEXT('<'))
+				{
+					++Depth;
+				}
+				else if (C == TEXT('>'))
+				{
+					--Depth;
+				}
+				else if (C == TEXT(',') && Depth == 0)
+				{
+					if (TopLevelCommaCount == 0)
+					{
+						CommaIndex = i;
+					}
+					++TopLevelCommaCount;
+				}
+			}
+
+			if (TopLevelCommaCount == 0)
+			{
+				OutError = TEXT("Map<K,V> requires exactly two type parameters separated by a top-level comma");
+				return false;
+			}
+			if (TopLevelCommaCount > 1)
+			{
+				OutError = FString::Printf(TEXT("Map<K,V> expects exactly two type parameters; got %d top-level parts"), TopLevelCommaCount + 1);
+				return false;
+			}
+
+			OutKey = Inner.Mid(0, CommaIndex).TrimStartAndEnd();
+			OutValue = Inner.Mid(CommaIndex + 1).TrimStartAndEnd();
+			if (OutKey.IsEmpty() || OutValue.IsEmpty())
+			{
+				OutError = TEXT("Map<K,V> has an empty key or value part");
+				return false;
+			}
+			return true;
+		}
+
+		// Resolve a UFunction from a fully-qualified path such as
+		// "/Script/FSTargeting.FSAbilityTarget.TargetReplicatedDelegate__DelegateSignature" or
+		// "/Script/X.Y__DelegateSignature".
+		UFunction* ResolveSignatureFunction(const FString& Path)
+		{
+			if (Path.IsEmpty())
+			{
+				return nullptr;
+			}
+			// FindObject supports module-scoped paths with dotted segments. Try direct first.
+			UFunction* Fn = FindObject<UFunction>(nullptr, *Path);
+			if (Fn)
+			{
+				return Fn;
+			}
+			// Fall back: LoadObject resolves redirectors + deferred loads.
+			return LoadObject<UFunction>(nullptr, *Path);
+		}
+
+		// Populate delegate signature members on PinType from a resolved UFunction.
+		void SetDelegateSignature(FEdGraphPinType& PinType, UFunction* SignatureFn)
+		{
+			if (!SignatureFn)
+			{
+				return;
+			}
+			FMemberReference::FillSimpleMemberReference<UFunction>(SignatureFn, PinType.PinSubCategoryMemberReference);
+		}
+
+		// Parse a SoftClass<X> / SoftObject<X> generic-angle body. Inner is the contents
+		// between the angles (already stripped).
+		FParseVariableTypeResult ParseSoftRefClass(const FString& Inner, bool bSoftClass)
+		{
+			FParseVariableTypeResult Result;
+			const FString Trimmed = Inner.TrimStartAndEnd();
+			if (Trimmed.IsEmpty())
+			{
+				Result.Error = bSoftClass
+					? TEXT("SoftClass<Class> requires a class name inside the angle brackets")
+					: TEXT("SoftObject<Class> requires a class name inside the angle brackets");
+				return Result;
+			}
+			ClaireonNameResolver::FNameResolveResult Resolve;
+			UClass* Cls = ClaireonNameResolver::ResolveClassName(Trimmed, nullptr, Resolve);
+			if (!Cls)
+			{
+				Result.Error = FString::Printf(TEXT("Could not resolve class '%s' for soft reference: %s"), *Trimmed, *Resolve.Error);
+				return Result;
+			}
+			Result.PinType.PinCategory = bSoftClass ? UEdGraphSchema_K2::PC_SoftClass : UEdGraphSchema_K2::PC_SoftObject;
+			Result.PinType.PinSubCategoryObject = Cls;
+			Result.ResolutionNote = Resolve.ResolutionNote;
+			Result.bSucceeded = true;
+			return Result;
+		}
+
+		// Parse `softclass:/Game/.../X.X_C` or `softobject:/Game/.../X.X` prefix form.
+		FParseVariableTypeResult ParseSoftRefPath(const FString& PathStr, bool bSoftClass)
+		{
+			FParseVariableTypeResult Result;
+			const FString Trimmed = PathStr.TrimStartAndEnd();
+			if (Trimmed.IsEmpty())
+			{
+				Result.Error = TEXT("softclass: / softobject: prefix requires an object path");
+				return Result;
+			}
+			UClass* Cls = FindObject<UClass>(nullptr, *Trimmed);
+			if (!Cls)
+			{
+				Cls = LoadObject<UClass>(nullptr, *Trimmed);
+			}
+			if (!Cls)
+			{
+				Result.Error = FString::Printf(TEXT("Could not resolve class path '%s' for soft reference"), *Trimmed);
+				return Result;
+			}
+			Result.PinType.PinCategory = bSoftClass ? UEdGraphSchema_K2::PC_SoftClass : UEdGraphSchema_K2::PC_SoftObject;
+			Result.PinType.PinSubCategoryObject = Cls;
+			Result.bSucceeded = true;
+			return Result;
+		}
+
+		// Parse `InstancedStruct<FMyStruct>` body. Inner is the contents between angles.
+		FParseVariableTypeResult ParseInstancedStructGeneric(const FString& Inner)
+		{
+			FParseVariableTypeResult Result;
+			const FString Trimmed = Inner.TrimStartAndEnd();
+			if (Trimmed.IsEmpty())
+			{
+				// Bare InstancedStruct<> is valid -- meta info points at FInstancedStruct only.
+				Result.PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+				Result.PinType.PinSubCategoryObject = FInstancedStruct::StaticStruct();
+				Result.bSucceeded = true;
+				return Result;
+			}
+			ClaireonNameResolver::FNameResolveResult Resolve;
+			UScriptStruct* InnerStruct = ClaireonNameResolver::ResolveStructName(Trimmed, Resolve);
+			if (!InnerStruct)
+			{
+				Result.Error = FString::Printf(TEXT("Could not resolve struct '%s' for InstancedStruct<>: %s"), *Trimmed, *Resolve.Error);
+				return Result;
+			}
+			Result.PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+			Result.PinType.PinSubCategoryObject = FInstancedStruct::StaticStruct();
+			// PinSubCategoryObject is fixed to FInstancedStruct; InnerStruct is the base-struct
+			// hint (written as BaseStruct metadata by downstream ApplyVariableProperties callers).
+			// We carry it forward via the resolution note so callers surface the intent.
+			Result.ResolutionNote = Resolve.ResolutionNote.IsEmpty()
+				? FString::Printf(TEXT("InstancedStruct base struct: %s"), *InnerStruct->GetName())
+				: Resolve.ResolutionNote;
+			Result.bSucceeded = true;
+			return Result;
+		}
+	} // namespace
+
+	FParseVariableTypeResult ParseVariableTypeChecked(const FString& TypeString)
+	{
+		FParseVariableTypeResult Result;
+		FEdGraphPinType& PinType = Result.PinType;
+
+		if (TypeString.IsEmpty())
+		{
+			Result.Error = TEXT("variable_type is empty");
+			return Result;
+		}
+
+		// --- Simple scalars (preserve legacy case-sensitive behavior for these keywords).
+		if (TypeString == TEXT("float") || TypeString.Equals(TEXT("Float"), ESearchCase::IgnoreCase))
 		{
 			PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
 			PinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
+			Result.bSucceeded = true;
+			return Result;
 		}
-		else if (TypeString == TEXT("double"))
+		if (TypeString == TEXT("double") || TypeString.Equals(TEXT("Double"), ESearchCase::IgnoreCase))
 		{
 			PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
 			PinType.PinSubCategory = UEdGraphSchema_K2::PC_Double;
+			Result.bSucceeded = true;
+			return Result;
 		}
-		else if (TypeString == TEXT("int") || TypeString == TEXT("int32"))
+		if (TypeString == TEXT("int") || TypeString == TEXT("int32") || TypeString.Equals(TEXT("Integer"), ESearchCase::IgnoreCase))
 		{
 			PinType.PinCategory = UEdGraphSchema_K2::PC_Int;
+			Result.bSucceeded = true;
+			return Result;
 		}
-		else if (TypeString == TEXT("int64"))
+		if (TypeString == TEXT("int64") || TypeString.Equals(TEXT("Integer64"), ESearchCase::IgnoreCase))
 		{
 			PinType.PinCategory = UEdGraphSchema_K2::PC_Int64;
+			Result.bSucceeded = true;
+			return Result;
 		}
-		else if (TypeString == TEXT("byte"))
+		if (TypeString == TEXT("byte") || TypeString.Equals(TEXT("Byte"), ESearchCase::IgnoreCase))
 		{
 			PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
+			Result.bSucceeded = true;
+			return Result;
 		}
-		else if (TypeString == TEXT("bool"))
+		if (TypeString == TEXT("bool") || TypeString.Equals(TEXT("Boolean"), ESearchCase::IgnoreCase) || TypeString.Equals(TEXT("Bool"), ESearchCase::IgnoreCase))
 		{
 			PinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
+			Result.bSucceeded = true;
+			return Result;
 		}
-		else if (TypeString == TEXT("string"))
+		if (TypeString == TEXT("string") || TypeString.Equals(TEXT("String"), ESearchCase::IgnoreCase) || TypeString == TEXT("FString"))
 		{
 			PinType.PinCategory = UEdGraphSchema_K2::PC_String;
+			Result.bSucceeded = true;
+			return Result;
 		}
-		else if (TypeString == TEXT("name"))
+		if (TypeString == TEXT("name") || TypeString.Equals(TEXT("Name"), ESearchCase::IgnoreCase) || TypeString == TEXT("FName"))
 		{
 			PinType.PinCategory = UEdGraphSchema_K2::PC_Name;
+			Result.bSucceeded = true;
+			return Result;
 		}
-		else if (TypeString == TEXT("text"))
+		if (TypeString == TEXT("text") || TypeString.Equals(TEXT("Text"), ESearchCase::IgnoreCase) || TypeString == TEXT("FText"))
 		{
 			PinType.PinCategory = UEdGraphSchema_K2::PC_Text;
+			Result.bSucceeded = true;
+			return Result;
 		}
-		// Arrays: "Array<float>", "Array<Actor>", etc.
-		else if (TypeString.StartsWith(TEXT("Array<")))
-		{
-			PinType.ContainerType = EPinContainerType::Array;
 
-			// Extract element type
-			FString ElementType = TypeString.Mid(6, TypeString.Len() - 7);	 // Remove "Array<" and ">"
-			FEdGraphPinType ElementPinType = ParseVariableType(ElementType); // Recursive
-			PinType.PinCategory = ElementPinType.PinCategory;
-			PinType.PinSubCategory = ElementPinType.PinSubCategory;
-			PinType.PinSubCategoryObject = ElementPinType.PinSubCategoryObject;
-		}
-		// Sets: "Set<int>", etc.
-		else if (TypeString.StartsWith(TEXT("Set<")))
+		// --- Expanded named types (D4/D5).
+		// Delegate family: flat-string form is an error without signature_function (per D4).
 		{
+			const FString LowerName = TypeString.ToLower();
+			if (LowerName == TEXT("mcdelegate") || LowerName == TEXT("dispatcher") || LowerName == TEXT("multicastinlinedelegate") || LowerName == TEXT("multicastdelegate"))
+			{
+				Result.Error = TEXT("multicast delegate requires variable_type_spec.signature_function (caller must supply the UFunction signature path)");
+				return Result;
+			}
+			if (LowerName == TEXT("delegate") || LowerName == TEXT("singledelegate"))
+			{
+				Result.Error = TEXT("delegate requires variable_type_spec.signature_function (caller must supply the UFunction signature path)");
+				return Result;
+			}
+			if (LowerName == TEXT("instancedstruct"))
+			{
+				PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+				PinType.PinSubCategoryObject = FInstancedStruct::StaticStruct();
+				Result.bSucceeded = true;
+				return Result;
+			}
+			if (LowerName == TEXT("gameplaytag"))
+			{
+				PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+				PinType.PinSubCategoryObject = FGameplayTag::StaticStruct();
+				Result.bSucceeded = true;
+				return Result;
+			}
+			if (LowerName == TEXT("gameplaytagcontainer"))
+			{
+				PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+				PinType.PinSubCategoryObject = FGameplayTagContainer::StaticStruct();
+				Result.bSucceeded = true;
+				return Result;
+			}
+		}
+
+		// --- Prefix forms: softclass:/path, softobject:/path
+		if (StartsWithI(TypeString, TEXT("softclass:")))
+		{
+			return ParseSoftRefPath(TypeString.Mid(10), /*bSoftClass=*/true);
+		}
+		if (StartsWithI(TypeString, TEXT("softobject:")))
+		{
+			return ParseSoftRefPath(TypeString.Mid(11), /*bSoftClass=*/false);
+		}
+
+		// --- Generic angle forms: Array<T>, Set<T>, Map<K,V>, SoftClass<X>, SoftObject<X>,
+		// InstancedStruct<X>, SoftClassReference<X>, SoftObjectReference<X>.
+		auto TryStripAngleForm = [&TypeString](const TCHAR* Keyword, int32 KeywordLen, FString& OutInner) -> bool
+		{
+			if (TypeString.Len() < KeywordLen + 2) return false;
+			if (TypeString.Left(KeywordLen).Equals(Keyword, ESearchCase::IgnoreCase) &&
+				TypeString[KeywordLen] == TEXT('<') &&
+				TypeString.EndsWith(TEXT(">")))
+			{
+				// Validate angle balance for the whole string.
+				const int32 Close = FindMatchingAngle(TypeString, KeywordLen);
+				if (Close != TypeString.Len() - 1) return false;
+				OutInner = TypeString.Mid(KeywordLen + 1, Close - KeywordLen - 1);
+				return true;
+			}
+			return false;
+		};
+
+		FString GenericInner;
+		if (TryStripAngleForm(TEXT("Array"), 5, GenericInner))
+		{
+			FParseVariableTypeResult Inner = ParseVariableTypeChecked(GenericInner.TrimStartAndEnd());
+			if (!Inner.bSucceeded)
+			{
+				Result.Error = FString::Printf(TEXT("Array<T> element parse failed: %s"), *Inner.Error);
+				return Result;
+			}
+			PinType = Inner.PinType;
+			PinType.ContainerType = EPinContainerType::Array;
+			Result.ResolutionNote = Inner.ResolutionNote;
+			Result.bSucceeded = true;
+			return Result;
+		}
+		if (TryStripAngleForm(TEXT("Set"), 3, GenericInner))
+		{
+			FParseVariableTypeResult Inner = ParseVariableTypeChecked(GenericInner.TrimStartAndEnd());
+			if (!Inner.bSucceeded)
+			{
+				Result.Error = FString::Printf(TEXT("Set<T> element parse failed: %s"), *Inner.Error);
+				return Result;
+			}
+			PinType = Inner.PinType;
 			PinType.ContainerType = EPinContainerType::Set;
-			FString ElementType = TypeString.Mid(4, TypeString.Len() - 5);
-			FEdGraphPinType ElementPinType = ParseVariableType(ElementType);
-			PinType.PinCategory = ElementPinType.PinCategory;
-			PinType.PinSubCategory = ElementPinType.PinSubCategory;
-			PinType.PinSubCategoryObject = ElementPinType.PinSubCategoryObject;
+			Result.ResolutionNote = Inner.ResolutionNote;
+			Result.bSucceeded = true;
+			return Result;
 		}
-		// Maps: "Map<string,int>", etc.
-		else if (TypeString.StartsWith(TEXT("Map<")))
+		if (TryStripAngleForm(TEXT("Map"), 3, GenericInner))
 		{
+			FString KeyStr, ValueStr, SplitErr;
+			if (!SplitMapInnerAtTopLevelComma(GenericInner, KeyStr, ValueStr, SplitErr))
+			{
+				Result.Error = FString::Printf(TEXT("Map<K,V> parse failed: %s"), *SplitErr);
+				return Result;
+			}
+
+			FParseVariableTypeResult Key = ParseVariableTypeChecked(KeyStr);
+			if (!Key.bSucceeded)
+			{
+				Result.Error = FString::Printf(TEXT("Map<K,V> key parse failed: key:%s"), *Key.Error);
+				return Result;
+			}
+			FParseVariableTypeResult Value = ParseVariableTypeChecked(ValueStr);
+			if (!Value.bSucceeded)
+			{
+				Result.Error = FString::Printf(TEXT("Map<K,V> value parse failed: value:%s"), *Value.Error);
+				return Result;
+			}
+
 			PinType.ContainerType = EPinContainerType::Map;
-			// For maps, default to string->string for now
-			// TODO: Parse key and value types properly
-			PinType.PinCategory = UEdGraphSchema_K2::PC_String;
+			PinType.PinCategory = Key.PinType.PinCategory;
+			PinType.PinSubCategory = Key.PinType.PinSubCategory;
+			PinType.PinSubCategoryObject = Key.PinType.PinSubCategoryObject;
+			PinType.PinValueType.TerminalCategory = Value.PinType.PinCategory;
+			PinType.PinValueType.TerminalSubCategory = Value.PinType.PinSubCategory;
+			PinType.PinValueType.TerminalSubCategoryObject = Value.PinType.PinSubCategoryObject;
+			Result.bSucceeded = true;
+			return Result;
 		}
-		// Objects, Structs, Enums
-		else
+		if (TryStripAngleForm(TEXT("SoftClass"), 9, GenericInner) || TryStripAngleForm(TEXT("SoftClassReference"), 18, GenericInner))
 		{
-			// Try to find as UClass
+			return ParseSoftRefClass(GenericInner, /*bSoftClass=*/true);
+		}
+		if (TryStripAngleForm(TEXT("SoftObject"), 10, GenericInner) || TryStripAngleForm(TEXT("SoftObjectReference"), 19, GenericInner))
+		{
+			return ParseSoftRefClass(GenericInner, /*bSoftClass=*/false);
+		}
+		if (TryStripAngleForm(TEXT("InstancedStruct"), 15, GenericInner))
+		{
+			return ParseInstancedStructGeneric(GenericInner);
+		}
+
+		// --- Name-resolution fallbacks: UClass, UScriptStruct, UEnum (in order).
+		{
 			ClaireonNameResolver::FNameResolveResult ClassResult;
 			UClass* Class = ClaireonNameResolver::ResolveClassName(TypeString, nullptr, ClassResult);
 			if (Class)
 			{
 				PinType.PinCategory = UEdGraphSchema_K2::PC_Object;
 				PinType.PinSubCategoryObject = Class;
+				Result.ResolutionNote = ClassResult.ResolutionNote;
+				Result.bSucceeded = true;
+				return Result;
 			}
-			else
+		}
+		{
+			ClaireonNameResolver::FNameResolveResult StructResult;
+			UScriptStruct* Struct = ClaireonNameResolver::ResolveStructName(TypeString, StructResult);
+			if (Struct)
 			{
-				// Try to find as UScriptStruct
-				ClaireonNameResolver::FNameResolveResult StructResult;
-				UScriptStruct* Struct = ClaireonNameResolver::ResolveStructName(TypeString, StructResult);
-				if (Struct)
-				{
-					PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
-					PinType.PinSubCategoryObject = Struct;
-				}
-				else
-				{
-					// Try to find as UEnum
-					ClaireonNameResolver::FNameResolveResult EnumResult;
-					UEnum* Enum = ClaireonNameResolver::ResolveEnumName(TypeString, EnumResult);
-					if (Enum)
-					{
-						PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
-						PinType.PinSubCategoryObject = Enum;
-					}
-					else
-					{
-						// Unknown type - default to string
-						UE_LOG(LogClaireon, Warning, TEXT("[ParseVariableType] Unknown type '%s', defaulting to string"), *TypeString);
-						PinType.PinCategory = UEdGraphSchema_K2::PC_String;
-					}
-				}
+				PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+				PinType.PinSubCategoryObject = Struct;
+				Result.ResolutionNote = StructResult.ResolutionNote;
+				Result.bSucceeded = true;
+				return Result;
+			}
+		}
+		{
+			ClaireonNameResolver::FNameResolveResult EnumResult;
+			UEnum* Enum = ClaireonNameResolver::ResolveEnumName(TypeString, EnumResult);
+			if (Enum)
+			{
+				PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
+				PinType.PinSubCategoryObject = Enum;
+				Result.ResolutionNote = EnumResult.ResolutionNote;
+				Result.bSucceeded = true;
+				return Result;
 			}
 		}
 
-		return PinType;
+		Result.Error = FString::Printf(TEXT("Unknown variable type '%s' (no matching keyword, class, struct, or enum)"), *TypeString);
+		return Result;
+	}
+
+	FParseVariableTypeResult ParseVariableTypeSpec(const TSharedPtr<FJsonObject>& Spec)
+	{
+		FParseVariableTypeResult Result;
+		if (!Spec.IsValid())
+		{
+			Result.Error = TEXT("variable_type_spec is missing or not an object");
+			return Result;
+		}
+
+		FString Base;
+		if (!Spec->TryGetStringField(TEXT("base"), Base) || Base.IsEmpty())
+		{
+			Result.Error = TEXT("variable_type_spec.base is required");
+			return Result;
+		}
+
+		const FString LowerBase = Base.ToLower();
+		const bool bMultiDelegate = (LowerBase == TEXT("mcdelegate") || LowerBase == TEXT("dispatcher") || LowerBase == TEXT("multicastinlinedelegate") || LowerBase == TEXT("multicastdelegate"));
+		const bool bSingleDelegate = (LowerBase == TEXT("delegate") || LowerBase == TEXT("singledelegate"));
+
+		FString SignatureFnPath;
+		Spec->TryGetStringField(TEXT("signature_function"), SignatureFnPath);
+		FString Subtype;
+		Spec->TryGetStringField(TEXT("subtype"), Subtype);
+
+		if (bMultiDelegate || bSingleDelegate)
+		{
+			if (SignatureFnPath.IsEmpty())
+			{
+				Result.Error = TEXT("delegate variable requires variable_type_spec.signature_function (caller must supply the UFunction signature path; the tool does not synthesize)");
+				return Result;
+			}
+			UFunction* SigFn = ResolveSignatureFunction(SignatureFnPath);
+			if (!SigFn)
+			{
+				Result.Error = FString::Printf(TEXT("signature_function '%s' could not be resolved to a UFunction"), *SignatureFnPath);
+				return Result;
+			}
+			Result.PinType.PinCategory = bMultiDelegate ? UEdGraphSchema_K2::PC_MCDelegate : UEdGraphSchema_K2::PC_Delegate;
+			SetDelegateSignature(Result.PinType, SigFn);
+			Result.bSucceeded = true;
+			return Result;
+		}
+
+		// Soft-ref base with explicit subtype overrides the short-form.
+		if (LowerBase == TEXT("softclass") || LowerBase == TEXT("softclassreference"))
+		{
+			if (Subtype.IsEmpty())
+			{
+				Result.Error = TEXT("softclass variable_type_spec requires 'subtype' (target class path or name)");
+				return Result;
+			}
+			// Route through the class resolver.
+			return ParseSoftRefClass(Subtype, /*bSoftClass=*/true);
+		}
+		if (LowerBase == TEXT("softobject") || LowerBase == TEXT("softobjectreference"))
+		{
+			if (Subtype.IsEmpty())
+			{
+				Result.Error = TEXT("softobject variable_type_spec requires 'subtype' (target class path or name)");
+				return Result;
+			}
+			return ParseSoftRefClass(Subtype, /*bSoftClass=*/false);
+		}
+		if (LowerBase == TEXT("instancedstruct"))
+		{
+			if (Subtype.IsEmpty())
+			{
+				// Bare FInstancedStruct with no base-struct hint is legal.
+				Result.PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+				Result.PinType.PinSubCategoryObject = FInstancedStruct::StaticStruct();
+				Result.bSucceeded = true;
+				return Result;
+			}
+			return ParseInstancedStructGeneric(Subtype);
+		}
+
+		// Otherwise fall through to the short-form parser with just base.
+		return ParseVariableTypeChecked(Base);
+	}
+
+	FEdGraphPinType ParseVariableType(const FString& TypeString)
+	{
+		FParseVariableTypeResult Local = ParseVariableTypeChecked(TypeString);
+		if (!Local.bSucceeded)
+		{
+			UE_LOG(LogClaireon, Warning,
+				TEXT("[ParseVariableType] legacy-path parse failed for '%s': %s"),
+				*TypeString, *Local.Error);
+			return FEdGraphPinType();
+		}
+		return Local.PinType;
 	}
 
 	uint64 ParsePropertyFlags(const TArray<FString>& FlagStrings)
@@ -924,5 +1357,12 @@ namespace ClaireonBlueprintHelpers
 			}
 		}
 		return Results;
+	}
+
+	bool IsBlueprintAssetClass(const FString& ClassName)
+	{
+		return ClassName == TEXT("Blueprint")
+			|| ClassName == TEXT("AnimBlueprint")
+			|| ClassName == TEXT("WidgetBlueprint");
 	}
 } // namespace ClaireonBlueprintHelpers

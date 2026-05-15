@@ -53,7 +53,7 @@ IClaireonTool::FToolResult ClaireonTool_AssetValidate::Execute(const TSharedPtr<
 		auto ResolveResult = ClaireonPathResolver::Resolve(ContentPath);
 		if (ResolveResult.bSuccess)
 		{
-			ContentPath = ResolveResult.ResolvedPath.Path;
+			ContentPath = ResolveResult.ResolvedPath.PackagePath;
 		}
 	}
 

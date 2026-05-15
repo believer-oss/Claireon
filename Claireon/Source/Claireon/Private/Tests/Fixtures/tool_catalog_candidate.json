@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "comment": "PLACEHOLDER candidate capture for #0000 A/B matcher-quality gate. Capturing the true candidate requires launching the Unreal Editor with the S3 C++ BM25-lite matcher live, rebuilding the tool catalog, and dumping top-K per query. That workflow is not available in this non-interactive environment, so this file ships alongside tool_catalog_baseline.json as a documented placeholder. Per test-plan.md section 5 the operator performs the capture before merging the PR and replaces this placeholder content with real results.",
+    "capture_procedure": [
+      "1. Check out this branch with S4 landed (python removals complete).",
+      "2. Launch UnrealEditor with the Claireon plugin loaded.",
+      "3. Open the Claireon REPL / diagnostics widget and trigger claireon.tools_search once to warm the C++ matcher.",
+      "4. For each non-blank, non-comment line in tool_catalog_ab_queries.txt, execute:",
+      "   from mcp_tool_catalog import search as _s",
+      "   import json",
+      "   print(json.dumps(_s(<query>, max_results=5)))",
+      "5. Record {query: [top-5 tool_name strings in rank order]} into this file's 'results' object.",
+      "6. Compute per-query top-5 intersection against tool_catalog_baseline.json; average across all 20 queries.",
+      "7. Gate: average intersection >= 70% or explicit per-query justification in the PR description."
+    ],
+    "fixture_source": "Claireon/Source/Claireon/Private/Tests/Fixtures/tool_catalog_ab_queries.txt",
+    "top_k": 5,
+    "matcher_under_capture": "C++ FClaireonToolCatalogMatcher (BM25-lite) + mcp_tool_catalog.py abbreviation / enrichment",
+    "capture_status": "placeholder_pending_operator_capture"
+  },
+  "results": {
+    "asset_search": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],
+    "blueprint_compile": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],
+    "data_table_add_row": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],
+    "python_execute": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],
+    "pie_start": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],
+    "bp": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],
+    "dt": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],
+    "gas": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],
+    "pie": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],
+    "bt": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],
+    "find actor by name": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],
+    "list datatable rows": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],
+    "open asset editor": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],
+    "read log file": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],
+    "search for blueprint references": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],
+    "blueprnt": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],
+    "assset serach": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],
+    "pie stat": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],
+    "find logs tool": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],
+    "grep code": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"]
+  }
+}

@@ -2,25 +2,536 @@
 // SPDX-License-Identifier: MIT
 
 #include "ClaireonOutputGate.h"
+
+#include "ClaireonLog.h"
+#include "ClaireonPythonAuditLog.h"
+#include "ClaireonSettings.h"
+
+#include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
+#include "HAL/FileManager.h"
+#include "HAL/PlatformFileManager.h"
+#include "Misc/DateTime.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Guid.h"
+#include "Misc/Paths.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 
-FString FClaireonOutputGate::RouteResult(const IClaireonTool::FToolResult& Result)
+namespace ClaireonOutputGateInternal
 {
-	// TODO: Stage 009+ — Size-based routing with index threshold
-	// For now, return direct JSON serialization
-	if (Result.Data.IsValid())
+	/** Test-only results-root override; empty means "use ProjectSavedDir/Claireon/Results". */
+	static FString GResultsRootOverride;
+
+	/** Sanitise a single path component: replace filesystem-invalid chars with '_'. */
+	static FString SanitizeComponent(const FString& In)
 	{
-		FString OutputString;
-		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutputString);
-		FJsonSerializer::Serialize(Result.Data.ToSharedRef(), Writer);
-		return OutputString;
+		FString Out = In;
+		const TCHAR BadChars[] = { '\\', '/', ':', '*', '?', '"', '<', '>', '|' };
+		for (TCHAR C : BadChars)
+		{
+			Out.ReplaceCharInline(C, TCHAR('_'), ESearchCase::CaseSensitive);
+		}
+		return Out;
 	}
-	return TEXT("{}");
+
+	/** Normalise a path to absolute + forward slashes. */
+	static FString ToForwardSlashAbsolute(const FString& Path)
+	{
+		FString Full = FPaths::ConvertRelativePathToFull(Path);
+		Full.ReplaceInline(TEXT("\\"), TEXT("/"));
+		return Full;
+	}
+
+	/**
+	 * Validate that a byte buffer is entirely valid UTF-8.  We accept any byte sequence
+	 * already produced by our own JSON/log serialisers as UTF-8; this check is a safety
+	 * net for tools that might surface raw binary in Result.Data-derived blobs or in
+	 * Logs/UELog.
+	 */
+	static bool IsValidUtf8(const uint8* Data, int32 Len)
+	{
+		if (!Data || Len <= 0)
+		{
+			return true;
+		}
+
+		int32 Index = 0;
+		while (Index < Len)
+		{
+			const uint8 Byte = Data[Index];
+			int32 Extra = 0;
+			uint32 MinValue = 0;
+			uint32 Code = 0;
+
+			if ((Byte & 0x80) == 0)
+			{
+				// ASCII
+				++Index;
+				continue;
+			}
+			else if ((Byte & 0xE0) == 0xC0)
+			{
+				Extra = 1;
+				Code = Byte & 0x1F;
+				MinValue = 0x80;
+			}
+			else if ((Byte & 0xF0) == 0xE0)
+			{
+				Extra = 2;
+				Code = Byte & 0x0F;
+				MinValue = 0x800;
+			}
+			else if ((Byte & 0xF8) == 0xF0)
+			{
+				Extra = 3;
+				Code = Byte & 0x07;
+				MinValue = 0x10000;
+			}
+			else
+			{
+				return false;
+			}
+
+			if (Index + Extra >= Len)
+			{
+				return false;
+			}
+
+			for (int32 i = 1; i <= Extra; ++i)
+			{
+				const uint8 Cont = Data[Index + i];
+				if ((Cont & 0xC0) != 0x80)
+				{
+					return false;
+				}
+				Code = (Code << 6) | (Cont & 0x3F);
+			}
+
+			if (Code < MinValue)
+			{
+				return false;
+			}
+			if (Code > 0x10FFFF)
+			{
+				return false;
+			}
+			if (Code >= 0xD800 && Code <= 0xDFFF)
+			{
+				return false;
+			}
+
+			Index += 1 + Extra;
+		}
+
+		return true;
+	}
+
+	/**
+	 * UTF-8-boundary-safe prefix of at most MaxBytes.  Given a byte buffer already
+	 * validated as UTF-8, returns the largest prefix <= MaxBytes that ends on a codepoint
+	 * boundary (per spill-mechanism.md "Preview policy").
+	 */
+	static FString Utf8PrefixSafe(const uint8* Data, int32 Len, int32 MaxBytes)
+	{
+		if (Len <= MaxBytes)
+		{
+			return FString(FUTF8ToTCHAR(reinterpret_cast<const ANSICHAR*>(Data), Len));
+		}
+
+		int32 Cut = MaxBytes;
+		while (Cut > 0 && (Data[Cut] & 0xC0) == 0x80)
+		{
+			--Cut;
+		}
+		return FString(FUTF8ToTCHAR(reinterpret_cast<const ANSICHAR*>(Data), Cut));
+	}
+
+	/** Hex-encode up to 256 bytes as "0x..." for a binary preview. */
+	static FString HexPreview(const uint8* Data, int32 Len)
+	{
+		const int32 Count = FMath::Min(Len, 256);
+		FString Out = TEXT("0x");
+		Out.Reserve(2 + Count * 2);
+		for (int32 i = 0; i < Count; ++i)
+		{
+			Out += FString::Printf(TEXT("%02X"), Data[i]);
+		}
+		return Out;
+	}
+
+	/**
+	 * Spill a single stream to disk using the atomic temp-then-rename dance.  Returns the
+	 * populated FClaireonSpillStream; the caller decides whether to record the manifest and
+	 * whether to emit an audit entry.
+	 *
+	 * See CLAIREON_DISK_RESULTS/spill-mechanism.md for the full specification (path layout,
+	 * UTF-8 classification, preview policy, ceiling handling, error path).
+	 */
+	static FClaireonSpillStream SpillOneStream(
+		const FString& ToolName,
+		const FString& ConversationId,
+		const FString& StreamName,
+		const TArray<uint8>& RawBytes,
+		int64 CeilingBytes)
+	{
+		FClaireonSpillStream Out;
+		Out.Name = StreamName;
+		Out.SizeBytes = RawBytes.Num();
+
+		// Apply the per-stream ceiling by truncation.
+		TArray<uint8> Bytes;
+		if (CeilingBytes > 0 && RawBytes.Num() > CeilingBytes)
+		{
+			Out.bOverCeiling = true;
+			Bytes.Append(RawBytes.GetData(), static_cast<int32>(CeilingBytes));
+		}
+		else
+		{
+			Bytes = RawBytes;
+		}
+
+		// Classify content -- UTF-8 text vs binary.
+		const bool bIsUtf8 = IsValidUtf8(Bytes.GetData(), Bytes.Num());
+		FString Extension;
+		if (bIsUtf8)
+		{
+			Extension = (StreamName == TEXT("data")) ? TEXT("json") : TEXT("txt");
+			Out.ContentType = (StreamName == TEXT("data")) ? TEXT("application/json") : TEXT("text/plain");
+			Out.Preview = Utf8PrefixSafe(Bytes.GetData(), Bytes.Num(), 1024);
+		}
+		else
+		{
+			Extension = TEXT("bin");
+			Out.ContentType = TEXT("application/octet-stream");
+			Out.Preview = HexPreview(Bytes.GetData(), Bytes.Num());
+		}
+
+		// Build the final path: <Root>/<conv_id>/<timestamp>-<tool>-<uuid>-<stream>.<ext>
+		const FString Root = FClaireonOutputGate::GetResultsRoot();
+		const FString ConvDir = Root / SanitizeComponent(ConversationId);
+		IFileManager::Get().MakeDirectory(*ConvDir, /*Tree*/ true);
+
+		const FString Timestamp = FDateTime::UtcNow().ToString(TEXT("%Y%m%d-%H%M%S"));
+		const FString ShortUuid = FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(12).ToLower();
+		const FString BaseName = FString::Printf(TEXT("%s-%s-%s-%s.%s"),
+			*Timestamp,
+			*SanitizeComponent(ToolName),
+			*ShortUuid,
+			*StreamName,
+			*Extension);
+
+		const FString FinalPath = ConvDir / BaseName;
+		const FString TempPath = FinalPath + TEXT(".part");
+
+		// Atomic write: temp file first, then Move to final name.
+		bool bWriteOk = false;
+		if (bIsUtf8)
+		{
+			// SaveArrayToFile preserves the exact bytes (including possible newlines);
+			// we have already verified the payload is valid UTF-8 so this is equivalent
+			// to ForceUTF8WithoutBOM for any well-formed text.
+			bWriteOk = FFileHelper::SaveArrayToFile(Bytes, *TempPath);
+		}
+		else
+		{
+			bWriteOk = FFileHelper::SaveArrayToFile(Bytes, *TempPath);
+		}
+
+		if (!bWriteOk)
+		{
+			Out.bWriteFailed = true;
+			Out.ErrorText = TEXT("Failed to write temp spill file");
+			IFileManager::Get().Delete(*TempPath, /*bRequireExists*/ false, /*bEvenIfReadOnly*/ true, /*bQuiet*/ true);
+			return Out;
+		}
+
+		if (!IFileManager::Get().Move(*FinalPath, *TempPath, /*bReplace*/ true, /*bEvenIfReadOnly*/ false))
+		{
+			Out.bWriteFailed = true;
+			Out.ErrorText = TEXT("Failed to rename temp spill file to final path");
+			IFileManager::Get().Delete(*TempPath, /*bRequireExists*/ false, /*bEvenIfReadOnly*/ true, /*bQuiet*/ true);
+			return Out;
+		}
+
+		Out.AbsolutePath = ToForwardSlashAbsolute(FinalPath);
+		return Out;
+	}
+
+	/** Serialise a JSON object to the condensed byte sequence used by the inline envelope. */
+	static TArray<uint8> SerializeJsonToUtf8Bytes(const TSharedPtr<FJsonObject>& Obj)
+	{
+		TArray<uint8> Out;
+		if (!Obj.IsValid())
+		{
+			return Out;
+		}
+		FString Serialized;
+		TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+			TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Serialized);
+		FJsonSerializer::Serialize(Obj.ToSharedRef(), Writer);
+		Writer->Close();
+
+		FTCHARToUTF8 Converter(*Serialized);
+		Out.Append(reinterpret_cast<const uint8*>(Converter.Get()), Converter.Length());
+		return Out;
+	}
+
+	/** Convert an FString to a UTF-8 byte array (no BOM). */
+	static TArray<uint8> StringToUtf8Bytes(const FString& In)
+	{
+		TArray<uint8> Out;
+		if (In.IsEmpty())
+		{
+			return Out;
+		}
+		FTCHARToUTF8 Converter(*In);
+		Out.Append(reinterpret_cast<const uint8*>(Converter.Get()), Converter.Length());
+		return Out;
+	}
+
+	/** Build the JSON object carried on the envelope for one spilled stream. */
+	static TSharedPtr<FJsonObject> StreamManifestToJson(const FClaireonSpillStream& Stream)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("name"), Stream.Name);
+		Obj->SetStringField(TEXT("absolute_path"), Stream.AbsolutePath);
+		Obj->SetNumberField(TEXT("size_bytes"), static_cast<double>(Stream.SizeBytes));
+		Obj->SetStringField(TEXT("content_type"), Stream.ContentType);
+		Obj->SetStringField(TEXT("preview"), Stream.Preview);
+		Obj->SetBoolField(TEXT("over_ceiling"), Stream.bOverCeiling);
+		Obj->SetBoolField(TEXT("write_failed"), Stream.bWriteFailed);
+		Obj->SetStringField(TEXT("error_text"), Stream.ErrorText);
+		return Obj;
+	}
 }
 
-FString FClaireonOutputGate::RouteLogs(const FString& Logs)
+void FClaireonOutputGate::SetResultsRootOverrideForTests(const FString& InOverridePath)
 {
-	// TODO: Stage 009+ — Size-based routing with index threshold
-	return Logs;
+	ClaireonOutputGateInternal::GResultsRootOverride = InOverridePath;
+}
+
+FString FClaireonOutputGate::GetResultsRoot()
+{
+	if (!ClaireonOutputGateInternal::GResultsRootOverride.IsEmpty())
+	{
+		return ClaireonOutputGateInternal::GResultsRootOverride;
+	}
+	return FPaths::ProjectSavedDir() / TEXT("Claireon") / TEXT("Results");
+}
+
+IClaireonTool::FToolResult FClaireonOutputGate::RouteResult(
+	IClaireonTool::FToolResult Result,
+	const FString& ToolName,
+	const FString& ConversationId,
+	EClaireonSpillStreamSet StreamSet)
+{
+	using namespace ClaireonOutputGateInternal;
+
+	const UClaireonSettings* Settings = UClaireonSettings::Get();
+	const int64 Threshold = Settings
+		? static_cast<int64>(Settings->ResultSpillThresholdBytes)
+		: 8192;
+	const int64 Ceiling = Settings
+		? static_cast<int64>(Settings->ResultSpillMaxBytes)
+		: 52428800;
+
+	const FString EffectiveConversationId = ConversationId.IsEmpty() ? FString(TEXT("default")) : ConversationId;
+
+	struct FStreamInput
+	{
+		FString Name;
+		TArray<uint8> Bytes;
+	};
+
+	TArray<FStreamInput> Inputs;
+
+	if (StreamSet == EClaireonSpillStreamSet::GenericData)
+	{
+		FStreamInput DataInput;
+		DataInput.Name = TEXT("data");
+		DataInput.Bytes = SerializeJsonToUtf8Bytes(Result.Data);
+		if (DataInput.Bytes.Num() > 0)
+		{
+			Inputs.Add(MoveTemp(DataInput));
+		}
+	}
+	else
+	{
+		if (!Result.Logs.IsEmpty())
+		{
+			FStreamInput StdoutInput;
+			StdoutInput.Name = TEXT("stdout");
+			StdoutInput.Bytes = StringToUtf8Bytes(Result.Logs);
+			if (StdoutInput.Bytes.Num() > 0)
+			{
+				Inputs.Add(MoveTemp(StdoutInput));
+			}
+		}
+		if (!Result.UELog.IsEmpty())
+		{
+			FStreamInput UELogInput;
+			UELogInput.Name = TEXT("uelog");
+			UELogInput.Bytes = StringToUtf8Bytes(Result.UELog);
+			if (UELogInput.Bytes.Num() > 0)
+			{
+				Inputs.Add(MoveTemp(UELogInput));
+			}
+		}
+	}
+
+	TArray<FClaireonSpillStream> SpilledStreams;
+	for (const FStreamInput& Input : Inputs)
+	{
+		if (Input.Bytes.Num() <= Threshold)
+		{
+			// Under threshold -- stays inline.
+			continue;
+		}
+
+		FClaireonSpillStream Stream = SpillOneStream(
+			ToolName,
+			EffectiveConversationId,
+			Input.Name,
+			Input.Bytes,
+			Ceiling);
+
+		// Audit every spill (success, truncated, or failed).
+		FClaireonPythonAuditLog::Get().RecordSpill(
+			ToolName,
+			Stream.Name,
+			Stream.SizeBytes,
+			Stream.AbsolutePath,
+			EffectiveConversationId,
+			Stream.bOverCeiling,
+			Stream.bWriteFailed,
+			Stream.ErrorText);
+
+		SpilledStreams.Add(MoveTemp(Stream));
+	}
+
+	if (SpilledStreams.Num() == 0)
+	{
+		return Result;
+	}
+
+	// Build the spill manifest onto Result.Data and clear the spilled inline payloads.
+	TSharedPtr<FJsonObject> Manifest = Result.Data;
+	if (!Manifest.IsValid())
+	{
+		Manifest = MakeShared<FJsonObject>();
+	}
+	Manifest->SetBoolField(TEXT("__mcp_spilled__"), true);
+
+	TArray<TSharedPtr<FJsonValue>> StreamsJson;
+	StreamsJson.Reserve(SpilledStreams.Num());
+	for (const FClaireonSpillStream& Stream : SpilledStreams)
+	{
+		StreamsJson.Add(MakeShared<FJsonValueObject>(StreamManifestToJson(Stream)));
+	}
+	Manifest->SetArrayField(TEXT("spilled_streams"), StreamsJson);
+
+	// Clear inline blobs whose contents are now on disk.
+	for (const FClaireonSpillStream& Stream : SpilledStreams)
+	{
+		if (StreamSet == EClaireonSpillStreamSet::GenericData && Stream.Name == TEXT("data"))
+		{
+			// The entire Result.Data blob spilled; preserve only the manifest fields.
+			TSharedPtr<FJsonObject> NewData = MakeShared<FJsonObject>();
+			NewData->SetBoolField(TEXT("__mcp_spilled__"), true);
+			NewData->SetArrayField(TEXT("spilled_streams"), StreamsJson);
+			Manifest = NewData;
+		}
+		else if (Stream.Name == TEXT("stdout"))
+		{
+			Result.Logs.Empty();
+		}
+		else if (Stream.Name == TEXT("uelog"))
+		{
+			Result.UELog.Empty();
+		}
+	}
+
+	Result.Data = Manifest;
+	return Result;
+}
+
+void FClaireonOutputGate::SweepStaleSpills(int32 RetentionDays)
+{
+	if (RetentionDays < 1)
+	{
+		RetentionDays = 1;
+	}
+
+	const FString Root = GetResultsRoot();
+	if (!IFileManager::Get().DirectoryExists(*Root))
+	{
+		return;
+	}
+
+	const FDateTime CutoffTime = FDateTime::UtcNow() - FTimespan::FromDays(RetentionDays);
+
+	// Enumerate immediate subdirectories.
+	class FSubdirVisitor : public IPlatformFile::FDirectoryVisitor
+	{
+	public:
+		TArray<FString> Subdirs;
+		virtual bool Visit(const TCHAR* FilenameOrDirectory, bool bIsDirectory) override
+		{
+			if (bIsDirectory)
+			{
+				Subdirs.Add(FString(FilenameOrDirectory));
+			}
+			return true;
+		}
+	};
+
+	FSubdirVisitor Visitor;
+	FPlatformFileManager::Get().GetPlatformFile().IterateDirectory(*Root, Visitor);
+
+	for (const FString& DirPath : Visitor.Subdirs)
+	{
+		// Find the most-recent mtime: directory itself or any child file.
+		FDateTime MostRecent = IFileManager::Get().GetTimeStamp(*DirPath);
+
+		class FRecentMtimeVisitor : public IPlatformFile::FDirectoryVisitor
+		{
+		public:
+			FDateTime Latest;
+			FRecentMtimeVisitor() : Latest(FDateTime::MinValue()) {}
+			virtual bool Visit(const TCHAR* FilenameOrDirectory, bool bIsDirectory) override
+			{
+				if (!bIsDirectory)
+				{
+					const FDateTime Ts = IFileManager::Get().GetTimeStamp(FilenameOrDirectory);
+					if (Ts > Latest)
+					{
+						Latest = Ts;
+					}
+				}
+				return true;
+			}
+		};
+
+		FRecentMtimeVisitor FileVisitor;
+		FPlatformFileManager::Get().GetPlatformFile().IterateDirectoryRecursively(*DirPath, FileVisitor);
+		if (FileVisitor.Latest > MostRecent)
+		{
+			MostRecent = FileVisitor.Latest;
+		}
+
+		if (MostRecent >= CutoffTime)
+		{
+			continue;
+		}
+
+		const bool bDeleted = IFileManager::Get().DeleteDirectory(*DirPath, /*bRequireExists*/ false, /*Tree*/ true);
+		if (!bDeleted)
+		{
+			UE_LOG(LogClaireon, Warning,
+				TEXT("[MCP Sweep] Could not fully delete %s (likely locked file); will retry on next sweep"),
+				*DirPath);
+		}
+	}
 }

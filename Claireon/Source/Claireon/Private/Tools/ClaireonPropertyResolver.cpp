@@ -159,6 +159,36 @@ bool ClaireonPropertyResolver::WritePropertyOnActor(
 	return ClaireonPropertyUtils::WritePropertyByPath(OutResolved.TargetObject, OutResolved.RemainingPath, Value, OutError);
 }
 
+// Strip an optional "[N]" suffix from a single path segment so that name lookups
+// on component/property registries work for array-indexed first segments like
+// "Waves[0]" or "MyArray[12]". Leaves non-indexed segments unchanged.
+// Returns true if the input was well-formed (either no bracket or matched [digits]).
+// If the input has an unmatched '[' or a non-numeric index, returns false and
+// leaves OutBareName unchanged so the caller can forward the raw segment to the
+// downstream parser (which emits the canonical "Malformed array index" error).
+static bool StripArrayIndexSuffix(const FString& Segment, FString& OutBareName)
+{
+	int32 BracketPos;
+	if (!Segment.FindChar(TEXT('['), BracketPos))
+	{
+		OutBareName = Segment;
+		return true;
+	}
+	int32 CloseBracket;
+	if (!Segment.FindChar(TEXT(']'), CloseBracket) || CloseBracket <= BracketPos + 1)
+	{
+		// Malformed -- let the writer's parser produce the canonical error.
+		return false;
+	}
+	const FString IndexStr = Segment.Mid(BracketPos + 1, CloseBracket - BracketPos - 1);
+	if (!IndexStr.IsNumeric())
+	{
+		return false;
+	}
+	OutBareName = Segment.Left(BracketPos);
+	return true;
+}
+
 bool ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(
 	UBlueprint* Blueprint,
 	const FString& PropertyPath,
@@ -183,13 +213,33 @@ bool ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(
 		return false;
 	}
 
-	// Step 2: Parse first segment and check for SCS component name prefix
+	// Step 2: Parse first segment and check for SCS component name prefix.
+	// For paths like "MyArray[0].Member", the first segment ("MyArray[0]")
+	// still needs to be looked up by its bare name ("MyArray") against the
+	// CDO class and component templates -- the "[0]" index is forwarded to
+	// the writer in RemainingPath.
 	FString FirstSegment;
 	FString Remainder;
 	if (!PropertyPath.Split(TEXT("."), &FirstSegment, &Remainder))
 	{
 		FirstSegment = PropertyPath;
 		Remainder = FString();
+	}
+
+	FString BareFirst;
+	if (!StripArrayIndexSuffix(FirstSegment, BareFirst))
+	{
+		// Malformed bracket syntax on the first segment. Pass the whole path
+		// straight through to the writer so ClaireonPropertyUtils::ParsePathSegments
+		// emits the canonical "Malformed array index in '...'" error. We pick
+		// the CDO as the target because we have no better choice; the writer
+		// will fail during parse before touching any property state.
+		OutResolved.TargetObject = CDO;
+		OutResolved.ResolvedOn = TEXT("CDO");
+		OutResolved.RemainingPath = PropertyPath;
+		OutResolved.QualifiedPath = PropertyPath;
+		OutResolved.Note = FString();
+		return true;
 	}
 
 	if (Blueprint->SimpleConstructionScript)
@@ -200,7 +250,7 @@ bool ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(
 			{
 				continue;
 			}
-			if (Node->GetVariableName().ToString() == FirstSegment)
+			if (Node->GetVariableName().ToString() == BareFirst)
 			{
 				if (Remainder.IsEmpty())
 				{
@@ -218,7 +268,7 @@ bool ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(
 	}
 
 	// Step 3: Check CDO class
-	if (CDO->GetClass()->FindPropertyByName(FName(*FirstSegment)))
+	if (CDO->GetClass()->FindPropertyByName(FName(*BareFirst)))
 	{
 		OutResolved.TargetObject = CDO;
 		OutResolved.ResolvedOn = TEXT("CDO");
@@ -237,7 +287,7 @@ bool ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(
 			{
 				continue;
 			}
-			if (Node->ComponentTemplate->GetClass()->FindPropertyByName(FName(*FirstSegment)))
+			if (Node->ComponentTemplate->GetClass()->FindPropertyByName(FName(*BareFirst)))
 			{
 				OutResolved.TargetObject = Node->ComponentTemplate;
 				OutResolved.ResolvedOn = Node->GetVariableName().ToString();

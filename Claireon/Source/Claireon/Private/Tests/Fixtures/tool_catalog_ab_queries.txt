@@ -1,0 +1,36 @@
+# A/B matcher-quality fixture for #0000 (CLAIREON_DISK_RESULTS / tool-catalog-rewrite).
+# One query per line. Blank lines and lines starting with '#' are ignored by the capture driver.
+# Composition target (per test-plan.md section 5):
+#   5 exact tool names
+#   5 abbreviations from _ABBREVIATIONS
+#   5 descriptive phrases
+#   5 noisy / typo-y inputs
+# Total: 20 representative agent-style queries.
+
+# --- exact tool names (5) ---
+asset_search
+blueprint_compile
+data_table_add_row
+python_execute
+pie_start
+
+# --- abbreviations from _ABBREVIATIONS (5) ---
+bp
+dt
+gas
+pie
+bt
+
+# --- descriptive phrases (5) ---
+find actor by name
+list datatable rows
+open asset editor
+read log file
+search for blueprint references
+
+# --- noisy / typo-y inputs (5) ---
+blueprnt
+assset serach
+pie stat
+find logs tool
+grep code

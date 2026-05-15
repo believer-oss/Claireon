@@ -25,9 +25,13 @@
 #include "AnimationStateMachineGraph.h"
 #include "AnimationGraph.h"
 #include "AnimationGraphSchema.h"
+#include "AnimStateAliasNode.h"
 
 // Runtime animation node base (from AnimGraphRuntime module)
 #include "Animation/AnimNodeBase.h"
+
+// Curve asset used for CustomBlendCurve on state transitions
+#include "Curves/CurveFloat.h"
 
 // Blueprint graph
 #include "EdGraph/EdGraph.h"
@@ -277,28 +281,47 @@ TArray<FAnimGraphInfo> CollectAllGraphs(UAnimBlueprint* AnimBP)
 		return Result;
 	}
 
-	// Collect AnimGraph roots from FunctionGraphs
-	for (UEdGraph* Graph : AnimBP->FunctionGraphs)
+	// Collect AnimGraph roots from FunctionGraphs.
+	// For child AnimBPs, FunctionGraphs may be empty — traverse the parent chain.
+	UAnimBlueprint* Current = AnimBP;
+	while (Current)
 	{
-		if (!Graph)
+		UE_LOG(LogClaireon, Log, TEXT("[CollectAllGraphs] Checking '%s' — FunctionGraphs: %d"),
+			*Current->GetName(), Current->FunctionGraphs.Num());
+		for (UEdGraph* Graph : Current->FunctionGraphs)
 		{
-			continue;
+			if (!Graph)
+			{
+				continue;
+			}
+
+			// Check if this is an animation graph (not a regular function graph)
+			if (Cast<UAnimationGraph>(Graph))
+			{
+				FAnimGraphInfo Info;
+				Info.Name = Graph->GetName();
+				Info.Type = TEXT("AnimGraph");
+				Info.NodeCount = Graph->Nodes.Num();
+				Info.Graph = Graph;
+				// Root graph has no parent
+				Result.Add(Info);
+
+				// Collect sub-graphs within this AnimGraph
+				CollectAnimGraphSubGraphs(Graph, Graph->GetName(), Result);
+			}
 		}
 
-		// Check if this is an animation graph (not a regular function graph)
-		if (Cast<UAnimationGraph>(Graph))
+		// If we found graphs, stop traversing parents
+		if (Result.Num() > 0)
 		{
-			FAnimGraphInfo Info;
-			Info.Name = Graph->GetName();
-			Info.Type = TEXT("AnimGraph");
-			Info.NodeCount = Graph->Nodes.Num();
-			Info.Graph = Graph;
-			// Root graph has no parent
-			Result.Add(Info);
-
-			// Collect sub-graphs within this AnimGraph
-			CollectAnimGraphSubGraphs(Graph, Graph->GetName(), Result);
+			break;
 		}
+
+		// Walk up to parent AnimBP
+		UAnimBlueprint* Parent = UAnimBlueprint::GetParentAnimBlueprint(Current);
+		UE_LOG(LogClaireon, Log, TEXT("[CollectAllGraphs] Parent of '%s' = '%s'"),
+			*Current->GetName(), Parent ? *Parent->GetName() : TEXT("null"));
+		Current = Parent;
 	}
 
 	return Result;
@@ -364,6 +387,11 @@ FString GetAnimNodeCategory(const UEdGraphNode* Node)
 	{
 		return TEXT("conduit");
 	}
+	// State alias nodes (shared transition sources/targets)
+	if (Node->GetClass()->GetName().Contains(TEXT("AnimStateAliasNode")))
+	{
+		return TEXT("state_alias");
+	}
 	if (Node->IsA<UAnimGraphNode_LinkedAnimLayer>())
 	{
 		return TEXT("linked_anim_layer");
@@ -412,7 +440,11 @@ FString GetAnimNodeCategory(const UEdGraphNode* Node)
 	{
 		return TEXT("transition_result");
 	}
-	if (ClassName.Contains(TEXT("Root")) && ClassName.Contains(TEXT("AnimGraphNode")))
+	if (ClassName.Contains(TEXT("OffsetRootBone")) || ClassName.Contains(TEXT("RotateRootBone")) || ClassName.Contains(TEXT("ResetRoot")) || ClassName.Contains(TEXT("OverrideRootMotion")))
+	{
+		return TEXT("anim_node");
+	}
+	if (ClassName == TEXT("AnimGraphNode_Root"))
 	{
 		return TEXT("output_pose");
 	}
@@ -936,30 +968,25 @@ TArray<TSharedPtr<FJsonValue>> SerializeNodeBoundEvents(UEdGraphNode* Node, UAni
 		}
 	}
 
-	// For generic anim graph nodes, check for function bindings via property reflection
+	// For generic anim graph nodes, check the three FMemberReference function bindings
 	if (UAnimGraphNode_Base* AnimGraphNode = Cast<UAnimGraphNode_Base>(Node))
 	{
-		// Look for OnBecomeRelevant/OnUpdate/OnInitialize type properties
-		// These are typically implemented as function bindings in the node
-		for (TFieldIterator<FProperty> PropIt(AnimGraphNode->GetClass()); PropIt; ++PropIt)
+		auto AddFunctionEvent = [&](const FString& EventName, const FMemberReference& FuncRef)
 		{
-			const FProperty* Prop = *PropIt;
-			if (!Prop)
+			bool bIsBound = UAnimGraphNode_Base::IsPotentiallyBoundFunction(FuncRef);
+			TSharedPtr<FJsonObject> EventObj = MakeShared<FJsonObject>();
+			EventObj->SetStringField(TEXT("event_name"), EventName);
+			EventObj->SetBoolField(TEXT("is_bound"), bIsBound);
+			if (bIsBound)
 			{
-				continue;
+				EventObj->SetStringField(TEXT("function_name"), FuncRef.GetMemberName().ToString());
 			}
+			EventsArray.Add(MakeShared<FJsonValueObject>(EventObj));
+		};
 
-			const FString PropName = Prop->GetName();
-			if (PropName.Contains(TEXT("OnBecomeRelevant")) || PropName.Contains(TEXT("OnUpdate")) ||
-				PropName.Contains(TEXT("OnCeaseRelevant")) || PropName.Contains(TEXT("OnInitialize")))
-			{
-				TSharedPtr<FJsonObject> EventObj = MakeShared<FJsonObject>();
-				EventObj->SetStringField(TEXT("event_name"), PropName);
-				EventObj->SetBoolField(TEXT("is_bound"), true);
-				EventObj->SetStringField(TEXT("property_type"), Prop->GetCPPType());
-				EventsArray.Add(MakeShared<FJsonValueObject>(EventObj));
-			}
-		}
+		AddFunctionEvent(TEXT("OnInitialUpdate"), AnimGraphNode->InitialUpdateFunction);
+		AddFunctionEvent(TEXT("OnBecomeRelevant"), AnimGraphNode->BecomeRelevantFunction);
+		AddFunctionEvent(TEXT("OnUpdate"), AnimGraphNode->UpdateFunction);
 	}
 
 	return EventsArray;
@@ -1114,6 +1141,22 @@ TSharedPtr<FJsonObject> SerializeAnimGraphNode(UEdGraphNode* Node, const FString
 		NodeObj->SetStringField(TEXT("from_state"), PrevState ? PrevState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("Unknown"));
 		NodeObj->SetStringField(TEXT("to_state"), NextState ? NextState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("Unknown"));
 		NodeObj->SetNumberField(TEXT("crossfade_duration"), TransNode->CrossfadeDuration);
+
+		// Shared transition rules
+		if (TransNode->bSharedRules)
+		{
+			TSharedPtr<FJsonObject> SharedObj = MakeShared<FJsonObject>();
+			SharedObj->SetStringField(TEXT("name"), TransNode->SharedRulesName);
+			SharedObj->SetStringField(TEXT("guid"), TransNode->SharedRulesGuid.ToString());
+			NodeObj->SetObjectField(TEXT("shared_rules"), SharedObj);
+		}
+		if (TransNode->bSharedCrossfade)
+		{
+			TSharedPtr<FJsonObject> SharedObj = MakeShared<FJsonObject>();
+			SharedObj->SetStringField(TEXT("name"), TransNode->SharedCrossfadeName);
+			SharedObj->SetStringField(TEXT("guid"), TransNode->SharedCrossfadeGuid.ToString());
+			NodeObj->SetObjectField(TEXT("shared_crossfade"), SharedObj);
+		}
 	}
 	else if (UAnimStateConduitNode* ConduitNode = Cast<UAnimStateConduitNode>(Node))
 	{
@@ -1125,6 +1168,24 @@ TSharedPtr<FJsonObject> SerializeAnimGraphNode(UEdGraphNode* Node, const FString
 			SubGraph->SetNumberField(TEXT("node_count"), ConduitNode->BoundGraph->Nodes.Num());
 			NodeObj->SetObjectField(TEXT("sub_graph"), SubGraph);
 		}
+	}
+	else if (UAnimStateAliasNode* AliasNode = Cast<UAnimStateAliasNode>(Node))
+	{
+		NodeObj->SetBoolField(TEXT("is_global_alias"), AliasNode->bGlobalAlias);
+
+		// Serialize which states this alias represents
+		TArray<TSharedPtr<FJsonValue>> AliasedArray;
+		for (const TWeakObjectPtr<UAnimStateNodeBase>& StatePtr : AliasNode->GetAliasedStates())
+		{
+			if (UAnimStateNodeBase* AliasedState = StatePtr.Get())
+			{
+				TSharedPtr<FJsonObject> AliasedObj = MakeShared<FJsonObject>();
+				AliasedObj->SetStringField(TEXT("name"), AliasedState->GetNodeTitle(ENodeTitleType::ListView).ToString());
+				AliasedObj->SetStringField(TEXT("guid"), AliasedState->NodeGuid.ToString());
+				AliasedArray.Add(MakeShared<FJsonValueObject>(AliasedObj));
+			}
+		}
+		NodeObj->SetArrayField(TEXT("aliased_states"), AliasedArray);
 	}
 
 	return NodeObj;
@@ -1236,6 +1297,22 @@ TSharedPtr<FJsonObject> SerializeStateMachine(UAnimationStateMachineGraph* SMGra
 			}
 			TransObj->SetStringField(TEXT("logic_type"), LogicTypeStr);
 
+			// Shared transition rules
+			if (TransNode->bSharedRules)
+			{
+				TSharedPtr<FJsonObject> SharedObj = MakeShared<FJsonObject>();
+				SharedObj->SetStringField(TEXT("name"), TransNode->SharedRulesName);
+				SharedObj->SetStringField(TEXT("guid"), TransNode->SharedRulesGuid.ToString());
+				TransObj->SetObjectField(TEXT("shared_rules"), SharedObj);
+			}
+			if (TransNode->bSharedCrossfade)
+			{
+				TSharedPtr<FJsonObject> SharedObj = MakeShared<FJsonObject>();
+				SharedObj->SetStringField(TEXT("name"), TransNode->SharedCrossfadeName);
+				SharedObj->SetStringField(TEXT("guid"), TransNode->SharedCrossfadeGuid.ToString());
+				TransObj->SetObjectField(TEXT("shared_crossfade"), SharedObj);
+			}
+
 			TransitionsArray.Add(MakeShared<FJsonValueObject>(TransObj));
 		}
 		else if (UAnimStateConduitNode* ConduitNode = Cast<UAnimStateConduitNode>(Node))
@@ -1337,6 +1414,22 @@ TSharedPtr<FJsonObject> SerializeTransition(UAnimStateTransitionNode* TransNode)
 	if (TransNode->CustomBlendCurve)
 	{
 		Result->SetStringField(TEXT("custom_blend_curve"), TransNode->CustomBlendCurve->GetPathName());
+	}
+
+	// Shared transition rules
+	if (TransNode->bSharedRules)
+	{
+		TSharedPtr<FJsonObject> SharedObj = MakeShared<FJsonObject>();
+		SharedObj->SetStringField(TEXT("name"), TransNode->SharedRulesName);
+		SharedObj->SetStringField(TEXT("guid"), TransNode->SharedRulesGuid.ToString());
+		Result->SetObjectField(TEXT("shared_rules"), SharedObj);
+	}
+	if (TransNode->bSharedCrossfade)
+	{
+		TSharedPtr<FJsonObject> SharedObj = MakeShared<FJsonObject>();
+		SharedObj->SetStringField(TEXT("name"), TransNode->SharedCrossfadeName);
+		SharedObj->SetStringField(TEXT("guid"), TransNode->SharedCrossfadeGuid.ToString());
+		Result->SetObjectField(TEXT("shared_crossfade"), SharedObj);
 	}
 
 	// Condition graph

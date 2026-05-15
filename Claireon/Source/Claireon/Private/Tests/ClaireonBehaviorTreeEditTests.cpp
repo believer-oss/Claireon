@@ -4,9 +4,16 @@
 
 #include "Untest.h"
 #include "Tools/IClaireonTool.h"
-#include "Tools/ClaireonTool_BehaviorTreeEdit.h"
-#include "Tools/ClaireonTool_BlackboardEdit.h"
-#include "Tools/ClaireonTool_EQSEdit.h"
+#include "Tools/ClaireonBehaviorTreeTool_Open.h"
+#include "Tools/ClaireonBehaviorTreeTool_Close.h"
+#include "Tools/ClaireonBehaviorTreeTool_Status.h"
+#include "Tools/ClaireonBehaviorTreeTool_ListNodeTypes.h"
+#include "Tools/ClaireonBlackboardTool_Open.h"
+#include "Tools/ClaireonBlackboardTool_Close.h"
+#include "Tools/ClaireonBlackboardTool_Status.h"
+#include "Tools/ClaireonEQSTool_Open.h"
+#include "Tools/ClaireonEQSTool_Close.h"
+#include "Tools/ClaireonEQSTool_Status.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
@@ -40,10 +47,9 @@ namespace
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, SchemaValid, UNTEST_TIMEOUTMS(1000))
 {
-	ClaireonTool_BehaviorTreeEdit Tool;
-	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.behaviortree_edit"));
+	ClaireonBehaviorTreeTool_Open Tool;
+	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.behaviortree_open"));
 	UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
-	UNTEST_EXPECT_TRUE(Tool.GetDescription().Contains(TEXT("add_node")));
 
 	auto Schema = Tool.GetInputSchema();
 	UNTEST_ASSERT_PTR(Schema.Get());
@@ -55,10 +61,6 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, SchemaValid, UNTEST_TIMEOUTMS(100
 	const TSharedPtr<FJsonObject>* Props;
 	UNTEST_EXPECT_TRUE(Schema->TryGetObjectField(TEXT("properties"), Props));
 
-	// Must have suppress_output property
-	const TSharedPtr<FJsonObject>* SuppressProp;
-	UNTEST_EXPECT_TRUE((*Props)->TryGetObjectField(TEXT("suppress_output"), SuppressProp));
-
 	co_return;
 }
 
@@ -68,17 +70,15 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, SchemaValid, UNTEST_TIMEOUTMS(100
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, OpenCloseCycle, UNTEST_TIMEOUTMS(15000))
 {
-	ClaireonTool_BehaviorTreeEdit Tool;
+	ClaireonBehaviorTreeTool_Open OpenTool;
+	ClaireonBehaviorTreeTool_Status StatusTool;
+	ClaireonBehaviorTreeTool_Close CloseTool;
 
 	// Open
-	TSharedPtr<FJsonObject> OpenParams = MakeShared<FJsonObject>();
-	OpenParams->SetStringField(TEXT("asset_path"), EditTestBTPath);
-
 	TSharedPtr<FJsonObject> OpenArgs = MakeShared<FJsonObject>();
-	OpenArgs->SetStringField(TEXT("operation"), TEXT("open"));
-	OpenArgs->SetObjectField(TEXT("params"), OpenParams);
+	OpenArgs->SetStringField(TEXT("asset_path"), EditTestBTPath);
 
-	auto OpenResult = Tool.Execute(OpenArgs);
+	auto OpenResult = OpenTool.Execute(OpenArgs);
 	UNTEST_ASSERT_FALSE(OpenResult.bIsError);
 	UNTEST_ASSERT_PTR(OpenResult.Data.Get());
 
@@ -93,10 +93,9 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, OpenCloseCycle, UNTEST_TIMEOUTMS(
 
 	// Status
 	TSharedPtr<FJsonObject> StatusArgs = MakeShared<FJsonObject>();
-	StatusArgs->SetStringField(TEXT("operation"), TEXT("status"));
 	StatusArgs->SetStringField(TEXT("session_id"), SessionId);
 
-	auto StatusResult = Tool.Execute(StatusArgs);
+	auto StatusResult = StatusTool.Execute(StatusArgs);
 	UNTEST_ASSERT_FALSE(StatusResult.bIsError);
 	UNTEST_ASSERT_PTR(StatusResult.Data.Get());
 	// session_id must be in Data
@@ -106,12 +105,10 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, OpenCloseCycle, UNTEST_TIMEOUTMS(
 
 	// Close
 	TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
-	CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 	CloseArgs->SetStringField(TEXT("session_id"), SessionId);
 
-	auto CloseResult = Tool.Execute(CloseArgs);
+	auto CloseResult = CloseTool.Execute(CloseArgs);
 	UNTEST_ASSERT_FALSE(CloseResult.bIsError);
-	UNTEST_EXPECT_TRUE(CloseResult.GetContentAsString().Contains(TEXT("Session closed")));
 
 	co_return;
 }
@@ -122,14 +119,10 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, OpenCloseCycle, UNTEST_TIMEOUTMS(
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, ListNodeTypes, UNTEST_TIMEOUTMS(10000))
 {
-	ClaireonTool_BehaviorTreeEdit Tool;
-
-	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
-	Params->SetStringField(TEXT("category"), TEXT("composite"));
+	ClaireonBehaviorTreeTool_ListNodeTypes Tool;
 
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("operation"), TEXT("list_node_types"));
-	Args->SetObjectField(TEXT("params"), Params);
+	Args->SetStringField(TEXT("category"), TEXT("composite"));
 
 	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_FALSE(Result.bIsError);
@@ -150,28 +143,25 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, ListNodeTypes, UNTEST_TIMEOUTMS(1
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, SuppressOutput, UNTEST_TIMEOUTMS(15000))
 {
-	ClaireonTool_BehaviorTreeEdit Tool;
+	ClaireonBehaviorTreeTool_Open OpenTool;
+	ClaireonBehaviorTreeTool_Status StatusTool;
+	ClaireonBehaviorTreeTool_Close CloseTool;
 
 	// Open
-	TSharedPtr<FJsonObject> OpenParams = MakeShared<FJsonObject>();
-	OpenParams->SetStringField(TEXT("asset_path"), EditTestBTPath);
-
 	TSharedPtr<FJsonObject> OpenArgs = MakeShared<FJsonObject>();
-	OpenArgs->SetStringField(TEXT("operation"), TEXT("open"));
-	OpenArgs->SetObjectField(TEXT("params"), OpenParams);
+	OpenArgs->SetStringField(TEXT("asset_path"), EditTestBTPath);
 
-	auto OpenResult = Tool.Execute(OpenArgs);
+	auto OpenResult = OpenTool.Execute(OpenArgs);
 	UNTEST_ASSERT_FALSE(OpenResult.bIsError);
 	FString SessionId = ExtractSessionId(OpenResult);
 	UNTEST_ASSERT_TRUE(!SessionId.IsEmpty());
 
 	// Status with suppress_output
 	TSharedPtr<FJsonObject> StatusArgs = MakeShared<FJsonObject>();
-	StatusArgs->SetStringField(TEXT("operation"), TEXT("status"));
 	StatusArgs->SetStringField(TEXT("session_id"), SessionId);
 	StatusArgs->SetBoolField(TEXT("suppress_output"), true);
 
-	auto SuppressedResult = Tool.Execute(StatusArgs);
+	auto SuppressedResult = StatusTool.Execute(StatusArgs);
 	UNTEST_ASSERT_FALSE(SuppressedResult.bIsError);
 	FString SuppressedOutput = SuppressedResult.GetContentAsString();
 	UNTEST_EXPECT_TRUE(SuppressedOutput.StartsWith(TEXT("ok")));
@@ -180,9 +170,8 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, SuppressOutput, UNTEST_TIMEOUTMS(
 
 	// Close
 	TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
-	CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 	CloseArgs->SetStringField(TEXT("session_id"), SessionId);
-	Tool.Execute(CloseArgs);
+	CloseTool.Execute(CloseArgs);
 
 	co_return;
 }
@@ -193,30 +182,26 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, SuppressOutput, UNTEST_TIMEOUTMS(
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, AssetLockConflict, UNTEST_TIMEOUTMS(15000))
 {
-	ClaireonTool_BehaviorTreeEdit Tool;
+	ClaireonBehaviorTreeTool_Open OpenTool;
+	ClaireonBehaviorTreeTool_Close CloseTool;
 
 	// Open first session
-	TSharedPtr<FJsonObject> OpenParams = MakeShared<FJsonObject>();
-	OpenParams->SetStringField(TEXT("asset_path"), EditTestBTPath);
-
 	TSharedPtr<FJsonObject> OpenArgs = MakeShared<FJsonObject>();
-	OpenArgs->SetStringField(TEXT("operation"), TEXT("open"));
-	OpenArgs->SetObjectField(TEXT("params"), OpenParams);
+	OpenArgs->SetStringField(TEXT("asset_path"), EditTestBTPath);
 
-	auto Result1 = Tool.Execute(OpenArgs);
+	auto Result1 = OpenTool.Execute(OpenArgs);
 	UNTEST_ASSERT_FALSE(Result1.bIsError);
 	FString SessionId1 = ExtractSessionId(Result1);
 
 	// Try to open second session on same asset — should fail with lock error
-	auto Result2 = Tool.Execute(OpenArgs);
+	auto Result2 = OpenTool.Execute(OpenArgs);
 	UNTEST_ASSERT_TRUE(Result2.bIsError);
 	UNTEST_EXPECT_TRUE(Result2.GetContentAsString().Contains(TEXT("locked")));
 
 	// Cleanup
 	TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
-	CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 	CloseArgs->SetStringField(TEXT("session_id"), SessionId1);
-	Tool.Execute(CloseArgs);
+	CloseTool.Execute(CloseArgs);
 
 	co_return;
 }
@@ -227,8 +212,8 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, AssetLockConflict, UNTEST_TIMEOUT
 
 UNTEST_UNIT_OPTS(Claireon, BlackboardEdit, SchemaValid, UNTEST_TIMEOUTMS(1000))
 {
-	ClaireonTool_BlackboardEdit Tool;
-	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.blackboard_edit"));
+	ClaireonBlackboardTool_Open Tool;
+	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.blackboard_open"));
 	UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
 
 	auto Schema = Tool.GetInputSchema();
@@ -247,17 +232,15 @@ UNTEST_UNIT_OPTS(Claireon, BlackboardEdit, SchemaValid, UNTEST_TIMEOUTMS(1000))
 
 UNTEST_UNIT_OPTS(Claireon, BlackboardEdit, OpenCloseCycle, UNTEST_TIMEOUTMS(15000))
 {
-	ClaireonTool_BlackboardEdit Tool;
+	ClaireonBlackboardTool_Open OpenTool;
+	ClaireonBlackboardTool_Status StatusTool;
+	ClaireonBlackboardTool_Close CloseTool;
 
 	// Open
-	TSharedPtr<FJsonObject> OpenParams = MakeShared<FJsonObject>();
-	OpenParams->SetStringField(TEXT("asset_path"), EditTestBBPath);
-
 	TSharedPtr<FJsonObject> OpenArgs = MakeShared<FJsonObject>();
-	OpenArgs->SetStringField(TEXT("operation"), TEXT("open"));
-	OpenArgs->SetObjectField(TEXT("params"), OpenParams);
+	OpenArgs->SetStringField(TEXT("asset_path"), EditTestBBPath);
 
-	auto OpenResult = Tool.Execute(OpenArgs);
+	auto OpenResult = OpenTool.Execute(OpenArgs);
 	UNTEST_ASSERT_FALSE(OpenResult.bIsError);
 	UNTEST_ASSERT_PTR(OpenResult.Data.Get());
 
@@ -272,10 +255,9 @@ UNTEST_UNIT_OPTS(Claireon, BlackboardEdit, OpenCloseCycle, UNTEST_TIMEOUTMS(1500
 
 	// Status
 	TSharedPtr<FJsonObject> StatusArgs = MakeShared<FJsonObject>();
-	StatusArgs->SetStringField(TEXT("operation"), TEXT("status"));
 	StatusArgs->SetStringField(TEXT("session_id"), SessionId);
 
-	auto StatusResult = Tool.Execute(StatusArgs);
+	auto StatusResult = StatusTool.Execute(StatusArgs);
 	UNTEST_ASSERT_FALSE(StatusResult.bIsError);
 	UNTEST_ASSERT_PTR(StatusResult.Data.Get());
 	// Blackboard status result should contain asset_path referencing the blackboard
@@ -285,10 +267,9 @@ UNTEST_UNIT_OPTS(Claireon, BlackboardEdit, OpenCloseCycle, UNTEST_TIMEOUTMS(1500
 
 	// Close
 	TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
-	CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 	CloseArgs->SetStringField(TEXT("session_id"), SessionId);
 
-	auto CloseResult = Tool.Execute(CloseArgs);
+	auto CloseResult = CloseTool.Execute(CloseArgs);
 	UNTEST_ASSERT_FALSE(CloseResult.bIsError);
 
 	co_return;
@@ -300,8 +281,8 @@ UNTEST_UNIT_OPTS(Claireon, BlackboardEdit, OpenCloseCycle, UNTEST_TIMEOUTMS(1500
 
 UNTEST_UNIT_OPTS(Claireon, EQSEdit, SchemaValid, UNTEST_TIMEOUTMS(1000))
 {
-	ClaireonTool_EQSEdit Tool;
-	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.eqs_edit"));
+	ClaireonEQSTool_Open Tool;
+	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.eqs_open"));
 	UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
 
 	auto Schema = Tool.GetInputSchema();
@@ -320,17 +301,15 @@ UNTEST_UNIT_OPTS(Claireon, EQSEdit, SchemaValid, UNTEST_TIMEOUTMS(1000))
 
 UNTEST_UNIT_OPTS(Claireon, EQSEdit, OpenCloseCycle, UNTEST_TIMEOUTMS(15000))
 {
-	ClaireonTool_EQSEdit Tool;
+	ClaireonEQSTool_Open OpenTool;
+	ClaireonEQSTool_Status StatusTool;
+	ClaireonEQSTool_Close CloseTool;
 
 	// Open
-	TSharedPtr<FJsonObject> OpenParams = MakeShared<FJsonObject>();
-	OpenParams->SetStringField(TEXT("asset_path"), EditTestEQSPath);
-
 	TSharedPtr<FJsonObject> OpenArgs = MakeShared<FJsonObject>();
-	OpenArgs->SetStringField(TEXT("operation"), TEXT("open"));
-	OpenArgs->SetObjectField(TEXT("params"), OpenParams);
+	OpenArgs->SetStringField(TEXT("asset_path"), EditTestEQSPath);
 
-	auto OpenResult = Tool.Execute(OpenArgs);
+	auto OpenResult = OpenTool.Execute(OpenArgs);
 	UNTEST_ASSERT_FALSE(OpenResult.bIsError);
 	UNTEST_ASSERT_PTR(OpenResult.Data.Get());
 
@@ -345,10 +324,9 @@ UNTEST_UNIT_OPTS(Claireon, EQSEdit, OpenCloseCycle, UNTEST_TIMEOUTMS(15000))
 
 	// Status
 	TSharedPtr<FJsonObject> StatusArgs = MakeShared<FJsonObject>();
-	StatusArgs->SetStringField(TEXT("operation"), TEXT("status"));
 	StatusArgs->SetStringField(TEXT("session_id"), SessionId);
 
-	auto StatusResult = Tool.Execute(StatusArgs);
+	auto StatusResult = StatusTool.Execute(StatusArgs);
 	UNTEST_ASSERT_FALSE(StatusResult.bIsError);
 	UNTEST_ASSERT_PTR(StatusResult.Data.Get());
 	// EQS status result should contain asset_path referencing the EQS query
@@ -358,10 +336,9 @@ UNTEST_UNIT_OPTS(Claireon, EQSEdit, OpenCloseCycle, UNTEST_TIMEOUTMS(15000))
 
 	// Close
 	TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
-	CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 	CloseArgs->SetStringField(TEXT("session_id"), SessionId);
 
-	auto CloseResult = Tool.Execute(CloseArgs);
+	auto CloseResult = CloseTool.Execute(CloseArgs);
 	UNTEST_ASSERT_FALSE(CloseResult.bIsError);
 
 	co_return;

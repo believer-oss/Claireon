@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 #include "ClaireonAnthropicClient.h"
+#include "ClaireonBridge.h"
 #include "ClaireonSettings.h"
 #include "ClaireonServer.h"
 #include "ClaireonModule.h"
 #include "ClaireonREPLLogger.h"
 #include "ClaireonLog.h"
+#include "ClaireonOutputGate.h"
 #include "Tools/IClaireonTool.h"
 #include "ClaireonXmlFormatter.h"
 #include "HttpModule.h"
@@ -47,6 +49,20 @@ void FClaireonAnthropicClient::SendMessage(const FString& UserText,
 	{
 		UE_LOG(LogClaireon, Warning, TEXT("[REPLClient] SendMessage called while request in flight"));
 		return;
+	}
+
+	// Connect-time stale-spill sweep (once per client lifetime, game-thread sync).
+	// See CLAIREON_DISK_RESULTS/cleanup-retention.md.  Benign double-fire on hot-reload.
+	if (!bHasSwept)
+	{
+		bHasSwept = true;
+		if (const UClaireonSettings* Settings = UClaireonSettings::Get())
+		{
+			if (!Settings->bKeepResultSpills)
+			{
+				FClaireonOutputGate::SweepStaleSpills(Settings->ResultSpillRetentionDays);
+			}
+		}
 	}
 
 	// Log user message
@@ -729,6 +745,11 @@ bool FClaireonAnthropicClient::ExecuteToolUses(
 		IClaireonTool::FToolResult ToolResult;
 		bool bFoundTool = false;
 
+		// Propagate the active conversation id to the bridge so downstream spill paths
+		// (generic gate + claireon.python_execute internal gate) bucket spill files by
+		// conv_NNN rather than "default".
+		FClaireonBridge::SetCurrentConversationId(CurrentConversationId);
+
 		FClaireonServer* CurrentServer = GetCurrentServer();
 		if (CurrentServer)
 		{
@@ -738,6 +759,17 @@ bool FClaireonAnthropicClient::ExecuteToolUses(
 			{
 				bFoundTool = true;
 				ToolResult = (*FoundTool)->Execute(ToolInput);
+
+				// Route generic-tool results through the disk-spill gate (per D6).
+				// claireon.python_execute routes its own stdout/uelog streams internally.
+				if (!ToolResult.bIsError && ToolName != TEXT("claireon.python_execute"))
+				{
+					ToolResult = FClaireonOutputGate::RouteResult(
+						MoveTemp(ToolResult),
+						ToolName,
+						CurrentConversationId,
+						EClaireonSpillStreamSet::GenericData);
+				}
 			}
 		}
 
@@ -761,13 +793,13 @@ bool FClaireonAnthropicClient::ExecuteToolUses(
 			ResultText = ToolResult.Summary;
 			if (ToolResult.Data.IsValid())
 			{
-				// Skip serializing Data for indexed results — the summary already
-				// contains the index_id and instructions. Dumping the envelope
-				// (with excerpts containing escaped previews) wastes tokens.
-				bool bIsIndexed = false;
-				ToolResult.Data->TryGetBoolField(TEXT("__mcp_indexed__"), bIsIndexed);
+				// Skip serializing Data for disk-spilled results — the summary and
+				// per-stream manifest already carry the path + preview.  Dumping the
+				// envelope here would include the manifest a second time.
+				bool bIsSpilled = false;
+				ToolResult.Data->TryGetBoolField(TEXT("__mcp_spilled__"), bIsSpilled);
 
-				if (!bIsIndexed)
+				if (!bIsSpilled)
 				{
 					FString DataJson;
 					auto Writer = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&DataJson);

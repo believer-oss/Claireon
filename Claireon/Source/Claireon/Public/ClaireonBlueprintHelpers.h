@@ -54,6 +54,21 @@ private:
 };
 
 /**
+ * Identifies a single cursor history entry: the graph name the cursor was on
+ * and the node GUID within that graph.
+ */
+struct FGraphCursorHistoryEntry
+{
+	FString GraphName;
+	FGuid   NodeGuid;
+
+	bool operator==(const FGraphCursorHistoryEntry& Other) const
+	{
+		return GraphName == Other.GraphName && NodeGuid == Other.NodeGuid;
+	}
+};
+
+/**
  * Represents the AI's current focus point in a Blueprint graph during editing.
  */
 struct FBlueprintEditCursor
@@ -73,8 +88,8 @@ struct FBlueprintEditCursor
 	/** Current viewport center position (for node placement) */
 	FVector2D ViewportCenter;
 
-	/** History of visited nodes for cursor_back navigation */
-	TArray<FGuid> CursorHistory;
+	/** History of visited (graph, node) pairs for cursor_back navigation */
+	TArray<FGraphCursorHistoryEntry> CursorHistory;
 
 	/** Maximum size of cursor history */
 	static constexpr int32 MaxHistorySize = 50;
@@ -82,25 +97,33 @@ struct FBlueprintEditCursor
 	/** Status message from the last operation */
 	FString LastOperationStatus;
 
-	/** Push current node to history before moving cursor */
-	void PushHistory()
+	/**
+	 * Push the currently focused node to history.
+	 *
+	 * @param InGraphName Graph name the focused node belongs to. Callers
+	 *        normally pass Data->Cursor.GraphName, but handlers that mutate
+	 *        Cursor.GraphName before pushing (e.g. Operation_AddFunctionOverride
+	 *        function path) must capture the previous graph name and pass it
+	 *        here so the history entry references the correct graph.
+	 */
+	void PushHistory(const FString& InGraphName)
 	{
-		if (FocusedNodeGuid.IsValid())
+		if (FocusedNodeGuid.IsValid() && !InGraphName.IsEmpty())
 		{
 			if (CursorHistory.Num() >= MaxHistorySize)
 			{
 				CursorHistory.RemoveAt(0);
 			}
-			CursorHistory.Add(FocusedNodeGuid);
+			CursorHistory.Add(FGraphCursorHistoryEntry{ InGraphName, FocusedNodeGuid });
 		}
 	}
 
-	/** Pop previous node from history (for cursor_back) */
-	bool PopHistory(FGuid& OutGuid)
+	/** Pop the most recent history entry. Returns false if history is empty. */
+	bool PopHistory(FGraphCursorHistoryEntry& OutEntry)
 	{
 		if (CursorHistory.Num() > 0)
 		{
-			OutGuid = CursorHistory.Pop();
+			OutEntry = CursorHistory.Pop();
 			return true;
 		}
 		return false;
@@ -150,6 +173,13 @@ struct FBlueprintEditToolData
 	// between get and edit calls.  Surfaced in BuildStateResponse so the MCP client
 	// can update its references.
 	TMap<FGuid, FGuid> GuidCorrections;
+
+	// Consecutive calls that resolved the session via asset_path (auto-open) rather
+	// than an explicit session_id. Resets to 0 whenever the caller passes session_id.
+	// BuildStateResponse emits a Data.session_hint nudge when this passes 5 (first
+	// at call 6, then every 5 past that: 11, 16, ...) to steer agents toward
+	// explicit open/close discipline.
+	int32 ConsecutiveAssetPathCalls = 0;
 
 	/** Check if the session is still valid (Blueprint and Graph are still loaded) */
 	bool IsValid() const
@@ -248,10 +278,61 @@ namespace ClaireonBlueprintHelpers
 	TArray<UEdGraphPin*> FindCompatiblePins(UEdGraphNode* Node, UEdGraphPin* Pin);
 
 	/**
-	 * Parse a variable type string (e.g., "float", "Array<Actor>") into an FEdGraphPinType.
+	 * Rich result carrier for variable-type parsing. Replaces the pre-existing
+	 * silent-fallback behavior of ParseVariableType so callers can surface
+	 * structured errors instead of quietly coercing unknown inputs to PC_String.
+	 */
+	struct FParseVariableTypeResult
+	{
+		/** True only when a concrete PinType was resolved from the input. */
+		bool bSucceeded = false;
+
+		/** The parsed pin type. Only meaningful when bSucceeded == true. */
+		FEdGraphPinType PinType;
+
+		/** Human-readable failure detail. Empty on success. */
+		FString Error;
+
+		/** Fuzzy-resolution note for class/struct/enum lookups. May be set on success. */
+		FString ResolutionNote;
+	};
+
+	/**
+	 * Parse a variable type string (e.g., "float", "Array<Actor>", "Map<FString,int>") into a
+	 * structured result. On unknown input, returns bSucceeded=false with a clear error -- no
+	 * silent PC_String fallback.
+	 *
+	 * Supported short-form strings (case-insensitive for names, keywords are case-sensitive
+	 * where noted):
+	 *  - float, double, int, int32, int64, byte, bool, string, name, text
+	 *  - Array<T>, Set<T>, Map<K,V>  (Map parser is comma/bracket-depth aware)
+	 *  - softclass:/Game/.../X.X_C, SoftClass<Class>
+	 *  - softobject:/Game/.../X.X,  SoftObject<Class>
+	 *  - instancedstruct, gameplaytag, gameplaytagcontainer
+	 *  - Class / Struct / Enum names resolved via ClaireonNameResolver
+	 *
+	 * Types that require extra data (delegate family) must go through ParseVariableTypeSpec.
+	 */
+	FParseVariableTypeResult ParseVariableTypeChecked(const FString& TypeString);
+
+	/**
+	 * Parse a variable type from a long-form JSON spec. Used by add_variable to carry
+	 * additional fields the short-form string cannot express (e.g. delegate signature
+	 * function path). Schema:
+	 *   {
+	 *     "base": "<type name>",                 (required)
+	 *     "signature_function": "/Script/.../X__DelegateSignature", (required for delegate family)
+	 *     "subtype": "/Script/.../X"             (optional; subcategory hint for softclass/softobject/instancedstruct)
+	 *   }
+	 */
+	FParseVariableTypeResult ParseVariableTypeSpec(const TSharedPtr<FJsonObject>& Spec);
+
+	/**
+	 * Legacy entry point retained as a lenient wrapper. On failure, logs a warning and
+	 * returns a default-constructed FEdGraphPinType. Prefer ParseVariableTypeChecked.
 	 *
 	 * @param TypeString The type string to parse
-	 * @return The parsed pin type
+	 * @return The parsed pin type (default-constructed on failure)
 	 */
 	FEdGraphPinType ParseVariableType(const FString& TypeString);
 
@@ -298,4 +379,23 @@ namespace ClaireonBlueprintHelpers
 
 	/** Find nodes by class name and/or title. Used for stale GUID recovery. */
 	TArray<UEdGraphNode*> FindNodesByClassAndTitle(UEdGraph* Graph, const FString& ClassName, const FString& Title);
+
+	/**
+	 * Returns true if the given asset class short-name is in the Blueprint family
+	 * allowlist used by D1 Branch 1 class validation.
+	 * Allowlist = { "Blueprint", "AnimBlueprint", "WidgetBlueprint" }.
+	 * This is a pure string check; it does not load the asset or inspect inheritance.
+	 * For IsChildOf<UBlueprint>-style checks (D1 Branch 2), load the asset and use
+	 * UClass::IsChildOf(UBlueprint::StaticClass()) directly.
+	 *
+	 * @param ClassName The AssetData.AssetClassPath.GetAssetName().ToString() value.
+	 * @return True if ClassName is one of the three allowlist values.
+	 */
+	bool IsBlueprintAssetClass(const FString& ClassName);
+
+	// Defined in ClaireonBlueprintGraphEditToolBase_Internal.cpp (file-local alias table).
+	// Returns the high-level add_node alias for a given node UClass (e.g. "CallFunction"
+	// for UK2Node_CallFunction, including subclasses via IsChildOf). Returns empty FString
+	// if no alias is registered.
+	FString GetNodeTypeAliasForClass(const UClass* NodeClass);
 } // namespace ClaireonBlueprintHelpers

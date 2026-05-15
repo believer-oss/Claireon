@@ -116,6 +116,15 @@ public:
 	 */
 	virtual FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) = 0;
 
+	/** Optional example usage string shown in deep-inspect / tools_search output. Default: empty. */
+	virtual FString GetExampleUsage() const { return FString(); }
+
+	/** Optional per-parameter tooltip map (parameter name -> tooltip string). Default: null. */
+	virtual TSharedPtr<FJsonObject> GetParameterTooltips() const { return nullptr; }
+
+	/** Optional search-keyword list used to boost fuzzy-search matches for this tool. Default: empty. */
+	virtual TArray<FString> GetSearchKeywords() const { return {}; }
+
 	/** Helper to create a success result with structured data and summary */
 	static FToolResult MakeSuccessResult(TSharedPtr<FJsonObject> InData, const FString& InSummary)
 	{

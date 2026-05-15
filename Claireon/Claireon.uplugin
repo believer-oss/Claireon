@@ -29,13 +29,5 @@
 			"Type": "Editor",
 			"LoadingPhase": "Default"
 		}
-	],
-	"PythonRequirements": [
-		{
-			"Platform": "Win64",
-			"Requirements": [
-				"model2vec==0.7.0 --hash=sha256:f7a6ebf1b9ca384ba1158c4ecc9a2d450407f63526c0a26e268711071e280c27"
-			]
-		}
 	]
 }

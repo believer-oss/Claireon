@@ -1,11 +1,19 @@
-"""Fuzzy tool catalog backed by the IndexEngine (FTS5 + semantic search)."""
+"""Fuzzy tool catalog backed by the C++ nearest-string matcher (#0000).
+
+This harness is a thin shim around two C++ bindings:
+    claireon._tool_catalog_build(entries_json: str) -> None
+    claireon._tool_catalog_nearest(query: str, max_results: int) -> str (JSON)
+
+It keeps the _ABBREVIATIONS synonym table plus the _enrich_text / _expand_query
+helpers so abbreviated queries (``bp``, ``dt``, ``gas``) still match.  The
+consumer surface (``rebuild`` and ``search``) is unchanged -- see
+ClaireonTool_SearchTools.cpp for the call sites.
+"""
 # Copyright (c) 2026 The Claireon Contributors
 # SPDX-License-Identifier: MIT
 
 import json
 import logging
-from dataclasses import dataclass
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +97,23 @@ _ABBREVIATIONS = {
     "run":         "run execute start launch",
     "stop":        "stop end close terminate kill",
     "screenshot":  "screenshot capture image snap viewport",
+    # Decomposed bundled-tool synonyms (decompose-bundled-tools work item)
+    "undo":        "undo transaction revert rollback",
+    "redo":        "redo transaction reapply",
+    "foliage":     "foliage paint vegetation instanced",
+    "landscape":   "landscape terrain heightmap sculpt paint",
+    "spline":      "spline path curve control point",
+    "pcg":         "procedural content generation graph",
+    "niagara":     "niagara vfx particles effect emitter",
+    "statetree":   "state tree statetree hierarchical",
+    "material":    "material shader expression parameter",
+    "widgetbp":    "widget blueprint umg widgetbp user interface",
+    "apply_spec":  "apply spec declarative batch idempotent",
+    # Phase 2 decomposition: claireon.sequence_edit -> 20 claireon.level_sequence_* tools.
+    # 'sequence' and 'level_sequence' both expand to the same keyword bag so either
+    # spelling surfaces the per-operation tools through _enrich_text / _expand_query.
+    "sequence":       "sequence level_sequence sequencer cinematic keyframe track",
+    "level_sequence": "sequence level_sequence sequencer cinematic keyframe track",
 }
 
 # Build reverse map: canonical term -> set of abbreviations that expand to it
@@ -98,29 +123,20 @@ for _abbr, _expansions in _ABBREVIATIONS.items():
         _REVERSE_MAP.setdefault(_term, set()).add(_abbr)
 
 
-@dataclass
-class _ToolChunk:
-    """Lightweight chunk for the tool catalog (matches IndexEngine expectations)."""
-    text: str
-    chunk_type: str = "tool"
-    source_tool: str = "tool_catalog"
-    metadata: Optional[dict] = None
-
-
 # ---------------------------------------------------------------------------
 # Catalog state
 # ---------------------------------------------------------------------------
 
-_CATALOG_INDEX_ID = "__tool_catalog__"
 _catalog_version: int = 0  # bumped on each rebuild
+_catalog_tool_count: int = 0
 
 
 def _enrich_text(name: str, description: str, category: str) -> str:
     """Build a rich searchable document for a single tool.
 
-    Includes the tool name (with dots replaced by spaces), description,
-    category, and all matching synonym expansions so that abbreviated
-    queries like "bp" or "dt" can match the right tools.
+    Includes the tool name (with dots/underscores replaced by spaces),
+    description, category, and all matching synonym expansions so that
+    abbreviated queries like ``bp`` or ``dt`` can match the right tools.
     """
     # Tokenize the name: "edit_blueprint_graph" -> "edit blueprint graph"
     name_tokens = name.replace(".", " ").replace("_", " ")
@@ -131,7 +147,7 @@ def _enrich_text(name: str, description: str, category: str) -> str:
     all_text_lower = " ".join(parts).lower()
 
     # Add abbreviation synonyms: if tool text contains "blueprint",
-    # also add "bp" so searching "bp" finds it via FTS5
+    # also add "bp" so searching "bp" finds it.
     added = set()
     for term, abbrevs in _REVERSE_MAP.items():
         if term in all_text_lower:
@@ -149,129 +165,136 @@ def _enrich_text(name: str, description: str, category: str) -> str:
     return " ".join(parts)
 
 
-def rebuild(tools_json: str) -> dict:
-    """Rebuild the tool catalog index from a JSON array of tool metadata.
-
-    Expected format: [{"name": "...", "description": "...", "category": "..."}, ...]
-
-    Returns dict with index creation stats.
-    """
-    global _catalog_version
-
-    from mcp_index_engine import get_engine
-
-    engine = get_engine()
-
-    # Clear the old catalog index
-    engine.clear(index_id=_CATALOG_INDEX_ID)
-
-    tools = json.loads(tools_json)
-
-    chunks = []
-    for tool in tools:
-        name = tool.get("name", "")
-        description = tool.get("description", "")
-        category = tool.get("category", "uncategorized")
-
-        enriched = _enrich_text(name, description, category)
-        chunks.append(_ToolChunk(
-            text=enriched,
-            chunk_type="tool",
-            source_tool="tool_catalog",
-            metadata={"tool_name": name, "category": category},
-        ))
-
-    result = engine.create_index(_CATALOG_INDEX_ID, chunks)
-    _catalog_version += 1
-    result["catalog_version"] = _catalog_version
-    result["tools_indexed"] = len(tools)
-
-    logger.info(
-        "Tool catalog rebuilt: %d tools indexed (v%d), %d chunks inserted, %d reused.",
-        len(tools), _catalog_version, result.get("chunks_inserted", 0), result.get("chunks_reused", 0),
-    )
-
-    return result
-
-
 def _expand_query(query: str) -> str:
     """Expand query tokens with synonym/abbreviation mappings.
 
-    "bp asset load" -> "bp OR blueprint asset load OR open OR read OR import"
+    The expanded string is whitespace-joined because the C++ matcher does
+    its own tokenisation on whitespace + punctuation; it has no FTS5-style
+    boolean grammar to honour.  Example::
 
-    Uses FTS5 OR syntax so any expanded term can match.
+        "bp asset load" -> "bp blueprint asset content resource load open read import"
     """
     tokens = query.lower().split()
     expanded_parts = []
 
     for token in tokens:
+        expanded_parts.append(token)
         if token in _ABBREVIATIONS:
-            # Add both the abbreviation and its expansions with OR
-            expansions = _ABBREVIATIONS[token].split()
-            or_group = [token] + expansions
-            # FTS5 OR groups: (term1 OR term2 OR term3)
-            expanded_parts.append("(" + " OR ".join(or_group) + ")")
-        else:
-            # Check if this token has reverse mappings (abbreviations)
-            abbrevs = _REVERSE_MAP.get(token, set())
-            if abbrevs:
-                or_group = [token] + list(abbrevs)
-                expanded_parts.append("(" + " OR ".join(or_group) + ")")
-            else:
-                expanded_parts.append(token)
+            expanded_parts.extend(_ABBREVIATIONS[token].split())
+        abbrevs = _REVERSE_MAP.get(token)
+        if abbrevs:
+            expanded_parts.extend(abbrevs)
 
-    return " AND ".join(expanded_parts)
+    return " ".join(expanded_parts)
+
+
+def _get_binding(name: str):
+    """Return the named C++ PyCFunction binding (registered onto the ``unreal`` module).
+
+    FClaireonBridge::RegisterBridgeFunctions installs ``_tool_catalog_build``
+    and ``_tool_catalog_nearest`` directly on the ``unreal`` module dict.
+    The ``claireon._tool_catalog_*`` aliases in the REPL prefix are a
+    convenience for user code; this harness goes straight to the source
+    so it works from any Python execution frame (RebuildCatalog /
+    FuzzySearch both run as one-shot PythonCommand blocks with no
+    ``claireon`` global).
+    """
+    try:
+        import unreal  # type: ignore
+    except ImportError:
+        return None
+    return getattr(unreal, name, None)
+
+
+def rebuild(tools_json: str) -> dict:
+    """Rebuild the tool catalog from a JSON array of tool metadata.
+
+    Expected format: ``[{"name": "...", "description": "...", "category": "..."}, ...]``.
+
+    Returns a dict with index creation stats.
+    """
+    global _catalog_version, _catalog_tool_count
+
+    build_fn = _get_binding("_tool_catalog_build")
+    if build_fn is None:
+        # Binding not registered; surface a non-fatal result so the C++
+        # caller sees ``tools_indexed`` = 0 and falls back to substring search.
+        logger.warning("Tool catalog rebuild: unreal._tool_catalog_build binding not available")
+        return {"tools_indexed": 0, "catalog_version": _catalog_version}
+
+    tools = json.loads(tools_json)
+
+    entries = []
+    for tool in tools:
+        name = tool.get("name", "")
+        description = tool.get("description", "")
+        category = tool.get("category", "uncategorized")
+        entries.append({
+            "name": name,
+            "description": description,
+            "category": category,
+            "enriched_text": _enrich_text(name, description, category),
+        })
+
+    build_fn(json.dumps(entries))
+
+    _catalog_version += 1
+    _catalog_tool_count = len(tools)
+
+    result = {
+        "tools_indexed": len(tools),
+        "catalog_version": _catalog_version,
+    }
+
+    logger.info(
+        "Tool catalog rebuilt: %d tools indexed (v%d).",
+        len(tools), _catalog_version,
+    )
+
+    return result
 
 
 def search(query: str, max_results: int = 20, method: str = "hybrid") -> list:
     """Search the tool catalog with fuzzy matching.
 
-    Returns a list of dicts: [{"tool_name": "...", "category": "...", "score": ...}, ...]
+    Returns a list of dicts: ``[{"tool_name": "...", "category": "...", "score": ...}, ...]``
     sorted by relevance (best first).
+
+    The ``method`` parameter is accepted for backward compatibility with the
+    old hybrid matcher but is ignored: the new C++ matcher always runs
+    the same BM25-lite nearest-string algorithm.
     """
-    from mcp_index_engine import get_engine
+    del method  # no longer a knob -- single-algorithm matcher
 
-    engine = get_engine()
-
-    # Check if catalog exists
-    info = engine.get_index_info(_CATALOG_INDEX_ID)
-    if "error" in info:
+    nearest_fn = _get_binding("_tool_catalog_nearest")
+    if nearest_fn is None:
         return []
 
-    # For keyword/hybrid search, expand the query with synonyms
+    if _catalog_tool_count == 0:
+        # No rebuild has happened yet; matcher would return empty anyway.
+        return []
+
     expanded = _expand_query(query)
+    raw = nearest_fn(expanded, int(max_results))
 
-    # Use the IndexEngine's search with the expanded query
-    # For semantic search, pass the original query (embeddings work better
-    # with natural language than with FTS5 syntax)
-    if method == "semantic":
-        hits = engine.search(_CATALOG_INDEX_ID, query, max_results=max_results, method="semantic")
-    elif method == "keyword":
-        hits = engine.search(_CATALOG_INDEX_ID, expanded, max_results=max_results, method="keyword")
-    else:
-        # Hybrid: run keyword with expanded query, semantic with original
-        kw_hits = engine._keyword_search(_CATALOG_INDEX_ID, expanded, max_results)
-        sem_hits = engine._semantic_search(_CATALOG_INDEX_ID, query, max_results)
+    try:
+        hits = json.loads(raw) if raw else []
+    except (TypeError, ValueError):
+        hits = []
 
-        if sem_hits:
-            from mcp_index_engine import _rrf_fuse
-            hits = _rrf_fuse(kw_hits, sem_hits)[:max_results]
-        else:
-            hits = kw_hits
-
-    # Extract tool metadata from results
     results = []
     seen = set()
     for hit in hits:
-        meta = hit.get("metadata")
-        if meta and isinstance(meta, dict):
-            tool_name = meta.get("tool_name", "")
-            if tool_name and tool_name not in seen:
-                seen.add(tool_name)
-                results.append({
-                    "tool_name": tool_name,
-                    "category": meta.get("category", ""),
-                    "score": hit.get("rrf_score", hit.get("score", 0)),
-                })
+        if not isinstance(hit, dict):
+            continue
+        tool_name = hit.get("name", "")
+        if not tool_name or tool_name in seen:
+            continue
+        seen.add(tool_name)
+        results.append({
+            "tool_name": tool_name,
+            "category": hit.get("category", ""),
+            "score": hit.get("score", 0.0),
+        })
 
     return results

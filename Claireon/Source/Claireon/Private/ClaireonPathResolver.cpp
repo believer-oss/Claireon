@@ -92,6 +92,7 @@ FResolveResult Resolve(const FString& InPath)
 	{
 		Result.bSuccess = true;
 		Result.ResolvedPath.Path = Path;
+		Result.ResolvedPath.PackagePath = Path;
 		Result.ResolvedPath.Kind = EPathKind::NativeClassPath;
 		Result.ResolvedPath.bIsClassReference = false;
 		AppendTrace(Result.ResolvedPath.NormalizationTrace, TEXT("Native class path (/Script/)"));
@@ -314,6 +315,23 @@ FResolveResult Resolve(const FString& InPath)
 		Result.Error = FString::Printf(
 			TEXT("Internal error: resolved path does not start with '/': %s"), *Path);
 		return Result;
+	}
+
+	// -----------------------------------------------------------------
+	// Step 12.5: Object-name append for PackagePath kind
+	// -----------------------------------------------------------------
+	// Capture the package-prefix form before any append so folder-path callers
+	// have access to it via ResolvedPath.PackagePath.
+	Result.ResolvedPath.PackagePath = Path;
+
+	{
+		const int32 LastSlash = Path.Find(TEXT("/"), ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+		const FString FinalSegment = (LastSlash != INDEX_NONE) ? Path.Mid(LastSlash + 1) : Path;
+		if (!FinalSegment.IsEmpty() && !FinalSegment.Contains(TEXT(".")))
+		{
+			Path = Path + TEXT(".") + FinalSegment;
+			AppendTrace(Result.ResolvedPath.NormalizationTrace, TEXT("Appended object-name suffix"));
+		}
 	}
 
 	// -----------------------------------------------------------------

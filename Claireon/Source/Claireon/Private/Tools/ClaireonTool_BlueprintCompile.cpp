@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_BlueprintCompile.h"
+#include "ClaireonBlueprintHelpers.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonLog.h"
 
@@ -152,32 +153,25 @@ static TSharedPtr<FJsonObject> CompileOneBlueprint(
 	return ResultObj;
 }
 
-static bool IsBlueprintAssetClass(const FString& ClassName)
-{
-	return ClassName == TEXT("Blueprint")
-		|| ClassName == TEXT("AnimBlueprint")
-		|| ClassName == TEXT("WidgetBlueprint");
-}
-
 // Resolve a single path entry: if it's a loadable Blueprint, return it directly;
 // if it's a folder, expand to all Blueprints under it.
-static void ResolvePath(const FString& Path, IAssetRegistry& AssetRegistry, TArray<FString>& OutBlueprintPaths)
+static void ResolvePath(const FString& ObjectPath, const FString& PackagePath, IAssetRegistry& AssetRegistry, TArray<FString>& OutBlueprintPaths)
 {
-	// First, try to load as a direct Blueprint asset
-	FAssetData AssetData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(Path));
-	if (AssetData.IsValid() && IsBlueprintAssetClass(AssetData.AssetClassPath.GetAssetName().ToString()))
+	// First, try to load as a direct Blueprint asset (uses object-path form).
+	FAssetData AssetData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(ObjectPath));
+	if (AssetData.IsValid() && ClaireonBlueprintHelpers::IsBlueprintAssetClass(AssetData.AssetClassPath.GetAssetName().ToString()))
 	{
 		OutBlueprintPaths.Add(AssetData.GetObjectPathString());
 		return;
 	}
 
-	// Not a direct asset — treat as a folder and scan recursively
+	// Not a direct asset — treat as a folder and scan recursively (uses package-prefix form).
 	TArray<FAssetData> AssetList;
-	AssetRegistry.GetAssetsByPath(FName(*Path), AssetList, /*bRecursive=*/true);
+	AssetRegistry.GetAssetsByPath(FName(*PackagePath), AssetList, /*bRecursive=*/true);
 
 	for (const FAssetData& Asset : AssetList)
 	{
-		if (IsBlueprintAssetClass(Asset.AssetClassPath.GetAssetName().ToString()))
+		if (ClaireonBlueprintHelpers::IsBlueprintAssetClass(Asset.AssetClassPath.GetAssetName().ToString()))
 		{
 			OutBlueprintPaths.Add(Asset.GetObjectPathString());
 		}
@@ -205,7 +199,11 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintCompile::Execute(const TSharedP
 	}
 
 	// Collect input paths (default: ["/Game"])
-	TArray<FString> InputPaths;
+	// Parallel arrays: InputObjectPaths[i] is the object-path canonical form
+	// (appended .AssetName when applicable), InputPackagePaths[i] is the
+	// package-prefix form for folder-scan use.
+	TArray<FString> InputObjectPaths;
+	TArray<FString> InputPackagePaths;
 	if (Arguments->HasField(TEXT("paths")))
 	{
 		const TArray<TSharedPtr<FJsonValue>>& PathsArray = Arguments->GetArrayField(TEXT("paths"));
@@ -214,7 +212,8 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintCompile::Execute(const TSharedP
 			auto ResolveResult = ClaireonPathResolver::Resolve(Val->AsString());
 			if (ResolveResult.bSuccess)
 			{
-				InputPaths.Add(ResolveResult.ResolvedPath.Path);
+				InputObjectPaths.Add(ResolveResult.ResolvedPath.Path);
+				InputPackagePaths.Add(ResolveResult.ResolvedPath.PackagePath);
 			}
 			else
 			{
@@ -222,21 +221,22 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintCompile::Execute(const TSharedP
 			}
 		}
 	}
-	if (InputPaths.Num() == 0)
+	if (InputObjectPaths.Num() == 0)
 	{
-		InputPaths.Add(TEXT("/Game"));
+		InputObjectPaths.Add(TEXT("/Game"));
+		InputPackagePaths.Add(TEXT("/Game"));
 	}
 
 	// Resolve each input path to concrete Blueprint asset paths
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
 	TArray<FString> BlueprintPaths;
-	for (const FString& Path : InputPaths)
+	for (int32 Idx = 0; Idx < InputObjectPaths.Num(); ++Idx)
 	{
-		ResolvePath(Path, AssetRegistry, BlueprintPaths);
+		ResolvePath(InputObjectPaths[Idx], InputPackagePaths[Idx], AssetRegistry, BlueprintPaths);
 	}
 
-	FString SourceDescription = FString::Join(InputPaths, TEXT(", "));
+	FString SourceDescription = FString::Join(InputObjectPaths, TEXT(", "));
 
 	int32 Total = BlueprintPaths.Num();
 

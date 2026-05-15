@@ -4,8 +4,10 @@
 #include "ClaireonBridge.h"
 #include "ClaireonLog.h"
 #include "ClaireonServer.h"
+#include "ClaireonOutputGate.h"
 #include "ClaireonSafeExec.h"
 #include "Tools/IClaireonTool.h"
+#include "Tools/ClaireonTool_ExecutePython.h"
 
 // CPython C API headers — provided by the Python3 module dependency.
 // Must be included after UE headers to avoid macro conflicts.
@@ -31,6 +33,7 @@ TAtomic<int32> FClaireonBridge::GToolCallCount(0);
 TArray<FClaireonDeferredAction> FClaireonBridge::GDeferredActions;
 FDelegateHandle FClaireonBridge::ToolsChangedHandle;
 std::atomic<bool> FClaireonBridge::bClaireonModuleStale{false};
+FString FClaireonBridge::GCurrentConversationId = TEXT("default");
 
 // PyMethodDef structs (static storage — CPython holds pointers to these)
 static PyMethodDef MCPCallDef = {
@@ -85,21 +88,26 @@ void FClaireonBridge::RegisterBridgeFunctions()
 	// PyDict_SetItemString increments refcount, so release our references
 	Py_DECREF(CallFunc);
 
-	// Add our Python modules directory to sys.path and pre-warm imports
-	// to avoid blocking the game thread during first execute call
+	// Register the nearest-string tool-catalog bindings (_tool_catalog_build /
+	// _tool_catalog_nearest) into the same 'unreal' module dict.  Per
+	// CLAIREON_DISK_RESULTS/tool-catalog-rewrite.md these replace the old
+	// mcp_index_engine hybrid matcher with a dependency-free C++ BM25-lite.
+	ClaireonTool_ExecutePython::RegisterToolCatalogBindings(UnrealDict);
+
+	// Add our Python modules directory to sys.path.  The prewarm imports for the old
+	// index-engine / output-gate / chunkers Python modules were removed in #0000 once
+	// the output gate and tool-catalog matcher moved to C++; mcp_tool_catalog.py is
+	// imported lazily from ClaireonTool_SearchTools.cpp and does not need prewarming.
 	{
 		const FString PluginPythonDir = FPaths::ConvertRelativePathToFull(
 			FPaths::Combine(FPaths::ProjectPluginsDir(), TEXT("Claireon"), TEXT("Content"), TEXT("Python")));
 		if (FPaths::DirectoryExists(PluginPythonDir))
 		{
-			const FString WarmupCode = FString::Printf(
-				TEXT("import sys; p = r'%s'; p not in sys.path and sys.path.insert(0, p)\n"
-					 "import mcp_output_gate\n"
-					 "import mcp_index_engine\n"
-					 "import mcp_chunkers\n"),
+			const FString PathInjectCode = FString::Printf(
+				TEXT("import sys; p = r'%s'; p not in sys.path and sys.path.insert(0, p)\n"),
 				*PluginPythonDir);
-			PyRun_SimpleString(TCHAR_TO_UTF8(*WarmupCode));
-			UE_LOG(LogClaireon, Display, TEXT("[MCP Bridge] Added Python path and pre-warmed imports: %s"), *PluginPythonDir);
+			PyRun_SimpleString(TCHAR_TO_UTF8(*PathInjectCode));
+			UE_LOG(LogClaireon, Display, TEXT("[MCP Bridge] Added Python path: %s"), *PluginPythonDir);
 		}
 	}
 
@@ -149,17 +157,31 @@ void FClaireonBridge::ResetToolCallCount()
 	GToolCallCount = 0;
 }
 
+void FClaireonBridge::SetCurrentConversationId(const FString& InConversationId)
+{
+	GCurrentConversationId = InConversationId.IsEmpty() ? FString(TEXT("default")) : InConversationId;
+}
+
+const FString& FClaireonBridge::GetCurrentConversationId()
+{
+	return GCurrentConversationId;
+}
+
 PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 {
 	const char* ToolNameUtf8 = nullptr;
 	const char* ArgsJsonUtf8 = nullptr;
-	if (!PyArg_ParseTuple(Args, "ss", &ToolNameUtf8, &ArgsJsonUtf8))
+	const char* ConversationIdUtf8 = nullptr;
+	if (!PyArg_ParseTuple(Args, "ss|s", &ToolNameUtf8, &ArgsJsonUtf8, &ConversationIdUtf8))
 	{
 		return nullptr; // PyArg_ParseTuple sets the exception
 	}
 
 	const FString ToolName = UTF8_TO_TCHAR(ToolNameUtf8);
 	const FString ArgsJson = UTF8_TO_TCHAR(ArgsJsonUtf8);
+	const FString ConversationId = (ConversationIdUtf8 && *ConversationIdUtf8)
+		? FString(UTF8_TO_TCHAR(ConversationIdUtf8))
+		: FString(TEXT("default"));
 
 	// Validate server instance
 	if (!GServerInstance)
@@ -210,12 +232,85 @@ PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 	FClaireonSafeExecResult SafeResult = ClaireonSafeExec::ExecuteTool(Tool.Get(), Arguments);
 	IClaireonTool::FToolResult Result = MoveTemp(SafeResult.ToolResult);
 
-	// If error, raise Python RuntimeError
+	// If error, raise Python RuntimeError with a structured envelope matching
+	// the success-path shape at lines 256-278 so callers can read
+	// e.args[1]["data"], e.args[1]["summary"], and e.args[1]["warnings"].
 	if (Result.bIsError)
 	{
 		FString ErrorStr = Result.ErrorMessage;
-		PyErr_Format(PyExc_RuntimeError, "Tool '%s' failed: %s", ToolNameUtf8, TCHAR_TO_UTF8(*ErrorStr));
+
+		// Build error envelope matching the success-path shape.
+		TSharedPtr<FJsonObject> ErrorEnvelope = MakeShared<FJsonObject>();
+
+		if (Result.Data.IsValid())
+		{
+			ErrorEnvelope->SetObjectField(TEXT("data"), Result.Data);
+		}
+		else
+		{
+			ErrorEnvelope->SetObjectField(TEXT("data"), MakeShared<FJsonObject>());
+		}
+
+		ErrorEnvelope->SetStringField(TEXT("summary"), Result.Summary);
+
+		TArray<TSharedPtr<FJsonValue>> ErrorWarningsArray;
+		for (const FString& Warning : Result.Warnings)
+		{
+			ErrorWarningsArray.Add(MakeShared<FJsonValueString>(Warning));
+		}
+		ErrorEnvelope->SetArrayField(TEXT("warnings"), ErrorWarningsArray);
+
+		// Serialize envelope to JSON string (same writer policy as success path).
+		FString ErrorEnvelopeJson;
+		TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> ErrorWriter =
+			TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&ErrorEnvelopeJson);
+		FJsonSerializer::Serialize(ErrorEnvelope.ToSharedRef(), ErrorWriter);
+		ErrorWriter->Close();
+
+		// Build the message string.
+		FString MessageStr = FString::Printf(
+			TEXT("Tool '%s' failed: %s"), *ToolName, *ErrorStr);
+
+		// Parse envelope JSON to a Python dict via json.loads so the object
+		// graph matches the success path exactly.
+		PyObject* JsonModule = PyImport_ImportModule("json");
+		PyObject* EnvelopePy = nullptr;
+		if (JsonModule)
+		{
+			EnvelopePy = PyObject_CallMethod(JsonModule, "loads", "s", TCHAR_TO_UTF8(*ErrorEnvelopeJson));
+			Py_DECREF(JsonModule);
+		}
+		if (!EnvelopePy)
+		{
+			// Clear any exception set by the failed json.loads call and fall
+			// back to the message-only path so behaviour never regresses.
+			PyErr_Clear();
+			PyErr_Format(PyExc_RuntimeError, "Tool '%s' failed: %s", ToolNameUtf8, TCHAR_TO_UTF8(*ErrorStr));
+			return nullptr;
+		}
+
+		PyObject* MessagePy = PyUnicode_FromString(TCHAR_TO_UTF8(*MessageStr));
+		PyObject* ArgsTuple = PyTuple_Pack(2, MessagePy, EnvelopePy);
+
+		PyErr_SetObject(PyExc_RuntimeError, ArgsTuple);
+
+		Py_DECREF(MessagePy);
+		Py_DECREF(EnvelopePy);
+		Py_DECREF(ArgsTuple);
 		return nullptr;
+	}
+
+	// Disk-spill routing for generic tools (per D6).
+	// claireon.python_execute routes its own stdout/uelog streams from inside its
+	// Execute method; skip here so we never double-route or emit a "data" stream
+	// for that tool.
+	if (ToolName != TEXT("claireon.python_execute"))
+	{
+		Result = FClaireonOutputGate::RouteResult(
+			MoveTemp(Result),
+			ToolName,
+			ConversationId,
+			EClaireonSpillStreamSet::GenericData);
 	}
 
 	// Serialize the result envelope: {"data": ..., "summary": "...", "warnings": [...]}
@@ -422,13 +517,15 @@ void FClaireonBridge::BuildAndRunBootstrap()
 		"        \"\"\"Generate an MCP-dispatched tool function using exec().\"\"\"\n"
 		"        param_parts = list(required) + [f'{p}=_UNSET' for p in optional]\n"
 		"        param_str = ', '.join(param_parts)\n"
+		"        _sep = ', ' if param_str else ''\n"
 		"        all_params = list(required) + list(optional)\n"
 		"        dict_expr = '{' + ', '.join(f'\"' + p + '\": ' + p for p in all_params) + '}'\n"
 		"        safe_doc = doc.replace('\\\\', '\\\\\\\\').replace('\"\"\"', \"'''\")\n"
-		"        func_code = f'def {short_name}({param_str}):\\n'\n"
+		"        func_code = f'def {short_name}({param_str}{_sep}**kwargs):\\n'\n"
 		"        func_code += f'    \"\"\"{safe_doc}\"\"\"\\n'\n"
 		"        func_code += f'    _all = {dict_expr}\\n'\n"
 		"        func_code += '    payload = {k: v for k, v in _all.items() if v is not _UNSET}\\n'\n"
+		"        func_code += '    payload.update(kwargs)\\n'\n"
 		"        func_code += f'    return json.loads(_u._mcp_call_tool({full_name!r}, json.dumps(payload)))\\n'\n"
 		"        namespace = {'_UNSET': _UNSET, '_u': _u, 'json': json}\n"
 		"        exec(func_code, namespace)\n"

@@ -336,5 +336,9 @@ FString FClaireonSessionManager::CanonicalizePath(const FString& InPath)
 		return FString();
 	}
 
-	return Result.ResolvedPath.Path;
+	// CanonicalizePath returns the package-prefix form (no trailing .<AssetName>) to
+	// preserve the pre-Stage-0 output contract for callers that feed the result into
+	// FPackageName::GetShortName / FPackageName::GetLongPackagePath (proxytable_duplicate,
+	// proxyasset_duplicate, chooser_duplicate).
+	return Result.ResolvedPath.PackagePath;
 }

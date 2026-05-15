@@ -4,6 +4,9 @@
 #include "ClaireonSafeExec.h"
 #include "ClaireonLog.h"
 
+#include "BlueprintEditorLibrary.h"
+#include "Engine/Blueprint.h"
+
 static bool bLastExecutionCrashed = false;
 
 #if PLATFORM_WINDOWS
@@ -18,7 +21,7 @@ static bool bLastExecutionCrashed = false;
 #endif
 
 // UE's check() raises SEH exception via RaiseException() with this code.
-// Defined in WindowsPlatformCrashContext.cpp (verified against UE 5.5).
+// Defined in WindowsPlatformCrashContext.cpp.
 // Used for log messages only, not control flow.
 static constexpr uint32 CLAIREON_UE_ASSERT_EXCEPTION_CODE = 0x4000;
 
@@ -45,6 +48,26 @@ static void ExecuteToolTrampoline(void* Context)
 static void ActionTrampoline(void* Context)
 {
 	(*static_cast<TFunctionRef<void()>*>(Context))();
+}
+
+// Context for the generated-class lookup trampoline.  Mirrors the
+// ExecuteToolTrampoline shape: raw pointer fields only, no destructors.
+struct FGeneratedClassLookupContext
+{
+	UBlueprint* Blueprint;
+	UClass** OutClass;
+};
+
+// Trampoline invoked inside GuardedCallSEH: calls
+// UBlueprintEditorLibrary::GeneratedClass(bp) and writes the result
+// pointer.  The call is a single static UFUNCTION dispatch, which
+// matches what `unreal.BlueprintEditorLibrary.generated_class(bp)`
+// exposes to the Python reflection layer.  See GAP6_REPRO_ARTIFACT.md.
+static void GeneratedClassLookupTrampoline(void* Context)
+{
+	FGeneratedClassLookupContext* Ctx =
+		static_cast<FGeneratedClassLookupContext*>(Context);
+	*Ctx->OutClass = UBlueprintEditorLibrary::GeneratedClass(Ctx->Blueprint);
 }
 
 // Pure-SEH inner function. No C++ objects with destructors on this frame.
@@ -138,6 +161,46 @@ FClaireonSafeActionResult ClaireonSafeExec::ExecuteAction(TFunctionRef<void()> A
 	return Result;
 }
 
+// Gap 6 of #0000: SEH-guarded wrapper around UBlueprintEditorLibrary::GeneratedClass.
+// Callstack analysis is recorded in BP_AUTHORING_GAPS_CLOSURE/GAP6_REPRO_ARTIFACT.md.
+// Rationale for the helper-based guard (over REPL interception): the crash
+// originates in engine code reached via a well-defined UFUNCTION entry
+// point, so a single __try/__except around the same entry point matches
+// the existing ExecuteTool / ExecuteAction shape and keeps the guard out
+// of the Python dispatch path.
+FClaireonGeneratedClassLookupResult ClaireonSafeExec::ExecuteGeneratedClassLookup(UBlueprint* Blueprint)
+{
+	FClaireonGeneratedClassLookupResult Result;
+	TCHAR ExceptionMsg[2048] = {};
+
+	UClass* OutClass = nullptr;
+	FGeneratedClassLookupContext Ctx;
+	Ctx.Blueprint = Blueprint;
+	Ctx.OutClass = &OutClass;
+
+	uint32 ExceptionCode = GuardedCallSEH(
+		&GeneratedClassLookupTrampoline, &Ctx, ExceptionMsg, UE_ARRAY_COUNT(ExceptionMsg));
+
+	if (ExceptionCode != 0)
+	{
+		Result.bCaughtFatalException = true;
+		Result.ExceptionCode = ExceptionCode;
+		Result.ExceptionDescription = FString::Printf(
+			TEXT("SEH exception 0x%08X during BlueprintEditorLibrary::GeneratedClass: %s"),
+			ExceptionCode, ExceptionMsg);
+		Result.OutClass = nullptr;
+		bLastExecutionCrashed = true;
+
+		UE_LOG(LogClaireon, Error, TEXT("ClaireonSafeExec: %s"), *Result.ExceptionDescription);
+	}
+	else
+	{
+		Result.OutClass = OutClass;
+	}
+
+	return Result;
+}
+
 #else // !PLATFORM_WINDOWS
 
 FClaireonSafeExecResult ClaireonSafeExec::ExecuteTool(
@@ -180,6 +243,25 @@ FClaireonSafeActionResult ClaireonSafeExec::ExecuteAction(TFunctionRef<void()> A
 		UE_LOG(LogClaireon, Error, TEXT("ClaireonSafeExec: %s"), *Result.ExceptionDescription);
 	}
 	// Note: ExecuteAction does NOT clear bLastExecutionCrashed on success.
+	return Result;
+}
+
+FClaireonGeneratedClassLookupResult ClaireonSafeExec::ExecuteGeneratedClassLookup(UBlueprint* Blueprint)
+{
+	FClaireonGeneratedClassLookupResult Result;
+	try
+	{
+		Result.OutClass = UBlueprintEditorLibrary::GeneratedClass(Blueprint);
+	}
+	catch (...)
+	{
+		Result.bCaughtFatalException = true;
+		Result.ExceptionDescription = TEXT("Caught unknown C++ exception in BlueprintEditorLibrary::GeneratedClass.");
+		Result.OutClass = nullptr;
+		bLastExecutionCrashed = true;
+
+		UE_LOG(LogClaireon, Error, TEXT("ClaireonSafeExec: %s"), *Result.ExceptionDescription);
+	}
 	return Result;
 }
 

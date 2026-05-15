@@ -28,16 +28,33 @@
 #include "Misc/App.h"
 #include "ClaireonSettings.h"
 #include "ClaireonXmlFormatter.h"
-#include "Tools/ClaireonTool_Transaction.h"
+#include "Tools/ClaireonTransactionGroupState.h"
 #include "ClaireonWorldReadiness.h"
 
 #include <atomic>
 
 static constexpr uint32 MaxPortRetries = 10;
 
+// Tools exposed directly via MCP tools/list / tools/call. All other tools are
+// accessed via claireon.* inside python_execute (see HandleToolsCall rejection).
+//
+// The claireon.transaction_* family is exempt from the "python_execute-only" rule
+// because (a) operators want undo/redo/group control available to MCP clients
+// that drive scripted workflows without spinning up a Python subinterpreter, and
+// (b) the begin_group / end_group semantics are a natural wrapper around other
+// MCP calls issued by the same client. The monolithic claireon.transaction was
+// previously hidden (commit 2f04bc55a9 on 2026-04-10) under the rationale that
+// all editor interaction should flow through python_execute; decomposition into
+// 6 single-purpose tools + operator directive 2026-04-20 supersedes that.
 static const TSet<FString> MCPVisibleTools = {
 	TEXT("claireon.python_execute"),
-	TEXT("claireon.tools_search")
+	TEXT("claireon.tools_search"),
+	TEXT("claireon.transaction_undo"),
+	TEXT("claireon.transaction_redo"),
+	TEXT("claireon.transaction_history"),
+	TEXT("claireon.transaction_begin_group"),
+	TEXT("claireon.transaction_end_group"),
+	TEXT("claireon.transaction_rollback_group")
 };
 
 FClaireonServer::FClaireonServer()
@@ -503,7 +520,7 @@ void FClaireonServer::HandleInitialized(const FMCPRequestContext& Context)
 	bFeedbackSubmittedThisSession = false;
 
 	// Reset transaction group state (close any leaked open groups)
-	ClaireonTool_Transaction::ResetGroupState();
+	ClaireonTransactionGroupState::ResetGroupState();
 
 	UE_LOG(LogClaireon, Display, TEXT("[MCP] Client initialized"));
 }

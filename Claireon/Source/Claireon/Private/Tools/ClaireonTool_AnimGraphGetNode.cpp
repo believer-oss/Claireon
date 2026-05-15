@@ -98,6 +98,16 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphGetNode::Execute(const TSharedP
 			Data->SetObjectField(TEXT("editor_properties"), EditorProps);
 		}
 	}
+	else
+	{
+		// For non-UAnimGraphNode_Base nodes (transitions, states, conduits, aliases),
+		// still serialize all editor-level UObject properties
+		TSharedPtr<FJsonObject> EditorProps = ClaireonPropertyUtils::GetAllProperties(Node, TEXT(""), 1);
+		if (EditorProps)
+		{
+			Data->SetObjectField(TEXT("editor_properties"), EditorProps);
+		}
+	}
 
 	FString Summary = FString::Printf(TEXT("Node '%s' (%s) in graph '%s'"),
 		*Node->GetNodeTitle(ENodeTitleType::ListView).ToString(),

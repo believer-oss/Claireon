@@ -195,6 +195,34 @@ public:
               ClampMin=0.0, ClampMax=60.0))
     float AutoSaveDebounceSeconds = 5.0f;
 
+    // --- Large Results ---
+
+    /** Per-stream threshold (bytes) above which tool result streams spill to disk under
+     *  <ProjectSavedDir>/Claireon/Results/.  Streams below this threshold stay inline. */
+    UPROPERTY(Config, EditAnywhere, Category="Large Results",
+        meta=(DisplayName="Result Spill Threshold (bytes)", ClampMin=1024, ClampMax=10485760))
+    int32 ResultSpillThresholdBytes = 8192;
+
+    /** Per-stream hard ceiling (bytes).  Streams above this size are truncated to this limit
+     *  on disk with bOverCeiling flagged on the envelope.  Clamp floor is threshold+1. */
+    UPROPERTY(Config, EditAnywhere, Category="Large Results",
+        meta=(DisplayName="Result Spill Ceiling (bytes)", ClampMin=1025, ClampMax=1073741824))
+    int32 ResultSpillMaxBytes = 52428800;
+
+    /** When true, the connect-time sweep is skipped and stale spill directories are kept.
+     *  Useful for offline debugging of past runs. */
+    UPROPERTY(Config, EditAnywhere, Category="Large Results",
+        meta=(DisplayName="Keep Result Spills"))
+    bool bKeepResultSpills = false;
+
+    /** Age threshold (days) above which spill subdirectories are swept on connect.
+     *  Hidden when bKeepResultSpills is true. */
+    UPROPERTY(Config, EditAnywhere, Category="Large Results",
+        meta=(DisplayName="Result Spill Retention (days)",
+              EditCondition="!bKeepResultSpills",
+              ClampMin=1, ClampMax=365))
+    int32 ResultSpillRetentionDays = 7;
+
     // --- Debug ---
 
     /** Log all REPL tool calls (name, arguments, results) to the Unreal output log.
