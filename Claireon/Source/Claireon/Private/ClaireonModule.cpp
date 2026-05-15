@@ -456,15 +456,13 @@
 #include "Tools/ClaireonConcurrencyTool_SetProperty.h"
 #include "Tools/ClaireonConcurrencyTool_Create.h"
 #include "Tools/ClaireonConcurrencyTool_ApplySpec.h"
-#include "Tools/ClaireonDataAssetTool_Create.h"
-#include "Tools/ClaireonTool_AssetExists.h"
-#include "Tools/ClaireonDeveloperSettingsTool_Get.h"
 
 // Data Table MCP tools
 #include "Tools/ClaireonTool_DataTableSearch.h"
 #include "Tools/ClaireonTool_DataTableGetInfo.h"
 #include "Tools/ClaireonTool_DataTableGetRows.h"
 #include "Tools/ClaireonTool_DataTableGetRow.h"
+#include "Tools/ClaireonTool_DataTableGetRowStructured.h"
 #include "Tools/ClaireonTool_DataTableFindRows.h"
 #include "Tools/ClaireonTool_DataTableAddRow.h"
 #include "Tools/ClaireonTool_DataTableRemoveRow.h"
@@ -613,7 +611,7 @@
 // Chooser / Proxy Table MCP tools
 #include "Tools/ClaireonTool_ChooserInspect.h"
 #include "Tools/ClaireonChooserTools_Lifecycle.h"
-// Decomposed chooser edit tools
+// Decomposed chooser edit tools (#0000)
 #include "Tools/ClaireonChooserTool_SetResultType.h"
 #include "Tools/ClaireonChooserTool_SetOutputClass.h"
 #include "Tools/ClaireonChooserTool_AddContextParameter.h"
@@ -634,13 +632,13 @@
 #include "Tools/ClaireonTool_ChooserFindRows.h"
 #include "Tools/ClaireonTool_ChooserTraverse.h"
 #include "Tools/ClaireonProxyTools_Lifecycle.h"
-// Decomposed proxyasset edit tools
+// Decomposed proxyasset edit tools (#0000)
 #include "Tools/ClaireonProxyAssetTool_SetType.h"
 #include "Tools/ClaireonProxyAssetTool_SetResultType.h"
 #include "Tools/ClaireonProxyAssetTool_AddContextParameter.h"
 #include "Tools/ClaireonProxyAssetTool_RemoveContextParameter.h"
 #include "Tools/ClaireonProxyAssetTool_SetContextParameterDirection.h"
-// Decomposed proxytable edit tools
+// Decomposed proxytable edit tools (#0000)
 #include "Tools/ClaireonProxyTableTool_AddInherit.h"
 #include "Tools/ClaireonProxyTableTool_RemoveInherit.h"
 #include "Tools/ClaireonProxyTableTool_AddEntry.h"
@@ -1495,10 +1493,6 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<FClaireonConcurrencyTool_SetProperty>());
 	Tools.Add(MakeShared<FClaireonConcurrencyTool_Create>());
 	Tools.Add(MakeShared<FClaireonConcurrencyTool_ApplySpec>());
-	// Data-asset / asset-exists / developer-settings (3)
-	Tools.Add(MakeShared<FClaireonDataAssetTool_Create>());
-	Tools.Add(MakeShared<ClaireonTool_AssetExists>());
-	Tools.Add(MakeShared<FClaireonDeveloperSettingsTool_Get>());
 
 	// PCG Graph MCP tools
 	Tools.Add(MakeShared<ClaireonTool_PCGGraphInspect>());
@@ -1621,6 +1615,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_DataTableGetInfo>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableGetRows>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableGetRow>());
+	Tools.Add(MakeShared<ClaireonTool_DataTableGetRowStructured>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableFindRows>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableAddRow>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableRemoveRow>());
@@ -1637,7 +1632,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_ChooserInspect>());
 	Tools.Add(MakeShared<ClaireonTool_ChooserCreate>());
 	Tools.Add(MakeShared<ClaireonTool_ChooserDuplicate>());
-	// Decomposed chooser edit tools
+	// Decomposed chooser edit tools (#0000)
 	Tools.Add(MakeShared<ClaireonTool_ChooserSetResultType>());
 	Tools.Add(MakeShared<ClaireonTool_ChooserSetOutputClass>());
 	Tools.Add(MakeShared<ClaireonTool_ChooserAddContextParameter>());
@@ -1667,13 +1662,13 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_ProxyTableDuplicate>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyAssetCreate>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyAssetDuplicate>());
-	// Decomposed proxyasset edit tools
+	// Decomposed proxyasset edit tools (#0000)
 	Tools.Add(MakeShared<ClaireonTool_ProxyAssetSetType>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyAssetSetResultType>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyAssetAddContextParameter>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyAssetRemoveContextParameter>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyAssetSetContextParameterDirection>());
-	// Decomposed proxytable edit tools
+	// Decomposed proxytable edit tools (#0000)
 	Tools.Add(MakeShared<ClaireonTool_ProxyTableAddInherit>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyTableRemoveInherit>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyTableAddEntry>());
