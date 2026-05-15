@@ -10,15 +10,17 @@
 #include "Untest.h"
 #include "Tools/IClaireonTool.h"
 
-// Edit tools (apply_spec targets)
-#include "Tools/ClaireonTool_BehaviorTreeEdit.h"
-#include "Tools/ClaireonTool_EditBlueprintGraph.h"
-#include "Tools/ClaireonTool_StateTreeEdit.h"
-#include "Tools/ClaireonTool_BlackboardEdit.h"
-#include "Tools/ClaireonTool_EQSEdit.h"
-#include "Tools/ClaireonTool_NiagaraEdit.h"
-#include "Tools/ClaireonTool_PCGGraphEdit.h"
-#include "Tools/ClaireonTool_EditWidgetBP.h"
+// Edit tools (apply_spec targets -- decomposed per-system tools)
+#include "Tools/ClaireonBehaviorTreeTool_ApplySpec.h"
+#include "Tools/ClaireonBlueprintGraphTool_ApplySpec.h"
+#include "Tools/ClaireonBlueprintGraphTool_Create.h"
+#include "Tools/ClaireonStateTreeTool_ApplySpec.h"
+#include "Tools/ClaireonBlackboardTool_ApplySpec.h"
+#include "Tools/ClaireonEQSTool_ApplySpec.h"
+#include "Tools/ClaireonNiagaraTool_ApplySpec.h"
+#include "Tools/ClaireonPCGGraphTool_ApplySpec.h"
+#include "Tools/ClaireonWidgetBPTool_ApplySpec.h"
+#include "Tools/ClaireonWidgetBPTool_Create.h"
 
 // Inspect tools (verification)
 #include "Tools/ClaireonTool_BehaviorTreeInspect.h"
@@ -53,15 +55,12 @@ static const TCHAR* ApplySpecTestPCGPath       = TEXT("/Game/__MCPTests/PCG_Appl
 namespace
 {
 
-TSharedPtr<FJsonObject> MakeApplySpecArgs(const TCHAR* AssetPath, const TSharedPtr<FJsonObject>& Spec)
+// Decomposed *_apply_spec tools take flat args (no operation/params wrapper).
+TSharedPtr<FJsonObject> MakeApplySpecArgsFlat(const TCHAR* AssetPath, const TSharedPtr<FJsonObject>& Spec)
 {
-	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
-	Params->SetStringField(TEXT("asset_path"), AssetPath);
-	Params->SetObjectField(TEXT("spec"), Spec);
-
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("operation"), TEXT("apply_spec"));
-	Args->SetObjectField(TEXT("params"), Params);
+	Args->SetStringField(TEXT("asset_path"), AssetPath);
+	Args->SetObjectField(TEXT("spec"), Spec);
 	return Args;
 }
 
@@ -193,7 +192,7 @@ void CleanupTestAsset(const FString& AssetPath)
 
 UNTEST_UNIT_OPTS(Claireon, ApplySpec_BehaviorTree, CreateNodesFromSpec, UNTEST_TIMEOUTMS(30000))
 {
-	ClaireonTool_BehaviorTreeEdit Tool;
+	ClaireonBehaviorTreeTool_ApplySpec Tool;
 
 	// Spec: Selector with two Wait task children
 	TSharedPtr<FJsonObject> Spec = MakeShared<FJsonObject>();
@@ -204,7 +203,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_BehaviorTree, CreateNodesFromSpec, UNTEST_T
 	Nodes.Add(MakeObj(MakeBTNode(TEXT("wait2"), TEXT("BTTask_Wait"), MakeStr(TEXT("sel1")))));
 	Spec->SetArrayField(TEXT("nodes"), Nodes);
 
-	auto Result = Tool.Execute(MakeApplySpecArgs(ApplySpecTestBTPath, Spec));
+	auto Result = Tool.Execute(MakeApplySpecArgsFlat(ApplySpecTestBTPath, Spec));
 	UNTEST_ASSERT_TRUE(VerifyApplySpecResult(Result, 3));
 
 	// Verify id_mappings has all 3 spec IDs
@@ -231,19 +230,17 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_BehaviorTree, CreateNodesFromSpec, UNTEST_T
 
 UNTEST_UNIT_OPTS(Claireon, ApplySpec_Blueprint, CreateGraphFromSpec, UNTEST_TIMEOUTMS(30000))
 {
-	ClaireonTool_EditBlueprintGraph Tool;
+	ClaireonBlueprintGraphTool_ApplySpec Tool;
 
-	// Create a test Blueprint
+	// Create a test Blueprint using the decomposed Create tool (flat-args schema).
 	{
-		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
-		CreateParams->SetStringField(TEXT("asset_path"), ApplySpecTestBPPath);
-		CreateParams->SetStringField(TEXT("parent_class"), TEXT("Actor"));
+		ClaireonBlueprintGraphTool_Create CreateTool;
 
 		TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
-		CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
-		CreateArgs->SetObjectField(TEXT("params"), CreateParams);
+		CreateArgs->SetStringField(TEXT("asset_path"), ApplySpecTestBPPath);
+		CreateArgs->SetStringField(TEXT("parent_class"), TEXT("Actor"));
 
-		auto CreateResult = Tool.Execute(CreateArgs);
+		auto CreateResult = CreateTool.Execute(CreateArgs);
 		UNTEST_ASSERT_FALSE(CreateResult.bIsError);
 	}
 
@@ -272,7 +269,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_Blueprint, CreateGraphFromSpec, UNTEST_TIME
 	}
 	Spec->SetArrayField(TEXT("variables"), Variables);
 
-	auto Result = Tool.Execute(MakeApplySpecArgs(ApplySpecTestBPPath, Spec));
+	auto Result = Tool.Execute(MakeApplySpecArgsFlat(ApplySpecTestBPPath, Spec));
 	UNTEST_ASSERT_TRUE(VerifyApplySpecResult(Result, 2));
 
 	const TSharedPtr<FJsonObject>* Mappings = nullptr;
@@ -299,7 +296,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_Blueprint, CreateGraphFromSpec, UNTEST_TIME
 
 UNTEST_UNIT_OPTS(Claireon, ApplySpec_Blackboard, CreateKeysFromSpec, UNTEST_TIMEOUTMS(30000))
 {
-	ClaireonTool_BlackboardEdit Tool;
+	ClaireonBlackboardTool_ApplySpec Tool;
 
 	// Spec: 3 keys of different types
 	TSharedPtr<FJsonObject> Spec = MakeShared<FJsonObject>();
@@ -327,7 +324,11 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_Blackboard, CreateKeysFromSpec, UNTEST_TIME
 	}
 	Spec->SetArrayField(TEXT("keys"), Keys);
 
-	auto Result = Tool.Execute(MakeApplySpecArgs(ApplySpecTestBBPath, Spec));
+	// Decomposed apply_spec tool accepts asset_path + spec directly on the top-level args.
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("asset_path"), ApplySpecTestBBPath);
+	Args->SetObjectField(TEXT("spec"), Spec);
+	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_TRUE(VerifyApplySpecResult(Result, 3));
 
 	const TSharedPtr<FJsonObject>* Mappings = nullptr;
@@ -354,7 +355,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_Blackboard, CreateKeysFromSpec, UNTEST_TIME
 
 UNTEST_UNIT_OPTS(Claireon, ApplySpec_EQS, CreateOptionsFromSpec, UNTEST_TIMEOUTMS(30000))
 {
-	ClaireonTool_EQSEdit Tool;
+	ClaireonEQSTool_ApplySpec Tool;
 
 	// Spec: 1 option with SimpleGrid generator and Distance test
 	TSharedPtr<FJsonObject> Spec = MakeShared<FJsonObject>();
@@ -379,7 +380,11 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_EQS, CreateOptionsFromSpec, UNTEST_TIMEOUTM
 	}
 	Spec->SetArrayField(TEXT("options"), Options);
 
-	auto Result = Tool.Execute(MakeApplySpecArgs(ApplySpecTestEQSPath, Spec));
+	// Decomposed apply_spec tool accepts asset_path + spec directly on the top-level args.
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("asset_path"), ApplySpecTestEQSPath);
+	Args->SetObjectField(TEXT("spec"), Spec);
+	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_TRUE(VerifyApplySpecResult(Result, 2));
 
 	const TSharedPtr<FJsonObject>* Mappings = nullptr;
@@ -402,7 +407,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_EQS, CreateOptionsFromSpec, UNTEST_TIMEOUTM
 
 UNTEST_UNIT_OPTS(Claireon, ApplySpec_StateTree, CreateStatesFromSpec, UNTEST_TIMEOUTMS(30000))
 {
-	ClaireonTool_StateTreeEdit Tool;
+	ClaireonStateTreeTool_ApplySpec Tool;
 
 	// Spec: 2 root-level states
 	TSharedPtr<FJsonObject> Spec = MakeShared<FJsonObject>();
@@ -425,7 +430,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_StateTree, CreateStatesFromSpec, UNTEST_TIM
 	}
 	Spec->SetArrayField(TEXT("states"), States);
 
-	auto Result = Tool.Execute(MakeApplySpecArgs(ApplySpecTestSTPath, Spec));
+	auto Result = Tool.Execute(MakeApplySpecArgsFlat(ApplySpecTestSTPath, Spec));
 	UNTEST_ASSERT_TRUE(VerifyApplySpecResult(Result, 2));
 
 	const TSharedPtr<FJsonObject>* Mappings = nullptr;
@@ -450,7 +455,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_StateTree, CreateStatesFromSpec, UNTEST_TIM
 
 UNTEST_UNIT_OPTS(Claireon, ApplySpec_Niagara, CreateParametersFromSpec, UNTEST_TIMEOUTMS(30000))
 {
-	ClaireonTool_NiagaraEdit Tool;
+	ClaireonNiagaraTool_ApplySpec Tool;
 
 	// Spec: add 2 system-level parameters
 	TSharedPtr<FJsonObject> Spec = MakeShared<FJsonObject>();
@@ -474,7 +479,11 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_Niagara, CreateParametersFromSpec, UNTEST_T
 	Spec->SetArrayField(TEXT("parameters"), Parameters);
 	Spec->SetArrayField(TEXT("emitters"), TArray<TSharedPtr<FJsonValue>>());
 
-	auto Result = Tool.Execute(MakeApplySpecArgs(ApplySpecTestNiagaraPath, Spec));
+	// Decomposed apply_spec tool accepts asset_path + spec directly on the top-level args.
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("asset_path"), ApplySpecTestNiagaraPath);
+	Args->SetObjectField(TEXT("spec"), Spec);
+	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_TRUE(VerifyApplySpecResult(Result, 2));
 
 	const TSharedPtr<FJsonObject>* Mappings = nullptr;
@@ -497,7 +506,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_Niagara, CreateParametersFromSpec, UNTEST_T
 
 UNTEST_UNIT_OPTS(Claireon, ApplySpec_PCG, CreateNodesFromSpec, UNTEST_TIMEOUTMS(30000))
 {
-	ClaireonTool_PCGGraphEdit Tool;
+	ClaireonPCGGraphTool_ApplySpec Tool;
 
 	// Spec: 2 PCG nodes with a connection
 	TSharedPtr<FJsonObject> Spec = MakeShared<FJsonObject>();
@@ -527,7 +536,11 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_PCG, CreateNodesFromSpec, UNTEST_TIMEOUTMS(
 	}
 	Spec->SetArrayField(TEXT("connections"), Connections);
 
-	auto Result = Tool.Execute(MakeApplySpecArgs(ApplySpecTestPCGPath, Spec));
+	// Decomposed apply_spec tool accepts asset_path + spec directly on the top-level args.
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("asset_path"), ApplySpecTestPCGPath);
+	Args->SetObjectField(TEXT("spec"), Spec);
+	auto Result = Tool.Execute(Args);
 
 	// PCG test asset might not exist -- handle gracefully
 	if (Result.bIsError && Result.GetContentAsString().Contains(TEXT("Failed to open")))
@@ -557,18 +570,14 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_PCG, CreateNodesFromSpec, UNTEST_TIMEOUTMS(
 
 UNTEST_UNIT_OPTS(Claireon, ApplySpec_WidgetBP, CreateWidgetsFromSpec, UNTEST_TIMEOUTMS(30000))
 {
-	ClaireonTool_EditWidgetBP Tool;
-
-	// Create a test Widget Blueprint
+	// Create a test Widget Blueprint using the decomposed Create tool (flat args).
 	{
-		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
-		CreateParams->SetStringField(TEXT("asset_path"), ApplySpecTestWidgetPath);
+		ClaireonWidgetBPTool_Create CreateTool;
 
 		TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
-		CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
-		CreateArgs->SetObjectField(TEXT("params"), CreateParams);
+		CreateArgs->SetStringField(TEXT("asset_path"), ApplySpecTestWidgetPath);
 
-		auto CreateResult = Tool.Execute(CreateArgs);
+		auto CreateResult = CreateTool.Execute(CreateArgs);
 		if (CreateResult.bIsError)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[ApplySpec_WidgetBP] Could not create test widget: %s"),
@@ -604,7 +613,9 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_WidgetBP, CreateWidgetsFromSpec, UNTEST_TIM
 	}
 	Spec->SetArrayField(TEXT("widgets"), Widgets);
 
-	auto Result = Tool.Execute(MakeApplySpecArgs(ApplySpecTestWidgetPath, Spec));
+	// Invoke the decomposed apply_spec tool with flat args.
+	ClaireonWidgetBPTool_ApplySpec Tool;
+	auto Result = Tool.Execute(MakeApplySpecArgsFlat(ApplySpecTestWidgetPath, Spec));
 	UNTEST_ASSERT_TRUE(VerifyApplySpecResult(Result, 3));
 
 	const TSharedPtr<FJsonObject>* Mappings = nullptr;
@@ -632,10 +643,10 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_WidgetBP, CreateWidgetsFromSpec, UNTEST_TIM
 
 UNTEST_UNIT_OPTS(Claireon, ApplySpec_Validation, RejectsEmptySpec, UNTEST_TIMEOUTMS(5000))
 {
-	ClaireonTool_BehaviorTreeEdit Tool;
+	ClaireonBehaviorTreeTool_ApplySpec Tool;
 
 	TSharedPtr<FJsonObject> Spec = MakeShared<FJsonObject>();
-	auto Result = Tool.Execute(MakeApplySpecArgs(ApplySpecTestBTPath, Spec));
+	auto Result = Tool.Execute(MakeApplySpecArgsFlat(ApplySpecTestBTPath, Spec));
 	UNTEST_ASSERT_TRUE(Result.bIsError);
 	UNTEST_EXPECT_TRUE(Result.GetContentAsString().Contains(TEXT("validation")));
 
@@ -644,15 +655,11 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_Validation, RejectsEmptySpec, UNTEST_TIMEOU
 
 UNTEST_UNIT_OPTS(Claireon, ApplySpec_Validation, RejectsMissingAssetPath, UNTEST_TIMEOUTMS(5000))
 {
-	ClaireonTool_BehaviorTreeEdit Tool;
+	ClaireonBehaviorTreeTool_ApplySpec Tool;
 
-	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 	TSharedPtr<FJsonObject> Spec = MakeShared<FJsonObject>();
-	Params->SetObjectField(TEXT("spec"), Spec);
-
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("operation"), TEXT("apply_spec"));
-	Args->SetObjectField(TEXT("params"), Params);
+	Args->SetObjectField(TEXT("spec"), Spec);
 
 	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_TRUE(Result.bIsError);
@@ -663,7 +670,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_Validation, RejectsMissingAssetPath, UNTEST
 
 UNTEST_UNIT_OPTS(Claireon, ApplySpec_Validation, RejectsMissingNodeId, UNTEST_TIMEOUTMS(5000))
 {
-	ClaireonTool_BehaviorTreeEdit Tool;
+	ClaireonBehaviorTreeTool_ApplySpec Tool;
 
 	TSharedPtr<FJsonObject> Spec = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> Nodes;
@@ -675,7 +682,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_Validation, RejectsMissingNodeId, UNTEST_TI
 	}
 	Spec->SetArrayField(TEXT("nodes"), Nodes);
 
-	auto Result = Tool.Execute(MakeApplySpecArgs(ApplySpecTestBTPath, Spec));
+	auto Result = Tool.Execute(MakeApplySpecArgsFlat(ApplySpecTestBTPath, Spec));
 	UNTEST_ASSERT_TRUE(Result.bIsError);
 	UNTEST_EXPECT_TRUE(Result.GetContentAsString().Contains(TEXT("id")));
 

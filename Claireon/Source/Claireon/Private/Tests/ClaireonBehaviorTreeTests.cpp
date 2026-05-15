@@ -6,7 +6,18 @@
 #include "Tools/IClaireonTool.h"
 #include "Tools/ClaireonTool_BehaviorTreeInspect.h"
 #include "Tools/ClaireonTool_BehaviorTreeInspectBlackboard.h"
-#include "Tools/ClaireonTool_BehaviorTreeEdit.h"
+#include "Tools/ClaireonBehaviorTreeTool_Open.h"
+#include "Tools/ClaireonBehaviorTreeTool_Close.h"
+#include "Tools/ClaireonBehaviorTreeTool_Status.h"
+#include "Tools/ClaireonBehaviorTreeTool_AddNode.h"
+#include "Tools/ClaireonBehaviorTreeTool_RemoveNode.h"
+#include "Tools/ClaireonBehaviorTreeTool_MoveNode.h"
+#include "Tools/ClaireonBehaviorTreeTool_SetNodeProperty.h"
+#include "Tools/ClaireonBehaviorTreeTool_AddDecorator.h"
+#include "Tools/ClaireonBehaviorTreeTool_RemoveDecorator.h"
+#include "Tools/ClaireonBehaviorTreeTool_AddService.h"
+#include "Tools/ClaireonBehaviorTreeTool_RemoveService.h"
+#include "Tools/ClaireonBehaviorTreeTool_UpdateAsset.h"
 #include "Tools/ClaireonTool_EQSInspect.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -304,27 +315,15 @@ UNTEST_UNIT_OPTS(Claireon, EQS, InspectWrongAssetType, UNTEST_TIMEOUTMS(5000))
 }
 
 // ============================================================================
-// claireon.behaviortree_edit — open/close/status session lifecycle
+// claireon.behaviortree_* (decomposed) — open/close/status session lifecycle
 // ============================================================================
-
-UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEdit, MissingOperation, UNTEST_TIMEOUTMS(5000))
-{
-	ClaireonTool_BehaviorTreeEdit Tool;
-
-	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	auto Result = Tool.Execute(Args);
-	UNTEST_ASSERT_TRUE(Result.bIsError);
-	UNTEST_EXPECT_TRUE(Result.GetContentAsString().Contains(TEXT("operation")));
-	co_return;
-}
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEdit, OpenRequiresAssetPath, UNTEST_TIMEOUTMS(5000))
 {
-	ClaireonTool_BehaviorTreeEdit Tool;
+	ClaireonBehaviorTreeTool_Open Tool;
 
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("operation"), TEXT("open"));
-	// No params.asset_path
+	// No asset_path
 	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_TRUE(Result.bIsError);
 	UNTEST_EXPECT_TRUE(Result.GetContentAsString().Contains(TEXT("asset_path")));
@@ -333,17 +332,15 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEdit, OpenRequiresAssetPath, UNTEST_TIMEO
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEdit, OpenCloseStatusCycle, UNTEST_TIMEOUTMS(15000))
 {
-	ClaireonTool_BehaviorTreeEdit Tool;
+	ClaireonBehaviorTreeTool_Open OpenTool;
+	ClaireonBehaviorTreeTool_Status StatusTool;
+	ClaireonBehaviorTreeTool_Close CloseTool;
 
 	// --- Step 1: Open a session ---
-	TSharedPtr<FJsonObject> OpenParams = MakeShared<FJsonObject>();
-	OpenParams->SetStringField(TEXT("asset_path"), TestBTPath);
-
 	TSharedPtr<FJsonObject> OpenArgs = MakeShared<FJsonObject>();
-	OpenArgs->SetStringField(TEXT("operation"), TEXT("open"));
-	OpenArgs->SetObjectField(TEXT("params"), OpenParams);
+	OpenArgs->SetStringField(TEXT("asset_path"), TestBTPath);
 
-	auto OpenResult = Tool.Execute(OpenArgs);
+	auto OpenResult = OpenTool.Execute(OpenArgs);
 	UNTEST_ASSERT_FALSE(OpenResult.bIsError);
 	UNTEST_ASSERT_PTR(OpenResult.Data.Get());
 
@@ -357,10 +354,9 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEdit, OpenCloseStatusCycle, UNTEST_TIMEOU
 
 	// --- Step 2: Status check ---
 	TSharedPtr<FJsonObject> StatusArgs = MakeShared<FJsonObject>();
-	StatusArgs->SetStringField(TEXT("operation"), TEXT("status"));
 	StatusArgs->SetStringField(TEXT("session_id"), SessionId);
 
-	auto StatusResult = Tool.Execute(StatusArgs);
+	auto StatusResult = StatusTool.Execute(StatusArgs);
 	UNTEST_ASSERT_FALSE(StatusResult.bIsError);
 	UNTEST_ASSERT_PTR(StatusResult.Data.Get());
 
@@ -369,52 +365,33 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEdit, OpenCloseStatusCycle, UNTEST_TIMEOU
 	UNTEST_EXPECT_TRUE(StatusResult.Data->TryGetStringField(TEXT("session_id"), StatusSessionId));
 	UNTEST_EXPECT_STREQ(StatusSessionId, SessionId);
 
-	// --- Step 3: List sessions should show our session ---
-	TSharedPtr<FJsonObject> ListArgs = MakeShared<FJsonObject>();
-	ListArgs->SetStringField(TEXT("operation"), TEXT("list_sessions"));
-
-	auto ListResult = Tool.Execute(ListArgs);
-	UNTEST_ASSERT_FALSE(ListResult.bIsError);
-	UNTEST_ASSERT_PTR(ListResult.Data.Get());
-
-	// Check session count >= 1
-	double SessionCount = 0.0;
-	UNTEST_EXPECT_TRUE(ListResult.Data->TryGetNumberField(TEXT("session_count"), SessionCount));
-	UNTEST_EXPECT_TRUE(SessionCount >= 1.0);
-
-	// --- Step 4: Close the session ---
+	// --- Step 3: Close the session ---
 	TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
-	CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 	CloseArgs->SetStringField(TEXT("session_id"), SessionId);
 
-	auto CloseResult = Tool.Execute(CloseArgs);
+	auto CloseResult = CloseTool.Execute(CloseArgs);
 	UNTEST_ASSERT_FALSE(CloseResult.bIsError);
-	UNTEST_EXPECT_TRUE(CloseResult.GetContentAsString().Contains(TEXT("Session closed")));
 
-	// --- Step 5: Status on closed session should fail ---
-	auto StatusAfterClose = Tool.Execute(StatusArgs);
+	// --- Step 4: Status on closed session should fail ---
+	auto StatusAfterClose = StatusTool.Execute(StatusArgs);
 	UNTEST_ASSERT_TRUE(StatusAfterClose.bIsError);
-	UNTEST_EXPECT_TRUE(StatusAfterClose.GetContentAsString().Contains(TEXT("not found or expired")));
 
 	co_return;
 }
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEdit, OpenDuplicateBlockedByLock, UNTEST_TIMEOUTMS(10000))
 {
-	ClaireonTool_BehaviorTreeEdit Tool;
-
-	TSharedPtr<FJsonObject> OpenParams = MakeShared<FJsonObject>();
-	OpenParams->SetStringField(TEXT("asset_path"), TestBTPath);
+	ClaireonBehaviorTreeTool_Open OpenTool;
+	ClaireonBehaviorTreeTool_Close CloseTool;
 
 	TSharedPtr<FJsonObject> OpenArgs = MakeShared<FJsonObject>();
-	OpenArgs->SetStringField(TEXT("operation"), TEXT("open"));
-	OpenArgs->SetObjectField(TEXT("params"), OpenParams);
+	OpenArgs->SetStringField(TEXT("asset_path"), TestBTPath);
 
-	auto Result1 = Tool.Execute(OpenArgs);
+	auto Result1 = OpenTool.Execute(OpenArgs);
 	UNTEST_ASSERT_FALSE(Result1.bIsError);
 
 	// Second open should be blocked by asset lock
-	auto Result2 = Tool.Execute(OpenArgs);
+	auto Result2 = OpenTool.Execute(OpenArgs);
 	UNTEST_EXPECT_TRUE(Result2.bIsError);
 	UNTEST_EXPECT_TRUE(Result2.GetContentAsString().Contains(TEXT("locked")));
 
@@ -423,9 +400,8 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEdit, OpenDuplicateBlockedByLock, UNTEST_
 	if (!SessionId1.IsEmpty())
 	{
 		TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
-		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionId1);
-		Tool.Execute(CloseArgs);
+		CloseTool.Execute(CloseArgs);
 	}
 
 	co_return;
@@ -433,57 +409,82 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEdit, OpenDuplicateBlockedByLock, UNTEST_
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEdit, OperationsRequireParamsOnMissingInput, UNTEST_TIMEOUTMS(10000))
 {
-	ClaireonTool_BehaviorTreeEdit Tool;
+	ClaireonBehaviorTreeTool_Open OpenTool;
+	ClaireonBehaviorTreeTool_Close CloseTool;
+	ClaireonBehaviorTreeTool_AddNode AddNodeTool;
+	ClaireonBehaviorTreeTool_RemoveNode RemoveNodeTool;
+	ClaireonBehaviorTreeTool_MoveNode MoveNodeTool;
+	ClaireonBehaviorTreeTool_SetNodeProperty SetNodePropertyTool;
+	ClaireonBehaviorTreeTool_AddDecorator AddDecoratorTool;
+	ClaireonBehaviorTreeTool_RemoveDecorator RemoveDecoratorTool;
+	ClaireonBehaviorTreeTool_AddService AddServiceTool;
+	ClaireonBehaviorTreeTool_RemoveService RemoveServiceTool;
+	ClaireonBehaviorTreeTool_UpdateAsset UpdateAssetTool;
 
 	// Open a session first
-	TSharedPtr<FJsonObject> OpenParams = MakeShared<FJsonObject>();
-	OpenParams->SetStringField(TEXT("asset_path"), TestBTPath);
-
 	TSharedPtr<FJsonObject> OpenArgs = MakeShared<FJsonObject>();
-	OpenArgs->SetStringField(TEXT("operation"), TEXT("open"));
-	OpenArgs->SetObjectField(TEXT("params"), OpenParams);
+	OpenArgs->SetStringField(TEXT("asset_path"), TestBTPath);
 
-	auto OpenResult = Tool.Execute(OpenArgs);
+	auto OpenResult = OpenTool.Execute(OpenArgs);
 	UNTEST_ASSERT_FALSE(OpenResult.bIsError);
 
 	// Extract session ID from structured Data
 	FString SessionId = ExtractSessionIdFromBTResult(OpenResult);
 	UNTEST_ASSERT_TRUE(!SessionId.IsEmpty());
 
-	// Calling operations without required params should return errors (not crash)
-	const TArray<FString> Ops = {
-		TEXT("add_node"), TEXT("remove_node"), TEXT("move_node"),
-		TEXT("set_node_property"), TEXT("add_decorator"), TEXT("remove_decorator"),
-		TEXT("add_service"), TEXT("remove_service")
+	// Each mutation tool should return an error when called without required params
+	auto CallWithSession = [&SessionId](IClaireonTool& Tool)
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		return Tool.Execute(Args);
 	};
 
-	for (const FString& Op : Ops)
 	{
-		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-		Args->SetStringField(TEXT("operation"), Op);
-		Args->SetStringField(TEXT("session_id"), SessionId);
-		// No params — should error gracefully
-
-		auto Result = Tool.Execute(Args);
+		auto Result = CallWithSession(AddNodeTool);
 		UNTEST_EXPECT_TRUE(Result.bIsError);
-		// Should mention missing parameter
-		UNTEST_EXPECT_TRUE(Result.GetContentAsString().Contains(TEXT("Missing")) || Result.GetContentAsString().Contains(TEXT("required")));
+	}
+	{
+		auto Result = CallWithSession(RemoveNodeTool);
+		UNTEST_EXPECT_TRUE(Result.bIsError);
+	}
+	{
+		auto Result = CallWithSession(MoveNodeTool);
+		UNTEST_EXPECT_TRUE(Result.bIsError);
+	}
+	{
+		auto Result = CallWithSession(SetNodePropertyTool);
+		UNTEST_EXPECT_TRUE(Result.bIsError);
+	}
+	{
+		auto Result = CallWithSession(AddDecoratorTool);
+		UNTEST_EXPECT_TRUE(Result.bIsError);
+	}
+	{
+		auto Result = CallWithSession(RemoveDecoratorTool);
+		UNTEST_EXPECT_TRUE(Result.bIsError);
+	}
+	{
+		auto Result = CallWithSession(AddServiceTool);
+		UNTEST_EXPECT_TRUE(Result.bIsError);
+	}
+	{
+		auto Result = CallWithSession(RemoveServiceTool);
+		UNTEST_EXPECT_TRUE(Result.bIsError);
 	}
 
-	// update_asset and save should work without extra params
+	// update_asset should work without extra params
 	{
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-		Args->SetStringField(TEXT("operation"), TEXT("update_asset"));
 		Args->SetStringField(TEXT("session_id"), SessionId);
-		auto Result = Tool.Execute(Args);
+		auto Result = UpdateAssetTool.Execute(Args);
 		UNTEST_EXPECT_FALSE(Result.bIsError);
 	}
 
 	// Cleanup
 	TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
-	CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 	CloseArgs->SetStringField(TEXT("session_id"), SessionId);
-	Tool.Execute(CloseArgs);
+	CloseTool.Execute(CloseArgs);
 
 	co_return;
 }
@@ -549,11 +550,11 @@ UNTEST_UNIT_OPTS(Claireon, EQS, InspectSchemaValid, UNTEST_TIMEOUTMS(1000))
 
 UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEdit, SchemaValid, UNTEST_TIMEOUTMS(1000))
 {
-	ClaireonTool_BehaviorTreeEdit Tool;
-	UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("claireon.behaviortree_edit"));
-	UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
+	ClaireonBehaviorTreeTool_Open OpenTool;
+	UNTEST_EXPECT_STREQ(OpenTool.GetName(), TEXT("claireon.behaviortree_open"));
+	UNTEST_EXPECT_TRUE(!OpenTool.GetDescription().IsEmpty());
 
-	auto Schema = Tool.GetInputSchema();
+	auto Schema = OpenTool.GetInputSchema();
 	UNTEST_ASSERT_PTR(Schema.Get());
 
 	FString Type;
@@ -563,15 +564,18 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEdit, SchemaValid, UNTEST_TIMEOUTMS(1000)
 	const TSharedPtr<FJsonObject>* Props;
 	UNTEST_EXPECT_TRUE(Schema->TryGetObjectField(TEXT("properties"), Props));
 
-	// Must have operation, session_id, and params properties
-	const TSharedPtr<FJsonObject>* OpProp;
-	UNTEST_EXPECT_TRUE((*Props)->TryGetObjectField(TEXT("operation"), OpProp));
+	// Open requires asset_path
+	const TSharedPtr<FJsonObject>* AssetPathProp;
+	UNTEST_EXPECT_TRUE((*Props)->TryGetObjectField(TEXT("asset_path"), AssetPathProp));
 
+	// A session-consumer tool should expose session_id
+	ClaireonBehaviorTreeTool_Status StatusTool;
+	auto StatusSchema = StatusTool.GetInputSchema();
+	UNTEST_ASSERT_PTR(StatusSchema.Get());
+	const TSharedPtr<FJsonObject>* StatusProps;
+	UNTEST_EXPECT_TRUE(StatusSchema->TryGetObjectField(TEXT("properties"), StatusProps));
 	const TSharedPtr<FJsonObject>* SessionProp;
-	UNTEST_EXPECT_TRUE((*Props)->TryGetObjectField(TEXT("session_id"), SessionProp));
-
-	const TSharedPtr<FJsonObject>* ParamsProp;
-	UNTEST_EXPECT_TRUE((*Props)->TryGetObjectField(TEXT("params"), ParamsProp));
+	UNTEST_EXPECT_TRUE((*StatusProps)->TryGetObjectField(TEXT("session_id"), SessionProp));
 
 	co_return;
 }

@@ -71,6 +71,31 @@ TSharedPtr<FJsonObject> ClaireonTool_SearchTools::GetInputSchema() const
 	DetailProp->SetArrayField(TEXT("enum"), DetailEnum);
 	Properties->SetObjectField(TEXT("detail"), DetailProp);
 
+	// include_schema - optional
+	TSharedPtr<FJsonObject> IncludeSchemaProp = MakeShared<FJsonObject>();
+	IncludeSchemaProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	IncludeSchemaProp->SetStringField(TEXT("description"),
+		TEXT("When true, include each tool's full input JSON Schema in the result."));
+	IncludeSchemaProp->SetBoolField(TEXT("default"), false);
+	Properties->SetObjectField(TEXT("include_schema"), IncludeSchemaProp);
+
+	// include_examples - optional
+	TSharedPtr<FJsonObject> IncludeExamplesProp = MakeShared<FJsonObject>();
+	IncludeExamplesProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	IncludeExamplesProp->SetStringField(TEXT("description"),
+		TEXT("When true, include each tool's GetExampleUsage() string in the result."));
+	IncludeExamplesProp->SetBoolField(TEXT("default"), false);
+	Properties->SetObjectField(TEXT("include_examples"), IncludeExamplesProp);
+
+	// tool_name - optional deep-inspect bypass
+	TSharedPtr<FJsonObject> ToolNameProp = MakeShared<FJsonObject>();
+	ToolNameProp->SetStringField(TEXT("type"), TEXT("string"));
+	ToolNameProp->SetStringField(TEXT("description"),
+		TEXT("When provided, return deep inspection of that exact tool name (bypasses search ranking). "
+			"Forces include_schema=true and include_examples=true for the matched tool."));
+	ToolNameProp->SetStringField(TEXT("default"), TEXT(""));
+	Properties->SetObjectField(TEXT("tool_name"), ToolNameProp);
+
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	return Schema;
@@ -109,6 +134,20 @@ bool ClaireonTool_SearchTools::RebuildCatalog()
 		ToolObj->SetStringField(TEXT("name"), ToolName);
 		ToolObj->SetStringField(TEXT("description"), Tool->GetDescription());
 		ToolObj->SetStringField(TEXT("category"), Tool->GetCategory());
+
+		// Include search keywords so the Python catalog can rank them alongside name/description.
+		const TArray<FString> Keywords = Tool->GetSearchKeywords();
+		if (Keywords.Num() > 0)
+		{
+			TArray<TSharedPtr<FJsonValue>> KeywordValues;
+			KeywordValues.Reserve(Keywords.Num());
+			for (const FString& Keyword : Keywords)
+			{
+				KeywordValues.Add(MakeShared<FJsonValueString>(Keyword));
+			}
+			ToolObj->SetArrayField(TEXT("keywords"), KeywordValues);
+		}
+
 		ToolsArray.Add(MakeShared<FJsonValueObject>(ToolObj));
 	}
 
@@ -243,13 +282,19 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 	FString Query;
 	FString Category;
 	FString Detail = TEXT("standard");
+	FString InspectToolName;
 	int32 MaxResults = 100;
+	bool bIncludeSchema = false;
+	bool bIncludeExamples = false;
 
 	if (Arguments.IsValid())
 	{
 		Arguments->TryGetStringField(TEXT("query"), Query);
 		Arguments->TryGetStringField(TEXT("category"), Category);
 		Arguments->TryGetStringField(TEXT("detail"), Detail);
+		Arguments->TryGetStringField(TEXT("tool_name"), InspectToolName);
+		Arguments->TryGetBoolField(TEXT("include_schema"), bIncludeSchema);
+		Arguments->TryGetBoolField(TEXT("include_examples"), bIncludeExamples);
 
 		double MaxResultsVal = 100;
 		if (Arguments->TryGetNumberField(TEXT("max_results"), MaxResultsVal))
@@ -267,8 +312,68 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 
 	Query = Query.TrimStartAndEnd();
 	Category = Category.TrimStartAndEnd();
+	InspectToolName = InspectToolName.TrimStartAndEnd();
 
 	const TMap<FString, TSharedPtr<IClaireonTool>>& ToolsMap = Server->GetTools();
+
+	// --- Deep-inspect bypass: when tool_name is provided, return that tool's full metadata. ---
+	if (!InspectToolName.IsEmpty())
+	{
+		const TSharedPtr<IClaireonTool>* FoundTool = ToolsMap.Find(InspectToolName);
+		if (!FoundTool || !FoundTool->IsValid())
+		{
+			return MakeErrorResult(FString::Printf(TEXT("Tool not found: %s"), *InspectToolName));
+		}
+		const TSharedPtr<IClaireonTool>& Tool = *FoundTool;
+
+		TSharedPtr<FJsonObject> ToolObj = MakeShared<FJsonObject>();
+		ToolObj->SetStringField(TEXT("name"), Tool->GetName());
+		ToolObj->SetStringField(TEXT("category"), Tool->GetCategory());
+		ToolObj->SetStringField(TEXT("description"), Tool->GetDescription());
+		ToolObj->SetStringField(TEXT("brief_description"), Tool->GetBriefDescription());
+		ToolObj->SetStringField(TEXT("full_description"), Tool->GetFullDescription());
+		ToolObj->SetStringField(TEXT("signature"),
+			FClaireonXmlFormatter::GenerateTypeSignature(Tool->GetName(), Tool->GetInputSchema()));
+
+		// Deep inspect always includes schema + example regardless of caller flags.
+		if (TSharedPtr<FJsonObject> InputSchema = Tool->GetInputSchema())
+		{
+			ToolObj->SetObjectField(TEXT("input_schema"), InputSchema);
+		}
+		const FString Example = Tool->GetExampleUsage();
+		if (!Example.IsEmpty())
+		{
+			ToolObj->SetStringField(TEXT("example_usage"), Example);
+		}
+		if (TSharedPtr<FJsonObject> Tooltips = Tool->GetParameterTooltips())
+		{
+			ToolObj->SetObjectField(TEXT("parameter_tooltips"), Tooltips);
+		}
+		const TArray<FString> Keywords = Tool->GetSearchKeywords();
+		if (Keywords.Num() > 0)
+		{
+			TArray<TSharedPtr<FJsonValue>> KeywordValues;
+			KeywordValues.Reserve(Keywords.Num());
+			for (const FString& Keyword : Keywords)
+			{
+				KeywordValues.Add(MakeShared<FJsonValueString>(Keyword));
+			}
+			ToolObj->SetArrayField(TEXT("keywords"), KeywordValues);
+		}
+
+		const TMap<FString, FName>& SourceMap = Server->GetToolSourceMap();
+		if (const FName* SourceName = SourceMap.Find(InspectToolName))
+		{
+			ToolObj->SetStringField(TEXT("source"), SourceName->ToString());
+		}
+
+		TSharedPtr<FJsonObject> InspectData = MakeShared<FJsonObject>();
+		InspectData->SetBoolField(TEXT("deep_inspect"), true);
+		InspectData->SetObjectField(TEXT("tool"), ToolObj);
+
+		const FString InspectSummary = FString::Printf(TEXT("Deep inspect: %s"), *InspectToolName);
+		return MakeSuccessResult(InspectData, InspectSummary);
+	}
 
 	// Determine which tools to include via fuzzy search or full catalog
 	TArray<FString> FuzzyRankedNames;  // ordered by relevance
@@ -283,7 +388,7 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 			RebuildCatalog();
 		}
 
-		// Try fuzzy search via Python IndexEngine
+		// Try fuzzy search via the C++ nearest-string catalog matcher (bridged through Python)
 		FuzzyRankedNames = FuzzySearch(Query, MaxResults);
 		if (FuzzyRankedNames.Num() > 0)
 		{
@@ -305,6 +410,8 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 		FString Category;
 		FString TypeSignature;
 		FString Source;
+		TSharedPtr<FJsonObject> InputSchema;
+		FString ExampleUsage;
 	};
 	TArray<FMatchEntry> MatchingTools;
 
@@ -385,7 +492,17 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 		Entry.Name = ToolName;
 		Entry.Description = ToolDescription;
 		Entry.Category = ToolCategory;
-		Entry.TypeSignature = FClaireonXmlFormatter::GenerateTypeSignature(ToolName, Tool->GetInputSchema());
+		TSharedPtr<FJsonObject> ToolSchema = Tool->GetInputSchema();
+		Entry.TypeSignature = FClaireonXmlFormatter::GenerateTypeSignature(ToolName, ToolSchema);
+
+		if (bIncludeSchema)
+		{
+			Entry.InputSchema = ToolSchema;
+		}
+		if (bIncludeExamples)
+		{
+			Entry.ExampleUsage = Tool->GetExampleUsage();
+		}
 
 		// Look up tool source from the server's source map
 		const TMap<FString, FName>& SourceMap = Server->GetToolSourceMap();
@@ -470,6 +587,14 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 			if (!Entry->Source.IsEmpty())
 			{
 				ToolObj->SetStringField(TEXT("source"), Entry->Source);
+			}
+			if (Entry->InputSchema.IsValid())
+			{
+				ToolObj->SetObjectField(TEXT("input_schema"), Entry->InputSchema);
+			}
+			if (!Entry->ExampleUsage.IsEmpty())
+			{
+				ToolObj->SetStringField(TEXT("example_usage"), Entry->ExampleUsage);
 			}
 			ToolsArr.Add(MakeShared<FJsonValueObject>(ToolObj));
 		}

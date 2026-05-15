@@ -107,31 +107,16 @@ FToolResult ClaireonTool_MapDuplicate::Execute(const TSharedPtr<FJsonObject>& Ar
 		DestPath = ResolveResult.ResolvedPath.Path;
 	}
 
-	// Post-resolver: append object name for asset registry lookup
-	FString SourceObjectPath = SourcePath;
-	if (!SourceObjectPath.Contains(TEXT(".")))
-	{
-		FString AssetName = FPaths::GetBaseFilename(SourceObjectPath);
-		SourceObjectPath = SourceObjectPath + TEXT(".") + AssetName;
-	}
-
-	FString DestObjectPath = DestPath;
-	if (!DestObjectPath.Contains(TEXT(".")))
-	{
-		FString AssetName = FPaths::GetBaseFilename(DestObjectPath);
-		DestObjectPath = DestObjectPath + TEXT(".") + AssetName;
-	}
-
 	// Validate source exists
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-	FAssetData SourceData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(SourceObjectPath));
+	FAssetData SourceData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(SourcePath));
 	if (!SourceData.IsValid())
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Source map not found: %s"), *SourcePath));
 	}
 
 	// Validate destination does not already exist
-	FAssetData DestData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(DestObjectPath));
+	FAssetData DestData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(DestPath));
 	if (DestData.IsValid())
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Destination already exists: %s"), *DestPath));

@@ -1,0 +1,14 @@
+// Copyright (c) 2026 The Claireon Contributors
+// SPDX-License-Identifier: MIT
+
+#pragma once
+
+#include "Tools/ClaireonAnimGraphEditBase.h"
+
+DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_AddState);
+DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_RemoveState);
+DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_RenameState);
+DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_SetEntryState);
+DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_AddTransition);
+DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_RemoveTransition);
+DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_SetTransitionProperties);

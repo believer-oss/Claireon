@@ -8,9 +8,9 @@
 #include "Engine/Blueprint.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "ScopedTransaction.h"
-#include "UObject/UnrealType.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Tools/ClaireonPropertyUtils.h"
 
 FString ClaireonTool_SetBlueprintCDOProperty::GetName() const
 {
@@ -28,7 +28,8 @@ FString ClaireonTool_SetBlueprintCDOProperty::GetDescription() const
 		"Supports all property types via ImportText serialization including TSoftClassPtr. "
 		"Sessionless alternative to edit_blueprint_graph for simple property changes. "
 		"Supports component template properties via automatic SCS component lookup. "
-		"Does not support array indexing.");
+		"Supports nested struct and array element writes via the `property_path` argument; "
+		"each path segment may be suffixed with `[N]` to index a TArray.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_SetBlueprintCDOProperty::GetInputSchema() const
@@ -59,7 +60,11 @@ TSharedPtr<FJsonObject> ClaireonTool_SetBlueprintCDOProperty::GetInputSchema() c
 	TSharedPtr<FJsonObject> PropertyPathProp = MakeShared<FJsonObject>();
 	PropertyPathProp->SetStringField(TEXT("type"), TEXT("string"));
 	PropertyPathProp->SetStringField(TEXT("description"),
-		TEXT("Optional dot-separated path for nested struct properties"));
+		TEXT("Optional dot-separated path for nested struct/array properties. "
+		     "Each segment may be suffixed with `[N]` to index a TArray "
+		     "(e.g. `waves[0].spawn_count`). The final segment is taken from `property_name`. "
+		     "If the first segment names a component property on the Blueprint CDO, "
+		     "the write is redirected to that component's SCS template."));
 	Properties->SetObjectField(TEXT("property_path"), PropertyPathProp);
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
@@ -126,126 +131,94 @@ IClaireonTool::FToolResult ClaireonTool_SetBlueprintCDOProperty::Execute(const T
 		return MakeErrorResult(TEXT("Failed to get Blueprint CDO"));
 	}
 
-	// Step 5: Resolve property
-	FProperty* Property = nullptr;
-	void* Container = nullptr;
-	FString ResolvedOn_ForResult;
-	FString ResolvedNote_ForResult;
-	bool bResolvedOnComponent = false;
-	UObject* ResolvedTargetObject = nullptr;
-
-	if (!PropertyPath.IsEmpty())
+	// Step 5: Build the combined path for the resolver + writer.
+	// Grammar and bounds-checking live in ClaireonPropertyUtils::WritePropertyByPath.
+	// This tool only composes property_path + property_name into a single string.
+	FString CombinedPath;
+	if (PropertyPath.IsEmpty())
 	{
-		// Dot-path struct walk
-		TArray<FString> PathParts;
-		PropertyPath.ParseIntoArray(PathParts, TEXT("."));
-
-		// Append the property_name as the final segment
-		PathParts.Add(PropertyName);
-
-		void* CurrentContainer = CDO;
-		UStruct* CurrentStruct = CDO->GetClass();
-
-		for (int32 i = 0; i < PathParts.Num(); i++)
-		{
-			FProperty* Prop = CurrentStruct->FindPropertyByName(FName(*PathParts[i]));
-			if (!Prop)
-			{
-				return MakeErrorResult(FString::Printf(
-					TEXT("Property '%s' not found on '%s'"),
-					*PathParts[i], *CurrentStruct->GetName()));
-			}
-
-			if (i == PathParts.Num() - 1)
-			{
-				// Final segment -- this is the target property
-				Property = Prop;
-				Container = CurrentContainer;
-			}
-			else
-			{
-				// Intermediate segment -- must be a struct property
-				FStructProperty* StructProp = CastField<FStructProperty>(Prop);
-				if (!StructProp)
-				{
-					return MakeErrorResult(FString::Printf(
-						TEXT("Property '%s' is not a struct -- cannot walk further"), *PathParts[i]));
-				}
-				CurrentContainer = StructProp->ContainerPtrToValuePtr<void>(CurrentContainer);
-				CurrentStruct = StructProp->Struct;
-			}
-		}
-		ResolvedOn_ForResult = TEXT("CDO");
+		CombinedPath = PropertyName;
 	}
 	else
 	{
-		// Component-aware lookup on CDO + SCS component templates
-		ClaireonPropertyResolver::FResolvedProperty Resolved;
-		FString ResolveError;
-		if (!ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(Blueprint, PropertyName, Resolved, ResolveError))
-		{
-			return MakeErrorResult(ResolveError);
-		}
-
-		// Find the actual FProperty* on the resolved target object
-		Property = Resolved.TargetObject->GetClass()->FindPropertyByName(FName(*PropertyName));
-		if (!Property)
-		{
-			// This should not happen since ResolvePropertyOnBlueprintCDO found it, but guard anyway
-			return MakeErrorResult(FString::Printf(
-				TEXT("Internal error: resolver found '%s' on '%s' but FindPropertyByName failed"),
-				*PropertyName, *Resolved.ResolvedOn));
-		}
-		Container = Resolved.TargetObject;
-
-		// Store resolution metadata for the result JSON
-		ResolvedOn_ForResult = Resolved.ResolvedOn;
-		ResolvedNote_ForResult = Resolved.Note;
-		bResolvedOnComponent = (Resolved.TargetObject != CDO);
-		ResolvedTargetObject = Resolved.TargetObject;
+		CombinedPath = PropertyPath + TEXT(".") + PropertyName;
 	}
 
-	// Step 6: Export old value
-	FString OldValue;
-	Property->ExportTextItem_Direct(OldValue, Property->ContainerPtrToValuePtr<void>(Container), nullptr, nullptr, PPF_None);
+	// Step 6: Resolve on Blueprint CDO (with SCS component fall-through).
+	// Resolver handles "first segment is a component name" cases and returns
+	// RemainingPath (the tail to forward to the writer).
+	ClaireonPropertyResolver::FResolvedProperty Resolved;
+	FString ResolveError;
+	if (!ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(Blueprint, CombinedPath, Resolved, ResolveError))
+	{
+		return MakeErrorResult(ResolveError);
+	}
 
-	// Step 7: FScopedTransaction + Modify()
+	UObject* TargetObject = Resolved.TargetObject;
+	if (!TargetObject)
+	{
+		// Defensive: ResolvePropertyOnBlueprintCDO should never succeed with a null target.
+		return MakeErrorResult(TEXT("Internal error: resolver returned null TargetObject"));
+	}
+
+	// Step 7: Export old value through the same path walker used for the write.
+	// Error from the reader is not fatal here -- if the read fails the write still proceeds
+	// and the response simply omits old_value. This mirrors a missing leaf being created by import.
+	FString OldValue;
+	{
+		FString ReadError;
+		OldValue = ClaireonPropertyUtils::ReadPropertyByPath(TargetObject, Resolved.RemainingPath, ReadError);
+		// ReadError deliberately swallowed; treated as non-fatal. Do not return MakeErrorResult here.
+	}
+
+	// Step 8: Open transaction + Modify() cluster.
+	// FScopedTransaction + CDO->Modify() capture the whole object's serialized state so
+	// in-place array element writes performed by FScriptArrayHelper::GetRawPtr inside
+	// WritePropertyByPath are rolled back on undo.
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Set Blueprint CDO Property")));
 	Blueprint->Modify();
-	CDO->Modify();
-	// When the property lives on a component template, also Modify() the component template
-	if (bResolvedOnComponent && ResolvedTargetObject)
+	UObject* CDOForModify = Blueprint->GeneratedClass->GetDefaultObject();
+	if (CDOForModify)
 	{
-		ResolvedTargetObject->Modify();
+		CDOForModify->Modify();
+	}
+	if (TargetObject != CDOForModify)
+	{
+		TargetObject->Modify();
 	}
 
-	// Step 8: ImportText_Direct -- check return value for nullptr
-	const TCHAR* Result = Property->ImportText_Direct(*Value, Property->ContainerPtrToValuePtr<void>(Container), CDO, PPF_None);
-	if (Result == nullptr)
+	// Step 9: Delegate the write to ClaireonPropertyUtils. Error strings come from the helper
+	// (ParsePathSegments / ResolvePath / ImportText_Direct) -- do not invent new strings here.
+	FString WriteError;
+	if (!ClaireonPropertyUtils::WritePropertyByPath(TargetObject, Resolved.RemainingPath, Value, WriteError))
 	{
-		return MakeErrorResult(FString::Printf(
-			TEXT("ImportText_Direct failed for property '%s' with value '%s'. Check that the value format matches the property type."),
-			*PropertyName, *Value));
+		return MakeErrorResult(WriteError);
 	}
 
-	// Step 9: Mark Blueprint as modified
+	// Step 10: Mark the Blueprint package dirty so editor save/cook picks up the change.
 	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
 
-	// Step 10: Return success JSON
+	// Step 11: Build response JSON.
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("property_name"), PropertyName);
 	Data->SetStringField(TEXT("old_value"), OldValue);
 	Data->SetStringField(TEXT("new_value"), Value);
 	Data->SetStringField(TEXT("asset_path"), AssetPath);
-	if (!ResolvedOn_ForResult.IsEmpty())
+	if (!PropertyPath.IsEmpty())
 	{
-		Data->SetStringField(TEXT("resolved_on"), ResolvedOn_ForResult);
+		Data->SetStringField(TEXT("property_path"), PropertyPath);
 	}
-	if (!ResolvedNote_ForResult.IsEmpty())
+	if (!Resolved.ResolvedOn.IsEmpty())
 	{
-		Data->SetStringField(TEXT("note"), ResolvedNote_ForResult);
+		Data->SetStringField(TEXT("resolved_on"), Resolved.ResolvedOn);
+	}
+	if (!Resolved.Note.IsEmpty())
+	{
+		Data->SetStringField(TEXT("note"), Resolved.Note);
 	}
 
-	FString Summary = FString::Printf(TEXT("Set %s.%s = '%s' (was '%s')"), *AssetPath, *PropertyName, *Value, *OldValue);
+	const FString Summary = FString::Printf(
+		TEXT("Set %s.%s = '%s' (was '%s')"),
+		*AssetPath, *CombinedPath, *Value, *OldValue);
 	return MakeSuccessResult(Data, Summary);
 }

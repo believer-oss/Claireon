@@ -57,4 +57,21 @@ private:
 
 	/** Check if detail level is valid */
 	static bool IsValidDetailLevel(const FString& DetailLevel);
+
+	// Test access: allow spec tests to call private formatters directly so they can
+	// verify the outline grammar / regex without needing a markdown wrapper in Execute.
+	friend struct FClaireonGetBlueprintGraphTestAccess;
+};
+
+/** Test-only accessor exposing private formatters for automation tests. */
+struct FClaireonGetBlueprintGraphTestAccess
+{
+	static FString FormatNodeSummary(ClaireonTool_GetBlueprintGraph& Tool, const class UEdGraphNode* Node, const FString& DetailLevel)
+	{
+		return Tool.FormatNodeSummary(Node, DetailLevel);
+	}
+	static FString BuildGraphJsonSummary(ClaireonTool_GetBlueprintGraph& Tool, const class UEdGraph* Graph, const FString& DetailLevel, int32 MaxNodes)
+	{
+		return Tool.BuildGraphJsonSummary(Graph, DetailLevel, MaxNodes);
+	}
 };

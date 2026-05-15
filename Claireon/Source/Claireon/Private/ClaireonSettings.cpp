@@ -43,11 +43,6 @@ FString UClaireonSettings::GetEffectiveSystemPrompt() const
         "- Do not write comments in code — it is not for human consumption.\n"
         "- Keep code minimal and direct.\n\n"
 
-        "## Large Results\n"
-        "When a tool returns a large result, it is automatically indexed and you receive "
-        "a summary with an `index_id`. Use `claireon.index_search(index_id, query)` to search "
-        "within the indexed result for specific information.\n\n"
-
         "## Behavior\n"
         "- Before calling execute, briefly state what you intend to do (one line).\n"
         "- Be concise. Do not repeat information already established in the conversation.\n"

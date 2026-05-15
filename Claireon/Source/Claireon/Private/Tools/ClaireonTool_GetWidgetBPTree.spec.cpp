@@ -1,9 +1,18 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
+// Stage 029 rewrite: MVVM setup helpers now use the decomposed
+// ClaireonWidgetBPTool_* classes instead of the deleted
+// ClaireonTool_EditWidgetBP shim. The tool-under-test
+// (ClaireonTool_GetWidgetBPTree) is untouched.
+
 #include "Misc/AutomationTest.h"
 #include "Tools/ClaireonTool_GetWidgetBPTree.h"
-#include "Tools/ClaireonTool_EditWidgetBP.h"
+#include "Tools/ClaireonWidgetBPTool_Create.h"
+#include "Tools/ClaireonWidgetBPTool_AddMVVMViewModel.h"
+#include "Tools/ClaireonWidgetBPTool_Compile.h"
+#include "Tools/ClaireonWidgetBPTool_Save.h"
+#include "Tools/ClaireonWidgetBPTool_Close.h"
 #include "WidgetBlueprint.h"
 #include "Blueprint/WidgetTree.h"
 #include "Blueprint/UserWidget.h"
@@ -197,29 +206,26 @@ bool FGetWidgetBPTreeTest_MVVMBindingsInTree::RunTest(const FString& Parameters)
 {
 	const FString AssetPath = TEXT("/Game/__MCPTests/WBP_MVVMTreeTest");
 
-	// --- Step 1: Create WBP and add MVVM viewmodel using EditWidgetBP ---
-	ClaireonTool_EditWidgetBP EditTool;
+	// --- Step 1: Create WBP and add MVVM viewmodel via decomposed widget-BP tools ---
+	FString SessionId;
 
 	// Create WBP
-	TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
-	CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
-	TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
-	CreateParams->SetStringField(TEXT("asset_path"), AssetPath);
-	CreateParams->SetStringField(TEXT("root_widget_class"), TEXT("CanvasPanel"));
-	CreateArgs->SetObjectField(TEXT("params"), CreateParams);
-
-	auto CreateResult = EditTool.Execute(CreateArgs);
-	if (CreateResult.bIsError)
 	{
-		AddError(FString::Printf(TEXT("Failed to create WBP: %s"), *CreateResult.GetContentAsString()));
-		return false;
-	}
+		ClaireonWidgetBPTool_Create CreateTool;
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("asset_path"), AssetPath);
+		Args->SetStringField(TEXT("root_widget_class"), TEXT("CanvasPanel"));
 
-	// Parse session_id
-	FString SessionId;
-	{
+		auto Result = CreateTool.Execute(Args);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("Failed to create WBP: %s"), *Result.GetContentAsString()));
+			return false;
+		}
+
+		// Parse session_id from pretty-printed JSON response
 		TSharedPtr<FJsonObject> Json;
-		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(CreateResult.GetContentAsString());
+		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Result.GetContentAsString());
 		if (FJsonSerializer::Deserialize(Reader, Json) && Json.IsValid())
 		{
 			Json->TryGetStringField(TEXT("session_id"), SessionId);
@@ -231,41 +237,42 @@ bool FGetWidgetBPTreeTest_MVVMBindingsInTree::RunTest(const FString& Parameters)
 		return false;
 	}
 
-	// Helper to execute operations
-	auto ExecOp = [&](const FString& Op, const TSharedPtr<FJsonObject>& Params) -> IClaireonTool::FToolResult
-	{
-		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-		Args->SetStringField(TEXT("operation"), Op);
-		Args->SetStringField(TEXT("session_id"), SessionId);
-		Args->SetObjectField(TEXT("params"), Params);
-		return EditTool.Execute(Args);
-	};
-
 	// Add viewmodel
 	{
-		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
-		Params->SetStringField(TEXT("viewmodel_name"), TEXT("TreeTestVM"));
-		Params->SetStringField(TEXT("viewmodel_class"), TEXT("MVVMViewModelBase"));
+		ClaireonWidgetBPTool_AddMVVMViewModel AddVMTool;
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		Args->SetStringField(TEXT("viewmodel_name"), TEXT("TreeTestVM"));
+		Args->SetStringField(TEXT("viewmodel_class"), TEXT("MVVMViewModelBase"));
 
-		auto Result = ExecOp(TEXT("add_mvvm_viewmodel"), Params);
+		auto Result = AddVMTool.Execute(Args);
 		TestFalse("add_mvvm_viewmodel should succeed", Result.bIsError);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add viewmodel: %s"), *Result.GetContentAsString()));
-			ExecOp(TEXT("close"), MakeShared<FJsonObject>());
+			ClaireonWidgetBPTool_Close CloseTool;
+			TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
+			CloseArgs->SetStringField(TEXT("session_id"), SessionId);
+			CloseTool.Execute(CloseArgs);
 			return false;
 		}
 	}
 
-	// Save (compile) and close
+	// Compile
 	{
-		auto Result = ExecOp(TEXT("compile"), MakeShared<FJsonObject>());
+		ClaireonWidgetBPTool_Compile CompileTool;
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		auto Result = CompileTool.Execute(Args);
 		TestFalse("compile should succeed", Result.bIsError);
 	}
 
 	// Save
 	{
-		auto Result = ExecOp(TEXT("save"), MakeShared<FJsonObject>());
+		ClaireonWidgetBPTool_Save SaveTool;
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		auto Result = SaveTool.Execute(Args);
 		if (Result.bIsError)
 		{
 			AddInfo(FString::Printf(TEXT("save returned: %s (non-fatal)"), *Result.GetContentAsString()));
@@ -273,7 +280,12 @@ bool FGetWidgetBPTreeTest_MVVMBindingsInTree::RunTest(const FString& Parameters)
 	}
 
 	// Close session
-	ExecOp(TEXT("close"), MakeShared<FJsonObject>());
+	{
+		ClaireonWidgetBPTool_Close CloseTool;
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		CloseTool.Execute(Args);
+	}
 
 	// --- Step 2: Call get_widget_tree WITH include_mvvm_bindings=true ---
 	ClaireonTool_GetWidgetBPTree TreeTool;

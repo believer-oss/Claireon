@@ -7,6 +7,7 @@
 #include "ClaireonLog.h"
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/MemberReference.h"
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SCS_Node.h"
 #include "EdGraphSchema_K2.h"
@@ -101,6 +102,61 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 		VarObj->SetStringField(TEXT("type"), FormatVariableType(Var.VarType));
 		VarObj->SetStringField(TEXT("default_value"), Var.DefaultValue);
 		VarObj->SetBoolField(TEXT("is_exposed"), (Var.PropertyFlags & CPF_BlueprintVisible) != 0);
+
+		// Raw K2 pin reflection for fixture assertions (Gap 3).
+		VarObj->SetStringField(TEXT("pin_category"), Var.VarType.PinCategory.ToString());
+		VarObj->SetStringField(TEXT("pin_sub_category"), Var.VarType.PinSubCategory.ToString());
+		if (UObject* SubObj = Var.VarType.PinSubCategoryObject.Get())
+		{
+			VarObj->SetStringField(TEXT("pin_sub_category_object"), SubObj->GetPathName());
+		}
+
+		// Delegate signature function (multicast + single-cast delegate variables
+		// carry their UFunction signature in PinSubCategoryMemberReference, not in
+		// PinSubCategoryObject). Emitting signature_function closes the round-trip
+		// contract with blueprint_edit_graph[add_variable] on the target side; see
+		// ClaireonBlueprintHelpers::ResolveSignatureFunction. #0000
+		if (Var.VarType.PinCategory == UEdGraphSchema_K2::PC_MCDelegate ||
+			Var.VarType.PinCategory == UEdGraphSchema_K2::PC_Delegate)
+		{
+			UFunction* SignatureFn = FMemberReference::ResolveSimpleMemberReference<UFunction>(
+				Var.VarType.PinSubCategoryMemberReference, Blueprint->GeneratedClass);
+			if (SignatureFn)
+			{
+				VarObj->SetStringField(TEXT("signature_function"), SignatureFn->GetPathName());
+			}
+			else
+			{
+				UE_LOG(LogClaireon, Warning,
+					TEXT("blueprint_get_properties: failed to resolve signature UFunction for delegate variable '%s' on Blueprint '%s'; omitting signature_function field"),
+					*Var.VarName.ToString(), *Blueprint->GetPathName());
+			}
+		}
+
+		const TCHAR* ContainerTypeStr = TEXT("None");
+		switch (Var.VarType.ContainerType)
+		{
+			case EPinContainerType::Array: ContainerTypeStr = TEXT("Array"); break;
+			case EPinContainerType::Set:   ContainerTypeStr = TEXT("Set"); break;
+			case EPinContainerType::Map:   ContainerTypeStr = TEXT("Map"); break;
+			default: break;
+		}
+		VarObj->SetStringField(TEXT("container_type"), ContainerTypeStr);
+
+		// inner_pin_category mirrors pin_category for Array/Set so fixtures can
+		// read the element kind without container-type branching.
+		if (Var.VarType.ContainerType == EPinContainerType::Array ||
+			Var.VarType.ContainerType == EPinContainerType::Set)
+		{
+			VarObj->SetStringField(TEXT("inner_pin_category"), Var.VarType.PinCategory.ToString());
+		}
+
+		// Map value side.
+		if (Var.VarType.ContainerType == EPinContainerType::Map)
+		{
+			VarObj->SetStringField(TEXT("pin_value_category"), Var.VarType.PinValueType.TerminalCategory.ToString());
+		}
+
 		VariablesArray.Add(MakeShared<FJsonValueObject>(VarObj));
 	}
 

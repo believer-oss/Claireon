@@ -17,8 +17,17 @@ namespace ClaireonPathResolver
 
 	struct FResolvedPath
 	{
-		// The normalized path (e.g. /Game/Characters/BP_Player or /Script/Engine.Actor)
+		// The normalized canonical path. For PackagePath kind, this has the form
+		// "/Game/Foo/Bar.Bar" (object-path canonical) after Stage 0. For NativeClassPath
+		// kind, this is the "/Script/Module.ClassName" form unchanged.
 		FString Path;
+
+		// The package-prefix form of the resolved path with no trailing .<ObjectName>.
+		// Populated by Resolve() alongside Path. Folder-path callers (callers that use
+		// the path with IAssetRegistry::GetAssetsByPath / FARFilter::PackagePaths) must
+		// read this field instead of Path. Object-path callers should continue to read
+		// Path. For NativeClassPath kind, PackagePath equals Path.
+		FString PackagePath;
 
 		// Classification of what type of path was resolved
 		EPathKind Kind = EPathKind::PackagePath;

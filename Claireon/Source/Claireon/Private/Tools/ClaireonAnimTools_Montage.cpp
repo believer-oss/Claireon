@@ -4,6 +4,7 @@
 #include "Tools/ClaireonAnimTools_Montage.h"
 #include "Tools/ClaireonAnimHelpers.h"
 #include "Tools/ClaireonAssetUtils.h"
+#include "ClaireonPathResolver.h"
 #include "ClaireonLog.h"
 #include "Animation/AnimSequenceBase.h"
 #include "Animation/AnimMontage.h"
@@ -289,6 +290,12 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddSegment::Execute(const TSharedPtr
 	FString AnimPath;
 	if (!Arguments->TryGetStringField(TEXT("anim_path"), AnimPath) || AnimPath.IsEmpty())
 		return MakeErrorResult(TEXT("Missing required parameter: anim_path"));
+
+	// Normalize caller-provided path through the central resolver before LoadObject.
+	const auto AnimPathResolve = ClaireonPathResolver::Resolve(AnimPath);
+	if (!AnimPathResolve.bSuccess)
+		return MakeErrorResult(AnimPathResolve.Error);
+	AnimPath = AnimPathResolve.ResolvedPath.Path;
 
 	UAnimSequenceBase* AnimAsset = LoadObject<UAnimSequenceBase>(nullptr, *AnimPath);
 	if (!AnimAsset)
@@ -1003,6 +1010,12 @@ IClaireonTool::FToolResult ClaireonAnimTool_BatchRetimeAnimation::Execute(const 
 	FString AnimPath;
 	if (!Arguments->TryGetStringField(TEXT("anim_path"), AnimPath) || AnimPath.IsEmpty())
 		return MakeErrorResult(TEXT("Missing required parameter: anim_path"));
+
+	// Normalize caller-provided path through the central resolver before LoadObject.
+	const auto AnimPathResolve = ClaireonPathResolver::Resolve(AnimPath);
+	if (!AnimPathResolve.bSuccess)
+		return MakeErrorResult(AnimPathResolve.Error);
+	AnimPath = AnimPathResolve.ResolvedPath.Path;
 
 	UAnimSequenceBase* TargetAnim = LoadObject<UAnimSequenceBase>(nullptr, *AnimPath);
 	if (!TargetAnim)

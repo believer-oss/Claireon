@@ -10,8 +10,10 @@
 #include "ClaireonBridge.h"
 #include "ClaireonAutoSave.h"
 #include "ClaireonLog.h"
+#include "ClaireonOutputGate.h"
 #include "ClaireonSafeExec.h"
 #include "ClaireonPythonAuditLog.h"
+#include "ClaireonToolCatalogMatcher.h"
 #include "IPythonScriptPlugin.h"
 #include "PythonScriptTypes.h"
 #include "Misc/FileHelper.h"
@@ -22,6 +24,7 @@
 #include "Async/Async.h"
 #include "HAL/ThreadHeartBeat.h"
 #include "ClaireonLogCapture.h"
+#include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
@@ -32,6 +35,148 @@ THIRD_PARTY_INCLUDES_START
 THIRD_PARTY_INCLUDES_END
 
 TAtomic<int32> ClaireonTool_ExecutePython::TempFileCounter(0);
+
+// ---------------------------------------------------------------------------
+// Tool-catalog nearest-string bindings (D3 / #0000).
+//
+// Replaces the deleted FTS5 + semantic hybrid matcher.  Exposed to Python as
+// claireon._tool_catalog_build(entries_json_str) / claireon._tool_catalog_nearest
+// (query_str, max_results_int).  Registered into the 'unreal' module dict
+// alongside _mcp_call_tool (see FClaireonBridge::RegisterBridgeFunctions), then
+// aliased onto the claireon proxy in the script prefix below.
+// ---------------------------------------------------------------------------
+
+namespace ClaireonToolCatalogBindings
+{
+	static PyObject* BuildCatalog(PyObject* /*Self*/, PyObject* Args)
+	{
+		const char* EntriesJsonUtf8 = nullptr;
+		if (!PyArg_ParseTuple(Args, "s", &EntriesJsonUtf8))
+		{
+			return nullptr;
+		}
+		if (!EntriesJsonUtf8)
+		{
+			PyErr_SetString(PyExc_ValueError, "claireon._tool_catalog_build: entries_json is null");
+			return nullptr;
+		}
+
+		const FString EntriesJson = UTF8_TO_TCHAR(EntriesJsonUtf8);
+
+		TArray<TSharedPtr<FJsonValue>> Root;
+		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(EntriesJson);
+		if (!FJsonSerializer::Deserialize(Reader, Root))
+		{
+			PyErr_SetString(PyExc_ValueError, "claireon._tool_catalog_build: failed to parse entries JSON array");
+			return nullptr;
+		}
+
+		TArray<FClaireonToolCatalogEntry> Entries;
+		Entries.Reserve(Root.Num());
+		for (const TSharedPtr<FJsonValue>& Val : Root)
+		{
+			if (!Val.IsValid() || Val->Type != EJson::Object)
+			{
+				continue;
+			}
+			const TSharedPtr<FJsonObject>& Obj = Val->AsObject();
+			if (!Obj.IsValid())
+			{
+				continue;
+			}
+			FClaireonToolCatalogEntry Entry;
+			Obj->TryGetStringField(TEXT("name"), Entry.Name);
+			Obj->TryGetStringField(TEXT("description"), Entry.Description);
+			Obj->TryGetStringField(TEXT("category"), Entry.Category);
+			Obj->TryGetStringField(TEXT("enriched_text"), Entry.EnrichedText);
+			if (Entry.EnrichedText.IsEmpty())
+			{
+				// Fallback: synthesise from the other fields so a caller that forgot enriched_text still indexes something.
+				Entry.EnrichedText = Entry.Name + TEXT(" ") + Entry.Description + TEXT(" ") + Entry.Category;
+			}
+			Entries.Add(MoveTemp(Entry));
+		}
+
+		FClaireonToolCatalogMatcher::BuildCatalog(Entries);
+
+		Py_RETURN_NONE;
+	}
+
+	static PyObject* FindNearest(PyObject* /*Self*/, PyObject* Args)
+	{
+		const char* QueryUtf8 = nullptr;
+		int MaxResults = 0;
+		if (!PyArg_ParseTuple(Args, "si", &QueryUtf8, &MaxResults))
+		{
+			return nullptr;
+		}
+		const FString Query = QueryUtf8 ? FString(UTF8_TO_TCHAR(QueryUtf8)) : FString();
+		const int32 K = FMath::Max(0, static_cast<int32>(MaxResults));
+
+		TArray<FClaireonToolCatalogMatch> Matches = FClaireonToolCatalogMatcher::FindNearest(Query, K);
+
+		// Serialise to JSON array of { name, category, score }.
+		TArray<TSharedPtr<FJsonValue>> OutArr;
+		OutArr.Reserve(Matches.Num());
+		for (const FClaireonToolCatalogMatch& M : Matches)
+		{
+			TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+			Obj->SetStringField(TEXT("name"), M.Name);
+			Obj->SetStringField(TEXT("category"), M.Category);
+			Obj->SetNumberField(TEXT("score"), M.Score);
+			OutArr.Add(MakeShared<FJsonValueObject>(Obj));
+		}
+
+		FString OutJson;
+		TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+			TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&OutJson);
+		FJsonSerializer::Serialize(OutArr, Writer);
+		Writer->Close();
+
+		return PyUnicode_FromString(TCHAR_TO_UTF8(*OutJson));
+	}
+
+	static PyMethodDef BuildDef = {
+		"_tool_catalog_build",
+		&BuildCatalog,
+		METH_VARARGS,
+		"Rebuild the tool catalog from JSON. Args: (entries_json: str) -> None"
+	};
+
+	static PyMethodDef NearestDef = {
+		"_tool_catalog_nearest",
+		&FindNearest,
+		METH_VARARGS,
+		"Rank catalog entries against a query. Args: (query: str, max_results: int) -> str (JSON array)"
+	};
+}
+
+void ClaireonTool_ExecutePython::RegisterToolCatalogBindings(void* UnrealModuleDict)
+{
+	PyObject* ModuleDict = static_cast<PyObject*>(UnrealModuleDict);
+	if (!ModuleDict)
+	{
+		return;
+	}
+
+	PyObject* BuildFn = PyCFunction_New(&ClaireonToolCatalogBindings::BuildDef, nullptr);
+	PyObject* NearestFn = PyCFunction_New(&ClaireonToolCatalogBindings::NearestDef, nullptr);
+	if (!BuildFn || !NearestFn)
+	{
+		Py_XDECREF(BuildFn);
+		Py_XDECREF(NearestFn);
+		UE_LOG(LogClaireon, Error, TEXT("[MCP Bridge] Failed to create tool-catalog PyCFunctions"));
+		return;
+	}
+
+	PyDict_SetItemString(ModuleDict, "_tool_catalog_build", BuildFn);
+	PyDict_SetItemString(ModuleDict, "_tool_catalog_nearest", NearestFn);
+
+	Py_DECREF(BuildFn);
+	Py_DECREF(NearestFn);
+
+	UE_LOG(LogClaireon, Display, TEXT("[MCP Bridge] Registered _tool_catalog_build / _tool_catalog_nearest in unreal module"));
+}
 
 FString ClaireonTool_ExecutePython::GetName() const
 {
@@ -344,5 +489,12 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 		bTimedOut ? TEXT("true") : TEXT("false"),
 		ToolCallCount);
 
-	return FinalResult;
+	// Route stdout ("Logs") and uelog streams through the disk-spill gate (per D6).
+	// claireon.python_execute has no structured "data" stream.  The conversation id comes
+	// from FClaireonBridge::GetCurrentConversationId(), set by the REPL before dispatch.
+	return FClaireonOutputGate::RouteResult(
+		MoveTemp(FinalResult),
+		TEXT("claireon.python_execute"),
+		FClaireonBridge::GetCurrentConversationId(),
+		EClaireonSpillStreamSet::PythonStdoutAndUELog);
 }

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "ClaireonXmlFormatter.h"
+#include "ClaireonOutputGate.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
@@ -52,44 +53,55 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 	}
 	else
 	{
-		// Check if this is an indexed result (Output Gate envelope)
-		bool bIsIndexed = false;
+		// Check if this is a disk-spilled result (Output Gate envelope)
+		bool bIsSpilled = false;
 		if (Result.Data.IsValid())
 		{
-			bool bMCPIndexed = false;
-			if (Result.Data->TryGetBoolField(TEXT("__mcp_indexed__"), bMCPIndexed) && bMCPIndexed)
+			bool bMCPSpilled = false;
+			if (Result.Data->TryGetBoolField(TEXT("__mcp_spilled__"), bMCPSpilled) && bMCPSpilled)
 			{
-				bIsIndexed = true;
-				FString IndexId;
-				Result.Data->TryGetStringField(TEXT("index_id"), IndexId);
-				double ChunkCountDouble = 0.0;
-				Result.Data->TryGetNumberField(TEXT("chunk_count"), ChunkCountDouble);
-				FString IndexSummary;
-				Result.Data->TryGetStringField(TEXT("summary"), IndexSummary);
+				bIsSpilled = true;
 
-				TArray<FString> Excerpts;
-				const TArray<TSharedPtr<FJsonValue>>* ExcerptsArray = nullptr;
-				if (Result.Data->TryGetArrayField(TEXT("excerpts"), ExcerptsArray) && ExcerptsArray)
+				// Parse spilled_streams array into FClaireonSpillStream entries.
+				TArray<FClaireonSpillStream> Streams;
+				const TArray<TSharedPtr<FJsonValue>>* StreamsArray = nullptr;
+				if (Result.Data->TryGetArrayField(TEXT("spilled_streams"), StreamsArray) && StreamsArray)
 				{
-					for (const TSharedPtr<FJsonValue>& ExcerptVal : *ExcerptsArray)
+					for (const TSharedPtr<FJsonValue>& StreamVal : *StreamsArray)
 					{
-						if (ExcerptVal.IsValid() && ExcerptVal->Type == EJson::Object)
+						const TSharedPtr<FJsonObject>* StreamObj = nullptr;
+						if (!StreamVal.IsValid() || !StreamVal->TryGetObject(StreamObj) || !StreamObj || !(*StreamObj).IsValid())
 						{
-							FString ExcerptStr;
-							TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> ExcerptWriter =
-								TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&ExcerptStr);
-							FJsonSerializer::Serialize(ExcerptVal->AsObject().ToSharedRef(), ExcerptWriter);
-							ExcerptWriter->Close();
-							Excerpts.Add(ExcerptStr);
+							continue;
 						}
+						FClaireonSpillStream Entry;
+						(*StreamObj)->TryGetStringField(TEXT("name"), Entry.Name);
+						(*StreamObj)->TryGetStringField(TEXT("absolute_path"), Entry.AbsolutePath);
+						double SizeDouble = 0.0;
+						if ((*StreamObj)->TryGetNumberField(TEXT("size_bytes"), SizeDouble))
+						{
+							Entry.SizeBytes = static_cast<int64>(SizeDouble);
+						}
+						(*StreamObj)->TryGetStringField(TEXT("content_type"), Entry.ContentType);
+						(*StreamObj)->TryGetStringField(TEXT("preview"), Entry.Preview);
+						(*StreamObj)->TryGetBoolField(TEXT("over_ceiling"), Entry.bOverCeiling);
+						(*StreamObj)->TryGetBoolField(TEXT("write_failed"), Entry.bWriteFailed);
+						(*StreamObj)->TryGetStringField(TEXT("error_text"), Entry.ErrorText);
+						Streams.Add(MoveTemp(Entry));
 					}
 				}
 
-				Xml = FormatIndexedResult(IndexId, static_cast<int32>(ChunkCountDouble), IndexSummary, Excerpts, Result.Logs, Result.UELog);
+				FString SpillSummary = Result.Summary;
+				if (SpillSummary.IsEmpty())
+				{
+					SpillSummary = TEXT("Result data exceeded inline threshold and was written to disk.");
+				}
+
+				Xml = FormatSpilledResult(SpillSummary, Streams, Result.Logs, Result.UELog);
 			}
 		}
 
-		if (!bIsIndexed)
+		if (!bIsSpilled)
 		{
 			// Standard success path
 			Xml = TEXT("<execute-result status=\"success\">\n");
@@ -170,61 +182,63 @@ FString FClaireonXmlFormatter::FormatErrorResult(const FString& Error, const FSt
 	return Xml;
 }
 
-FString FClaireonXmlFormatter::FormatIndexedResult(
-	const FString& IndexId,
-	int32 ChunkCount,
+FString FClaireonXmlFormatter::FormatSpilledResult(
 	const FString& Summary,
-	const TArray<FString>& Excerpts,
-	const FString& Logs,
-	const FString& UELog)
+	const TArray<FClaireonSpillStream>& Streams,
+	const FString& InlineLogs,
+	const FString& InlineUELog)
 {
 	FString Xml = TEXT("<execute-result status=\"success\">\n");
 
-	// Compact summary surfacing the most important metadata up front
-	FString SummaryLine = FString::Printf(
-		TEXT("Result too large for inline display — indexed as '%s' (%d chunks). "
-			 "Use claireon.index_search(index_id, query) to retrieve content."),
-		*IndexId, ChunkCount);
-	Xml += TEXT("<summary>\n") + SummaryLine + TEXT("\n</summary>\n");
+	Xml += TEXT("<summary>\n") + Summary + TEXT("\n</summary>\n");
 
-	// Indexed result envelope
-	Xml += TEXT("<indexed-result>\n");
-	Xml += TEXT("<index-id>\n") + IndexId + TEXT("\n</index-id>\n");
-	Xml += FString::Printf(TEXT("<chunk-count>\n%d\n</chunk-count>\n"), ChunkCount);
-
-	if (!Summary.IsEmpty())
+	Xml += TEXT("<spilled-result>\n");
+	for (const FClaireonSpillStream& Stream : Streams)
 	{
-		Xml += TEXT("<chunk-summary>\n") + Summary + TEXT("\n</chunk-summary>\n");
-	}
+		Xml += FString::Printf(TEXT("<stream name=\"%s\">\n"), *Stream.Name);
 
-	if (Excerpts.Num() > 0)
-	{
-		Xml += TEXT("<top-excerpts>\n");
-		for (int32 i = 0; i < Excerpts.Num(); ++i)
+		if (Stream.bWriteFailed)
 		{
-			Xml += FString::Printf(TEXT("<excerpt rank=\"%d\">\n"), i + 1);
-			Xml += Excerpts[i];
-			Xml += TEXT("\n</excerpt>\n");
+			Xml += TEXT("<error>\n") + Stream.ErrorText + TEXT("\n</error>\n");
 		}
-		Xml += TEXT("</top-excerpts>\n");
+		else
+		{
+			Xml += TEXT("<path>\n") + Stream.AbsolutePath + TEXT("\n</path>\n");
+		}
+
+		Xml += FString::Printf(TEXT("<size-bytes>\n%lld\n</size-bytes>\n"), Stream.SizeBytes);
+		Xml += TEXT("<content-type>\n") + Stream.ContentType + TEXT("\n</content-type>\n");
+
+		// The preview is always a prefix of the on-disk file; whenever the preview is
+		// shorter than the raw size the envelope surfaces <truncated>true</truncated>.
+		const int64 PreviewBytes = static_cast<int64>(Stream.Preview.Len());
+		if (PreviewBytes < Stream.SizeBytes)
+		{
+			Xml += TEXT("<truncated>true</truncated>\n");
+		}
+
+		if (Stream.bOverCeiling)
+		{
+			Xml += TEXT("<over-ceiling>true</over-ceiling>\n");
+		}
+
+		if (!Stream.bWriteFailed)
+		{
+			Xml += TEXT("<preview>\n") + Stream.Preview + TEXT("\n</preview>\n");
+		}
+
+		Xml += TEXT("</stream>\n");
 	}
+	Xml += TEXT("</spilled-result>\n");
 
-	Xml += TEXT("<hint>\nCall claireon.index_search(\"") + IndexId
-		+ TEXT("\", \"your query\") to search this index, or claireon.index_search(\"")
-		+ IndexId + TEXT("\", \"\") to list the first chunks.\n</hint>\n");
-
-	Xml += TEXT("</indexed-result>\n");
-
-	// Logs
-	if (!Logs.IsEmpty())
+	// Inline logs / UE log (only those that stayed inline -- spilled streams cleared these).
+	if (!InlineLogs.IsEmpty())
 	{
-		Xml += TEXT("<logs>\n") + Logs + TEXT("\n</logs>\n");
+		Xml += TEXT("<logs>\n") + InlineLogs + TEXT("\n</logs>\n");
 	}
-
-	// Engine UE_LOG output
-	if (!UELog.IsEmpty())
+	if (!InlineUELog.IsEmpty())
 	{
-		Xml += TEXT("  <ue_log>") + UELog + TEXT("</ue_log>\n");
+		Xml += TEXT("  <ue_log>") + InlineUELog + TEXT("</ue_log>\n");
 	}
 
 	Xml += TEXT("</execute-result>");

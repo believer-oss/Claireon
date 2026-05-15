@@ -277,6 +277,140 @@ void FClaireonPythonAuditLog::RecordInvocation(
 		*Entries.Last().Id, bSuccess ? TEXT("true") : TEXT("false"), DurationMs);
 }
 
+void FClaireonPythonAuditLog::LoadSpillIndex()
+{
+	if (bSpillIndexLoaded)
+	{
+		return;
+	}
+	bSpillIndexLoaded = true;
+
+	const FString IndexPath = GetAuditLogDir() / TEXT("spills_index.json");
+	FString JsonString;
+	if (!FFileHelper::LoadFileToString(JsonString, *IndexPath))
+	{
+		return;
+	}
+
+	TSharedPtr<FJsonObject> RootObject;
+	const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
+	if (!FJsonSerializer::Deserialize(Reader, RootObject) || !RootObject.IsValid())
+	{
+		UE_LOG(LogClaireon, Warning, TEXT("[MCP] PythonAuditLog: Failed to parse spills_index.json, starting fresh"));
+		return;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* EntriesArray = nullptr;
+	if (!RootObject->TryGetArrayField(TEXT("entries"), EntriesArray))
+	{
+		return;
+	}
+
+	for (const TSharedPtr<FJsonValue>& EntryValue : *EntriesArray)
+	{
+		const TSharedPtr<FJsonObject>* EntryObj = nullptr;
+		if (!EntryValue->TryGetObject(EntryObj) || !(*EntryObj).IsValid())
+		{
+			continue;
+		}
+
+		FSpillEntry Entry;
+		FString TimestampStr;
+		if ((*EntryObj)->TryGetStringField(TEXT("timestamp"), TimestampStr))
+		{
+			FDateTime::ParseIso8601(*TimestampStr, Entry.Timestamp);
+		}
+		(*EntryObj)->TryGetStringField(TEXT("tool_name"), Entry.ToolName);
+		(*EntryObj)->TryGetStringField(TEXT("stream"), Entry.Stream);
+
+		double SizeDouble = 0.0;
+		if ((*EntryObj)->TryGetNumberField(TEXT("size_bytes"), SizeDouble))
+		{
+			Entry.SizeBytes = static_cast<int64>(SizeDouble);
+		}
+
+		(*EntryObj)->TryGetStringField(TEXT("absolute_path"), Entry.AbsolutePath);
+		(*EntryObj)->TryGetStringField(TEXT("conversation_id"), Entry.ConversationId);
+		(*EntryObj)->TryGetBoolField(TEXT("over_ceiling"), Entry.bOverCeiling);
+		(*EntryObj)->TryGetBoolField(TEXT("write_failed"), Entry.bWriteFailed);
+		(*EntryObj)->TryGetStringField(TEXT("error_text"), Entry.ErrorText);
+
+		SpillEntries.Add(MoveTemp(Entry));
+	}
+}
+
+void FClaireonPythonAuditLog::WriteSpillIndex() const
+{
+	const FString AuditDir = GetAuditLogDir();
+	IFileManager::Get().MakeDirectory(*AuditDir, true);
+
+	TSharedPtr<FJsonObject> RootObject = MakeShared<FJsonObject>();
+	RootObject->SetNumberField(TEXT("version"), 1);
+
+	TArray<TSharedPtr<FJsonValue>> EntriesArray;
+	for (const FSpillEntry& Entry : SpillEntries)
+	{
+		TSharedPtr<FJsonObject> EntryObj = MakeShared<FJsonObject>();
+		EntryObj->SetStringField(TEXT("timestamp"), Entry.Timestamp.ToIso8601());
+		EntryObj->SetStringField(TEXT("tool_name"), Entry.ToolName);
+		EntryObj->SetStringField(TEXT("stream"), Entry.Stream);
+		EntryObj->SetNumberField(TEXT("size_bytes"), static_cast<double>(Entry.SizeBytes));
+		EntryObj->SetStringField(TEXT("absolute_path"), Entry.AbsolutePath);
+		EntryObj->SetStringField(TEXT("conversation_id"), Entry.ConversationId);
+		EntryObj->SetBoolField(TEXT("over_ceiling"), Entry.bOverCeiling);
+		EntryObj->SetBoolField(TEXT("write_failed"), Entry.bWriteFailed);
+		EntryObj->SetStringField(TEXT("error_text"), Entry.ErrorText);
+		EntriesArray.Add(MakeShared<FJsonValueObject>(EntryObj));
+	}
+
+	RootObject->SetArrayField(TEXT("entries"), EntriesArray);
+
+	FString OutputString;
+	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutputString);
+	FJsonSerializer::Serialize(RootObject.ToSharedRef(), Writer);
+
+	const FString IndexPath = AuditDir / TEXT("spills_index.json");
+	if (!FFileHelper::SaveStringToFile(OutputString, *IndexPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		UE_LOG(LogClaireon, Warning, TEXT("[MCP] PythonAuditLog: Failed to write spills_index.json"));
+	}
+}
+
+void FClaireonPythonAuditLog::RecordSpill(
+	const FString& ToolName,
+	const FString& Stream,
+	int64 SizeBytes,
+	const FString& AbsolutePath,
+	const FString& ConversationId,
+	bool bOverCeiling,
+	bool bWriteFailed,
+	const FString& ErrorText)
+{
+	FScopeLock Lock(&CriticalSection);
+
+	LoadSpillIndex();
+
+	FSpillEntry Entry;
+	Entry.Timestamp = FDateTime::UtcNow();
+	Entry.ToolName = ToolName;
+	Entry.Stream = Stream;
+	Entry.SizeBytes = SizeBytes;
+	Entry.AbsolutePath = AbsolutePath;
+	Entry.ConversationId = ConversationId;
+	Entry.bOverCeiling = bOverCeiling;
+	Entry.bWriteFailed = bWriteFailed;
+	Entry.ErrorText = ErrorText;
+
+	SpillEntries.Add(MoveTemp(Entry));
+
+	WriteSpillIndex();
+
+	UE_LOG(LogClaireon, Display, TEXT("[MCP] PythonAuditLog: Recorded spill tool=%s stream=%s size=%lld over_ceiling=%s write_failed=%s"),
+		*ToolName, *Stream, SizeBytes,
+		bOverCeiling ? TEXT("true") : TEXT("false"),
+		bWriteFailed ? TEXT("true") : TEXT("false"));
+}
+
 FString FClaireonPythonAuditLog::GetRecentEntries(int32 Limit, TOptional<bool> FilterSuccess) const
 {
 	FScopeLock Lock(&CriticalSection);

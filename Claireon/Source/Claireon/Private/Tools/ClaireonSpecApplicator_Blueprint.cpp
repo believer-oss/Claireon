@@ -455,7 +455,13 @@ bool FClaireonSpecApplicator_Blueprint::ApplyPass1_CreateEntities(const FString&
 				continue;
 			}
 
-			FEdGraphPinType PinType = ClaireonBlueprintHelpers::ParseVariableType(VarType);
+			ClaireonBlueprintHelpers::FParseVariableTypeResult VarParseResult = ClaireonBlueprintHelpers::ParseVariableTypeChecked(VarType);
+			if (!VarParseResult.bSucceeded)
+			{
+				RecordEntryFailure(VarId, FString::Printf(TEXT("Failed to parse variable type '%s': %s"), *VarType, *VarParseResult.Error));
+				continue;
+			}
+			FEdGraphPinType PinType = VarParseResult.PinType;
 
 			FBPVariableDescription NewVar;
 			NewVar.VarName = FName(*VarName);

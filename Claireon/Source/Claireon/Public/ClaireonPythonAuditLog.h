@@ -50,6 +50,24 @@ public:
 	 */
 	FString GetRecentEntries(int32 Limit = 50, TOptional<bool> FilterSuccess = {}) const;
 
+	/**
+	 * Record a single disk-spill event.  Called once per spilled (or failed) stream from
+	 * FClaireonOutputGate::RouteResult.  Persists to a sibling index file at
+	 * <AuditLogDir>/spills_index.json; the existing script-invocation index.json is
+	 * untouched.
+	 *
+	 * See CLAIREON_DISK_RESULTS/telemetry-audit.md for the schema.
+	 */
+	void RecordSpill(
+		const FString& ToolName,
+		const FString& Stream,
+		int64 SizeBytes,
+		const FString& AbsolutePath,
+		const FString& ConversationId,
+		bool bOverCeiling,
+		bool bWriteFailed,
+		const FString& ErrorText);
+
 	/** Get the audit log directory path */
 	FString GetAuditLogDir() const;
 
@@ -88,6 +106,29 @@ private:
 
 	static constexpr int32 MaxEntries = 500;
 	static constexpr int32 PreviewLength = 100;
+
+	/** One entry in spills_index.json -- mirrors CLAIREON_DISK_RESULTS/telemetry-audit.md schema. */
+	struct FSpillEntry
+	{
+		FDateTime Timestamp;
+		FString ToolName;
+		FString Stream;
+		int64 SizeBytes = 0;
+		FString AbsolutePath;
+		FString ConversationId;
+		bool bOverCeiling = false;
+		bool bWriteFailed = false;
+		FString ErrorText;
+	};
+
+	TArray<FSpillEntry> SpillEntries;
+	bool bSpillIndexLoaded = false;
+
+	/** Load the sibling spills_index.json into SpillEntries.  Idempotent. */
+	void LoadSpillIndex();
+
+	/** Persist SpillEntries to disk. */
+	void WriteSpillIndex() const;
 
 	/** Thread safety */
 	mutable FCriticalSection CriticalSection;

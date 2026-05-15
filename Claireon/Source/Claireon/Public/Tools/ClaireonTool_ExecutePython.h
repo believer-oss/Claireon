@@ -18,6 +18,14 @@ public:
 	virtual TSharedPtr<FJsonObject> GetInputSchema() const override;
 	virtual FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;
 
+	/**
+	 * Install the tool-catalog binding PyCFunctions (_tool_catalog_build,
+	 * _tool_catalog_nearest) into the given Python 'unreal' module dict.
+	 * Intended to be called once from FClaireonBridge::RegisterBridgeFunctions
+	 * under the GIL.  The void* typing avoids leaking Python.h to callers.
+	 */
+	static void RegisterToolCatalogBindings(void* UnrealModuleDict);
+
 private:
 	/** Maximum allowed script size in bytes */
 	static constexpr int32 MaxScriptSizeBytes = 64 * 1024;

@@ -45,6 +45,7 @@ public class Claireon : ModuleRules
 			"ModelViewViewModelBlueprint", // UMVVMBlueprintView, FMVVMBlueprintViewBinding, property paths
 			"MovieScene",        // UMovieScene, FMovieScenePossessable, channels
 			"MovieSceneTracks",  // UMovieSceneFloatTrack, UMovieSceneColorTrack, UMovieSceneBoolTrack
+			"LevelSequence",     // ULevelSequence asset type, ALevelSequenceActor
 
 			// PIE actor query and init state dependencies
 			"ModularGameplay",   // UGameFrameworkComponentManager, IGameFrameworkInitStateInterface
@@ -94,6 +95,12 @@ public class Claireon : ModuleRules
 			"Niagara",           // UNiagaraSystem, UNiagaraEmitter, UNiagaraRendererProperties
 			"NiagaraCore",       // FNiagaraTypeDefinition, core Niagara type system
 			"NiagaraEditor",     // FNiagaraStackGraphUtilities, UNiagaraGraph, INiagaraEditorModule
+
+			// Material tools dependencies
+			"MaterialEditor",     // UMaterialEditingLibrary, material compile helpers
+			"RenderCore",         // Substrate::IsSubstrateEnabled() in RenderUtils.h
+			"RHI",                // GMaxRHIFeatureLevel, GMaxRHIShaderPlatform
+			"EditorScriptingUtilities", // UEditorAssetLibrary (used by ClaireonMaterialTests for asset duplication + cleanup)
 
 			// PCG Graph tools dependencies
 			"PCG",               // UPCGGraph, UPCGNode, UPCGPin, UPCGEdge, UPCGSettings

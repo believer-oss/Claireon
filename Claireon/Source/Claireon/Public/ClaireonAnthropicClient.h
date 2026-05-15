@@ -196,4 +196,7 @@ private:
 	// --- Rate limiter ---
 	double LastRequestTimestamp = 0.0;
 	FTSTicker::FDelegateHandle RateLimitTickerHandle;
+
+	/** Guard for the one-shot connect-time stale-spill sweep (see SendMessage). */
+	bool bHasSwept = false;
 };

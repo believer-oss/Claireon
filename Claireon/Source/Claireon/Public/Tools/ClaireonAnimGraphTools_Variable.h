@@ -1,0 +1,15 @@
+// Copyright (c) 2026 The Claireon Contributors
+// SPDX-License-Identifier: MIT
+
+#pragma once
+
+#include "Tools/ClaireonAnimGraphEditBase.h"
+
+DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_AddVariable);
+DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_RemoveVariable);
+DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_SetVariableProperties);
+DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_AddFunction);
+DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_AddFunctionOverride);
+DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_RemoveFunction);
+DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_AddInterface);
+DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_RemoveInterface);

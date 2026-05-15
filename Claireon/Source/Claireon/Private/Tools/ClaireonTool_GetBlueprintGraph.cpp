@@ -37,14 +37,29 @@ FString ClaireonTool_GetBlueprintGraph::GetFullDescription() const
 				"    'exec' â compact view: title, class, GUID, position, exec-pin connections, and compact data-pin count. Best for large graphs.\n"
 				"    'full' â all pin details and defaults.\n"
 				"    'summary' â node types and connections only (no pin defaults).\n"
-				"    'outline' â node names only.\n"
+				"    'outline' - one line per node, parseable by a single regex. No embedded newlines.\n"
+				"      Grammar: '<index>. <node_class> <guid8>  <clean_title>  @ (x, y)'\n"
+				"      Regex:   ^\\s*(\\d+)\\.\\s+(\\w+)\\s+([0-9a-fA-F]{8})\\s{2}(.+?)\\s{2}@\\s+\\((-?\\d+),\\s*(-?\\d+)\\)\\s*$\n"
+				"      <guid8> is the first 8 hex chars of the node GUID; full GUID included in exec/summary/full.\n"
+				"      <clean_title> uses ENodeTitleType::ListView; embedded newlines replaced with spaces.\n"
+				"    At 'full' detail the JSON payload additionally includes an optional 'node_subtitle' field\n"
+				"      (e.g. 'Target is Kismet System Library') when the node FullTitle has a second line.\n"
 				"  include_pin_defaults (optional): Include default values for unconnected pins. Ignored in 'exec' mode. In 'summary' mode defaults to false.\n"
 				"  max_nodes (optional, default=100): Maximum nodes to include. Use 0 for unlimited. Capped at 50 when anchor_node_guid is used.\n"
 				"  anchor_node_guid (optional): GUID of a node to anchor BFS traversal. When provided, returns only nodes reachable via exec connections from this node (up to 50). "
 				"Use node_detail_level='exec' on the full graph first to get GUIDs, then anchor + node_detail_level='full' to drill into a specific section.\n"
 				"  traversal_depth (optional, default=-1): BFS hop limit when anchor_node_guid is set. 0=anchor only, 1=anchor+direct neighbors, 2=two hops, -1=unlimited.\n\n"
 				"Navigation workflow: Call with defaults to get a compact exec-level overview and node GUIDs. Then use anchor_node_guid=<guid> with node_detail_level='full' to inspect a specific subgraph.\n"
-				"Use editor.blueprint.getProperties first to discover available graphs.");
+				"Use editor.blueprint.getProperties first to discover available graphs.\n\n"
+				"node_type_alias and generic_class_name (roundtrip contract for add_node):\n"
+				"- node_type_alias is the guaranteed-roundtrip value for add_node(node_type=...). Prefer it\n"
+				"  over node_class when re-creating nodes.\n"
+				"- When node_type_alias == 'Generic', the caller MUST also pass generic_class_name as\n"
+				"  add_node(class_name=<that>). Passing only node_type='Generic' without class_name hits\n"
+				"  the terminal Unsupported node type error.\n"
+				"- node_class remains the raw UClass name (engine namespace) for callers that need it.\n"
+				"  Newer callers should prefer node_type_alias for replay; node_class is retained for\n"
+				"  back-compat.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_GetBlueprintGraph::GetInputSchema() const
@@ -96,7 +111,7 @@ TSharedPtr<FJsonObject> ClaireonTool_GetBlueprintGraph::GetInputSchema() const
 														 "'exec' â compact view: node title, class, GUID, position, exec-pin connections only, and a compact data pin count (N data pins). Best for surveying large graphs.\n"
 														 "'full' â all pin details and defaults.\n"
 														 "'summary' â node types and connections only (no pin defaults).\n"
-														 "'outline' â node names only."));
+														 "'outline' - one line per node; see full description for grammar and regex."));
 	Properties->SetObjectField(TEXT("node_detail_level"), DetailProp);
 
 	// max_nodes - optional
@@ -335,8 +350,38 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 
 			TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
 			NodeObj->SetStringField(TEXT("node_id"), Node->NodeGuid.ToString());
-			NodeObj->SetStringField(TEXT("node_class"), Node->GetClass()->GetName());
+			const FString ClassName = Node->GetClass()->GetName();
+			const FString AliasName = ClaireonBlueprintHelpers::GetNodeTypeAliasForClass(Node->GetClass());
+			NodeObj->SetStringField(TEXT("node_class"), ClassName);
+			if (!AliasName.IsEmpty())
+			{
+				NodeObj->SetStringField(TEXT("node_type_alias"), AliasName);
+			}
+			else
+			{
+				// Generic escape hatch: runner must pass both fields back through add_node.
+				NodeObj->SetStringField(TEXT("node_type_alias"), TEXT("Generic"));
+				NodeObj->SetStringField(TEXT("generic_class_name"), ClassName);
+			}
 			NodeObj->SetStringField(TEXT("node_title"), GetNodeTitle(Node));
+
+			// Full detail: emit node_subtitle when the node's FullTitle has a second line
+			// (e.g. "Target is Kismet System Library" on K2Node_CallFunction nodes).
+			if (DetailLevel == TEXT("full"))
+			{
+				const FString FullTitleStr = Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString();
+				TArray<FString> SubtitleLines;
+				FullTitleStr.ParseIntoArray(SubtitleLines, TEXT("\n"), true);
+				if (SubtitleLines.Num() > 1)
+				{
+					FString SubtitleValue = SubtitleLines[1];
+					SubtitleValue.TrimStartAndEndInline();
+					if (!SubtitleValue.IsEmpty())
+					{
+						NodeObj->SetStringField(TEXT("node_subtitle"), SubtitleValue);
+					}
+				}
+			}
 
 			TSharedPtr<FJsonObject> PosObj = MakeShared<FJsonObject>();
 			PosObj->SetNumberField(TEXT("x"), Node->NodePosX);
@@ -731,23 +776,38 @@ FString ClaireonTool_GetBlueprintGraph::FormatNodeSummary(const UEdGraphNode* No
 		return TEXT("[Invalid Node]");
 	}
 
-	FString NodeTitle = GetNodeTitle(Node);
+	// Split FullTitle into clean first line and optional subtitle ("Target is X").
+	const FString FullTitle = Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString();
+	TArray<FString> TitleLines;
+	FullTitle.ParseIntoArray(TitleLines, TEXT("\n"), true);
+	FString CleanTitle = TitleLines.Num() > 0 ? TitleLines[0].TrimStartAndEnd() : FullTitle;
+	const FString Subtitle = TitleLines.Num() > 1 ? TitleLines[1].TrimStartAndEnd() : FString();
+
 	FString NodeClass = Node->GetClass()->GetName();
 	FVector2D NodePos(Node->NodePosX, Node->NodePosY);
 
+	// Outline mode: single-line grammar per FRACTURE/04_outline_format.md.
+	// "<class> <guid8>  <clean_title>  @ (x, y)" — no embedded newlines. The
+	// caller (BuildGraphJsonSummary) prepends the "<index>. " prefix.
+	if (DetailLevel == TEXT("outline"))
+	{
+		const FString ShortGuid = Node->NodeGuid.ToString(EGuidFormats::Digits).Left(8).ToLower();
+		FString ListTitle = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();
+		ListTitle = ListTitle.Replace(TEXT("\n"), TEXT(" ")).Replace(TEXT("\r"), TEXT(" "));
+		ListTitle.TrimStartAndEndInline();
+		return FString::Printf(
+			TEXT("%s %s  %s  @ (%.0f, %.0f)"),
+			*NodeClass, *ShortGuid, *ListTitle, NodePos.X, NodePos.Y);
+	}
+
+	// Non-outline modes keep today's bracketed header using the clean (first-line) title.
 	FString Summary = FString::Printf(TEXT("[%s] (%s) @ (%.0f, %.0f)"),
-		*NodeTitle, *NodeClass, NodePos.X, NodePos.Y);
+		*CleanTitle, *NodeClass, NodePos.X, NodePos.Y);
 
 	// Add GUID for reference
 	if (DetailLevel == TEXT("full") || DetailLevel == TEXT("summary") || DetailLevel == TEXT("exec"))
 	{
 		Summary += FString::Printf(TEXT(" [GUID: %s]"), *Node->NodeGuid.ToString());
-	}
-
-	if (DetailLevel == TEXT("outline"))
-	{
-		// Outline mode: just the title and class
-		return Summary;
 	}
 
 	if (DetailLevel == TEXT("exec"))
@@ -834,6 +894,12 @@ FString ClaireonTool_GetBlueprintGraph::FormatNodeSummary(const UEdGraphNode* No
 	{
 		Summary += TEXT("\n   Outputs: ");
 		Summary += FString::Join(OutputPins, TEXT(", "));
+	}
+
+	// Full-only: render "Target is X" on its own indented line (no raw \n in the title).
+	if (!Subtitle.IsEmpty() && DetailLevel == TEXT("full"))
+	{
+		Summary += FString::Printf(TEXT("\n   Target: %s"), *Subtitle);
 	}
 
 	return Summary;

@@ -6,6 +6,7 @@
 #include "ClaireonBPNodeMapper.h"
 #include "ClaireonBPTranslateSession.h"
 #include "ClaireonLog.h"
+#include "ClaireonPathResolver.h"
 
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
@@ -1034,6 +1035,14 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 		{
 			continue;
 		}
+
+		// Normalize caller-provided path through the central resolver before LoadObject.
+		const auto AssetPathResolve = ClaireonPathResolver::Resolve(AssetPath);
+		if (!AssetPathResolve.bSuccess)
+		{
+			return MakeErrorResult(AssetPathResolve.Error);
+		}
+		AssetPath = AssetPathResolve.ResolvedPath.Path;
 		AssetPaths.Add(AssetPath);
 
 		UBlueprint* BP = LoadObject<UBlueprint>(nullptr, *AssetPath);

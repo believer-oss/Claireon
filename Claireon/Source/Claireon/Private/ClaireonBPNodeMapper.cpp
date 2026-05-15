@@ -290,6 +290,49 @@ FString FClaireonBPNodeMapper::GetConnectedPinExpression(const UEdGraphPin* Pin)
 			{
 				return TEXT("this");
 			}
+
+			// V9-zero-init: Emit a type-appropriate zero-initialized expression for
+			// unconnected input pins with empty default values. BP function signatures
+			// only expose pins whose defaults were left unset; in generated C++ these
+			// map directly to `T{}` (bool=>false, numeric=>0, object=>nullptr, struct=>{}).
+			// This produces compileable arguments instead of `/* unconnected */` comments.
+			if (Pin->Direction == EGPD_Input && Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec
+				&& Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Delegate)
+			{
+				const FName& Cat = Pin->PinType.PinCategory;
+				if (Cat == UEdGraphSchema_K2::PC_Boolean)
+				{
+					return TEXT("false");
+				}
+				if (Cat == UEdGraphSchema_K2::PC_Byte || Cat == UEdGraphSchema_K2::PC_Int
+					|| Cat == UEdGraphSchema_K2::PC_Int64 || Cat == UEdGraphSchema_K2::PC_Real)
+				{
+					return TEXT("0");
+				}
+				if (Cat == UEdGraphSchema_K2::PC_Object || Cat == UEdGraphSchema_K2::PC_Class
+					|| Cat == UEdGraphSchema_K2::PC_Interface || Cat == UEdGraphSchema_K2::PC_SoftObject
+					|| Cat == UEdGraphSchema_K2::PC_SoftClass)
+				{
+					return TEXT("nullptr");
+				}
+				if (Cat == UEdGraphSchema_K2::PC_String)
+				{
+					return TEXT("FString()");
+				}
+				if (Cat == UEdGraphSchema_K2::PC_Name)
+				{
+					return TEXT("NAME_None");
+				}
+				if (Cat == UEdGraphSchema_K2::PC_Text)
+				{
+					return TEXT("FText::GetEmpty()");
+				}
+				if (Cat == UEdGraphSchema_K2::PC_Struct)
+				{
+					const FString CppType = PinTypeToCppType(Pin->PinType);
+					return FString::Printf(TEXT("%s()"), *CppType);
+				}
+			}
 		}
 		return TEXT("/* unconnected */");
 	}

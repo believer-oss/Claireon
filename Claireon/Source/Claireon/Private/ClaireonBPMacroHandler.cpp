@@ -55,7 +55,12 @@ namespace
 		return FString();
 	}
 
-	// Get the default value or connected expression for a pin by name
+	// Get the default value or connected expression for a pin by name.
+	// V9-macro-pin-expr: Delegate to FClaireonBPNodeMapper::GetConnectedPinExpression so
+	// upstream variable-gets, self refs, and pure calls resolve to real C++ expressions
+	// instead of raw pin names. This eliminates the `/* unconnected */` placeholders emitted
+	// for macro inputs (IsValid, Select, SwitchHasAuthority, etc.) whose source pin is
+	// connected but was previously stringified as the upstream pin-name.
 	FString GetMacroPinExpression(const UEdGraphNode* Node, const FName& PinName, EEdGraphPinDirection Direction)
 	{
 		if (!Node)
@@ -68,6 +73,12 @@ namespace
 			{
 				if (Pin->LinkedTo.Num() > 0 && Pin->LinkedTo[0])
 				{
+					FClaireonBPNodeMapper Mapper;
+					FString Expr = Mapper.GetConnectedPinExpression(Pin);
+					if (!Expr.IsEmpty())
+					{
+						return Expr;
+					}
 					return Pin->LinkedTo[0]->PinName.ToString();
 				}
 				if (!Pin->DefaultValue.IsEmpty())
