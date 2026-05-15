@@ -52,6 +52,9 @@
 #include "Tools/ClaireonTool_SearchInBlueprints.h"
 #include "Tools/ClaireonTool_ApplyBlueprintGraph.h"
 #include "Tools/ClaireonTool_GameplayTagsList.h"
+#include "Tools/ClaireonTool_GameplayTagsAdd.h"
+#include "Tools/ClaireonTool_GameplayTagsRemove.h"
+#include "Tools/ClaireonTool_GameplayTagsReload.h"
 #include "Tools/ClaireonTool_StructInspect.h"
 #include "Tools/ClaireonTool_ReplaceStructUsage.h"
 #include "Tools/ClaireonAnimGraphTools_CopyGraph.h"
@@ -462,7 +465,6 @@
 #include "Tools/ClaireonTool_DataTableGetInfo.h"
 #include "Tools/ClaireonTool_DataTableGetRows.h"
 #include "Tools/ClaireonTool_DataTableGetRow.h"
-#include "Tools/ClaireonTool_DataTableGetRowStructured.h"
 #include "Tools/ClaireonTool_DataTableFindRows.h"
 #include "Tools/ClaireonTool_DataTableAddRow.h"
 #include "Tools/ClaireonTool_DataTableRemoveRow.h"
@@ -493,6 +495,7 @@
 
 // Animation MCP tools
 #include "Tools/ClaireonTool_AnimInspect.h"
+#include "Tools/ClaireonTool_AnimInvariantsCheck.h"
 #include "Tools/ClaireonAnimTools_Session.h"
 #include "Tools/ClaireonAnimTools_Create.h"
 #include "Tools/ClaireonAnimTools_Notify.h"
@@ -979,6 +982,9 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_AssetSearch>());
 	Tools.Add(MakeShared<ClaireonTool_ExecutePython>());
 	Tools.Add(MakeShared<ClaireonTool_GameplayTagsList>());
+	Tools.Add(MakeShared<ClaireonTool_GameplayTagsAdd>());
+	Tools.Add(MakeShared<ClaireonTool_GameplayTagsRemove>());
+	Tools.Add(MakeShared<ClaireonTool_GameplayTagsReload>());
 	Tools.Add(MakeShared<ClaireonTool_StructInspect>());
 	Tools.Add(MakeShared<ClaireonTool_ReplaceStructUsage>());
 
@@ -1080,6 +1086,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_AssetFixupRedirectors>());
 	Tools.Add(MakeShared<ClaireonTool_OpenAssetEditor>());
 	Tools.Add(MakeShared<ClaireonTool_AnimInspect>());
+	Tools.Add(MakeShared<ClaireonTool_AnimInvariantsCheck>());
 	// Animation editing tools (individual operations with focused inputSchema)
 	Tools.Add(MakeShared<ClaireonAnimTool_Open>());
 	Tools.Add(MakeShared<ClaireonAnimTool_Close>());
@@ -1615,7 +1622,6 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_DataTableGetInfo>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableGetRows>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableGetRow>());
-	Tools.Add(MakeShared<ClaireonTool_DataTableGetRowStructured>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableFindRows>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableAddRow>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableRemoveRow>());
