@@ -16,7 +16,10 @@
     "fixture_source": "Claireon/Source/Claireon/Private/Tests/Fixtures/tool_catalog_ab_queries.txt",
     "top_k": 5,
     "matcher_under_capture": "hybrid FTS5 keyword + semantic (RRF fuse) via mcp_index_engine.get_engine()",
-    "capture_status": "placeholder_pending_operator_capture"
+    "capture_status": "placeholder_pending_operator_capture",
+    "tool_catalog_drift_notes": [
+      "#0000 (claireon.level_sequence_rebind_actor) added to module registration; live operator capture should include this tool under category 'level_sequence' with keywords ['rebind', 'bind', 'actor', 'possessable', 'repair']."
+    ]
   },
   "results": {
     "asset_search": ["PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER", "PLACEHOLDER"],

@@ -11,8 +11,12 @@
 
 #include "LevelSequence.h"
 #include "Engine/Blueprint.h"
+#include "Engine/World.h"
+#include "Editor.h"
+#include "GameFramework/Actor.h"
 #include "MovieScene.h"
 #include "MovieSceneBinding.h"
+#include "MovieScenePossessable.h"
 #include "MovieSceneTrack.h"
 #include "MovieSceneSection.h"
 #include "Channels/MovieSceneChannelProxy.h"
@@ -26,7 +30,7 @@
 #include "UObject/UnrealType.h"
 
 // ============================================================================
-// Apply* handlers -- free functions used by decomposed level_sequence_*
+// Apply* handlers -- free functions used by decomposed claireon.level_sequence_*
 // tools and by FClaireonSpecApplicator_LevelSequence. Definitions extracted from
 // the deleted ClaireonTool_SequenceEdit.cpp so the apply-handler surface (see
 // FEATURE_6_CLAIREON_SPEC_APPLICATOR.md "Handler extraction") continues to link
@@ -528,4 +532,87 @@ bool ApplyCreateEventEndpoint(ULevelSequence* Sequence, FName EndpointName,
 	OutDirectorBP = DirectorBP;
 	OutFunction = Func;
 	return true;
+}
+
+bool ApplyRebindActor(ULevelSequence* Sequence, const FGuid& BindingGuid,
+    AActor* Actor, bool bClear, FString& OutError)
+{
+    if (!Sequence || !Sequence->GetMovieScene())
+    {
+        OutError = TEXT("sequence or MovieScene is null");
+        return false;
+    }
+    UMovieScene* MovieScene = Sequence->GetMovieScene();
+
+    FMovieScenePossessable* Possessable = MovieScene->FindPossessable(BindingGuid);
+    if (!Possessable)
+    {
+        // Either no binding at all, or a spawnable. Distinguish for a clear
+        // user-facing error.
+        for (const FMovieSceneBinding& B : MovieScene->GetBindings())
+        {
+            if (B.GetObjectGuid() == BindingGuid)
+            {
+                OutError = FString::Printf(
+                    TEXT("binding %s is a spawnable; use claireon.level_sequence_<spawnable-tool> "
+                         "or set_spawnable_binding_id instead"),
+                    *BindingGuid.ToString(EGuidFormats::DigitsWithHyphens));
+                return false;
+            }
+        }
+        OutError = FString::Printf(TEXT("binding %s not found"),
+            *BindingGuid.ToString(EGuidFormats::DigitsWithHyphens));
+        return false;
+    }
+
+    if (!Sequence->CanRebindPossessable(*Possessable))
+    {
+        OutError = FString::Printf(
+            TEXT("binding %s has parent %s and cannot be rebound directly "
+                 "(see ULevelSequence::CanRebindPossessable -- rebind the parent instead)"),
+            *BindingGuid.ToString(EGuidFormats::DigitsWithHyphens),
+            *Possessable->GetParent().ToString(EGuidFormats::DigitsWithHyphens));
+        return false;
+    }
+
+    if (!bClear && !Actor)
+    {
+        OutError = TEXT("actor is null and clear is false");
+        return false;
+    }
+
+#if WITH_EDITORONLY_DATA
+    if (!bClear && Actor)
+    {
+        if (const UClass* Required = Possessable->GetPossessedObjectClass())
+        {
+            if (!Actor->GetClass()->IsChildOf(Required))
+            {
+                OutError = FString::Printf(
+                    TEXT("actor class '%s' is not a child of possessable class '%s'"),
+                    *Actor->GetClass()->GetName(), *Required->GetName());
+                return false;
+            }
+        }
+    }
+#endif
+
+    UWorld* ResolutionContext = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!bClear && !ResolutionContext)
+    {
+        OutError = TEXT("editor world unavailable for binding context");
+        return false;
+    }
+
+    // Drop every existing reference for this GUID before re-binding. The engine
+    // BindPossessableObject always appends, so without this clear step a second
+    // rebind would leave two references in BindingReferences.
+    Sequence->UnbindPossessableObjects(BindingGuid);
+
+    if (!bClear)
+    {
+        Sequence->BindPossessableObject(BindingGuid, *Actor, ResolutionContext);
+    }
+
+    return true;
 }

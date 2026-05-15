@@ -20,7 +20,6 @@
 #include "ClaireonDiagnosticsWidget.h"
 #include "ClaireonSettings.h"
 #include "IClaireonToolProvider.h"
-#include "IPythonScriptPlugin.h"
 #include "Modules/ModuleManager.h"
 #include "Features/IModularFeatures.h"
 #include "ToolMenus.h"
@@ -52,9 +51,6 @@
 #include "Tools/ClaireonTool_SearchInBlueprints.h"
 #include "Tools/ClaireonTool_ApplyBlueprintGraph.h"
 #include "Tools/ClaireonTool_GameplayTagsList.h"
-#include "Tools/ClaireonTool_GameplayTagsAdd.h"
-#include "Tools/ClaireonTool_GameplayTagsRemove.h"
-#include "Tools/ClaireonTool_GameplayTagsReload.h"
 #include "Tools/ClaireonTool_StructInspect.h"
 #include "Tools/ClaireonTool_ReplaceStructUsage.h"
 #include "Tools/ClaireonAnimGraphTools_CopyGraph.h"
@@ -71,7 +67,6 @@
 #include "Tools/ClaireonBlueprintGraphTool_ConnectPins.h"
 #include "Tools/ClaireonBlueprintGraphTool_DisconnectPin.h"
 #include "Tools/ClaireonBlueprintGraphTool_SetPinValue.h"
-#include "Tools/ClaireonBlueprintGraphTool_SetNodeProperty.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddPin.h"
 #include "Tools/ClaireonBlueprintGraphTool_RemovePin.h"
 #include "Tools/ClaireonBlueprintGraphTool_SplitPin.h"
@@ -209,7 +204,6 @@
 
 // Blueprint CDO tools
 #include "Tools/ClaireonTool_SetBlueprintCDOProperty.h"
-#include "Tools/ClaireonTool_AppendBlueprintCDOArrayInstanced.h"
 #include "Tools/ClaireonTool_SetBlueprintMetadata.h"
 
 // Meta tools
@@ -349,6 +343,7 @@
 #include "Tools/ClaireonLevelSequenceTool_FocusTrack.h"
 #include "Tools/ClaireonLevelSequenceTool_AddPossessable.h"
 #include "Tools/ClaireonLevelSequenceTool_RemovePossessable.h"
+#include "Tools/ClaireonLevelSequenceTool_RebindActor.h"
 #include "Tools/ClaireonLevelSequenceTool_AddSpawnable.h"
 #include "Tools/ClaireonLevelSequenceTool_AddTrack.h"
 #include "Tools/ClaireonLevelSequenceTool_RemoveTrack.h"
@@ -982,9 +977,6 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_AssetSearch>());
 	Tools.Add(MakeShared<ClaireonTool_ExecutePython>());
 	Tools.Add(MakeShared<ClaireonTool_GameplayTagsList>());
-	Tools.Add(MakeShared<ClaireonTool_GameplayTagsAdd>());
-	Tools.Add(MakeShared<ClaireonTool_GameplayTagsRemove>());
-	Tools.Add(MakeShared<ClaireonTool_GameplayTagsReload>());
 	Tools.Add(MakeShared<ClaireonTool_StructInspect>());
 	Tools.Add(MakeShared<ClaireonTool_ReplaceStructUsage>());
 
@@ -1007,7 +999,6 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_ConnectPins>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_DisconnectPin>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SetPinValue>());
-	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SetNodeProperty>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_AddPin>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_RemovePin>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SplitPin>());
@@ -1383,6 +1374,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonLevelSequenceTool_FocusTrack>());
 	Tools.Add(MakeShared<ClaireonLevelSequenceTool_AddPossessable>());
 	Tools.Add(MakeShared<ClaireonLevelSequenceTool_RemovePossessable>());
+	Tools.Add(MakeShared<ClaireonLevelSequenceTool_RebindActor>());
 	Tools.Add(MakeShared<ClaireonLevelSequenceTool_AddSpawnable>());
 	Tools.Add(MakeShared<ClaireonLevelSequenceTool_AddTrack>());
 	Tools.Add(MakeShared<ClaireonLevelSequenceTool_RemoveTrack>());
@@ -1437,7 +1429,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<FClaireonTool_AudioInspect>());
 	Tools.Add(MakeShared<FClaireonTool_AudioApply>());
 
-	// Audio decomposed tools (42; replaces the bundled audio_edit umbrella)
+	// Audio decomposed tools (42; replaces the bundled claireon.audio_edit umbrella)
 	// SoundCue (14)
 	Tools.Add(MakeShared<FClaireonSoundCueTool_Open>());
 	Tools.Add(MakeShared<FClaireonSoundCueTool_Close>());
@@ -1601,7 +1593,6 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 
 	// Blueprint CDO tools
 	Tools.Add(MakeShared<ClaireonTool_SetBlueprintCDOProperty>());
-	Tools.Add(MakeShared<ClaireonTool_AppendBlueprintCDOArrayInstanced>());
 	Tools.Add(MakeShared<ClaireonTool_SetBlueprintMetadata>());
 
 	// Meta tools
@@ -1780,52 +1771,11 @@ void FClaireonModule::StartupModule()
 	IModularFeatures::Get().RegisterModularFeature(
 		IClaireonToolProvider::FeatureName, BuiltinToolProvider.Get());
 
-	// Construct the in-process tool registry eagerly so the Python bridge can
-	// be bootstrapped from OnPythonInitialized (Spec D) without depending on
-	// whether the HTTP listener has been brought up yet. After this point,
-	// Server.IsValid() means "registry constructed"; Server->IsRunning() means
-	// "HTTP listener is up". Place this BEFORE the modular-feature listener
-	// hooks so any registration callbacks that fire during StartupModule see
-	// a valid Server pointer.
-	Server = MakeShared<FClaireonServer>();
-	FClaireonBridge::SetToolRegistry(Server.Get());
-	CollectToolsFromProviders();
-
 	// Listen for modular feature registration/unregistration
 	IModularFeatures::Get().OnModularFeatureRegistered().AddRaw(
 		this, &FClaireonModule::OnModularFeatureRegistered);
 	IModularFeatures::Get().OnModularFeatureUnregistered().AddRaw(
 		this, &FClaireonModule::OnModularFeatureUnregistered);
-
-	// Bootstrap the Claireon Python bridge as early as Python permits, so that
-	// any user Python (init_unreal.py, deferred slate-tick imports) sees a
-	// fully populated `claireon` (and other namespaces') module on first import.
-	// Replaces the previous 1.0s FTSTicker deferral that lost the import race.
-	//
-	// We rely exclusively on IPythonScriptPlugin::OnPythonInitialized rather
-	// than IPythonScriptPlugin::IsPythonAvailable(): the latter can return
-	// true while CPython's gilstate machinery is still uninitialised
-	// (autoTSSkey null), which crashes PyGILState_Ensure at offset 0x28.
-	// OnPythonInitialized only fires after the interpreter is fully usable
-	// and BEFORE init_unreal.py runs. If the delegate has already fired by
-	// the time we reach this point (very rare; we load at PostEngineInit),
-	// the existing lazy `EnsureRegistered()` call on first MCP tool call
-	// covers us.
-	if (IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get())
-	{
-		PythonInitHandle = PythonPlugin->OnPythonInitialized().AddLambda([]()
-		{
-			FClaireonBridge::EnsureRegistered();
-		});
-	}
-	else
-	{
-		// Python plugin unavailable in this configuration (unlikely for editor
-		// builds). The bridge will register lazily via the existing
-		// EnsureRegistered call sites if Python is brought up later.
-		UE_LOG(LogClaireon, Verbose,
-			TEXT("[MCP Bootstrap] IPythonScriptPlugin not available at module load -- bridge will register lazily."));
-	}
 
 	// Check for -StartMCPServer command-line flag
 	if (FParse::Param(FCommandLine::Get(), TEXT("StartMCPServer")))
@@ -1848,16 +1798,6 @@ void FClaireonModule::ShutdownModule()
 	IModularFeatures::Get().OnModularFeatureRegistered().RemoveAll(this);
 	IModularFeatures::Get().OnModularFeatureUnregistered().RemoveAll(this);
 
-	// Unsubscribe from Python initialisation delegate (Spec D).
-	if (PythonInitHandle.IsValid())
-	{
-		if (IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get())
-		{
-			PythonPlugin->OnPythonInitialized().Remove(PythonInitHandle);
-		}
-		PythonInitHandle.Reset();
-	}
-
 	// Unsubscribe from settings changes
 	if (SettingsChangedHandle.IsValid())
 	{
@@ -1872,15 +1812,6 @@ void FClaireonModule::ShutdownModule()
 	}
 
 	StopServer();
-
-	// Detach the bridge from the registry pointer before destroying Server.
-	// (The bridge captures Server.Get(); leaving a dangling pointer in the
-	// bridge until the next module load is unsafe if any callsite probes it.)
-	FClaireonBridge::SetToolRegistry(nullptr);
-
-	// Final tear-down of the Server registry that StartupModule constructed.
-	Server.Reset();
-
 	SClaireonDiagnosticsWidget::UnregisterTabSpawner();
 
 	// Unregister built-in tool provider
@@ -1894,21 +1825,16 @@ void FClaireonModule::ShutdownModule()
 
 void FClaireonModule::StartServer()
 {
-	if (!Server.IsValid())
-	{
-		// StartupModule constructs Server. This branch indicates a misuse
-		// (StartServer called before StartupModule, or in a configuration
-		// where StartupModule short-circuited via the GIsEditor/commandlet
-		// guard). Log and bail; do NOT lazy-construct here -- the bridge has
-		// already been wired against the StartupModule-time registry pointer.
-		UE_LOG(LogClaireon, Error, TEXT("[MCP] StartServer called before Server was constructed (StartupModule did not run?)."));
-		return;
-	}
-	if (Server->IsRunning())
+	if (Server.IsValid() && Server->IsRunning())
 	{
 		UE_LOG(LogClaireon, Warning, TEXT("[MCP] Server is already running"));
 		return;
 	}
+
+	Server = MakeShared<FClaireonServer>();
+
+	// Set the bridge's tool registry pointer so Python can dispatch tool calls
+	FClaireonBridge::SetToolRegistry(Server.Get());
 
 	// Decide whether to front this editor with the always-on MCP proxy. When
 	// enabled, the editor generates a fresh per-session bearer token, hands it
@@ -1947,10 +1873,21 @@ void FClaireonModule::StartServer()
 		Server->SetSessionToken(SessionToken);
 	}
 
-	// Bridge registration is now driven by IPythonScriptPlugin::OnPythonInitialized
-	// from StartupModule (Spec D). The previous 1.0s FTSTicker deferral was
-	// removed because it lost the import race with init_unreal.py's
-	// deferred-tick callbacks.
+	// Defer bridge registration + Python import pre-warming to next tick.
+	// Python may not be fully initialized yet during StartupModule, and calling
+	// CPython C API too early causes access violations. Deferring to next tick
+	// ensures Python is ready, and pre-warming avoids blocking the game thread
+	// for >6s during the first execute call (which triggers UE's audio mixer abort).
+	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda(
+											 [](float) -> bool
+	{
+		FClaireonBridge::EnsureRegistered();
+		return false; // one-shot
+	}),
+		1.0f);
+
+	// Collect tools from all registered providers
+	CollectToolsFromProviders();
 
 	// Stage 010 (direct-connect SHA port + auto-promote): the editor's MCP
 	// listener binds the per-worktree SHA-256-derived port -- the same port
@@ -2003,41 +1940,13 @@ void FClaireonModule::StartServer()
 	// Spawning hint: when bEnableProxy is opted in, bring the proxy up first
 	// so the SHA port is held by the singleton when we try to bind below.
 	// EnsureProxyRunning is idempotent (attaches if already up).
-	//
-	// EnsureProxyRunning() only gets the listener up; it does NOT make the
-	// proxy claim our worktree's SHA port. A proxy spawned by some other
-	// worktree only holds its own SHA port, and proxy startup logs
-	// "Awaiting /admin/ensure_worktree" -- the proxy binds per-worktree MCP
-	// ports lazily on that endpoint. Without an explicit EnsureWorktreeBound,
-	// TryStart(PreferredPort) below succeeds because nothing holds our port,
-	// the auto-promote branch never fires, and the editor lands in
-	// DirectConnect mode while still token-gated -- causing Claude Code's
-	// requests to be rejected as 401 because the proxy is not in the path.
-	// EnsureWorktreeBound makes the proxy bind PreferredPort first, so the
-	// editor's TryStart EADDRINUSEs out into the auto-promote branch, which
-	// is what bEnableProxy is supposed to mean.
-	bool bProxyHoldsOurPort = false;
 	if (bEnableProxy)
 	{
 		ProxyClient = MakeUnique<FClaireonProxyClient>();
-		if (ProxyClient->EnsureProxyRunning() && !bPortOverriddenByCommandLine)
-		{
-			bProxyHoldsOurPort = ProxyClient->EnsureWorktreeBound(
-				WorktreeRoot, static_cast<int32>(PreferredPort));
-		}
+		ProxyClient->EnsureProxyRunning();
 	}
 
-	// Skip TryStart on the SHA port when the proxy has already claimed it.
-	// UE's HTTP server binds 0.0.0.0 while the proxy binds 127.0.0.1 -- on
-	// Windows those two binds do NOT conflict, so a naive TryStart would
-	// succeed even though the proxy already owns the port. The editor would
-	// then land in DirectConnect mode, the proxy would forward incoming
-	// traffic to "127.0.0.1:<SHA>" and loop back into itself (the proxy is
-	// what's listening there), producing "Editor connection failed".
-	// Instead, when EnsureWorktreeBound returned true we go straight to
-	// the auto-promote path: bind an ephemeral listener and let the proxy
-	// forward to it.
-	if (!bProxyHoldsOurPort && Server->TryStart(PreferredPort))
+	if (Server->TryStart(PreferredPort))
 	{
 		// DirectConnect mode -- we own the SHA port. The proxy (if any) is
 		// not in the path; .mcp.json still points Claude at this port.
@@ -2056,20 +1965,11 @@ void FClaireonModule::StartServer()
 		return;
 	}
 
-	if (bProxyHoldsOurPort)
-	{
-		UE_LOG(LogClaireon, Display,
-			TEXT("[MCP] Proxy is fronting port %u for worktree %s; binding ephemeral editor listener."),
-			static_cast<uint32>(PreferredPort), *WorktreeRoot);
-	}
-	else
-	{
-		// EADDRINUSE on the SHA port. Probe 43017 to decide between auto-
-		// promote and abort.
-		UE_LOG(LogClaireon, Display,
-			TEXT("[MCP] Port %u busy; probing 43017 for an existing Claireon proxy."),
-			static_cast<uint32>(PreferredPort));
-	}
+	// EADDRINUSE on the SHA port. Probe 43017 to decide between auto-
+	// promote and abort.
+	UE_LOG(LogClaireon, Display,
+		TEXT("[MCP] Port %u busy; probing 43017 for an existing Claireon proxy."),
+		static_cast<uint32>(PreferredPort));
 
 	if (!ProxyClient.IsValid())
 	{
@@ -2136,8 +2036,7 @@ void FClaireonModule::StopServer()
 	if (Server.IsValid())
 	{
 		Server->Stop();
-		// Do NOT reset Server -- the registry must remain valid across
-		// stop/start cycles (post-Spec-C). ShutdownModule fully tears it down.
+		Server.Reset();
 	}
 }
 

@@ -46,11 +46,11 @@ public class Claireon : ModuleRules
 			"MovieScene",        // UMovieScene, FMovieScenePossessable, channels
 			"MovieSceneTracks",  // UMovieSceneFloatTrack, UMovieSceneColorTrack, UMovieSceneBoolTrack
 			"LevelSequence",     // ULevelSequence asset type, ALevelSequenceActor
+			"CinematicCamera",   // ACineCameraActor (referenced by ClaireonLevelSequenceTests)
 
 			// PIE actor query and init state dependencies
 			"ModularGameplay",   // UGameFrameworkComponentManager, IGameFrameworkInitStateInterface
 			"GameplayTags",      // FGameplayTag for init state tags
-			"GameplayTagsEditor", // IGameplayTagsEditorModule::AddNewGameplayTagToINI / DeleteTagsFromINI for gameplay-tag-authoring tools
 
 			// Combat testing tools dependencies
 			"GameplayAbilities", // UAbilitySystemComponent, UGameplayAbility, FGameplayAbilitySpec
