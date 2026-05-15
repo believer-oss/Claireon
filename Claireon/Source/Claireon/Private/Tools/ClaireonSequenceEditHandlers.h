@@ -8,6 +8,7 @@
 #include "KeyParams.h"
 #include "Tools/ClaireonSequenceHelpers.h"
 
+class AActor;
 class ULevelSequence;
 class UClass;
 class UMovieSceneTrack;
@@ -65,3 +66,37 @@ bool ApplySetKeyInterpMode(UMovieSceneSection* Section, FFrameNumber Frame,
 bool ApplyCreateEventEndpoint(ULevelSequence* Sequence, FName EndpointName,
 	ESequenceEventEndpointSignature Signature, UBlueprint*& OutDirectorBP, UFunction*& OutFunction,
 	FString& OutError);
+
+/**
+ * Re-attach a world AActor to an existing possessable binding GUID inside the
+ * given ULevelSequence, preserving the GUID so all sections / tracks already
+ * referencing it continue to play unchanged.
+ *
+ * Steps performed:
+ *   1. Validate Sequence and its UMovieScene are non-null.
+ *   2. Look up FMovieScenePossessable* via UMovieScene::FindPossessable.
+ *      Return false if the GUID is not a possessable (could be a spawnable,
+ *      could be missing entirely).
+ *   3. Reject if FMovieScenePossessable::GetParent().IsValid() (i.e.
+ *      ULevelSequence::CanRebindPossessable returns false for child / component
+ *      possessables).
+ *   4. Reject if (bClear == false && Actor == nullptr).
+ *   5. Defensive class compatibility (#if WITH_EDITORONLY_DATA only): if
+ *      Possessable->GetPossessedObjectClass() is non-null and Actor is non-null
+ *      and !Actor->GetClass()->IsChildOf(...), reject.
+ *   6. Sequence->UnbindPossessableObjects(BindingGuid)  -- drops ALL existing
+ *      binding references for the GUID.
+ *   7. If !bClear: Sequence->BindPossessableObject(BindingGuid, *Actor,
+ *      EditorWorld) where EditorWorld is GEditor->GetEditorWorldContext().World().
+ *
+ * Returns true on success, false with OutError populated on failure.
+ *
+ * Actor may be nullptr only when bClear is true. The handler does NOT take a
+ * World*; if GEditor is null, returns false.
+ */
+bool ApplyRebindActor(
+    ULevelSequence* Sequence,
+    const FGuid&    BindingGuid,
+    AActor*         Actor,        // may be null when bClear is true
+    bool            bClear,
+    FString&        OutError);

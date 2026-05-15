@@ -9,6 +9,7 @@
 #include "Tools/ClaireonTool_SequenceActorPlace.h"
 #include "Tools/ClaireonLevelSequenceEditToolBase.h"
 #include "Tools/ClaireonSequenceHelpers.h"
+#include "Tools/ClaireonSequenceEditHandlers.h"
 #include "Tools/ClaireonSpecApplicator_LevelSequence.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -25,12 +26,17 @@
 #include "Tracks/MovieSceneEventTrack.h"
 #include "Tracks/MovieSceneFloatTrack.h"
 #include "Tracks/MovieSceneCameraCutTrack.h"
+#include "Sections/MovieSceneCameraCutSection.h"
 #include "Tracks/MovieSceneAudioTrack.h"
 #include "Tracks/MovieSceneColorTrack.h"
 #include "Animation/MovieSceneMarginTrack.h"
 #include "Animation/MovieScene2DTransformTrack.h"
 #include "Animation/MovieSceneWidgetMaterialTrack.h"
 #include "GameFramework/Actor.h"
+#include "CineCameraActor.h"
+#include "Editor.h"
+#include "EngineUtils.h"
+#include "MovieSceneObjectBindingID.h"
 
 // ---------------------------------------------------------------------------
 // Fixture helper: build an in-memory Level Sequence with one possessable +
@@ -80,6 +86,24 @@ static ULevelSequence* CreateInMemoryFixtureSequence()
 	return Seq;
 }
 
+// ---------------------------------------------------------------------------
+// Fixture helper for #0000 rebind tests: build an in-memory Level Sequence
+// with one possessable of the requested class. The resulting binding has no
+// resolved actor reference (callers rebind via ApplyRebindActor).
+// ---------------------------------------------------------------------------
+
+static ULevelSequence* CreateRebindFixtureSequence(
+	UClass* PossessableClass,
+	FGuid&  OutBindingGuid)
+{
+	ULevelSequence* Seq = NewObject<ULevelSequence>(GetTransientPackage(),
+		FName(TEXT("LS_RebindFixture")), RF_Transient | RF_Transactional);
+	Seq->Initialize();
+	UMovieScene* MS = Seq->GetMovieScene();
+	OutBindingGuid = MS->AddPossessable(TEXT("CamA"), PossessableClass);
+	return Seq;
+}
+
 // ============================================================================
 // F1: FClaireonSequenceHelpers
 // ============================================================================
@@ -93,7 +117,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_ResolveTrackClass, UNTEST_TIMEOUTMS
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("camera_cut")) == UMovieSceneCameraCutTrack::StaticClass());
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("float"))      == UMovieSceneFloatTrack::StaticClass());
 
-	// Widget-common track types
+	// Widget-common track types (#0000 stage 002)
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("color"))           == UMovieSceneColorTrack::StaticClass());
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("margin"))          == UMovieSceneMarginTrack::StaticClass());
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("2d_transform"))    == UMovieScene2DTransformTrack::StaticClass());
@@ -240,7 +264,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_CoerceKeyframeUnsupportedFails, UNT
 }
 
 // ============================================================================
-// F1: sequence_inspect
+// F1: claireon.sequence_inspect
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_InspectMissingAssetPath, UNTEST_TIMEOUTMS(5000))
@@ -314,7 +338,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_InspectHappyPath, UNTEST_TIMEOUTMS(
 }
 
 // ============================================================================
-// F3: sequence_list_track_types
+// F3: claireon.sequence_list_track_types
 // ============================================================================
 //
 // NOTE: stage-008 test mode is build_time_only_deferred_to_021. These Untest
@@ -469,7 +493,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F3_MetadataAndSchema, UNTEST_TIMEOUTMS
 }
 
 // ============================================================================
-// F4: sequence_actor_place
+// F4: claireon.sequence_actor_place
 // ============================================================================
 //
 // NOTE: stage-010 test mode is build_time_only_deferred_to_021. These Untest
@@ -606,7 +630,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F4_ClassResolutionSanity, UNTEST_TIMEO
 }
 
 // ============================================================================
-// F2: sequence_edit
+// F2: claireon.sequence_edit
 // ============================================================================
 //
 // NOTE: stage-012 test mode is build_time_only_deferred_to_021. These Untest
@@ -622,7 +646,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F4_ClassResolutionSanity, UNTEST_TIMEO
 // blocks assert tool metadata, schema shape, and error-path behaviour to catch
 // drift.
 
-// Stage 026: sequence_edit was decomposed into 20 level_sequence_*
+// Stage 026: claireon.sequence_edit was decomposed into 20 claireon.level_sequence_*
 // tools. The monolith-envelope tests below predate decomposition; they will be
 // rewritten against the decomposed tools in a follow-up (mirrors stages 023/024
 // BP + WidgetBP monolith test rewrite). Disabled here to keep the build green.
@@ -824,7 +848,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_CursorHistoryCap, UNTEST_TIMEOUTMS(
 }
 
 // ============================================================================
-// F5: sequence_edit.create_event_endpoint
+// F5: claireon.sequence_edit.create_event_endpoint
 // ============================================================================
 //
 // NOTE: stage-014 test mode is build_time_only_deferred_to_021. These Untest
@@ -884,7 +908,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_CreateEventEndpointEmptyName, UNTES
 	co_return;
 }
 
-#if 0 // MONOLITH_ENVELOPE_TESTS -- stage 026 decomposed sequence_edit
+#if 0 // MONOLITH_ENVELOPE_TESTS -- stage 026 decomposed claireon.sequence_edit
 UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_DispatcherUnknownSignature, UNTEST_TIMEOUTMS(5000))
 {
 	// create_event_endpoint with an unknown signature string must error with a
@@ -963,7 +987,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_DispatcherAdvertisesOp, UNTEST_TIME
 #endif // MONOLITH_ENVELOPE_TESTS
 
 // ============================================================================
-// F6: sequence_edit.apply_spec (FClaireonSpecApplicator_LevelSequence)
+// F6: claireon.sequence_edit.apply_spec (FClaireonSpecApplicator_LevelSequence)
 // ============================================================================
 //
 // NOTE: stage-016 test mode is build_time_only_deferred_to_021. These Untest
@@ -989,7 +1013,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6_ValidateSpecEmpty, UNTEST_TIMEOUTMS
 	co_return;
 }
 
-#if 0 // MONOLITH_ENVELOPE_TESTS -- stage 026 decomposed sequence_edit
+#if 0 // MONOLITH_ENVELOPE_TESTS -- stage 026 decomposed claireon.sequence_edit
 UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6_DispatcherAdvertisesApplySpec, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_SequenceEdit Tool;
@@ -1072,6 +1096,302 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6_UnknownBindingKindRejected, UNTEST_
 	auto Result = Applicator.ApplySpec(Spec, TEXT("/Game/Test/F6_fake"), FString());
 	UNTEST_ASSERT_TRUE(Result.bIsError);
 	UNTEST_EXPECT_TRUE(Result.GetContentAsString().Contains(TEXT("kind")));
+	co_return;
+}
+
+// ============================================================================
+// #0000: ApplyRebindActor (claireon.level_sequence_rebind_actor handler)
+// ============================================================================
+
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_ByGuid_Resolves, UNTEST_TIMEOUTMS(5000))
+{
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UNTEST_ASSERT_TRUE(World != nullptr);
+
+	FGuid Guid;
+	ULevelSequence* Seq = CreateRebindFixtureSequence(ACineCameraActor::StaticClass(), Guid);
+	UNTEST_ASSERT_TRUE(Seq != nullptr);
+	UNTEST_ASSERT_TRUE(Guid.IsValid());
+
+	ACineCameraActor* Cam = World->SpawnActor<ACineCameraActor>();
+	UNTEST_ASSERT_TRUE(Cam != nullptr);
+
+	FString Err;
+	const bool bOk = ApplyRebindActor(Seq, Guid, Cam, /*bClear=*/false, Err);
+	UNTEST_EXPECT_TRUE(bOk);
+	UNTEST_EXPECT_TRUE(Err.IsEmpty());
+
+	TArray<UObject*, TInlineAllocator<1>> Out;
+	Seq->LocateBoundObjects(Guid,
+		UE::UniversalObjectLocator::FResolveParams(World), nullptr, Out);
+	UNTEST_EXPECT_TRUE(Out.Num() == 1);
+	UNTEST_EXPECT_TRUE(Out.Num() == 1 && Out[0] == Cam);
+
+	World->DestroyActor(Cam);
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_PreservesCameraCutSection_Parameters, UNTEST_TIMEOUTMS(5000))
+{
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UNTEST_ASSERT_TRUE(World != nullptr);
+
+	FGuid Guid;
+	ULevelSequence* Seq = CreateRebindFixtureSequence(ACineCameraActor::StaticClass(), Guid);
+	UNTEST_ASSERT_TRUE(Seq != nullptr);
+	UMovieScene* MS = Seq->GetMovieScene();
+	UNTEST_ASSERT_TRUE(MS != nullptr);
+
+	UMovieSceneCameraCutTrack* Track = MS->AddTrack<UMovieSceneCameraCutTrack>();
+	UNTEST_ASSERT_TRUE(Track != nullptr);
+	UMovieSceneCameraCutSection* Section = Cast<UMovieSceneCameraCutSection>(Track->CreateNewSection());
+	UNTEST_ASSERT_TRUE(Section != nullptr);
+	Section->SetCameraBindingID(FMovieSceneObjectBindingID(Guid));
+	Section->SetRange(TRange<FFrameNumber>(FFrameNumber(100), FFrameNumber(5500)));
+	Section->SetBlendType(EMovieSceneBlendType::Absolute);
+	Section->Easing.bManualEaseIn = true;
+	Section->Easing.ManualEaseInDuration = 317;
+	Section->Easing.bManualEaseOut = true;
+	Section->Easing.ManualEaseOutDuration = 421;
+	Track->AddSection(*Section);
+
+	const TRange<FFrameNumber> RangeBefore = Section->GetRange();
+	const FOptionalMovieSceneBlendType BlendBefore = Section->GetBlendType();
+	const int32 EaseInBefore  = Section->Easing.GetEaseInDuration();
+	const int32 EaseOutBefore = Section->Easing.GetEaseOutDuration();
+
+	ACineCameraActor* NewCam = World->SpawnActor<ACineCameraActor>();
+	UNTEST_ASSERT_TRUE(NewCam != nullptr);
+
+	FString Err;
+	const bool bOk = ApplyRebindActor(Seq, Guid, NewCam, /*bClear=*/false, Err);
+	UNTEST_EXPECT_TRUE(bOk);
+	UNTEST_EXPECT_TRUE(Err.IsEmpty());
+
+	UNTEST_EXPECT_TRUE(Section->GetRange().GetLowerBoundValue() == RangeBefore.GetLowerBoundValue());
+	UNTEST_EXPECT_TRUE(Section->GetRange().GetUpperBoundValue() == RangeBefore.GetUpperBoundValue());
+	UNTEST_EXPECT_TRUE(Section->GetBlendType().IsValid() == BlendBefore.IsValid());
+	if (Section->GetBlendType().IsValid() && BlendBefore.IsValid())
+	{
+		UNTEST_EXPECT_TRUE(Section->GetBlendType().Get() == BlendBefore.Get());
+	}
+	UNTEST_EXPECT_TRUE(Section->Easing.GetEaseInDuration()  == EaseInBefore);
+	UNTEST_EXPECT_TRUE(Section->Easing.GetEaseOutDuration() == EaseOutBefore);
+
+	World->DestroyActor(NewCam);
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_ByLabel_RepairsUnresolved, UNTEST_TIMEOUTMS(5000))
+{
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UNTEST_ASSERT_TRUE(World != nullptr);
+
+	ULevelSequence* Seq = NewObject<ULevelSequence>(GetTransientPackage(),
+		FName(TEXT("LS_RebindFixture_ByLabel")), RF_Transient | RF_Transactional);
+	UNTEST_ASSERT_TRUE(Seq != nullptr);
+	Seq->Initialize();
+	UMovieScene* MS = Seq->GetMovieScene();
+	UNTEST_ASSERT_TRUE(MS != nullptr);
+
+	const FGuid GuidA = MS->AddPossessable(TEXT("CamA"), ACineCameraActor::StaticClass());
+	const FGuid GuidB = MS->AddPossessable(TEXT("CamB"), ACineCameraActor::StaticClass());
+	const FGuid GuidC = MS->AddPossessable(TEXT("CamC"), ACineCameraActor::StaticClass());
+
+	ACineCameraActor* CamA = World->SpawnActor<ACineCameraActor>();
+	ACineCameraActor* CamB = World->SpawnActor<ACineCameraActor>();
+	ACineCameraActor* CamC = World->SpawnActor<ACineCameraActor>();
+	UNTEST_ASSERT_TRUE(CamA && CamB && CamC);
+	CamA->SetActorLabel(TEXT("CamA"));
+	CamB->SetActorLabel(TEXT("CamB"));
+	CamC->SetActorLabel(TEXT("CamC"));
+
+	struct FPair { FGuid Guid; FString Label; AActor* Expected; };
+	const FPair Pairs[] = {
+		{ GuidA, TEXT("CamA"), CamA },
+		{ GuidB, TEXT("CamB"), CamB },
+		{ GuidC, TEXT("CamC"), CamC },
+	};
+
+	for (const FPair& P : Pairs)
+	{
+		AActor* Match = nullptr;
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			if (It->GetActorLabel() == P.Label)
+			{
+				Match = *It;
+				break;
+			}
+		}
+		UNTEST_EXPECT_TRUE(Match == P.Expected);
+
+		FString Err;
+		const bool bOk = ApplyRebindActor(Seq, P.Guid, Match, /*bClear=*/false, Err);
+		UNTEST_EXPECT_TRUE(bOk);
+		UNTEST_EXPECT_TRUE(Err.IsEmpty());
+
+		TArray<UObject*, TInlineAllocator<1>> Out;
+		Seq->LocateBoundObjects(P.Guid,
+			UE::UniversalObjectLocator::FResolveParams(World), nullptr, Out);
+		UNTEST_EXPECT_TRUE(Out.Num() == 1 && Out[0] == P.Expected);
+	}
+
+	UNTEST_EXPECT_TRUE(MS->FindPossessable(GuidA) != nullptr);
+	UNTEST_EXPECT_TRUE(MS->FindPossessable(GuidB) != nullptr);
+	UNTEST_EXPECT_TRUE(MS->FindPossessable(GuidC) != nullptr);
+
+	World->DestroyActor(CamA);
+	World->DestroyActor(CamB);
+	World->DestroyActor(CamC);
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_TwiceToDifferentActors_OneReference, UNTEST_TIMEOUTMS(5000))
+{
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UNTEST_ASSERT_TRUE(World != nullptr);
+
+	FGuid Guid;
+	ULevelSequence* Seq = CreateRebindFixtureSequence(ACineCameraActor::StaticClass(), Guid);
+	UNTEST_ASSERT_TRUE(Seq != nullptr);
+
+	ACineCameraActor* CamA = World->SpawnActor<ACineCameraActor>();
+	ACineCameraActor* CamB = World->SpawnActor<ACineCameraActor>();
+	UNTEST_ASSERT_TRUE(CamA && CamB);
+
+	FString Err1;
+	const bool bOk1 = ApplyRebindActor(Seq, Guid, CamA, /*bClear=*/false, Err1);
+	UNTEST_EXPECT_TRUE(bOk1);
+
+	FString Err2;
+	const bool bOk2 = ApplyRebindActor(Seq, Guid, CamB, /*bClear=*/false, Err2);
+	UNTEST_EXPECT_TRUE(bOk2);
+
+	TArray<UObject*, TInlineAllocator<1>> Out;
+	Seq->LocateBoundObjects(Guid,
+		UE::UniversalObjectLocator::FResolveParams(World), nullptr, Out);
+	UNTEST_EXPECT_TRUE(Out.Num() == 1);
+	UNTEST_EXPECT_TRUE(Out.Num() == 1 && Out[0] == CamB);
+
+	World->DestroyActor(CamA);
+	World->DestroyActor(CamB);
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_WrongClass_Errors, UNTEST_TIMEOUTMS(5000))
+{
+#if WITH_EDITORONLY_DATA
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UNTEST_ASSERT_TRUE(World != nullptr);
+
+	FGuid Guid;
+	ULevelSequence* Seq = CreateRebindFixtureSequence(ACineCameraActor::StaticClass(), Guid);
+	UNTEST_ASSERT_TRUE(Seq != nullptr);
+
+	AActor* NonCam = World->SpawnActor<AActor>();
+	UNTEST_ASSERT_TRUE(NonCam != nullptr);
+
+	FString Err;
+	const bool bOk = ApplyRebindActor(Seq, Guid, NonCam, /*bClear=*/false, Err);
+	UNTEST_EXPECT_FALSE(bOk);
+	UNTEST_EXPECT_TRUE(Err.Contains(TEXT("is not a child of possessable class")));
+
+	World->DestroyActor(NonCam);
+#endif // WITH_EDITORONLY_DATA
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_OnSpawnable_Errors, UNTEST_TIMEOUTMS(5000))
+{
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UNTEST_ASSERT_TRUE(World != nullptr);
+
+	ULevelSequence* Seq = NewObject<ULevelSequence>(GetTransientPackage(),
+		FName(TEXT("LS_RebindSpawnableFixture")), RF_Transient | RF_Transactional);
+	UNTEST_ASSERT_TRUE(Seq != nullptr);
+	Seq->Initialize();
+	UMovieScene* MS = Seq->GetMovieScene();
+	UNTEST_ASSERT_TRUE(MS != nullptr);
+
+	UObject* Template = NewObject<UObject>(Seq, ACineCameraActor::StaticClass(),
+		NAME_None, RF_Transactional);
+	UNTEST_ASSERT_TRUE(Template != nullptr);
+	const FGuid SpawnableGuid = MS->AddSpawnable(TEXT("SpawnableCam"), *Template);
+	UNTEST_ASSERT_TRUE(SpawnableGuid.IsValid());
+
+	ACineCameraActor* Cam = World->SpawnActor<ACineCameraActor>();
+	UNTEST_ASSERT_TRUE(Cam != nullptr);
+
+	FString Err;
+	const bool bOk = ApplyRebindActor(Seq, SpawnableGuid, Cam, /*bClear=*/false, Err);
+	UNTEST_EXPECT_FALSE(bOk);
+	UNTEST_EXPECT_TRUE(Err.Contains(TEXT("set_spawnable_binding_id")));
+
+	World->DestroyActor(Cam);
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_ChildPossessable_Errors, UNTEST_TIMEOUTMS(5000))
+{
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UNTEST_ASSERT_TRUE(World != nullptr);
+
+	ULevelSequence* Seq = NewObject<ULevelSequence>(GetTransientPackage(),
+		FName(TEXT("LS_RebindChildFixture")), RF_Transient | RF_Transactional);
+	UNTEST_ASSERT_TRUE(Seq != nullptr);
+	Seq->Initialize();
+	UMovieScene* MS = Seq->GetMovieScene();
+	UNTEST_ASSERT_TRUE(MS != nullptr);
+
+	const FGuid ParentGuid = MS->AddPossessable(TEXT("Parent"), ACineCameraActor::StaticClass());
+	const FGuid ChildGuid  = MS->AddPossessable(TEXT("Child"),  AActor::StaticClass());
+	FMovieScenePossessable* Child = MS->FindPossessable(ChildGuid);
+	UNTEST_ASSERT_TRUE(Child != nullptr);
+	Child->SetParent(ParentGuid, MS);
+
+	ACineCameraActor* Cam = World->SpawnActor<ACineCameraActor>();
+	UNTEST_ASSERT_TRUE(Cam != nullptr);
+
+	FString Err;
+	const bool bOk = ApplyRebindActor(Seq, ChildGuid, Cam, /*bClear=*/false, Err);
+	UNTEST_EXPECT_FALSE(bOk);
+	UNTEST_EXPECT_TRUE(Err.Contains(TEXT("cannot be rebound directly")));
+
+	World->DestroyActor(Cam);
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_Clear_DropsReferences_KeepsGuid, UNTEST_TIMEOUTMS(5000))
+{
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UNTEST_ASSERT_TRUE(World != nullptr);
+
+	FGuid Guid;
+	ULevelSequence* Seq = CreateRebindFixtureSequence(ACineCameraActor::StaticClass(), Guid);
+	UNTEST_ASSERT_TRUE(Seq != nullptr);
+	UMovieScene* MS = Seq->GetMovieScene();
+	UNTEST_ASSERT_TRUE(MS != nullptr);
+
+	ACineCameraActor* Cam = World->SpawnActor<ACineCameraActor>();
+	UNTEST_ASSERT_TRUE(Cam != nullptr);
+
+	FString ErrBind;
+	const bool bBound = ApplyRebindActor(Seq, Guid, Cam, /*bClear=*/false, ErrBind);
+	UNTEST_EXPECT_TRUE(bBound);
+
+	FString ErrClear;
+	const bool bCleared = ApplyRebindActor(Seq, Guid, /*Actor=*/nullptr, /*bClear=*/true, ErrClear);
+	UNTEST_EXPECT_TRUE(bCleared);
+	UNTEST_EXPECT_TRUE(ErrClear.IsEmpty());
+
+	TArray<UObject*, TInlineAllocator<1>> Out;
+	Seq->LocateBoundObjects(Guid,
+		UE::UniversalObjectLocator::FResolveParams(World), nullptr, Out);
+	UNTEST_EXPECT_TRUE(Out.Num() == 0);
+	UNTEST_EXPECT_TRUE(MS->FindPossessable(Guid) != nullptr);
+
+	World->DestroyActor(Cam);
 	co_return;
 }
 
