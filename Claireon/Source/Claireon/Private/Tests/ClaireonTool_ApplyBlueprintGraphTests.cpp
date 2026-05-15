@@ -205,6 +205,100 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins,
 }
 
 // ============================================================================
+// AsyncAction typed branch. The new node_type='AsyncAction' surface in
+// ClaireonBlueprintNodeFactory::CreateNode constructs the same UK2Node_AsyncAction
+// the helper-detection path produces, but without requiring node_type='CallFunction'
+// + the four-conjunct helper guard. Callers who already know they want an async
+// node state intent directly.
+// ============================================================================
+
+UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins,
+    AsyncActionNodeType_HasOnComplete, UNTEST_TIMEOUTMS(30000))
+{
+	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
+	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
+
+	// Differs from the auto-pick sibling test ONLY in node_type: 'AsyncAction'
+	// instead of 'CallFunction'.
+	TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
+	Node->SetStringField(TEXT("id"), TEXT("delay1"));
+	Node->SetStringField(TEXT("node_type"), TEXT("AsyncAction"));
+	Node->SetStringField(TEXT("function_name"), TEXT("AwaitDelay"));
+	Node->SetStringField(TEXT("function_class"),
+		TEXT("/Script/Engine.AsyncActionLoadPrimaryAsset"));
+
+	ClaireonTool_ApplyBlueprintGraph Tool;
+	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
+	UNTEST_ASSERT_FALSE(Result.bIsError);
+
+	UEdGraphNode* Created = ResolveCreatedNode(Result, TEXT("delay1"), SessionId);
+	UNTEST_ASSERT_PTR(Created);
+
+	// Cast check: regression here means the new typed branch failed to route
+	// to UK2Node_AsyncAction (e.g., fell through to the Generic fallback or
+	// emitted a CallFunction instead).
+	UK2Node_AsyncAction* AsyncNode = Cast<UK2Node_AsyncAction>(Created);
+	UNTEST_ASSERT_PTR(AsyncNode);
+
+	// Card-defining pin: the BlueprintAssignable delegate exec output. This is
+	// the pin AllocateDefaultPins synthesizes from the proxy class's
+	// multicast delegate; its presence proves InitializeProxyFromFunction
+	// populated ProxyFactoryClass / ProxyClass / ProxyFactoryFunctionName.
+	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("OnComplete")));
+
+	// Proxy-class parameter pin (factory's float arg).
+	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("Duration")));
+
+	// Standard exec pair -- confirms the base wiring.
+	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("execute")));
+	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("then")));
+
+	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	co_return;
+}
+
+// ============================================================================
+// Generic + K2Node_AsyncAction without node_properties. Pre-fix, this produced
+// the inert "Async Task: Missing Function" stub silently (exec pins only, no
+// delegate output). Post-fix, the loud-failure guard in
+// ClaireonBlueprintNodeFactory::CreateNode catches the half-populated proxy bag
+// and returns an error that points the caller at the node_type='AsyncAction'
+// surface.
+// ============================================================================
+
+UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins,
+    GenericK2NodeAsyncAction_WithoutProxyBag_FailsLoudly, UNTEST_TIMEOUTMS(30000))
+{
+	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
+	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
+
+	// Generic surface with class_name='K2Node_AsyncAction' and NO
+	// node_properties -- the silent-stub failure mode the guard catches.
+	TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
+	Node->SetStringField(TEXT("id"), TEXT("stub1"));
+	Node->SetStringField(TEXT("node_type"), TEXT("Generic"));
+	Node->SetStringField(TEXT("class_name"), TEXT("K2Node_AsyncAction"));
+
+	ClaireonTool_ApplyBlueprintGraph Tool;
+	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
+
+	// The factory's loud-failure guard must short-circuit before
+	// Graph->AddNode runs. bIsError must be true.
+	UNTEST_ASSERT_TRUE(Result.bIsError);
+
+	// Error message must contain both the recommended surface name
+	// ('AsyncAction') and at least one of the proxy-field names
+	// ('ProxyFactoryFunctionName') so the caller can self-locate the fix.
+	UNTEST_EXPECT_TRUE(Result.ErrorMessage.Contains(TEXT("AsyncAction")));
+	UNTEST_EXPECT_TRUE(Result.ErrorMessage.Contains(TEXT("ProxyFactoryFunctionName")));
+
+	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	co_return;
+}
+
+// ============================================================================
 // Self-bound CallFunction -- primary card repro.  Before T2+T3 this node
 // would end up with zero pins because the factory never resolved the UFunction
 // and never triggered ReconstructNode.

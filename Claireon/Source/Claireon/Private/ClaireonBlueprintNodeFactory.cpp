@@ -47,6 +47,7 @@
 #include "K2Node_DoOnceMultiInput.h"
 
 #include "Kismet2/BlueprintEditorUtils.h"
+#include "Kismet/BlueprintAsyncActionBase.h"
 
 #include "Dom/JsonValue.h"
 
@@ -303,6 +304,49 @@ namespace ClaireonBlueprintNodeFactory
 				NewNode = N;
 				Desc = FString::Printf(TEXT("CallFunction: %s (%s)"), *FunctionName, *NodeClass->GetName());
 			}
+		}
+		else if (NodeType == TEXT("AsyncAction"))
+		{
+			// Explicit AsyncAction surface: callers state intent directly instead
+			// of relying on CallFunction helper-detection. Both paths construct
+			// the same node; this one skips the helper-detection guard for callers
+			// who already know they want an AsyncAction node.
+			FString FunctionName, FunctionClass;
+			if (!Params->TryGetStringField(TEXT("function_name"), FunctionName))
+			{
+				Out.Error = TEXT("AsyncAction: missing required field 'function_name'");
+				return Out;
+			}
+			if (!Params->TryGetStringField(TEXT("function_class"), FunctionClass))
+			{
+				Out.Error = TEXT("AsyncAction: missing required field 'function_class' (the UClass that hosts the async factory UFUNCTION, e.g. '/Script/Engine.AsyncActionLoadPrimaryAsset')");
+				return Out;
+			}
+
+			ClaireonNameResolver::FNameResolveResult R;
+			UClass* OwnerClass = ClaireonNameResolver::ResolveClassName(FunctionClass, UBlueprintAsyncActionBase::StaticClass(), R);
+			if (!OwnerClass)
+			{
+				Out.Error = FString::Printf(
+					TEXT("AsyncAction: function_class '%s' could not be resolved to a UBlueprintAsyncActionBase-derived class. (%s)"),
+					*FunctionClass, *R.Error);
+				return Out;
+			}
+			if (!R.ResolutionNote.IsEmpty()) Out.Warnings.Add(R.ResolutionNote);
+
+			UFunction* ResolvedFunction = OwnerClass->FindFunctionByName(FName(*FunctionName));
+			if (!ResolvedFunction)
+			{
+				Out.Error = FString::Printf(
+					TEXT("AsyncAction: factory function '%s' not found on class '%s'."),
+					*FunctionName, *OwnerClass->GetName());
+				return Out;
+			}
+
+			UK2Node_AsyncAction* AsyncNode = NewObject<UK2Node_AsyncAction>(Graph);
+			AsyncNode->InitializeProxyFromFunction(ResolvedFunction);
+			NewNode = AsyncNode;
+			Desc = FString::Printf(TEXT("AsyncAction: %s (%s)"), *FunctionName, *OwnerClass->GetName());
 		}
 		else if (NodeType == TEXT("CallParentFunction"))
 		{
@@ -659,6 +703,51 @@ namespace ClaireonBlueprintNodeFactory
 		{
 			ApplyReflectionProperties(NewNode, *PropsObj, Out.Warnings);
 			bWroteProperties = (*PropsObj)->Values.Num() > 0;
+		}
+
+		// Loud-failure guard for Generic + UK2Node_BaseAsyncTask subclasses (e.g.
+		// K2Node_AsyncAction, K2Node_LatentAbilityCall) constructed without the
+		// proxy bag. The engine's AllocateDefaultPins synthesizes the
+		// BlueprintAssignable delegate exec pins from ProxyFactoryClass +
+		// ProxyFactoryFunctionName + ProxyClass; if any are unset (via
+		// node_properties), the result is the inert "Async Task: Missing Function"
+		// stub. The three proxy fields are protected on UK2Node_BaseAsyncTask
+		// with no public accessors, so we read them via reflection.
+		if (NewNode && NewNode->IsA<UK2Node_BaseAsyncTask>())
+		{
+			auto ReadObjProp = [&](const TCHAR* PropName) -> UClass*
+			{
+				if (const FObjectPropertyBase* P = CastField<FObjectPropertyBase>(
+					NewNode->GetClass()->FindPropertyByName(PropName)))
+				{
+					return Cast<UClass>(P->GetObjectPropertyValue_InContainer(NewNode));
+				}
+				return nullptr;
+			};
+			auto ReadNameProp = [&](const TCHAR* PropName) -> FName
+			{
+				if (const FNameProperty* P = CastField<FNameProperty>(
+					NewNode->GetClass()->FindPropertyByName(PropName)))
+				{
+					return P->GetPropertyValue_InContainer(NewNode);
+				}
+				return NAME_None;
+			};
+
+			UClass* PFC      = ReadObjProp(TEXT("ProxyFactoryClass"));
+			UClass* PC       = ReadObjProp(TEXT("ProxyClass"));
+			const FName PFF  = ReadNameProp(TEXT("ProxyFactoryFunctionName"));
+
+			if (PFC == nullptr || PC == nullptr || PFF.IsNone())
+			{
+				Out.Error = FString::Printf(
+					TEXT("Generic '%s' was created without proxy fields populated -- ")
+					TEXT("the node would render as 'Async Task: Missing Function' with no delegate pins. ")
+					TEXT("Use `node_type='AsyncAction'` with `function_name` and `function_class` (recommended). ")
+					TEXT("As a fallback, supply `node_properties` containing 'ProxyFactoryFunctionName', 'ProxyFactoryClass', and 'ProxyClass'."),
+					*NewNode->GetClass()->GetName());
+				return Out;
+			}
 		}
 
 		// -------- Add to graph + AllocateDefaultPins --------

@@ -16,6 +16,7 @@
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraphSchema_K2.h"
 #include "K2Node_AsyncAction.h"
+#include "Kismet/BlueprintAsyncActionBase.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_CallArrayFunction.h"
 #include "K2Node_CallDataTableFunction.h"
@@ -115,7 +116,7 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddNode::GetInputSchema() con
     FToolSchemaBuilder Builder;
     Builder.AddString(TEXT("session_id"), TEXT("Session id from a prior open/create (or use asset_path to auto-open)."), false);
     Builder.AddString(TEXT("asset_path"), TEXT("Blueprint asset path (alternative to session_id)."), false);
-    Builder.AddString(TEXT("node_type"), TEXT("Node class alias or full name (e.g. CallFunction, VariableGet, Branch, Sequence, Cast, MacroInstance, or a known macro shorthand like IsValid)."), true);
+    Builder.AddString(TEXT("node_type"), TEXT("Node class alias or full name (e.g. CallFunction, AsyncAction, VariableGet, Branch, Sequence, Cast, MacroInstance, or a known macro shorthand like IsValid)."), true);
     Builder.AddString(TEXT("function_name"), TEXT("Function name for CallFunction."));
     Builder.AddString(TEXT("function_class"), TEXT("Class that owns the function (for CallFunction)."));
     Builder.AddString(TEXT("variable_name"), TEXT("Variable name for VariableGet/Set."));
@@ -322,6 +323,49 @@ FToolResult ClaireonBlueprintGraphTool_AddNode::AddNode_Impl(
 			NodeDescription = FString::Printf(TEXT("CallFunction: %s (%s)"),
 				*FunctionName, *NodeClass->GetName());
 		}
+	}
+	else if (NodeType == TEXT("AsyncAction"))
+	{
+		// Explicit AsyncAction surface: callers state intent directly instead of
+		// relying on CallFunction helper-detection. Both paths construct the same
+		// node; this one skips the helper-detection guard for callers who already
+		// know they want an AsyncAction node. Mirrors the factory edit in
+		// ClaireonBlueprintNodeFactory.cpp::CreateNode.
+		FString FunctionName, FunctionClass;
+		if (!Params->TryGetStringField(TEXT("function_name"), FunctionName))
+		{
+			return MakeErrorResult(TEXT("AsyncAction: missing required field 'function_name'"));
+		}
+		if (!Params->TryGetStringField(TEXT("function_class"), FunctionClass))
+		{
+			return MakeErrorResult(TEXT("AsyncAction: missing required field 'function_class' (the UClass that hosts the async factory UFUNCTION, e.g. '/Script/Engine.AsyncActionLoadPrimaryAsset')"));
+		}
+
+		ClaireonNameResolver::FNameResolveResult AsyncClassResult;
+		UClass* OwnerClass = ClaireonNameResolver::ResolveClassName(FunctionClass, UBlueprintAsyncActionBase::StaticClass(), AsyncClassResult);
+		if (!OwnerClass)
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("AsyncAction: function_class '%s' could not be resolved to a UBlueprintAsyncActionBase-derived class. (%s)"),
+				*FunctionClass, *AsyncClassResult.Error));
+		}
+		if (!AsyncClassResult.ResolutionNote.IsEmpty())
+		{
+			ResolutionWarnings.Add(AsyncClassResult.ResolutionNote);
+		}
+
+		UFunction* ResolvedFunction = OwnerClass->FindFunctionByName(FName(*FunctionName));
+		if (!ResolvedFunction)
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("AsyncAction: factory function '%s' not found on class '%s'."),
+				*FunctionName, *OwnerClass->GetName()));
+		}
+
+		UK2Node_AsyncAction* AsyncNode = NewObject<UK2Node_AsyncAction>(Graph);
+		AsyncNode->InitializeProxyFromFunction(ResolvedFunction);
+		NewNode = AsyncNode;
+		NodeDescription = FString::Printf(TEXT("AsyncAction: %s (%s)"), *FunctionName, *OwnerClass->GetName());
 	}
 	else if (NodeType == TEXT("VariableGet"))
 	{
@@ -804,6 +848,51 @@ FToolResult ClaireonBlueprintGraphTool_AddNode::AddNode_Impl(
 				{
 					UE_LOG(LogClaireon, Warning, TEXT("node_properties: Unsupported property type for '%s'"), *Pair.Key);
 				}
+			}
+		}
+
+		// Loud-failure guard for Generic + UK2Node_BaseAsyncTask subclasses (e.g.
+		// K2Node_AsyncAction, K2Node_LatentAbilityCall) constructed without the
+		// proxy bag. The engine's AllocateDefaultPins synthesizes the
+		// BlueprintAssignable delegate exec pins from ProxyFactoryClass +
+		// ProxyFactoryFunctionName + ProxyClass; if any are unset (via
+		// node_properties), the result is the inert "Async Task: Missing Function"
+		// stub. The three proxy fields are protected on UK2Node_BaseAsyncTask
+		// with no public accessors, so we read them via reflection. Mirrors the
+		// factory guard in ClaireonBlueprintNodeFactory.cpp::CreateNode.
+		if (NewNode && NewNode->IsA<UK2Node_BaseAsyncTask>())
+		{
+			auto ReadObjProp = [&](const TCHAR* PropName) -> UClass*
+			{
+				if (const FObjectPropertyBase* P = CastField<FObjectPropertyBase>(
+					NewNode->GetClass()->FindPropertyByName(PropName)))
+				{
+					return Cast<UClass>(P->GetObjectPropertyValue_InContainer(NewNode));
+				}
+				return nullptr;
+			};
+			auto ReadNameProp = [&](const TCHAR* PropName) -> FName
+			{
+				if (const FNameProperty* P = CastField<FNameProperty>(
+					NewNode->GetClass()->FindPropertyByName(PropName)))
+				{
+					return P->GetPropertyValue_InContainer(NewNode);
+				}
+				return NAME_None;
+			};
+
+			UClass* PFC      = ReadObjProp(TEXT("ProxyFactoryClass"));
+			UClass* PC       = ReadObjProp(TEXT("ProxyClass"));
+			const FName PFF  = ReadNameProp(TEXT("ProxyFactoryFunctionName"));
+
+			if (PFC == nullptr || PC == nullptr || PFF.IsNone())
+			{
+				return MakeErrorResult(FString::Printf(
+					TEXT("Generic '%s' was created without proxy fields populated -- ")
+					TEXT("the node would render as 'Async Task: Missing Function' with no delegate pins. ")
+					TEXT("Use node_type='AsyncAction' with function_name and function_class (recommended). ")
+					TEXT("As a fallback, supply node_properties containing 'ProxyFactoryFunctionName', 'ProxyFactoryClass', and 'ProxyClass'."),
+					*NewNode->GetClass()->GetName()));
 			}
 		}
 
