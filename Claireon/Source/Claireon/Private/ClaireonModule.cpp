@@ -1867,7 +1867,7 @@ void FClaireonModule::StartServer()
 		// Two guids concatenated give us 64 hex chars sans the braces, well
 		// above the 32-char minimum required by /editor/register. Never
 		// persisted to disk; lives only in this process and inside the proxy's
-		// active_session dict.
+		// singleton_session dict.
 		SessionToken = FGuid::NewGuid().ToString(EGuidFormats::Digits)
 			+ FGuid::NewGuid().ToString(EGuidFormats::Digits);
 		Server->SetSessionToken(SessionToken);

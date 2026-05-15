@@ -502,7 +502,7 @@ def release_lock(path: str) -> None:
 #
 # Single-session state held under SESSION_LOCK. Semantics per PROTOCOL.md:
 #   - register returns {accepted: true} or {accepted: false, reason: ...}
-#     with reasons in {active_session, version_mismatch, malformed_request,
+#     with reasons in {singleton_session, version_mismatch, malformed_request,
 #     worktree_mismatch}.
 #   - heartbeat returns {ok: true} or {ok: false, reason: "unknown_session"}.
 #   - deregister clears session; proxy continues running.
@@ -525,11 +525,11 @@ _REGISTER_REQUIRED_FIELDS = (
 
 # Registration state (guarded by SESSION_LOCK). None when no editor registered.
 # After Stage 005, RUNTIME["worktrees"][canonical].session is authoritative;
-# active_session is retained as a compatibility shim for the legacy /admin/...
+# singleton_session is retained as a compatibility shim for the legacy /admin/...
 # read paths (status, idle-exit) that still skim the singleton view. Both views
 # are written under SESSION_LOCK so they stay coherent.
 SESSION_LOCK = threading.Lock()
-active_session: Optional[Dict[str, Any]] = None
+singleton_session: Optional[Dict[str, Any]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -537,12 +537,12 @@ active_session: Optional[Dict[str, Any]] = None
 #
 # Stages 005-007 wire handle_register / handle_heartbeat / handle_deregister to
 # read AND write through these maps; this stage only mirrors writes alongside
-# the legacy single-session state. Today the legacy globals (active_session +
-# RUNTIME["worktree_root"] / RUNTIME["canonical_worktree"]) remain authoritative;
+# the legacy single-session state. Today the legacy globals (singleton_session +
+# RUNTIME["singleton_worktree_root"] / RUNTIME["canonical_worktree"]) remain authoritative;
 # nothing in the proxy reads from RUNTIME["worktrees"] yet.
 #
 # All mutations to these maps MUST be performed under SESSION_LOCK, the same
-# lock that already guards active_session. A missed lock here will surface as
+# lock that already guards singleton_session. A missed lock here will surface as
 # flaky multi-tenant tests in Stage 005+.
 # ---------------------------------------------------------------------------
 
@@ -618,17 +618,17 @@ def _mono_now() -> float:
     return time.monotonic() + float(RUNTIME.get("clock_offset_seconds", 0.0))
 
 
-def evict_stale_session_locked() -> Optional[Dict[str, Any]]:
+def evict_singleton_stale_session_locked() -> Optional[Dict[str, Any]]:
     """Drop the active session if it has gone silent beyond the staleness
     threshold. MUST be called with SESSION_LOCK held. Returns the evicted
     session dict (for logging) or None if nothing was evicted."""
-    global active_session
-    if active_session is None:
+    global singleton_session
+    if singleton_session is None:
         return None
-    age = _mono_now() - float(active_session.get("last_heartbeat_ts") or 0.0)
+    age = _mono_now() - float(singleton_session.get("last_heartbeat_ts") or 0.0)
     if age <= HEARTBEAT_STALENESS_SECONDS:
         return None
-    evicted = active_session
+    evicted = singleton_session
     forward_conn = evicted.get("forward_conn")
     if forward_conn is not None:
         try:
@@ -637,7 +637,7 @@ def evict_stale_session_locked() -> Optional[Dict[str, Any]]:
             pass
 
     # Stage 004 mirror write: clear the matching WorktreeState.session
-    # so the per-worktree map agrees with active_session=None. Caller
+    # so the per-worktree map agrees with singleton_session=None. Caller
     # already holds SESSION_LOCK per the docstring.
     canonical = evicted.get("worktree_root")
     if canonical:
@@ -646,7 +646,7 @@ def evict_stale_session_locked() -> Optional[Dict[str, Any]]:
         if ws is not None:
             ws.session = None
 
-    active_session = None
+    singleton_session = None
     return evicted
 
 
@@ -698,7 +698,7 @@ def handle_register(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
       - Required field set is now (pid, worktree_root, start_time_ns,
         build_id, proxy_version, editor_mcp_port, editor_mcp_token).
         session_uuid is gone; (pid, start_time_ns) is the per-session key.
-      - 409 active_session is no longer returned. D6 newest-wins: the
+      - 409 singleton_session is no longer returned. D6 newest-wins: the
         incoming registration evicts whatever session was previously
         bound to the worktree slot. The displaced session's next
         heartbeat sees evicted_by and walks to terminal Failed.
@@ -706,7 +706,7 @@ def handle_register(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
         rejected.
       - worktree_mismatch is gone. The proxy is multi-tenant: any
         canonical worktree gets its own slot in RUNTIME["worktrees"].
-      - active_session is still written for the legacy /admin/...
+      - singleton_session is still written for the legacy /admin/...
         observability + idle-exit views; the per-worktree map is now
         authoritative for routing/heartbeat/eviction.
     """
@@ -729,9 +729,9 @@ def handle_register(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
                 body["proxy_version"],
             )
 
-    global active_session
+    global singleton_session
     with SESSION_LOCK:
-        evict_stale_session_locked()
+        evict_singleton_stale_session_locked()
 
         editor_pid = int(body["pid"])
         editor_start = body["start_time_ns"]  # decimal string, never parsed
@@ -782,12 +782,12 @@ def handle_register(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
         wt.last_seen_ns = int(_mono_now() * 1_000_000_000)
         wt.version_hash = str(body["proxy_version"])
 
-        # Compatibility shim: keep active_session populated so the legacy
+        # Compatibility shim: keep singleton_session populated so the legacy
         # /admin/status, idle-exit, and any other singleton-view readers
         # continue to work until they are migrated in Stage 006+. The
         # per-worktree map is authoritative; this mirror is read-only
         # outside of register/deregister.
-        active_session = {
+        singleton_session = {
             "pid": editor_pid,
             "worktree_root": body["worktree_root"],
             "start_time_ns": editor_start,
@@ -838,7 +838,7 @@ def handle_heartbeat(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
     canonical = os.path.realpath(worktree_root).lower()
 
     with SESSION_LOCK:
-        evict_stale_session_locked()
+        evict_singleton_stale_session_locked()
 
         wt = RUNTIME["worktrees"].get(canonical)
         if wt is None or wt.session is None:
@@ -859,14 +859,14 @@ def handle_heartbeat(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
 
         wt.last_seen_ns = int(_mono_now() * 1_000_000_000)
 
-        # Mirror to active_session for the legacy idle-exit watchdog and
+        # Mirror to singleton_session for the legacy idle-exit watchdog and
         # /admin/status. Only meaningful when this is the same session
         # the singleton view believes is current.
-        global active_session
-        if active_session is not None \
-                and active_session.get("pid") == pid \
-                and active_session.get("start_time_ns") == start_time_ns:
-            active_session["last_heartbeat_ts"] = _mono_now()
+        global singleton_session
+        if singleton_session is not None \
+                and singleton_session.get("pid") == pid \
+                and singleton_session.get("start_time_ns") == start_time_ns:
+            singleton_session["last_heartbeat_ts"] = _mono_now()
     return 200, {"ok": True}
 
 
@@ -890,7 +890,7 @@ def handle_deregister(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
 
     canonical = os.path.realpath(worktree_root).lower()
 
-    global active_session
+    global singleton_session
     with SESSION_LOCK:
         wt = RUNTIME["worktrees"].get(canonical)
         if wt is not None and wt.session is not None and \
@@ -904,19 +904,19 @@ def handle_deregister(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
             wt.session = None
             wt._evicted_by = None
 
-            # Compatibility shim: clear active_session if it was tracking
+            # Compatibility shim: clear singleton_session if it was tracking
             # this same session. The legacy /admin/status reader expects
             # the singleton view to agree with the per-worktree map.
-            if active_session is not None \
-                    and active_session.get("pid") == pid \
-                    and active_session.get("start_time_ns") == start_time_ns:
-                forward_conn = active_session.get("forward_conn")
+            if singleton_session is not None \
+                    and singleton_session.get("pid") == pid \
+                    and singleton_session.get("start_time_ns") == start_time_ns:
+                forward_conn = singleton_session.get("forward_conn")
                 if forward_conn is not None:
                     try:
                         forward_conn.close()
                     except Exception:  # noqa: BLE001
                         pass
-                active_session = None
+                singleton_session = None
     return 200, {"ok": True}
 
 
@@ -1332,11 +1332,11 @@ class RegistrationHandler(BaseHTTPRequestHandler):
                 self._respond_json(403, {"reason": "forbidden"})
                 return
             with SESSION_LOCK:
-                evict_stale_session_locked()
-                has_session = active_session is not None
-                pid = active_session.get("pid") if has_session else None
+                evict_singleton_stale_session_locked()
+                has_session = singleton_session is not None
+                pid = singleton_session.get("pid") if has_session else None
                 start_time_ns = (
-                    active_session.get("start_time_ns") if has_session else None
+                    singleton_session.get("start_time_ns") if has_session else None
                 )
             self._respond_json(
                 200,
@@ -1671,16 +1671,17 @@ def _resolve_active_worktree_root(listener_port: Optional[int]) -> Optional[str]
 
     Singleton mode: prefer the canonical worktree the listener_port maps
     to (Claude reached us through that port). If listener_port is None or
-    unmapped, fall back to RUNTIME["worktree_root"] (legacy single-tenant
-    mirror; still set by tests). Returns None if nothing is resolvable.
+    unmapped, fall back to RUNTIME["singleton_worktree_root"] (singleton
+    fallback; still set by test fixtures). Returns None if nothing is
+    resolvable.
     """
     if listener_port is not None:
         canonical = RUNTIME.get("mcp_port_to_worktree", {}).get(listener_port)
         if canonical:
             return canonical
-    legacy = RUNTIME.get("worktree_root")
-    if legacy:
-        return legacy
+    singleton = RUNTIME.get("singleton_worktree_root")
+    if singleton:
+        return singleton
     # Last resort: a single registered session's canonical worktree.
     with SESSION_LOCK:
         for canonical, wt in RUNTIME.get("worktrees", {}).items():
@@ -1709,7 +1710,7 @@ def _handle_proxy_command(
 
     if command == "status":
         with SESSION_LOCK:
-            session = dict(active_session) if active_session is not None else None
+            session = dict(singleton_session) if singleton_session is not None else None
         info = {
             # Stage 012: worktree_root is the resolved listener-mapped
             # worktree (or None in singleton mode without a session).
@@ -1786,7 +1787,7 @@ def _handle_proxy_command(
         poll_interval = 0.5
         while True:
             with SESSION_LOCK:
-                session = dict(active_session) if active_session is not None else None
+                session = dict(singleton_session) if singleton_session is not None else None
             if session is not None:
                 age = _mono_now() - float(session.get("last_heartbeat_ts") or 0.0)
                 if age <= max_age:
@@ -1858,7 +1859,7 @@ def _resolve_session_for_listener(listener_port: Optional[int]) -> Optional[Dict
     Returns a session-snapshot dict (the same shape _forward_once expects)
     or None if no session is bound to that worktree.
 
-    When listener_port is None we fall back to active_session for the
+    When listener_port is None we fall back to singleton_session for the
     legacy single-tenant code path; this lets existing tests that drive
     forward_tool_call directly (without a real listener) keep working.
     """
@@ -1877,13 +1878,13 @@ def _resolve_session_for_listener(listener_port: Optional[int]) -> Optional[Dict
             "canonical_worktree": canonical,
         }
     # Legacy / no-listener-port path.
-    if active_session is None:
+    if singleton_session is None:
         return None
     return {
-        "editor_mcp_port": active_session["editor_mcp_port"],
-        "editor_mcp_token": active_session["editor_mcp_token"],
-        "editor_pid": active_session.get("pid"),
-        "editor_start_time_ns": active_session.get("start_time_ns"),
+        "editor_mcp_port": singleton_session["editor_mcp_port"],
+        "editor_mcp_token": singleton_session["editor_mcp_token"],
+        "editor_pid": singleton_session.get("pid"),
+        "editor_start_time_ns": singleton_session.get("start_time_ns"),
         "canonical_worktree": None,
     }
 
@@ -1934,12 +1935,12 @@ def _forward_payload_to_editor(
     listener_port is the port on which the Claude request arrived. Stage
     006 uses it to pick the per-worktree session via
     RUNTIME["mcp_port_to_worktree"]. When omitted (legacy callers / tests),
-    falls back to the singleton active_session.
+    falls back to the singleton singleton_session.
     """
-    global active_session
+    global singleton_session
     request_id = payload.get("id")
     with SESSION_LOCK:
-        evict_stale_session_locked()
+        evict_singleton_stale_session_locked()
         session_snapshot = _resolve_session_for_listener(listener_port)
         if session_snapshot is None:
             return _jsonrpc_result(request_id, _fallback_tool_result())
@@ -2021,11 +2022,11 @@ def _forward_payload_to_editor(
                         "editor_pid=%s start_time_ns=%s",
                         canonical, evicted_pid, evicted_start,
                     )
-            # Legacy active_session shim eviction.
-            if active_session is not None \
-                    and active_session.get("pid") == evicted_pid \
-                    and active_session.get("start_time_ns") == evicted_start:
-                forward_conn = active_session.get("forward_conn")
+            # Legacy singleton_session shim eviction.
+            if singleton_session is not None \
+                    and singleton_session.get("pid") == evicted_pid \
+                    and singleton_session.get("start_time_ns") == evicted_start:
+                forward_conn = singleton_session.get("forward_conn")
                 if forward_conn is not None:
                     try:
                         forward_conn.close()
@@ -2037,7 +2038,7 @@ def _forward_payload_to_editor(
                         "start_time_ns=%s",
                         evicted_pid, evicted_start,
                     )
-                active_session = None
+                singleton_session = None
         return _jsonrpc_result(request_id, _fallback_tool_result())
 
     log.error(
@@ -2274,14 +2275,14 @@ def evict_stale_sessions_all_locked() -> int:
     WorktreeState. Returns the count of sessions evicted. MUST be called
     with SESSION_LOCK held.
 
-    The single-tenant evict_stale_session_locked() (which still walks
-    active_session) is invoked first so the legacy /admin/status mirror
+    The single-tenant evict_singleton_stale_session_locked() (which still walks
+    singleton_session) is invoked first so the legacy /admin/status mirror
     stays consistent; then we iterate every worktree and clear any
     session whose last_seen_ns predates the staleness threshold.
     """
-    # Drain the legacy view first; it walks active_session and
+    # Drain the legacy view first; it walks singleton_session and
     # transitively clears the matching WorktreeState.session.
-    legacy_evicted = evict_stale_session_locked()
+    legacy_evicted = evict_singleton_stale_session_locked()
     n = 1 if legacy_evicted is not None else 0
     if legacy_evicted is not None:
         log.info(
@@ -2293,7 +2294,7 @@ def evict_stale_sessions_all_locked() -> int:
         )
 
     # Now sweep every per-worktree slot. Multi-tenant routing means a
-    # worktree with no active_session mirror can still hold a stale
+    # worktree with no singleton_session mirror can still hold a stale
     # session record from a previous editor.
     threshold_ns = HEARTBEAT_STALENESS_SECONDS * 1_000_000_000
     now_ns = int(_mono_now() * 1_000_000_000)
@@ -2444,7 +2445,7 @@ def run(argv: list[str]) -> int:
     # longer carries a singleton worktree_root / canonical_worktree;
     # /admin/ensure_worktree adds worktrees on demand. The legacy keys
     # are left as None so any defensive reader still finds the slot.
-    RUNTIME["worktree_root"] = None
+    RUNTIME["singleton_worktree_root"] = None
     RUNTIME["canonical_worktree"] = None
     RUNTIME["proxy_version_hash"] = version_hash
     RUNTIME["last_claude_activity_ts"] = time.monotonic()
@@ -2481,8 +2482,8 @@ def run(argv: list[str]) -> int:
     finally:
         # Close any persistent forward connection to the editor.
         with SESSION_LOCK:
-            if active_session is not None:
-                fc = active_session.get("forward_conn")
+            if singleton_session is not None:
+                fc = singleton_session.get("forward_conn")
                 if fc is not None:
                     try:
                         fc.close()

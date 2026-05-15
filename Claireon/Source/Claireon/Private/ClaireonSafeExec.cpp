@@ -62,7 +62,7 @@ struct FGeneratedClassLookupContext
 // UBlueprintEditorLibrary::GeneratedClass(bp) and writes the result
 // pointer.  The call is a single static UFUNCTION dispatch, which
 // matches what `unreal.BlueprintEditorLibrary.generated_class(bp)`
-// exposes to the Python reflection layer.  See GAP6_REPRO_ARTIFACT.md.
+// exposes to the Python reflection layer.
 static void GeneratedClassLookupTrampoline(void* Context)
 {
 	FGeneratedClassLookupContext* Ctx =

@@ -3,7 +3,7 @@
 
 // These specs exercise the decomposed ClaireonBlueprintGraphTool_* tools
 // directly. Tests below keep their envelope-shaped JSON bodies unchanged
-// and call through DispatchLegacyEnvelope, which reads the envelope
+// and call through DispatchBundledEnvelope, which reads the envelope
 // "operation" field, flattens the envelope to the flat arg shape each
 // decomposed tool's Execute expects, and routes to the right tool.
 
@@ -90,7 +90,7 @@ namespace
 	 * Drops "operation" itself (it is only used to pick a tool) but preserves
 	 * every other top-level field (e.g. session_id) plus all params.* fields.
 	 */
-	static TSharedPtr<FJsonObject> BPFlattenLegacyEnvelope(const TSharedPtr<FJsonObject>& Envelope)
+	static TSharedPtr<FJsonObject> BPFlattenBundledEnvelope(const TSharedPtr<FJsonObject>& Envelope)
 	{
 		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 		if (!Envelope.IsValid())
@@ -127,15 +127,15 @@ namespace
 	 * Unknown operations return an error result -- the ErrorHandling test
 	 * asserts this "reject invalid_operation" behavior.
 	 */
-	static IClaireonTool::FToolResult DispatchLegacyEnvelope(const TSharedPtr<FJsonObject>& Envelope)
+	static IClaireonTool::FToolResult DispatchBundledEnvelope(const TSharedPtr<FJsonObject>& Envelope)
 	{
 		FString Operation;
 		if (!Envelope.IsValid() || !Envelope->TryGetStringField(TEXT("operation"), Operation))
 		{
-			return IClaireonTool::MakeErrorResult(TEXT("DispatchLegacyEnvelope: missing 'operation' field"));
+			return IClaireonTool::MakeErrorResult(TEXT("DispatchBundledEnvelope: missing 'operation' field"));
 		}
 
-		const TSharedPtr<FJsonObject> FlatArgs = BPFlattenLegacyEnvelope(Envelope);
+		const TSharedPtr<FJsonObject> FlatArgs = BPFlattenBundledEnvelope(Envelope);
 
 		#define CLAIREON_DISPATCH_CASE(OpString, ToolClass) \
 			if (Operation == TEXT(OpString)) { ToolClass Tool; return Tool.Execute(FlatArgs); }
@@ -189,7 +189,7 @@ namespace
 		#undef CLAIREON_DISPATCH_CASE
 
 		return IClaireonTool::MakeErrorResult(
-			FString::Printf(TEXT("DispatchLegacyEnvelope: unknown operation '%s'"), *Operation));
+			FString::Printf(TEXT("DispatchBundledEnvelope: unknown operation '%s'"), *Operation));
 	}
 } // namespace
 
@@ -210,7 +210,7 @@ bool FEditBlueprintGraphTest_CreateAndBasicOps::RunTest(const FString& Parameter
 		Params->SetStringField(TEXT("parent_class"), TEXT("Actor"));
 		CreateParams->SetObjectField(TEXT("params"), Params);
 
-		auto Result = DispatchLegacyEnvelope(CreateParams);
+		auto Result = DispatchBundledEnvelope(CreateParams);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to create blueprint: %s"), *Result.GetContentAsString()));
@@ -251,7 +251,7 @@ bool FEditBlueprintGraphTest_CreateAndBasicOps::RunTest(const FString& Parameter
 			NodeParams->SetBoolField(TEXT("auto_connect_from_cursor"), true);
 			AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-			Result = DispatchLegacyEnvelope(AddNodeArgs);
+			Result = DispatchBundledEnvelope(AddNodeArgs);
 			if (Result.bIsError)
 			{
 				AddError(FString::Printf(TEXT("Failed to add PrintString node: %s"), *Result.GetContentAsString()));
@@ -271,7 +271,7 @@ bool FEditBlueprintGraphTest_CreateAndBasicOps::RunTest(const FString& Parameter
 			NodeParams->SetStringField(TEXT("node_type"), TEXT("Branch"));
 			AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-			Result = DispatchLegacyEnvelope(AddNodeArgs);
+			Result = DispatchBundledEnvelope(AddNodeArgs);
 			if (Result.bIsError)
 			{
 				AddError(FString::Printf(TEXT("Failed to add Branch node: %s"), *Result.GetContentAsString()));
@@ -294,7 +294,7 @@ bool FEditBlueprintGraphTest_CreateAndBasicOps::RunTest(const FString& Parameter
 			ConnectParams->SetStringField(TEXT("target_pin_name"), TEXT("execute"));
 			ConnectArgs->SetObjectField(TEXT("params"), ConnectParams);
 
-			Result = DispatchLegacyEnvelope(ConnectArgs);
+			Result = DispatchBundledEnvelope(ConnectArgs);
 			if (Result.bIsError)
 			{
 				AddError(FString::Printf(TEXT("Failed to connect pins by title: %s"), *Result.GetContentAsString()));
@@ -311,7 +311,7 @@ bool FEditBlueprintGraphTest_CreateAndBasicOps::RunTest(const FString& Parameter
 			CompileArgs->SetStringField(TEXT("session_id"), SessionId);
 			CompileArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
 
-			Result = DispatchLegacyEnvelope(CompileArgs);
+			Result = DispatchBundledEnvelope(CompileArgs);
 			if (Result.bIsError)
 			{
 				AddError(FString::Printf(TEXT("Failed to compile: %s"), *Result.GetContentAsString()));
@@ -328,7 +328,7 @@ bool FEditBlueprintGraphTest_CreateAndBasicOps::RunTest(const FString& Parameter
 			SaveArgs->SetStringField(TEXT("session_id"), SessionId);
 			SaveArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
 
-			Result = DispatchLegacyEnvelope(SaveArgs);
+			Result = DispatchBundledEnvelope(SaveArgs);
 			if (Result.bIsError)
 			{
 				AddError(FString::Printf(TEXT("Failed to save: %s"), *Result.GetContentAsString()));
@@ -345,7 +345,7 @@ bool FEditBlueprintGraphTest_CreateAndBasicOps::RunTest(const FString& Parameter
 			CloseArgs->SetStringField(TEXT("session_id"), SessionId);
 			CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
 
-			Result = DispatchLegacyEnvelope(CloseArgs);
+			Result = DispatchBundledEnvelope(CloseArgs);
 			if (Result.bIsError)
 			{
 				AddError(FString::Printf(TEXT("Failed to close session: %s"), *Result.GetContentAsString()));
@@ -375,7 +375,7 @@ bool FEditBlueprintGraphTest_NodeTypes::RunTest(const FString& Parameters)
 	Params->SetStringField(TEXT("parent_class"), TEXT("Actor"));
 	CreateParams->SetObjectField(TEXT("params"), Params);
 
-	auto Result = DispatchLegacyEnvelope(CreateParams);
+	auto Result = DispatchBundledEnvelope(CreateParams);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("Failed to create test blueprint: %s"), *Result.GetContentAsString()));
@@ -438,7 +438,7 @@ bool FEditBlueprintGraphTest_NodeTypes::RunTest(const FString& Parameters)
 
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add %s node: %s"), *Test.Description, *Result.GetContentAsString()));
@@ -459,7 +459,7 @@ bool FEditBlueprintGraphTest_NodeTypes::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("class_name"), TEXT("K2Node_AddPinInterface"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add Generic node: %s"), *Result.GetContentAsString()));
@@ -475,7 +475,7 @@ bool FEditBlueprintGraphTest_NodeTypes::RunTest(const FString& Parameters)
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
 		CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
-		DispatchLegacyEnvelope(CloseArgs);
+		DispatchBundledEnvelope(CloseArgs);
 	}
 
 	return true;
@@ -501,7 +501,7 @@ bool FEditBlueprintGraphTest_MacroNodes::RunTest(const FString& Parameters)
 	Params->SetStringField(TEXT("parent_class"), TEXT("Actor"));
 	CreateParams->SetObjectField(TEXT("params"), Params);
 
-	auto Result = DispatchLegacyEnvelope(CreateParams);
+	auto Result = DispatchBundledEnvelope(CreateParams);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("Failed to create test blueprint: %s"), *Result.GetContentAsString()));
@@ -541,7 +541,7 @@ bool FEditBlueprintGraphTest_MacroNodes::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("node_type"), MacroName);
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add %s macro node: %s"), *MacroName, *Result.GetContentAsString()));
@@ -562,7 +562,7 @@ bool FEditBlueprintGraphTest_MacroNodes::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("macro_name"), TEXT("ForLoop"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add generic Macro node: %s"), *Result.GetContentAsString()));
@@ -583,7 +583,7 @@ bool FEditBlueprintGraphTest_MacroNodes::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("macro_name"), TEXT("NonExistentMacro"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Expected error for non-existent macro but got success"));
@@ -599,7 +599,7 @@ bool FEditBlueprintGraphTest_MacroNodes::RunTest(const FString& Parameters)
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
 		CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
-		DispatchLegacyEnvelope(CloseArgs);
+		DispatchBundledEnvelope(CloseArgs);
 	}
 
 	return true;
@@ -624,7 +624,7 @@ bool FEditBlueprintGraphTest_NewK2NodeTypes::RunTest(const FString& Parameters)
 	Params->SetStringField(TEXT("parent_class"), TEXT("Actor"));
 	CreateParams->SetObjectField(TEXT("params"), Params);
 
-	auto Result = DispatchLegacyEnvelope(CreateParams);
+	auto Result = DispatchBundledEnvelope(CreateParams);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("Failed to create test blueprint: %s"), *Result.GetContentAsString()));
@@ -662,7 +662,7 @@ bool FEditBlueprintGraphTest_NewK2NodeTypes::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("node_type"), NodeType);
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add %s node: %s"), *NodeType, *Result.GetContentAsString()));
@@ -683,7 +683,7 @@ bool FEditBlueprintGraphTest_NewK2NodeTypes::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("enum_type"), TEXT("ECollisionChannel"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add SwitchEnum node: %s"), *Result.GetContentAsString()));
@@ -704,7 +704,7 @@ bool FEditBlueprintGraphTest_NewK2NodeTypes::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("enum_type"), TEXT("ECollisionChannel"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add ForEachElementInEnum node: %s"), *Result.GetContentAsString()));
@@ -720,7 +720,7 @@ bool FEditBlueprintGraphTest_NewK2NodeTypes::RunTest(const FString& Parameters)
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
 		CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
-		DispatchLegacyEnvelope(CloseArgs);
+		DispatchBundledEnvelope(CloseArgs);
 	}
 
 	return true;
@@ -745,7 +745,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 	Params->SetStringField(TEXT("parent_class"), TEXT("Actor"));
 	CreateParams->SetObjectField(TEXT("params"), Params);
 
-	auto Result = DispatchLegacyEnvelope(CreateParams);
+	auto Result = DispatchBundledEnvelope(CreateParams);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("Failed to create test blueprint: %s"), *Result.GetContentAsString()));
@@ -793,7 +793,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("node_type"), TEXT("Sequence"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add Sequence node: %s"), *Result.GetContentAsString()));
@@ -812,7 +812,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 			PinParams->SetStringField(TEXT("node_guid"), SeqGuid);
 			AddPinArgs->SetObjectField(TEXT("params"), PinParams);
 
-			Result = DispatchLegacyEnvelope(AddPinArgs);
+			Result = DispatchBundledEnvelope(AddPinArgs);
 			if (Result.bIsError)
 			{
 				AddError(FString::Printf(TEXT("Failed to add pin to Sequence: %s"), *Result.GetContentAsString()));
@@ -833,7 +833,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("node_type"), TEXT("MakeArray"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add MakeArray node: %s"), *Result.GetContentAsString()));
@@ -851,7 +851,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 		PinParams->SetNumberField(TEXT("count"), 3);
 		AddPinArgs->SetObjectField(TEXT("params"), PinParams);
 
-		Result = DispatchLegacyEnvelope(AddPinArgs);
+		Result = DispatchBundledEnvelope(AddPinArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add pins to MakeArray: %s"), *Result.GetContentAsString()));
@@ -871,7 +871,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("node_type"), TEXT("SwitchString"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add SwitchString node: %s"), *Result.GetContentAsString()));
@@ -889,7 +889,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 		PinParams->SetStringField(TEXT("pin_value"), TEXT("MyCase"));
 		AddPinArgs->SetObjectField(TEXT("params"), PinParams);
 
-		Result = DispatchLegacyEnvelope(AddPinArgs);
+		Result = DispatchBundledEnvelope(AddPinArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add pin to SwitchString: %s"), *Result.GetContentAsString()));
@@ -909,7 +909,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("node_type"), TEXT("Branch"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		FString BranchGuid = ExtractNodeGuid(Result.GetContentAsString());
 
 		TSharedPtr<FJsonObject> AddPinArgs = MakeShared<FJsonObject>();
@@ -920,7 +920,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 		PinParams->SetStringField(TEXT("node_guid"), BranchGuid);
 		AddPinArgs->SetObjectField(TEXT("params"), PinParams);
 
-		Result = DispatchLegacyEnvelope(AddPinArgs);
+		Result = DispatchBundledEnvelope(AddPinArgs);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Expected error for add_pin on Branch but got success"));
@@ -941,7 +941,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("enum_type"), TEXT("ECollisionChannel"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		FString EnumSwitchGuid = ExtractNodeGuid(Result.GetContentAsString());
 
 		TSharedPtr<FJsonObject> AddPinArgs = MakeShared<FJsonObject>();
@@ -952,7 +952,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 		PinParams->SetStringField(TEXT("node_guid"), EnumSwitchGuid);
 		AddPinArgs->SetObjectField(TEXT("params"), PinParams);
 
-		Result = DispatchLegacyEnvelope(AddPinArgs);
+		Result = DispatchBundledEnvelope(AddPinArgs);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Expected error for add_pin on SwitchEnum but got success"));
@@ -968,7 +968,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
 		CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
-		DispatchLegacyEnvelope(CloseArgs);
+		DispatchBundledEnvelope(CloseArgs);
 	}
 
 	return true;
@@ -993,7 +993,7 @@ bool FEditBlueprintGraphTest_NumExtraPins::RunTest(const FString& Parameters)
 	Params->SetStringField(TEXT("parent_class"), TEXT("Actor"));
 	CreateParams->SetObjectField(TEXT("params"), Params);
 
-	auto Result = DispatchLegacyEnvelope(CreateParams);
+	auto Result = DispatchBundledEnvelope(CreateParams);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("Failed to create test blueprint: %s"), *Result.GetContentAsString()));
@@ -1027,7 +1027,7 @@ bool FEditBlueprintGraphTest_NumExtraPins::RunTest(const FString& Parameters)
 		NodeParams->SetNumberField(TEXT("num_extra_pins"), 3);
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add Sequence with extra pins: %s"), *Result.GetContentAsString()));
@@ -1048,7 +1048,7 @@ bool FEditBlueprintGraphTest_NumExtraPins::RunTest(const FString& Parameters)
 		NodeParams->SetNumberField(TEXT("num_extra_pins"), 5);
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add MakeArray with extra pins: %s"), *Result.GetContentAsString()));
@@ -1069,7 +1069,7 @@ bool FEditBlueprintGraphTest_NumExtraPins::RunTest(const FString& Parameters)
 		NodeParams->SetNumberField(TEXT("num_extra_pins"), 4);
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add SwitchInteger with extra pins: %s"), *Result.GetContentAsString()));
@@ -1085,7 +1085,7 @@ bool FEditBlueprintGraphTest_NumExtraPins::RunTest(const FString& Parameters)
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
 		CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
-		DispatchLegacyEnvelope(CloseArgs);
+		DispatchBundledEnvelope(CloseArgs);
 	}
 
 	return true;
@@ -1107,7 +1107,7 @@ bool FEditBlueprintGraphTest_ImportNodes::RunTest(const FString& Parameters)
 	Params->SetStringField(TEXT("parent_class"), TEXT("Actor"));
 	CreateParams->SetObjectField(TEXT("params"), Params);
 
-	auto Result = DispatchLegacyEnvelope(CreateParams);
+	auto Result = DispatchBundledEnvelope(CreateParams);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("Failed to create blueprint: %s"), *Result.GetContentAsString()));
@@ -1146,7 +1146,7 @@ bool FEditBlueprintGraphTest_ImportNodes::RunTest(const FString& Parameters)
 		ImportParams->SetStringField(TEXT("t3d_text"), T3DText);
 		ImportArgs->SetObjectField(TEXT("params"), ImportParams);
 
-		Result = DispatchLegacyEnvelope(ImportArgs);
+		Result = DispatchBundledEnvelope(ImportArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to import nodes: %s"), *Result.GetContentAsString()));
@@ -1162,13 +1162,13 @@ bool FEditBlueprintGraphTest_ImportNodes::RunTest(const FString& Parameters)
 		CompileArgs->SetStringField(TEXT("operation"), TEXT("compile"));
 		CompileArgs->SetStringField(TEXT("session_id"), SessionId);
 		CompileArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
-		DispatchLegacyEnvelope(CompileArgs);
+		DispatchBundledEnvelope(CompileArgs);
 
 		TSharedPtr<FJsonObject> SaveArgs = MakeShared<FJsonObject>();
 		SaveArgs->SetStringField(TEXT("operation"), TEXT("save"));
 		SaveArgs->SetStringField(TEXT("session_id"), SessionId);
 		SaveArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
-		DispatchLegacyEnvelope(SaveArgs);
+		DispatchBundledEnvelope(SaveArgs);
 	}
 
 	// Close session
@@ -1176,7 +1176,7 @@ bool FEditBlueprintGraphTest_ImportNodes::RunTest(const FString& Parameters)
 	CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 	CloseArgs->SetStringField(TEXT("session_id"), SessionId);
 	CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
-	DispatchLegacyEnvelope(CloseArgs);
+	DispatchBundledEnvelope(CloseArgs);
 
 	return true;
 }
@@ -1194,7 +1194,7 @@ bool FEditBlueprintGraphTest_ErrorHandling::RunTest(const FString& Parameters)
 		Args->SetStringField(TEXT("operation"), TEXT("invalid_operation"));
 		Args->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Expected error for invalid operation"));
@@ -1209,7 +1209,7 @@ bool FEditBlueprintGraphTest_ErrorHandling::RunTest(const FString& Parameters)
 		Args->SetStringField(TEXT("operation"), TEXT("add_node"));
 		Args->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (!Result.bIsError || !Result.GetContentAsString().Contains(TEXT("session_id")))
 		{
 			AddError(TEXT("Expected error about missing session_id"));
@@ -1228,7 +1228,7 @@ bool FEditBlueprintGraphTest_ErrorHandling::RunTest(const FString& Parameters)
 		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/__MCPTests/BP_ErrorTest"));
 		CreateParams->SetObjectField(TEXT("params"), Params);
 
-		auto CreateResult = DispatchLegacyEnvelope(CreateParams);
+		auto CreateResult = DispatchBundledEnvelope(CreateParams);
 		if (CreateResult.bIsError)
 		{
 			AddError(TEXT("Failed to create test blueprint"));
@@ -1255,7 +1255,7 @@ bool FEditBlueprintGraphTest_ErrorHandling::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("node_type"), TEXT("InvalidNodeType"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		auto Result = DispatchLegacyEnvelope(AddNodeArgs);
+		auto Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (!Result.bIsError || !Result.GetContentAsString().Contains(TEXT("Unsupported node type")))
 		{
 			AddError(TEXT("Expected error for unsupported node type"));
@@ -1268,7 +1268,7 @@ bool FEditBlueprintGraphTest_ErrorHandling::RunTest(const FString& Parameters)
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
 		CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
-		DispatchLegacyEnvelope(CloseArgs);
+		DispatchBundledEnvelope(CloseArgs);
 	}
 
 	return true;
@@ -1291,14 +1291,14 @@ bool FEditBlueprintGraphTest_ListGraphs::RunTest(const FString& Parameters)
 		P->SetStringField(TEXT("asset_path"), TEXT("/Game/__MCPTests/BP_ListGraphsTest"));
 		P->SetStringField(TEXT("parent_class"), TEXT("Actor"));
 		CreateParams->SetObjectField(TEXT("params"), P);
-		DispatchLegacyEnvelope(CreateParams); // Ignore error if already exists
+		DispatchBundledEnvelope(CreateParams); // Ignore error if already exists
 	}
 
 	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 	Params->SetStringField(TEXT("operation"), TEXT("list_graphs"));
 	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/__MCPTests/BP_ListGraphsTest"));
 
-	auto Result = DispatchLegacyEnvelope(Params);
+	auto Result = DispatchBundledEnvelope(Params);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("list_graphs failed: %s"), *Result.GetContentAsString()));
@@ -1329,7 +1329,7 @@ bool FEditBlueprintGraphTest_ListGraphs::RunTest(const FString& Parameters)
 		ErrParams->SetStringField(TEXT("operation"), TEXT("list_graphs"));
 		ErrParams->SetStringField(TEXT("asset_path"), TEXT("/Game/__MCPTests/BP_DoesNotExist_XYZ"));
 
-		auto ErrResult = DispatchLegacyEnvelope(ErrParams);
+		auto ErrResult = DispatchBundledEnvelope(ErrParams);
 		if (!ErrResult.bIsError)
 		{
 			AddError(TEXT("Expected error for non-existent blueprint"));
@@ -1360,7 +1360,7 @@ bool FEditBlueprintGraphTest_StatelessNodeOps::RunTest(const FString& Parameters
 		P->SetStringField(TEXT("parent_class"), TEXT("Actor"));
 		CreateParams->SetObjectField(TEXT("params"), P);
 
-		auto Result = DispatchLegacyEnvelope(CreateParams);
+		auto Result = DispatchBundledEnvelope(CreateParams);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to create blueprint: %s"), *Result.GetContentAsString()));
@@ -1385,7 +1385,7 @@ bool FEditBlueprintGraphTest_StatelessNodeOps::RunTest(const FString& Parameters
 		NP->SetStringField(TEXT("node_type"), TEXT("Branch"));
 		AddArgs->SetObjectField(TEXT("params"), NP);
 
-		Result = DispatchLegacyEnvelope(AddArgs);
+		Result = DispatchBundledEnvelope(AddArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add Branch node: %s"), *Result.GetContentAsString()));
@@ -1407,13 +1407,13 @@ bool FEditBlueprintGraphTest_StatelessNodeOps::RunTest(const FString& Parameters
 		SaveArgs->SetStringField(TEXT("operation"), TEXT("save"));
 		SaveArgs->SetStringField(TEXT("session_id"), SessionId);
 		SaveArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
-		DispatchLegacyEnvelope(SaveArgs);
+		DispatchBundledEnvelope(SaveArgs);
 
 		TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
 		CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
-		DispatchLegacyEnvelope(CloseArgs);
+		DispatchBundledEnvelope(CloseArgs);
 	}
 
 	if (NodeGuid.IsEmpty())
@@ -1430,7 +1430,7 @@ bool FEditBlueprintGraphTest_StatelessNodeOps::RunTest(const FString& Parameters
 		RemoveParams->SetStringField(TEXT("graph_name"), TEXT("EventGraph"));
 		RemoveParams->SetStringField(TEXT("node_guid"), NodeGuid);
 
-		auto Result = DispatchLegacyEnvelope(RemoveParams);
+		auto Result = DispatchBundledEnvelope(RemoveParams);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Stateless remove_node failed: %s"), *Result.GetContentAsString()));
@@ -1454,7 +1454,7 @@ bool FEditBlueprintGraphTest_StatelessNodeOps::RunTest(const FString& Parameters
 		ReconParams->SetStringField(TEXT("graph_name"), TEXT("EventGraph"));
 		ReconParams->SetStringField(TEXT("node_guid"), TEXT("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"));
 
-		auto Result = DispatchLegacyEnvelope(ReconParams);
+		auto Result = DispatchBundledEnvelope(ReconParams);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Expected error for non-existent node GUID in reconstruct_node"));
@@ -1469,7 +1469,7 @@ bool FEditBlueprintGraphTest_StatelessNodeOps::RunTest(const FString& Parameters
 		BadParams->SetStringField(TEXT("operation"), TEXT("remove_node"));
 		// No asset_path, graph_name, or node_guid
 
-		auto Result = DispatchLegacyEnvelope(BadParams);
+		auto Result = DispatchBundledEnvelope(BadParams);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Expected error for missing required fields in stateless remove_node"));
@@ -1494,7 +1494,7 @@ bool FEditBlueprintGraphTest_SetGameplayTags::RunTest(const FString& Parameters)
 		Params->SetStringField(TEXT("operation"), TEXT("set_gameplay_tags"));
 		Params->SetStringField(TEXT("property_path"), TEXT("SomeProperty"));
 
-		auto Result = DispatchLegacyEnvelope(Params);
+		auto Result = DispatchBundledEnvelope(Params);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Expected error for missing asset_path"));
@@ -1509,7 +1509,7 @@ bool FEditBlueprintGraphTest_SetGameplayTags::RunTest(const FString& Parameters)
 		Params->SetStringField(TEXT("operation"), TEXT("set_gameplay_tags"));
 		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/__MCPTests/BP_TestActor"));
 
-		auto Result = DispatchLegacyEnvelope(Params);
+		auto Result = DispatchBundledEnvelope(Params);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Expected error for missing property_path"));
@@ -1528,7 +1528,7 @@ bool FEditBlueprintGraphTest_SetGameplayTags::RunTest(const FString& Parameters)
 		Params->SetArrayField(TEXT("tags_to_add"), EmptyArray);
 		Params->SetArrayField(TEXT("tags_to_remove"), EmptyArray);
 
-		auto Result = DispatchLegacyEnvelope(Params);
+		auto Result = DispatchBundledEnvelope(Params);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Expected error for empty tags_to_add and tags_to_remove"));
@@ -1548,7 +1548,7 @@ bool FEditBlueprintGraphTest_SetGameplayTags::RunTest(const FString& Parameters)
 		AddTags.Add(MakeShared<FJsonValueString>(TEXT("Test.Tag")));
 		Params->SetArrayField(TEXT("tags_to_add"), AddTags);
 
-		auto Result = DispatchLegacyEnvelope(Params);
+		auto Result = DispatchBundledEnvelope(Params);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Expected error for non-existent asset"));
@@ -1628,7 +1628,7 @@ bool FEditBlueprintGraphTest_DelegateNodes::RunTest(const FString& Parameters)
 	Params->SetStringField(TEXT("parent_class"), TEXT("Actor"));
 	CreateParams->SetObjectField(TEXT("params"), Params);
 
-	auto Result = DispatchLegacyEnvelope(CreateParams);
+	auto Result = DispatchBundledEnvelope(CreateParams);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("Failed to create test blueprint: %s"), *Result.GetContentAsString()));
@@ -1664,7 +1664,7 @@ bool FEditBlueprintGraphTest_DelegateNodes::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("target_class"), TEXT("AActor"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("AddDelegate failed: %s"), *Result.GetContentAsString()));
@@ -1687,7 +1687,7 @@ bool FEditBlueprintGraphTest_DelegateNodes::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("target_class"), TEXT("AActor"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("RemoveDelegate failed: %s"), *Result.GetContentAsString()));
@@ -1710,7 +1710,7 @@ bool FEditBlueprintGraphTest_DelegateNodes::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("target_class"), TEXT("AActor"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("ClearDelegate failed: %s"), *Result.GetContentAsString()));
@@ -1733,7 +1733,7 @@ bool FEditBlueprintGraphTest_DelegateNodes::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("target_class"), TEXT("AActor"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("CallDelegate failed: %s"), *Result.GetContentAsString()));
@@ -1755,7 +1755,7 @@ bool FEditBlueprintGraphTest_DelegateNodes::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("function_name"), TEXT("TestFunction"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("CreateDelegate failed: %s"), *Result.GetContentAsString()));
@@ -1779,7 +1779,7 @@ bool FEditBlueprintGraphTest_DelegateNodes::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("event_name"), TEXT("OnDestroyed_Handler"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("AssignDelegate failed: %s"), *Result.GetContentAsString()));
@@ -1802,7 +1802,7 @@ bool FEditBlueprintGraphTest_DelegateNodes::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("target_class"), TEXT("AActor"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Expected error for invalid delegate_name, but got success"));
@@ -1825,7 +1825,7 @@ bool FEditBlueprintGraphTest_DelegateNodes::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("target_class"), TEXT("UNonExistentClass"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Expected error for invalid target_class, but got success"));
@@ -1846,7 +1846,7 @@ bool FEditBlueprintGraphTest_DelegateNodes::RunTest(const FString& Parameters)
 		NodeParams->SetStringField(TEXT("node_type"), TEXT("AddDelegate"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		Result = DispatchLegacyEnvelope(AddNodeArgs);
+		Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Expected error for missing delegate_name, but got success"));
@@ -1863,7 +1863,7 @@ bool FEditBlueprintGraphTest_DelegateNodes::RunTest(const FString& Parameters)
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
 		CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
-		DispatchLegacyEnvelope(CloseArgs);
+		DispatchBundledEnvelope(CloseArgs);
 	}
 
 	return true;
@@ -1891,7 +1891,7 @@ bool FEditBlueprintGraphTest_AddFunctionOverride::RunTest(const FString& Paramet
 		Params->SetStringField(TEXT("parent_class"), TEXT("MyDirectorBase"));
 		CreateParams->SetObjectField(TEXT("params"), Params);
 
-		auto Result = DispatchLegacyEnvelope(CreateParams);
+		auto Result = DispatchBundledEnvelope(CreateParams);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to create blueprint: %s"), *Result.GetContentAsString()));
@@ -1924,7 +1924,7 @@ bool FEditBlueprintGraphTest_AddFunctionOverride::RunTest(const FString& Paramet
 		Args->SetStringField(TEXT("session_id"), SessionId);
 		Args->SetStringField(TEXT("function_name"), TEXT("SelectDropLocation"));
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("add_function_override failed: %s"), *Result.GetContentAsString()));
@@ -1950,7 +1950,7 @@ bool FEditBlueprintGraphTest_AddFunctionOverride::RunTest(const FString& Paramet
 		SaveArgs->SetStringField(TEXT("operation"), TEXT("save"));
 		SaveArgs->SetStringField(TEXT("session_id"), SessionId);
 
-		auto SaveResult = DispatchLegacyEnvelope(SaveArgs);
+		auto SaveResult = DispatchBundledEnvelope(SaveArgs);
 		if (SaveResult.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Save failed: %s"), *SaveResult.GetContentAsString()));
@@ -1965,7 +1965,7 @@ bool FEditBlueprintGraphTest_AddFunctionOverride::RunTest(const FString& Paramet
 		CompileArgs->SetStringField(TEXT("operation"), TEXT("compile"));
 		CompileArgs->SetStringField(TEXT("session_id"), SessionId);
 
-		auto CompileResult = DispatchLegacyEnvelope(CompileArgs);
+		auto CompileResult = DispatchBundledEnvelope(CompileArgs);
 		if (CompileResult.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Compile failed: %s"), *CompileResult.GetContentAsString()));
@@ -1990,7 +1990,7 @@ bool FEditBlueprintGraphTest_AddFunctionOverride::RunTest(const FString& Paramet
 		Args->SetStringField(TEXT("session_id"), SessionId);
 		Args->SetStringField(TEXT("function_name"), TEXT("SelectDropLocation"));
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Expected error for duplicate override, but got success"));
@@ -2020,7 +2020,7 @@ bool FEditBlueprintGraphTest_AddFunctionOverride::RunTest(const FString& Paramet
 		NodeParams->SetStringField(TEXT("function_name"), TEXT("GetRewardData"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		auto Result = DispatchLegacyEnvelope(AddNodeArgs);
+		auto Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (!Result.bIsError)
 		{
 			// If this succeeds, the function might not be a native event -- skip the check
@@ -2046,7 +2046,7 @@ bool FEditBlueprintGraphTest_AddFunctionOverride::RunTest(const FString& Paramet
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
 		CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
-		DispatchLegacyEnvelope(CloseArgs);
+		DispatchBundledEnvelope(CloseArgs);
 	}
 
 	return true;
@@ -2135,7 +2135,7 @@ namespace ClaireonTool_AddFunctionSpecHelpers
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
 		CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
-		DispatchLegacyEnvelope(CloseArgs);
+		DispatchBundledEnvelope(CloseArgs);
 	}
 }
 
@@ -2160,7 +2160,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 		Params->SetStringField(TEXT("parent_class"), TEXT("Actor"));
 		CreateArgs->SetObjectField(TEXT("params"), Params);
 
-		auto Result = DispatchLegacyEnvelope(CreateArgs);
+		auto Result = DispatchBundledEnvelope(CreateArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to create blueprint: %s"), *Result.GetContentAsString()));
@@ -2191,7 +2191,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 		Args->SetStringField(TEXT("session_id"), SessionId);
 		Args->SetStringField(TEXT("function_name"), TEXT("MyFunc"));
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("add_function MyFunc failed: %s"), *Result.GetContentAsString()));
@@ -2251,7 +2251,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 		}
 		Args->SetArrayField(TEXT("outputs"), Outputs);
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("add_function FuncWithIO failed: %s"), *Result.GetContentAsString()));
@@ -2298,7 +2298,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 		Args->SetStringField(TEXT("function_name"), TEXT("PureFunc"));
 		Args->SetBoolField(TEXT("is_pure"), true);
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("add_function PureFunc failed: %s"), *Result.GetContentAsString()));
@@ -2324,7 +2324,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 		Args->SetStringField(TEXT("function_name"), TEXT("StaticFunc"));
 		Args->SetBoolField(TEXT("is_static"), true);
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("add_function StaticFunc failed: %s"), *Result.GetContentAsString()));
@@ -2350,7 +2350,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 		Args->SetStringField(TEXT("function_name"), TEXT("ConstFunc"));
 		Args->SetBoolField(TEXT("is_const"), true);
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("add_function ConstFunc failed: %s"), *Result.GetContentAsString()));
@@ -2383,7 +2383,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 		Args->SetStringField(TEXT("function_name"), C.FuncName);
 		Args->SetStringField(TEXT("access_specifier"), C.Spec);
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("add_function %s (access %s) failed: %s"),
@@ -2423,7 +2423,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 		Args->SetStringField(TEXT("function_name"), C.FuncName);
 		Args->SetStringField(TEXT("is_network_call"), C.Spec);
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("add_function %s (net %s) failed: %s"),
@@ -2456,7 +2456,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 		Args->SetStringField(TEXT("session_id"), SessionId);
 		Args->SetStringField(TEXT("function_name"), TEXT("MyFunc"));
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Collision: expected error for duplicate function name, got success"));
@@ -2481,7 +2481,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 		Args->SetStringField(TEXT("function_name"), TEXT("BadAccessFunc"));
 		Args->SetStringField(TEXT("access_specifier"), TEXT("Bogus"));
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Invalid access_specifier: expected error, got success"));
@@ -2506,7 +2506,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 		Args->SetStringField(TEXT("function_name"), TEXT("BadNetFunc"));
 		Args->SetStringField(TEXT("is_network_call"), TEXT("Bogus"));
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Invalid is_network_call: expected error, got success"));
@@ -2539,7 +2539,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 		}
 		Args->SetArrayField(TEXT("inputs"), Inputs);
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("type_parser_error: expected error for bad type, got success"));
@@ -2634,7 +2634,7 @@ bool FEditBlueprintGraphTest_SuggestNode_PositivePath::RunTest(const FString& Pa
 	// Load real catalog, query a known-intent string
 	{
 		TSharedPtr<FJsonObject> Args = BuildSuggestArgs(TEXT("loop over an array"), 0, /*bSetTopK*/false);
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("suggest_node failed: %s"), *Result.GetContentAsString()));
@@ -2672,7 +2672,7 @@ bool FEditBlueprintGraphTest_SuggestNode_PositivePath::RunTest(const FString& Pa
 	// Empty intent should be an error
 	{
 		TSharedPtr<FJsonObject> Args = BuildSuggestArgs(TEXT(""), 0, /*bSetTopK*/false);
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Expected error for empty intent"));
@@ -2696,7 +2696,7 @@ bool FEditBlueprintGraphTest_SuggestNode_TopKClamp::RunTest(const FString& Param
 	// in the real catalog (Add_DoubleDouble, Add_FloatFloat, etc.) so the result
 	// size is the clamp boundary, not the candidate count.
 	TSharedPtr<FJsonObject> Args = BuildSuggestArgs(TEXT("add"), 500, /*bSetTopK*/true);
-	auto Result = DispatchLegacyEnvelope(Args);
+	auto Result = DispatchBundledEnvelope(Args);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("suggest_node failed: %s"), *Result.GetContentAsString()));
@@ -2728,7 +2728,7 @@ bool FEditBlueprintGraphTest_SuggestNode_PriorityTieBreak::RunTest(const FString
 
 	// Issue a broad query; verify results are ordered by 'priority' descending.
 	TSharedPtr<FJsonObject> Args = BuildSuggestArgs(TEXT("a"), 20, /*bSetTopK*/true);
-	auto Result = DispatchLegacyEnvelope(Args);
+	auto Result = DispatchBundledEnvelope(Args);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("suggest_node failed: %s"), *Result.GetContentAsString()));
@@ -2774,7 +2774,7 @@ bool FEditBlueprintGraphTest_SuggestNode_StructureKeys::RunTest(const FString& P
 	using namespace ClaireonTool_SuggestNodeSpecHelpers;
 
 	TSharedPtr<FJsonObject> Args = BuildSuggestArgs(TEXT("add two floats"), 5, /*bSetTopK*/true);
-	auto Result = DispatchLegacyEnvelope(Args);
+	auto Result = DispatchBundledEnvelope(Args);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("suggest_node failed: %s"), *Result.GetContentAsString()));
@@ -2870,7 +2870,7 @@ namespace ClaireonTool_MacroShorthandSpecHelpers
 		Params->SetStringField(TEXT("parent_class"), TEXT("Actor"));
 		CreateArgs->SetObjectField(TEXT("params"), Params);
 
-		auto Result = DispatchLegacyEnvelope(CreateArgs);
+		auto Result = DispatchBundledEnvelope(CreateArgs);
 		if (Result.bIsError)
 		{
 			OutError = FString::Printf(TEXT("Failed to create %s: %s"), *AssetPath, *Result.GetContentAsString());
@@ -2892,7 +2892,7 @@ namespace ClaireonTool_MacroShorthandSpecHelpers
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
 		CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
-		DispatchLegacyEnvelope(CloseArgs);
+		DispatchBundledEnvelope(CloseArgs);
 	}
 
 	// Locate the most-recently-added MacroInstance in the Blueprint's Ubergraph pages
@@ -2951,7 +2951,7 @@ bool FEditBlueprintGraphTest_MacroShorthand_ForEachLoop::RunTest(const FString& 
 	NodeParams->SetStringField(TEXT("node_type"), TEXT("ForEachLoop"));
 	AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-	auto Result = DispatchLegacyEnvelope(AddNodeArgs);
+	auto Result = DispatchBundledEnvelope(AddNodeArgs);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("Shorthand add_node(ForEachLoop) failed: %s"), *Result.GetContentAsString()));
@@ -3002,7 +3002,7 @@ bool FEditBlueprintGraphTest_MacroShorthand_RespectsCallerLibrary::RunTest(const
 	NodeParams->SetStringField(TEXT("macro_name"), TEXT("ForLoop"));
 	AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-	auto Result = DispatchLegacyEnvelope(AddNodeArgs);
+	auto Result = DispatchBundledEnvelope(AddNodeArgs);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("Shorthand with override failed: %s"), *Result.GetContentAsString()));
@@ -3049,7 +3049,7 @@ bool FEditBlueprintGraphTest_MacroShorthand_UnknownNodeTypeErrors::RunTest(const
 	NodeParams->SetStringField(TEXT("node_type"), TEXT("NotARealMacroOrK2Node"));
 	AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-	auto Result = DispatchLegacyEnvelope(AddNodeArgs);
+	auto Result = DispatchBundledEnvelope(AddNodeArgs);
 	if (!Result.bIsError)
 	{
 		AddError(TEXT("Expected error for unknown node_type, got success"));
@@ -3090,7 +3090,7 @@ bool FEditBlueprintGraphTest_MacroShorthand_AllResolve::RunTest(const FString& P
 		NodeParams->SetStringField(TEXT("node_type"), MacroName);
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
-		auto Result = DispatchLegacyEnvelope(AddNodeArgs);
+		auto Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Shorthand add_node(%s) failed: %s"), MacroName, *Result.GetContentAsString()));
@@ -3232,7 +3232,7 @@ bool FEditBlueprintGraphTest_ComponentBoundEvent::RunTest(const FString& Paramet
 		CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
 		CreateArgs->SetStringField(TEXT("parent_class"), TEXT("Actor"));
 
-		auto Result = DispatchLegacyEnvelope(CreateArgs);
+		auto Result = DispatchBundledEnvelope(CreateArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to create test blueprint: %s"), *Result.GetContentAsString()));
@@ -3254,7 +3254,7 @@ bool FEditBlueprintGraphTest_ComponentBoundEvent::RunTest(const FString& Paramet
 		AddCompArgs->SetStringField(TEXT("component_name"), TEXT("StaticMesh"));
 		AddCompArgs->SetStringField(TEXT("component_class"), TEXT("StaticMeshComponent"));
 
-		auto Result = DispatchLegacyEnvelope(AddCompArgs);
+		auto Result = DispatchBundledEnvelope(AddCompArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add StaticMesh component: %s"), *Result.GetContentAsString()));
@@ -3268,7 +3268,7 @@ bool FEditBlueprintGraphTest_ComponentBoundEvent::RunTest(const FString& Paramet
 		CompileArgs->SetStringField(TEXT("operation"), TEXT("compile"));
 		CompileArgs->SetStringField(TEXT("session_id"), SessionId);
 
-		auto Result = DispatchLegacyEnvelope(CompileArgs);
+		auto Result = DispatchBundledEnvelope(CompileArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Compile after add_component failed: %s"), *Result.GetContentAsString()));
@@ -3285,7 +3285,7 @@ bool FEditBlueprintGraphTest_ComponentBoundEvent::RunTest(const FString& Paramet
 		AddNodeArgs->SetStringField(TEXT("component_name"), TEXT("StaticMesh"));
 		AddNodeArgs->SetStringField(TEXT("delegate_name"), TEXT("OnComponentHit"));
 
-		auto Result = DispatchLegacyEnvelope(AddNodeArgs);
+		auto Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("add_node ComponentBoundEvent failed: %s"), *Result.GetContentAsString()));
@@ -3300,7 +3300,7 @@ bool FEditBlueprintGraphTest_ComponentBoundEvent::RunTest(const FString& Paramet
 		CompileArgs->SetStringField(TEXT("operation"), TEXT("compile"));
 		CompileArgs->SetStringField(TEXT("session_id"), SessionId);
 
-		auto Result = DispatchLegacyEnvelope(CompileArgs);
+		auto Result = DispatchBundledEnvelope(CompileArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Compile after add_node failed: %s"), *Result.GetContentAsString()));
@@ -3402,7 +3402,7 @@ bool FEditBlueprintGraphTest_ComponentBoundEvent::RunTest(const FString& Paramet
 		AddNodeArgs->SetStringField(TEXT("component_name"), TEXT("StaticMesh"));
 		AddNodeArgs->SetStringField(TEXT("delegate_name"), TEXT("OnComponentHit"));
 
-		auto Result = DispatchLegacyEnvelope(AddNodeArgs);
+		auto Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Expected duplicate ComponentBoundEvent to fail, but it succeeded"));
@@ -3425,7 +3425,7 @@ bool FEditBlueprintGraphTest_ComponentBoundEvent::RunTest(const FString& Paramet
 		AddNodeArgs->SetStringField(TEXT("node_type"), TEXT("ComponentBoundEvent"));
 		AddNodeArgs->SetStringField(TEXT("delegate_name"), TEXT("OnComponentHit"));
 
-		auto Result = DispatchLegacyEnvelope(AddNodeArgs);
+		auto Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Missing component_name should return error"));
@@ -3448,7 +3448,7 @@ bool FEditBlueprintGraphTest_ComponentBoundEvent::RunTest(const FString& Paramet
 		AddNodeArgs->SetStringField(TEXT("node_type"), TEXT("ComponentBoundEvent"));
 		AddNodeArgs->SetStringField(TEXT("component_name"), TEXT("StaticMesh"));
 
-		auto Result = DispatchLegacyEnvelope(AddNodeArgs);
+		auto Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Missing delegate_name should return error"));
@@ -3472,7 +3472,7 @@ bool FEditBlueprintGraphTest_ComponentBoundEvent::RunTest(const FString& Paramet
 		AddNodeArgs->SetStringField(TEXT("component_name"), TEXT("DoesNotExistComponent"));
 		AddNodeArgs->SetStringField(TEXT("delegate_name"), TEXT("OnComponentHit"));
 
-		auto Result = DispatchLegacyEnvelope(AddNodeArgs);
+		auto Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Non-existent component_name should return error"));
@@ -3497,7 +3497,7 @@ bool FEditBlueprintGraphTest_ComponentBoundEvent::RunTest(const FString& Paramet
 		AddNodeArgs->SetStringField(TEXT("component_name"), TEXT("StaticMesh"));
 		AddNodeArgs->SetStringField(TEXT("delegate_name"), TEXT("RelativeLocation"));
 
-		auto Result = DispatchLegacyEnvelope(AddNodeArgs);
+		auto Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("delegate_name pointing at non-multicast property should fail"));
@@ -3521,7 +3521,7 @@ bool FEditBlueprintGraphTest_ComponentBoundEvent::RunTest(const FString& Paramet
 		AddNodeArgs->SetStringField(TEXT("component_name"), TEXT("StaticMesh"));
 		AddNodeArgs->SetStringField(TEXT("delegate_name"), TEXT("DefinitelyNotADelegate_XYZ"));
 
-		auto Result = DispatchLegacyEnvelope(AddNodeArgs);
+		auto Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Non-existent delegate_name should return error"));
@@ -3541,7 +3541,7 @@ bool FEditBlueprintGraphTest_ComponentBoundEvent::RunTest(const FString& Paramet
 		TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
-		DispatchLegacyEnvelope(CloseArgs);
+		DispatchBundledEnvelope(CloseArgs);
 	}
 
 	return true;
@@ -3588,7 +3588,7 @@ bool FEditBlueprintGraphTest_WildcardPinResolution::RunTest(const FString& Param
 		CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
 		CreateArgs->SetStringField(TEXT("parent_class"), TEXT("Actor"));
 
-		auto Result = DispatchLegacyEnvelope(CreateArgs);
+		auto Result = DispatchBundledEnvelope(CreateArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to create blueprint: %s"), *Result.GetContentAsString()));
@@ -3613,7 +3613,7 @@ bool FEditBlueprintGraphTest_WildcardPinResolution::RunTest(const FString& Param
 		Args->SetStringField(TEXT("variable_name"), TEXT("NameArray"));
 		Args->SetStringField(TEXT("variable_type"), TEXT("Array<Name>"));
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("add_variable failed: %s"), *Result.GetContentAsString()));
@@ -3626,7 +3626,7 @@ bool FEditBlueprintGraphTest_WildcardPinResolution::RunTest(const FString& Param
 		TSharedPtr<FJsonObject> CompileArgs = MakeShared<FJsonObject>();
 		CompileArgs->SetStringField(TEXT("operation"), TEXT("compile"));
 		CompileArgs->SetStringField(TEXT("session_id"), SessionId);
-		DispatchLegacyEnvelope(CompileArgs);
+		DispatchBundledEnvelope(CompileArgs);
 	}
 
 	// Step 4: Add a VariableGet node for NameArray.
@@ -3637,7 +3637,7 @@ bool FEditBlueprintGraphTest_WildcardPinResolution::RunTest(const FString& Param
 		Args->SetStringField(TEXT("node_type"), TEXT("VariableGet"));
 		Args->SetStringField(TEXT("variable_name"), TEXT("NameArray"));
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add VariableGet node: %s"), *Result.GetContentAsString()));
@@ -3656,7 +3656,7 @@ bool FEditBlueprintGraphTest_WildcardPinResolution::RunTest(const FString& Param
 		Args->SetStringField(TEXT("function_name"), TEXT("Array_Length"));
 		Args->SetStringField(TEXT("function_class"), TEXT("KismetArrayLibrary"));
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add Array_Length node: %s"), *Result.GetContentAsString()));
@@ -3680,7 +3680,7 @@ bool FEditBlueprintGraphTest_WildcardPinResolution::RunTest(const FString& Param
 		ConnectArgs->SetStringField(TEXT("target_node_title"), TEXT("Length"));
 		ConnectArgs->SetStringField(TEXT("target_pin_name"), TEXT("TargetArray"));
 
-		auto Result = DispatchLegacyEnvelope(ConnectArgs);
+		auto Result = DispatchBundledEnvelope(ConnectArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("connect_pins failed: %s"), *Result.GetContentAsString()));
@@ -3764,7 +3764,7 @@ bool FEditBlueprintGraphTest_WildcardPinResolution::RunTest(const FString& Param
 		CompileArgs->SetStringField(TEXT("operation"), TEXT("compile"));
 		CompileArgs->SetStringField(TEXT("session_id"), SessionId);
 
-		auto Result = DispatchLegacyEnvelope(CompileArgs);
+		auto Result = DispatchBundledEnvelope(CompileArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Post-connect compile failed: %s"), *Result.GetContentAsString()));
@@ -3789,7 +3789,7 @@ bool FEditBlueprintGraphTest_WildcardPinResolution::RunTest(const FString& Param
 		TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
-		DispatchLegacyEnvelope(CloseArgs);
+		DispatchBundledEnvelope(CloseArgs);
 	}
 
 	return true;
@@ -3926,7 +3926,7 @@ bool FEditBlueprintGraphTest_CursorHistory_CursorBackAutoSwitches::RunTest(const
 		CreateParams->SetStringField(TEXT("asset_path"), TEXT("/Game/__MCPTests/BP_CursorBackAutoSwitches"));
 		CreateParams->SetStringField(TEXT("parent_class"), TEXT("MyDirectorBase"));
 
-		auto Result = DispatchLegacyEnvelope(CreateParams);
+		auto Result = DispatchBundledEnvelope(CreateParams);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to create blueprint: %s"), *Result.GetContentAsString()));
@@ -3949,7 +3949,7 @@ bool FEditBlueprintGraphTest_CursorHistory_CursorBackAutoSwitches::RunTest(const
 		AddArgs->SetStringField(TEXT("node_type"), TEXT("CallFunction"));
 		AddArgs->SetStringField(TEXT("function_name"), TEXT("PrintString"));
 		AddArgs->SetStringField(TEXT("function_class"), TEXT("KismetSystemLibrary"));
-		auto AddResult = DispatchLegacyEnvelope(AddArgs);
+		auto AddResult = DispatchBundledEnvelope(AddArgs);
 		if (AddResult.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add EventGraph node: %s"), *AddResult.GetContentAsString()));
@@ -3964,7 +3964,7 @@ bool FEditBlueprintGraphTest_CursorHistory_CursorBackAutoSwitches::RunTest(const
 		Args->SetStringField(TEXT("operation"), TEXT("add_function_override"));
 		Args->SetStringField(TEXT("session_id"), SessionId);
 		Args->SetStringField(TEXT("function_name"), TEXT("SelectDropLocation"));
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("add_function_override failed: %s"), *Result.GetContentAsString()));
@@ -3982,7 +3982,7 @@ bool FEditBlueprintGraphTest_CursorHistory_CursorBackAutoSwitches::RunTest(const
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 		Args->SetStringField(TEXT("operation"), TEXT("cursor_back"));
 		Args->SetStringField(TEXT("session_id"), SessionId);
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("cursor_back failed: %s"), *Result.GetContentAsString()));
@@ -4001,7 +4001,7 @@ bool FEditBlueprintGraphTest_CursorHistory_CursorBackAutoSwitches::RunTest(const
 		TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
-		DispatchLegacyEnvelope(CloseArgs);
+		DispatchBundledEnvelope(CloseArgs);
 	}
 
 	return true;
@@ -4076,7 +4076,7 @@ bool FEditBlueprintGraphTest_CursorHistory_FunctionOverridePushesOldGraph::RunTe
 		CreateParams->SetStringField(TEXT("asset_path"), TEXT("/Game/__MCPTests/BP_FuncOverridePushesOldGraph"));
 		CreateParams->SetStringField(TEXT("parent_class"), TEXT("MyDirectorBase"));
 
-		auto Result = DispatchLegacyEnvelope(CreateParams);
+		auto Result = DispatchBundledEnvelope(CreateParams);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to create blueprint: %s"), *Result.GetContentAsString()));
@@ -4099,7 +4099,7 @@ bool FEditBlueprintGraphTest_CursorHistory_FunctionOverridePushesOldGraph::RunTe
 		AddArgs->SetStringField(TEXT("node_type"), TEXT("CallFunction"));
 		AddArgs->SetStringField(TEXT("function_name"), TEXT("PrintString"));
 		AddArgs->SetStringField(TEXT("function_class"), TEXT("KismetSystemLibrary"));
-		auto Result = DispatchLegacyEnvelope(AddArgs);
+		auto Result = DispatchBundledEnvelope(AddArgs);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to add node: %s"), *Result.GetContentAsString()));
@@ -4113,7 +4113,7 @@ bool FEditBlueprintGraphTest_CursorHistory_FunctionOverridePushesOldGraph::RunTe
 		Args->SetStringField(TEXT("operation"), TEXT("add_function_override"));
 		Args->SetStringField(TEXT("session_id"), SessionId);
 		Args->SetStringField(TEXT("function_name"), TEXT("SelectDropLocation"));
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("add_function_override failed: %s"), *Result.GetContentAsString()));
@@ -4126,7 +4126,7 @@ bool FEditBlueprintGraphTest_CursorHistory_FunctionOverridePushesOldGraph::RunTe
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 		Args->SetStringField(TEXT("operation"), TEXT("cursor_back"));
 		Args->SetStringField(TEXT("session_id"), SessionId);
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("cursor_back failed: %s"), *Result.GetContentAsString()));
@@ -4145,7 +4145,7 @@ bool FEditBlueprintGraphTest_CursorHistory_FunctionOverridePushesOldGraph::RunTe
 		TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
-		DispatchLegacyEnvelope(CloseArgs);
+		DispatchBundledEnvelope(CloseArgs);
 	}
 
 	return true;
@@ -4172,7 +4172,7 @@ namespace
 		CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
 		CreateArgs->SetStringField(TEXT("parent_class"), TEXT("MyDirectorBase"));
 
-		auto CreateResult = DispatchLegacyEnvelope(CreateArgs);
+		auto CreateResult = DispatchBundledEnvelope(CreateArgs);
 		if (CreateResult.bIsError)
 		{
 			Test.AddError(FString::Printf(TEXT("Failed to create blueprint: %s"), *CreateResult.GetContentAsString()));
@@ -4190,7 +4190,7 @@ namespace
 		OverrideArgs->SetStringField(TEXT("operation"), TEXT("add_function_override"));
 		OverrideArgs->SetStringField(TEXT("session_id"), OutSessionId);
 		OverrideArgs->SetStringField(TEXT("function_name"), TEXT("SelectDropLocation"));
-		auto OverrideResult = DispatchLegacyEnvelope(OverrideArgs);
+		auto OverrideResult = DispatchBundledEnvelope(OverrideArgs);
 		if (OverrideResult.bIsError)
 		{
 			Test.AddError(FString::Printf(TEXT("add_function_override failed: %s"), *OverrideResult.GetContentAsString()));
@@ -4206,7 +4206,7 @@ namespace
 		TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
-		DispatchLegacyEnvelope(CloseArgs);
+		DispatchBundledEnvelope(CloseArgs);
 	}
 }
 
@@ -4229,7 +4229,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_UbergraphToFunction::RunTest(const FStr
 		Args->SetStringField(TEXT("operation"), TEXT("switch_graph"));
 		Args->SetStringField(TEXT("session_id"), SessionId);
 		Args->SetStringField(TEXT("graph_name"), TEXT("EventGraph"));
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("switch_graph to EventGraph failed: %s"), *Result.GetContentAsString()));
@@ -4244,7 +4244,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_UbergraphToFunction::RunTest(const FStr
 		Args->SetStringField(TEXT("operation"), TEXT("switch_graph"));
 		Args->SetStringField(TEXT("session_id"), SessionId);
 		Args->SetStringField(TEXT("graph_name"), FunctionGraphName);
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("switch_graph to function failed: %s"), *Result.GetContentAsString()));
@@ -4284,7 +4284,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_RoundTripPreservesSession::RunTest(cons
 		Args->SetStringField(TEXT("session_id"), SessionId);
 		Args->SetStringField(TEXT("graph_name"), TargetName);
 		Args->SetStringField(TEXT("response_mode"), TEXT("full"));
-		auto R = DispatchLegacyEnvelope(Args);
+		auto R = DispatchBundledEnvelope(Args);
 		OutResponse = R.GetContentAsString();
 		return !R.bIsError;
 	};
@@ -4337,7 +4337,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_UnknownGraphReturnsAvailableList::RunTe
 	Args->SetStringField(TEXT("operation"), TEXT("switch_graph"));
 	Args->SetStringField(TEXT("session_id"), SessionId);
 	Args->SetStringField(TEXT("graph_name"), TEXT("NonExistent_XYZ"));
-	auto Result = DispatchLegacyEnvelope(Args);
+	auto Result = DispatchBundledEnvelope(Args);
 
 	if (!Result.bIsError)
 	{
@@ -4382,7 +4382,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_SameGraphIsNoOp::RunTest(const FString&
 	Args->SetStringField(TEXT("operation"), TEXT("switch_graph"));
 	Args->SetStringField(TEXT("session_id"), SessionId);
 	Args->SetStringField(TEXT("graph_name"), FunctionGraphName);
-	auto Result = DispatchLegacyEnvelope(Args);
+	auto Result = DispatchBundledEnvelope(Args);
 
 	if (Result.bIsError)
 	{
@@ -4438,7 +4438,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_HonorsResponseMode::RunTest(const FStri
 		Args->SetStringField(TEXT("session_id"), SessionId);
 		Args->SetStringField(TEXT("graph_name"), TargetName);
 		Args->SetStringField(TEXT("response_mode"), Mode);
-		auto R = DispatchLegacyEnvelope(Args);
+		auto R = DispatchBundledEnvelope(Args);
 		OutText = R.GetContentAsString();
 		return !R.bIsError;
 	};
@@ -4491,7 +4491,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_HistoryPreservedAcrossSwitch::RunTest(c
 		Args->SetStringField(TEXT("operation"), TEXT("switch_graph"));
 		Args->SetStringField(TEXT("session_id"), SessionId);
 		Args->SetStringField(TEXT("graph_name"), TEXT("EventGraph"));
-		auto R = DispatchLegacyEnvelope(Args);
+		auto R = DispatchBundledEnvelope(Args);
 		if (R.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Initial switch to EventGraph failed: %s"), *R.GetContentAsString()));
@@ -4508,7 +4508,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_HistoryPreservedAcrossSwitch::RunTest(c
 		Args->SetStringField(TEXT("node_type"), TEXT("CallFunction"));
 		Args->SetStringField(TEXT("function_name"), TEXT("PrintString"));
 		Args->SetStringField(TEXT("function_class"), TEXT("KismetSystemLibrary"));
-		DispatchLegacyEnvelope(Args);
+		DispatchBundledEnvelope(Args);
 	}
 
 	// Switch to function graph
@@ -4517,7 +4517,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_HistoryPreservedAcrossSwitch::RunTest(c
 		Args->SetStringField(TEXT("operation"), TEXT("switch_graph"));
 		Args->SetStringField(TEXT("session_id"), SessionId);
 		Args->SetStringField(TEXT("graph_name"), FunctionGraphName);
-		auto R = DispatchLegacyEnvelope(Args);
+		auto R = DispatchBundledEnvelope(Args);
 		if (R.bIsError)
 		{
 			AddError(FString::Printf(TEXT("switch_graph to function failed: %s"), *R.GetContentAsString()));
@@ -4531,7 +4531,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_HistoryPreservedAcrossSwitch::RunTest(c
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 		Args->SetStringField(TEXT("operation"), TEXT("cursor_back"));
 		Args->SetStringField(TEXT("session_id"), SessionId);
-		auto R = DispatchLegacyEnvelope(Args);
+		auto R = DispatchBundledEnvelope(Args);
 		if (R.bIsError)
 		{
 			AddError(FString::Printf(TEXT("cursor_back after switch failed: %s"), *R.GetContentAsString()));
@@ -4592,7 +4592,7 @@ namespace
 		CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
 		CreateArgs->SetStringField(TEXT("parent_class"), TEXT("Actor"));
 
-		auto CreateResult = DispatchLegacyEnvelope(CreateArgs);
+		auto CreateResult = DispatchBundledEnvelope(CreateArgs);
 		if (CreateResult.bIsError)
 		{
 			Test.AddError(FString::Printf(TEXT("Failed to create blueprint: %s"), *CreateResult.GetContentAsString()));
@@ -4615,7 +4615,7 @@ namespace
 		AddArgs->SetStringField(TEXT("function_class"), TEXT("KismetSystemLibrary"));
 		AddArgs->SetStringField(TEXT("response_mode"), TEXT("full"));
 
-		auto AddResult = DispatchLegacyEnvelope(AddArgs);
+		auto AddResult = DispatchBundledEnvelope(AddArgs);
 		if (AddResult.bIsError)
 		{
 			Test.AddError(FString::Printf(TEXT("Failed to add PrintString: %s"), *AddResult.GetContentAsString()));
@@ -4636,7 +4636,7 @@ namespace
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 		Args->SetStringField(TEXT("operation"), TEXT("close"));
 		Args->SetStringField(TEXT("session_id"), SessionId);
-		DispatchLegacyEnvelope(Args);
+		DispatchBundledEnvelope(Args);
 	}
 
 	/** Parse a payload string as a JSON object. Returns nullptr on failure. */
@@ -4670,7 +4670,7 @@ bool FEditBlueprintGraphTest_InspectNode_PrintStringUnder5KB::RunTest(const FStr
 	Args->SetStringField(TEXT("session_id"), SessionId);
 	Args->SetStringField(TEXT("node_guid"), PrintStringGuid);
 
-	auto Result = DispatchLegacyEnvelope(Args);
+	auto Result = DispatchBundledEnvelope(Args);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("inspect_node failed: %s"), *Result.GetContentAsString()));
@@ -4709,7 +4709,7 @@ bool FEditBlueprintGraphTest_InspectNode_PinTypeSerialization::RunTest(const FSt
 	Args->SetStringField(TEXT("session_id"), SessionId);
 	Args->SetStringField(TEXT("node_guid"), PrintStringGuid);
 
-	auto Result = DispatchLegacyEnvelope(Args);
+	auto Result = DispatchBundledEnvelope(Args);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("inspect_node failed: %s"), *Result.GetContentAsString()));
@@ -4805,7 +4805,7 @@ bool FEditBlueprintGraphTest_InspectNode_ConnectionsRoundTrip::RunTest(const FSt
 		ConnectArgs->SetStringField(TEXT("source_pin_name"), TEXT("then"));
 		ConnectArgs->SetStringField(TEXT("target_node_title"), TEXT("Print String"));
 		ConnectArgs->SetStringField(TEXT("target_pin_name"), TEXT("execute"));
-		auto R = DispatchLegacyEnvelope(ConnectArgs);
+		auto R = DispatchBundledEnvelope(ConnectArgs);
 		if (R.bIsError)
 		{
 			AddError(FString::Printf(TEXT("connect_pins failed: %s"), *R.GetContentAsString()));
@@ -4819,7 +4819,7 @@ bool FEditBlueprintGraphTest_InspectNode_ConnectionsRoundTrip::RunTest(const FSt
 	Args->SetStringField(TEXT("operation"), TEXT("inspect_node"));
 	Args->SetStringField(TEXT("session_id"), SessionId);
 	Args->SetStringField(TEXT("node_guid"), PrintStringGuid);
-	auto Result = DispatchLegacyEnvelope(Args);
+	auto Result = DispatchBundledEnvelope(Args);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("inspect_node failed: %s"), *Result.GetContentAsString()));
@@ -4900,7 +4900,7 @@ bool FEditBlueprintGraphTest_InspectNode_IncludeConnectionsFalseOmitsLinkedTo::R
 	Args->SetStringField(TEXT("node_guid"), PrintStringGuid);
 	Args->SetBoolField(TEXT("include_connections"), false);
 
-	auto Result = DispatchLegacyEnvelope(Args);
+	auto Result = DispatchBundledEnvelope(Args);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("inspect_node failed: %s"), *Result.GetContentAsString()));
@@ -4965,7 +4965,7 @@ bool FEditBlueprintGraphTest_InspectNode_IncludePinDefaultsFalseOmitsDefaults::R
 	Args->SetStringField(TEXT("node_guid"), PrintStringGuid);
 	Args->SetBoolField(TEXT("include_pin_defaults"), false);
 
-	auto Result = DispatchLegacyEnvelope(Args);
+	auto Result = DispatchBundledEnvelope(Args);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("inspect_node failed: %s"), *Result.GetContentAsString()));
@@ -5026,7 +5026,7 @@ bool FEditBlueprintGraphTest_InspectNode_MissingNodeSurfacesAvailableList::RunTe
 	Args->SetStringField(TEXT("session_id"), SessionId);
 	Args->SetStringField(TEXT("node_guid"), FreshGuid);
 
-	auto Result = DispatchLegacyEnvelope(Args);
+	auto Result = DispatchBundledEnvelope(Args);
 	if (!Result.bIsError)
 	{
 		AddError(TEXT("Expected error for missing node GUID"));
@@ -5086,7 +5086,7 @@ namespace
 		Args->SetStringField(TEXT("operation"), TEXT("add_function_override"));
 		Args->SetStringField(TEXT("session_id"), SessionId);
 		Args->SetStringField(TEXT("function_name"), FunctionName);
-		auto R = DispatchLegacyEnvelope(Args);
+		auto R = DispatchBundledEnvelope(Args);
 		if (R.bIsError)
 		{
 			Test.AddError(FString::Printf(TEXT("add_function_override('%s') failed: %s"),
@@ -5105,7 +5105,7 @@ namespace
 		Args->SetStringField(TEXT("operation"), TEXT("switch_graph"));
 		Args->SetStringField(TEXT("session_id"), SessionId);
 		Args->SetStringField(TEXT("graph_name"), GraphName);
-		return DispatchLegacyEnvelope(Args);
+		return DispatchBundledEnvelope(Args);
 	}
 
 	/** Call inspect_node; returns full response body. */
@@ -5117,7 +5117,7 @@ namespace
 		Args->SetStringField(TEXT("operation"), TEXT("inspect_node"));
 		Args->SetStringField(TEXT("session_id"), SessionId);
 		Args->SetStringField(TEXT("node_guid"), NodeGuid);
-		return DispatchLegacyEnvelope(Args);
+		return DispatchBundledEnvelope(Args);
 	}
 
 	/** Call get_state to capture the current graph + cursor info markdown. */
@@ -5127,7 +5127,7 @@ namespace
 		Args->SetStringField(TEXT("operation"), TEXT("get_state"));
 		Args->SetStringField(TEXT("session_id"), SessionId);
 		Args->SetStringField(TEXT("response_mode"), TEXT("full"));
-		auto R = DispatchLegacyEnvelope(Args);
+		auto R = DispatchBundledEnvelope(Args);
 		return R.GetContentAsString();
 	}
 
@@ -5208,7 +5208,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_RefinementLoopEndToEnd::RunTest(const F
 	CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
 	CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
 	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("MyDirectorBase"));
-	auto CR = DispatchLegacyEnvelope(CreateArgs);
+	auto CR = DispatchBundledEnvelope(CreateArgs);
 	if (CR.bIsError)
 	{
 		AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
@@ -5325,7 +5325,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_RefinementLoopEndToEnd::RunTest(const F
 	TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
 	CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 	CloseArgs->SetStringField(TEXT("session_id"), SessionId);
-	DispatchLegacyEnvelope(CloseArgs);
+	DispatchBundledEnvelope(CloseArgs);
 	return true;
 }
 
@@ -5349,7 +5349,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd::RunTest(c
 	CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
 	CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
 	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("MyDirectorBase"));
-	auto CR = DispatchLegacyEnvelope(CreateArgs);
+	auto CR = DispatchBundledEnvelope(CreateArgs);
 	if (CR.bIsError)
 	{
 		AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
@@ -5386,7 +5386,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd::RunTest(c
 		Args->SetStringField(TEXT("node_type"), TEXT("CallFunction"));
 		Args->SetStringField(TEXT("function_name"), TEXT("PrintString"));
 		Args->SetStringField(TEXT("function_class"), TEXT("KismetSystemLibrary"));
-		auto R = DispatchLegacyEnvelope(Args);
+		auto R = DispatchBundledEnvelope(Args);
 		if (R.bIsError)
 		{
 			AddError(FString::Printf(TEXT("add_node EventGraph PrintString failed: %s"), *R.GetContentAsString()));
@@ -5441,7 +5441,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd::RunTest(c
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 		Args->SetStringField(TEXT("operation"), TEXT("cursor_back"));
 		Args->SetStringField(TEXT("session_id"), SessionId);
-		auto R = DispatchLegacyEnvelope(Args);
+		auto R = DispatchBundledEnvelope(Args);
 		if (R.bIsError)
 		{
 			AddError(FString::Printf(TEXT("cursor_back #1 failed: %s"), *R.GetContentAsString()));
@@ -5476,7 +5476,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd::RunTest(c
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 		Args->SetStringField(TEXT("operation"), TEXT("cursor_back"));
 		Args->SetStringField(TEXT("session_id"), SessionId);
-		auto R = DispatchLegacyEnvelope(Args);
+		auto R = DispatchBundledEnvelope(Args);
 		if (R.bIsError)
 		{
 			AddError(FString::Printf(TEXT("cursor_back #2 failed: %s"), *R.GetContentAsString()));
@@ -5509,7 +5509,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd::RunTest(c
 	TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
 	CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 	CloseArgs->SetStringField(TEXT("session_id"), SessionId);
-	DispatchLegacyEnvelope(CloseArgs);
+	DispatchBundledEnvelope(CloseArgs);
 	return true;
 }
 
@@ -5552,7 +5552,7 @@ bool FEditBlueprintGraphTest_SessionIdContract::RunTest(const FString& Parameter
 		Args->SetStringField(TEXT("asset_path"), AssetPath);
 		Args->SetStringField(TEXT("parent_class"), TEXT("Actor"));
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("create failed: %s"), *Result.GetContentAsString()));
@@ -5622,7 +5622,7 @@ bool FEditBlueprintGraphTest_SessionIdContract::RunTest(const FString& Parameter
 		Args->SetStringField(TEXT("operation"), TEXT("get_state"));
 		Args->SetStringField(TEXT("session_id"), SessionIdFromCreate);
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("get_state with session_id failed: %s"), *Result.GetContentAsString()));
@@ -5654,7 +5654,7 @@ bool FEditBlueprintGraphTest_SessionIdContract::RunTest(const FString& Parameter
 		Args->SetStringField(TEXT("operation"), TEXT("get_state"));
 		Args->SetStringField(TEXT("asset_path"), AssetPath);
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
 			AddError(FString::Printf(TEXT("get_state with asset_path (no session_id) failed: %s"), *Result.GetContentAsString()));
@@ -5688,7 +5688,7 @@ bool FEditBlueprintGraphTest_SessionIdContract::RunTest(const FString& Parameter
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 		Args->SetStringField(TEXT("operation"), TEXT("get_state"));
 
-		auto Result = DispatchLegacyEnvelope(Args);
+		auto Result = DispatchBundledEnvelope(Args);
 		if (!Result.bIsError)
 		{
 			AddError(TEXT("Expected error when both session_id and asset_path are omitted"));
@@ -5719,7 +5719,7 @@ bool FEditBlueprintGraphTest_SessionIdContract::RunTest(const FString& Parameter
 			TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 			Args->SetStringField(TEXT("operation"), TEXT("get_state"));
 			Args->SetStringField(TEXT("asset_path"), AssetPath);
-			auto Result = DispatchLegacyEnvelope(Args);
+			auto Result = DispatchBundledEnvelope(Args);
 			if (Result.bIsError)
 			{
 				AddError(FString::Printf(TEXT("[nudge] get_state(asset_path) call #%d failed: %s"),
@@ -5775,7 +5775,7 @@ bool FEditBlueprintGraphTest_SessionIdContract::RunTest(const FString& Parameter
 			TSharedPtr<FJsonObject> ResetArgs = MakeShared<FJsonObject>();
 			ResetArgs->SetStringField(TEXT("operation"), TEXT("get_state"));
 			ResetArgs->SetStringField(TEXT("session_id"), SessionIdFromCreate);
-			auto ResetResult = DispatchLegacyEnvelope(ResetArgs);
+			auto ResetResult = DispatchBundledEnvelope(ResetArgs);
 			if (ResetResult.bIsError || !ResetResult.Data.IsValid())
 			{
 				AddError(TEXT("[nudge] reset get_state(session_id) failed"));
@@ -5810,7 +5810,7 @@ bool FEditBlueprintGraphTest_SessionIdContract::RunTest(const FString& Parameter
 		TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionIdFromCreate);
-		DispatchLegacyEnvelope(CloseArgs);
+		DispatchBundledEnvelope(CloseArgs);
 	}
 
 	return true;
@@ -5833,7 +5833,7 @@ bool FEditBlueprintGraphTest_ApplyGraphRollback::RunTest(const FString& Paramete
 		Params->SetStringField(TEXT("parent_class"), TEXT("Actor"));
 		CreateParams->SetObjectField(TEXT("params"), Params);
 
-		auto CreateResult = DispatchLegacyEnvelope(CreateParams);
+		auto CreateResult = DispatchBundledEnvelope(CreateParams);
 		if (CreateResult.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to create blueprint: %s"), *CreateResult.GetContentAsString()));
@@ -5944,7 +5944,7 @@ bool FEditBlueprintGraphTest_ApplyGraphRollback::RunTest(const FString& Paramete
 		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
 		CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
 
-		auto CloseResult = DispatchLegacyEnvelope(CloseArgs);
+		auto CloseResult = DispatchBundledEnvelope(CloseArgs);
 		if (CloseResult.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Failed to close session: %s"), *CloseResult.GetContentAsString()));
@@ -5978,7 +5978,7 @@ bool FEditBlueprintGraphTest_ResolveByTitle_InspectEventBeginPlay::RunTest(const
 	Args->SetStringField(TEXT("session_id"), SessionId);
 	Args->SetStringField(TEXT("node_title"), TEXT("Event BeginPlay"));
 
-	auto Result = DispatchLegacyEnvelope(Args);
+	auto Result = DispatchBundledEnvelope(Args);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("inspect_node by title failed: %s"), *Result.GetContentAsString()));
@@ -6042,7 +6042,7 @@ bool FEditBlueprintGraphTest_ResolveByTitle_AmbiguousListsGuids::RunTest(const F
 	Add2->SetStringField(TEXT("function_name"), TEXT("PrintString"));
 	Add2->SetStringField(TEXT("function_class"), TEXT("KismetSystemLibrary"));
 	Add2->SetStringField(TEXT("response_mode"), TEXT("full"));
-	auto AddResult = DispatchLegacyEnvelope(Add2);
+	auto AddResult = DispatchBundledEnvelope(Add2);
 	if (AddResult.bIsError)
 	{
 		AddError(FString::Printf(TEXT("Second add_node failed: %s"), *AddResult.GetContentAsString()));
@@ -6055,7 +6055,7 @@ bool FEditBlueprintGraphTest_ResolveByTitle_AmbiguousListsGuids::RunTest(const F
 	Args->SetStringField(TEXT("session_id"), SessionId);
 	Args->SetStringField(TEXT("node_title"), TEXT("Print String"));
 
-	auto Result = DispatchLegacyEnvelope(Args);
+	auto Result = DispatchBundledEnvelope(Args);
 	if (!Result.bIsError)
 	{
 		AddError(TEXT("Expected error for ambiguous title"));
@@ -6113,7 +6113,7 @@ bool FEditBlueprintGraphTest_ResolveByTitle_MissingBothFields::RunTest(const FSt
 	Args->SetStringField(TEXT("operation"), TEXT("inspect_node"));
 	Args->SetStringField(TEXT("session_id"), SessionId);
 
-	auto Result = DispatchLegacyEnvelope(Args);
+	auto Result = DispatchBundledEnvelope(Args);
 	if (!Result.bIsError)
 	{
 		AddError(TEXT("Expected error when neither node_guid nor node_title provided"));
@@ -6161,7 +6161,7 @@ bool FEditBlueprintGraphTest_ResolveByTitle_MoveNodeByTitle::RunTest(const FStri
 	Pos->SetNumberField(TEXT("y"), 128);
 	Args->SetObjectField(TEXT("position"), Pos);
 
-	auto Result = DispatchLegacyEnvelope(Args);
+	auto Result = DispatchBundledEnvelope(Args);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("move_node by title failed: %s"), *Result.GetContentAsString()));
@@ -6195,7 +6195,7 @@ bool FEditBlueprintGraphTest_ResolveByTitle_UnknownTitle::RunTest(const FString&
 	Args->SetStringField(TEXT("session_id"), SessionId);
 	Args->SetStringField(TEXT("node_title"), TEXT("DoesNotExist"));
 
-	auto Result = DispatchLegacyEnvelope(Args);
+	auto Result = DispatchBundledEnvelope(Args);
 	if (!Result.bIsError)
 	{
 		AddError(TEXT("Expected error for unknown title"));
@@ -6240,7 +6240,7 @@ bool FEditBlueprintGraphTest_FieldAliases_ComponentDetailsAliases::RunTest(const
 	CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
 	CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
 	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("Actor"));
-	auto CR = DispatchLegacyEnvelope(CreateArgs);
+	auto CR = DispatchBundledEnvelope(CreateArgs);
 	if (CR.bIsError)
 	{
 		AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
@@ -6255,7 +6255,7 @@ bool FEditBlueprintGraphTest_FieldAliases_ComponentDetailsAliases::RunTest(const
 	AddArgs->SetStringField(TEXT("session_id"), SessionId);
 	AddArgs->SetStringField(TEXT("component_name"), TEXT("TestStaticMesh"));
 	AddArgs->SetStringField(TEXT("component_class"), TEXT("/Script/Engine.StaticMeshComponent"));
-	auto AR = DispatchLegacyEnvelope(AddArgs);
+	auto AR = DispatchBundledEnvelope(AddArgs);
 	if (AR.bIsError)
 	{
 		AddError(FString::Printf(TEXT("add_component failed: %s"), *AR.GetContentAsString()));
@@ -6267,7 +6267,7 @@ bool FEditBlueprintGraphTest_FieldAliases_ComponentDetailsAliases::RunTest(const
 	GetArgs->SetStringField(TEXT("operation"), TEXT("get_component_details"));
 	GetArgs->SetStringField(TEXT("session_id"), SessionId);
 	GetArgs->SetStringField(TEXT("component_name"), TEXT("TestStaticMesh"));
-	auto GR = DispatchLegacyEnvelope(GetArgs);
+	auto GR = DispatchBundledEnvelope(GetArgs);
 	if (GR.bIsError)
 	{
 		AddError(FString::Printf(TEXT("get_component_details failed: %s"), *GR.GetContentAsString()));
@@ -6353,7 +6353,7 @@ bool FEditBlueprintGraphTest_ComponentDetails_StructuredShape::RunTest(const FSt
 	CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
 	CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
 	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("Actor"));
-	auto CR = DispatchLegacyEnvelope(CreateArgs);
+	auto CR = DispatchBundledEnvelope(CreateArgs);
 	if (CR.bIsError)
 	{
 		AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
@@ -6367,7 +6367,7 @@ bool FEditBlueprintGraphTest_ComponentDetails_StructuredShape::RunTest(const FSt
 	AddArgs->SetStringField(TEXT("session_id"), SessionId);
 	AddArgs->SetStringField(TEXT("component_name"), TEXT("TestStaticMesh"));
 	AddArgs->SetStringField(TEXT("component_class"), TEXT("/Script/Engine.StaticMeshComponent"));
-	auto AR = DispatchLegacyEnvelope(AddArgs);
+	auto AR = DispatchBundledEnvelope(AddArgs);
 	if (AR.bIsError)
 	{
 		AddError(FString::Printf(TEXT("add_component failed: %s"), *AR.GetContentAsString()));
@@ -6380,7 +6380,7 @@ bool FEditBlueprintGraphTest_ComponentDetails_StructuredShape::RunTest(const FSt
 	Args->SetStringField(TEXT("session_id"), SessionId);
 	Args->SetStringField(TEXT("component_name"), TEXT("TestStaticMesh"));
 	Args->SetStringField(TEXT("response_mode"), TEXT("status"));
-	auto R = DispatchLegacyEnvelope(Args);
+	auto R = DispatchBundledEnvelope(Args);
 	if (R.bIsError)
 	{
 		AddError(FString::Printf(TEXT("get_component_details failed: %s"), *R.GetContentAsString()));
@@ -6463,7 +6463,7 @@ bool FEditBlueprintGraphTest_ComponentDetails_ResponseModeSurvival::RunTest(cons
 	CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
 	CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
 	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("Actor"));
-	auto CR = DispatchLegacyEnvelope(CreateArgs);
+	auto CR = DispatchBundledEnvelope(CreateArgs);
 	if (CR.bIsError)
 	{
 		AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
@@ -6477,7 +6477,7 @@ bool FEditBlueprintGraphTest_ComponentDetails_ResponseModeSurvival::RunTest(cons
 	AddArgs->SetStringField(TEXT("session_id"), SessionId);
 	AddArgs->SetStringField(TEXT("component_name"), TEXT("TestStaticMesh"));
 	AddArgs->SetStringField(TEXT("component_class"), TEXT("/Script/Engine.StaticMeshComponent"));
-	DispatchLegacyEnvelope(AddArgs);
+	DispatchBundledEnvelope(AddArgs);
 
 	auto CheckMode = [&](const FString& Mode) -> bool
 	{
@@ -6486,7 +6486,7 @@ bool FEditBlueprintGraphTest_ComponentDetails_ResponseModeSurvival::RunTest(cons
 		A->SetStringField(TEXT("session_id"), SessionId);
 		A->SetStringField(TEXT("component_name"), TEXT("TestStaticMesh"));
 		A->SetStringField(TEXT("response_mode"), Mode);
-		auto R = DispatchLegacyEnvelope(A);
+		auto R = DispatchBundledEnvelope(A);
 		if (R.bIsError)
 		{
 			AddError(FString::Printf(TEXT("get_component_details (%s) failed: %s"), *Mode, *R.GetContentAsString()));
@@ -6573,7 +6573,7 @@ bool FEditBlueprintGraphTest_GetStatePositions_SingleNode::RunTest(const FString
 	CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
 	CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
 	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("Actor"));
-	auto CR = DispatchLegacyEnvelope(CreateArgs);
+	auto CR = DispatchBundledEnvelope(CreateArgs);
 	if (CR.bIsError)
 	{
 		AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
@@ -6614,7 +6614,7 @@ bool FEditBlueprintGraphTest_GetStatePositions_SingleNode::RunTest(const FString
 	StateArgs->SetStringField(TEXT("operation"), TEXT("get_state"));
 	StateArgs->SetStringField(TEXT("session_id"), SessionId);
 	StateArgs->SetStringField(TEXT("response_mode"), TEXT("full"));
-	auto SR = DispatchLegacyEnvelope(StateArgs);
+	auto SR = DispatchBundledEnvelope(StateArgs);
 	if (SR.bIsError)
 	{
 		AddError(FString::Printf(TEXT("get_state failed: %s"), *SR.GetContentAsString()));
@@ -6672,7 +6672,7 @@ bool FEditBlueprintGraphTest_GetStatePositions_MultiNode::RunTest(const FString&
 	CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
 	CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
 	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("Actor"));
-	auto CR = DispatchLegacyEnvelope(CreateArgs);
+	auto CR = DispatchBundledEnvelope(CreateArgs);
 	if (CR.bIsError)
 	{
 		AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
@@ -6785,7 +6785,7 @@ namespace
 		TSharedPtr<FJsonObject> A = MakeShared<FJsonObject>();
 		A->SetStringField(TEXT("operation"), TEXT("list_graphs"));
 		A->SetStringField(TEXT("asset_path"), AssetPath);
-		return DispatchLegacyEnvelope(A);
+		return DispatchBundledEnvelope(A);
 	}
 
 	IClaireonTool::FToolResult CallListGraphsBySessionId(const FString& SessionId)
@@ -6793,7 +6793,7 @@ namespace
 		TSharedPtr<FJsonObject> A = MakeShared<FJsonObject>();
 		A->SetStringField(TEXT("operation"), TEXT("list_graphs"));
 		A->SetStringField(TEXT("session_id"), SessionId);
-		return DispatchLegacyEnvelope(A);
+		return DispatchBundledEnvelope(A);
 	}
 
 	FString CreateHintFixtureBlueprint(FAutomationTestBase& Test, const FString& AssetPath)
@@ -6802,7 +6802,7 @@ namespace
 		CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
 		CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
 		CreateArgs->SetStringField(TEXT("parent_class"), TEXT("Actor"));
-		auto CR = DispatchLegacyEnvelope(CreateArgs);
+		auto CR = DispatchBundledEnvelope(CreateArgs);
 		if (CR.bIsError)
 		{
 			Test.AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
@@ -6814,7 +6814,7 @@ namespace
 		TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
 		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
 		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
-		DispatchLegacyEnvelope(CloseArgs);
+		DispatchBundledEnvelope(CloseArgs);
 
 		return SessionId;
 	}

@@ -166,7 +166,7 @@ public:
 	 * On any other rejection / transport failure -> false (transient);
 	 * the heartbeat ticker retries.
 	 */
-	bool Register(int32 EditorMCPPort, const FString& EditorMCPToken, const FString& BuildId);
+	bool RegisterAndReturnAccepted(int32 EditorMCPPort, const FString& EditorMCPToken, const FString& BuildId);
 
 	/**
 	 * Send /editor/unregister and stop the heartbeat ticker. Does NOT kill
@@ -357,8 +357,9 @@ private:
 	 * the editor never sees that rejection. Used by both BeginRetryRegister
 	 * (initial wiring) and the heartbeat tick state machine.
 	 *
-	 * The legacy public Register(...) bool wrapper still exists for the existing
-	 * smoke tests; it forwards to RegisterOnce and returns true iff Accepted.
+	 * RegisterAndReturnAccepted remains as a bool-returning helper for the
+	 * existing smoke tests; it forwards to RegisterOnce and returns true iff
+	 * Accepted.
 	 */
 	ERegisterResult RegisterOnce();
 

@@ -44,10 +44,9 @@ namespace ClaireonSafeExec
 	// SEH-guarded wrapper around UBlueprintEditorLibrary::GeneratedClass.
 	// Mirrors the Python-side unreal.BlueprintEditorLibrary.generated_class
 	// call path that has been observed to raise SEH 0xC0000005 after
-	// MulticastDelegate variable authoring + save sequences (see
-	// BP_AUTHORING_GAPS_CLOSURE/GAP6_REPRO_ARTIFACT.md).  Callers that need
-	// the generated class from Python should route through this helper via
-	// a Claireon tool, not call the BlueprintEditorLibrary reflection path
+	// MulticastDelegate variable authoring + save sequences. Callers that
+	// need the generated class from Python should route through this helper
+	// via a Claireon tool, not call the BlueprintEditorLibrary reflection path
 	// directly.
 	FClaireonGeneratedClassLookupResult ExecuteGeneratedClassLookup(UBlueprint* Blueprint);
 

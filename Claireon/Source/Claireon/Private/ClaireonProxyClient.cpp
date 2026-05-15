@@ -669,7 +669,7 @@ ERegisterResult FClaireonProxyClient::RegisterOnce()
 		*Reason, Status);
 
 	// Stage 005: version_mismatch is gone (advisory on the proxy side, D5),
-	// active_session is gone (newest-wins, D6), worktree_mismatch is gone
+	// singleton_session is gone (newest-wins, D6), worktree_mismatch is gone
 	// (multi-tenant). Only auth/malformed remain as 4xx terminal cases.
 	if (Reason == TEXT("malformed_request") || Reason == TEXT("bad_request")
 		|| Reason == TEXT("unauthorized") || Reason == TEXT("auth_required"))
@@ -683,7 +683,7 @@ ERegisterResult FClaireonProxyClient::RegisterOnce()
 	return ERegisterResult::Transient;
 }
 
-bool FClaireonProxyClient::Register(int32 EditorMCPPort, const FString& EditorMCPToken, const FString& BuildId)
+bool FClaireonProxyClient::RegisterAndReturnAccepted(int32 EditorMCPPort, const FString& EditorMCPToken, const FString& BuildId)
 {
 	CachedEditorMCPPort = EditorMCPPort;
 	CachedEditorMCPToken = EditorMCPToken;

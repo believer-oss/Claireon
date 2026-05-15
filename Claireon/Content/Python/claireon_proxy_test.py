@@ -56,10 +56,10 @@ import claireon_proxy  # noqa: E402  (path insertion above is intentional)
 
 def _reset_proxy_runtime(worktree_root: str) -> None:
     """Clear module-level state so each test starts from a clean slate."""
-    claireon_proxy.active_session = None
+    claireon_proxy.singleton_session = None
     claireon_proxy._version_mismatch_state["last_log_ts"] = 0.0
     claireon_proxy._version_mismatch_state["last_seen"] = None
-    claireon_proxy.RUNTIME["worktree_root"] = worktree_root
+    claireon_proxy.RUNTIME["singleton_worktree_root"] = worktree_root
     claireon_proxy.RUNTIME["canonical_worktree"] = claireon_proxy.canonicalize_worktree(worktree_root)
     claireon_proxy.RUNTIME["proxy_version_hash"] = "TESTHASH"
     claireon_proxy.RUNTIME["last_claude_activity_ts"] = time.monotonic()
@@ -288,7 +288,7 @@ class TestRegistrationProtocol(unittest.TestCase):
         status, resp = claireon_proxy.handle_register(body)
         self.assertEqual(status, 200)
         self.assertTrue(resp["accepted"])
-        self.assertIsNotNone(claireon_proxy.active_session)
+        self.assertIsNotNone(claireon_proxy.singleton_session)
 
     def test_register_json_roundtrip_with_filetime_value(self) -> None:
         """Regression: Windows FILETIME values (~1.3e17) exceed JSON Number
@@ -413,9 +413,9 @@ class TestRegistrationProtocol(unittest.TestCase):
             float(claireon_proxy.HEARTBEAT_STALENESS_SECONDS) + 1.0
         )
         with claireon_proxy.SESSION_LOCK:
-            evicted = claireon_proxy.evict_stale_session_locked()
+            evicted = claireon_proxy.evict_singleton_stale_session_locked()
         self.assertIsNotNone(evicted)
-        self.assertIsNone(claireon_proxy.active_session)
+        self.assertIsNone(claireon_proxy.singleton_session)
 
     def test_unregister_clears_session(self) -> None:
         body = _well_formed_register_body(self.tmp)
@@ -427,7 +427,7 @@ class TestRegistrationProtocol(unittest.TestCase):
         })
         self.assertEqual(status, 200)
         self.assertTrue(resp["ok"])
-        self.assertIsNone(claireon_proxy.active_session)
+        self.assertIsNone(claireon_proxy.singleton_session)
         canonical = claireon_proxy.canonicalize_worktree(self.tmp)
         self.assertIsNone(claireon_proxy.RUNTIME["worktrees"][canonical].session)
 
@@ -549,7 +549,7 @@ class TestForwardRoundTrip(unittest.TestCase):
         )
         # Active session has been cleared so the next call hits the no-editor
         # branch directly (no further wait or transport error).
-        self.assertIsNone(claireon_proxy.active_session)
+        self.assertIsNone(claireon_proxy.singleton_session)
 
     def test_socket_timeout_does_not_evict(self) -> None:
         """Stage 007 (D7): only clean transport-layer rejection
@@ -567,7 +567,7 @@ class TestForwardRoundTrip(unittest.TestCase):
         self.assertIn("error", resp)
         self.assertEqual(resp["error"]["code"], -32000)
         # Session intact -- the heartbeat watchdog will decide on staleness.
-        self.assertIsNotNone(claireon_proxy.active_session)
+        self.assertIsNotNone(claireon_proxy.singleton_session)
 
     def test_connection_reset_evicts_session(self) -> None:
         """Stage 007 (D7): ConnectionResetError qualifies as a clean
@@ -585,7 +585,7 @@ class TestForwardRoundTrip(unittest.TestCase):
         self.assertEqual(
             resp["result"]["content"][0]["text"], claireon_proxy.FALLBACK_TEXT
         )
-        self.assertIsNone(claireon_proxy.active_session)
+        self.assertIsNone(claireon_proxy.singleton_session)
 
 
 # ---------------------------------------------------------------------------
@@ -699,11 +699,11 @@ class TestProxyMetaTool(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="claireon-proxy-meta-")
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self._prev_runtime = dict(claireon_proxy.RUNTIME)
-        claireon_proxy.RUNTIME["worktree_root"] = self.tmp
+        claireon_proxy.RUNTIME["singleton_worktree_root"] = self.tmp
         claireon_proxy.RUNTIME["proxy_version_hash"] = "DEADBEEF"
         # Ensure no leftover session from earlier tests.
         with claireon_proxy.SESSION_LOCK:
-            claireon_proxy.active_session = None
+            claireon_proxy.singleton_session = None
 
     def tearDown(self) -> None:
         claireon_proxy.RUNTIME.clear()
@@ -760,7 +760,7 @@ class TestProxyMetaTool(unittest.TestCase):
 
     def test_status_with_editor(self) -> None:
         with claireon_proxy.SESSION_LOCK:
-            claireon_proxy.active_session = {
+            claireon_proxy.singleton_session = {
                 "pid": 12345,
                 "worktree_root": self.tmp,
                 "start_time_ns": "9876543210",
@@ -780,7 +780,7 @@ class TestProxyMetaTool(unittest.TestCase):
             self.assertGreaterEqual(body["active_editor"]["last_heartbeat_age_seconds"], 0.0)
         finally:
             with claireon_proxy.SESSION_LOCK:
-                claireon_proxy.active_session = None
+                claireon_proxy.singleton_session = None
 
     def test_read_log_missing_file(self) -> None:
         resp = self._call(command="read_log")
@@ -806,7 +806,7 @@ class TestProxyMetaTool(unittest.TestCase):
     def test_proxy_not_forwarded_to_editor(self) -> None:
         # Even with an active session, `proxy` must be handled locally.
         with claireon_proxy.SESSION_LOCK:
-            claireon_proxy.active_session = {
+            claireon_proxy.singleton_session = {
                 "pid": 1,
                 "worktree_root": self.tmp,
                 "start_time_ns": "1",
@@ -823,7 +823,7 @@ class TestProxyMetaTool(unittest.TestCase):
             self.assertIn("subcommands", resp["result"]["content"][0]["text"])
         finally:
             with claireon_proxy.SESSION_LOCK:
-                claireon_proxy.active_session = None
+                claireon_proxy.singleton_session = None
 
 
 # ---------------------------------------------------------------------------
@@ -989,9 +989,9 @@ class TestForwardedMcpMethods(unittest.TestCase):
 
     def test_forwarded_method_no_editor_returns_fallback(self) -> None:
         # Explicitly clear the registered session so _forward_payload_to_editor
-        # takes the "active_session is None" branch.
+        # takes the "singleton_session is None" branch.
         with claireon_proxy.SESSION_LOCK:
-            claireon_proxy.active_session = None
+            claireon_proxy.singleton_session = None
 
         payload = {
             "jsonrpc": "2.0",
@@ -1067,7 +1067,7 @@ class TestInitializeCapabilities(unittest.TestCase):
         # the no-editor state. _reset_proxy_runtime in setUp has already
         # done this; the explicit lock block here documents the intent.
         with claireon_proxy.SESSION_LOCK:
-            claireon_proxy.active_session = None
+            claireon_proxy.singleton_session = None
 
         payload = {
             "jsonrpc": "2.0",

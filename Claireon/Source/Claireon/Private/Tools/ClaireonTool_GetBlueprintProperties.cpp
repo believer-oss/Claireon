@@ -128,7 +128,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 		VarObj->SetStringField(TEXT("default_value"), Var.DefaultValue);
 		VarObj->SetBoolField(TEXT("is_exposed"), (Var.PropertyFlags & CPF_BlueprintVisible) != 0);
 
-		// Raw K2 pin reflection for fixture assertions (Gap 3).
+		// Raw K2 pin reflection for fixture assertions.
 		VarObj->SetStringField(TEXT("pin_category"), Var.VarType.PinCategory.ToString());
 		VarObj->SetStringField(TEXT("pin_sub_category"), Var.VarType.PinSubCategory.ToString());
 		if (UObject* SubObj = Var.VarType.PinSubCategoryObject.Get())
