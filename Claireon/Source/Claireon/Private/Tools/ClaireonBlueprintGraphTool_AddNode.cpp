@@ -99,7 +99,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_AddNode::GetOperation() const { return TEXT("graph_add_node"); }
+FString ClaireonBlueprintGraphTool_AddNode::GetOperation() const { return TEXT("add_node"); }
 
 TArray<FString> ClaireonBlueprintGraphTool_AddNode::GetSearchKeywords() const
 {
@@ -108,7 +108,7 @@ TArray<FString> ClaireonBlueprintGraphTool_AddNode::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_AddNode::GetDescription() const
 {
-    return TEXT("Adds a node to the current session's graph (CallFunction, VariableGet/Set, control flow, macros, delegates, etc.). Pass auto_connect_from_cursor=true to route the new node's exec pin through the cursor pin when compatible. Most-common pitfall: forgetting to save every 1-3 nodes via blueprint_graph_save, which loses progress on editor crash.");
+    return TEXT("Adds a node to the current session's graph (CallFunction, VariableGet/Set, control flow, macros, delegates, etc.). Pass auto_connect_from_cursor=true to route the new node's exec pin through the cursor pin when compatible. Most-common pitfall: forgetting to save every 1-3 nodes via blueprint_graph_save, which loses progress on editor crash. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddNode::GetInputSchema() const

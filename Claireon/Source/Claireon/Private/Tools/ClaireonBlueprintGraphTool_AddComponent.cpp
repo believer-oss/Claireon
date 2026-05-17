@@ -97,11 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_AddComponent::GetOperation() const { return TEXT("graph_add_component"); }
+FString ClaireonBlueprintGraphTool_AddComponent::GetOperation() const { return TEXT("add_component"); }
 
 FString ClaireonBlueprintGraphTool_AddComponent::GetDescription() const
 {
-    return TEXT("Add a component to the Blueprint's Simple Construction Script in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: only Actor-derived Blueprints have an SCS; non-Actor BPs error.");
+    return TEXT("Add a component to the Blueprint's Simple Construction Script in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: only Actor-derived Blueprints have an SCS; non-Actor BPs error. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddComponent::GetInputSchema() const

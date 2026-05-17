@@ -97,7 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_Close::GetOperation() const { return TEXT("graph_close"); }
+FString ClaireonBlueprintGraphTool_Close::GetOperation() const { return TEXT("close"); }
 
 TArray<FString> ClaireonBlueprintGraphTool_Close::GetSearchKeywords() const
 {
@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_Close::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_Close::GetDescription() const
 {
-    return TEXT("Closes the current Blueprint editing session, releasing the lock and clearing the in-session cursor. Implicitly compiles and saves before closing. Most-common pitfall: calling close on a session_id that does not exist (returns an error rather than a no-op); look up session ids via list_sessions if unsure.");
+    return TEXT("Closes the current Blueprint editing session, releasing the lock and clearing the in-session cursor. Implicitly compiles and saves before closing. Most-common pitfall: calling close on a session_id that does not exist (returns an error rather than a no-op); look up session ids via list_sessions if unsure. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Close::GetInputSchema() const

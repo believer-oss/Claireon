@@ -97,7 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_ListGraphs::GetOperation() const { return TEXT("graph_list_graphs"); }
+FString ClaireonBlueprintGraphTool_ListGraphs::GetOperation() const { return TEXT("list_graphs"); }
 
 FString ClaireonBlueprintGraphTool_ListGraphs::GetDescription() const
 {

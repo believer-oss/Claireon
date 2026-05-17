@@ -97,11 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_SetRootComponent::GetOperation() const { return TEXT("graph_set_root_component"); }
+FString ClaireonBlueprintGraphTool_SetRootComponent::GetOperation() const { return TEXT("set_root_component"); }
 
 FString ClaireonBlueprintGraphTool_SetRootComponent::GetDescription() const
 {
-    return TEXT("Designate a scene component as the new root of the Blueprint's Simple Construction Script in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: only USceneComponent-derived components can be roots; non-scene components error.");
+    return TEXT("Designate a scene component as the new root of the Blueprint's Simple Construction Script in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: only USceneComponent-derived components can be roots; non-scene components error. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetRootComponent::GetInputSchema() const

@@ -97,11 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_SelectNode::GetOperation() const { return TEXT("graph_select_node"); }
+FString ClaireonBlueprintGraphTool_SelectNode::GetOperation() const { return TEXT("select_node"); }
 
 FString ClaireonBlueprintGraphTool_SelectNode::GetDescription() const
 {
-    return TEXT("Move the cursor to a specific node by GUID in the open Blueprint editing session. Requires open session_id from blueprint_graph_open. Read-only with respect to graph contents (cursor is session state). The node_id must be the exact GUID returned by blueprint_graph_get_state or blueprint_graph_add_node.");
+    return TEXT("Move the cursor to a specific node by GUID in the open Blueprint editing session. Requires open session_id from blueprint_graph_open. Read-only with respect to graph contents (cursor is session state). The node_id must be the exact GUID returned by blueprint_graph_get_state or blueprint_graph_add_node. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SelectNode::GetInputSchema() const

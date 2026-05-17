@@ -26,7 +26,7 @@ TArray<FString> ClaireonTool_BlueprintCompile::GetSearchKeywords() const
 FString ClaireonTool_BlueprintCompile::GetDescription() const
 {
 	return TEXT("Compile a single Blueprint by asset path. Acquires a per-asset session for the duration of the compile. "
-		"For batch compilation across many blueprints or content folders, use blueprint_compile_batch instead.");
+		"For batch compilation across many blueprints or content folders, use blueprint_compile_batch instead. Immediate-mode tool: no session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_BlueprintCompile::GetInputSchema() const

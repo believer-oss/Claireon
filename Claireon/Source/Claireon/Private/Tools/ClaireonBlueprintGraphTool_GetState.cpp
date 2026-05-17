@@ -97,11 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_GetState::GetOperation() const { return TEXT("graph_get_state"); }
+FString ClaireonBlueprintGraphTool_GetState::GetOperation() const { return TEXT("get_state"); }
 
 FString ClaireonBlueprintGraphTool_GetState::GetDescription() const
 {
-    return TEXT("Return the current graph state (nodes, pins, cursor) for the open Blueprint editing session. Requires open session_id from blueprint_graph_open. Read-only. The most-used inspection tool during the per-node author cycle; pair with blueprint_graph_inspect_node for full single-node fidelity.");
+    return TEXT("Return the current graph state (nodes, pins, cursor) for the open Blueprint editing session. Requires open session_id from blueprint_graph_open. Read-only. The most-used inspection tool during the per-node author cycle; pair with blueprint_graph_inspect_node for full single-node fidelity. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_GetState::GetInputSchema() const

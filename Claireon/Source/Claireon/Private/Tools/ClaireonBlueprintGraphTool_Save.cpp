@@ -97,7 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_Save::GetOperation() const { return TEXT("graph_save"); }
+FString ClaireonBlueprintGraphTool_Save::GetOperation() const { return TEXT("save"); }
 
 TArray<FString> ClaireonBlueprintGraphTool_Save::GetSearchKeywords() const
 {
@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_Save::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_Save::GetDescription() const
 {
-    return TEXT("Compiles and saves the Blueprint package to disk for the current session. Per the per-node cycle, call save every 1-3 add_node operations to flush in-session edits. Most-common pitfall: skipping save until close, which loses progress on editor crash and forces a full re-author of the in-session graph.");
+    return TEXT("Compiles and saves the Blueprint package to disk for the current session. Per the per-node cycle, call save every 1-3 add_node operations to flush in-session edits. Most-common pitfall: skipping save until close, which loses progress on editor crash and forces a full re-author of the in-session graph. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Save::GetInputSchema() const

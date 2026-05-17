@@ -97,7 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_Create::GetOperation() const { return TEXT("graph_create"); }
+FString ClaireonBlueprintGraphTool_Create::GetOperation() const { return TEXT("create"); }
 
 FString ClaireonBlueprintGraphTool_Create::GetDescription() const
 {

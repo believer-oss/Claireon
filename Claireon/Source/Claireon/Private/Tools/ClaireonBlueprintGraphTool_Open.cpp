@@ -97,7 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_Open::GetOperation() const { return TEXT("graph_open"); }
+FString ClaireonBlueprintGraphTool_Open::GetOperation() const { return TEXT("open"); }
 
 TArray<FString> ClaireonBlueprintGraphTool_Open::GetSearchKeywords() const
 {

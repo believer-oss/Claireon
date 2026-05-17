@@ -25,7 +25,7 @@ TArray<FString> ClaireonTool_GetBlueprintGraph::GetSearchKeywords() const
 
 FString ClaireonTool_GetBlueprintGraph::GetDescription() const
 {
-	return TEXT("Read Blueprint graph structure at configurable detail levels (exec/full/summary/outline). Supports BFS traversal from anchor nodes and JSON or T3D export formats.");
+	return TEXT("Read Blueprint graph structure at configurable detail levels (exec/full/summary/outline). Supports BFS traversal from anchor nodes and JSON or T3D export formats. Immediate-mode tool: no session required.");
 }
 
 FString ClaireonTool_GetBlueprintGraph::GetFullDescription() const

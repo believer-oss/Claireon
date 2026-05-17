@@ -36,7 +36,7 @@ TArray<FString> ClaireonTool_FormatBlueprintGraph::GetSearchKeywords() const
 
 FString ClaireonTool_FormatBlueprintGraph::GetDescription() const
 {
-	return TEXT("Auto-format a Blueprint graph using Blueprint Assist. Arranges nodes in a readable layout.");
+	return TEXT("Auto-format a Blueprint graph using Blueprint Assist. Arranges nodes in a readable layout. Immediate-mode tool: no session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_FormatBlueprintGraph::GetInputSchema() const

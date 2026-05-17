@@ -97,11 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_InspectNode::GetOperation() const { return TEXT("graph_inspect_node"); }
+FString ClaireonBlueprintGraphTool_InspectNode::GetOperation() const { return TEXT("inspect_node"); }
 
 FString ClaireonBlueprintGraphTool_InspectNode::GetDescription() const
 {
-    return TEXT("Return a single node in full fidelity (structured JSON) from the open Blueprint editing session without dumping the whole graph. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Read-only. Pair with blueprint_graph_get_state to navigate, then drill in here for property-level detail.");
+    return TEXT("Return a single node in full fidelity (structured JSON) from the open Blueprint editing session without dumping the whole graph. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Read-only. Pair with blueprint_graph_get_state to navigate, then drill in here for property-level detail. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_InspectNode::GetInputSchema() const

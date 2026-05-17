@@ -31,7 +31,7 @@ FString ClaireonTool_BlueprintCompileBatch::GetDescription() const
 		"Default max_count is 50 -- if more blueprints are found, returns immediately with the count. "
 		"Pass max_count=0 for unlimited or raise the limit explicitly. "
 		"Editor-wide tool: acquires an exclusive lock that blocks all other Claireon sessions for the duration of this call. "
-		"Fails fast if any other session is currently held.");
+		"Fails fast if any other session is currently held. Immediate-mode tool: no session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_BlueprintCompileBatch::GetInputSchema() const

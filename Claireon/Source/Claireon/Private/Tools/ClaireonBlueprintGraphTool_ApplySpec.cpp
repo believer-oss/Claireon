@@ -97,11 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_ApplySpec::GetOperation() const { return TEXT("graph_apply_spec"); }
+FString ClaireonBlueprintGraphTool_ApplySpec::GetOperation() const { return TEXT("apply_spec"); }
 
 FString ClaireonBlueprintGraphTool_ApplySpec::GetDescription() const
 {
-    return TEXT("Apply a declarative JSON specification to create/modify the Blueprint atomically in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. The spec runs as one rollback unit; partial failures revert all spec operations together.");
+    return TEXT("Apply a declarative JSON specification to create/modify the Blueprint atomically in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. The spec runs as one rollback unit; partial failures revert all spec operations together. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ApplySpec::GetInputSchema() const

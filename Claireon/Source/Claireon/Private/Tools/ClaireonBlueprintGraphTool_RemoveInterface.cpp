@@ -97,11 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_RemoveInterface::GetOperation() const { return TEXT("graph_remove_interface"); }
+FString ClaireonBlueprintGraphTool_RemoveInterface::GetOperation() const { return TEXT("remove_interface"); }
 
 FString ClaireonBlueprintGraphTool_RemoveInterface::GetDescription() const
 {
-    return TEXT("Remove an interface from the Blueprint's ImplementedInterfaces in the open editing session and compile. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: any function-override graphs implementing the interface are deleted with it.");
+    return TEXT("Remove an interface from the Blueprint's ImplementedInterfaces in the open editing session and compile. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: any function-override graphs implementing the interface are deleted with it. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_RemoveInterface::GetInputSchema() const

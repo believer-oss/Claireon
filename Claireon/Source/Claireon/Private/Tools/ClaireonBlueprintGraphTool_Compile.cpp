@@ -97,7 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_Compile::GetOperation() const { return TEXT("graph_compile"); }
+FString ClaireonBlueprintGraphTool_Compile::GetOperation() const { return TEXT("compile"); }
 
 TArray<FString> ClaireonBlueprintGraphTool_Compile::GetSearchKeywords() const
 {
@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_Compile::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_Compile::GetDescription() const
 {
-    return TEXT("Compiles the Blueprint of the current session and reports structured errors and warnings. Most-common pitfall: assuming compile == save -- it does not write to disk; call blueprint_graph_save (or close, which auto-saves) to persist the compiled state.");
+    return TEXT("Compiles the Blueprint of the current session and reports structured errors and warnings. Most-common pitfall: assuming compile == save -- it does not write to disk; call blueprint_graph_save (or close, which auto-saves) to persist the compiled state. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Compile::GetInputSchema() const

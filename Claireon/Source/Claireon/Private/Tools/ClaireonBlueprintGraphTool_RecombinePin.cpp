@@ -97,11 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_RecombinePin::GetOperation() const { return TEXT("graph_recombine_pin"); }
+FString ClaireonBlueprintGraphTool_RecombinePin::GetOperation() const { return TEXT("recombine_pin"); }
 
 FString ClaireonBlueprintGraphTool_RecombinePin::GetDescription() const
 {
-    return TEXT("Recombine a previously split struct pin in the open Blueprint editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: connections to sub-pins are dropped on recombine; cache them and reconnect to the parent pin after if needed.");
+    return TEXT("Recombine a previously split struct pin in the open Blueprint editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: connections to sub-pins are dropped on recombine; cache them and reconnect to the parent pin after if needed. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_RecombinePin::GetInputSchema() const

@@ -97,7 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_SelectPin::GetOperation() const { return TEXT("graph_select_pin"); }
+FString ClaireonBlueprintGraphTool_SelectPin::GetOperation() const { return TEXT("select_pin"); }
 
 TArray<FString> ClaireonBlueprintGraphTool_SelectPin::GetSearchKeywords() const
 {
@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_SelectPin::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_SelectPin::GetDescription() const
 {
-    return TEXT("Moves the session cursor to a specific pin on a node. Subsequent blueprint_graph_add_node calls with auto_connect_from_cursor=true will wire to this pin if compatible. Most-common pitfall: the cursor is per-session, so re-running select_pin between sessions is a no-op for any session you already closed.");
+    return TEXT("Moves the session cursor to a specific pin on a node. Subsequent blueprint_graph_add_node calls with auto_connect_from_cursor=true will wire to this pin if compatible. Most-common pitfall: the cursor is per-session, so re-running select_pin between sessions is a no-op for any session you already closed. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SelectPin::GetInputSchema() const

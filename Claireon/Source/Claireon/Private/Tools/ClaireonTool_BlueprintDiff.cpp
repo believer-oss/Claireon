@@ -665,7 +665,7 @@ FString ClaireonTool_BlueprintDiff::GetDescription() const
 		"Use 'sections' to select which parts to compare (graphs, cdo, scs). "
 		"Use 'resolution' for output detail level: exists, summary, or detailed. "
 		"Supply 'spec_json' to run apply_spec-vs-asset diff mode (read-only; compares an "
-		"apply_spec payload against asset_path_a without mutating the Blueprint).");
+		"apply_spec payload against asset_path_a without mutating the Blueprint). Immediate-mode tool: no session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_BlueprintDiff::GetInputSchema() const

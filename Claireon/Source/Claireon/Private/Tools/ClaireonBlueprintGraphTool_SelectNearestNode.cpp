@@ -97,11 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_SelectNearestNode::GetOperation() const { return TEXT("graph_select_nearest_node"); }
+FString ClaireonBlueprintGraphTool_SelectNearestNode::GetOperation() const { return TEXT("select_nearest_node"); }
 
 FString ClaireonBlueprintGraphTool_SelectNearestNode::GetDescription() const
 {
-    return TEXT("Move the cursor to the node nearest a graph-space position (object with x, y) in the open Blueprint editing session. Requires open session_id from blueprint_graph_open. Read-only with respect to graph contents (cursor is session state). Useful when chaining new nodes off an existing layout cluster.");
+    return TEXT("Move the cursor to the node nearest a graph-space position (object with x, y) in the open Blueprint editing session. Requires open session_id from blueprint_graph_open. Read-only with respect to graph contents (cursor is session state). Useful when chaining new nodes off an existing layout cluster. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SelectNearestNode::GetInputSchema() const

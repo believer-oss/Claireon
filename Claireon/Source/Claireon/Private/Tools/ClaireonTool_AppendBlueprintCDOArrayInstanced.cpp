@@ -28,7 +28,7 @@ FString ClaireonTool_AppendBlueprintCDOArrayInstanced::GetDescription() const
 		"property on a Blueprint's Class Default Object. Constructs an instance of element_class "
 		"and adds it to the array reached by array_property_path. Pairs with blueprint_set_cdo_property "
 		"for then writing into the new element via `<array_property_path>[N].<sub_property>`. "
-		"Returns the new index and array size.");
+		"Returns the new index and array size. Immediate-mode tool: no session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AppendBlueprintCDOArrayInstanced::GetInputSchema() const
