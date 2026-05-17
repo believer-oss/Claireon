@@ -12,7 +12,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_Close::GetOperation() const { return TEXT("sequence_close"); }
+FString ClaireonLevelSequenceTool_Close::GetOperation() const { return TEXT("close"); }
 
 FString ClaireonLevelSequenceTool_Close::GetDescription() const
 {

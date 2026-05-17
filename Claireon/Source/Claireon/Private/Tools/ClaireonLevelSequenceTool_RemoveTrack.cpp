@@ -12,7 +12,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_RemoveTrack::GetOperation() const { return TEXT("sequence_remove_track"); }
+FString ClaireonLevelSequenceTool_RemoveTrack::GetOperation() const { return TEXT("remove_track"); }
 
 FString ClaireonLevelSequenceTool_RemoveTrack::GetDescription() const
 {

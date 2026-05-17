@@ -15,7 +15,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_AddTrack::GetOperation() const { return TEXT("sequence_add_track"); }
+FString ClaireonLevelSequenceTool_AddTrack::GetOperation() const { return TEXT("add_track"); }
 
 FString ClaireonLevelSequenceTool_AddTrack::GetDescription() const
 {

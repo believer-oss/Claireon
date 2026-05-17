@@ -7,7 +7,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_ApplySpec::GetOperation() const { return TEXT("sequence_apply_spec"); }
+FString ClaireonLevelSequenceTool_ApplySpec::GetOperation() const { return TEXT("apply_spec"); }
 
 FString ClaireonLevelSequenceTool_ApplySpec::GetDescription() const
 {

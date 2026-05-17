@@ -11,7 +11,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_AddSpawnable::GetOperation() const { return TEXT("sequence_add_spawnable"); }
+FString ClaireonLevelSequenceTool_AddSpawnable::GetOperation() const { return TEXT("add_spawnable"); }
 
 FString ClaireonLevelSequenceTool_AddSpawnable::GetDescription() const
 {

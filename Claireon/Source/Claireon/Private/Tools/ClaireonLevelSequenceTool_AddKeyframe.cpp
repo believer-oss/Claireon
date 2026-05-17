@@ -15,7 +15,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_AddKeyframe::GetOperation() const { return TEXT("sequence_add_keyframe"); }
+FString ClaireonLevelSequenceTool_AddKeyframe::GetOperation() const { return TEXT("add_keyframe"); }
 
 FString ClaireonLevelSequenceTool_AddKeyframe::GetDescription() const
 {

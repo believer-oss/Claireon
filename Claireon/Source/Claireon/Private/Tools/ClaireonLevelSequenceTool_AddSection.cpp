@@ -13,7 +13,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_AddSection::GetOperation() const { return TEXT("sequence_add_section"); }
+FString ClaireonLevelSequenceTool_AddSection::GetOperation() const { return TEXT("add_section"); }
 
 FString ClaireonLevelSequenceTool_AddSection::GetDescription() const
 {

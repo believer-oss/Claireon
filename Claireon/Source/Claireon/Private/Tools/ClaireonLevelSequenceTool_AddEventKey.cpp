@@ -13,7 +13,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_AddEventKey::GetOperation() const { return TEXT("sequence_add_event_key"); }
+FString ClaireonLevelSequenceTool_AddEventKey::GetOperation() const { return TEXT("add_event_key"); }
 
 FString ClaireonLevelSequenceTool_AddEventKey::GetDescription() const
 {
