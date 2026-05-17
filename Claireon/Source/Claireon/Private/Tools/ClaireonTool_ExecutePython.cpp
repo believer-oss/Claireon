@@ -88,17 +88,25 @@ namespace ClaireonToolCatalogBindings
 			Obj->TryGetStringField(TEXT("name"), Entry.Name);
 			Obj->TryGetStringField(TEXT("description"), Entry.Description);
 			Obj->TryGetStringField(TEXT("category"), Entry.Category);
-			Obj->TryGetStringField(TEXT("name_text"),        Entry.NameText);
-			Obj->TryGetStringField(TEXT("category_text"),    Entry.CategoryText);
-			Obj->TryGetStringField(TEXT("keywords_text"),    Entry.KeywordsText);
-			Obj->TryGetStringField(TEXT("operation_text"),   Entry.OperationText);
-			Obj->TryGetStringField(TEXT("description_text"), Entry.DescriptionText);
-			if (Entry.NameText.IsEmpty() && Entry.CategoryText.IsEmpty()
-				&& Entry.KeywordsText.IsEmpty() && Entry.OperationText.IsEmpty()
-				&& Entry.DescriptionText.IsEmpty())
+			Obj->TryGetStringField(TEXT("operation"), Entry.Operation);
+			const TArray<TSharedPtr<FJsonValue>>* KeywordsArr = nullptr;
+			if (Obj->TryGetArrayField(TEXT("keywords"), KeywordsArr) && KeywordsArr)
+			{
+				Entry.Keywords.Reserve(KeywordsArr->Num());
+				for (const TSharedPtr<FJsonValue>& KV : *KeywordsArr)
+				{
+					FString K;
+					if (KV.IsValid() && KV->TryGetString(K) && !K.IsEmpty())
+					{
+						Entry.Keywords.Add(MoveTemp(K));
+					}
+				}
+			}
+			if (Entry.Name.IsEmpty() && Entry.Category.IsEmpty() && Entry.Operation.IsEmpty()
+				&& Entry.Description.IsEmpty() && Entry.Keywords.Num() == 0)
 			{
 				UE_LOG(LogClaireon, Warning,
-					TEXT("[ToolCatalogBindings] Entry '%s' has no per-field text strings; nothing will be indexed for it."),
+					TEXT("[ToolCatalogBindings] Entry '%s' has no indexable fields; nothing will be indexed for it."),
 					*Entry.Name);
 			}
 			Entries.Add(MoveTemp(Entry));

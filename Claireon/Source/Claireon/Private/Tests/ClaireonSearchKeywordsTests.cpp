@@ -160,9 +160,10 @@ UNTEST_UNIT(Claireon, SearchKeywords, TierC_ReadInspectDiscovery)
 // These mappings document the synonym/target intent from P3 acceptance #3.
 // Direct ranker validation lives in ClaireonToolCatalogMatcherTests; here we
 // guarantee that the source-of-truth keyword list contains the words the
-// matcher will index. If the matcher integrates the Python _ABBREVIATIONS
-// table (which it does at query time), the presence of any one keyword
-// from the synonym phrase is sufficient for top-N rank.
+// matcher will index. The matcher applies the C++ abbreviation table
+// (ClaireonToolCatalogAbbreviations.h) at both index and query time, so the
+// presence of any one keyword from the synonym phrase is sufficient for
+// top-N rank.
 //
 // Substitutions vs. P3:
 //   - 'bt task' -> behaviortree_open (P3 cited behaviortree_edit

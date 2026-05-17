@@ -9,7 +9,7 @@
 /**
  * Bitmask identifying which catalog field(s) produced an inverted-index posting
  * for a given token.  A single token can belong to multiple fields for the
- * same entry (e.g. `create` appearing in both NameText and OperationText for
+ * same entry (e.g. `create` appearing in both Name and Operation for
  * `chooser_create`); the matcher then credits the MAX of contributing field
  * weights.
  */
@@ -25,25 +25,19 @@ enum class EFieldMask : uint8
 ENUM_CLASS_FLAGS(EFieldMask);
 
 /**
- * One entry in the tool catalog.  The Python harness builds the per-field
- * text strings (name_text / category_text / keywords_text / operation_text /
- * description_text) before passing the array across the binding boundary.
- *
- * Each per-field string is tokenised separately in BuildCatalog so the
- * matcher can apply per-field weights and the MAX-over-fields aggregation.
+ * One entry in the tool catalog.  Raw fields only -- the matcher owns
+ * tokenisation and abbreviation expansion on both sides (BuildCatalog +
+ * FindNearest).  See ClaireonToolCatalogAbbreviations.h for the synonym table.
  */
 struct FClaireonToolCatalogEntry
 {
 	FString Name;
 	FString Description;
 	FString Category;
-
-	/** Per-field tokenisation sources. */
-	FString NameText;        // Tool->GetName() with `.`/`_` -> space, plus name-derived abbreviations.
-	FString CategoryText;    // Tool->GetCategory(), plus category-derived abbreviations.
-	FString KeywordsText;    // Space-joined Tool->GetSearchKeywords(), plus keyword-derived abbreviations.
-	FString OperationText;   // Tool->GetOperation(), plus operation-derived abbreviations.
-	FString DescriptionText; // Tool->GetDescription(), plus description-derived abbreviations.
+	FString Operation;
+	/** Each keyword is one element; the matcher tokenises each independently
+	 *  (no separator-format negotiation between caller and matcher). */
+	TArray<FString> Keywords;
 };
 
 /**
