@@ -4,6 +4,7 @@
 #include "ClaireonToolCatalogMatcher.h"
 
 #include "ClaireonLog.h"
+#include "ClaireonToolCatalogAbbreviations.h"
 #include "HAL/CriticalSection.h"
 #include "Misc/ScopeLock.h"
 
@@ -13,6 +14,46 @@ namespace ClaireonToolCatalogMatcherInternal
 	static TArray<FClaireonToolCatalogEntry>                          GCatalogEntries;
 	static TMap<FString, TArray<TPair<int32, EFieldMask>>>           GInvertedIndex;
 	static FCriticalSection                                          GMatcherLock;
+
+	/** Lazily-built lookups derived from ClaireonToolCatalogAbbreviations::GetTable(). */
+	static const TMap<FString, TArray<FString>>& GetForwardMap()
+	{
+		static const TMap<FString, TArray<FString>> Map = []()
+		{
+			TMap<FString, TArray<FString>> Out;
+			for (const ClaireonToolCatalogAbbreviations::FEntry& E : ClaireonToolCatalogAbbreviations::GetTable())
+			{
+				TArray<FString> Parts;
+				FString(E.Expansion).ParseIntoArray(Parts, TEXT(" "), /*CullEmpty=*/true);
+				for (FString& P : Parts) { P.ToLowerInline(); }
+				Out.Add(FString(E.Key).ToLower(), MoveTemp(Parts));
+			}
+			return Out;
+		}();
+		return Map;
+	}
+
+	/** Reverse map: canonical term -> abbreviations that expand to it. */
+	static const TMap<FString, TArray<FString>>& GetReverseMap()
+	{
+		static const TMap<FString, TArray<FString>> Map = []()
+		{
+			TMap<FString, TArray<FString>> Out;
+			for (const ClaireonToolCatalogAbbreviations::FEntry& E : ClaireonToolCatalogAbbreviations::GetTable())
+			{
+				const FString Key = FString(E.Key).ToLower();
+				TArray<FString> Parts;
+				FString(E.Expansion).ParseIntoArray(Parts, TEXT(" "), /*CullEmpty=*/true);
+				for (FString& P : Parts)
+				{
+					P.ToLowerInline();
+					Out.FindOrAdd(P).AddUnique(Key);
+				}
+			}
+			return Out;
+		}();
+		return Map;
+	}
 
 	/** Tokenise: lowercase + split on whitespace + common punctuation + drop tokens < 2 chars. */
 	static void Tokenise(const FString& In, TArray<FString>& OutTokens)
@@ -70,19 +111,75 @@ namespace ClaireonToolCatalogMatcherInternal
 	}
 
 	/**
-	 * Tokenise the entry's per-field text strings and merge the postings into
-	 * the inverted index, OR-ing field-mask bits for tokens that appear in
-	 * multiple fields for the same entry.
+	 * Tokenise a raw field value and record (token -> field-bit) into the
+	 * per-entry mask map.  Also stamps abbreviation expansions and reverse
+	 * abbreviations onto the same field bit so a query for `gas` matches a
+	 * tool whose Operation field is `gas` (forward) and a tool whose Name
+	 * field is `gameplay_ability_system` (reverse).
 	 */
-	static void IndexField(int32 EntryIdx, const FString& FieldText, EFieldMask FieldBit, TMap<FString, EFieldMask>& OutTokenMaskForEntry)
+	static void IndexField(const FString& FieldValue, EFieldMask FieldBit, TMap<FString, EFieldMask>& OutTokenMaskForEntry)
 	{
 		TArray<FString> Tokens;
-		Tokenise(FieldText, Tokens);
+		Tokenise(FieldValue, Tokens);
+
+		const TMap<FString, TArray<FString>>& Forward = GetForwardMap();
+		const TMap<FString, TArray<FString>>& Reverse = GetReverseMap();
+
 		for (const FString& Tok : Tokens)
 		{
-			EFieldMask& Existing = OutTokenMaskForEntry.FindOrAdd(Tok, EFieldMask::None);
-			Existing |= FieldBit;
+			OutTokenMaskForEntry.FindOrAdd(Tok, EFieldMask::None) |= FieldBit;
+
+			// Forward: field contains an abbreviation (e.g. `gas`) -> also index its expansions.
+			if (const TArray<FString>* Expansions = Forward.Find(Tok))
+			{
+				for (const FString& Exp : *Expansions)
+				{
+					if (Exp.Len() >= 2)
+					{
+						OutTokenMaskForEntry.FindOrAdd(Exp, EFieldMask::None) |= FieldBit;
+					}
+				}
+			}
+
+			// Reverse: field contains a canonical term (e.g. `blueprint`) -> also index abbreviations that expand to it.
+			if (const TArray<FString>* Abbrevs = Reverse.Find(Tok))
+			{
+				for (const FString& Abbr : *Abbrevs)
+				{
+					if (Abbr.Len() >= 2)
+					{
+						OutTokenMaskForEntry.FindOrAdd(Abbr, EFieldMask::None) |= FieldBit;
+					}
+				}
+			}
 		}
+	}
+
+	/** Expand a tokenised query in place using forward + reverse abbreviation maps. */
+	static void ExpandQueryTokens(TArray<FString>& InOutTokens)
+	{
+		const TMap<FString, TArray<FString>>& Forward = GetForwardMap();
+		const TMap<FString, TArray<FString>>& Reverse = GetReverseMap();
+
+		TArray<FString> Additions;
+		for (const FString& Tok : InOutTokens)
+		{
+			if (const TArray<FString>* Expansions = Forward.Find(Tok))
+			{
+				for (const FString& Exp : *Expansions)
+				{
+					Additions.Add(Exp);
+				}
+			}
+			if (const TArray<FString>* Abbrevs = Reverse.Find(Tok))
+			{
+				for (const FString& Abbr : *Abbrevs)
+				{
+					Additions.Add(Abbr);
+				}
+			}
+		}
+		InOutTokens.Append(MoveTemp(Additions));
 	}
 }
 
@@ -100,12 +197,16 @@ void FClaireonToolCatalogMatcher::BuildCatalog(const TArray<FClaireonToolCatalog
 		const FClaireonToolCatalogEntry& E = GCatalogEntries[EntryIdx];
 
 		// Tokenise each field separately; OR the bits when a token appears in multiple fields.
+		// Each call also stamps abbreviation expansions / reverse abbreviations onto the same field bit.
 		TMap<FString, EFieldMask> TokenMaskForEntry;
-		IndexField(EntryIdx, E.NameText,        EFieldMask::Name,        TokenMaskForEntry);
-		IndexField(EntryIdx, E.CategoryText,    EFieldMask::Category,    TokenMaskForEntry);
-		IndexField(EntryIdx, E.KeywordsText,    EFieldMask::Keywords,    TokenMaskForEntry);
-		IndexField(EntryIdx, E.OperationText,   EFieldMask::Operation,   TokenMaskForEntry);
-		IndexField(EntryIdx, E.DescriptionText, EFieldMask::Description, TokenMaskForEntry);
+		IndexField(E.Name,        EFieldMask::Name,        TokenMaskForEntry);
+		IndexField(E.Category,    EFieldMask::Category,    TokenMaskForEntry);
+		for (const FString& Keyword : E.Keywords)
+		{
+			IndexField(Keyword, EFieldMask::Keywords, TokenMaskForEntry);
+		}
+		IndexField(E.Operation,   EFieldMask::Operation,   TokenMaskForEntry);
+		IndexField(E.Description, EFieldMask::Description, TokenMaskForEntry);
 
 		for (const TPair<FString, EFieldMask>& KV : TokenMaskForEntry)
 		{
@@ -210,6 +311,11 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolCatalogMatcher::FindNearest(const
 
 	TArray<FString> TokeniseRawTokens;
 	Tokenise(Query, TokeniseRawTokens);
+
+	// Expand abbreviations / canonical terms in place (forward + reverse maps).
+	// Previously done Python-side; folded into C++ so the wire format carries
+	// raw fields only.
+	ExpandQueryTokens(TokeniseRawTokens);
 
 	// Query-side min-length cutoff: drop fuzzy-match terms of length <= 2
 	// unless every token in the query is short. The asymmetry vs the index

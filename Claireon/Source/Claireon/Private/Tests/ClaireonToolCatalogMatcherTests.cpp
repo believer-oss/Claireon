@@ -17,9 +17,8 @@
 
 namespace ClaireonToolCatalogMatcherTestsHelpers
 {
-	/** Per-field fixture builder mirroring the Python harness's _build_field_text:
-	 *  NameText receives both the raw name and its dot/underscore-tokenised form so
-	 *  multi-part names contribute their components as separate index tokens. */
+	/** Raw-fields fixture builder. The matcher owns tokenisation and abbreviation
+	 *  expansion (see ClaireonToolCatalogAbbreviations.h), so callers pass plain values. */
 	static FClaireonToolCatalogEntry MakeEntry(const TCHAR* Name, const TCHAR* Desc, const TCHAR* Cat,
 		const TCHAR* Operation = TEXT(""), const TCHAR* Keywords = TEXT(""))
 	{
@@ -27,12 +26,12 @@ namespace ClaireonToolCatalogMatcherTestsHelpers
 		X.Name = Name;
 		X.Description = Desc;
 		X.Category = Cat;
-		const FString NameStr(Name);
-		X.NameText = NameStr + TEXT(" ") + NameStr.Replace(TEXT("."), TEXT(" ")).Replace(TEXT("_"), TEXT(" "));
-		X.CategoryText = Cat;
-		X.DescriptionText = Desc;
-		X.KeywordsText = Keywords;
-		X.OperationText = Operation;
+		X.Operation = Operation;
+		const FString KeywordsStr(Keywords);
+		if (!KeywordsStr.IsEmpty())
+		{
+			KeywordsStr.ParseIntoArrayWS(X.Keywords);
+		}
 		return X;
 	}
 
@@ -133,13 +132,11 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, AbbreviationQueriesSurfaceCategory)
 	FClaireonToolCatalogMatcher::Clear();
 	FClaireonToolCatalogMatcher::BuildCatalog(BuildFixtureTwenty());
 
-	// "blueprint" should surface at least one blueprint_* tool inside the top-5.
-	// NB: abbreviation expansion is performed Python-side by _ABBREVIATIONS in
-	// mcp_tool_catalog.py.  At the C++ matcher level "bp" is a literal 2-char
-	// token; we therefore exercise the full-form here.  The end-to-end "bp ->
-	// blueprint_*" pipeline is covered by the Python harness tests.
+	// "bp" must surface at least one blueprint_* tool inside the top-5. The
+	// abbreviation table (ClaireonToolCatalogAbbreviations.h) now lives in C++,
+	// so `bp` <-> `blueprint` expansion happens at index AND query time.
 	{
-		TArray<FClaireonToolCatalogMatch> Top = FClaireonToolCatalogMatcher::FindNearest(TEXT("blueprint"), 5);
+		TArray<FClaireonToolCatalogMatch> Top = FClaireonToolCatalogMatcher::FindNearest(TEXT("bp"), 5);
 		bool bAnyBlueprint = false;
 		for (const FClaireonToolCatalogMatch& M : Top)
 		{
@@ -292,9 +289,8 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, ThreeCharMinTermCutoff)
 	FClaireonToolCatalogMatcher::BuildCatalog(F);
 
 	// Sub-case A: query "ai create" -- "ai" is <=2 chars and must be dropped
-	// in favour of "create"; asset_create matches (via NameText "create"
-	// posting), ai_decisions_inspect must NOT (no "create" token in any of
-	// its fields).
+	// in favour of "create"; asset_create matches (via Name "create" posting),
+	// ai_decisions_inspect must NOT (no "create" token in any of its fields).
 	{
 		TArray<FClaireonToolCatalogMatch> Top = FClaireonToolCatalogMatcher::FindNearest(TEXT("ai create"), 5);
 		bool bSawAssetCreate = false;
@@ -346,6 +342,74 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, OperationFieldParticipatesInRanking)
 	TArray<FClaireonToolCatalogMatch> Top = FClaireonToolCatalogMatcher::FindNearest(TEXT("create"), 5);
 	UNTEST_ASSERT_TRUE(Top.Num() >= 2);
 	UNTEST_EXPECT_STREQ(*Top[0].Name, TEXT("tool_a"));
+
+	co_return;
+}
+
+// ===========================================================================
+// Wire-shape invariant: each Keywords element is tokenised independently.
+// Locks in the TArray<FString> contract so a caller passing two distinct
+// keywords cannot accidentally merge them via a separator-format mistake.
+// ===========================================================================
+
+UNTEST_UNIT(Claireon, ToolCatalogMatcher, KeywordsArrayTokenisedIndependently)
+{
+	TArray<FClaireonToolCatalogEntry> F;
+	FClaireonToolCatalogEntry A;
+	A.Name = TEXT("tool_alpha");
+	A.Description = TEXT("alpha");
+	A.Category = TEXT("alpha");
+	A.Keywords = { TEXT("zebra"), TEXT("quokka") };
+	F.Add(MoveTemp(A));
+
+	FClaireonToolCatalogMatcher::Clear();
+	FClaireonToolCatalogMatcher::BuildCatalog(F);
+
+	// Each keyword must score independently as a Keywords-field hit.
+	TArray<FClaireonToolCatalogMatch> Z = FClaireonToolCatalogMatcher::FindNearest(TEXT("zebra"), 5);
+	UNTEST_ASSERT_TRUE(Z.Num() > 0);
+	UNTEST_EXPECT_STREQ(*Z[0].Name, TEXT("tool_alpha"));
+
+	TArray<FClaireonToolCatalogMatch> Q = FClaireonToolCatalogMatcher::FindNearest(TEXT("quokka"), 5);
+	UNTEST_ASSERT_TRUE(Q.Num() > 0);
+	UNTEST_EXPECT_STREQ(*Q[0].Name, TEXT("tool_alpha"));
+
+	co_return;
+}
+
+// ===========================================================================
+// Abbreviation table is owned by C++: querying the canonical term matches a
+// tool whose name contains only the abbreviation, and vice versa.
+// ===========================================================================
+
+UNTEST_UNIT(Claireon, ToolCatalogMatcher, AbbreviationExpansionInCpp)
+{
+	using namespace ClaireonToolCatalogMatcherTestsHelpers;
+
+	TArray<FClaireonToolCatalogEntry> F;
+	// Forward: tool name contains the abbreviation `gas`; query its expansion.
+	F.Add(MakeEntry(TEXT("gas_inspect"),       TEXT("inspect gas state"),            TEXT("gas")));
+	// Reverse: tool name contains the canonical term `blueprint`; query its abbreviation.
+	F.Add(MakeEntry(TEXT("blueprint_compile"), TEXT("compile a blueprint asset"),   TEXT("blueprint")));
+
+	FClaireonToolCatalogMatcher::Clear();
+	FClaireonToolCatalogMatcher::BuildCatalog(F);
+
+	// Forward: `gameplay` (an expansion of `gas`) must surface `gas_inspect`.
+	{
+		TArray<FClaireonToolCatalogMatch> Top = FClaireonToolCatalogMatcher::FindNearest(TEXT("gameplay"), 5);
+		bool bSaw = false;
+		for (const FClaireonToolCatalogMatch& M : Top) { if (M.Name == TEXT("gas_inspect")) { bSaw = true; break; } }
+		UNTEST_EXPECT_TRUE(bSaw);
+	}
+
+	// Reverse: `bp` (an abbreviation of `blueprint`) must surface `blueprint_compile`.
+	{
+		TArray<FClaireonToolCatalogMatch> Top = FClaireonToolCatalogMatcher::FindNearest(TEXT("bp"), 5);
+		bool bSaw = false;
+		for (const FClaireonToolCatalogMatch& M : Top) { if (M.Name == TEXT("blueprint_compile")) { bSaw = true; break; } }
+		UNTEST_EXPECT_TRUE(bSaw);
+	}
 
 	co_return;
 }
