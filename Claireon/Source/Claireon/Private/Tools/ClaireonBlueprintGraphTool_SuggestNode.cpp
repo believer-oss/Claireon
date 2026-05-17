@@ -97,11 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_SuggestNode::GetOperation() const { return TEXT("graph_suggest_node"); }
+FString ClaireonBlueprintGraphTool_SuggestNode::GetOperation() const { return TEXT("suggest_node"); }
 
 FString ClaireonBlueprintGraphTool_SuggestNode::GetDescription() const
 {
-    return TEXT("Suggest Blueprint authoring patterns matching an intent string. Stateless / read-only / non-session: never mutates and requires no open session. Reads BPAuthoringPatterns.json from the Claireon plugin content directory and ranks matches by keyword overlap. Use during planning to discover the right node sequence.");
+    return TEXT("Suggest Blueprint authoring patterns matching an intent string. Stateless / read-only / non-session: never mutates and requires no open session. Reads BPAuthoringPatterns.json from the Claireon plugin content directory and ranks matches by keyword overlap. Use during planning to discover the right node sequence. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SuggestNode::GetInputSchema() const

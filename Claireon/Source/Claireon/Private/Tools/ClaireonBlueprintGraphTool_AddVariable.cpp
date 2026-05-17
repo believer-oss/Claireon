@@ -97,7 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_AddVariable::GetOperation() const { return TEXT("graph_add_variable"); }
+FString ClaireonBlueprintGraphTool_AddVariable::GetOperation() const { return TEXT("add_variable"); }
 
 TArray<FString> ClaireonBlueprintGraphTool_AddVariable::GetSearchKeywords() const
 {
@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_AddVariable::GetSearchKeywords() cons
 
 FString ClaireonBlueprintGraphTool_AddVariable::GetDescription() const
 {
-    return TEXT("Add a member variable to the Blueprint in the open editing session. Requires open session_id from blueprint_graph_open. Transactional. Pass variable_type for primitives/classes/structs, or variable_type_spec (base + signature_function/subtype) for delegate/multicast/soft-class/soft-object/instanced-struct. Common pitfall: plain delegate names in variable_type silently fail.");
+    return TEXT("Add a member variable to the Blueprint in the open editing session. Transactional. Pass variable_type for primitives/classes/structs, or variable_type_spec (base + signature_function/subtype) for delegate/multicast/soft-class/soft-object/instanced-struct. Common pitfall: plain delegate names in variable_type silently fail. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddVariable::GetInputSchema() const

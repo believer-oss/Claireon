@@ -18,7 +18,7 @@ FString ClaireonTool_InspectBlueprintNode::GetDescription() const
 {
 	return TEXT("Returns a single Blueprint node in full fidelity as structured JSON. "
 		"Requires asset_path, graph_name, and node_guid. AnimGraph nodes are redirected "
-		"to animgraph_get_node.");
+		"to animgraph_get_node. Immediate-mode tool: no session required.");
 }
 
 FString ClaireonTool_InspectBlueprintNode::GetFullDescription() const

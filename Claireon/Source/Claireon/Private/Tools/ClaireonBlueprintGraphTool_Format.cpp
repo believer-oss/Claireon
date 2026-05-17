@@ -97,7 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_Format::GetOperation() const { return TEXT("graph_format"); }
+FString ClaireonBlueprintGraphTool_Format::GetOperation() const { return TEXT("format"); }
 
 TArray<FString> ClaireonBlueprintGraphTool_Format::GetSearchKeywords() const
 {
@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_Format::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_Format::GetDescription() const
 {
-    return TEXT("Auto-layouts the current session's graph nodes. This is the IN-SESSION formatter (blueprint_graph_format), distinct from the standalone blueprint_format_graph which operates on a closed asset path. Most-common pitfall: confusing the two -- use this one inside a session, the standalone one for one-off cleanup of an unopened asset.");
+    return TEXT("Auto-layouts the current session's graph nodes. This is the IN-SESSION formatter (blueprint_graph_format), distinct from the standalone blueprint_format_graph which operates on a closed asset path. Most-common pitfall: confusing the two -- use this one inside a session, the standalone one for one-off cleanup of an unopened asset. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Format::GetInputSchema() const

@@ -97,11 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_SwitchGraph::GetOperation() const { return TEXT("graph_switch_graph"); }
+FString ClaireonBlueprintGraphTool_SwitchGraph::GetOperation() const { return TEXT("switch_graph"); }
 
 FString ClaireonBlueprintGraphTool_SwitchGraph::GetDescription() const
 {
-    return TEXT("Switch the open Blueprint editing session to a different graph on the same Blueprint. Requires open session_id from blueprint_graph_open. Read-only with respect to graph contents (the cursor and graph pointer are session state). Cursor history is preserved across the switch.");
+    return TEXT("Switch the open Blueprint editing session to a different graph on the same Blueprint. Requires open session_id from blueprint_graph_open. Read-only with respect to graph contents (the cursor and graph pointer are session state). Cursor history is preserved across the switch. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SwitchGraph::GetInputSchema() const

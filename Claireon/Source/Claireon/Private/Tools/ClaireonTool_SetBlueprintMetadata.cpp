@@ -24,7 +24,7 @@ FString ClaireonTool_SetBlueprintMetadata::GetDescription() const
 	return TEXT("Set a UBlueprint metadata property (namespace, display_name, description, "
 		"category, hide_categories, is_abstract, is_const, is_deprecated, compile_mode). "
 		"These are blueprint-level settings distinct from CDO properties. "
-		"Reports needs_compile when the change affects the generated class.");
+		"Reports needs_compile when the change affects the generated class. Immediate-mode tool: no session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_SetBlueprintMetadata::GetInputSchema() const

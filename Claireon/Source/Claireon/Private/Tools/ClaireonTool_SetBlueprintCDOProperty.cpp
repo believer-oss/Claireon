@@ -27,7 +27,7 @@ FString ClaireonTool_SetBlueprintCDOProperty::GetDescription() const
 		"Sessionless alternative to edit_blueprint_graph for simple property changes. "
 		"Supports component template properties via automatic SCS component lookup. "
 		"Supports nested struct and array element writes via the `property_path` argument; "
-		"each path segment may be suffixed with `[N]` to index a TArray.");
+		"each path segment may be suffixed with `[N]` to index a TArray. Immediate-mode tool: no session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_SetBlueprintCDOProperty::GetInputSchema() const

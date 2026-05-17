@@ -97,11 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_AddPin::GetOperation() const { return TEXT("graph_add_pin"); }
+FString ClaireonBlueprintGraphTool_AddPin::GetOperation() const { return TEXT("add_pin"); }
 
 FString ClaireonBlueprintGraphTool_AddPin::GetDescription() const
 {
-    return TEXT("Add a dynamic pin to a node in the open Blueprint editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Only nodes that implement AddPin support this (Sequence, MakeArray, Switch*, DoOnceMultiInput, etc.); non-supporting nodes error.");
+    return TEXT("Add a dynamic pin to a node in the open Blueprint editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Only nodes that implement AddPin support this (Sequence, MakeArray, Switch*, DoOnceMultiInput, etc.); non-supporting nodes error. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddPin::GetInputSchema() const

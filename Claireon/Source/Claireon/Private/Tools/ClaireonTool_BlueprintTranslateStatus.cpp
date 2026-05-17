@@ -11,7 +11,7 @@ FString ClaireonTool_BlueprintTranslateStatus::GetOperation() const { return TEX
 FString ClaireonTool_BlueprintTranslateStatus::GetDescription() const
 {
 	return TEXT("Query the completion status of a BP-to-C++ translation session. Returns per-blueprint "
-		"node counts (total, implemented, skipped, pending) and overall completion percentage.");
+		"node counts (total, implemented, skipped, pending) and overall completion percentage. Immediate-mode tool: no session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_BlueprintTranslateStatus::GetInputSchema() const

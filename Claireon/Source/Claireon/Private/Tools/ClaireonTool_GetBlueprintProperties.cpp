@@ -34,7 +34,7 @@ FString ClaireonTool_GetBlueprintProperties::GetDescription() const
 		"By default, the components, variables, and functions arrays only include items declared on this Blueprint (SCS-only for components). "
 		"Pass include_inherited=true to also include items inherited from ancestor Blueprints and (for actor-derived BPs) from native parent CDOs -- this matches what unreal.Actor.get_components_by_class(unreal.ActorComponent) returns when called on the editor CDO. "
 		"Note that native subobjects guarded by WITH_EDITORONLY_DATA only appear in editor builds. "
-		"Every entry in components, variables, and functions always carries is_inherited (bool) and source_class (short class name) fields regardless of include_inherited, providing a stable schema for callers.");
+		"Every entry in components, variables, and functions always carries is_inherited (bool) and source_class (short class name) fields regardless of include_inherited, providing a stable schema for callers. Immediate-mode tool: no session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_GetBlueprintProperties::GetInputSchema() const

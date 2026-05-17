@@ -47,7 +47,7 @@ FString ClaireonTool_BlueprintDuplicate::GetDescription() const
 		"FPrimaryAssetId/FPrimaryAssetType) that point back at the source package so they "
 		"point at the new package. The destination folder is created automatically if it "
 		"does not exist. The source may be open in the editor; the duplicate is not "
-		"opened automatically."
+		"opened automatically. Immediate-mode tool: no session required."
 	);
 }
 

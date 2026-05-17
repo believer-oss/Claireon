@@ -97,7 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_SetPinValue::GetOperation() const { return TEXT("graph_set_pin_value"); }
+FString ClaireonBlueprintGraphTool_SetPinValue::GetOperation() const { return TEXT("set_pin_value"); }
 
 TArray<FString> ClaireonBlueprintGraphTool_SetPinValue::GetSearchKeywords() const
 {
@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_SetPinValue::GetSearchKeywords() cons
 
 FString ClaireonBlueprintGraphTool_SetPinValue::GetDescription() const
 {
-    return TEXT("Sets a pin's default literal value on the current session's graph (input pin only; the pin must be unconnected). Most-common pitfall: trying to set a value on a pin that is already wired to another node, which silently does nothing -- disconnect first via blueprint_graph_disconnect_pin.");
+    return TEXT("Sets a pin's default literal value on the current session's graph (input pin only; the pin must be unconnected). Most-common pitfall: trying to set a value on a pin that is already wired to another node, which silently does nothing -- disconnect first via blueprint_graph_disconnect_pin. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetPinValue::GetInputSchema() const

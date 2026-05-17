@@ -16,7 +16,7 @@ FString ClaireonTool_BlueprintTranslateImplement::GetDescription() const
 {
 	return TEXT("Interactive implementation of scaffolded BP-to-C++ code regions. Phase 2 tool that supports "
 		"inspect, implement, force_implement, skip, and mark_complete actions on individual nodes "
-		"within a translation session created by blueprint_translate_scaffold.");
+		"within a translation session created by blueprint_translate_scaffold. Immediate-mode tool: no session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_BlueprintTranslateImplement::GetInputSchema() const

@@ -37,7 +37,7 @@ FString ClaireonBlueprintGraphTool_SetNodeProperty::GetDescription() const
 		"K2Node_BaseAsyncTask.ProxyFactoryClass/ProxyFactoryFunctionName, and similar. property_path "
 		"supports dot/array navigation through nested structs (e.g. 'ProxyClass' or "
 		"'StructType.Struct'). Calls ReconstructNode() after the write by default so dynamic pins "
-		"materialize.");
+		"materialize. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetNodeProperty::GetInputSchema() const

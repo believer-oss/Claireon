@@ -97,7 +97,7 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_ConnectPins::GetOperation() const { return TEXT("graph_connect_pins"); }
+FString ClaireonBlueprintGraphTool_ConnectPins::GetOperation() const { return TEXT("connect_pins"); }
 
 TArray<FString> ClaireonBlueprintGraphTool_ConnectPins::GetSearchKeywords() const
 {
@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_ConnectPins::GetSearchKeywords() cons
 
 FString ClaireonBlueprintGraphTool_ConnectPins::GetDescription() const
 {
-    return TEXT("Connects two pins on the current session's graph. Accepts node GUIDs or titles plus pin names; pin names are fuzzy-resolved (e.g. 'exec' matches 'execute', 'then' matches the canonical exec output). Most-common pitfall: forgetting that auto_connect_from_cursor on blueprint_graph_add_node typically removes the need for a follow-up connect_pins call.");
+    return TEXT("Connects two pins on the current session's graph. Accepts node GUIDs or titles plus pin names; pin names are fuzzy-resolved (e.g. 'exec' matches 'execute', 'then' matches the canonical exec output). Most-common pitfall: forgetting that auto_connect_from_cursor on blueprint_graph_add_node typically obviates this call. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ConnectPins::GetInputSchema() const

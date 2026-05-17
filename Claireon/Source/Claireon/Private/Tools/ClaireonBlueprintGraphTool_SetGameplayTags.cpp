@@ -97,11 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_SetGameplayTags::GetOperation() const { return TEXT("graph_set_gameplay_tags"); }
+FString ClaireonBlueprintGraphTool_SetGameplayTags::GetOperation() const { return TEXT("set_gameplay_tags"); }
 
 FString ClaireonBlueprintGraphTool_SetGameplayTags::GetDescription() const
 {
-    return TEXT("Surgically add/remove gameplay tags from a FGameplayTagContainer property on a Blueprint CDO. Stateless / non-session: writes the asset directly by path, no open session required. Common pitfall: the property must be a FGameplayTagContainer (not a single FGameplayTag); the tags must already be registered in a tag table.");
+    return TEXT("Surgically add/remove gameplay tags from a FGameplayTagContainer property on a Blueprint CDO. Stateless / non-session: writes the asset directly by path, no open session required. Common pitfall: the property must be a FGameplayTagContainer (not a single FGameplayTag); the tags must already be registered in a tag table. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetGameplayTags::GetInputSchema() const

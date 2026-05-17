@@ -97,11 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_MoveNode::GetOperation() const { return TEXT("graph_move_node"); }
+FString ClaireonBlueprintGraphTool_MoveNode::GetOperation() const { return TEXT("move_node"); }
 
 FString ClaireonBlueprintGraphTool_MoveNode::GetDescription() const
 {
-    return TEXT("Move a node to a new position in the graph in the open Blueprint editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Layout-only: connections, properties, and pin values are unchanged. Use blueprint_graph_format for whole-graph cleanup.");
+    return TEXT("Move a node to a new position in the graph in the open Blueprint editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Layout-only: connections, properties, and pin values are unchanged. Use blueprint_graph_format for whole-graph cleanup. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_MoveNode::GetInputSchema() const

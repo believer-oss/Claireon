@@ -934,7 +934,7 @@ FString ClaireonTool_BlueprintTranslateScaffold::GetDescription() const
 {
 	return TEXT("Generate annotated C++ skeleton files from Blueprint graphs. Phase 1 of the BP-to-C++ "
 		"translation pipeline. Extracts class hierarchy, properties, components, and function graphs "
-		"into .h/.cpp pairs with //[BP] metadata tags for interactive Phase 2 implementation.");
+		"into .h/.cpp pairs with //[BP] metadata tags for interactive Phase 2 implementation. Immediate-mode tool: no session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_BlueprintTranslateScaffold::GetInputSchema() const

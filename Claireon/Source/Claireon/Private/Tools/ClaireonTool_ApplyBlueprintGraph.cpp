@@ -108,7 +108,7 @@ FString ClaireonTool_ApplyBlueprintGraph::GetDescription() const
 		"creates nodes, and connects pins in one transactional call. New nodes are referenced by local "
 		"'id'; existing nodes by GUID or title. Execution order: disconnect → remove → create → connect. "
 		"Uses the same session opened by blueprint_edit_graph. Returns full graph state with "
-		"id_map showing local-id → GUID mappings. Counterpart to animgraph_apply_graph.");
+		"id_map showing local-id → GUID mappings. Counterpart to animgraph_apply_graph. Session-mode tool: open via blueprint_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ApplyBlueprintGraph::GetInputSchema() const
