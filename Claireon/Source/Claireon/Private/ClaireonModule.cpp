@@ -52,6 +52,7 @@
 #include "Tools/ClaireonTool_ApplyBlueprintGraph.h"
 #include "Tools/ClaireonTool_GameplayTagsList.h"
 #include "Tools/ClaireonTool_StructInspect.h"
+#include "Tools/ClaireonTool_UObjectInspect.h"
 #include "Tools/ClaireonTool_ReplaceStructUsage.h"
 #include "Tools/ClaireonAnimGraphTools_CopyGraph.h"
 
@@ -978,6 +979,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_ExecutePython>());
 	Tools.Add(MakeShared<ClaireonTool_GameplayTagsList>());
 	Tools.Add(MakeShared<ClaireonTool_StructInspect>());
+	Tools.Add(MakeShared<ClaireonTool_UObjectInspect>());
 	Tools.Add(MakeShared<ClaireonTool_ReplaceStructUsage>());
 
 	// Blueprint MCP tools

@@ -47,6 +47,34 @@ namespace ClaireonPropertyUtils
 	CLAIREON_API TSharedPtr<FJsonObject> GetAllProperties(UObject* Object, const FString& Filter = TEXT(""), int32 Depth = 2);
 
 	/**
+	 * Serialize a single FProperty's value to a JSON value, with depth-limited
+	 * recursion for nested structs and instanced sub-objects. Object properties
+	 * are emitted as GetPathName() unless the property is instanced and Depth
+	 * permits expansion. Soft-object / soft-class properties are emitted via
+	 * ExportText_Direct (quoted path form).
+	 *
+	 * Used by ClaireonTool_UObjectInspect and ClaireonTool_StructInspect.
+	 *
+	 * @param Property      The FProperty to serialize. Must not be null.
+	 * @param ValuePtr      Pointer to the value memory (obtained via
+	 *                      ContainerPtrToValuePtr or equivalent). Must not be null.
+	 * @param OwnerObject   The UObject that owns ValuePtr, used for resolving
+	 *                      instanced sub-object references. May be null for
+	 *                      non-instanced contexts (e.g. struct-only inspection).
+	 * @param Depth         Remaining recursion depth. When zero, nested structs
+	 *                      and instanced object expansion stop and the value is
+	 *                      summarized as a path/string.
+	 * @return              A non-null TSharedPtr<FJsonValue>. On serialization
+	 *                      failure, returns a string FJsonValue with an error
+	 *                      description rather than nullptr.
+	 */
+	CLAIREON_API TSharedPtr<FJsonValue> PropertyToJsonValue(
+		FProperty* Property,
+		const void* ValuePtr,
+		UObject* OwnerObject,
+		int32 Depth);
+
+	/**
 	 * Add an element to a TArray UPROPERTY.
 	 * @param Object - The UObject containing the array
 	 * @param ArrayPath - Dot-path to the array property
