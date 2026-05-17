@@ -96,7 +96,10 @@ TSharedPtr<FJsonObject> ClaireonTool_BlueprintDuplicate::GetInputSchema() const
 // D5 reference rewrite helper
 // -----------------------------------------------------------------------------
 
-static bool TryRewriteSoftObjectPath(FSoftObjectPath& InOutPath, const FString& SourcePackagePath, const FString& DestPackagePath)
+namespace ClaireonTool_BlueprintDuplicateInternal
+{
+
+bool TryRewriteSoftObjectPath(FSoftObjectPath& InOutPath, const FString& SourcePackagePath, const FString& DestPackagePath)
 {
 	const FString PackageName = InOutPath.GetLongPackageName();
 	if (PackageName != SourcePackagePath)
@@ -133,7 +136,7 @@ static bool TryRewriteSoftObjectPath(FSoftObjectPath& InOutPath, const FString& 
 	return true;
 }
 
-static void RewriteSelfReferences(UObject* NewAsset, const FString& SourcePackagePath, const FString& DestPackagePath)
+void RewriteSelfReferences(UObject* NewAsset, const FString& SourcePackagePath, const FString& DestPackagePath)
 {
 	if (!NewAsset)
 	{
@@ -195,6 +198,8 @@ static void RewriteSelfReferences(UObject* NewAsset, const FString& SourcePackag
 		NewAsset->MarkPackageDirty();
 	}
 }
+
+}  // namespace ClaireonTool_BlueprintDuplicateInternal
 
 IClaireonTool::FToolResult ClaireonTool_BlueprintDuplicate::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
@@ -338,7 +343,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintDuplicate::Execute(const TShare
 	// 18. Optional D5 reference rewrite
 	if (bRenameDependencies)
 	{
-		RewriteSelfReferences(NewAsset, SourcePackagePath, DestPackagePath);
+		ClaireonTool_BlueprintDuplicateInternal::RewriteSelfReferences(NewAsset, SourcePackagePath, DestPackagePath);
 	}
 
 	// 19. Save the new package

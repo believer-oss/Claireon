@@ -732,9 +732,12 @@ struct FAsyncToolSEHContext
 	bool* bPromiseFulfilled;
 };
 
+namespace ClaireonServerInternal
+{
+
 // Trampoline: executes the tool and fulfills the promise.
 // C++ temporaries (FToolResult) exist on THIS frame, not the __try frame.
-static void AsyncToolTrampoline(void* Context)
+void AsyncToolTrampoline(void* Context)
 {
 	FAsyncToolSEHContext* Ctx = static_cast<FAsyncToolSEHContext*>(Context);
 	Ctx->Promise->SetValue(Ctx->Tool->Execute(*Ctx->Args));
@@ -744,7 +747,7 @@ static void AsyncToolTrampoline(void* Context)
 // Fulfills the promise with an error FToolResult after an SEH exception.
 // Separated from the __try/__except function to avoid C2712 (cannot use __try
 // in functions that require object unwinding).
-static void FulfillPromiseWithError(
+void FulfillPromiseWithError(
 	TPromise<IClaireonTool::FToolResult>* Promise,
 	bool* bPromiseFulfilled,
 	uint32 Code,
@@ -762,6 +765,8 @@ static void FulfillPromiseWithError(
 		*bPromiseFulfilled = true;
 	}
 }
+
+}  // namespace ClaireonServerInternal
 
 // Pure-SEH inner function for async path. No C++ objects with destructors
 // anywhere in this function (including __except block) to avoid C2712.
@@ -785,7 +790,7 @@ __declspec(noinline) static uint32 ExecuteToolAsyncSEH(
 
 		// Fulfill the promise with an error result if not already fulfilled.
 		// Done in a separate function to avoid C++ objects on this frame.
-		FulfillPromiseWithError(Promise, bPromiseFulfilled, Code, OutExceptionMsg);
+		ClaireonServerInternal::FulfillPromiseWithError(Promise, bPromiseFulfilled, Code, OutExceptionMsg);
 		return Code;
 	}
 }
@@ -904,7 +909,7 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsCall(const FMCPRequestContex
 				Ctx.Promise = &Promise;
 				Ctx.bPromiseFulfilled = &bPromiseFulfilled;
 				AsyncExceptionCode.store(
-					ExecuteToolAsyncSEH(&AsyncToolTrampoline, &Ctx, &bPromiseFulfilled,
+					ExecuteToolAsyncSEH(&ClaireonServerInternal::AsyncToolTrampoline, &Ctx, &bPromiseFulfilled,
 						&Promise, ExMsg, UE_ARRAY_COUNT(ExMsg)),
 					std::memory_order_release);
 			});

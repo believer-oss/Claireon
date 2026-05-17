@@ -341,7 +341,7 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 				}
 			}
 			FString Err;
-			if (ApplyRemovePossessable(LS, Guid, Err))
+			if (Claireon::SequenceEdit::ApplyRemovePossessable(LS, Guid, Err))
 			{
 				RecordEntrySuccess(FString::Printf(TEXT("binding:%s:remove"), *Label), Guid.ToString());
 			}
@@ -396,7 +396,7 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 				}
 				FMovieSceneBinding NewBinding;
 				FString Err;
-				if (!ApplyAddPossessable(LS, FName(*Label), ObjectClass, NewBinding, Err))
+				if (!Claireon::SequenceEdit::ApplyAddPossessable(LS, FName(*Label), ObjectClass, NewBinding, Err))
 				{
 					RecordEntryFailure(FString::Printf(TEXT("binding:%s"), *Label), Err);
 					continue;
@@ -470,7 +470,7 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 						continue;
 					}
 					FString Err;
-					if (!ApplyRemoveTrack(LS, BindingGuid, TrackIdx, Err))
+					if (!Claireon::SequenceEdit::ApplyRemoveTrack(LS, BindingGuid, TrackIdx, Err))
 					{
 						AddWarning(FString::Printf(TEXT("remove track [%d] on '%s' failed: %s"),
 							TrackIdx, *Label, *Err));
@@ -513,7 +513,7 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 				if (!Track)
 				{
 					FString Err;
-					if (!ApplyAddTrack(LS, BindingGuid, TrackClass, Track, Err))
+					if (!Claireon::SequenceEdit::ApplyAddTrack(LS, BindingGuid, TrackClass, Track, Err))
 					{
 						RecordEntryFailure(
 							FString::Printf(TEXT("track:%s:%s"), *Label, *Type), Err);
@@ -556,7 +556,7 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 						if (!SpecSectionIds.Contains(Id))
 						{
 							FString Err;
-							if (!ApplyRemoveSection(Track, i, Err))
+							if (!Claireon::SequenceEdit::ApplyRemoveSection(Track, i, Err))
 							{
 								AddWarning(FString::Printf(TEXT("remove section failed: %s"), *Err));
 							}
@@ -579,7 +579,7 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 					if (SecIdx == INDEX_NONE)
 					{
 						FString Err;
-						if (!ApplyAddSection(Track, FFrameNumber(Start), FFrameNumber(End), Row, Section, Err))
+						if (!Claireon::SequenceEdit::ApplyAddSection(Track, FFrameNumber(Start), FFrameNumber(End), Row, Section, Err))
 						{
 							RecordEntryFailure(
 								FString::Printf(TEXT("section:%s:%s:%d@%d"), *Label, *Type, Row, Start),
@@ -635,7 +635,7 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 							if (!SpecFrames.Contains(F))
 							{
 								FString Err;
-								if (!ApplyRemoveKeyframe(Section, FFrameNumber(F), Err))
+								if (!Claireon::SequenceEdit::ApplyRemoveKeyframe(Section, FFrameNumber(F), Err))
 								{
 									AddWarning(FString::Printf(TEXT("remove key @%d failed: %s"), F, *Err));
 								}
@@ -672,7 +672,7 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 								// Serialize the payload into the ApplyAddKeyframe input convention.
 								FString Payload = FString::Printf(TEXT("\"%s\""), *EndpointName);
 								FString Err;
-								if (!ApplyAddKeyframe(Section, FFrameNumber(Frame), Payload, Err))
+								if (!Claireon::SequenceEdit::ApplyAddKeyframe(Section, FFrameNumber(Frame), Payload, Err))
 								{
 									RecordEntryFailure(
 										FString::Printf(TEXT("keyframe:%s:%s:%d:%s"), *Label, *Type, Frame, *EndpointName), Err);
@@ -695,7 +695,7 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 								continue;
 							}
 							FString Err;
-							if (!ApplyAddKeyframe(Section, FFrameNumber(Frame), ValueJson, Err))
+							if (!Claireon::SequenceEdit::ApplyAddKeyframe(Section, FFrameNumber(Frame), ValueJson, Err))
 							{
 								RecordEntryFailure(
 									FString::Printf(TEXT("keyframe:%s:%s:%d"), *Label, *Type, Frame), Err);

@@ -59,7 +59,7 @@ FToolResult ClaireonWidgetBPTool_RenameAnimation::Execute(const TSharedPtr<FJson
 
     FScopedTransaction Transaction(NSLOCTEXT("Claireon", "RenameWidgetAnimation", "Rename Widget Animation"));
     FString ApplyError;
-    if (!ApplyRenameAnimation(WBP, OldName, NewName, ApplyError))
+    if (!Claireon::WidgetAnimation::ApplyRenameAnimation(WBP, OldName, NewName, ApplyError))
     {
         Transaction.Cancel();
         return MakeErrorResult(ApplyError);

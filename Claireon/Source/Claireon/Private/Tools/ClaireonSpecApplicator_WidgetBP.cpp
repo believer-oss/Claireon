@@ -416,7 +416,7 @@ bool FClaireonSpecApplicator_WidgetBP::ApplyPass2_WireRelationships(const FStrin
 
 			UWidgetAnimation* Anim = nullptr;
 			FString CreateError;
-			if (!ApplyCreateAnimation(WBP, AnimName, static_cast<float>(DurationD), DisplayLabel, Anim, CreateError))
+			if (!Claireon::WidgetAnimation::ApplyCreateAnimation(WBP, AnimName, static_cast<float>(DurationD), DisplayLabel, Anim, CreateError))
 			{
 				RecordEntryFailure(AnimName, CreateError);
 				continue;
@@ -466,7 +466,7 @@ bool FClaireonSpecApplicator_WidgetBP::ApplyPass2_WireRelationships(const FStrin
 
 				FGuid BindingGuid;
 				FString BindError;
-				if (!ApplyAddAnimationBinding(Anim, Widget, SlotWidget, BindingGuid, BindError))
+				if (!Claireon::WidgetAnimation::ApplyAddAnimationBinding(Anim, Widget, SlotWidget, BindingGuid, BindError))
 				{
 					RecordEntryFailure(AnimName, BindError);
 					continue;
@@ -490,7 +490,7 @@ bool FClaireonSpecApplicator_WidgetBP::ApplyPass2_WireRelationships(const FStrin
 
 					UMovieSceneTrack* NewTrack = nullptr;
 					FString TrackError;
-					if (!ApplyAddAnimationTrack(Anim, BindingGuid, TrackType, TrackProp, NewTrack, TrackError))
+					if (!Claireon::WidgetAnimation::ApplyAddAnimationTrack(Anim, BindingGuid, TrackType, TrackProp, NewTrack, TrackError))
 					{
 						RecordEntryFailure(AnimName, TrackError);
 						continue;
@@ -540,7 +540,7 @@ bool FClaireonSpecApplicator_WidgetBP::ApplyPass2_WireRelationships(const FStrin
 						}
 
 						FString KeyError;
-						if (!ApplyAddKeyframe(Section, Frame, ValueJson, KeyError))
+						if (!Claireon::SequenceEdit::ApplyAddKeyframe(Section, Frame, ValueJson, KeyError))
 						{
 							RecordEntryFailure(AnimName,
 								FString::Printf(TEXT("add_keyframe t=%.3f: %s"), TimeSec, *KeyError));
@@ -564,7 +564,7 @@ bool FClaireonSpecApplicator_WidgetBP::ApplyPass2_WireRelationships(const FStrin
 								continue;
 							}
 							FString InterpError;
-							if (!ApplySetKeyInterpMode(Section, Frame, InterpMode, InterpError))
+							if (!Claireon::SequenceEdit::ApplySetKeyInterpMode(Section, Frame, InterpMode, InterpError))
 							{
 								RecordEntryFailure(AnimName, InterpError);
 								continue;

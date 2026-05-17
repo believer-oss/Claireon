@@ -37,6 +37,9 @@
 // after decomposition.
 // ============================================================================
 
+namespace Claireon::SequenceEdit
+{
+
 bool ApplyAddPossessable(ULevelSequence* Sequence, FName Label, UClass* ObjectClass, FMovieSceneBinding& OutBinding, FString& OutError)
 {
 	if (!Sequence)
@@ -206,7 +209,10 @@ bool ApplyRemoveSection(UMovieSceneTrack* Track, int32 SectionIndex, FString& Ou
 	return true;
 }
 
-static TSharedPtr<FJsonObject> ParseJsonObject(const FString& JsonPayload)
+namespace ClaireonSequenceEditHandlersInternal
+{
+
+TSharedPtr<FJsonObject> ParseJsonObject(const FString& JsonPayload)
 {
 	TSharedPtr<FJsonObject> Obj;
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonPayload);
@@ -216,6 +222,8 @@ static TSharedPtr<FJsonObject> ParseJsonObject(const FString& JsonPayload)
 	}
 	return nullptr;
 }
+
+}  // namespace ClaireonSequenceEditHandlersInternal
 
 bool ApplyAddKeyframe(UMovieSceneSection* Section, FFrameNumber Frame, const FString& ValueJson, FString& OutError)
 {
@@ -235,7 +243,7 @@ bool ApplyAddKeyframe(UMovieSceneSection* Section, FFrameNumber Frame, const FSt
 		bool bParsed = FDefaultValueHelper::ParseDouble(Trim, ValueD);
 		if (!bParsed)
 		{
-			if (TSharedPtr<FJsonObject> Obj = ParseJsonObject(ValueJson))
+			if (TSharedPtr<FJsonObject> Obj = ClaireonSequenceEditHandlersInternal::ParseJsonObject(ValueJson))
 			{
 				bParsed = Obj->TryGetNumberField(TEXT("value"), ValueD);
 			}
@@ -257,7 +265,7 @@ bool ApplyAddKeyframe(UMovieSceneSection* Section, FFrameNumber Frame, const FSt
 		bool bParsed = false;
 		if (Trim.Equals(TEXT("true"), ESearchCase::IgnoreCase)) { bValue = true; bParsed = true; }
 		else if (Trim.Equals(TEXT("false"), ESearchCase::IgnoreCase)) { bValue = false; bParsed = true; }
-		else if (TSharedPtr<FJsonObject> Obj = ParseJsonObject(ValueJson))
+		else if (TSharedPtr<FJsonObject> Obj = ClaireonSequenceEditHandlersInternal::ParseJsonObject(ValueJson))
 		{
 			bParsed = Obj->TryGetBoolField(TEXT("value"), bValue);
 		}
@@ -273,7 +281,7 @@ bool ApplyAddKeyframe(UMovieSceneSection* Section, FFrameNumber Frame, const FSt
 	TArrayView<FMovieSceneDoubleChannel*> DoubleChannels = Proxy.GetChannels<FMovieSceneDoubleChannel>();
 	if (DoubleChannels.Num() >= 6)
 	{
-		TSharedPtr<FJsonObject> Obj = ParseJsonObject(ValueJson);
+		TSharedPtr<FJsonObject> Obj = ClaireonSequenceEditHandlersInternal::ParseJsonObject(ValueJson);
 		if (!Obj.IsValid())
 		{
 			OutError = TEXT("transform channel expects {\"location\":[x,y,z],\"rotation\":[p,y,r]}");
@@ -351,24 +359,21 @@ bool ApplyRemoveKeyframe(UMovieSceneSection* Section, FFrameNumber Frame, FStrin
 	return true;
 }
 
-namespace Claireon::SequenceEdit
+// EMovieSceneKeyInterpolation (storage) -> ERichCurveInterpMode (per-key field on
+// FMovieSceneFloatValue / FMovieSceneDoubleValue). Maps follow the engine
+// convention used by TMovieSceneCurveChannelImpl::AddKeyToChannel at
+// MovieSceneCurveChannelImpl.cpp:1043.
+ERichCurveInterpMode InterpolationToRichMode(EMovieSceneKeyInterpolation In)
 {
-	// EMovieSceneKeyInterpolation (storage) -> ERichCurveInterpMode (per-key field on
-	// FMovieSceneFloatValue / FMovieSceneDoubleValue). Maps follow the engine
-	// convention used by TMovieSceneCurveChannelImpl::AddKeyToChannel at
-	// MovieSceneCurveChannelImpl.cpp:1043.
-	static ERichCurveInterpMode InterpolationToRichMode(EMovieSceneKeyInterpolation In)
+	switch (In)
 	{
-		switch (In)
-		{
-		case EMovieSceneKeyInterpolation::SmartAuto: return RCIM_Cubic;
-		case EMovieSceneKeyInterpolation::Auto:      return RCIM_Cubic;
-		case EMovieSceneKeyInterpolation::User:      return RCIM_Cubic;
-		case EMovieSceneKeyInterpolation::Break:     return RCIM_Cubic;
-		case EMovieSceneKeyInterpolation::Linear:    return RCIM_Linear;
-		case EMovieSceneKeyInterpolation::Constant:  return RCIM_Constant;
-		default:                                     return RCIM_Cubic;
-		}
+	case EMovieSceneKeyInterpolation::SmartAuto: return RCIM_Cubic;
+	case EMovieSceneKeyInterpolation::Auto:      return RCIM_Cubic;
+	case EMovieSceneKeyInterpolation::User:      return RCIM_Cubic;
+	case EMovieSceneKeyInterpolation::Break:     return RCIM_Cubic;
+	case EMovieSceneKeyInterpolation::Linear:    return RCIM_Linear;
+	case EMovieSceneKeyInterpolation::Constant:  return RCIM_Constant;
+	default:                                     return RCIM_Cubic;
 	}
 }
 
@@ -382,7 +387,7 @@ bool ApplySetKeyInterpMode(UMovieSceneSection* Section, FFrameNumber Frame,
 	}
 
 	FMovieSceneChannelProxy& Proxy = Section->GetChannelProxy();
-	const ERichCurveInterpMode RichMode = Claireon::SequenceEdit::InterpolationToRichMode(InterpMode);
+	const ERichCurveInterpMode RichMode = InterpolationToRichMode(InterpMode);
 
 	bool bMatched = false;
 	TArray<FString> UnsupportedChannelErrors;
@@ -547,8 +552,6 @@ bool ApplyRebindActor(ULevelSequence* Sequence, const FGuid& BindingGuid,
     FMovieScenePossessable* Possessable = MovieScene->FindPossessable(BindingGuid);
     if (!Possessable)
     {
-        // Either no binding at all, or a spawnable. Distinguish for a clear
-        // user-facing error.
         for (const FMovieSceneBinding& B : MovieScene->GetBindings())
         {
             if (B.GetObjectGuid() == BindingGuid)
@@ -568,8 +571,7 @@ bool ApplyRebindActor(ULevelSequence* Sequence, const FGuid& BindingGuid,
     if (!Sequence->CanRebindPossessable(*Possessable))
     {
         OutError = FString::Printf(
-            TEXT("binding %s has parent %s and cannot be rebound directly "
-                 "(see ULevelSequence::CanRebindPossessable -- rebind the parent instead)"),
+            TEXT("binding %s has parent %s and cannot be rebound directly"),
             *BindingGuid.ToString(EGuidFormats::DigitsWithHyphens),
             *Possessable->GetParent().ToString(EGuidFormats::DigitsWithHyphens));
         return false;
@@ -604,9 +606,8 @@ bool ApplyRebindActor(ULevelSequence* Sequence, const FGuid& BindingGuid,
         return false;
     }
 
-    // Drop every existing reference for this GUID before re-binding. The engine
-    // BindPossessableObject always appends, so without this clear step a second
-    // rebind would leave two references in BindingReferences.
+    // BindPossessableObject appends to BindingReferences; unbind first to avoid
+    // a second rebind leaving two references for the same GUID.
     Sequence->UnbindPossessableObjects(BindingGuid);
 
     if (!bClear)
@@ -616,3 +617,5 @@ bool ApplyRebindActor(ULevelSequence* Sequence, const FGuid& BindingGuid,
 
     return true;
 }
+
+}  // namespace Claireon::SequenceEdit

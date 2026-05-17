@@ -12,7 +12,10 @@
 #include "Modules/ModuleManager.h"
 #include "Presentation/MessageLogListingViewModel.h"
 
-static const TCHAR* MessageLogGet_SeverityTag(EMessageSeverity::Type Severity)
+namespace ClaireonTool_MessageLogGetInternal
+{
+
+const TCHAR* MessageLogGet_SeverityTag(EMessageSeverity::Type Severity)
 {
 	if (Severity == EMessageSeverity::Error)
 	{
@@ -29,7 +32,7 @@ static const TCHAR* MessageLogGet_SeverityTag(EMessageSeverity::Type Severity)
 	return TEXT("info");
 }
 
-static bool MessageLogGet_MessageReferencesAsset(const FTokenizedMessage& Msg, const FString& AssetPath)
+bool MessageLogGet_MessageReferencesAsset(const FTokenizedMessage& Msg, const FString& AssetPath)
 {
 	for (const TSharedRef<IMessageToken>& Token : Msg.GetMessageTokens())
 	{
@@ -56,7 +59,7 @@ static bool MessageLogGet_MessageReferencesAsset(const FTokenizedMessage& Msg, c
 	return false;
 }
 
-static TSharedPtr<FJsonObject> MessageLogGet_FlattenToken(const TSharedRef<IMessageToken>& Token)
+TSharedPtr<FJsonObject> MessageLogGet_FlattenToken(const TSharedRef<IMessageToken>& Token)
 {
 	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 	const EMessageToken::Type TokenType = Token->GetType();
@@ -97,6 +100,8 @@ static TSharedPtr<FJsonObject> MessageLogGet_FlattenToken(const TSharedRef<IMess
 
 	return Obj;
 }
+
+}  // namespace ClaireonTool_MessageLogGetInternal
 
 FString ClaireonTool_MessageLogGet::GetOperation() const { return TEXT("message_log_get"); }
 
@@ -242,7 +247,7 @@ IClaireonTool::FToolResult ClaireonTool_MessageLogGet::Execute(const TSharedPtr<
 		for (const TSharedRef<FTokenizedMessage>& Msg : PageMessages)
 		{
 			const EMessageSeverity::Type S = Msg->GetSeverity();
-			const TCHAR* Tag = MessageLogGet_SeverityTag(S);
+			const TCHAR* Tag = ClaireonTool_MessageLogGetInternal::MessageLogGet_SeverityTag(S);
 
 			TotalMessages++;
 			if (S == EMessageSeverity::Error)
@@ -268,7 +273,7 @@ IClaireonTool::FToolResult ClaireonTool_MessageLogGet::Execute(const TSharedPtr<
 				continue;
 			}
 
-			if (!AssetPath.IsEmpty() && !MessageLogGet_MessageReferencesAsset(*Msg, AssetPath))
+			if (!AssetPath.IsEmpty() && !ClaireonTool_MessageLogGetInternal::MessageLogGet_MessageReferencesAsset(*Msg, AssetPath))
 			{
 				continue;
 			}
@@ -276,7 +281,7 @@ IClaireonTool::FToolResult ClaireonTool_MessageLogGet::Execute(const TSharedPtr<
 			TArray<TSharedPtr<FJsonValue>> TokensArray;
 			for (const TSharedRef<IMessageToken>& Token : Msg->GetMessageTokens())
 			{
-				TokensArray.Add(MakeShared<FJsonValueObject>(MessageLogGet_FlattenToken(Token)));
+				TokensArray.Add(MakeShared<FJsonValueObject>(ClaireonTool_MessageLogGetInternal::MessageLogGet_FlattenToken(Token)));
 			}
 
 			TSharedPtr<FJsonObject> MsgObj = MakeShared<FJsonObject>();

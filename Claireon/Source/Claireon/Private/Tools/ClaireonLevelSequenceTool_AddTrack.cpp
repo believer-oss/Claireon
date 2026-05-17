@@ -74,7 +74,7 @@ FToolResult ClaireonLevelSequenceTool_AddTrack::Execute(const TSharedPtr<FJsonOb
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Add Track")));
 	UMovieSceneTrack* NewTrack = nullptr;
-	if (!ApplyAddTrack(Data->Sequence.Get(), BindingGuid, TrackClass, NewTrack, Error))
+	if (!Claireon::SequenceEdit::ApplyAddTrack(Data->Sequence.Get(), BindingGuid, TrackClass, NewTrack, Error))
 	{
 		return MakeErrorResult(Error);
 	}

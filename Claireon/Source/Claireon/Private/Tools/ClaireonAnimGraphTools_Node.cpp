@@ -28,11 +28,14 @@ using FToolResult = IClaireonTool::FToolResult;
 
 #define LOCTEXT_NAMESPACE "ClaireonAnimGraphTools_Node"
 
+namespace ClaireonAnimGraphTools_NodeInternal
+{
+
 // ============================================================================
 // Helper: Find node by GUID or title
 // ============================================================================
 
-static UEdGraphNode* FindNodeByGuidOrTitle(UEdGraph* Graph, const FString& Identifier, FString& OutError)
+UEdGraphNode* FindNodeByGuidOrTitle(UEdGraph* Graph, const FString& Identifier, FString& OutError)
 {
 	// Try GUID first
 	FGuid ParsedGuid;
@@ -62,7 +65,7 @@ static UEdGraphNode* FindNodeByGuidOrTitle(UEdGraph* Graph, const FString& Ident
 // Helper: Find pin by name on a node
 // ============================================================================
 
-static UEdGraphPin* FindPinByName(UEdGraphNode* Node, const FString& PinName, FString& OutError)
+UEdGraphPin* FindPinByName(UEdGraphNode* Node, const FString& PinName, FString& OutError)
 {
 	for (UEdGraphPin* Pin : Node->Pins)
 	{
@@ -90,6 +93,8 @@ static UEdGraphPin* FindPinByName(UEdGraphNode* Node, const FString& PinName, FS
 		*FString::Join(PinNames, TEXT(", ")));
 	return nullptr;
 }
+
+}  // namespace ClaireonAnimGraphTools_NodeInternal
 
 // ============================================================================
 // ClaireonAnimGraphTool_AddNode
@@ -311,7 +316,7 @@ FToolResult ClaireonAnimGraphTool_RemoveNode::Execute(const TSharedPtr<FJsonObje
 	}
 
 	FString FindError;
-	UEdGraphNode* Node = FindNodeByGuidOrTitle(Graph, NodeGuidStr, FindError);
+	UEdGraphNode* Node = ClaireonAnimGraphTools_NodeInternal::FindNodeByGuidOrTitle(Graph, NodeGuidStr, FindError);
 	if (!Node)
 	{
 		return MakeErrorResult(FindError);
@@ -402,7 +407,7 @@ FToolResult ClaireonAnimGraphTool_MoveNode::Execute(const TSharedPtr<FJsonObject
 	(*PosObj)->TryGetNumberField(TEXT("y"), Y);
 
 	FString FindError;
-	UEdGraphNode* Node = FindNodeByGuidOrTitle(Graph, NodeGuidStr, FindError);
+	UEdGraphNode* Node = ClaireonAnimGraphTools_NodeInternal::FindNodeByGuidOrTitle(Graph, NodeGuidStr, FindError);
 	if (!Node)
 	{
 		return MakeErrorResult(FindError);
@@ -465,7 +470,7 @@ FToolResult ClaireonAnimGraphTool_SetNodeProperty::Execute(const TSharedPtr<FJso
 		return MakeErrorResult(TEXT("Missing required field: value"));
 
 	FString FindError;
-	UEdGraphNode* Node = FindNodeByGuidOrTitle(Graph, NodeGuidStr, FindError);
+	UEdGraphNode* Node = ClaireonAnimGraphTools_NodeInternal::FindNodeByGuidOrTitle(Graph, NodeGuidStr, FindError);
 	if (!Node)
 	{
 		return MakeErrorResult(FindError);
@@ -554,17 +559,17 @@ FToolResult ClaireonAnimGraphTool_ConnectPins::Execute(const TSharedPtr<FJsonObj
 
 	// Find nodes
 	FString FindError;
-	UEdGraphNode* SourceNode = FindNodeByGuidOrTitle(Graph, SourceNodeStr, FindError);
+	UEdGraphNode* SourceNode = ClaireonAnimGraphTools_NodeInternal::FindNodeByGuidOrTitle(Graph, SourceNodeStr, FindError);
 	if (!SourceNode) return MakeErrorResult(FindError);
 
-	UEdGraphNode* TargetNode = FindNodeByGuidOrTitle(Graph, TargetNodeStr, FindError);
+	UEdGraphNode* TargetNode = ClaireonAnimGraphTools_NodeInternal::FindNodeByGuidOrTitle(Graph, TargetNodeStr, FindError);
 	if (!TargetNode) return MakeErrorResult(FindError);
 
 	// Find pins
-	UEdGraphPin* SourcePin = FindPinByName(SourceNode, SourcePinStr, FindError);
+	UEdGraphPin* SourcePin = ClaireonAnimGraphTools_NodeInternal::FindPinByName(SourceNode, SourcePinStr, FindError);
 	if (!SourcePin) return MakeErrorResult(FindError);
 
-	UEdGraphPin* TargetPin = FindPinByName(TargetNode, TargetPinStr, FindError);
+	UEdGraphPin* TargetPin = ClaireonAnimGraphTools_NodeInternal::FindPinByName(TargetNode, TargetPinStr, FindError);
 	if (!TargetPin) return MakeErrorResult(FindError);
 
 	// Use the animation graph schema for validation (NOT K2Schema)
@@ -650,10 +655,10 @@ FToolResult ClaireonAnimGraphTool_DisconnectPin::Execute(const TSharedPtr<FJsonO
 		return MakeErrorResult(TEXT("Missing required field: pin_name"));
 
 	FString FindError;
-	UEdGraphNode* Node = FindNodeByGuidOrTitle(Graph, NodeGuidStr, FindError);
+	UEdGraphNode* Node = ClaireonAnimGraphTools_NodeInternal::FindNodeByGuidOrTitle(Graph, NodeGuidStr, FindError);
 	if (!Node) return MakeErrorResult(FindError);
 
-	UEdGraphPin* Pin = FindPinByName(Node, PinName, FindError);
+	UEdGraphPin* Pin = ClaireonAnimGraphTools_NodeInternal::FindPinByName(Node, PinName, FindError);
 	if (!Pin) return MakeErrorResult(FindError);
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Disconnect AnimGraph Pin")));

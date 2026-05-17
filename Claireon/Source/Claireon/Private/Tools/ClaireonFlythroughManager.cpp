@@ -160,7 +160,10 @@ void FClaireonFlythroughManager::DistanceToSegmentAndT(float Distance, int32& Ou
 // PIE world helpers
 // ------------------------------------------------------------------
 
-static UWorld* FindPIEWorldWithLocalPlayer()
+namespace ClaireonFlythroughManagerInternal
+{
+
+UWorld* FindPIEWorldWithLocalPlayer()
 {
 	for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
 	{
@@ -179,7 +182,7 @@ static UWorld* FindPIEWorldWithLocalPlayer()
 }
 
 /** Find the server PIE world (DedicatedServer or ListenServer net mode). */
-static UWorld* FindPIEServerWorld()
+UWorld* FindPIEServerWorld()
 {
 	for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
 	{
@@ -199,7 +202,7 @@ static UWorld* FindPIEServerWorld()
  * Disable the movement component tick on a pawn so it doesn't fight flythrough teleportation.
  * Clears accumulated forces and stops all movement. Works on both client and server pawns.
  */
-static void DisablePawnMovement(APawn* Pawn)
+void DisablePawnMovement(APawn* Pawn)
 {
 	if (!Pawn)
 	{
@@ -235,7 +238,7 @@ static void DisablePawnMovement(APawn* Pawn)
  * Re-enable the movement component tick on a pawn after flythrough completes.
  * Clears any stale prediction data before re-enabling so saved moves don't snap the character.
  */
-static void EnablePawnMovement(APawn* Pawn)
+void EnablePawnMovement(APawn* Pawn)
 {
 	if (!Pawn)
 	{
@@ -268,7 +271,7 @@ static void EnablePawnMovement(APawn* Pawn)
  * In client-server PIE, the server world has its own copy of each player's pawn.
  * We match by PlayerState->GetPlayerId().
  */
-static APawn* FindServerPawnForLocalPlayer(UWorld* ServerWorld, APlayerController* ClientPC)
+APawn* FindServerPawnForLocalPlayer(UWorld* ServerWorld, APlayerController* ClientPC)
 {
 	if (!ServerWorld || !ClientPC || !ClientPC->PlayerState)
 	{
@@ -287,6 +290,8 @@ static APawn* FindServerPawnForLocalPlayer(UWorld* ServerWorld, APlayerControlle
 	}
 	return nullptr;
 }
+
+}  // namespace ClaireonFlythroughManagerInternal
 
 // ------------------------------------------------------------------
 // Camera position update
@@ -337,7 +342,7 @@ void FClaireonFlythroughManager::UpdateCameraPosition(float Distance)
 
 	// Apply position/rotation to both client and server pawns.
 	// The server pawn must be teleported first so it doesn't send corrections.
-	UWorld* PIEWorld = FindPIEWorldWithLocalPlayer();
+	UWorld* PIEWorld = ClaireonFlythroughManagerInternal::FindPIEWorldWithLocalPlayer();
 	if (!PIEWorld)
 	{
 		return;
@@ -360,10 +365,10 @@ void FClaireonFlythroughManager::UpdateCameraPosition(float Distance)
 	}
 
 	// Teleport the server-side pawn first (authoritative position)
-	UWorld* ServerWorld = FindPIEServerWorld();
+	UWorld* ServerWorld = ClaireonFlythroughManagerInternal::FindPIEServerWorld();
 	if (ServerWorld)
 	{
-		if (APawn* ServerPawn = FindServerPawnForLocalPlayer(ServerWorld, ClientPC))
+		if (APawn* ServerPawn = ClaireonFlythroughManagerInternal::FindServerPawnForLocalPlayer(ServerWorld, ClientPC))
 		{
 			ServerPawn->SetActorLocation(CurrentPosition);
 		}
@@ -462,7 +467,7 @@ void FClaireonFlythroughManager::ProcessWaypointEvents(int32 WaypointIndex)
 		else if (Evt.StartsWith(TEXT("console_command:")))
 		{
 			const FString Cmd = Evt.Mid(16); // len("console_command:") == 16
-			if (UWorld* PIEWorld = FindPIEWorldWithLocalPlayer())
+			if (UWorld* PIEWorld = ClaireonFlythroughManagerInternal::FindPIEWorldWithLocalPlayer())
 			{
 				GEngine->Exec(PIEWorld, *Cmd);
 			}
@@ -488,7 +493,7 @@ void FClaireonFlythroughManager::ProcessWaypointEvents(int32 WaypointIndex)
 void FClaireonFlythroughManager::DisableDebugCamera()
 {
 	// Re-enable the movement components and player input that were disabled in Start().
-	UWorld* PIEWorld = FindPIEWorldWithLocalPlayer();
+	UWorld* PIEWorld = ClaireonFlythroughManagerInternal::FindPIEWorldWithLocalPlayer();
 	if (!PIEWorld)
 	{
 		return;
@@ -511,16 +516,16 @@ void FClaireonFlythroughManager::DisableDebugCamera()
 	}
 
 	// Re-enable client pawn movement and input
-	EnablePawnMovement(ClientPC->GetPawn());
+	ClaireonFlythroughManagerInternal::EnablePawnMovement(ClientPC->GetPawn());
 	ClientPC->EnableInput(ClientPC);
 
 	// Re-enable server pawn movement
-	UWorld* ServerWorld = FindPIEServerWorld();
+	UWorld* ServerWorld = ClaireonFlythroughManagerInternal::FindPIEServerWorld();
 	if (ServerWorld)
 	{
-		if (APawn* ServerPawn = FindServerPawnForLocalPlayer(ServerWorld, ClientPC))
+		if (APawn* ServerPawn = ClaireonFlythroughManagerInternal::FindServerPawnForLocalPlayer(ServerWorld, ClientPC))
 		{
-			EnablePawnMovement(ServerPawn);
+			ClaireonFlythroughManagerInternal::EnablePawnMovement(ServerPawn);
 		}
 	}
 }
@@ -648,7 +653,7 @@ bool FClaireonFlythroughManager::Start(TArray<FFlythroughWaypoint> InWaypoints, 
 
 	// Find the PIE world with a local player controller — Client netmode creates both
 	// a server and client world; only the client world has a local player controller.
-	UWorld* PIEWorld = FindPIEWorldWithLocalPlayer();
+	UWorld* PIEWorld = ClaireonFlythroughManagerInternal::FindPIEWorldWithLocalPlayer();
 	if (!PIEWorld)
 	{
 		ErrorMessage = TEXT("Cannot find PIE world with local player");
@@ -682,15 +687,15 @@ bool FClaireonFlythroughManager::Start(TArray<FFlythroughWaypoint> InWaypoints, 
 	// Disable movement components on both client and server pawns so they don't fight
 	// the flythrough teleportation. In client-server PIE, the server pawn's movement
 	// component would apply gravity/velocity and send net corrections to the client.
-	DisablePawnMovement(PC->GetPawn());
+	ClaireonFlythroughManagerInternal::DisablePawnMovement(PC->GetPawn());
 	PC->DisableInput(PC);
 
-	UWorld* ServerWorld = FindPIEServerWorld();
+	UWorld* ServerWorld = ClaireonFlythroughManagerInternal::FindPIEServerWorld();
 	if (ServerWorld)
 	{
-		if (APawn* ServerPawn = FindServerPawnForLocalPlayer(ServerWorld, PC))
+		if (APawn* ServerPawn = ClaireonFlythroughManagerInternal::FindServerPawnForLocalPlayer(ServerWorld, PC))
 		{
-			DisablePawnMovement(ServerPawn);
+			ClaireonFlythroughManagerInternal::DisablePawnMovement(ServerPawn);
 		}
 	}
 
@@ -904,7 +909,7 @@ bool FClaireonFlythroughManager::Tick(float DeltaTime)
 					}
 					else if (Evt.StartsWith(TEXT("console_command:")))
 					{
-						if (UWorld* CmdWorld = FindPIEWorldWithLocalPlayer())
+						if (UWorld* CmdWorld = ClaireonFlythroughManagerInternal::FindPIEWorldWithLocalPlayer())
 						{
 							GEngine->Exec(CmdWorld, *Evt.Mid(16));
 						}

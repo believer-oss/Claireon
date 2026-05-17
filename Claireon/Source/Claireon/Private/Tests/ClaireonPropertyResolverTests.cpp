@@ -18,7 +18,10 @@
 // Helpers
 // ---------------------------------------------------------------------------
 
-static AActor* FindTestActorWithComponents()
+namespace ClaireonPropertyResolverTestsHelpers
+{
+
+AActor* FindTestActorWithComponents()
 {
 	if (!GEditor) return nullptr;
 	UWorld* World = GEditor->GetEditorWorldContext().World();
@@ -36,7 +39,7 @@ static AActor* FindTestActorWithComponents()
 	return nullptr;
 }
 
-static UBlueprint* LoadBlueprintWithSCSComponents()
+UBlueprint* LoadBlueprintWithSCSComponents()
 {
 	UClass* BPClass = UBlueprint::StaticClass();
 	TArray<FAssetData> Assets = ClaireonAssetUtils::FindAssetsByClass(BPClass, TEXT(""), 50);
@@ -52,6 +55,8 @@ static UBlueprint* LoadBlueprintWithSCSComponents()
 	}
 	return nullptr;
 }
+
+}  // namespace ClaireonPropertyResolverTestsHelpers
 
 // ---------------------------------------------------------------------------
 // ResolvePropertyOnActor tests
@@ -82,7 +87,7 @@ UNTEST_UNIT(Claireon, PropertyResolver_Actor, RootProperty)
 
 UNTEST_UNIT(Claireon, PropertyResolver_Actor, RootComponentFallback)
 {
-	AActor* Actor = FindTestActorWithComponents();
+	AActor* Actor = ClaireonPropertyResolverTestsHelpers::FindTestActorWithComponents();
 	if (!Actor) co_return; // skip gracefully
 
 	ClaireonPropertyResolver::FResolvedProperty Resolved;
@@ -136,7 +141,7 @@ UNTEST_UNIT(Claireon, PropertyResolver_Actor, ComponentFallback)
 
 UNTEST_UNIT(Claireon, PropertyResolver_Actor, ExplicitComponentPrefix)
 {
-	AActor* Actor = FindTestActorWithComponents();
+	AActor* Actor = ClaireonPropertyResolverTestsHelpers::FindTestActorWithComponents();
 	if (!Actor || !Actor->GetRootComponent()) co_return;
 
 	FString CompName = Actor->GetRootComponent()->GetName();
@@ -179,7 +184,7 @@ UNTEST_UNIT(Claireon, PropertyResolver_Actor, NotFound)
 
 UNTEST_UNIT(Claireon, PropertyResolver_Actor, ReadViaFallback)
 {
-	AActor* Actor = FindTestActorWithComponents();
+	AActor* Actor = ClaireonPropertyResolverTestsHelpers::FindTestActorWithComponents();
 	if (!Actor) co_return;
 
 	ClaireonPropertyResolver::FResolvedProperty Resolved;
@@ -233,7 +238,7 @@ UNTEST_UNIT_OPTS(Claireon, PropertyResolver_Actor, WriteReadRoundTrip, UNTEST_TI
 
 UNTEST_UNIT_OPTS(Claireon, PropertyResolver_CDO, DirectProperty, UNTEST_TIMEOUTMS(5000))
 {
-	UBlueprint* Blueprint = LoadBlueprintWithSCSComponents();
+	UBlueprint* Blueprint = ClaireonPropertyResolverTestsHelpers::LoadBlueprintWithSCSComponents();
 	if (!Blueprint) co_return; // skip gracefully
 	if (!Blueprint->GeneratedClass) co_return;
 
@@ -251,7 +256,7 @@ UNTEST_UNIT_OPTS(Claireon, PropertyResolver_CDO, DirectProperty, UNTEST_TIMEOUTM
 
 UNTEST_UNIT_OPTS(Claireon, PropertyResolver_CDO, SCSComponentTemplate, UNTEST_TIMEOUTMS(5000))
 {
-	UBlueprint* Blueprint = LoadBlueprintWithSCSComponents();
+	UBlueprint* Blueprint = ClaireonPropertyResolverTestsHelpers::LoadBlueprintWithSCSComponents();
 	if (!Blueprint || !Blueprint->SimpleConstructionScript) co_return;
 
 	// Find a node with a component template that has CastShadow (UPrimitiveComponent)
@@ -278,7 +283,7 @@ UNTEST_UNIT_OPTS(Claireon, PropertyResolver_CDO, SCSComponentTemplate, UNTEST_TI
 
 UNTEST_UNIT_OPTS(Claireon, PropertyResolver_CDO, ExplicitSCSPrefix, UNTEST_TIMEOUTMS(5000))
 {
-	UBlueprint* Blueprint = LoadBlueprintWithSCSComponents();
+	UBlueprint* Blueprint = ClaireonPropertyResolverTestsHelpers::LoadBlueprintWithSCSComponents();
 	if (!Blueprint || !Blueprint->SimpleConstructionScript) co_return;
 
 	// Find a scene component SCS node with Mobility

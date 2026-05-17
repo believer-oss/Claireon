@@ -16,8 +16,11 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
+namespace ClaireonLandscapeTool_CreateInternal
+{
+
 // Helper to extract FVector from JSON
-static FVector ExtractVector(const TSharedPtr<FJsonObject>& Obj, const FVector& Default)
+FVector ExtractVector(const TSharedPtr<FJsonObject>& Obj, const FVector& Default)
 {
 	if (!Obj) return Default;
 	FVector Result = Default;
@@ -27,6 +30,8 @@ static FVector ExtractVector(const TSharedPtr<FJsonObject>& Obj, const FVector& 
 	if (Obj->TryGetNumberField(TEXT("z"), Val)) Result.Z = Val;
 	return Result;
 }
+
+}  // namespace ClaireonLandscapeTool_CreateInternal
 
 FString ClaireonLandscapeTool_Create::GetOperation() const { return TEXT("create"); }
 
@@ -75,11 +80,11 @@ FToolResult ClaireonLandscapeTool_Create::Execute(const TSharedPtr<FJsonObject>&
 
 	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
 	Arguments->TryGetObjectField(TEXT("location"), LocationObj);
-	const FVector Location = ExtractVector(LocationObj ? *LocationObj : nullptr, FVector::ZeroVector);
+	const FVector Location = ClaireonLandscapeTool_CreateInternal::ExtractVector(LocationObj ? *LocationObj : nullptr, FVector::ZeroVector);
 
 	const TSharedPtr<FJsonObject>* ScaleObj = nullptr;
 	Arguments->TryGetObjectField(TEXT("scale"), ScaleObj);
-	const FVector Scale = ExtractVector(ScaleObj ? *ScaleObj : nullptr, FVector(100.0, 100.0, 100.0));
+	const FVector Scale = ClaireonLandscapeTool_CreateInternal::ExtractVector(ScaleObj ? *ScaleObj : nullptr, FVector(100.0, 100.0, 100.0));
 
 	// Spawn landscape actor
 	FActorSpawnParameters SpawnParams;

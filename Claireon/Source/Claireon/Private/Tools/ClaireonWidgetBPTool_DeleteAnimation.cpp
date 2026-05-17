@@ -53,7 +53,7 @@ FToolResult ClaireonWidgetBPTool_DeleteAnimation::Execute(const TSharedPtr<FJson
 
     FScopedTransaction Transaction(NSLOCTEXT("Claireon", "DeleteWidgetAnimation", "Delete Widget Animation"));
     FString ApplyError;
-    if (!ApplyDeleteAnimation(WBP, AnimationName, ApplyError))
+    if (!Claireon::WidgetAnimation::ApplyDeleteAnimation(WBP, AnimationName, ApplyError))
     {
         Transaction.Cancel();
         return MakeErrorResult(ApplyError);

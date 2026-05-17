@@ -54,7 +54,7 @@ FToolResult ClaireonLevelSequenceTool_RemovePossessable::Execute(const TSharedPt
 	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Remove Possessable")));
-	if (!ApplyRemovePossessable(Data->Sequence.Get(), Guid, Error))
+	if (!Claireon::SequenceEdit::ApplyRemovePossessable(Data->Sequence.Get(), Guid, Error))
 	{
 		return MakeErrorResult(Error);
 	}

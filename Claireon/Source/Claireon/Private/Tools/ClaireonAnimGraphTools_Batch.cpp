@@ -27,11 +27,14 @@ using FToolResult = IClaireonTool::FToolResult;
 
 #define LOCTEXT_NAMESPACE "ClaireonAnimGraphTools_Batch"
 
+namespace ClaireonAnimGraphTools_BatchInternal
+{
+
 // ============================================================================
 // Helper: Resolve a node reference (local ID, GUID, or title)
 // ============================================================================
 
-static UEdGraphNode* ResolveNodeRef(
+UEdGraphNode* ResolveNodeRef(
 	const FString& Ref,
 	const TMap<FString, UEdGraphNode*>& LocalIdMap,
 	UEdGraph* Graph,
@@ -71,7 +74,7 @@ static UEdGraphNode* ResolveNodeRef(
 // Helper: Find pin by name on a node
 // ============================================================================
 
-static UEdGraphPin* FindPinOnNode(UEdGraphNode* Node, const FString& PinName, FString& OutError)
+UEdGraphPin* FindPinOnNode(UEdGraphNode* Node, const FString& PinName, FString& OutError)
 {
 	for (UEdGraphPin* Pin : Node->Pins)
 	{
@@ -97,6 +100,8 @@ static UEdGraphPin* FindPinOnNode(UEdGraphNode* Node, const FString& PinName, FS
 		*FString::Join(PinNames, TEXT(", ")));
 	return nullptr;
 }
+
+}  // namespace ClaireonAnimGraphTools_BatchInternal
 
 // ============================================================================
 // ClaireonAnimGraphTool_ApplyGraph
@@ -168,14 +173,14 @@ FToolResult ClaireonAnimGraphTool_ApplyGraph::Execute(const TSharedPtr<FJsonObje
 
 			TMap<FString, UEdGraphNode*> EmptyMap; // No local IDs yet
 			FString FindError;
-			UEdGraphNode* Node = ResolveNodeRef(NodeRef, EmptyMap, Graph, FindError);
+			UEdGraphNode* Node = ClaireonAnimGraphTools_BatchInternal::ResolveNodeRef(NodeRef, EmptyMap, Graph, FindError);
 			if (!Node)
 			{
 				Warnings.Add(FString::Printf(TEXT("disconnect: %s"), *FindError));
 				continue;
 			}
 
-			UEdGraphPin* Pin = FindPinOnNode(Node, PinName, FindError);
+			UEdGraphPin* Pin = ClaireonAnimGraphTools_BatchInternal::FindPinOnNode(Node, PinName, FindError);
 			if (!Pin)
 			{
 				Warnings.Add(FString::Printf(TEXT("disconnect: %s"), *FindError));
@@ -185,7 +190,7 @@ FToolResult ClaireonAnimGraphTool_ApplyGraph::Execute(const TSharedPtr<FJsonObje
 			if (!TargetRef.IsEmpty())
 			{
 				// Selective disconnect
-				UEdGraphNode* TargetNode = ResolveNodeRef(TargetRef, EmptyMap, Graph, FindError);
+				UEdGraphNode* TargetNode = ClaireonAnimGraphTools_BatchInternal::ResolveNodeRef(TargetRef, EmptyMap, Graph, FindError);
 				if (TargetNode)
 				{
 					for (int32 i = Pin->LinkedTo.Num() - 1; i >= 0; --i)
@@ -225,7 +230,7 @@ FToolResult ClaireonAnimGraphTool_ApplyGraph::Execute(const TSharedPtr<FJsonObje
 			if (!Entry.IsValid() || !Entry->TryGetString(NodeRef)) continue;
 
 			FString FindError;
-			UEdGraphNode* Node = ResolveNodeRef(NodeRef, EmptyMap, Graph, FindError);
+			UEdGraphNode* Node = ClaireonAnimGraphTools_BatchInternal::ResolveNodeRef(NodeRef, EmptyMap, Graph, FindError);
 			if (!Node)
 			{
 				Warnings.Add(FString::Printf(TEXT("remove: %s"), *FindError));
@@ -373,25 +378,25 @@ FToolResult ClaireonAnimGraphTool_ApplyGraph::Execute(const TSharedPtr<FJsonObje
 			}
 
 			FString FindError;
-			UEdGraphNode* FromNode = ResolveNodeRef(FromRef, LocalIdMap, Graph, FindError);
+			UEdGraphNode* FromNode = ClaireonAnimGraphTools_BatchInternal::ResolveNodeRef(FromRef, LocalIdMap, Graph, FindError);
 			if (!FromNode)
 			{
 				return MakeErrorResult(FString::Printf(TEXT("Connection from '%s': %s"), *FromRef, *FindError));
 			}
 
-			UEdGraphNode* ToNode = ResolveNodeRef(ToRef, LocalIdMap, Graph, FindError);
+			UEdGraphNode* ToNode = ClaireonAnimGraphTools_BatchInternal::ResolveNodeRef(ToRef, LocalIdMap, Graph, FindError);
 			if (!ToNode)
 			{
 				return MakeErrorResult(FString::Printf(TEXT("Connection to '%s': %s"), *ToRef, *FindError));
 			}
 
-			UEdGraphPin* FromPin = FindPinOnNode(FromNode, FromPinName, FindError);
+			UEdGraphPin* FromPin = ClaireonAnimGraphTools_BatchInternal::FindPinOnNode(FromNode, FromPinName, FindError);
 			if (!FromPin)
 			{
 				return MakeErrorResult(FString::Printf(TEXT("Connection %s.%s: %s"), *FromRef, *FromPinName, *FindError));
 			}
 
-			UEdGraphPin* ToPin = FindPinOnNode(ToNode, ToPinName, FindError);
+			UEdGraphPin* ToPin = ClaireonAnimGraphTools_BatchInternal::FindPinOnNode(ToNode, ToPinName, FindError);
 			if (!ToPin)
 			{
 				return MakeErrorResult(FString::Printf(TEXT("Connection %s.%s: %s"), *ToRef, *ToPinName, *FindError));

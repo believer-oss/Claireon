@@ -182,9 +182,12 @@ UNTEST_UNIT_OPTS(Claireon, NameResolver, Class_DomainPrefix_UnknownBase, UNTEST_
 // Pin Name Resolution Tests
 // ===========================================================================
 
+namespace ClaireonNameResolverTestsHelpers
+{
+
 // Helper to create a K2Node_CallFunction targeting AActor::K2_SetActorLocation
 // with allocated pins for testing.
-static UK2Node_CallFunction* CreateTestCallFunctionNode(UEdGraph*& OutGraph, UBlueprint*& OutBlueprint)
+UK2Node_CallFunction* CreateTestCallFunctionNode(UEdGraph*& OutGraph, UBlueprint*& OutBlueprint)
 {
 	OutBlueprint = NewObject<UBlueprint>(GetTransientPackage(), TEXT("TestBP_NameResolver"));
 	OutBlueprint->ParentClass = AActor::StaticClass();
@@ -201,11 +204,13 @@ static UK2Node_CallFunction* CreateTestCallFunctionNode(UEdGraph*& OutGraph, UBl
 	return Node;
 }
 
+}  // namespace ClaireonNameResolverTestsHelpers
+
 UNTEST_UNIT(Claireon, NameResolver, Pin_ExactMatch)
 {
 	UEdGraph* Graph = nullptr;
 	UBlueprint* BP = nullptr;
-	UK2Node_CallFunction* Node = CreateTestCallFunctionNode(Graph, BP);
+	UK2Node_CallFunction* Node = ClaireonNameResolverTestsHelpers::CreateTestCallFunctionNode(Graph, BP);
 	UNTEST_ASSERT_TRUE(Node != nullptr);
 	UNTEST_ASSERT_TRUE(Node->Pins.Num() > 0);
 
@@ -224,7 +229,7 @@ UNTEST_UNIT(Claireon, NameResolver, Pin_CaseInsensitive)
 {
 	UEdGraph* Graph = nullptr;
 	UBlueprint* BP = nullptr;
-	UK2Node_CallFunction* Node = CreateTestCallFunctionNode(Graph, BP);
+	UK2Node_CallFunction* Node = ClaireonNameResolverTestsHelpers::CreateTestCallFunctionNode(Graph, BP);
 	UNTEST_ASSERT_TRUE(Node != nullptr);
 
 	ClaireonNameResolver::FNameResolveResult Result;
@@ -239,7 +244,7 @@ UNTEST_UNIT(Claireon, NameResolver, Pin_AliasExec)
 {
 	UEdGraph* Graph = nullptr;
 	UBlueprint* BP = nullptr;
-	UK2Node_CallFunction* Node = CreateTestCallFunctionNode(Graph, BP);
+	UK2Node_CallFunction* Node = ClaireonNameResolverTestsHelpers::CreateTestCallFunctionNode(Graph, BP);
 	UNTEST_ASSERT_TRUE(Node != nullptr);
 
 	ClaireonNameResolver::FNameResolveResult Result;
@@ -256,7 +261,7 @@ UNTEST_UNIT(Claireon, NameResolver, Pin_AliasThen)
 {
 	UEdGraph* Graph = nullptr;
 	UBlueprint* BP = nullptr;
-	UK2Node_CallFunction* Node = CreateTestCallFunctionNode(Graph, BP);
+	UK2Node_CallFunction* Node = ClaireonNameResolverTestsHelpers::CreateTestCallFunctionNode(Graph, BP);
 	UNTEST_ASSERT_TRUE(Node != nullptr);
 
 	ClaireonNameResolver::FNameResolveResult Result;
@@ -273,7 +278,7 @@ UNTEST_UNIT(Claireon, NameResolver, Pin_AliasSelf)
 {
 	UEdGraph* Graph = nullptr;
 	UBlueprint* BP = nullptr;
-	UK2Node_CallFunction* Node = CreateTestCallFunctionNode(Graph, BP);
+	UK2Node_CallFunction* Node = ClaireonNameResolverTestsHelpers::CreateTestCallFunctionNode(Graph, BP);
 	UNTEST_ASSERT_TRUE(Node != nullptr);
 
 	ClaireonNameResolver::FNameResolveResult Result;
@@ -287,7 +292,7 @@ UNTEST_UNIT(Claireon, NameResolver, Pin_SubstringUnique)
 {
 	UEdGraph* Graph = nullptr;
 	UBlueprint* BP = nullptr;
-	UK2Node_CallFunction* Node = CreateTestCallFunctionNode(Graph, BP);
+	UK2Node_CallFunction* Node = ClaireonNameResolverTestsHelpers::CreateTestCallFunctionNode(Graph, BP);
 	UNTEST_ASSERT_TRUE(Node != nullptr);
 
 	ClaireonNameResolver::FNameResolveResult Result;

@@ -3896,8 +3896,11 @@ bool FEditBlueprintGraphTest_CursorHistory_PopReturnsEntry::RunTest(const FStrin
 	return true;
 }
 
+namespace ClaireonTool_EditBlueprintGraph_SpecInternal
+{
+
 // Helper: extract session id from the create response text
-static FString ExtractSessionIdFromResponse(const FString& ResultText)
+FString ExtractSessionIdFromResponse(const FString& ResultText)
 {
 	int32 SessionIdStart = ResultText.Find(TEXT("Session ID: "));
 	if (SessionIdStart == INDEX_NONE)
@@ -3908,6 +3911,8 @@ static FString ExtractSessionIdFromResponse(const FString& ResultText)
 	int32 SessionIdEnd = ResultText.Find(TEXT("\n"), ESearchCase::IgnoreCase, ESearchDir::FromStart, SessionIdStart);
 	return ResultText.Mid(SessionIdStart, SessionIdEnd - SessionIdStart);
 }
+
+}  // namespace ClaireonTool_EditBlueprintGraph_SpecInternal
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_CursorHistory_CursorBackAutoSwitches,
 	"Claireon.EditBlueprintGraph.CursorHistory.CursorBackAutoSwitches",
@@ -3933,7 +3938,7 @@ bool FEditBlueprintGraphTest_CursorHistory_CursorBackAutoSwitches::RunTest(const
 			return false;
 		}
 
-		SessionId = ExtractSessionIdFromResponse(Result.GetContentAsString());
+		SessionId = ClaireonTool_EditBlueprintGraph_SpecInternal::ExtractSessionIdFromResponse(Result.GetContentAsString());
 		if (SessionId.IsEmpty())
 		{
 			AddError(TEXT("Failed to extract session ID"));
@@ -4083,7 +4088,7 @@ bool FEditBlueprintGraphTest_CursorHistory_FunctionOverridePushesOldGraph::RunTe
 			return false;
 		}
 
-		SessionId = ExtractSessionIdFromResponse(Result.GetContentAsString());
+		SessionId = ClaireonTool_EditBlueprintGraph_SpecInternal::ExtractSessionIdFromResponse(Result.GetContentAsString());
 		if (SessionId.IsEmpty())
 		{
 			AddError(TEXT("Failed to extract session ID"));
@@ -4179,7 +4184,7 @@ namespace
 			return false;
 		}
 
-		OutSessionId = ExtractSessionIdFromResponse(CreateResult.GetContentAsString());
+		OutSessionId = ClaireonTool_EditBlueprintGraph_SpecInternal::ExtractSessionIdFromResponse(CreateResult.GetContentAsString());
 		if (OutSessionId.IsEmpty())
 		{
 			Test.AddError(TEXT("Failed to extract session ID"));
@@ -4599,7 +4604,7 @@ namespace
 			return false;
 		}
 
-		OutSessionId = ExtractSessionIdFromResponse(CreateResult.GetContentAsString());
+		OutSessionId = ClaireonTool_EditBlueprintGraph_SpecInternal::ExtractSessionIdFromResponse(CreateResult.GetContentAsString());
 		if (OutSessionId.IsEmpty())
 		{
 			Test.AddError(TEXT("Failed to extract session ID"));
@@ -5214,7 +5219,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_RefinementLoopEndToEnd::RunTest(const F
 		AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
 		return false;
 	}
-	const FString SessionId = ExtractSessionIdFromResponse(CR.GetContentAsString());
+	const FString SessionId = ClaireonTool_EditBlueprintGraph_SpecInternal::ExtractSessionIdFromResponse(CR.GetContentAsString());
 	if (SessionId.IsEmpty())
 	{
 		AddError(TEXT("Failed to extract session id"));
@@ -5287,7 +5292,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_RefinementLoopEndToEnd::RunTest(const F
 
 		// Confirm the session's reported graph is Func2 -- proves session stability.
 		const FString StateText = GetSessionStateText(SessionId);
-		const FString SessionAfter = ExtractSessionIdFromResponse(StateText);
+		const FString SessionAfter = ClaireonTool_EditBlueprintGraph_SpecInternal::ExtractSessionIdFromResponse(StateText);
 		if (!SessionAfter.IsEmpty() && SessionAfter != SessionId)
 		{
 			AddError(FString::Printf(TEXT("Session ID changed mid-loop: expected %s got %s"),
@@ -5355,7 +5360,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd::RunTest(c
 		AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
 		return false;
 	}
-	const FString SessionId = ExtractSessionIdFromResponse(CR.GetContentAsString());
+	const FString SessionId = ClaireonTool_EditBlueprintGraph_SpecInternal::ExtractSessionIdFromResponse(CR.GetContentAsString());
 	if (SessionId.IsEmpty())
 	{
 		AddError(TEXT("Failed to extract session id"));
@@ -6246,7 +6251,7 @@ bool FEditBlueprintGraphTest_FieldAliases_ComponentDetailsAliases::RunTest(const
 		AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
 		return false;
 	}
-	const FString SessionId = ExtractSessionIdFromResponse(CR.GetContentAsString());
+	const FString SessionId = ClaireonTool_EditBlueprintGraph_SpecInternal::ExtractSessionIdFromResponse(CR.GetContentAsString());
 	if (SessionId.IsEmpty()) { AddError(TEXT("No session id")); return false; }
 
 	// Add a component so there is a target for get_component_details.
@@ -6359,7 +6364,7 @@ bool FEditBlueprintGraphTest_ComponentDetails_StructuredShape::RunTest(const FSt
 		AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
 		return false;
 	}
-	const FString SessionId = ExtractSessionIdFromResponse(CR.GetContentAsString());
+	const FString SessionId = ClaireonTool_EditBlueprintGraph_SpecInternal::ExtractSessionIdFromResponse(CR.GetContentAsString());
 	if (SessionId.IsEmpty()) { AddError(TEXT("No session id")); return false; }
 
 	TSharedPtr<FJsonObject> AddArgs = MakeShared<FJsonObject>();
@@ -6469,7 +6474,7 @@ bool FEditBlueprintGraphTest_ComponentDetails_ResponseModeSurvival::RunTest(cons
 		AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
 		return false;
 	}
-	const FString SessionId = ExtractSessionIdFromResponse(CR.GetContentAsString());
+	const FString SessionId = ClaireonTool_EditBlueprintGraph_SpecInternal::ExtractSessionIdFromResponse(CR.GetContentAsString());
 	if (SessionId.IsEmpty()) { return false; }
 
 	TSharedPtr<FJsonObject> AddArgs = MakeShared<FJsonObject>();
@@ -6579,7 +6584,7 @@ bool FEditBlueprintGraphTest_GetStatePositions_SingleNode::RunTest(const FString
 		AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
 		return false;
 	}
-	const FString SessionId = ExtractSessionIdFromResponse(CR.GetContentAsString());
+	const FString SessionId = ClaireonTool_EditBlueprintGraph_SpecInternal::ExtractSessionIdFromResponse(CR.GetContentAsString());
 	if (SessionId.IsEmpty()) { return false; }
 
 	// apply_graph with one PrintString node at (-1200, -800).
@@ -6678,7 +6683,7 @@ bool FEditBlueprintGraphTest_GetStatePositions_MultiNode::RunTest(const FString&
 		AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
 		return false;
 	}
-	const FString SessionId = ExtractSessionIdFromResponse(CR.GetContentAsString());
+	const FString SessionId = ClaireonTool_EditBlueprintGraph_SpecInternal::ExtractSessionIdFromResponse(CR.GetContentAsString());
 	if (SessionId.IsEmpty()) { return false; }
 
 	// Three Branch nodes at distinct positions. Branch has a stable ListView title
@@ -6808,7 +6813,7 @@ namespace
 			Test.AddError(FString::Printf(TEXT("create failed: %s"), *CR.GetContentAsString()));
 			return FString();
 		}
-		const FString SessionId = ExtractSessionIdFromResponse(CR.GetContentAsString());
+		const FString SessionId = ClaireonTool_EditBlueprintGraph_SpecInternal::ExtractSessionIdFromResponse(CR.GetContentAsString());
 
 		// Close the session so subsequent asset_path calls trigger auto-open + counter increment.
 		TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();

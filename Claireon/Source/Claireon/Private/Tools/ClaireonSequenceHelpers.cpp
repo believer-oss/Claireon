@@ -309,9 +309,12 @@ FString FClaireonSequenceHelpers::FormatKeyframe(const FKeyHandle& Handle, const
 	return TEXT("key (unresolved)");
 }
 
+namespace ClaireonSequenceHelpersInternal
+{
+
 // Emit per-section keyframe list (used by FormatSequenceStructure when
 // bIncludeKeyframes is set). Walks every channel in the proxy, lists times.
-static FString FormatSectionKeyframes(const UMovieSceneSection* Section, const FString& Indent)
+FString FormatSectionKeyframes(const UMovieSceneSection* Section, const FString& Indent)
 {
 	if (!Section)
 	{
@@ -379,6 +382,8 @@ static FString FormatSectionKeyframes(const UMovieSceneSection* Section, const F
 
 	return Output;
 }
+
+}  // namespace ClaireonSequenceHelpersInternal
 
 FString FClaireonSequenceHelpers::FormatSequenceStructure(const ULevelSequence* Sequence, bool bIncludeKeyframes, bool bIncludeSections)
 {
@@ -450,7 +455,7 @@ FString FClaireonSequenceHelpers::FormatSequenceStructure(const ULevelSequence* 
 				{
 					if (Section)
 					{
-						Output += FormatSectionKeyframes(Section, TEXT("      "));
+						Output += ClaireonSequenceHelpersInternal::FormatSectionKeyframes(Section, TEXT("      "));
 					}
 				}
 			}
@@ -464,7 +469,10 @@ FString FClaireonSequenceHelpers::FormatSequenceStructure(const ULevelSequence* 
 // Keyframe value coercion (used by F2 sequence_edit)
 // ---------------------------------------------------------------------------
 
-static TSharedPtr<FJsonObject> ParseJsonObjectPayload(const FString& JsonPayload)
+namespace ClaireonSequenceHelpersInternal
+{
+
+TSharedPtr<FJsonObject> ParseJsonObjectPayload(const FString& JsonPayload)
 {
 	TSharedPtr<FJsonObject> Obj;
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonPayload);
@@ -474,6 +482,8 @@ static TSharedPtr<FJsonObject> ParseJsonObjectPayload(const FString& JsonPayload
 	}
 	return nullptr;
 }
+
+}  // namespace ClaireonSequenceHelpersInternal
 
 bool FClaireonSequenceHelpers::CoerceKeyframeValue(UMovieSceneTrack* Track, const FString& JsonPayload, FFrameNumber Frame, FString& OutError)
 {
@@ -493,7 +503,7 @@ bool FClaireonSequenceHelpers::CoerceKeyframeValue(UMovieSceneTrack* Track, cons
 		bool bParsed = FDefaultValueHelper::ParseDouble(JsonPayload.TrimStartAndEnd(), ValueD);
 		if (!bParsed)
 		{
-			if (TSharedPtr<FJsonObject> Obj = ParseJsonObjectPayload(JsonPayload))
+			if (TSharedPtr<FJsonObject> Obj = ClaireonSequenceHelpersInternal::ParseJsonObjectPayload(JsonPayload))
 			{
 				bParsed = Obj->TryGetNumberField(TEXT("value"), ValueD);
 			}
@@ -517,7 +527,7 @@ bool FClaireonSequenceHelpers::CoerceKeyframeValue(UMovieSceneTrack* Track, cons
 		{
 			return true;
 		}
-		if (TSharedPtr<FJsonObject> Obj = ParseJsonObjectPayload(JsonPayload))
+		if (TSharedPtr<FJsonObject> Obj = ClaireonSequenceHelpersInternal::ParseJsonObjectPayload(JsonPayload))
 		{
 			bool bValue = false;
 			if (Obj->TryGetBoolField(TEXT("value"), bValue))
@@ -532,7 +542,7 @@ bool FClaireonSequenceHelpers::CoerceKeyframeValue(UMovieSceneTrack* Track, cons
 	// Transform track -- payload must be {"location":[x,y,z], "rotation":[p,y,r], "scale":[sx,sy,sz]?}
 	if (TrackClass->IsChildOf(UMovieScene3DTransformTrack::StaticClass()))
 	{
-		TSharedPtr<FJsonObject> Obj = ParseJsonObjectPayload(JsonPayload);
+		TSharedPtr<FJsonObject> Obj = ClaireonSequenceHelpersInternal::ParseJsonObjectPayload(JsonPayload);
 		if (!Obj.IsValid())
 		{
 			OutError = TEXT("transform track requires JSON object payload");
@@ -558,7 +568,7 @@ bool FClaireonSequenceHelpers::CoerceKeyframeValue(UMovieSceneTrack* Track, cons
 		{
 			return true;
 		}
-		if (TSharedPtr<FJsonObject> Obj = ParseJsonObjectPayload(JsonPayload))
+		if (TSharedPtr<FJsonObject> Obj = ClaireonSequenceHelpersInternal::ParseJsonObjectPayload(JsonPayload))
 		{
 			FString Endpoint;
 			if (Obj->TryGetStringField(TEXT("endpoint"), Endpoint) && !Endpoint.IsEmpty())
@@ -616,9 +626,12 @@ UBlueprint* FClaireonSequenceHelpers::EnsureDirectorBlueprint(ULevelSequence* Se
 	return NewBP;
 }
 
+namespace ClaireonSequenceHelpersInternal
+{
+
 // Locate the first K2 ubergraph page. Event endpoints live on the ubergraph
 // (not a function graph) because UK2Node_CustomEvent is a root event node.
-static UEdGraph* FindDirectorUbergraph(UBlueprint* DirectorBP)
+UEdGraph* FindDirectorUbergraph(UBlueprint* DirectorBP)
 {
 	if (!DirectorBP)
 	{
@@ -635,6 +648,8 @@ static UEdGraph* FindDirectorUbergraph(UBlueprint* DirectorBP)
 	return DirectorBP->UbergraphPages.Num() > 0 ? DirectorBP->UbergraphPages[0] : nullptr;
 }
 
+}  // namespace ClaireonSequenceHelpersInternal
+
 UFunction* FClaireonSequenceHelpers::CreateEventEndpointNode(UBlueprint* DirectorBlueprint, FName EndpointName, ESequenceEventEndpointSignature Signature, FString& OutError)
 {
 	OutError.Reset();
@@ -649,7 +664,7 @@ UFunction* FClaireonSequenceHelpers::CreateEventEndpointNode(UBlueprint* Directo
 		return nullptr;
 	}
 
-	UEdGraph* Graph = FindDirectorUbergraph(DirectorBlueprint);
+	UEdGraph* Graph = ClaireonSequenceHelpersInternal::FindDirectorUbergraph(DirectorBlueprint);
 	if (!Graph)
 	{
 		OutError = TEXT("director blueprint has no K2 ubergraph page");

@@ -24,6 +24,9 @@
 // definition per TU.
 // ============================================================================
 
+namespace Claireon::WidgetAnimation
+{
+
 UWidgetAnimation* FindWidgetAnimationByName(UWidgetBlueprint* WBP, const FString& AnimationName)
 {
 	if (!WBP || AnimationName.IsEmpty())
@@ -247,3 +250,5 @@ bool ApplyAddAnimationTrack(UWidgetAnimation* Anim, const FGuid& BindingGuid, co
 	OutTrack = Track;
 	return true;
 }
+
+}  // namespace Claireon::WidgetAnimation

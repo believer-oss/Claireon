@@ -17,6 +17,9 @@ class UMovieSceneTrack;
  * live in ClaireonWidgetAnimationHandlers.cpp.
  */
 
+namespace Claireon::WidgetAnimation
+{
+
 bool ApplyCreateAnimation(
 	UWidgetBlueprint* WBP,
 	const FString& AnimationName,
@@ -53,3 +56,5 @@ bool ApplyAddAnimationTrack(
 
 /** Helper: find a UWidgetAnimation on the WBP by case-sensitive FName match. */
 UWidgetAnimation* FindWidgetAnimationByName(UWidgetBlueprint* WBP, const FString& AnimationName);
+
+}  // namespace Claireon::WidgetAnimation

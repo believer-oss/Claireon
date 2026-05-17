@@ -24,11 +24,14 @@ using FToolResult = IClaireonTool::FToolResult;
 
 #define LOCTEXT_NAMESPACE "ClaireonAnimGraphTools_Pin"
 
+namespace ClaireonAnimGraphTools_PinInternal
+{
+
 // ============================================================================
 // Helper: Find UAnimGraphNode_Base by GUID in graph
 // ============================================================================
 
-static UAnimGraphNode_Base* FindAnimNodeByGuid(UEdGraph* Graph, const FString& GuidStr, FString& OutError)
+UAnimGraphNode_Base* FindAnimNodeByGuid(UEdGraph* Graph, const FString& GuidStr, FString& OutError)
 {
 	FGuid ParsedGuid;
 	if (!FGuid::Parse(GuidStr, ParsedGuid) || !ParsedGuid.IsValid())
@@ -54,6 +57,8 @@ static UAnimGraphNode_Base* FindAnimNodeByGuid(UEdGraph* Graph, const FString& G
 
 	return AnimNode;
 }
+
+}  // namespace ClaireonAnimGraphTools_PinInternal
 
 // ============================================================================
 // ClaireonAnimGraphTool_ExposePin
@@ -93,7 +98,7 @@ FToolResult ClaireonAnimGraphTool_ExposePin::Execute(const TSharedPtr<FJsonObjec
 		return MakeErrorResult(TEXT("Missing required field: property_name"));
 
 	FString FindError;
-	UAnimGraphNode_Base* AnimNode = FindAnimNodeByGuid(Graph, NodeGuidStr, FindError);
+	UAnimGraphNode_Base* AnimNode = ClaireonAnimGraphTools_PinInternal::FindAnimNodeByGuid(Graph, NodeGuidStr, FindError);
 	if (!AnimNode) return MakeErrorResult(FindError);
 
 	// Find the property in ShowPinForProperties
@@ -177,7 +182,7 @@ FToolResult ClaireonAnimGraphTool_HidePin::Execute(const TSharedPtr<FJsonObject>
 		return MakeErrorResult(TEXT("Missing required field: property_name"));
 
 	FString FindError;
-	UAnimGraphNode_Base* AnimNode = FindAnimNodeByGuid(Graph, NodeGuidStr, FindError);
+	UAnimGraphNode_Base* AnimNode = ClaireonAnimGraphTools_PinInternal::FindAnimNodeByGuid(Graph, NodeGuidStr, FindError);
 	if (!AnimNode) return MakeErrorResult(FindError);
 
 	int32 FoundIndex = INDEX_NONE;
@@ -259,7 +264,7 @@ FToolResult ClaireonAnimGraphTool_SetBinding::Execute(const TSharedPtr<FJsonObje
 	Arguments->TryGetStringField(TEXT("binding_type"), BindingTypeStr);
 
 	FString FindError;
-	UAnimGraphNode_Base* AnimNode = FindAnimNodeByGuid(Graph, NodeGuidStr, FindError);
+	UAnimGraphNode_Base* AnimNode = ClaireonAnimGraphTools_PinInternal::FindAnimNodeByGuid(Graph, NodeGuidStr, FindError);
 	if (!AnimNode) return MakeErrorResult(FindError);
 
 	// Access the mutable binding object
@@ -353,7 +358,7 @@ FToolResult ClaireonAnimGraphTool_RemoveBinding::Execute(const TSharedPtr<FJsonO
 		return MakeErrorResult(TEXT("Missing required field: property_name"));
 
 	FString FindError;
-	UAnimGraphNode_Base* AnimNode = FindAnimNodeByGuid(Graph, NodeGuidStr, FindError);
+	UAnimGraphNode_Base* AnimNode = ClaireonAnimGraphTools_PinInternal::FindAnimNodeByGuid(Graph, NodeGuidStr, FindError);
 	if (!AnimNode) return MakeErrorResult(FindError);
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Remove Property Binding")));
@@ -414,7 +419,7 @@ FToolResult ClaireonAnimGraphTool_BindFunction::Execute(const TSharedPtr<FJsonOb
 		return MakeErrorResult(TEXT("Missing required field: function_name"));
 
 	FString FindError;
-	UAnimGraphNode_Base* AnimNode = FindAnimNodeByGuid(Graph, NodeGuidStr, FindError);
+	UAnimGraphNode_Base* AnimNode = ClaireonAnimGraphTools_PinInternal::FindAnimNodeByGuid(Graph, NodeGuidStr, FindError);
 	if (!AnimNode) return MakeErrorResult(FindError);
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Bind Function to Node")));

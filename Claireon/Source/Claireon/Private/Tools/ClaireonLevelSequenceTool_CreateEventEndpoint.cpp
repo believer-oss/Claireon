@@ -71,7 +71,7 @@ FToolResult ClaireonLevelSequenceTool_CreateEventEndpoint::Execute(const TShared
 	ULevelSequence* Sequence = Data->Sequence.Get();
 	UBlueprint* DirectorBP = nullptr;
 	UFunction* EndpointFunc = nullptr;
-	if (!ApplyCreateEventEndpoint(Sequence, FName(*EndpointName), Signature, DirectorBP, EndpointFunc, Error))
+	if (!Claireon::SequenceEdit::ApplyCreateEventEndpoint(Sequence, FName(*EndpointName), Signature, DirectorBP, EndpointFunc, Error))
 	{
 		return MakeErrorResult(Error);
 	}

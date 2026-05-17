@@ -199,8 +199,11 @@ TArray<TSharedPtr<FJsonValue>> SerializeContextData(const TArray<FInstancedStruc
 // Property Binding Serialization
 // ============================================================================
 
+namespace ClaireonChooserHelpersInternal
+{
+
 /** Resolve a property chain through a UStruct to find the final property type. */
-static void ResolvePropertyChainType(const UStruct* StartStruct, const TArray<FName>& Chain, TSharedPtr<FJsonObject>& BindingObj)
+void ResolvePropertyChainType(const UStruct* StartStruct, const TArray<FName>& Chain, TSharedPtr<FJsonObject>& BindingObj)
 {
 	if (!StartStruct || Chain.IsEmpty())
 	{
@@ -309,6 +312,8 @@ static void ResolvePropertyChainType(const UStruct* StartStruct, const TArray<FN
 	}
 }
 
+}  // namespace ClaireonChooserHelpersInternal
+
 TSharedPtr<FJsonObject> SerializePropertyBinding(const FInstancedStruct& ColumnStruct, const TArray<FInstancedStruct>* ContextData)
 {
 	TSharedPtr<FJsonObject> BindingObj = MakeShared<FJsonObject>();
@@ -381,7 +386,7 @@ TSharedPtr<FJsonObject> SerializePropertyBinding(const FInstancedStruct& ColumnS
 
 							if (ContextStruct)
 							{
-								ResolvePropertyChainType(ContextStruct, Binding->PropertyBindingChain, BindingObj);
+								ClaireonChooserHelpersInternal::ResolvePropertyChainType(ContextStruct, Binding->PropertyBindingChain, BindingObj);
 							}
 						}
 					}

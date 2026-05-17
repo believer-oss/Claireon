@@ -60,7 +60,7 @@ FToolResult ClaireonLevelSequenceTool_RemoveSection::Execute(const TSharedPtr<FJ
 	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Remove Section")));
-	if (!ApplyRemoveSection(Track, SectionIndex, Error))
+	if (!Claireon::SequenceEdit::ApplyRemoveSection(Track, SectionIndex, Error))
 	{
 		return MakeErrorResult(Error);
 	}

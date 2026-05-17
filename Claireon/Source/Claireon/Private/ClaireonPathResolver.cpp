@@ -11,7 +11,7 @@
 namespace ClaireonPathResolver
 {
 
-static void AppendTrace(FString& Trace, const TCHAR* Step)
+void AppendTrace(FString& Trace, const TCHAR* Step)
 {
 	if (!Trace.IsEmpty())
 	{

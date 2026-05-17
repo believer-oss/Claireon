@@ -20,7 +20,7 @@ struct FPathSegment
 	bool IsArrayAccess() const { return ArrayIndex != INDEX_NONE; }
 };
 
-static bool ParsePathSegments(const FString& PropertyPath, TArray<FPathSegment>& OutSegments, FString& OutError)
+bool ParsePathSegments(const FString& PropertyPath, TArray<FPathSegment>& OutSegments, FString& OutError)
 {
 	TArray<FString> DotParts;
 	PropertyPath.ParseIntoArray(DotParts, TEXT("."));
@@ -74,7 +74,7 @@ static bool ParsePathSegments(const FString& PropertyPath, TArray<FPathSegment>&
 // ---------------------------------------------------------------------------
 // Resolve a property path to a (FProperty*, void*) pair
 // ---------------------------------------------------------------------------
-static bool ResolvePath(
+bool ResolvePath(
 	UStruct* Struct,
 	void* Container,
 	const TArray<FPathSegment>& Segments,
@@ -189,7 +189,7 @@ static bool ResolvePath(
 // ---------------------------------------------------------------------------
 // Resolve path for array operations (returns the FArrayProperty and its container)
 // ---------------------------------------------------------------------------
-static bool ResolveArrayPath(
+bool ResolveArrayPath(
 	UObject* Object,
 	const FString& ArrayPath,
 	FArrayProperty*& OutArrayProp,
@@ -358,9 +358,9 @@ bool WritePropertyByPath(UObject* Object, const FString& PropertyPath, const FSt
 // GetAllProperties — recursive property enumeration to JSON
 // ---------------------------------------------------------------------------
 
-static TSharedPtr<FJsonObject> EnumerateProperties(UStruct* Struct, const void* Container, UObject* OwnerObject, const FString& Filter, int32 Depth);
+TSharedPtr<FJsonObject> EnumerateProperties(UStruct* Struct, const void* Container, UObject* OwnerObject, const FString& Filter, int32 Depth);
 
-static TSharedPtr<FJsonValue> PropertyToJsonValue(FProperty* Prop, const void* ValuePtr, UObject* OwnerObject, int32 Depth)
+TSharedPtr<FJsonValue> PropertyToJsonValue(FProperty* Prop, const void* ValuePtr, UObject* OwnerObject, int32 Depth)
 {
 	if (FStructProperty* StructProp = CastField<FStructProperty>(Prop))
 	{
@@ -445,7 +445,7 @@ static TSharedPtr<FJsonValue> PropertyToJsonValue(FProperty* Prop, const void* V
 	return MakeShared<FJsonValueString>(Value);
 }
 
-static TSharedPtr<FJsonObject> EnumerateProperties(UStruct* Struct, const void* Container, UObject* OwnerObject, const FString& Filter, int32 Depth)
+TSharedPtr<FJsonObject> EnumerateProperties(UStruct* Struct, const void* Container, UObject* OwnerObject, const FString& Filter, int32 Depth)
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 

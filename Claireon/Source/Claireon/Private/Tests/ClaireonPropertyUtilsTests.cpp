@@ -14,7 +14,10 @@
 
 // Discover test assets dynamically. Tests that modify assets use undo to restore.
 
-static UObject* LoadAnyGameplayEffect(FString& OutPath)
+namespace ClaireonPropertyUtilsTestsHelpers
+{
+
+UObject* LoadAnyGameplayEffect(FString& OutPath)
 {
 	UClass* GEClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.GameplayEffect"));
 	if (!GEClass) return nullptr;
@@ -28,13 +31,15 @@ static UObject* LoadAnyGameplayEffect(FString& OutPath)
 	return nullptr;
 }
 
+}  // namespace ClaireonPropertyUtilsTestsHelpers
+
 // ---------------------------------------------------------------------------
 // Read tests
 // ---------------------------------------------------------------------------
 
 UNTEST_UNIT(Claireon, PropertyUtils_Read, Primitive)
 {
-	FString Path; UObject* GE = LoadAnyGameplayEffect(Path);
+	FString Path; UObject* GE = ClaireonPropertyUtilsTestsHelpers::LoadAnyGameplayEffect(Path);
 	UNTEST_ASSERT_PTR(GE);
 	FString Error;
 	FString Value = ClaireonPropertyUtils::ReadPropertyByPath(GE, TEXT("DurationPolicy"), Error);
@@ -44,7 +49,7 @@ UNTEST_UNIT(Claireon, PropertyUtils_Read, Primitive)
 
 UNTEST_UNIT(Claireon, PropertyUtils_Read, Enum)
 {
-	FString Path; UObject* GE = LoadAnyGameplayEffect(Path);
+	FString Path; UObject* GE = ClaireonPropertyUtilsTestsHelpers::LoadAnyGameplayEffect(Path);
 	UNTEST_ASSERT_PTR(GE);
 	FString Error;
 	FString Value = ClaireonPropertyUtils::ReadPropertyByPath(GE, TEXT("DurationPolicy"), Error);
@@ -55,7 +60,7 @@ UNTEST_UNIT(Claireon, PropertyUtils_Read, Enum)
 
 UNTEST_UNIT(Claireon, PropertyUtils_Read, InvalidPath)
 {
-	FString Path; UObject* GE = LoadAnyGameplayEffect(Path);
+	FString Path; UObject* GE = ClaireonPropertyUtilsTestsHelpers::LoadAnyGameplayEffect(Path);
 	UNTEST_ASSERT_PTR(GE);
 	FString Error;
 	ClaireonPropertyUtils::ReadPropertyByPath(GE, TEXT("ThisDoesNotExist"), Error);
@@ -73,7 +78,7 @@ UNTEST_UNIT(Claireon, PropertyUtils_Read, NullObject)
 
 UNTEST_UNIT(Claireon, PropertyUtils_Read, ArrayIndexOutOfBounds)
 {
-	FString Path; UObject* GE = LoadAnyGameplayEffect(Path);
+	FString Path; UObject* GE = ClaireonPropertyUtilsTestsHelpers::LoadAnyGameplayEffect(Path);
 	UNTEST_ASSERT_PTR(GE);
 	FString Error;
 	ClaireonPropertyUtils::ReadPropertyByPath(GE, TEXT("Modifiers[9999]"), Error);
@@ -108,7 +113,7 @@ UNTEST_UNIT(Claireon, PropertyUtils_Read, ArrayIndexOnModifiers)
 
 UNTEST_UNIT(Claireon, PropertyUtils_Write, PrimitiveAndUndo)
 {
-	FString Path; UObject* GE = LoadAnyGameplayEffect(Path);
+	FString Path; UObject* GE = ClaireonPropertyUtilsTestsHelpers::LoadAnyGameplayEffect(Path);
 	UNTEST_ASSERT_PTR(GE);
 	FString Error;
 	FString Original = ClaireonPropertyUtils::ReadPropertyByPath(GE, TEXT("StackLimitCount"), Error);
@@ -142,7 +147,7 @@ UNTEST_UNIT(Claireon, PropertyUtils_Write, NullObjectReturnsError)
 
 UNTEST_UNIT(Claireon, PropertyUtils_GetAll, ReturnsNonEmpty)
 {
-	FString Path; UObject* GE = LoadAnyGameplayEffect(Path);
+	FString Path; UObject* GE = ClaireonPropertyUtilsTestsHelpers::LoadAnyGameplayEffect(Path);
 	UNTEST_ASSERT_PTR(GE);
 	TSharedPtr<FJsonObject> Props = ClaireonPropertyUtils::GetAllProperties(GE, TEXT(""), 1);
 	UNTEST_ASSERT_PTR(Props.Get());
@@ -152,7 +157,7 @@ UNTEST_UNIT(Claireon, PropertyUtils_GetAll, ReturnsNonEmpty)
 
 UNTEST_UNIT(Claireon, PropertyUtils_GetAll, FilterNarrows)
 {
-	FString Path; UObject* GE = LoadAnyGameplayEffect(Path);
+	FString Path; UObject* GE = ClaireonPropertyUtilsTestsHelpers::LoadAnyGameplayEffect(Path);
 	UNTEST_ASSERT_PTR(GE);
 	TSharedPtr<FJsonObject> All = ClaireonPropertyUtils::GetAllProperties(GE, TEXT(""), 0);
 	TSharedPtr<FJsonObject> Filtered = ClaireonPropertyUtils::GetAllProperties(GE, TEXT("Duration"), 0);

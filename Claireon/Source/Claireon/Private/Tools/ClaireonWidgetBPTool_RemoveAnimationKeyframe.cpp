@@ -72,7 +72,7 @@ FToolResult ClaireonWidgetBPTool_RemoveAnimationKeyframe::Execute(const TSharedP
         Params->TryGetStringField(TEXT("property_path"), PropertyName);
     }
 
-    UWidgetAnimation* Anim = FindWidgetAnimationByName(WBP, AnimationName);
+    UWidgetAnimation* Anim = Claireon::WidgetAnimation::FindWidgetAnimationByName(WBP, AnimationName);
     if (!Anim)
     {
         return MakeErrorResult(FString::Printf(TEXT("animation '%s' not found on %s"), *AnimationName, *WBP->GetName()));
@@ -138,7 +138,7 @@ FToolResult ClaireonWidgetBPTool_RemoveAnimationKeyframe::Execute(const TSharedP
 
     FScopedTransaction Transaction(NSLOCTEXT("Claireon", "RemoveWidgetAnimationKeyframe", "Remove Widget Animation Keyframe"));
     FString ApplyError;
-    if (!ApplyRemoveKeyframe(Section, FrameNumber, ApplyError))
+    if (!Claireon::SequenceEdit::ApplyRemoveKeyframe(Section, FrameNumber, ApplyError))
     {
         Transaction.Cancel();
         return MakeErrorResult(ApplyError);

@@ -32,7 +32,10 @@ static const TCHAR* TestNiagaraSystemPath = TEXT("/Game/Art_Lib/VOL/NS_LocalVolu
 // ---------------------------------------------------------------------------
 // Helpers: open / close a session via the decomposed Open/Close tools.
 // ---------------------------------------------------------------------------
-static bool OpenTestSession(FString& OutSessionId)
+namespace ClaireonNiagaraTestsHelpers
+{
+
+bool OpenTestSession(FString& OutSessionId)
 {
 	ClaireonNiagaraTool_Open OpenTool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
@@ -50,13 +53,15 @@ static bool OpenTestSession(FString& OutSessionId)
 	return !OutSessionId.IsEmpty();
 }
 
-static void CloseTestSession(const FString& SessionId)
+void CloseTestSession(const FString& SessionId)
 {
 	ClaireonNiagaraTool_Close CloseTool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 	Args->SetStringField(TEXT("session_id"), SessionId);
 	CloseTool.Execute(Args);
 }
+
+}  // namespace ClaireonNiagaraTestsHelpers
 
 // ============================================================================
 // ClaireonNiagaraHelpers
@@ -299,7 +304,7 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, SessionExclusivity, UNTEST_TIMEOUTMS(150
 	UNTEST_ASSERT_TRUE(OpenResult2.bIsError);
 	UNTEST_EXPECT_TRUE(OpenResult2.GetContentAsString().Contains(TEXT("locked")));
 
-	CloseTestSession(SessionId1);
+	ClaireonNiagaraTestsHelpers::CloseTestSession(SessionId1);
 
 	co_return;
 }
@@ -307,7 +312,7 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, SessionExclusivity, UNTEST_TIMEOUTMS(150
 UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, StatusSuppressOutput, UNTEST_TIMEOUTMS(15000))
 {
 	FString SessionId;
-	UNTEST_ASSERT_TRUE(OpenTestSession(SessionId));
+	UNTEST_ASSERT_TRUE(ClaireonNiagaraTestsHelpers::OpenTestSession(SessionId));
 
 	ClaireonNiagaraTool_Status StatusTool;
 	TSharedPtr<FJsonObject> StatusArgs = MakeShared<FJsonObject>();
@@ -320,7 +325,7 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, StatusSuppressOutput, UNTEST_TIMEOUTMS(1
 	UNTEST_EXPECT_TRUE(StatusOutput.StartsWith(TEXT("ok")));
 	UNTEST_EXPECT_FALSE(StatusOutput.Contains(TEXT("=== Niagara System:")));
 
-	CloseTestSession(SessionId);
+	ClaireonNiagaraTestsHelpers::CloseTestSession(SessionId);
 	co_return;
 }
 
@@ -372,7 +377,7 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, ListModules_InvalidStack, UNTEST_TIMEOUT
 UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, AddModule_ByShortName, UNTEST_TIMEOUTMS(30000))
 {
 	FString SessionId;
-	UNTEST_ASSERT_TRUE(OpenTestSession(SessionId));
+	UNTEST_ASSERT_TRUE(ClaireonNiagaraTestsHelpers::OpenTestSession(SessionId));
 
 	{
 		ClaireonNiagaraTool_AddEmitter Tool;
@@ -401,14 +406,14 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, AddModule_ByShortName, UNTEST_TIMEOUTMS(
 		UNTEST_EXPECT_TRUE(Output.Contains(TEXT("add_module")) || Output.Contains(TEXT("Spawn")));
 	}
 
-	CloseTestSession(SessionId);
+	ClaireonNiagaraTestsHelpers::CloseTestSession(SessionId);
 	co_return;
 }
 
 UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, GetModuleInputs_Success, UNTEST_TIMEOUTMS(30000))
 {
 	FString SessionId;
-	UNTEST_ASSERT_TRUE(OpenTestSession(SessionId));
+	UNTEST_ASSERT_TRUE(ClaireonNiagaraTestsHelpers::OpenTestSession(SessionId));
 
 	{
 		ClaireonNiagaraTool_AddEmitter Tool;
@@ -445,14 +450,14 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, GetModuleInputs_Success, UNTEST_TIMEOUTM
 		UNTEST_EXPECT_TRUE(Output.Contains(TEXT("=== Module Inputs")));
 	}
 
-	CloseTestSession(SessionId);
+	ClaireonNiagaraTestsHelpers::CloseTestSession(SessionId);
 	co_return;
 }
 
 UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, RemoveModule_Success, UNTEST_TIMEOUTMS(30000))
 {
 	FString SessionId;
-	UNTEST_ASSERT_TRUE(OpenTestSession(SessionId));
+	UNTEST_ASSERT_TRUE(ClaireonNiagaraTestsHelpers::OpenTestSession(SessionId));
 
 	{
 		ClaireonNiagaraTool_AddEmitter Tool;
@@ -489,14 +494,14 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, RemoveModule_Success, UNTEST_TIMEOUTMS(3
 		UNTEST_EXPECT_TRUE(Output.Contains(TEXT("remove_module")));
 	}
 
-	CloseTestSession(SessionId);
+	ClaireonNiagaraTestsHelpers::CloseTestSession(SessionId);
 	co_return;
 }
 
 UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, AddModule_InvalidStack, UNTEST_TIMEOUTMS(15000))
 {
 	FString SessionId;
-	UNTEST_ASSERT_TRUE(OpenTestSession(SessionId));
+	UNTEST_ASSERT_TRUE(ClaireonNiagaraTestsHelpers::OpenTestSession(SessionId));
 
 	ClaireonNiagaraTool_AddModule Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
@@ -510,7 +515,7 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, AddModule_InvalidStack, UNTEST_TIMEOUTMS
 	FString Output = Result.GetContentAsString();
 	UNTEST_EXPECT_TRUE(Output.Contains(TEXT("resolve")) || Output.Contains(TEXT("Unknown")) || Output.Contains(TEXT("Invalid")));
 
-	CloseTestSession(SessionId);
+	ClaireonNiagaraTestsHelpers::CloseTestSession(SessionId);
 	co_return;
 }
 
@@ -521,7 +526,7 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, AddModule_InvalidStack, UNTEST_TIMEOUTMS
 UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, SetSystemProperty_Success, UNTEST_TIMEOUTMS(15000))
 {
 	FString SessionId;
-	UNTEST_ASSERT_TRUE(OpenTestSession(SessionId));
+	UNTEST_ASSERT_TRUE(ClaireonNiagaraTestsHelpers::OpenTestSession(SessionId));
 
 	ClaireonNiagaraTool_SetSystemProperty Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
@@ -533,14 +538,14 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, SetSystemProperty_Success, UNTEST_TIMEOU
 	FString Output = Result.GetContentAsString();
 	UNTEST_EXPECT_TRUE(Output.Contains(TEXT("set_system_property")) || Output.Contains(TEXT("bFixedBounds")));
 
-	CloseTestSession(SessionId);
+	ClaireonNiagaraTestsHelpers::CloseTestSession(SessionId);
 	co_return;
 }
 
 UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, AddParameter_Float, UNTEST_TIMEOUTMS(15000))
 {
 	FString SessionId;
-	UNTEST_ASSERT_TRUE(OpenTestSession(SessionId));
+	UNTEST_ASSERT_TRUE(ClaireonNiagaraTestsHelpers::OpenTestSession(SessionId));
 
 	ClaireonNiagaraTool_AddParameter Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
@@ -552,14 +557,14 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, AddParameter_Float, UNTEST_TIMEOUTMS(150
 	FString Output = Result.GetContentAsString();
 	UNTEST_EXPECT_TRUE(Output.Contains(TEXT("add_parameter")) || Output.Contains(TEXT("TestFloat")));
 
-	CloseTestSession(SessionId);
+	ClaireonNiagaraTestsHelpers::CloseTestSession(SessionId);
 	co_return;
 }
 
 UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, RemoveParameter_Success, UNTEST_TIMEOUTMS(15000))
 {
 	FString SessionId;
-	UNTEST_ASSERT_TRUE(OpenTestSession(SessionId));
+	UNTEST_ASSERT_TRUE(ClaireonNiagaraTestsHelpers::OpenTestSession(SessionId));
 
 	{
 		ClaireonNiagaraTool_AddParameter AddTool;
@@ -581,14 +586,14 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, RemoveParameter_Success, UNTEST_TIMEOUTM
 		UNTEST_EXPECT_TRUE(Output.Contains(TEXT("remove_parameter")) || Output.Contains(TEXT("TestParamToRemove")));
 	}
 
-	CloseTestSession(SessionId);
+	ClaireonNiagaraTestsHelpers::CloseTestSession(SessionId);
 	co_return;
 }
 
 UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, AddParameter_InvalidType, UNTEST_TIMEOUTMS(15000))
 {
 	FString SessionId;
-	UNTEST_ASSERT_TRUE(OpenTestSession(SessionId));
+	UNTEST_ASSERT_TRUE(ClaireonNiagaraTestsHelpers::OpenTestSession(SessionId));
 
 	ClaireonNiagaraTool_AddParameter Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
@@ -601,7 +606,7 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, AddParameter_InvalidType, UNTEST_TIMEOUT
 	FString Output = Result.GetContentAsString();
 	UNTEST_EXPECT_TRUE(Output.Contains(TEXT("Unsupported")) || Output.Contains(TEXT("Invalid")));
 
-	CloseTestSession(SessionId);
+	ClaireonNiagaraTestsHelpers::CloseTestSession(SessionId);
 	co_return;
 }
 
@@ -612,7 +617,7 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, AddParameter_InvalidType, UNTEST_TIMEOUT
 UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, Compile_Success, UNTEST_TIMEOUTMS(30000))
 {
 	FString SessionId;
-	UNTEST_ASSERT_TRUE(OpenTestSession(SessionId));
+	UNTEST_ASSERT_TRUE(ClaireonNiagaraTestsHelpers::OpenTestSession(SessionId));
 
 	ClaireonNiagaraTool_Compile Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
@@ -622,7 +627,7 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, Compile_Success, UNTEST_TIMEOUTMS(30000)
 	FString Output = Result.GetContentAsString();
 	UNTEST_EXPECT_TRUE(Output.Contains(TEXT("Success")));
 
-	CloseTestSession(SessionId);
+	ClaireonNiagaraTestsHelpers::CloseTestSession(SessionId);
 	co_return;
 }
 
@@ -633,7 +638,7 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, Compile_Success, UNTEST_TIMEOUTMS(30000)
 UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, Status_IncludesStacks, UNTEST_TIMEOUTMS(15000))
 {
 	FString SessionId;
-	UNTEST_ASSERT_TRUE(OpenTestSession(SessionId));
+	UNTEST_ASSERT_TRUE(ClaireonNiagaraTestsHelpers::OpenTestSession(SessionId));
 
 	ClaireonNiagaraTool_Status Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
@@ -644,7 +649,7 @@ UNTEST_UNIT_OPTS(Claireon, NiagaraEdit, Status_IncludesStacks, UNTEST_TIMEOUTMS(
 	UNTEST_EXPECT_TRUE(Output.Contains(TEXT("=== Session Status ===")));
 	UNTEST_EXPECT_TRUE(Output.Contains(TEXT("Stacks:")) || Output.Contains(TEXT("--- Emitter")));
 
-	CloseTestSession(SessionId);
+	ClaireonNiagaraTestsHelpers::CloseTestSession(SessionId);
 	co_return;
 }
 

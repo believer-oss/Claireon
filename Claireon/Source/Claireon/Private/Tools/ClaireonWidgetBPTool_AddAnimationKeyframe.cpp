@@ -133,7 +133,7 @@ FToolResult ClaireonWidgetBPTool_AddAnimationKeyframe::Execute(const TSharedPtr<
         Params->TryGetStringField(TEXT("property_path"), PropertyName);
     }
 
-    UWidgetAnimation* Anim = FindWidgetAnimationByName(WBP, AnimationName);
+    UWidgetAnimation* Anim = Claireon::WidgetAnimation::FindWidgetAnimationByName(WBP, AnimationName);
     if (!Anim)
     {
         return MakeErrorResult(FString::Printf(TEXT("animation '%s' not found on %s"), *AnimationName, *WBP->GetName()));
@@ -191,7 +191,7 @@ FToolResult ClaireonWidgetBPTool_AddAnimationKeyframe::Execute(const TSharedPtr<
 
     FScopedTransaction Transaction(NSLOCTEXT("Claireon", "AddWidgetAnimationKeyframe", "Add Widget Animation Keyframe"));
     FString ApplyError;
-    if (!ApplyAddKeyframe(Section, FrameNumber, ValueJson, ApplyError))
+    if (!Claireon::SequenceEdit::ApplyAddKeyframe(Section, FrameNumber, ValueJson, ApplyError))
     {
         Transaction.Cancel();
         return MakeErrorResult(ApplyError);
@@ -207,7 +207,7 @@ FToolResult ClaireonWidgetBPTool_AddAnimationKeyframe::Execute(const TSharedPtr<
             return MakeErrorResult(FString::Printf(TEXT("unknown interpolation '%s'; supported: Constant, Linear, Cubic"), *InterpolationStr));
         }
         FString InterpError;
-        if (!ApplySetKeyInterpMode(Section, FrameNumber, InterpMode, InterpError))
+        if (!Claireon::SequenceEdit::ApplySetKeyInterpMode(Section, FrameNumber, InterpMode, InterpError))
         {
             Transaction.Cancel();
             return MakeErrorResult(InterpError);

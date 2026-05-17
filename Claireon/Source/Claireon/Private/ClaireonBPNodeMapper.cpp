@@ -212,8 +212,11 @@ namespace
 
 }
 
+namespace ClaireonBPNodeMapperInternal
+{
+
 // V7-tags: Convert BP default value strings to valid C++ expressions
-static FString SanitizeDefaultValue(const FString& Value)
+FString SanitizeDefaultValue(const FString& Value)
 {
 	// FGameplayTag: (TagName="Foo.Bar") -> FGameplayTag::RequestGameplayTag(TEXT("Foo.Bar"))
 	if (Value.StartsWith(TEXT("(TagName=\"")))
@@ -272,6 +275,8 @@ static FString SanitizeDefaultValue(const FString& Value)
 	return Value;
 }
 
+}  // namespace ClaireonBPNodeMapperInternal
+
 FString FClaireonBPNodeMapper::GetConnectedPinExpression(const UEdGraphPin* Pin) const
 {
 	if (!Pin || Pin->LinkedTo.Num() == 0)
@@ -279,7 +284,7 @@ FString FClaireonBPNodeMapper::GetConnectedPinExpression(const UEdGraphPin* Pin)
 		if (Pin && !Pin->DefaultValue.IsEmpty())
 		{
 			// V7-tags: Sanitize default values to valid C++ expressions
-			return SanitizeDefaultValue(Pin->DefaultValue);
+			return ClaireonBPNodeMapperInternal::SanitizeDefaultValue(Pin->DefaultValue);
 		}
 		// V7-unconnected: Auto-fill well-known hidden/implicit pins
 		if (Pin)

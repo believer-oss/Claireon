@@ -18,6 +18,9 @@
 
 #include <atomic>
 
+namespace ClaireonTool_SearchToolsInternal
+{
+
 // ---------------------------------------------------------------------------
 // Module-static catalog-invalidation state.
 //
@@ -28,11 +31,11 @@
 // FClaireonServer::OnToolsChanged and set a dirty bit; Execute() drains
 // the bit before each search and rebuilds if set.
 // ---------------------------------------------------------------------------
-static FDelegateHandle ToolCatalogChangedHandle;
-static FClaireonServer* LastSubscribedServer = nullptr;
-static std::atomic<bool> bToolCatalogDirty{false};
+FDelegateHandle ToolCatalogChangedHandle;
+FClaireonServer* LastSubscribedServer = nullptr;
+std::atomic<bool> bToolCatalogDirty{false};
 
-static TArray<FString> SplitWholeWordCaseInsensitive(const FString& In, const TCHAR* Word)
+TArray<FString> SplitWholeWordCaseInsensitive(const FString& In, const TCHAR* Word)
 {
 	TArray<FString> Out;
 	int32 Cursor = 0;
@@ -58,6 +61,8 @@ static TArray<FString> SplitWholeWordCaseInsensitive(const FString& In, const TC
 	}
 	return Out;
 }
+
+}  // namespace ClaireonTool_SearchToolsInternal
 
 FString ClaireonTool_SearchTools::GetCategory() const { return TEXT("tool"); }
 FString ClaireonTool_SearchTools::GetOperation() const { return TEXT("search"); }
@@ -179,17 +184,17 @@ bool ClaireonTool_SearchTools::RebuildCatalog()
 	// (Re-)subscribe to OnToolsChanged on the currently running server so
 	// rename-in-place changes flip the dirty bit. Re-subscribes across server
 	// restarts when the pointer changes.
-	if (Server != LastSubscribedServer)
+	if (Server != ClaireonTool_SearchToolsInternal::LastSubscribedServer)
 	{
-		if (ToolCatalogChangedHandle.IsValid() && LastSubscribedServer != nullptr)
+		if (ClaireonTool_SearchToolsInternal::ToolCatalogChangedHandle.IsValid() && ClaireonTool_SearchToolsInternal::LastSubscribedServer != nullptr)
 		{
-			LastSubscribedServer->OnToolsChanged.Remove(ToolCatalogChangedHandle);
+			ClaireonTool_SearchToolsInternal::LastSubscribedServer->OnToolsChanged.Remove(ClaireonTool_SearchToolsInternal::ToolCatalogChangedHandle);
 		}
-		ToolCatalogChangedHandle = Server->OnToolsChanged.AddLambda([]()
+		ClaireonTool_SearchToolsInternal::ToolCatalogChangedHandle = Server->OnToolsChanged.AddLambda([]()
 		{
-			bToolCatalogDirty.store(true);
+			ClaireonTool_SearchToolsInternal::bToolCatalogDirty.store(true);
 		});
-		LastSubscribedServer = Server;
+		ClaireonTool_SearchToolsInternal::LastSubscribedServer = Server;
 	}
 
 	FClaireonBridge::EnsureRegistered();
@@ -431,7 +436,7 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 		static const TCHAR* const BoolOps[] = { TEXT("AND"), TEXT("OR"), TEXT("NOT") };
 		for (const TCHAR* Op : BoolOps)
 		{
-			Query = FString::Join(SplitWholeWordCaseInsensitive(Query, Op), TEXT(" "));
+			Query = FString::Join(ClaireonTool_SearchToolsInternal::SplitWholeWordCaseInsensitive(Query, Op), TEXT(" "));
 		}
 		Query = Query.Replace(TEXT("("), TEXT(" "), ESearchCase::CaseSensitive);
 		Query = Query.Replace(TEXT(")"), TEXT(" "), ESearchCase::CaseSensitive);
@@ -610,7 +615,7 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 		// the bit so a concurrent broadcast queues the next rebuild instead of
 		// racing the current one.
 		const bool bCountChanged = (LastCatalogToolCount != ToolsMap.Num());
-		const bool bDirtyDrained = bToolCatalogDirty.exchange(false);
+		const bool bDirtyDrained = ClaireonTool_SearchToolsInternal::bToolCatalogDirty.exchange(false);
 		if (bCountChanged || bDirtyDrained)
 		{
 			RebuildCatalog();

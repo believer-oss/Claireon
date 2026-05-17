@@ -64,7 +64,7 @@ FToolResult ClaireonLevelSequenceTool_AddPossessable::Execute(const TSharedPtr<F
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Add Possessable")));
 	FMovieSceneBinding AddedBinding;
-	if (!ApplyAddPossessable(Data->Sequence.Get(), FName(*Label), ObjectClass, AddedBinding, Error))
+	if (!Claireon::SequenceEdit::ApplyAddPossessable(Data->Sequence.Get(), FName(*Label), ObjectClass, AddedBinding, Error))
 	{
 		return MakeErrorResult(Error);
 	}

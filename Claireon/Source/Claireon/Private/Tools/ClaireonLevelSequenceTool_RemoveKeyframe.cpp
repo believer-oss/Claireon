@@ -61,7 +61,7 @@ FToolResult ClaireonLevelSequenceTool_RemoveKeyframe::Execute(const TSharedPtr<F
 	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Remove Keyframe")));
-	if (!ApplyRemoveKeyframe(Section, FFrameNumber(Frame), Error))
+	if (!Claireon::SequenceEdit::ApplyRemoveKeyframe(Section, FFrameNumber(Frame), Error))
 	{
 		return MakeErrorResult(Error);
 	}

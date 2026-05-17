@@ -60,7 +60,7 @@ FToolResult ClaireonLevelSequenceTool_RemoveTrack::Execute(const TSharedPtr<FJso
 	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Remove Track")));
-	if (!ApplyRemoveTrack(Data->Sequence.Get(), BindingGuid, TrackIndex, Error))
+	if (!Claireon::SequenceEdit::ApplyRemoveTrack(Data->Sequence.Get(), BindingGuid, TrackIndex, Error))
 	{
 		return MakeErrorResult(Error);
 	}

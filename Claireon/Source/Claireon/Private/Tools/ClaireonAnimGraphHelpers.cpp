@@ -87,10 +87,10 @@ UAnimBlueprint* LoadAnimBlueprint(const FString& AssetPath, FString& OutError)
 // ============================================================================
 
 // Forward declaration for mutual recursion between CollectStateMachineGraphs and CollectAnimGraphSubGraphs
-static void CollectAnimGraphSubGraphs(UEdGraph* AnimGraph, const FString& ParentName, TArray<FAnimGraphInfo>& OutGraphs);
+void CollectAnimGraphSubGraphs(UEdGraph* AnimGraph, const FString& ParentName, TArray<FAnimGraphInfo>& OutGraphs);
 
 /** Internal recursive helper to collect graphs from a state machine. */
-static void CollectStateMachineGraphs(UAnimationStateMachineGraph* SMGraph, const FString& ParentName, TArray<FAnimGraphInfo>& OutGraphs)
+void CollectStateMachineGraphs(UAnimationStateMachineGraph* SMGraph, const FString& ParentName, TArray<FAnimGraphInfo>& OutGraphs)
 {
 	if (!SMGraph)
 	{
@@ -182,7 +182,7 @@ static void CollectStateMachineGraphs(UAnimationStateMachineGraph* SMGraph, cons
 }
 
 /** Internal helper to collect graphs from an animation graph (AnimGraph root or state pose graph). */
-static void CollectAnimGraphSubGraphs(UEdGraph* AnimGraph, const FString& ParentName, TArray<FAnimGraphInfo>& OutGraphs)
+void CollectAnimGraphSubGraphs(UEdGraph* AnimGraph, const FString& ParentName, TArray<FAnimGraphInfo>& OutGraphs)
 {
 	if (!AnimGraph)
 	{
@@ -491,7 +491,7 @@ FString GetAnimNodeCategory(const UEdGraphNode* Node)
 // ============================================================================
 
 /** Get a human-readable pin type string. */
-static FString GetPinTypeString(const UEdGraphPin* Pin)
+FString GetPinTypeString(const UEdGraphPin* Pin)
 {
 	if (!Pin)
 	{
@@ -730,7 +730,7 @@ TSharedPtr<FJsonObject> SerializeAnimNodeProperties(UAnimGraphNode_Base* AnimNod
  * The binding object (UAnimGraphNodeBinding_Base) stores PropertyBindings as a private UPROPERTY.
  * We access it via reflection since the old direct access was deprecated.
  */
-static const TMap<FName, FAnimGraphNodePropertyBinding>* GetPropertyBindingsMap(UAnimGraphNode_Base* AnimNode)
+const TMap<FName, FAnimGraphNodePropertyBinding>* GetPropertyBindingsMap(UAnimGraphNode_Base* AnimNode)
 {
 	if (!AnimNode)
 	{

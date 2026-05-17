@@ -88,8 +88,11 @@ TSharedPtr<FJsonObject> ClaireonTool_LandscapeImport::GetInputSchema() const
 	return Schema;
 }
 
+namespace ClaireonTool_LandscapeImportInternal
+{
+
 // Helper to extract FVector from JSON object with {x, y, z} fields, falling back to defaults
-static FVector ExtractVectorFromJson(const TSharedPtr<FJsonObject>& Obj, const FVector& Default)
+FVector ExtractVectorFromJson(const TSharedPtr<FJsonObject>& Obj, const FVector& Default)
 {
 	if (!Obj) return Default;
 	FVector Result = Default;
@@ -99,6 +102,8 @@ static FVector ExtractVectorFromJson(const TSharedPtr<FJsonObject>& Obj, const F
 	if (Obj->TryGetNumberField(TEXT("z"), Val)) Result.Z = Val;
 	return Result;
 }
+
+}  // namespace ClaireonTool_LandscapeImportInternal
 
 IClaireonTool::FToolResult ClaireonTool_LandscapeImport::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
@@ -202,11 +207,11 @@ IClaireonTool::FToolResult ClaireonTool_LandscapeImport::Execute(const TSharedPt
 			// Extract location and scale
 			const TSharedPtr<FJsonObject>* LocationObj = nullptr;
 			Arguments->TryGetObjectField(TEXT("location"), LocationObj);
-			const FVector Location = ExtractVectorFromJson(LocationObj ? *LocationObj : nullptr, FVector::ZeroVector);
+			const FVector Location = ClaireonTool_LandscapeImportInternal::ExtractVectorFromJson(LocationObj ? *LocationObj : nullptr, FVector::ZeroVector);
 
 			const TSharedPtr<FJsonObject>* ScaleObj = nullptr;
 			Arguments->TryGetObjectField(TEXT("scale"), ScaleObj);
-			const FVector Scale = ExtractVectorFromJson(ScaleObj ? *ScaleObj : nullptr, FVector(100.0, 100.0, 100.0));
+			const FVector Scale = ClaireonTool_LandscapeImportInternal::ExtractVectorFromJson(ScaleObj ? *ScaleObj : nullptr, FVector(100.0, 100.0, 100.0));
 
 			// Spawn landscape actor
 			FActorSpawnParameters SpawnParams;

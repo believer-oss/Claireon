@@ -62,7 +62,7 @@ FToolResult ClaireonWidgetBPTool_CreateAnimation::Execute(const TSharedPtr<FJson
     FScopedTransaction Transaction(NSLOCTEXT("Claireon", "CreateWidgetAnimation", "Create Widget Animation"));
     UWidgetAnimation* NewAnim = nullptr;
     FString ApplyError;
-    if (!ApplyCreateAnimation(WBP, AnimationName, static_cast<float>(Duration), DisplayLabel, NewAnim, ApplyError))
+    if (!Claireon::WidgetAnimation::ApplyCreateAnimation(WBP, AnimationName, static_cast<float>(Duration), DisplayLabel, NewAnim, ApplyError))
     {
         Transaction.Cancel();
         return MakeErrorResult(ApplyError);

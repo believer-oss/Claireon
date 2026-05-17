@@ -104,7 +104,7 @@ FToolResult ClaireonLevelSequenceTool_AddKeyframe::Execute(const TSharedPtr<FJso
 	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Add Keyframe")));
-	if (!ApplyAddKeyframe(Section, FFrameNumber(Frame), ValueJson, Error))
+	if (!Claireon::SequenceEdit::ApplyAddKeyframe(Section, FFrameNumber(Frame), ValueJson, Error))
 	{
 		return MakeErrorResult(Error);
 	}

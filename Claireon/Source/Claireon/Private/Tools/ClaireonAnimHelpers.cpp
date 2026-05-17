@@ -711,11 +711,14 @@ UClass* ClaireonAnimHelpers::ResolveNotifyClass(const FString& ClassName, bool b
 	return nullptr;
 }
 
+namespace ClaireonAnimHelpersInternal
+{
+
 /**
  * Ensure enough notify tracks exist on the animation to accommodate the given track index.
  * Creates new tracks with auto-numbered names as needed.
  */
-static void EnsureNotifyTrackExists(UAnimSequenceBase* Anim, int32 TrackIndex)
+void EnsureNotifyTrackExists(UAnimSequenceBase* Anim, int32 TrackIndex)
 {
 	while (Anim->AnimNotifyTracks.Num() <= TrackIndex)
 	{
@@ -724,6 +727,8 @@ static void EnsureNotifyTrackExists(UAnimSequenceBase* Anim, int32 TrackIndex)
 		Anim->AnimNotifyTracks.Add(NewTrack);
 	}
 }
+
+}  // namespace ClaireonAnimHelpersInternal
 
 int32 ClaireonAnimHelpers::AddSkeletonNotify(UAnimSequenceBase* Anim, const FString& NotifyName, float Time, int32 TrackIndex, FString& OutError)
 {
@@ -748,7 +753,7 @@ int32 ClaireonAnimHelpers::AddSkeletonNotify(UAnimSequenceBase* Anim, const FStr
 	}
 
 	// Ensure track exists
-	EnsureNotifyTrackExists(Anim, TrackIndex);
+	ClaireonAnimHelpersInternal::EnsureNotifyTrackExists(Anim,TrackIndex);
 
 	// Register name on skeleton if needed
 	if (!Skeleton->AnimationNotifies.Contains(FName(*NotifyName)))
@@ -794,7 +799,7 @@ int32 ClaireonAnimHelpers::AddClassNotify(UAnimSequenceBase* Anim, UClass* Notif
 	}
 
 	// Ensure track exists
-	EnsureNotifyTrackExists(Anim, TrackIndex);
+	ClaireonAnimHelpersInternal::EnsureNotifyTrackExists(Anim,TrackIndex);
 
 	const bool bIsState = NotifyClass->IsChildOf(UAnimNotifyState::StaticClass());
 	const bool bIsNotify = NotifyClass->IsChildOf(UAnimNotify::StaticClass());
@@ -898,7 +903,7 @@ bool ClaireonAnimHelpers::MoveNotify(UAnimSequenceBase* Anim, int32 NotifyIndex,
 	// Update track if requested
 	if (NewTrackIndex >= 0)
 	{
-		EnsureNotifyTrackExists(Anim, NewTrackIndex);
+		ClaireonAnimHelpersInternal::EnsureNotifyTrackExists(Anim,NewTrackIndex);
 		Event.TrackIndex = NewTrackIndex;
 	}
 
@@ -1175,7 +1180,10 @@ const FRichCurveKey* ClaireonAnimHelpers::FindCurveKey(const UAnimSequenceBase* 
 	return BestKey;
 }
 
-static ERichCurveInterpMode ParseInterpMode(const FString& Value, bool& bSuccess)
+namespace ClaireonAnimHelpersInternal
+{
+
+ERichCurveInterpMode ParseInterpMode(const FString& Value, bool& bSuccess)
 {
 	bSuccess = true;
 	FString Lower = Value.ToLower();
@@ -1187,7 +1195,7 @@ static ERichCurveInterpMode ParseInterpMode(const FString& Value, bool& bSuccess
 	return RCIM_Linear;
 }
 
-static ERichCurveTangentMode ParseTangentMode(const FString& Value, bool& bSuccess)
+ERichCurveTangentMode ParseTangentMode(const FString& Value, bool& bSuccess)
 {
 	bSuccess = true;
 	FString Lower = Value.ToLower();
@@ -1199,7 +1207,7 @@ static ERichCurveTangentMode ParseTangentMode(const FString& Value, bool& bSucce
 	return RCTM_Auto;
 }
 
-static ERichCurveTangentWeightMode ParseTangentWeightMode(const FString& Value, bool& bSuccess)
+ERichCurveTangentWeightMode ParseTangentWeightMode(const FString& Value, bool& bSuccess)
 {
 	bSuccess = true;
 	FString Lower = Value.ToLower();
@@ -1210,6 +1218,8 @@ static ERichCurveTangentWeightMode ParseTangentWeightMode(const FString& Value, 
 	bSuccess = false;
 	return RCTWM_WeightedNone;
 }
+
+}  // namespace ClaireonAnimHelpersInternal
 
 bool ClaireonAnimHelpers::SetCurveKeyProperty(UAnimSequenceBase* Anim, const FString& CurveName, float Time, const FString& PropertyName, const FString& Value, FString& OutError)
 {
@@ -1235,17 +1245,17 @@ bool ClaireonAnimHelpers::SetCurveKeyProperty(UAnimSequenceBase* Anim, const FSt
 
 	if (PropLower == TEXT("interp_mode"))
 	{
-		ModifiedKey.InterpMode = ParseInterpMode(Value, bSuccess);
+		ModifiedKey.InterpMode = ClaireonAnimHelpersInternal::ParseInterpMode(Value, bSuccess);
 		if (!bSuccess) { OutError = FString::Printf(TEXT("Invalid interp_mode '%s'. Expected: linear, cubic, constant, none"), *Value); return false; }
 	}
 	else if (PropLower == TEXT("tangent_mode"))
 	{
-		ModifiedKey.TangentMode = ParseTangentMode(Value, bSuccess);
+		ModifiedKey.TangentMode = ClaireonAnimHelpersInternal::ParseTangentMode(Value, bSuccess);
 		if (!bSuccess) { OutError = FString::Printf(TEXT("Invalid tangent_mode '%s'. Expected: auto, user, break, none"), *Value); return false; }
 	}
 	else if (PropLower == TEXT("tangent_weight_mode"))
 	{
-		ModifiedKey.TangentWeightMode = ParseTangentWeightMode(Value, bSuccess);
+		ModifiedKey.TangentWeightMode = ClaireonAnimHelpersInternal::ParseTangentWeightMode(Value, bSuccess);
 		if (!bSuccess) { OutError = FString::Printf(TEXT("Invalid tangent_weight_mode '%s'. Expected: none, arrive, leave, both"), *Value); return false; }
 	}
 	else if (PropLower == TEXT("arrive_tangent"))

@@ -56,7 +56,7 @@ FToolResult ClaireonWidgetBPTool_SetAnimationProperty::Execute(const TSharedPtr<
     {
         return MakeErrorResult(TEXT("animation_name is required"));
     }
-    UWidgetAnimation* Anim = FindWidgetAnimationByName(WBP, AnimationName);
+    UWidgetAnimation* Anim = Claireon::WidgetAnimation::FindWidgetAnimationByName(WBP, AnimationName);
     if (!Anim)
     {
         return MakeErrorResult(FString::Printf(TEXT("animation '%s' not found on %s"), *AnimationName, *WBP->GetName()));

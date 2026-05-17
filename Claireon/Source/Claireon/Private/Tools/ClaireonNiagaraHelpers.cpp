@@ -29,8 +29,11 @@
 // File-local helpers for graph traversal (replacing non-exported engine functions)
 // ============================================================================
 
+namespace ClaireonNiagaraHelpersInternal
+{
+
 /** Find the ParameterMap input pin on a Niagara node by checking pin types. */
-static UEdGraphPin* FindParameterMapInputPin(UNiagaraNode& Node)
+UEdGraphPin* FindParameterMapInputPin(UNiagaraNode& Node)
 {
 	FPinCollectorArray InputPins;
 	Node.GetInputPins(InputPins);
@@ -46,7 +49,7 @@ static UEdGraphPin* FindParameterMapInputPin(UNiagaraNode& Node)
 }
 
 /** Find the ParameterMap output pin on a Niagara node by checking pin types. */
-static UEdGraphPin* FindParameterMapOutputPin(UNiagaraNode& Node)
+UEdGraphPin* FindParameterMapOutputPin(UNiagaraNode& Node)
 {
 	FPinCollectorArray OutputPins;
 	Node.GetOutputPins(OutputPins);
@@ -65,7 +68,7 @@ static UEdGraphPin* FindParameterMapOutputPin(UNiagaraNode& Node)
  * Local reimplementation of FNiagaraStackGraphUtilities::GetStackFunctionInputOverridePin
  * which is not exported from NiagaraEditor. Finds an existing override pin for a module input.
  */
-static UEdGraphPin* FindStackFunctionInputOverridePin(UNiagaraNodeFunctionCall& StackFunctionCall, FNiagaraParameterHandle AliasedInputParameterHandle)
+UEdGraphPin* FindStackFunctionInputOverridePin(UNiagaraNodeFunctionCall& StackFunctionCall, FNiagaraParameterHandle AliasedInputParameterHandle)
 {
 	// Find the ParameterMapSet node connected to the function call's parameter map input
 	UEdGraphPin* FuncInputPin = FindParameterMapInputPin(StackFunctionCall);
@@ -86,6 +89,8 @@ static UEdGraphPin* FindStackFunctionInputOverridePin(UNiagaraNodeFunctionCall& 
 	}
 	return nullptr;
 }
+
+}  // namespace ClaireonNiagaraHelpersInternal
 
 // ============================================================================
 // Asset Loading
@@ -601,7 +606,7 @@ bool ClaireonNiagaraHelpers::GetOrderedModuleNodes(UNiagaraSystem* System, int32
 	UNiagaraNode* PreviousNode = OutputNode;
 	while (PreviousNode)
 	{
-		UEdGraphPin* InputPin = FindParameterMapInputPin(*PreviousNode);
+		UEdGraphPin* InputPin = ClaireonNiagaraHelpersInternal::FindParameterMapInputPin(*PreviousNode);
 		if (InputPin && InputPin->LinkedTo.Num() == 1)
 		{
 			UNiagaraNode* CurrentNode = Cast<UNiagaraNode>(InputPin->LinkedTo[0]->GetOwningNode());

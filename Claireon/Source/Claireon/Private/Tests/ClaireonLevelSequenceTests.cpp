@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 #if WITH_UNTESTED
 
@@ -43,7 +43,10 @@
 // one transform track + one section, and stash it in the transient package.
 // ---------------------------------------------------------------------------
 
-static ULevelSequence* CreateInMemoryFixtureSequence()
+namespace ClaireonLevelSequenceTestsHelpers
+{
+
+ULevelSequence* CreateInMemoryFixtureSequence()
 {
 	// Mirrors ULevelSequenceFactoryNew::FactoryCreateNew without requiring the
 	// editor-only factory header (LevelSequenceEditor plugin Private/).
@@ -86,13 +89,7 @@ static ULevelSequence* CreateInMemoryFixtureSequence()
 	return Seq;
 }
 
-// ---------------------------------------------------------------------------
-// Fixture helper for #0000 rebind tests: build an in-memory Level Sequence
-// with one possessable of the requested class. The resulting binding has no
-// resolved actor reference (callers rebind via ApplyRebindActor).
-// ---------------------------------------------------------------------------
-
-static ULevelSequence* CreateRebindFixtureSequence(
+ULevelSequence* CreateRebindFixtureSequence(
 	UClass* PossessableClass,
 	FGuid&  OutBindingGuid)
 {
@@ -103,6 +100,8 @@ static ULevelSequence* CreateRebindFixtureSequence(
 	OutBindingGuid = MS->AddPossessable(TEXT("CamA"), PossessableClass);
 	return Seq;
 }
+
+}  // namespace ClaireonLevelSequenceTestsHelpers
 
 // ============================================================================
 // F1: FClaireonSequenceHelpers
@@ -152,7 +151,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_LoadEmptyPath, UNTEST_TIMEOUTMS(500
 
 UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_FormatRoundTrip, UNTEST_TIMEOUTMS(10000))
 {
-	ULevelSequence* Seq = CreateInMemoryFixtureSequence();
+	ULevelSequence* Seq = ClaireonLevelSequenceTestsHelpers::CreateInMemoryFixtureSequence();
 	UNTEST_ASSERT_TRUE(Seq != nullptr);
 	UNTEST_ASSERT_TRUE(Seq->GetMovieScene() != nullptr);
 
@@ -174,7 +173,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_FormatRoundTrip, UNTEST_TIMEOUTMS(1
 
 UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_FormatOmitsSectionsWhenRequested, UNTEST_TIMEOUTMS(10000))
 {
-	ULevelSequence* Seq = CreateInMemoryFixtureSequence();
+	ULevelSequence* Seq = ClaireonLevelSequenceTestsHelpers::CreateInMemoryFixtureSequence();
 	UNTEST_ASSERT_TRUE(Seq != nullptr);
 
 	const FString FullOutput = FClaireonSequenceHelpers::FormatSequenceStructure(Seq, true, true);
@@ -187,7 +186,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_FormatOmitsSectionsWhenRequested, U
 
 UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_FrameSecondsRoundTrip, UNTEST_TIMEOUTMS(5000))
 {
-	ULevelSequence* Seq = CreateInMemoryFixtureSequence();
+	ULevelSequence* Seq = ClaireonLevelSequenceTestsHelpers::CreateInMemoryFixtureSequence();
 	UNTEST_ASSERT_TRUE(Seq != nullptr);
 
 	const double Seconds = 1.5;
@@ -299,7 +298,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_InspectHappyPath, UNTEST_TIMEOUTMS(
 	// The MCP Execute(...) contract requires a resolvable /Game path; the fixture
 	// sequence is transient, so this test asserts the formatter + schema shape
 	// using the helpers directly (which is what Execute routes through).
-	ULevelSequence* Seq = CreateInMemoryFixtureSequence();
+	ULevelSequence* Seq = ClaireonLevelSequenceTestsHelpers::CreateInMemoryFixtureSequence();
 	UNTEST_ASSERT_TRUE(Seq != nullptr);
 
 	const FString Formatted = FClaireonSequenceHelpers::FormatSequenceStructure(Seq, true, true);
@@ -1109,7 +1108,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_ByGuid_Resolves, UNTEST_T
 	UNTEST_ASSERT_TRUE(World != nullptr);
 
 	FGuid Guid;
-	ULevelSequence* Seq = CreateRebindFixtureSequence(ACineCameraActor::StaticClass(), Guid);
+	ULevelSequence* Seq = ClaireonLevelSequenceTestsHelpers::CreateRebindFixtureSequence(ACineCameraActor::StaticClass(), Guid);
 	UNTEST_ASSERT_TRUE(Seq != nullptr);
 	UNTEST_ASSERT_TRUE(Guid.IsValid());
 
@@ -1137,7 +1136,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_PreservesCameraCutSection
 	UNTEST_ASSERT_TRUE(World != nullptr);
 
 	FGuid Guid;
-	ULevelSequence* Seq = CreateRebindFixtureSequence(ACineCameraActor::StaticClass(), Guid);
+	ULevelSequence* Seq = ClaireonLevelSequenceTestsHelpers::CreateRebindFixtureSequence(ACineCameraActor::StaticClass(), Guid);
 	UNTEST_ASSERT_TRUE(Seq != nullptr);
 	UMovieScene* MS = Seq->GetMovieScene();
 	UNTEST_ASSERT_TRUE(MS != nullptr);
@@ -1253,7 +1252,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_TwiceToDifferentActors_On
 	UNTEST_ASSERT_TRUE(World != nullptr);
 
 	FGuid Guid;
-	ULevelSequence* Seq = CreateRebindFixtureSequence(ACineCameraActor::StaticClass(), Guid);
+	ULevelSequence* Seq = ClaireonLevelSequenceTestsHelpers::CreateRebindFixtureSequence(ACineCameraActor::StaticClass(), Guid);
 	UNTEST_ASSERT_TRUE(Seq != nullptr);
 
 	ACineCameraActor* CamA = World->SpawnActor<ACineCameraActor>();
@@ -1286,7 +1285,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_WrongClass_Errors, UNTEST
 	UNTEST_ASSERT_TRUE(World != nullptr);
 
 	FGuid Guid;
-	ULevelSequence* Seq = CreateRebindFixtureSequence(ACineCameraActor::StaticClass(), Guid);
+	ULevelSequence* Seq = ClaireonLevelSequenceTestsHelpers::CreateRebindFixtureSequence(ACineCameraActor::StaticClass(), Guid);
 	UNTEST_ASSERT_TRUE(Seq != nullptr);
 
 	AActor* NonCam = World->SpawnActor<AActor>();
@@ -1368,7 +1367,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_Clear_DropsReferences_Kee
 	UNTEST_ASSERT_TRUE(World != nullptr);
 
 	FGuid Guid;
-	ULevelSequence* Seq = CreateRebindFixtureSequence(ACineCameraActor::StaticClass(), Guid);
+	ULevelSequence* Seq = ClaireonLevelSequenceTestsHelpers::CreateRebindFixtureSequence(ACineCameraActor::StaticClass(), Guid);
 	UNTEST_ASSERT_TRUE(Seq != nullptr);
 	UMovieScene* MS = Seq->GetMovieScene();
 	UNTEST_ASSERT_TRUE(MS != nullptr);

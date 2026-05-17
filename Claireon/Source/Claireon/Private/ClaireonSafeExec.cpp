@@ -34,21 +34,26 @@ struct FExecuteToolContext
 	IClaireonTool::FToolResult* OutResult;
 };
 
+namespace ClaireonSafeExecInternal
+{
+
 // Trampoline for tool execution: calls Tool->Execute() and writes result.
 // This function has C++ temporaries (FToolResult return value) on its stack,
 // but it does NOT contain __try/__except. Under /EHsc, if an SEH exception
 // fires inside Execute(), the temporaries leak -- accepted to prevent crash.
-static void ExecuteToolTrampoline(void* Context)
+void ExecuteToolTrampoline(void* Context)
 {
 	FExecuteToolContext* Ctx = static_cast<FExecuteToolContext*>(Context);
 	*Ctx->OutResult = Ctx->Tool->Execute(*Ctx->Args);
 }
 
 // Trampoline: casts void* back to TFunctionRef and invokes it
-static void ActionTrampoline(void* Context)
+void ActionTrampoline(void* Context)
 {
 	(*static_cast<TFunctionRef<void()>*>(Context))();
 }
+
+}  // namespace ClaireonSafeExecInternal
 
 // Context for the generated-class lookup trampoline.  Mirrors the
 // ExecuteToolTrampoline shape: raw pointer fields only, no destructors.
@@ -58,17 +63,22 @@ struct FGeneratedClassLookupContext
 	UClass** OutClass;
 };
 
+namespace ClaireonSafeExecInternal
+{
+
 // Trampoline invoked inside GuardedCallSEH: calls
 // UBlueprintEditorLibrary::GeneratedClass(bp) and writes the result
 // pointer.  The call is a single static UFUNCTION dispatch, which
 // matches what `unreal.BlueprintEditorLibrary.generated_class(bp)`
 // exposes to the Python reflection layer.
-static void GeneratedClassLookupTrampoline(void* Context)
+void GeneratedClassLookupTrampoline(void* Context)
 {
 	FGeneratedClassLookupContext* Ctx =
 		static_cast<FGeneratedClassLookupContext*>(Context);
 	*Ctx->OutClass = UBlueprintEditorLibrary::GeneratedClass(Ctx->Blueprint);
 }
+
+}  // namespace ClaireonSafeExecInternal
 
 // Pure-SEH inner function. No C++ objects with destructors on this frame.
 // Calls through a raw function pointer to avoid C2712.
@@ -105,7 +115,7 @@ FClaireonSafeExecResult ClaireonSafeExec::ExecuteTool(
 	Ctx.OutResult = &Result.ToolResult;
 
 	uint32 ExceptionCode = GuardedCallSEH(
-		&ExecuteToolTrampoline, &Ctx, ExceptionMsg, UE_ARRAY_COUNT(ExceptionMsg));
+		&ClaireonSafeExecInternal::ExecuteToolTrampoline, &Ctx, ExceptionMsg, UE_ARRAY_COUNT(ExceptionMsg));
 
 	if (ExceptionCode != 0)
 	{
@@ -141,7 +151,7 @@ FClaireonSafeActionResult ClaireonSafeExec::ExecuteAction(TFunctionRef<void()> A
 	TCHAR ExceptionMsg[2048] = {};
 
 	uint32 ExceptionCode = GuardedCallSEH(
-		&ActionTrampoline, &Action, ExceptionMsg, UE_ARRAY_COUNT(ExceptionMsg));
+		&ClaireonSafeExecInternal::ActionTrampoline, &Action, ExceptionMsg, UE_ARRAY_COUNT(ExceptionMsg));
 
 	if (ExceptionCode != 0)
 	{
@@ -178,7 +188,7 @@ FClaireonGeneratedClassLookupResult ClaireonSafeExec::ExecuteGeneratedClassLooku
 	Ctx.OutClass = &OutClass;
 
 	uint32 ExceptionCode = GuardedCallSEH(
-		&GeneratedClassLookupTrampoline, &Ctx, ExceptionMsg, UE_ARRAY_COUNT(ExceptionMsg));
+		&ClaireonSafeExecInternal::GeneratedClassLookupTrampoline, &Ctx, ExceptionMsg, UE_ARRAY_COUNT(ExceptionMsg));
 
 	if (ExceptionCode != 0)
 	{

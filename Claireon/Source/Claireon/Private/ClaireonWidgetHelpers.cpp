@@ -578,8 +578,11 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeAnimationDetails(UWidget
 // MVVM Helpers
 // ============================================================================
 
+namespace ClaireonWidgetHelpersInternal
+{
+
 // Helper to convert EMVVMBindingMode to string
-static FString BindingModeToString(EMVVMBindingMode Mode)
+FString BindingModeToString(EMVVMBindingMode Mode)
 {
 	switch (Mode)
 	{
@@ -592,7 +595,7 @@ static FString BindingModeToString(EMVVMBindingMode Mode)
 }
 
 // Helper to convert EMVVMBlueprintViewModelContextCreationType to string
-static FString CreationTypeToString(EMVVMBlueprintViewModelContextCreationType Type)
+FString CreationTypeToString(EMVVMBlueprintViewModelContextCreationType Type)
 {
 	switch (Type)
 	{
@@ -606,7 +609,7 @@ static FString CreationTypeToString(EMVVMBlueprintViewModelContextCreationType T
 }
 
 // Helper to resolve a ViewModel GUID to its name via the view's contexts
-static FString ResolveViewModelName(const UMVVMBlueprintView* View, const FGuid& ViewModelId)
+FString ResolveViewModelName(const UMVVMBlueprintView* View, const FGuid& ViewModelId)
 {
 	if (!View || !ViewModelId.IsValid())
 	{
@@ -623,7 +626,7 @@ static FString ResolveViewModelName(const UMVVMBlueprintView* View, const FGuid&
 }
 
 // Helper to serialize an FMVVMBlueprintPropertyPath
-static TSharedPtr<FJsonObject> SerializePropertyPath(const UWidgetBlueprint* WidgetBP, const UMVVMBlueprintView* View, const FMVVMBlueprintPropertyPath& Path)
+TSharedPtr<FJsonObject> SerializePropertyPath(const UWidgetBlueprint* WidgetBP, const UMVVMBlueprintView* View, const FMVVMBlueprintPropertyPath& Path)
 {
 	TSharedPtr<FJsonObject> PathObj = MakeShared<FJsonObject>();
 
@@ -660,6 +663,8 @@ static TSharedPtr<FJsonObject> SerializePropertyPath(const UWidgetBlueprint* Wid
 
 	return PathObj;
 }
+
+}  // namespace ClaireonWidgetHelpersInternal
 
 // ============================================================================
 // GetOrCreateMVVMBlueprintView
@@ -741,7 +746,7 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeMVVMViewModelContexts(co
 		UClass* VMClass = Context.GetViewModelClass();
 		ContextObj->SetStringField(TEXT("class"), VMClass ? VMClass->GetPathName() : TEXT("null"));
 
-		ContextObj->SetStringField(TEXT("creation_type"), CreationTypeToString(Context.CreationType));
+		ContextObj->SetStringField(TEXT("creation_type"), ClaireonWidgetHelpersInternal::CreationTypeToString(Context.CreationType));
 		ContextObj->SetBoolField(TEXT("optional"), Context.bOptional);
 
 		ViewModelsArray.Add(MakeShared<FJsonValueObject>(ContextObj));
@@ -794,13 +799,13 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeMVVMBinding(const UWidge
 	BindingObj->SetStringField(TEXT("id"), Binding.BindingId.ToString());
 
 	// Source path
-	BindingObj->SetObjectField(TEXT("source"), SerializePropertyPath(WidgetBP, View, Binding.SourcePath));
+	BindingObj->SetObjectField(TEXT("source"), ClaireonWidgetHelpersInternal::SerializePropertyPath(WidgetBP, View, Binding.SourcePath));
 
 	// Destination path
-	BindingObj->SetObjectField(TEXT("destination"), SerializePropertyPath(WidgetBP, View, Binding.DestinationPath));
+	BindingObj->SetObjectField(TEXT("destination"), ClaireonWidgetHelpersInternal::SerializePropertyPath(WidgetBP, View, Binding.DestinationPath));
 
 	// Binding mode
-	BindingObj->SetStringField(TEXT("mode"), BindingModeToString(Binding.BindingType));
+	BindingObj->SetStringField(TEXT("mode"), ClaireonWidgetHelpersInternal::BindingModeToString(Binding.BindingType));
 
 	// Enabled / Compile flags
 	BindingObj->SetBoolField(TEXT("enabled"), Binding.bEnabled);

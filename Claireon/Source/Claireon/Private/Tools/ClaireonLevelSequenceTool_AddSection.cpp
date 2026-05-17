@@ -69,7 +69,7 @@ FToolResult ClaireonLevelSequenceTool_AddSection::Execute(const TSharedPtr<FJson
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Add Section")));
 	UMovieSceneSection* NewSection = nullptr;
-	if (!ApplyAddSection(Track, FFrameNumber(StartFrame), FFrameNumber(EndFrame),
+	if (!Claireon::SequenceEdit::ApplyAddSection(Track, FFrameNumber(StartFrame), FFrameNumber(EndFrame),
 			RowIndex, NewSection, Error))
 	{
 		return MakeErrorResult(Error);

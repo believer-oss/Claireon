@@ -65,7 +65,7 @@ FToolResult ClaireonWidgetBPTool_AddAnimationBinding::Execute(const TSharedPtr<F
     FString SlotWidgetName;
     Params->TryGetStringField(TEXT("slot_widget_name"), SlotWidgetName);
 
-    UWidgetAnimation* Anim = FindWidgetAnimationByName(WBP, AnimationName);
+    UWidgetAnimation* Anim = Claireon::WidgetAnimation::FindWidgetAnimationByName(WBP, AnimationName);
     if (!Anim)
     {
         return MakeErrorResult(FString::Printf(TEXT("animation '%s' not found on %s"), *AnimationName, *WBP->GetName()));
@@ -79,7 +79,7 @@ FToolResult ClaireonWidgetBPTool_AddAnimationBinding::Execute(const TSharedPtr<F
     FScopedTransaction Transaction(NSLOCTEXT("Claireon", "AddWidgetAnimationBinding", "Add Widget Animation Binding"));
     FGuid NewGuid;
     FString ApplyError;
-    if (!ApplyAddAnimationBinding(Anim, Widget, SlotWidgetName, NewGuid, ApplyError))
+    if (!Claireon::WidgetAnimation::ApplyAddAnimationBinding(Anim, Widget, SlotWidgetName, NewGuid, ApplyError))
     {
         Transaction.Cancel();
         return MakeErrorResult(ApplyError);

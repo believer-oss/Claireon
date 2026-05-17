@@ -71,7 +71,7 @@ FToolResult ClaireonWidgetBPTool_AddAnimationTrack::Execute(const TSharedPtr<FJs
     FString TrackType;
     Params->TryGetStringField(TEXT("track_type"), TrackType);
 
-    UWidgetAnimation* Anim = FindWidgetAnimationByName(WBP, AnimationName);
+    UWidgetAnimation* Anim = Claireon::WidgetAnimation::FindWidgetAnimationByName(WBP, AnimationName);
     if (!Anim)
     {
         return MakeErrorResult(FString::Printf(TEXT("animation '%s' not found on %s"), *AnimationName, *WBP->GetName()));
@@ -95,7 +95,7 @@ FToolResult ClaireonWidgetBPTool_AddAnimationTrack::Execute(const TSharedPtr<FJs
     FScopedTransaction Transaction(NSLOCTEXT("Claireon", "AddWidgetAnimationTrack", "Add Widget Animation Track"));
     UMovieSceneTrack* NewTrack = nullptr;
     FString ApplyError;
-    if (!ApplyAddAnimationTrack(Anim, BindingGuid, TrackType, PropertyName, NewTrack, ApplyError))
+    if (!Claireon::WidgetAnimation::ApplyAddAnimationTrack(Anim, BindingGuid, TrackType, PropertyName, NewTrack, ApplyError))
     {
         Transaction.Cancel();
         return MakeErrorResult(ApplyError);

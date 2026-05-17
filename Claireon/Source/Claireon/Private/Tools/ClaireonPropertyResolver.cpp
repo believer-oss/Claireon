@@ -159,6 +159,9 @@ bool ClaireonPropertyResolver::WritePropertyOnActor(
 	return ClaireonPropertyUtils::WritePropertyByPath(OutResolved.TargetObject, OutResolved.RemainingPath, Value, OutError);
 }
 
+namespace ClaireonPropertyResolverInternal
+{
+
 // Strip an optional "[N]" suffix from a single path segment so that name lookups
 // on component/property registries work for array-indexed first segments like
 // "Waves[0]" or "MyArray[12]". Leaves non-indexed segments unchanged.
@@ -166,7 +169,7 @@ bool ClaireonPropertyResolver::WritePropertyOnActor(
 // If the input has an unmatched '[' or a non-numeric index, returns false and
 // leaves OutBareName unchanged so the caller can forward the raw segment to the
 // downstream parser (which emits the canonical "Malformed array index" error).
-static bool StripArrayIndexSuffix(const FString& Segment, FString& OutBareName)
+bool StripArrayIndexSuffix(const FString& Segment, FString& OutBareName)
 {
 	int32 BracketPos;
 	if (!Segment.FindChar(TEXT('['), BracketPos))
@@ -188,6 +191,8 @@ static bool StripArrayIndexSuffix(const FString& Segment, FString& OutBareName)
 	OutBareName = Segment.Left(BracketPos);
 	return true;
 }
+
+}  // namespace ClaireonPropertyResolverInternal
 
 bool ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(
 	UBlueprint* Blueprint,
@@ -227,7 +232,7 @@ bool ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(
 	}
 
 	FString BareFirst;
-	if (!StripArrayIndexSuffix(FirstSegment, BareFirst))
+	if (!ClaireonPropertyResolverInternal::StripArrayIndexSuffix(FirstSegment, BareFirst))
 	{
 		// Malformed bracket syntax on the first segment. Pass the whole path
 		// straight through to the writer so ClaireonPropertyUtils::ParsePathSegments

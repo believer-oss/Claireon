@@ -61,7 +61,7 @@ FToolResult ClaireonWidgetBPTool_DuplicateAnimation::Execute(const TSharedPtr<FJ
         return MakeErrorResult(TEXT("new_name is required"));
     }
 
-    UWidgetAnimation* Source = FindWidgetAnimationByName(WBP, SourceName);
+    UWidgetAnimation* Source = Claireon::WidgetAnimation::FindWidgetAnimationByName(WBP, SourceName);
     if (!Source)
     {
         return MakeErrorResult(FString::Printf(TEXT("source animation '%s' not found on %s"), *SourceName, *WBP->GetName()));

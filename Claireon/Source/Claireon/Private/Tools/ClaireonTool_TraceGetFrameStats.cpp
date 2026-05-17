@@ -99,8 +99,11 @@ static const TSet<FString> GFrameWrapperScopes = {
 	TEXT("FEngineLoop::Tick"),
 };
 
+namespace ClaireonTool_TraceGetFrameStatsInternal
+{
+
 // Read aggregated scopes from a table, filtering out zero-instance entries
-static TArray<FHitchScopeEntry> ReadScopesFromAggregation(
+TArray<FHitchScopeEntry> ReadScopesFromAggregation(
 	TraceServices::ITable<TraceServices::FTimingProfilerAggregatedStats>* AggTable)
 {
 	TArray<FHitchScopeEntry> Result;
@@ -134,6 +137,8 @@ static TArray<FHitchScopeEntry> ReadScopesFromAggregation(
 	delete AggTable;
 	return Result;
 }
+
+}  // namespace ClaireonTool_TraceGetFrameStatsInternal
 
 IClaireonTool::FToolResult ClaireonTool_TraceGetFrameStats::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {

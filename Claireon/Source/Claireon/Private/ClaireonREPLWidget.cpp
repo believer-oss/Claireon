@@ -58,12 +58,15 @@ static const FLinearColor Color_Gray_Light(0.7f, 0.7f, 0.7f); // Secondary text
 static const FLinearColor Color_White(1.0f, 1.0f, 1.0f);	  // User text
 static const FLinearColor Color_DarkBg(0.12f, 0.12f, 0.14f);  // Message bg
 
+namespace ClaireonREPLWidgetInternal
+{
+
 /**
  * Build an FTextBlockStyle derived from NormalText with the given foreground color.
  * SMultiLineEditableText uses TextStyle rather than ColorAndOpacity.
  * Returns by value; callers should store the result for the widget's lifetime.
  */
-static FTextBlockStyle MakeColoredTextStyle(const FLinearColor& InColor, const FSlateFontInfo* InFont = nullptr)
+FTextBlockStyle MakeColoredTextStyle(const FLinearColor& InColor, const FSlateFontInfo* InFont = nullptr)
 {
 	FTextBlockStyle Style = FCoreStyle::Get().GetWidgetStyle<FTextBlockStyle>(TEXT("NormalText"));
 	Style.SetColorAndOpacity(FSlateColor(InColor));
@@ -73,6 +76,8 @@ static FTextBlockStyle MakeColoredTextStyle(const FLinearColor& InColor, const F
 	}
 	return Style;
 }
+
+}  // namespace ClaireonREPLWidgetInternal
 
 void SClaireonREPLWidget::Construct(const FArguments& InArgs, FClaireonServer* InServer)
 {
@@ -850,7 +855,7 @@ TSharedRef<SWidget> SClaireonREPLWidget::BuildConversationItemWidget(
 	else
 	{
 		// User messages, system messages: keep SMultiLineEditableText
-		const FTextBlockStyle MessageTextStyle = MakeColoredTextStyle(TextColor);
+		const FTextBlockStyle MessageTextStyle = ClaireonREPLWidgetInternal::MakeColoredTextStyle(TextColor);
 		Content->AddSlot().AutoHeight()
 			[SNew(SMultiLineEditableText)
 					.Text(FText::FromString(Item.Text))
@@ -886,7 +891,7 @@ TSharedRef<SWidget> SClaireonREPLWidget::BuildToolCardWidget(
 	// SMultiLineEditableText uses TextStyle instead of ColorAndOpacity.
 	// Store locally; Slate copies the style data during SNew construction.
 	const FSlateFontInfo SmallRegularFont = FCoreStyle::GetDefaultFontStyle("Regular", 9);
-	const FTextBlockStyle ToolStatusTextStyle = MakeColoredTextStyle(StatusColor, &SmallRegularFont);
+	const FTextBlockStyle ToolStatusTextStyle = ClaireonREPLWidgetInternal::MakeColoredTextStyle(StatusColor, &SmallRegularFont);
 
 	return SNew(SBorder)
 		.BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
@@ -917,7 +922,7 @@ TSharedRef<SWidget> SClaireonREPLWidget::BuildAssistantMessageWidget(
 	// Fallback: if parsing produces nothing, render as plain text
 	if (Blocks.Num() == 0)
 	{
-		const FTextBlockStyle PlainStyle = MakeColoredTextStyle(Color_Lavender);
+		const FTextBlockStyle PlainStyle = ClaireonREPLWidgetInternal::MakeColoredTextStyle(Color_Lavender);
 		return SNew(SMultiLineEditableText)
 			.Text(FText::FromString(InMarkdown))
 			.TextStyle(&PlainStyle)
