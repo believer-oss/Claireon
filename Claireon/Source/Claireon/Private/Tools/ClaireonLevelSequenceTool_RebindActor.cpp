@@ -158,7 +158,7 @@ FToolResult ClaireonLevelSequenceTool_RebindActor::Execute(
 	FScopedTransaction Transaction(FText::FromString(
 		TEXT("[Claireon] Rebind Possessable Actor")));
 
-	if (!ApplyRebindActor(Data->Sequence.Get(), BindingGuid, Actor, bClear, Error))
+	if (!Claireon::SequenceEdit::ApplyRebindActor(Data->Sequence.Get(), BindingGuid, Actor, bClear, Error))
 	{
 		Transaction.Cancel();
 		return MakeErrorResult(Error);

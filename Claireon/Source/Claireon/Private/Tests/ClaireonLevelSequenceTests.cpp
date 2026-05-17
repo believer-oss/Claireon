@@ -1116,7 +1116,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_ByGuid_Resolves, UNTEST_T
 	UNTEST_ASSERT_TRUE(Cam != nullptr);
 
 	FString Err;
-	const bool bOk = ApplyRebindActor(Seq, Guid, Cam, /*bClear=*/false, Err);
+	const bool bOk = Claireon::SequenceEdit::ApplyRebindActor(Seq, Guid, Cam, /*bClear=*/false, Err);
 	UNTEST_EXPECT_TRUE(bOk);
 	UNTEST_EXPECT_TRUE(Err.IsEmpty());
 
@@ -1163,7 +1163,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_PreservesCameraCutSection
 	UNTEST_ASSERT_TRUE(NewCam != nullptr);
 
 	FString Err;
-	const bool bOk = ApplyRebindActor(Seq, Guid, NewCam, /*bClear=*/false, Err);
+	const bool bOk = Claireon::SequenceEdit::ApplyRebindActor(Seq, Guid, NewCam, /*bClear=*/false, Err);
 	UNTEST_EXPECT_TRUE(bOk);
 	UNTEST_EXPECT_TRUE(Err.IsEmpty());
 
@@ -1226,7 +1226,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_ByLabel_RepairsUnresolved
 		UNTEST_EXPECT_TRUE(Match == P.Expected);
 
 		FString Err;
-		const bool bOk = ApplyRebindActor(Seq, P.Guid, Match, /*bClear=*/false, Err);
+		const bool bOk = Claireon::SequenceEdit::ApplyRebindActor(Seq, P.Guid, Match, /*bClear=*/false, Err);
 		UNTEST_EXPECT_TRUE(bOk);
 		UNTEST_EXPECT_TRUE(Err.IsEmpty());
 
@@ -1260,11 +1260,11 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_TwiceToDifferentActors_On
 	UNTEST_ASSERT_TRUE(CamA && CamB);
 
 	FString Err1;
-	const bool bOk1 = ApplyRebindActor(Seq, Guid, CamA, /*bClear=*/false, Err1);
+	const bool bOk1 = Claireon::SequenceEdit::ApplyRebindActor(Seq, Guid, CamA, /*bClear=*/false, Err1);
 	UNTEST_EXPECT_TRUE(bOk1);
 
 	FString Err2;
-	const bool bOk2 = ApplyRebindActor(Seq, Guid, CamB, /*bClear=*/false, Err2);
+	const bool bOk2 = Claireon::SequenceEdit::ApplyRebindActor(Seq, Guid, CamB, /*bClear=*/false, Err2);
 	UNTEST_EXPECT_TRUE(bOk2);
 
 	TArray<UObject*, TInlineAllocator<1>> Out;
@@ -1292,7 +1292,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_WrongClass_Errors, UNTEST
 	UNTEST_ASSERT_TRUE(NonCam != nullptr);
 
 	FString Err;
-	const bool bOk = ApplyRebindActor(Seq, Guid, NonCam, /*bClear=*/false, Err);
+	const bool bOk = Claireon::SequenceEdit::ApplyRebindActor(Seq, Guid, NonCam, /*bClear=*/false, Err);
 	UNTEST_EXPECT_FALSE(bOk);
 	UNTEST_EXPECT_TRUE(Err.Contains(TEXT("is not a child of possessable class")));
 
@@ -1323,7 +1323,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_OnSpawnable_Errors, UNTES
 	UNTEST_ASSERT_TRUE(Cam != nullptr);
 
 	FString Err;
-	const bool bOk = ApplyRebindActor(Seq, SpawnableGuid, Cam, /*bClear=*/false, Err);
+	const bool bOk = Claireon::SequenceEdit::ApplyRebindActor(Seq, SpawnableGuid, Cam, /*bClear=*/false, Err);
 	UNTEST_EXPECT_FALSE(bOk);
 	UNTEST_EXPECT_TRUE(Err.Contains(TEXT("set_spawnable_binding_id")));
 
@@ -1353,7 +1353,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_ChildPossessable_Errors, 
 	UNTEST_ASSERT_TRUE(Cam != nullptr);
 
 	FString Err;
-	const bool bOk = ApplyRebindActor(Seq, ChildGuid, Cam, /*bClear=*/false, Err);
+	const bool bOk = Claireon::SequenceEdit::ApplyRebindActor(Seq, ChildGuid, Cam, /*bClear=*/false, Err);
 	UNTEST_EXPECT_FALSE(bOk);
 	UNTEST_EXPECT_TRUE(Err.Contains(TEXT("cannot be rebound directly")));
 
@@ -1376,11 +1376,11 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_Clear_DropsReferences_Kee
 	UNTEST_ASSERT_TRUE(Cam != nullptr);
 
 	FString ErrBind;
-	const bool bBound = ApplyRebindActor(Seq, Guid, Cam, /*bClear=*/false, ErrBind);
+	const bool bBound = Claireon::SequenceEdit::ApplyRebindActor(Seq, Guid, Cam, /*bClear=*/false, ErrBind);
 	UNTEST_EXPECT_TRUE(bBound);
 
 	FString ErrClear;
-	const bool bCleared = ApplyRebindActor(Seq, Guid, /*Actor=*/nullptr, /*bClear=*/true, ErrClear);
+	const bool bCleared = Claireon::SequenceEdit::ApplyRebindActor(Seq, Guid, /*Actor=*/nullptr, /*bClear=*/true, ErrClear);
 	UNTEST_EXPECT_TRUE(bCleared);
 	UNTEST_EXPECT_TRUE(ErrClear.IsEmpty());
 
