@@ -80,6 +80,17 @@ public:
 	static void BuildCatalog(const TArray<FClaireonToolCatalogEntry>& Entries);
 
 	/**
+	 * Idempotent build trigger: if the catalog is currently empty, populates it
+	 * from the live FClaireonServer tool registry (skipping the python_execute
+	 * and tool_search meta tools).  Safe to call repeatedly; no-op when the
+	 * catalog already has entries.  Used by python_execute hint nudges on the
+	 * cold path (first invocation after editor launch, before any tool_search
+	 * has rebuilt the catalog).  Returns true if the catalog has any entries
+	 * after the call.
+	 */
+	static bool EnsureBuilt();
+
+	/**
 	 * Rank catalog entries against Query.  Returns at most MaxResults matches,
 	 * sorted by DistinctQueryTokensMatched desc, then Score desc, then Name asc.
 	 * Returns an empty array when the catalog is empty or when no candidate

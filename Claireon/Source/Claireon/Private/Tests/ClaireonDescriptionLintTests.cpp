@@ -230,4 +230,79 @@ UNTEST_UNIT(Claireon, DescriptionLint, AllP5CategoriesConformToTemplate)
 	co_return;
 }
 
+// ---------------------------------------------------------------------------
+// Stage 003 / Part C: GetPatterns() output lint sweep.
+//
+// Every tool that overrides GetPatterns() with a non-empty body must:
+//   - return only ASCII code points (reject em/en dashes + NBSP).
+//   - omit the project shibboleths "delightful", "thoughtful", "elegant".
+// Empty returns (the default) are skipped.
+// ---------------------------------------------------------------------------
+UNTEST_UNIT(Claireon, DescriptionLint, AllGetPatternsAreAsciiAndShibbolethFree)
+{
+	using namespace ClaireonDescriptionLintHelpers;
+
+	TArray<TSharedPtr<IClaireonTool>> AllTools;
+	CollectAllRegisteredTools(AllTools);
+
+	if (AllTools.Num() == 0)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[DescriptionLint] No IClaireonToolProvider tools registered; skipping GetPatterns lint."));
+		UNTEST_EXPECT_TRUE(true);
+		co_return;
+	}
+
+	TArray<FString> Failures;
+	int32 EvaluatedCount = 0;
+	for (const TSharedPtr<IClaireonTool>& Tool : AllTools)
+	{
+		if (!Tool.IsValid()) { continue; }
+		const FString Patterns = Tool->GetPatterns();
+		if (Patterns.IsEmpty()) { continue; }
+		++EvaluatedCount;
+
+		const FString Name = Tool->GetName();
+		// ASCII-only sweep.
+		for (int32 I = 0; I < Patterns.Len(); ++I)
+		{
+			const TCHAR C = Patterns[I];
+			if (C == TCHAR(0x2013) || C == TCHAR(0x2014) || C == TCHAR(0x00A0))
+			{
+				Failures.Add(FString::Printf(
+					TEXT("[%s] GetPatterns() contains non-ASCII code point U+%04X at index %d"),
+					*Name, static_cast<uint32>(C), I));
+				break;
+			}
+		}
+		// Shibboleth sweep.
+		const FString Lower = Patterns.ToLower();
+		const TArray<FString> Shibboleths = {
+			TEXT("delightful"), TEXT("thoughtful"), TEXT("elegant")
+		};
+		for (const FString& S : Shibboleths)
+		{
+			if (Lower.Contains(S))
+			{
+				Failures.Add(FString::Printf(
+					TEXT("[%s] GetPatterns() contains shibboleth '%s'"), *Name, *S));
+			}
+		}
+	}
+
+	if (Failures.Num() > 0)
+	{
+		UE_LOG(LogTemp, Error,
+			TEXT("[DescriptionLint] %d GetPatterns() lint failure(s) across %d evaluated tool(s):"),
+			Failures.Num(), EvaluatedCount);
+		for (const FString& F : Failures)
+		{
+			UE_LOG(LogTemp, Error, TEXT("[DescriptionLint]   %s"), *F);
+		}
+	}
+
+	UNTEST_EXPECT_TRUE(Failures.Num() == 0);
+	co_return;
+}
+
 #endif // WITH_UNTESTED

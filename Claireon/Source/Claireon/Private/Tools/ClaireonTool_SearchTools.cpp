@@ -11,6 +11,9 @@
 #include "IPythonScriptPlugin.h"
 #include "PythonScriptTypes.h"
 #include "HAL/ThreadHeartBeat.h"
+#include "Interfaces/IPluginManager.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "Serialization/JsonReader.h"
@@ -60,6 +63,68 @@ TArray<FString> SplitWholeWordCaseInsensitive(const FString& In, const TCHAR* Wo
 		}
 	}
 	return Out;
+}
+
+// ---------------------------------------------------------------------------
+// Stage 4 / Part D (#0000): apply_spec catalog loader.
+//
+// Loads `ApplySpecCatalog.json` on demand, caches by file mtime so per-search
+// IO is avoided in the common case.  Returns the parsed root JSON object, or
+// null on any failure (missing plugin, missing file, parse error).  Failures
+// are logged at Warning level for ops visibility but never surface to the
+// agent -- the deep-inspect branch just omits the `spec_shape` field.
+//
+// File-local discriminator `Cl622SearchSpec_` per project memory about
+// anonymous-namespace name collisions under unity batching.
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonObject> Cl622SearchSpec_LoadCatalog()
+{
+	static FCriticalSection CacheLock;
+	static TSharedPtr<FJsonObject> CachedCatalog;
+	static FDateTime CachedMTime = FDateTime::MinValue();
+	static FString CachedPath;
+
+	TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("Claireon"));
+	if (!Plugin.IsValid())
+	{
+		return nullptr;
+	}
+	const FString Path = FPaths::Combine(Plugin->GetContentDir(), TEXT("ApplySpecCatalog.json"));
+	if (!FPaths::FileExists(Path))
+	{
+		return nullptr;
+	}
+
+	const FDateTime MTime = IFileManager::Get().GetTimeStamp(*Path);
+
+	FScopeLock Lock(&CacheLock);
+	if (CachedCatalog.IsValid() && CachedPath == Path && CachedMTime == MTime)
+	{
+		return CachedCatalog;
+	}
+
+	FString Raw;
+	if (!FFileHelper::LoadFileToString(Raw, *Path))
+	{
+		UE_LOG(LogClaireon, Warning,
+			TEXT("[tool_search] Failed to read ApplySpecCatalog.json at %s"), *Path);
+		return nullptr;
+	}
+
+	TSharedPtr<FJsonObject> Root;
+	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Raw);
+	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+	{
+		UE_LOG(LogClaireon, Warning,
+			TEXT("[tool_search] Failed to parse ApplySpecCatalog.json: %s"),
+			*Reader->GetErrorMessage());
+		return nullptr;
+	}
+
+	CachedCatalog = Root;
+	CachedMTime = MTime;
+	CachedPath = Path;
+	return CachedCatalog;
 }
 
 }  // namespace ClaireonTool_SearchToolsInternal
@@ -474,6 +539,35 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 		{
 			ToolObj->SetStringField(TEXT("example_usage"), Example);
 		}
+		// Part C (#0000): deep-inspect always surfaces GetPatterns() when
+		// non-empty.  Empty returns are dropped so deep-inspect responses for
+		// non-overriding tools stay byte-identical.
+		const FString InspectPatterns = Tool->GetPatterns();
+		if (!InspectPatterns.IsEmpty())
+		{
+			ToolObj->SetStringField(TEXT("patterns"), InspectPatterns);
+		}
+		// Part D (#0000): for apply_spec / instance_apply_spec families, look up
+		// the bare GetCategory() in ApplySpecCatalog.json and surface the
+		// matching entry under `spec_shape`.  No-match path (missing plugin,
+		// missing file, parse error, or unknown family) silently omits the
+		// field; the tool still succeeds.
+		const FString InspectOp = Tool->GetOperation();
+		if (InspectOp == TEXT("apply_spec") || InspectOp == TEXT("instance_apply_spec"))
+		{
+			const FString Family = Tool->GetCategory();
+			TSharedPtr<FJsonObject> Catalog =
+				ClaireonTool_SearchToolsInternal::Cl622SearchSpec_LoadCatalog();
+			if (Catalog.IsValid())
+			{
+				const TSharedPtr<FJsonObject>* Entry = nullptr;
+				if (Catalog->TryGetObjectField(Family, Entry)
+					&& Entry && (*Entry).IsValid())
+				{
+					ToolObj->SetObjectField(TEXT("spec_shape"), *Entry);
+				}
+			}
+		}
 		if (TSharedPtr<FJsonObject> Tooltips = Tool->GetParameterTooltips())
 		{
 			ToolObj->SetObjectField(TEXT("parameter_tooltips"), Tooltips);
@@ -675,6 +769,12 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 		FString Source;
 		TSharedPtr<FJsonObject> InputSchema;
 		FString ExampleUsage;
+		/** Per-tool markdown patterns block. Populated only when Detail == "full"
+		 *  AND Tool->GetPatterns() returned a non-empty string. Surfaced as
+		 *  `patterns` on the per-result JSON object; never emitted when empty so
+		 *  full-detail responses do not pick up a `"patterns": ""` field for the
+		 *  200+ tools that do not override GetPatterns(). */
+		FString Patterns;
 		/** Distinct query tokens that matched this entry (surfaced as `query_tokens_matched`). */
 		int32 QueryTokensMatched = 0;
 	};
@@ -814,6 +914,14 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 			Entry.ExampleUsage = Tool->GetExampleUsage();
 		}
 
+		// Part C (#0000): patterns block surfaces only on the full-detail tier;
+		// empty returns are dropped so non-overriding tools do not advertise an
+		// empty `patterns` field.
+		if (Detail == TEXT("full"))
+		{
+			Entry.Patterns = Tool->GetPatterns();
+		}
+
 		// Look up tool source from the server's source map
 		const TMap<FString, FName>& SourceMap = Server->GetToolSourceMap();
 		if (const FName* SourceName = SourceMap.Find(ToolName))
@@ -945,6 +1053,10 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 			{
 				ToolObj->SetStringField(TEXT("example_usage"), Entry->ExampleUsage);
 			}
+			if (!Entry->Patterns.IsEmpty())
+			{
+				ToolObj->SetStringField(TEXT("patterns"), Entry->Patterns);
+			}
 			ToolsArr.Add(MakeShared<FJsonValueObject>(ToolObj));
 		}
 		CatObj->SetArrayField(TEXT("tools"), ToolsArr);
@@ -969,6 +1081,29 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 	if (TotalMatching > MatchingTools.Num())
 	{
 		SummaryText += FString::Printf(TEXT(" (showing %d of %d)"), MatchingTools.Num(), TotalMatching);
+	}
+
+	// Part B (#0000): upgrade-path footer.  Tells the agent how to escalate to
+	// full detail without a follow-up search.  Suppressed when:
+	//   - already at full detail (nothing to escalate to);
+	//   - the deep-inspect bypass already short-circuited earlier (defensive --
+	//     deep-inspect returns at MakeSuccessResult above);
+	//   - no hits to recommend;
+	//   - exactly one match whose canonical name equals the trimmed query
+	//     (per operator D5: the agent already has the canonical name).
+	const bool bSuppressFooter =
+		Detail == TEXT("full") ||
+		!InspectToolName.IsEmpty() ||
+		MatchingTools.Num() == 0 ||
+		(MatchingTools.Num() == 1 &&
+			MatchingTools[0].Name.Equals(Query, ESearchCase::IgnoreCase));
+
+	if (!bSuppressFooter)
+	{
+		SummaryText += FString::Printf(
+			TEXT("\ntip: call tool_search(name=\"%s\", detail=\"full\") "
+				 "for schema, examples, and patterns"),
+			*MatchingTools[0].Name);
 	}
 
 	return MakeSuccessResult(DataObj, SummaryText);

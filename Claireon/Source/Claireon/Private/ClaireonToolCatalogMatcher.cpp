@@ -4,9 +4,12 @@
 #include "ClaireonToolCatalogMatcher.h"
 
 #include "ClaireonLog.h"
+#include "ClaireonModule.h"
+#include "ClaireonServer.h"
 #include "ClaireonToolCatalogAbbreviations.h"
 #include "HAL/CriticalSection.h"
 #include "Misc/ScopeLock.h"
+#include "Tools/IClaireonTool.h"
 
 namespace ClaireonToolCatalogMatcherInternal
 {
@@ -232,6 +235,61 @@ void FClaireonToolCatalogMatcher::BuildCatalog(const TArray<FClaireonToolCatalog
 	UE_LOG(LogClaireon, Verbose,
 		TEXT("[ToolCatalogMatcher] BuildCatalog: %d entries, %d unique tokens"),
 		GCatalogEntries.Num(), GInvertedIndex.Num());
+}
+
+bool FClaireonToolCatalogMatcher::EnsureBuilt()
+{
+	using namespace ClaireonToolCatalogMatcherInternal;
+
+	{
+		FScopeLock Lock(&GMatcherLock);
+		if (GCatalogEntries.Num() > 0)
+		{
+			return true;
+		}
+	}
+
+	// Cold path: catalog empty.  Walk the live tool registry and build a
+	// minimal entry list mirroring the field shape used by
+	// ClaireonTool_SearchTools::RebuildCatalog (skipping the python_execute and
+	// tool_search meta tools so they cannot win their own best-match suffix).
+	FClaireonServer* Server = FClaireonModule::Get().GetServer();
+	if (!Server)
+	{
+		return false;
+	}
+
+	const TMap<FString, TSharedPtr<IClaireonTool>>& Tools = Server->GetTools();
+	TArray<FClaireonToolCatalogEntry> Entries;
+	Entries.Reserve(Tools.Num());
+	for (const TPair<FString, TSharedPtr<IClaireonTool>>& Pair : Tools)
+	{
+		const TSharedPtr<IClaireonTool>& Tool = Pair.Value;
+		if (!Tool.IsValid())
+		{
+			continue;
+		}
+		const FString ToolName = Tool->GetName();
+		if (ToolName == TEXT("python_execute") || ToolName == TEXT("tool_search"))
+		{
+			continue;
+		}
+
+		FClaireonToolCatalogEntry Entry;
+		Entry.Name        = ToolName;
+		Entry.Description = Tool->GetDescription();
+		Entry.Category    = Tool->GetCategory();
+		Entry.Operation   = Tool->GetOperation();
+		Entry.Keywords    = Tool->GetSearchKeywords();
+		Entries.Add(MoveTemp(Entry));
+	}
+
+	BuildCatalog(Entries);
+
+	{
+		FScopeLock Lock(&GMatcherLock);
+		return GCatalogEntries.Num() > 0;
+	}
 }
 
 int32 FClaireonToolCatalogMatcher::DistanceBounded(const FString& A, const FString& B, int32 MaxDistance)

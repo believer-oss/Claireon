@@ -124,6 +124,11 @@ public:
 		/** Error description */
 		FString ErrorMessage;
 
+		/** Optional structured hint to nudge the agent toward tool_search on
+		 *  signature-class failures. Emitted on the wire envelope when valid;
+		 *  absent otherwise. See ClaireonTool_ExecutePython for emitters. */
+		TSharedPtr<FJsonObject> Hint;
+
 		/** Returns ErrorMessage (if error) or Summary (if success) as a single string. */
 		FString GetContentAsString() const
 		{
@@ -152,6 +157,10 @@ public:
 
 	/** Optional example usage string shown in deep-inspect / search output. Default: empty. */
 	virtual FString GetExampleUsage() const { return FString(); }
+
+	/** Optional patterns / common-pitfalls / see-also block. Returned as markdown.
+	 *  Empty string suppresses surfacing entirely in tool_search responses. */
+	virtual FString GetPatterns() const { return FString(); }
 
 	/** Optional per-parameter tooltip map (parameter name -> tooltip string). Default: null. */
 	virtual TSharedPtr<FJsonObject> GetParameterTooltips() const { return nullptr; }

@@ -152,4 +152,36 @@ UNTEST_UNIT(Claireon, BlueprintGraphMetadata, AddVariableParameterTooltipsCoverR
 	co_return;
 }
 
+// ===========================================================================
+// Stage 003 / Part C: bp_add_node GetPatterns() is non-empty, ASCII-clean
+// (no em-dash), and the migrated content no longer lives in
+// GetFullDescription().
+// ===========================================================================
+
+UNTEST_UNIT(Claireon, BlueprintGraphMetadata, AddNodePatternsNonEmptyAndAscii)
+{
+	ClaireonBlueprintGraphTool_AddNode Tool;
+	const FString Patterns = Tool.GetPatterns();
+	UNTEST_EXPECT_TRUE(!Patterns.IsEmpty());
+	UNTEST_EXPECT_TRUE(Patterns.Contains(TEXT("## Common pitfalls")));
+	UNTEST_EXPECT_TRUE(Patterns.Contains(TEXT("## See also")));
+	// ASCII-clean: reject em/en dashes and the non-breaking space code unit.
+	for (int32 I = 0; I < Patterns.Len(); ++I)
+	{
+		const TCHAR C = Patterns[I];
+		UNTEST_EXPECT_FALSE(C == TCHAR(0x2013)); // en dash
+		UNTEST_EXPECT_FALSE(C == TCHAR(0x2014)); // em dash
+		UNTEST_EXPECT_FALSE(C == TCHAR(0x00A0)); // non-breaking space
+	}
+	co_return;
+}
+
+UNTEST_UNIT(Claireon, BlueprintGraphMetadata, AddNodeFullDescriptionDoesNotMentionPerNodeCycle)
+{
+	ClaireonBlueprintGraphTool_AddNode Tool;
+	const FString Full = Tool.GetFullDescription();
+	UNTEST_EXPECT_FALSE(Full.Contains(TEXT("per-node cycle")));
+	co_return;
+}
+
 #endif // WITH_UNTESTED

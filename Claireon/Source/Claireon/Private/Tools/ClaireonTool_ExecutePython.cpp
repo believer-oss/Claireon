@@ -10,6 +10,8 @@
 #include "ClaireonBridge.h"
 #include "ClaireonAutoSave.h"
 #include "ClaireonLog.h"
+#include "ClaireonModule.h"
+#include "ClaireonServer.h"
 #include "ClaireonOutputGate.h"
 #include "ClaireonSafeExec.h"
 #include "ClaireonPythonAuditLog.h"
@@ -35,6 +37,261 @@ THIRD_PARTY_INCLUDES_START
 THIRD_PARTY_INCLUDES_END
 
 TAtomic<int32> ClaireonTool_ExecutePython::TempFileCounter(0);
+
+// Forward declaration of internal helper used by the public BuildHintFromLogs
+// method.  Defined in the Cl622PyHintInternal namespace below.
+namespace Cl622PyHintInternal
+{
+	static TSharedPtr<FJsonObject> Cl622Py_BuildHintFromLogs(const FString& Logs);
+}
+
+TSharedPtr<FJsonObject> ClaireonTool_ExecutePython::BuildHintFromLogs(const FString& Logs)
+{
+	return Cl622PyHintInternal::Cl622Py_BuildHintFromLogs(Logs);
+}
+
+// ---------------------------------------------------------------------------
+// Hint-emission helpers (Stage 002 / Part A of #0000).
+//
+// Parses the Python traceback emitted by the user-script template at :332-343
+// for four signature-class error patterns and constructs an
+// FToolResult::Hint payload that nudges the agent toward tool_search:
+//
+//   - NameError: name '<X>' is not defined        (with claireon.<X> source ctx)
+//   - AttributeError: module 'claireon' has no attribute '<X>'
+//   - TypeError: <tool>() got an unexpected keyword argument '<K>'
+//   - TypeError: <tool>() missing N required positional argument
+//
+// SyntaxError is intentionally not nudged (operator answer D4 + design notes).
+//
+// File-local discriminator: helpers are prefixed `Cl622Py_` to avoid
+// anonymous-namespace collisions under Module.Claireon.<N>.cpp unity batching
+// (project memory: unique anon-NS naming required).
+// ---------------------------------------------------------------------------
+namespace Cl622PyHintInternal
+{
+	static bool Cl622Py_LineMatchesPrefix(const FString& Line, const FString& Prefix)
+	{
+		return Line.StartsWith(Prefix, ESearchCase::CaseSensitive);
+	}
+
+	/** True if the traceback (the lines preceding `ExceptionLineIdx`) shows a
+	 *  `File "...", line ...,` block whose echoed source line references
+	 *  `claireon.<Name>`. The user-script template wraps user code with a fixed
+	 *  prefix, so the echoed source for the failing line in the traceback
+	 *  contains the call expression -- a substring match for "claireon.<Name>"
+	 *  is sufficient.
+	 *
+	 *  We scan a small backward window of up to 6 lines from the exception
+	 *  line so that nested call sites (where the failing frame is several
+	 *  source lines up from the exception line) still match. */
+	static bool Cl622Py_TracebackCallsClaireonOnName(
+		const TArray<FString>& Lines,
+		int32 ExceptionLineIdx,
+		const FString& Name)
+	{
+		const FString Needle = TEXT("claireon.") + Name;
+		const int32 Start = FMath::Max(0, ExceptionLineIdx - 6);
+		for (int32 I = Start; I < ExceptionLineIdx; ++I)
+		{
+			if (Lines[I].Contains(Needle, ESearchCase::CaseSensitive))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Look up a tool by name from the live FClaireonServer.  Returns true if
+	 *  the name corresponds to a registered tool (so we don't hint on
+	 *  non-claireon library functions whose names happen to appear in a
+	 *  TypeError signature line). */
+	static bool Cl622Py_IsRegisteredTool(const FString& Name)
+	{
+		FClaireonServer* Server = FClaireonModule::Get().GetServer();
+		if (!Server)
+		{
+			return false;
+		}
+		const TMap<FString, TSharedPtr<IClaireonTool>>& Tools = Server->GetTools();
+		return Tools.Contains(Name);
+	}
+
+	/** Extract the substring between two delimiters (exclusive). Returns true if both
+	 *  delimiters are found and the start is before the end. */
+	static bool Cl622Py_BetweenDelimiters(
+		const FString& Source,
+		const FString& Open,
+		const FString& Close,
+		FString& OutValue)
+	{
+		const int32 OpenAt = Source.Find(Open, ESearchCase::CaseSensitive, ESearchDir::FromStart);
+		if (OpenAt < 0)
+		{
+			return false;
+		}
+		const int32 CloseAt = Source.Find(Close, ESearchCase::CaseSensitive, ESearchDir::FromStart, OpenAt + Open.Len());
+		if (CloseAt < 0 || CloseAt <= OpenAt + Open.Len())
+		{
+			return false;
+		}
+		OutValue = Source.Mid(OpenAt + Open.Len(), CloseAt - (OpenAt + Open.Len()));
+		return true;
+	}
+
+	/** Parse `<tool>(` out of a TypeError line such as
+	 *  `TypeError: bp_compile() got an unexpected keyword argument 'foo'`.
+	 *  Returns the bare tool name, or empty when the pattern is not present. */
+	static FString Cl622Py_ExtractTypeErrorToolName(const FString& Line)
+	{
+		// Strip optional traceback prefix that Python sometimes prefixes
+		// (e.g. "  File ..." vs. "TypeError: ..."). Find "TypeError:" first.
+		const int32 At = Line.Find(TEXT("TypeError:"), ESearchCase::CaseSensitive, ESearchDir::FromStart);
+		if (At < 0)
+		{
+			return FString();
+		}
+		// Substring from "TypeError:" forward.
+		const FString Tail = Line.Mid(At + FString(TEXT("TypeError:")).Len()).TrimStartAndEnd();
+		const int32 ParenAt = Tail.Find(TEXT("("), ESearchCase::CaseSensitive, ESearchDir::FromStart);
+		if (ParenAt <= 0)
+		{
+			return FString();
+		}
+		FString Name = Tail.Left(ParenAt).TrimStartAndEnd();
+		// Reject anything that contains a space (e.g. "missing 1 required positional")
+		// -- the bare tool basename is the token immediately preceding '('.
+		int32 SpaceAt;
+		if (Name.FindLastChar(TEXT(' '), SpaceAt))
+		{
+			Name = Name.Mid(SpaceAt + 1);
+		}
+		return Name;
+	}
+
+	/** Inspect the Python log lines for one of the four nudge patterns and,
+	 *  on match, build a hint object.  Returns null when no pattern matches
+	 *  or when the match is explicitly suppressed (SyntaxError, or TypeError
+	 *  on a non-registered tool name). */
+	static TSharedPtr<FJsonObject> Cl622Py_BuildHintFromLogs(const FString& Logs)
+	{
+		if (Logs.IsEmpty())
+		{
+			return nullptr;
+		}
+
+		TArray<FString> Lines;
+		Logs.ParseIntoArrayLines(Lines, /*CullEmpty=*/false);
+
+		for (int32 I = 0; I < Lines.Num(); ++I)
+		{
+			const FString& Line = Lines[I];
+
+			// Highest priority: SyntaxError -- suppress hint regardless of any
+			// later patterns.  The user-script template's bare-except branch
+			// only catches Exception, so SyntaxErrors at parse time surface
+			// here as a top-level traceback line.
+			if (Line.Contains(TEXT("SyntaxError:"), ESearchCase::CaseSensitive))
+			{
+				return nullptr;
+			}
+
+			// TypeError signature-mismatch nudges. Two sub-shapes share the
+			// same hint payload (name + detail=full + reason).
+			const bool bUnexpectedKwarg = Line.Contains(
+				TEXT("got an unexpected keyword argument"), ESearchCase::CaseSensitive);
+			const bool bMissingPositional = Line.Contains(
+				TEXT("missing"), ESearchCase::CaseSensitive)
+				&& Line.Contains(TEXT("required positional"), ESearchCase::CaseSensitive);
+			if ((bUnexpectedKwarg || bMissingPositional)
+				&& Line.Contains(TEXT("TypeError:"), ESearchCase::CaseSensitive))
+			{
+				const FString ToolName = Cl622Py_ExtractTypeErrorToolName(Line);
+				if (!ToolName.IsEmpty() && Cl622Py_IsRegisteredTool(ToolName))
+				{
+					TSharedPtr<FJsonObject> Hint = MakeShared<FJsonObject>();
+					Hint->SetStringField(TEXT("tool"), TEXT("tool_search"));
+					TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+					Args->SetStringField(TEXT("name"), ToolName);
+					Args->SetStringField(TEXT("detail"), TEXT("full"));
+					Hint->SetObjectField(TEXT("args"), Args);
+					Hint->SetStringField(TEXT("reason"),
+						FString::Printf(TEXT("signature mismatch on %s"), *ToolName));
+					return Hint;
+				}
+			}
+
+			// NameError: name '<X>' is not defined -- only when traceback
+			// source context shows `claireon.<X>`.
+			if (Line.Contains(TEXT("NameError:"), ESearchCase::CaseSensitive))
+			{
+				FString MissingName;
+				if (Cl622Py_BetweenDelimiters(Line, TEXT("name '"), TEXT("'"), MissingName)
+					&& !MissingName.IsEmpty()
+					&& Cl622Py_TracebackCallsClaireonOnName(Lines, I, MissingName))
+				{
+					TSharedPtr<FJsonObject> Hint = MakeShared<FJsonObject>();
+					Hint->SetStringField(TEXT("tool"), TEXT("tool_search"));
+					TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+					Args->SetStringField(TEXT("query"), MissingName);
+					Hint->SetObjectField(TEXT("args"), Args);
+
+					FString Reason = FString::Printf(
+						TEXT("unknown tool '%s'"), *MissingName);
+
+					FClaireonToolCatalogMatcher::EnsureBuilt();
+					TArray<FClaireonToolCatalogMatch> Matches =
+						FClaireonToolCatalogMatcher::FindNearest(MissingName, 1);
+					if (Matches.Num() > 0)
+					{
+						Reason += FString::Printf(
+							TEXT("; best match: %s"), *Matches[0].Name);
+					}
+					Hint->SetStringField(TEXT("reason"), Reason);
+					return Hint;
+				}
+			}
+
+			// AttributeError: module 'claireon' has no attribute '<X>'.
+			if (Line.Contains(TEXT("AttributeError:"), ESearchCase::CaseSensitive)
+				&& Line.Contains(TEXT("module 'claireon'"), ESearchCase::CaseSensitive))
+			{
+				FString MissingName;
+				// Two attribute shapes: "has no attribute 'X'" or "has no attribute \"X\""
+				if (!Cl622Py_BetweenDelimiters(
+						Line, TEXT("has no attribute '"), TEXT("'"), MissingName))
+				{
+					Cl622Py_BetweenDelimiters(
+						Line, TEXT("has no attribute \""), TEXT("\""), MissingName);
+				}
+				if (!MissingName.IsEmpty())
+				{
+					TSharedPtr<FJsonObject> Hint = MakeShared<FJsonObject>();
+					Hint->SetStringField(TEXT("tool"), TEXT("tool_search"));
+					TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+					Args->SetStringField(TEXT("query"), MissingName);
+					Hint->SetObjectField(TEXT("args"), Args);
+
+					FString Reason = FString::Printf(
+						TEXT("unknown tool '%s'"), *MissingName);
+
+					FClaireonToolCatalogMatcher::EnsureBuilt();
+					TArray<FClaireonToolCatalogMatch> Matches =
+						FClaireonToolCatalogMatcher::FindNearest(MissingName, 1);
+					if (Matches.Num() > 0)
+					{
+						Reason += FString::Printf(
+							TEXT("; best match: %s"), *Matches[0].Name);
+					}
+					Hint->SetStringField(TEXT("reason"), Reason);
+					return Hint;
+				}
+			}
+		}
+
+		return nullptr;
+	}
+}
 
 // ---------------------------------------------------------------------------
 // Tool-catalog nearest-string bindings.
@@ -443,6 +700,14 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	FToolResult FinalResult;
 	FinalResult.Logs = Logs;
 	FinalResult.UELog = EngineOutput;
+
+	// Stage 002 / Part A: scan the traceback (regardless of bPythonSuccess --
+	// the user-script template's bare-except branch can absorb the exception
+	// while still printing the traceback to stdout, so the hint signal must
+	// be available on both result paths). The bridge from Stage 001 surfaces
+	// Result.Hint on the wire envelope only when valid; null leaves the wire
+	// shape byte-identical.
+	FinalResult.Hint = Cl622PyHintInternal::Cl622Py_BuildHintFromLogs(Logs);
 
 	if (bTimedOut)
 	{

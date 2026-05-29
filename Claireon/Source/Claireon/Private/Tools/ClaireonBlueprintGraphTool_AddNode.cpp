@@ -1728,10 +1728,26 @@ FString ClaireonBlueprintGraphTool_AddNode::GetFullDescription() const
         "preferred wiring path is auto_connect_from_cursor=true: when the "
         "session cursor sits on a pin compatible with the new node's exec "
         "input, the connection is made automatically without requiring a "
-        "follow-up bp_connect_pins call. Per the "
-        "per-node cycle in the per-tool authoring guidance, save every "
-        "1-3 add_node calls via bp_save to flush in-session "
-        "edits to the asset and protect against editor-crash data loss.");
+        "follow-up bp_connect_pins call.");
+}
+
+FString ClaireonBlueprintGraphTool_AddNode::GetPatterns() const
+{
+    // Part C (#0000): save-discipline guidance migrates here from
+    // GetFullDescription so tool_search deep-inspect can surface it under a
+    // dedicated `patterns` field. ASCII only; no em-dashes.
+    return TEXT(
+        "## Common pitfalls\n"
+        "\n"
+        "Per the per-node cycle in the per-tool authoring guidance, save "
+        "every 1-3 add_node calls via bp_save to flush in-session edits to "
+        "the asset and protect against editor-crash data loss.\n"
+        "\n"
+        "## See also\n"
+        "\n"
+        "- claireon.bp_connect_pins -- companion when auto_connect_from_cursor "
+        "doesn't fit\n"
+        "- claireon.bp_save -- per-node-cycle save discipline\n");
 }
 
 FString ClaireonBlueprintGraphTool_AddNode::GetExampleUsage() const

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Tools/IClaireonTool.h"
 #include <atomic>
 
 // Forward declare CPython types to avoid pulling Python.h into the header
@@ -65,6 +66,17 @@ class CLAIREON_API FClaireonBridge
 public:
 	/** Set the server instance used for tool dispatch */
 	static void SetToolRegistry(FClaireonServer* Server);
+
+	/** Build the bridge wire envelope JSON object for a tool result.
+	 *  Used by both the success and error code paths inside MCPCallTool so the
+	 *  on-wire shape is identical (data / hint / summary / warnings / logs /
+	 *  ue_log) regardless of success/error.
+	 *
+	 *  The `hint` field is emitted only when `Result.Hint.IsValid()`; absent
+	 *  otherwise so existing wire envelopes stay byte-identical when callers
+	 *  do not populate the field. */
+	static TSharedPtr<class FJsonObject> BuildResultEnvelope(
+		const IClaireonTool::FToolResult& Result);
 
 	/** Register all bridge functions with the CPython interpreter */
 	static void RegisterBridgeFunctions();
