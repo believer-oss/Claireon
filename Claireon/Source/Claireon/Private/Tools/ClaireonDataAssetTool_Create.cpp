@@ -140,6 +140,20 @@ IClaireonTool::FToolResult FClaireonDataAssetTool_Create::Execute(const TSharedP
 	FAssetRegistryModule::AssetCreated(NewAsset);
 	Package->MarkPackageDirty();
 
+	{
+		FString AssertError;
+		if (!ClaireonAssetUtils::AssertInnerNameMatchesPackage(NewAsset, AssertError))
+		{
+			// Failure cleanup mirrors the property-seeding failure branch
+			// below: cancel transaction, garbage-collect the partially-created
+			// asset so it does not linger in subsequent LoadObject queries.
+			Transaction.Cancel();
+			NewAsset->ClearFlags(RF_Standalone | RF_Public);
+			NewAsset->MarkAsGarbage();
+			return MakeErrorResult(AssertError);
+		}
+	}
+
 	// Optional property seeding
 	TArray<FString> WrittenPaths;
 	const TSharedPtr<FJsonObject>* PropertiesPtr = nullptr;

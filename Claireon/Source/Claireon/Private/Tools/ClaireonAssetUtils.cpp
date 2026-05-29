@@ -9,6 +9,8 @@
 #include "Engine/Blueprint.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Dom/JsonValue.h"
+#include "Misc/PackageName.h"
+#include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "Subsystems/AssetEditorSubsystem.h"
 #include "Editor.h"
@@ -317,6 +319,43 @@ UClass* ResolveClassName(const FString& ClassName)
 		if (It->GetName() == Stripped || It->GetName() == ClassName) return *It;
 	}
 	return nullptr;
+}
+
+bool AssertInnerNameMatchesPackage(const UObject* Asset, FString& OutError)
+{
+	OutError.Reset();
+
+	if (!Asset)
+	{
+		OutError = TEXT("AssertInnerNameMatchesPackage: Asset is null");
+		return false;
+	}
+
+	const UPackage* Package = Asset->GetPackage();
+	if (!Package)
+	{
+		OutError = FString::Printf(
+			TEXT("AssertInnerNameMatchesPackage: asset %s has no outer package"),
+			*Asset->GetName());
+		return false;
+	}
+
+	const FString PackageName = Package->GetName();
+	const FString PackageShortName = FPackageName::GetShortName(PackageName);
+	const FString InnerName = Asset->GetName();
+
+	if (InnerName == PackageShortName)
+	{
+		return true;
+	}
+
+	OutError = FString::Printf(
+		TEXT("AssertInnerNameMatchesPackage: inner-name/package-short-name mismatch -- ")
+		TEXT("package_path='%s' package_short_name='%s' inner_name='%s' asset_class='%s'. ")
+		TEXT("This is the bug class detected by claireon.asset_check_inner_name_invariant."),
+		*PackageName, *PackageShortName, *InnerName,
+		*Asset->GetClass()->GetName());
+	return false;
 }
 
 } // namespace ClaireonAssetUtils

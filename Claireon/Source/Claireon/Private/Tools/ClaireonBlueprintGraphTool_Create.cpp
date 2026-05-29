@@ -4,6 +4,7 @@
 
 #include "Tools/ClaireonBlueprintGraphTool_Create.h"
 #include "Tools/FToolSchemaBuilder.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonBlueprintHelpers.h"
 #include "Dom/JsonObject.h"
 #include "Tools/ClaireonSpecApplicator_Blueprint.h"
@@ -218,6 +219,19 @@ FToolResult ClaireonBlueprintGraphTool_Create::Execute(const TSharedPtr<FJsonObj
 
 	// Notify asset registry
 	FAssetRegistryModule::AssetCreated(Blueprint);
+
+	{
+		FString AssertError;
+		if (!ClaireonAssetUtils::AssertInnerNameMatchesPackage(Blueprint, AssertError))
+		{
+			// No FScopedTransaction wrapper in this path. Mark the
+			// partially-created Blueprint garbage so it does not linger
+			// past GC.
+			Blueprint->ClearFlags(RF_Public | RF_Standalone);
+			Blueprint->MarkAsGarbage();
+			return MakeErrorResult(AssertError);
+		}
+	}
 
 	// Get EventGraph (created by default)
 	UEdGraph* EventGraph = nullptr;

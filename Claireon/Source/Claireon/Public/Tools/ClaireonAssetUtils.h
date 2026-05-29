@@ -52,6 +52,21 @@ namespace ClaireonAssetUtils
 	CLAIREON_API bool SaveAsset(UObject* Asset, FString& OutError);
 
 	/**
+	 * Assert that an asset's inner UObject name matches its containing
+	 * package's short-name. Returns true on match; on mismatch populates
+	 * OutError with package_path, package_short_name, inner_name,
+	 * asset_class context so the caller's failure path can surface the
+	 * same fields the asset_check_inner_name_invariant audit tool
+	 * reports.
+	 * @param Asset - The freshly-created asset (must be non-null and
+	 *   have a valid outer package)
+	 * @param OutError - Populated on mismatch with a human-readable
+	 *   error message
+	 * @return true if invariant holds, false on mismatch or invalid input
+	 */
+	CLAIREON_API bool AssertInnerNameMatchesPackage(const UObject* Asset, FString& OutError);
+
+	/**
 	 * Convert an FAssetData to a JSON object for tool responses.
 	 * @param Data - The asset data to convert
 	 * @return JSON object with path, name, class fields

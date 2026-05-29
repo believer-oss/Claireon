@@ -489,6 +489,7 @@
 // Animation MCP tools
 #include "Tools/ClaireonTool_AnimInspect.h"
 #include "Tools/ClaireonTool_AnimInvariantsCheck.h"
+#include "Tools/ClaireonTool_AssetCheckInnerNameInvariant.h"
 #include "Tools/ClaireonAnimTools_Session.h"
 #include "Tools/ClaireonAnimTools_Create.h"
 #include "Tools/ClaireonAnimTools_Notify.h"
@@ -1072,6 +1073,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_AssetList>());
 	Tools.Add(MakeShared<ClaireonTool_AssetValidate>());
 	Tools.Add(MakeShared<ClaireonTool_AssetFixupRedirectors>());
+	Tools.Add(MakeShared<ClaireonTool_AssetCheckInnerNameInvariant>());
 	Tools.Add(MakeShared<ClaireonTool_OpenAssetEditor>());
 	Tools.Add(MakeShared<ClaireonTool_AnimInspect>());
 	Tools.Add(MakeShared<ClaireonTool_AnimInvariantsCheck>());

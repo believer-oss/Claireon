@@ -6,6 +6,8 @@
 #include "Tools/ClaireonAssetUtils.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "UObject/Package.h"
+#include "UObject/UObjectGlobals.h"
 
 // ---------------------------------------------------------------------------
 // Loading tests
@@ -162,6 +164,51 @@ UNTEST_UNIT(Claireon, AssetUtils_Json, AssetDataToJson)
 	UNTEST_EXPECT_TRUE(Json->HasField(TEXT("class")));
 	UNTEST_EXPECT_FALSE(Json->GetStringField(TEXT("path")).IsEmpty());
 	UNTEST_EXPECT_FALSE(Json->GetStringField(TEXT("name")).IsEmpty());
+	co_return;
+}
+
+// ---------------------------------------------------------------------------
+// AssertInnerNameMatchesPackage tests (work item #0000)
+// ---------------------------------------------------------------------------
+
+UNTEST_UNIT(Claireon, AssetUtils_Assert, AssertInnerNameMatchesPackage_NullAssetFails)
+{
+	FString Error;
+	const bool bOk = ClaireonAssetUtils::AssertInnerNameMatchesPackage(nullptr, Error);
+	UNTEST_EXPECT_FALSE(bOk);
+	UNTEST_EXPECT_FALSE(Error.IsEmpty());
+	UNTEST_EXPECT_TRUE(Error.Contains(TEXT("null")));
+	co_return;
+}
+
+UNTEST_UNIT(Claireon, AssetUtils_Assert, AssertInnerNameMatchesPackage_MatchingNamesPass)
+{
+	UPackage* Package = CreatePackage(TEXT("/Engine/Transient/Test_AICNI_Pkg"));
+	UNTEST_ASSERT_PTR(Package);
+	UObject* Asset = NewObject<UObject>(Package, UObject::StaticClass(), TEXT("Test_AICNI_Pkg"), RF_Transient);
+	UNTEST_ASSERT_PTR(Asset);
+
+	FString Error;
+	const bool bOk = ClaireonAssetUtils::AssertInnerNameMatchesPackage(Asset, Error);
+	UNTEST_EXPECT_TRUE(bOk);
+	UNTEST_EXPECT_TRUE(Error.IsEmpty());
+	co_return;
+}
+
+UNTEST_UNIT(Claireon, AssetUtils_Assert, AssertInnerNameMatchesPackage_MismatchedNamesFails)
+{
+	UPackage* Package = CreatePackage(TEXT("/Engine/Transient/Test_AICNI_Pkg2"));
+	UNTEST_ASSERT_PTR(Package);
+	UObject* Asset = NewObject<UObject>(Package, UObject::StaticClass(), TEXT("WrongInnerName"), RF_Transient);
+	UNTEST_ASSERT_PTR(Asset);
+
+	FString Error;
+	const bool bOk = ClaireonAssetUtils::AssertInnerNameMatchesPackage(Asset, Error);
+	UNTEST_EXPECT_FALSE(bOk);
+	UNTEST_EXPECT_FALSE(Error.IsEmpty());
+	UNTEST_EXPECT_TRUE(Error.Contains(TEXT("Test_AICNI_Pkg2")));
+	UNTEST_EXPECT_TRUE(Error.Contains(TEXT("WrongInnerName")));
+	UNTEST_EXPECT_TRUE(Error.Contains(TEXT("asset_check_inner_name_invariant")));
 	co_return;
 }
 

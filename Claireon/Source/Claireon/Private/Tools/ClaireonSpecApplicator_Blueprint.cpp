@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonSpecApplicator_Blueprint.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonBlueprintHelpers.h"
 #include "ClaireonNameResolver.h"
 #include "ClaireonPathResolver.h"
@@ -227,6 +228,19 @@ bool FClaireonSpecApplicator_Blueprint::OpenOrCreateAsset(const FString& AssetPa
 		Package->SetIsExternallyReferenceable(true);
 		Package->MarkPackageDirty();
 		FAssetRegistryModule::AssetCreated(BP);
+
+		{
+			FString AssertError;
+			if (!ClaireonAssetUtils::AssertInnerNameMatchesPackage(BP, AssertError))
+			{
+				// bool-returning caller -- propagate via OutError + return false.
+				// Cleanup mirrors the BP-create path: clear flags + garbage.
+				BP->ClearFlags(RF_Public | RF_Standalone);
+				BP->MarkAsGarbage();
+				OutError = AssertError;
+				return false;
+			}
+		}
 	}
 
 	// Find graph
