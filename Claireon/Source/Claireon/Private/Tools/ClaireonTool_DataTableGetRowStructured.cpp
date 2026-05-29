@@ -11,7 +11,7 @@
 #include "Misc/Paths.h"
 
 FString ClaireonTool_DataTableGetRowStructured::GetCategory() const { return TEXT("datatable"); }
-FString ClaireonTool_DataTableGetRowStructured::GetOperation() const { return TEXT("get_row_structured"); }
+FString ClaireonTool_DataTableGetRowStructured::GetOperation() const { return TEXT("get_row"); }
 
 FString ClaireonTool_DataTableGetRowStructured::GetDescription() const
 {
@@ -25,7 +25,7 @@ FString ClaireonTool_DataTableGetRowStructured::GetDescription() const
 		"Enums emit { value, name } objects. "
 		"Optional 'columns' filter accepts friendly or raw property names, case-insensitive. "
 		"Optional 'include_schema' flag adds a sibling top-level 'schema' field for callers that need the struct shape alongside values. "
-		"Intended for single rows; for bulk pulls see datatable_export_json or datatable_get_rows with a columns filter."
+		"For bulk row pulls use datatable_export_json or datatable_get_rows with a columns filter."
 	);
 }
 

@@ -10,20 +10,46 @@
 #include "Widgets/Layout/SWidgetSwitcher.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SScrollBox.h"
+#include "Animation/CurveSequence.h"
 #include "ClaireonTypes.h"
 #include "ClaireonREPLWidget.h"
 
 class FClaireonServer;
 
+struct FClaireonFeedbackPanelEntry
+{
+	FString Id;
+	FDateTime Timestamp;
+	FString Text;
+	FString TextPreview;
+	FString RequestSummary;
+	FString SourceDir;
+	FString EntryFilePath;
+	FString RawJson;
+	double DurationMs = 0.0;
+	bool bIsBug = false;
+	bool bIsFeedback = true;
+	bool bIsSuggestion = false;
+	bool bFromCurrentSession = false;
+};
+
 /**
- * Diagnostics window for the MCP server.
- * Shows server status, request log, and statistics.
+ * Claireon MCP panel.
+ *
+ * Layout:
+ *   [Tab bar: Activity (N) | Feedback (M) | Chat*]   (* only when bEnableREPLChat)
+ *   [Status strip: conn-dot + state | proxy chip | stats segments]
+ *   [Content area: switcher driven by active tab]
+ *
+ * Activity tab: log list (Time | Method | Content | Duration)
+ *               + horizontal JSON split (Request | Response)
+ * Feedback tab: left feedback list + right detail view
+ * Chat tab:     in-editor REPL (SClaireonREPLWidget), hidden by default
  */
 class SClaireonDiagnosticsWidget : public SCompoundWidget
 {
 public:
-	SLATE_BEGIN_ARGS(SClaireonDiagnosticsWidget)
-	{}
+	SLATE_BEGIN_ARGS(SClaireonDiagnosticsWidget) {}
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
@@ -39,93 +65,171 @@ public:
 		const FKeyEvent& InKeyEvent) override;
 	virtual bool SupportsKeyboardFocus() const override { return true; }
 
-	/** Register the tab spawner with FGlobalTabmanager */
+	/** Register / unregister the tab spawner with FGlobalTabmanager */
 	static void RegisterTabSpawner();
-
-	/** Unregister the tab spawner */
 	static void UnregisterTabSpawner();
 
 private:
-	/** Generate a row for the log list view */
-	TSharedRef<ITableRow> OnGenerateRow(
+	// ---------------------------------------------------------------------------
+	// Build helpers
+	// ---------------------------------------------------------------------------
+	TSharedRef<SWidget> BuildTabBar();
+	TSharedRef<SWidget> BuildStatusStrip();
+	TSharedRef<SWidget> BuildActivityTab();
+	TSharedRef<SWidget> BuildFeedbackTab();
+
+	// ---------------------------------------------------------------------------
+	// Tab switching
+	// ---------------------------------------------------------------------------
+	void SetActiveTab(int32 Index);
+
+	// ---------------------------------------------------------------------------
+	// Status strip
+	// ---------------------------------------------------------------------------
+	FSlateColor GetConnDotColor() const;
+	FText GetServerStateText() const;
+	FText GetProxyChipText() const;
+	FText GetProxyChipModeText() const;
+	FText GetProxyChipPortText() const;
+	EVisibility GetProxyChipVisibility() const;
+	FReply OnProxyChipClicked();
+	float GetProxyPulseOpacity() const;
+	FText GetStatsSegmentsText() const;
+
+	// ---------------------------------------------------------------------------
+	// Activity tab - log list
+	// ---------------------------------------------------------------------------
+	TSharedRef<ITableRow> OnGenerateActivityRow(
 		TSharedPtr<FMCPDiagnosticsEntry> Item,
 		const TSharedRef<STableViewBase>& OwnerTable);
+	void OnActivityEntrySelected(
+		TSharedPtr<FMCPDiagnosticsEntry> Item, ESelectInfo::Type SelectInfo);
+	void PopulateJsonPanes(const FMCPDiagnosticsEntry& Entry);
 
-	/** Called when a new diagnostics entry is added */
+	/** Called when a new diagnostics entry is added (may fire from background thread) */
 	void OnDiagnosticsEntryAdded(const FMCPDiagnosticsEntry& Entry);
 
 	/** Refresh the list from the server's ring buffer */
 	void RefreshList();
 
-	/** Get the server status text */
-	FText GetStatusText() const;
+	/** Text filter for the Content column */
+	void OnSearchTextChanged(const FText& NewText);
 
-	/** Get the statistics text */
-	FText GetStatsText() const;
+	/** Live/Paused toggle */
+	FReply OnLivePausedToggled();
+	FText GetLivePausedButtonText() const;
 
-	/** Handle Start/Stop button click */
-	FReply OnToggleServerClicked();
-
-	/** Handle Clear Log button click */
+	// ---------------------------------------------------------------------------
+	// Activity tab - toolbar actions
+	// ---------------------------------------------------------------------------
 	FReply OnClearLogClicked();
 
-	/** Get the toggle button text */
+	// ---------------------------------------------------------------------------
+	// Feedback tab
+	// ---------------------------------------------------------------------------
+	TSharedRef<ITableRow> OnGenerateFeedbackRow(
+		TSharedPtr<FClaireonFeedbackPanelEntry> Item,
+		const TSharedRef<STableViewBase>& OwnerTable);
+	void OnFeedbackEntrySelected(
+		TSharedPtr<FClaireonFeedbackPanelEntry> Item, ESelectInfo::Type SelectInfo);
+	void PopulateFeedbackDetail(const FClaireonFeedbackPanelEntry& Entry);
+	FReply OnExportFeedbackJsonlClicked();
+	FReply OnGenerateFeedbackReportClicked();
+	FText GetFeedbackReportButtonText() const;
+	bool IsFeedbackReportEnabled() const;
+	FReply OnFeedbackScopeToggled();
+	FText GetFeedbackScopeButtonText() const;
+
+	// ---------------------------------------------------------------------------
+	// Server start/stop (kept for status strip)
+	// ---------------------------------------------------------------------------
+	FReply OnToggleServerClicked();
 	FText GetToggleButtonText() const;
 
-	/** Single-line proxy state ("Unstarted" / "Retrying" / "Registered" / "Failed"). */
-	FText GetProxyStateText() const;
-
-	/** Visibility hook for the Reconnect button (only when ProxyState is Failed). */
-	EVisibility GetReconnectButtonVisibility() const;
-
-	/** Handle click on the Reconnect button (proxy RetryRegister kick-off). */
-	FReply OnReconnectClicked();
-
-	/** Handle log entry selection for detail view */
-	void OnLogEntrySelected(TSharedPtr<FMCPDiagnosticsEntry> SelectedItem, ESelectInfo::Type SelectInfo);
-
-	/** Populate the detail panel with the selected entry */
-	void PopulateDetailPanel(const FMCPDiagnosticsEntry& Entry);
-
-	/** Pretty-print a JSON string */
+	// ---------------------------------------------------------------------------
+	// Helpers
+	// ---------------------------------------------------------------------------
 	static FString PrettyPrintJson(const FString& RawJson);
 
-	/** Handle Generate Feedback Report button click */
-	FReply OnGenerateFeedbackReportClicked();
+	/** Build the filtered+sorted view of ListItems for the activity list */
+	void RebuildFilteredItems();
+	/** Same but for feedback-only entries */
+	void RebuildFeedbackItems();
+	void RememberCurrentSessionFeedbackId(const FMCPDiagnosticsEntry& Entry);
 
-	/** Get the feedback report button text (changes while generating) */
-	FText GetFeedbackReportButtonText() const;
+	// ---------------------------------------------------------------------------
+	// Animation (proxy verifying pulse)
+	// ---------------------------------------------------------------------------
+	void StartProxyPulse();
+	void StopProxyPulse();
 
-	/** Whether the feedback report button is enabled */
-	bool IsFeedbackReportEnabled() const;
-
-	/** The list of entries for the SListView (shared pointers to copies) */
+	// ---------------------------------------------------------------------------
+	// Data
+	// ---------------------------------------------------------------------------
+	/** All entries, newest last (mirrors server ring buffer) */
 	TArray<TSharedPtr<FMCPDiagnosticsEntry>> ListItems;
 
-	/** The list view widget */
-	TSharedPtr<SListView<TSharedPtr<FMCPDiagnosticsEntry>>> ListView;
+	/** Filtered subset shown in the activity list (rebuilt on filter change) */
+	TArray<TSharedPtr<FMCPDiagnosticsEntry>> FilteredItems;
+
+	/** Persisted feedback entries loaded from Saved/Claireon/Feedback. */
+	TArray<TSharedPtr<FClaireonFeedbackPanelEntry>> FeedbackItems;
+
+	/** Feedback entry IDs observed through this panel's live diagnostics stream. */
+	TSet<FString> CurrentSessionFeedbackIds;
+
+	/** Active text filter (matches against ContentPreview) */
+	FString SearchFilter;
+
+	/** Whether new entries should auto-scroll (true = live, false = paused) */
+	bool bIsLive = true;
 
 	/** Delegate handle for entry-added callback */
 	FDelegateHandle DiagnosticsEntryDelegateHandle;
 
-	/** The embedded REPL widget (Claude tab) */
-	TSharedPtr<SClaireonREPLWidget> REPLWidget;
-
-	/** Tab content switcher: 0=Chat REPL, 1=Diagnostics */
-	TSharedPtr<SWidgetSwitcher> TabSwitcher;
-
-	/** Detail panel for selected log entry */
-	TSharedPtr<SBorder> DetailPanel;
-
-	/** Detail view switcher: 0=Summary, 1=Raw JSON */
-	TSharedPtr<SWidgetSwitcher> DetailSwitcher;
-
-	/** Detail summary scroll box */
-	TSharedPtr<SScrollBox> DetailSummaryBox;
-
-	/** Detail raw JSON scroll box */
-	TSharedPtr<SScrollBox> DetailJsonBox;
-
 	/** Whether a feedback report is currently being generated */
 	bool bGeneratingFeedbackReport = false;
+
+	/** When true, the report generator reads from all git worktrees of this repo */
+	bool bFeedbackAllWorktrees = false;
+
+	// ---------------------------------------------------------------------------
+	// Widgets
+	// ---------------------------------------------------------------------------
+	/** Main tab content switcher: 0=Activity, 1=Feedback, 2=Chat(optional) */
+	TSharedPtr<SWidgetSwitcher> TabSwitcher;
+	int32 ActiveTabIndex = 0;
+
+	/** Activity log list view */
+	TSharedPtr<SListView<TSharedPtr<FMCPDiagnosticsEntry>>> ActivityList;
+
+	/** Activity tab "Activity (N)" button label -- updated when entries change */
+	TSharedPtr<STextBlock> ActivityTabLabel;
+	TSharedPtr<STextBlock> FeedbackTabLabel;
+
+	/** Status strip: proxy pulse animation */
+	FCurveSequence ProxyPulseSequence;
+	FCurveHandle ProxyPulseHandle;
+
+	/** JSON panes (request / response) in the Activity split */
+	TSharedPtr<SScrollBox> RequestJsonPane;
+	TSharedPtr<SScrollBox> ResponseJsonPane;
+
+	/** Cached pretty-printed JSON strings for clipboard copy */
+	FString SelectedRequestJson;
+	FString SelectedResponseJson;
+
+	/** Feedback tab list and detail panes */
+	TSharedPtr<SListView<TSharedPtr<FClaireonFeedbackPanelEntry>>> FeedbackList;
+	TSharedPtr<SScrollBox> FeedbackDetailPane;
+	TSharedPtr<SBorder> FeedbackDetailBorder;
+
+	/** Tracks the currently selected feedback item (by ID for rebuild safety) */
+	FString SelectedFeedbackItemId;
+
+	/** Tracks the currently selected activity item (pointer valid until RefreshList) */
+	TSharedPtr<FMCPDiagnosticsEntry> SelectedActivityItem;
+
+	/** The embedded REPL widget (Chat tab) */
+	TSharedPtr<SClaireonREPLWidget> REPLWidget;
 };

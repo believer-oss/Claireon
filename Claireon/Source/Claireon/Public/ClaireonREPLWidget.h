@@ -42,6 +42,7 @@ struct FREPLConversationItem
 	bool bToolRunning = false;
 	bool bToolError = false;
 	bool bIsError = false; // For SystemMessage
+	FString Timestamp;     // HH:MM:SS recorded at append time
 };
 
 /**
@@ -72,6 +73,10 @@ private:
 	// --- Construction ---
 	TSharedRef<SWidget> BuildOnboardingView();
 	TSharedRef<SWidget> BuildChatView();
+	TSharedRef<SWidget> BuildThinkingRowWidget();
+	TSharedRef<SWidget> BuildComposerWidget();
+	TSharedRef<SWidget> BuildAvatarWidget(bool bIsAssistant);
+	TSharedRef<SWidget> BuildMessageBodyContent(const FREPLConversationItem& Item);
 
 	// --- Onboarding ---
 	FReply OnGetApiKeyClicked();
@@ -162,11 +167,12 @@ private:
 	TSharedPtr<SWidgetSwitcher> RootSwitcher; // 0=onboarding, 1=chat
 	TSharedPtr<SScrollBox> ConversationScroll;
 	TSharedPtr<SVerticalBox> ConversationBox;
-	TSharedPtr<SMultiLineEditableTextBox> InputBox;
-	TSharedPtr<SWidgetSwitcher> SendStopSwitcher; // 0=Send, 1=Stop
+	TSharedPtr<SMultiLineEditableText> InputBox;  // composer text (no box wrapper)
 	TSharedPtr<SButton> NewTopicButton;
 	TSharedPtr<STextBlock> StatusText;
 	TSharedPtr<STextBlock> ContextIndicatorText;
+	TSharedPtr<STextBlock> ThinkingStepText;       // step label in thinking row
+	int32 ContextUsagePct = 3;                     // context window usage 0-100
 
 	// Onboarding
 	TSharedPtr<SEditableTextBox> ApiKeyInputBox;

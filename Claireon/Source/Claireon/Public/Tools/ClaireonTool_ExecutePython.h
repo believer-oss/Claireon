@@ -49,9 +49,6 @@ private:
 	/** Maximum allowed script size in bytes */
 	static constexpr int32 MaxScriptSizeBytes = 64 * 1024;
 
-	/** Default timeout in milliseconds */
-	static constexpr int32 DefaultTimeoutMs = 30000;
-
 	/** Generate the Python prefix code (tools namespace wrapper) */
 	static FString GetPythonPrefix();
 

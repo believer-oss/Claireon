@@ -128,6 +128,16 @@ void FClaireonAnthropicClient::PostToAPI(
 	}
 
 	const UClaireonSettings* Settings = UClaireonSettings::Get();
+	const FString ApiKey = Settings ? Settings->GetAnthropicApiKey() : FString();
+	if (ApiKey.IsEmpty())
+	{
+		FREPLEvent Ev;
+		Ev.Type = EREPLEventType::Error;
+		Ev.Text = TEXT("No Anthropic API key configured. Enable REPL Chat and set the key in Editor Preferences > Plugins > Claireon.");
+		BroadcastEvent(MoveTemp(Ev));
+		FinalizeTurn();
+		return;
+	}
 
 	// Rate limiter: enforce minimum interval between API calls
 	double Now = FPlatformTime::Seconds();
@@ -204,7 +214,7 @@ void FClaireonAnthropicClient::PostToAPI(
 	Request->SetURL(Settings->ApiEndpointUrl);
 	Request->SetVerb(TEXT("POST"));
 	Request->SetHeader(TEXT("content-type"), TEXT("application/json"));
-	Request->SetHeader(TEXT("x-api-key"), Settings->AnthropicApiKey);
+	Request->SetHeader(TEXT("x-api-key"), ApiKey);
 	Request->SetHeader(TEXT("anthropic-version"), Settings->AnthropicVersion);
 	Request->SetContentAsString(BodyStr);
 	Request->SetTimeout(Settings->RequestTimeoutSeconds);

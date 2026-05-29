@@ -154,7 +154,7 @@ UNTEST_UNIT_OPTS(Claireon, REPL, ToolUseViaAPI, UNTEST_TIMEOUTMS(60000))
 {
 	// Skip if no API key configured
 	const UClaireonSettings* Settings = UClaireonSettings::Get();
-	if (!Settings || Settings->AnthropicApiKey.IsEmpty())
+	if (!Settings || !Settings->HasAnthropicApiKey())
 	{
 		UE_LOG(LogTemp, Warning,
 			TEXT("[REPL Test] ToolUseViaAPI: SKIPPED — no Anthropic API key configured in "

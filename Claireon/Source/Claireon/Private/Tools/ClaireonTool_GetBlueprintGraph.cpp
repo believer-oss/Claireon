@@ -51,7 +51,7 @@ FString ClaireonTool_GetBlueprintGraph::GetFullDescription() const
 				"    At 'full' detail the JSON payload additionally includes an optional 'node_subtitle' field\n"
 				"      (e.g. 'Target is Kismet System Library') when the node FullTitle has a second line.\n"
 				"  include_pin_defaults (optional): Include default values for unconnected pins. Ignored in 'exec' mode. In 'summary' mode defaults to false.\n"
-				"  max_nodes (optional, default=100): Maximum nodes to include. Use 0 for unlimited. Capped at 50 when anchor_node_guid is used.\n"
+				"  max_nodes (optional, default=0 unlimited): Maximum nodes to include. 0 means all nodes. Capped at 50 when anchor_node_guid is used.\n"
 				"  anchor_node_guid (optional): GUID of a node to anchor BFS traversal. When provided, returns only nodes reachable via exec connections from this node (up to 50). "
 				"Use node_detail_level='exec' on the full graph first to get GUIDs, then anchor + node_detail_level='full' to drill into a specific section.\n"
 				"  traversal_depth (optional, default=-1): BFS hop limit when anchor_node_guid is set. 0=anchor only, 1=anchor+direct neighbors, 2=two hops, -1=unlimited.\n\n"
@@ -123,7 +123,7 @@ TSharedPtr<FJsonObject> ClaireonTool_GetBlueprintGraph::GetInputSchema() const
 	// max_nodes - optional
 	TSharedPtr<FJsonObject> MaxProp = MakeShared<FJsonObject>();
 	MaxProp->SetStringField(TEXT("type"), TEXT("integer"));
-	MaxProp->SetStringField(TEXT("description"), TEXT("Maximum number of nodes to include in full detail. Remaining nodes are shown as a summary count. Default: 100. Use 0 for unlimited."));
+	MaxProp->SetStringField(TEXT("description"), TEXT("Maximum number of nodes to return. 0 (default) = unlimited (all nodes). Pass a positive integer to cap. Capped at 50 when anchor_node_guid is used."));
 	Properties->SetObjectField(TEXT("max_nodes"), MaxProp);
 
 	// anchor_node_guid - optional
@@ -210,7 +210,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 		}
 	}
 
-	int32 MaxNodes = 100;
+	int32 MaxNodes = 0;  // 0 = unlimited (all nodes); callers may pass a positive cap
 	if (Arguments->HasField(TEXT("max_nodes")))
 	{
 		MaxNodes = static_cast<int32>(Arguments->GetNumberField(TEXT("max_nodes")));

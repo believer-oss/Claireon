@@ -7,7 +7,6 @@
 #include "Tools/ClaireonTool_DataTableSearch.h"
 #include "Tools/ClaireonTool_DataTableGetInfo.h"
 #include "Tools/ClaireonTool_DataTableGetRows.h"
-#include "Tools/ClaireonTool_DataTableGetRow.h"
 #include "Tools/ClaireonTool_DataTableGetRowStructured.h"
 #include "Tools/ClaireonTool_DataTableFindRows.h"
 #include "Tools/ClaireonTool_DataTableAddRow.h"
@@ -86,21 +85,10 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, ReadToolsValid, UNTEST_TIMEOUTMS(100
 		UNTEST_ASSERT_PTR(Schema.Get());
 	}
 
-	// get_datatable_row
-	{
-		ClaireonTool_DataTableGetRow Tool;
-		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("datatable_get_row"));
-		auto Schema = Tool.GetInputSchema();
-		UNTEST_ASSERT_PTR(Schema.Get());
-		const TArray<TSharedPtr<FJsonValue>>* Required;
-		UNTEST_EXPECT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
-		UNTEST_EXPECT_TRUE(Required->Num() >= 2);
-	}
-
-	// get_datatable_row_structured
+	// datatable_get_row (formerly get_row_structured -- now the primary get_row tool)
 	{
 		ClaireonTool_DataTableGetRowStructured Tool;
-		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("datatable_get_row_structured"));
+		UNTEST_EXPECT_STREQ(Tool.GetName(), TEXT("datatable_get_row"));
 		UNTEST_EXPECT_TRUE(!Tool.GetDescription().IsEmpty());
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
@@ -294,7 +282,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetInfoMissingAssetPath, UNTEST_TIMEOUTMS(
 
 UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowMissingParams, UNTEST_TIMEOUTMS(5000))
 {
-	ClaireonTool_DataTableGetRow Tool;
+	ClaireonTool_DataTableGetRowStructured Tool;
 
 	// Missing both params
 	{
@@ -445,7 +433,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, AddRowBadAssetPath, UNTEST_TIMEOUTMS(5000)
 
 UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowNonexistentRow, UNTEST_TIMEOUTMS(30000))
 {
-	ClaireonTool_DataTableGetRow Tool;
+	ClaireonTool_DataTableGetRowStructured Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 	Args->SetStringField(TEXT("asset_path"), TestDTPath);
 	Args->SetStringField(TEXT("row_name"), TEXT("_UNTEST_NonexistentRow_999"));
@@ -456,7 +444,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowNonexistentRow, UNTEST_TIMEOUTMS(300
 }
 
 // ============================================================================
-// Error handling — datatable_get_row_structured
+// Error handling — datatable_get_row (structured)
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowStructuredErrors, UNTEST_TIMEOUTMS(30000))
@@ -726,7 +714,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, MutationAddAndRemoveLifecycle, UNTEST_TIME
 	}
 
 	// --- Step 2: Verify row exists via get_row ---
-	ClaireonTool_DataTableGetRow GetTool;
+	ClaireonTool_DataTableGetRowStructured GetTool;
 	{
 		TSharedPtr<FJsonObject> GetArgs = MakeShared<FJsonObject>();
 		GetArgs->SetStringField(TEXT("asset_path"), TestDTPath);
@@ -828,7 +816,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, MutationAddAndRemoveLifecycle, UNTEST_TIME
 
 
 // ============================================================================
-// Functional tests -- datatable_get_row_structured
+// Functional tests -- datatable_get_row (structured)
 // ============================================================================
 
 namespace

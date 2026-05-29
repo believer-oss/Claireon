@@ -11,7 +11,7 @@ DECLARE_DELEGATE_TwoParams(FOnFeedbackReportComplete, bool /*bSuccess*/, const F
  * Generates a feedback report by aggregating MCP feedback entries and Python
  * audit log data, then sending them to Claude Opus for analysis.
  *
- * The report is saved to Saved/MCP/FeedbackReports/ and copied to clipboard
+ * The report is saved to Saved/Claireon/FeedbackReports/ and copied to clipboard
  * with the file path as the first line.
  */
 class FClaireonFeedbackReport
@@ -19,13 +19,18 @@ class FClaireonFeedbackReport
 public:
 	/**
 	 * Generate a feedback report asynchronously.
+	 * @param bAllWorktrees  When true, aggregate persisted feedback from every
+	 *                       git worktree of this repository that has a Feedback dir.
 	 * @param OnComplete Called when generation finishes (success or failure).
 	 */
-	static void Generate(FOnFeedbackReportComplete OnComplete);
+	static void Generate(bool bAllWorktrees, FOnFeedbackReportComplete OnComplete);
 
 private:
-	/** Aggregate feedback entries from Saved/MCP/Feedback/ */
-	static FString AggregateFeedbackEntries(int32 MaxEntries = 50);
+	/**
+	 * Aggregate persisted feedback entries.
+	 * @param FeedbackDirs  One or more Saved/Claireon/Feedback directories to read from.
+	 */
+	static FString AggregateFeedbackEntries(const TArray<FString>& FeedbackDirs, int32 MaxEntries = 50);
 
 	/** Aggregate Python audit log entries */
 	static FString AggregatePythonAuditEntries(int32 MaxEntries = 100);

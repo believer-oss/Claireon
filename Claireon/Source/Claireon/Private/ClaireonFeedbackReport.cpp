@@ -4,6 +4,7 @@
 #include "ClaireonFeedbackReport.h"
 #include "ClaireonLog.h"
 #include "ClaireonSettings.h"
+#include "ClaireonFeedbackLog.h"
 #include "ClaireonPythonAuditLog.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -24,7 +25,7 @@ static const FString OpusModelId = TEXT("claude-opus-4-6");
 
 FString FClaireonFeedbackReport::GetReportDir()
 {
-	return FPaths::ProjectSavedDir() / TEXT("MCP") / TEXT("FeedbackReports");
+	return FPaths::ProjectSavedDir() / TEXT("Claireon") / TEXT("FeedbackReports");
 }
 
 FString FClaireonFeedbackReport::GenerateReportFilename()
@@ -34,82 +35,124 @@ FString FClaireonFeedbackReport::GenerateReportFilename()
 		*Now.ToString(TEXT("%Y-%m-%d_%H%M%S")));
 }
 
-FString FClaireonFeedbackReport::AggregateFeedbackEntries(int32 MaxEntries)
+// ---------------------------------------------------------------------------
+// Per-entry data used for cross-worktree merge + sort
+// ---------------------------------------------------------------------------
+namespace
 {
-	const FString FeedbackDir = FPaths::ProjectSavedDir() / TEXT("MCP") / TEXT("Feedback");
-	const FString IndexPath = FeedbackDir / TEXT("index.json");
+	struct FClaireonFeedbackEntryData_R
+	{
+		FDateTime Timestamp;
+		FString FormattedText;
+	};
 
-	FString IndexJson;
-	if (!FFileHelper::LoadFileToString(IndexJson, *IndexPath))
+	static TArray<FClaireonFeedbackEntryData_R> ReadEntriesFromFeedbackDir(const FString& FeedbackDir)
+	{
+		TArray<FClaireonFeedbackEntryData_R> Result;
+
+		const FString IndexPath = FeedbackDir / TEXT("index.json");
+		FString IndexJson;
+		if (!FFileHelper::LoadFileToString(IndexJson, *IndexPath))
+		{
+			return Result;
+		}
+
+		TSharedPtr<FJsonObject> IndexObj;
+		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(IndexJson);
+		if (!FJsonSerializer::Deserialize(Reader, IndexObj) || !IndexObj.IsValid())
+		{
+			return Result;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* EntriesArray = nullptr;
+		if (!IndexObj->TryGetArrayField(TEXT("entries"), EntriesArray))
+		{
+			return Result;
+		}
+
+		for (const TSharedPtr<FJsonValue>& EntryValue : *EntriesArray)
+		{
+			const TSharedPtr<FJsonObject>* EntryObj = nullptr;
+			if (!EntryValue->TryGetObject(EntryObj) || !(*EntryObj).IsValid())
+			{
+				continue;
+			}
+
+			FString Id, TimestampStr, TextPreview;
+			bool bIsBug = false, bIsFeedback = false, bIsSuggestion = false;
+			(*EntryObj)->TryGetStringField(TEXT("id"), Id);
+			(*EntryObj)->TryGetStringField(TEXT("timestamp"), TimestampStr);
+			(*EntryObj)->TryGetStringField(TEXT("textPreview"), TextPreview);
+			(*EntryObj)->TryGetBoolField(TEXT("isBug"), bIsBug);
+			(*EntryObj)->TryGetBoolField(TEXT("isFeedback"), bIsFeedback);
+			(*EntryObj)->TryGetBoolField(TEXT("isSuggestion"), bIsSuggestion);
+
+			FDateTime Timestamp;
+			FDateTime::ParseIso8601(*TimestampStr, Timestamp);
+
+			// Prefer the full entry file text over the preview
+			FString FullText;
+			if (!Id.IsEmpty())
+			{
+				FString EntryJson;
+				const FString EntryPath = FeedbackDir / TEXT("entries") / (Id + TEXT(".json"));
+				if (FFileHelper::LoadFileToString(EntryJson, *EntryPath))
+				{
+					TSharedPtr<FJsonObject> FullObj;
+					TSharedRef<TJsonReader<>> EntryReader = TJsonReaderFactory<>::Create(EntryJson);
+					if (FJsonSerializer::Deserialize(EntryReader, FullObj) && FullObj.IsValid())
+					{
+						FullObj->TryGetStringField(TEXT("text"), FullText);
+					}
+				}
+			}
+			if (FullText.IsEmpty())
+			{
+				FullText = TextPreview;
+			}
+
+			FString Type;
+			if (bIsBug)        Type += TEXT("[Bug] ");
+			if (bIsFeedback)   Type += TEXT("[Feedback] ");
+			if (bIsSuggestion) Type += TEXT("[Suggestion] ");
+
+			FClaireonFeedbackEntryData_R E;
+			E.Timestamp = Timestamp;
+			E.FormattedText = FString::Printf(
+				TEXT("### Entry %s (%s)\n%s%s\n\n"), *Id, *TimestampStr, *Type, *FullText);
+			Result.Add(MoveTemp(E));
+		}
+
+		return Result;
+	}
+} // namespace
+
+FString FClaireonFeedbackReport::AggregateFeedbackEntries(const TArray<FString>& FeedbackDirs, int32 MaxEntries)
+{
+	// Collect from all supplied dirs, then sort by timestamp and take newest MaxEntries
+	TArray<FClaireonFeedbackEntryData_R> AllEntries;
+	for (const FString& Dir : FeedbackDirs)
+	{
+		AllEntries.Append(ReadEntriesFromFeedbackDir(Dir));
+	}
+
+	if (AllEntries.Num() == 0)
 	{
 		return TEXT("(No feedback entries found)");
 	}
 
-	TSharedPtr<FJsonObject> IndexObj;
-	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(IndexJson);
-	if (!FJsonSerializer::Deserialize(Reader, IndexObj) || !IndexObj.IsValid())
+	AllEntries.Sort([](const FClaireonFeedbackEntryData_R& A, const FClaireonFeedbackEntryData_R& B)
 	{
-		return TEXT("(Failed to parse feedback index)");
-	}
-
-	const TArray<TSharedPtr<FJsonValue>>* EntriesArray = nullptr;
-	if (!IndexObj->TryGetArrayField(TEXT("entries"), EntriesArray) || EntriesArray->Num() == 0)
-	{
-		return TEXT("(No feedback entries found)");
-	}
+		return A.Timestamp < B.Timestamp;
+	});
 
 	FString Result;
-	const int32 StartIdx = FMath::Max(0, EntriesArray->Num() - MaxEntries);
-
-	for (int32 i = StartIdx; i < EntriesArray->Num(); ++i)
+	const int32 StartIdx = FMath::Max(0, AllEntries.Num() - MaxEntries);
+	for (int32 i = StartIdx; i < AllEntries.Num(); ++i)
 	{
-		const TSharedPtr<FJsonObject>* EntryObj = nullptr;
-		if (!(*EntriesArray)[i]->TryGetObject(EntryObj) || !(*EntryObj).IsValid())
-		{
-			continue;
-		}
-
-		FString Id;
-		(*EntryObj)->TryGetStringField(TEXT("id"), Id);
-
-		// Try to read the full entry file for complete text
-		FString FullText;
-		const FString EntryPath = FeedbackDir / TEXT("entries") / (Id + TEXT(".json"));
-		FString EntryJson;
-		if (FFileHelper::LoadFileToString(EntryJson, *EntryPath))
-		{
-			TSharedPtr<FJsonObject> FullEntryObj;
-			TSharedRef<TJsonReader<>> EntryReader = TJsonReaderFactory<>::Create(EntryJson);
-			if (FJsonSerializer::Deserialize(EntryReader, FullEntryObj) && FullEntryObj.IsValid())
-			{
-				FullEntryObj->TryGetStringField(TEXT("text"), FullText);
-			}
-		}
-
-		// Fall back to preview if full text not available
-		if (FullText.IsEmpty())
-		{
-			(*EntryObj)->TryGetStringField(TEXT("textPreview"), FullText);
-		}
-
-		FString Timestamp;
-		(*EntryObj)->TryGetStringField(TEXT("timestamp"), Timestamp);
-
-		bool bIsBug = false, bIsFeedback = false, bIsSuggestion = false;
-		(*EntryObj)->TryGetBoolField(TEXT("isBug"), bIsBug);
-		(*EntryObj)->TryGetBoolField(TEXT("isFeedback"), bIsFeedback);
-		(*EntryObj)->TryGetBoolField(TEXT("isSuggestion"), bIsSuggestion);
-
-		FString Type;
-		if (bIsBug) Type += TEXT("[Bug] ");
-		if (bIsFeedback) Type += TEXT("[Feedback] ");
-		if (bIsSuggestion) Type += TEXT("[Suggestion] ");
-
-		Result += FString::Printf(TEXT("### Entry %s (%s)\n%s%s\n\n"),
-			*Id, *Timestamp, *Type, *FullText);
+		Result += AllEntries[i].FormattedText;
 	}
-
-	return Result.IsEmpty() ? TEXT("(No feedback entries found)") : Result;
+	return Result;
 }
 
 FString FClaireonFeedbackReport::AggregatePythonAuditEntries(int32 MaxEntries)
@@ -161,18 +204,30 @@ FString FClaireonFeedbackReport::FormatReport(
 		*FeedbackData);
 }
 
-void FClaireonFeedbackReport::Generate(FOnFeedbackReportComplete OnComplete)
+void FClaireonFeedbackReport::Generate(bool bAllWorktrees, FOnFeedbackReportComplete OnComplete)
 {
 	// Validate API key
 	const UClaireonSettings* Settings = UClaireonSettings::Get();
-	if (!Settings || Settings->AnthropicApiKey.IsEmpty())
+	const FString ApiKey = Settings ? Settings->GetAnthropicApiKey() : FString();
+	if (!Settings || ApiKey.IsEmpty())
 	{
 		OnComplete.ExecuteIfBound(false, TEXT("No API key configured. Set your Anthropic API key in Editor Preferences > Plugins > Claireon."));
 		return;
 	}
 
+	// Determine which feedback dirs to aggregate
+	TArray<FString> FeedbackDirs;
+	if (bAllWorktrees)
+	{
+		FeedbackDirs = FClaireonFeedbackLog::FindAllWorktreeFeedbackDirs();
+	}
+	else
+	{
+		FeedbackDirs.Add(FClaireonFeedbackLog::Get().GetFeedbackDir());
+	}
+
 	// Aggregate data
-	const FString FeedbackData = AggregateFeedbackEntries();
+	const FString FeedbackData = AggregateFeedbackEntries(FeedbackDirs);
 	const FString PythonAuditData = AggregatePythonAuditEntries();
 
 	if (FeedbackData.Contains(TEXT("(No feedback entries found)")) &&
@@ -205,7 +260,7 @@ void FClaireonFeedbackReport::Generate(FOnFeedbackReportComplete OnComplete)
 	HttpRequest->SetURL(Settings->ApiEndpointUrl);
 	HttpRequest->SetVerb(TEXT("POST"));
 	HttpRequest->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
-	HttpRequest->SetHeader(TEXT("x-api-key"), Settings->AnthropicApiKey);
+	HttpRequest->SetHeader(TEXT("x-api-key"), ApiKey);
 	HttpRequest->SetHeader(TEXT("anthropic-version"), Settings->AnthropicVersion);
 	HttpRequest->SetContentAsString(RequestBodyString);
 	HttpRequest->SetTimeout(120.0f); // Opus can take a while

@@ -44,69 +44,73 @@ TSharedRef<FSlateStyleSet> FClaireonRichTextStyle::Create()
 	const FTextBlockStyle NormalStyle =
 		FCoreStyle::Get().GetWidgetStyle<FTextBlockStyle>(TEXT("NormalText"));
 
-	// Color constants (matching REPL widget palette, prefixed to avoid unity build collisions)
-	const FLinearColor RTS_Lavender(0.8f, 0.8f, 1.0f);
-	const FLinearColor RTS_Amber(0.9f, 0.7f, 0.3f);
-	const FLinearColor RTS_White(1.0f, 1.0f, 1.0f);
-	const FLinearColor RTS_Gray_Light(0.7f, 0.7f, 0.7f);
+	auto Hex = [](const TCHAR* HexString) -> FLinearColor
+	{
+		return FLinearColor::FromSRGBColor(FColor::FromHex(HexString));
+	};
+
+	// Color constants matching the Claireon design tokens.
+	const FLinearColor RTS_Primary = Hex(TEXT("ECEDEF"));
+	const FLinearColor RTS_Secondary = Hex(TEXT("A8ACB3"));
+	const FLinearColor RTS_Accent = Hex(TEXT("F0A063"));
 
 	// Default assistant text
 	Style.Set(TEXT("RichText.Default"),
 		FTextBlockStyle(NormalStyle)
 			.SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10))
-			.SetColorAndOpacity(FSlateColor(RTS_Lavender)));
+			.SetColorAndOpacity(FSlateColor(RTS_Primary)));
 
 	// Bold
 	Style.Set(TEXT("RichText.Bold"),
 		FTextBlockStyle(NormalStyle)
 			.SetFont(FCoreStyle::GetDefaultFontStyle("Bold", 10))
-			.SetColorAndOpacity(FSlateColor(RTS_Lavender)));
+			.SetColorAndOpacity(FSlateColor(RTS_Primary)));
 
 	// Italic
 	Style.Set(TEXT("RichText.Italic"),
 		FTextBlockStyle(NormalStyle)
 			.SetFont(FCoreStyle::GetDefaultFontStyle("Italic", 10))
-			.SetColorAndOpacity(FSlateColor(RTS_Lavender)));
+			.SetColorAndOpacity(FSlateColor(RTS_Primary)));
 
 	// Bold Italic
 	Style.Set(TEXT("RichText.BoldItalic"),
 		FTextBlockStyle(NormalStyle)
 			.SetFont(FCoreStyle::GetDefaultFontStyle("BoldItalic", 10))
-			.SetColorAndOpacity(FSlateColor(RTS_Lavender)));
+			.SetColorAndOpacity(FSlateColor(RTS_Primary)));
 
 	// Headers
 	Style.Set(TEXT("RichText.Header1"),
 		FTextBlockStyle(NormalStyle)
 			.SetFont(FCoreStyle::GetDefaultFontStyle("Bold", 14))
-			.SetColorAndOpacity(FSlateColor(RTS_White)));
+			.SetColorAndOpacity(FSlateColor(RTS_Primary)));
 
 	Style.Set(TEXT("RichText.Header2"),
 		FTextBlockStyle(NormalStyle)
 			.SetFont(FCoreStyle::GetDefaultFontStyle("Bold", 12))
-			.SetColorAndOpacity(FSlateColor(RTS_White)));
+			.SetColorAndOpacity(FSlateColor(RTS_Primary)));
 
 	Style.Set(TEXT("RichText.Header3"),
 		FTextBlockStyle(NormalStyle)
 			.SetFont(FCoreStyle::GetDefaultFontStyle("Bold", 11))
-			.SetColorAndOpacity(FSlateColor(RTS_Gray_Light)));
+			.SetColorAndOpacity(FSlateColor(RTS_Secondary)));
 
 	// Inline code (monospace, amber)
 	Style.Set(TEXT("RichText.Code"),
 		FTextBlockStyle(NormalStyle)
 			.SetFont(FCoreStyle::GetDefaultFontStyle("Mono", 9))
-			.SetColorAndOpacity(FSlateColor(RTS_Amber)));
+			.SetColorAndOpacity(FSlateColor(RTS_Primary)));
 
 	// Asset link (amber, used as fallback FTextBlockStyle for non-hyperlink contexts)
 	Style.Set(TEXT("RichText.AssetLink"),
 		FTextBlockStyle(NormalStyle)
 			.SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10))
-			.SetColorAndOpacity(FSlateColor(RTS_Amber)));
+			.SetColorAndOpacity(FSlateColor(RTS_Accent)));
 
 	// Asset hyperlink style (FHyperlinkStyle for FSlateHyperlinkRun clickable links)
 	{
 		FTextBlockStyle LinkTextStyle(NormalStyle);
 		LinkTextStyle.SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
-		LinkTextStyle.SetColorAndOpacity(FSlateColor(RTS_Amber));
+		LinkTextStyle.SetColorAndOpacity(FSlateColor(RTS_Accent));
 
 		FButtonStyle UnderlineButtonStyle;
 		UnderlineButtonStyle.SetNormal(FSlateNoResource());

@@ -71,6 +71,9 @@ public:
 	/** Get the module instance */
 	static FClaireonModule& Get();
 
+	/** Launch Claude Code (or the configured agent) from the project directory. */
+	static void LaunchClaudeCode();
+
 private:
 	/** Register toolbar button and menu entries */
 	void RegisterMenus();

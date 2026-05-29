@@ -6,7 +6,7 @@
 #include "Tools/IClaireonTool.h"
 
 /**
- * MCP tool: datatable_get_row_structured
+ * MCP tool: datatable_get_row
  * Get a single DataTable row as a nested JSON tree mirroring the row struct's
  * property layout. BP user-defined struct GUID suffixes are stripped, FText is
  * exploded into { text, namespace, key }, TMap is emitted as an array of

@@ -12,7 +12,7 @@
  * All public methods are game-thread only.
  * File I/O is dispatched to a background thread — the game thread is never blocked.
  *
- * Log files: Saved/Logs/MCPRepl/repl_YYYY-MM-DD_HHMMSS.jsonl (one per editor session)
+ * Log files: Saved/Logs/Claireon/repl_YYYY-MM-DD_HHMMSS.jsonl (one per editor session)
  */
 class FClaireonREPLLogger
 {

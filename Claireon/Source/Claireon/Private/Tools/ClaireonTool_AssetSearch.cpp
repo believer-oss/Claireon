@@ -34,10 +34,16 @@ TSharedPtr<FJsonObject> ClaireonTool_AssetSearch::GetInputSchema() const
 	ClassProp->SetStringField(TEXT("description"), TEXT("Filter results to a specific asset class (e.g. Blueprint, StaticMesh, Material, World)"));
 	Properties->SetObjectField(TEXT("class_filter"), ClassProp);
 
-	// name_filter - optional
+	// query - primary name search parameter (alias for name_filter)
+	TSharedPtr<FJsonObject> QueryProp = MakeShared<FJsonObject>();
+	QueryProp->SetStringField(TEXT("type"), TEXT("string"));
+	QueryProp->SetStringField(TEXT("description"), TEXT("Search query: filter results by asset name (case-insensitive substring match). Alias for name_filter; name_filter takes precedence if both are provided."));
+	Properties->SetObjectField(TEXT("query"), QueryProp);
+
+	// name_filter - optional (legacy alias for query)
 	TSharedPtr<FJsonObject> NameProp = MakeShared<FJsonObject>();
 	NameProp->SetStringField(TEXT("type"), TEXT("string"));
-	NameProp->SetStringField(TEXT("description"), TEXT("Filter results by asset name (case-insensitive substring match)"));
+	NameProp->SetStringField(TEXT("description"), TEXT("Filter results by asset name (case-insensitive substring match). Same as query; kept for backward compatibility."));
 	Properties->SetObjectField(TEXT("name_filter"), NameProp);
 
 	// recursive - optional
@@ -87,6 +93,10 @@ IClaireonTool::FToolResult ClaireonTool_AssetSearch::Execute(const TSharedPtr<FJ
 	if (Arguments->HasField(TEXT("name_filter")))
 	{
 		NameFilter = Arguments->GetStringField(TEXT("name_filter"));
+	}
+	else if (Arguments->HasField(TEXT("query")))
+	{
+		NameFilter = Arguments->GetStringField(TEXT("query"));
 	}
 
 	bool bRecursive = true;

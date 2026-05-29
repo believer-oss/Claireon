@@ -47,16 +47,56 @@
 
 #define LOCTEXT_NAMESPACE "ClaireonREPL"
 
-// --- Color palette ---
-// (FLinearColor constants used throughout)
-static const FLinearColor Color_Lavender(0.8f, 0.8f, 1.0f);	  // Assistant text
-static const FLinearColor Color_Amber(0.9f, 0.7f, 0.3f);	  // Tool cards, CTA
-static const FLinearColor Color_Green(0.1f, 0.8f, 0.1f);	  // Active/running
-static const FLinearColor Color_Red(1.0f, 0.3f, 0.3f);		  // Error/cancel/stop
-static const FLinearColor Color_Gray_Mid(0.5f, 0.5f, 0.5f);	  // Subdued text
-static const FLinearColor Color_Gray_Light(0.7f, 0.7f, 0.7f); // Secondary text
-static const FLinearColor Color_White(1.0f, 1.0f, 1.0f);	  // User text
-static const FLinearColor Color_DarkBg(0.12f, 0.12f, 0.14f);  // Message bg
+// ---------------------------------------------------------------------------
+// Claireon design tokens — matched to styles.css color variables
+// ---------------------------------------------------------------------------
+namespace ClaireonTokens
+{
+	static FLinearColor Hex(const TCHAR* HexString, float Alpha = 1.0f)
+	{
+		FLinearColor Color = FLinearColor::FromSRGBColor(FColor::FromHex(HexString));
+		Color.A = Alpha;
+		return Color;
+	}
+
+	// Surfaces
+	static const FLinearColor BgPanel    = Hex(TEXT("15171A"));
+	static const FLinearColor Bg2        = Hex(TEXT("1B1D21"));
+	static const FLinearColor Bg3        = Hex(TEXT("22252A"));
+	static const FLinearColor BgRowHover = Hex(TEXT("1D2024"));
+	static const FLinearColor BgRowSel   = Hex(TEXT("2A2014"));
+
+	// Lines
+	static const FLinearColor Line1      = Hex(TEXT("25272C"));
+	static const FLinearColor Line2      = Hex(TEXT("2E3137"));
+
+	// Text
+	static const FLinearColor Fg1        = Hex(TEXT("ECEDEF"));
+	static const FLinearColor Fg2        = Hex(TEXT("A8ACB3"));
+	static const FLinearColor Fg3        = Hex(TEXT("6B6F76"));
+	static const FLinearColor Fg4        = Hex(TEXT("4A4D54"));
+
+	// Signal
+	static const FLinearColor Accent     = Hex(TEXT("E7873B"));
+	static const FLinearColor AccentHi   = Hex(TEXT("F0A063"));
+	static const FLinearColor AccentLine = Hex(TEXT("E7873B"), 0.35f);
+	static const FLinearColor Ok         = Hex(TEXT("4EA780"));
+	static const FLinearColor OkSoft     = Hex(TEXT("0D1411"));
+	static const FLinearColor Warn       = Hex(TEXT("D3A24A"));
+	static const FLinearColor Err        = Hex(TEXT("D96565"));
+	static const FLinearColor ErrSoft    = Hex(TEXT("140D0D"));
+	static const FLinearColor ErrHi      = Hex(TEXT("EC8585"));
+
+	// Method chip: py (orange accent)
+	static const FLinearColor PyChipBg   = Hex(TEXT("352F2C"));
+	static const FLinearColor PyChipBdr  = Hex(TEXT("58433A"));
+	static const FLinearColor TsChipBg   = Hex(TEXT("292F36"));
+	static const FLinearColor TsChipBdr  = Hex(TEXT("363F4B"));
+	static const FLinearColor TsText     = Hex(TEXT("98B3D9"));
+
+	// Dark text on orange Send button (#1a1410)
+	static const FLinearColor SendBtnText = Hex(TEXT("1A1410"));
+}
 
 namespace ClaireonREPLWidgetInternal
 {
@@ -164,67 +204,85 @@ TSharedRef<SWidget> SClaireonREPLWidget::BuildOnboardingView()
 {
 	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().FillHeight(1.0f)
-			  [SNew(SBorder)
-					  .BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
-					  .Padding(32.0f)
-						  [SNew(SVerticalBox)
+		[
+			SNew(SBorder)
+			.BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
+			.Padding(32.0f)
+			[
+				SNew(SVerticalBox)
 
-							  // Title
-							  + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 16)
-								  [SNew(STextBlock)
-										  .Text(LOCTEXT("OnboardingTitle", "Set up Claude"))
-										  .ColorAndOpacity(FSlateColor(Color_Amber))
-										  .Font(FCoreStyle::GetDefaultFontStyle("Bold", 16))]
-
-							  // Subtitle
-							  + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 24)
-								  [SNew(STextBlock)
-										  .Text(LOCTEXT("OnboardingSubtitle",
-											  "Ask questions, search assets, run scripts — all from here."))
-										  .ColorAndOpacity(FSlateColor(Color_Gray_Light))
-										  .AutoWrapText(true)]
-
-							  // Step 1
-							  + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 8)
-								  [SNew(STextBlock)
-										  .Text(LOCTEXT("Step1", "1. Get an Anthropic API key"))
-										  .ColorAndOpacity(FSlateColor(Color_White))]
-							  + SVerticalBox::Slot().AutoHeight().Padding(16, 0, 0, 16)
-								  [SNew(SButton)
-										  .Text(LOCTEXT("GetKeyButton", "Open console.anthropic.com ->"))
-										  .OnClicked(this, &SClaireonREPLWidget::OnGetApiKeyClicked)
-										  .ButtonColorAndOpacity(FLinearColor(Color_Amber.R * 0.3f,
-											  Color_Amber.G * 0.3f, Color_Amber.B * 0.1f, 1.0f))]
-
-							  // Step 2
-							  + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 8)
-								  [SNew(STextBlock)
-										  .Text(LOCTEXT("Step2", "2. Paste your API key here"))
-										  .ColorAndOpacity(FSlateColor(Color_White))]
-							  + SVerticalBox::Slot().AutoHeight().Padding(16, 0, 0, 16)
-								  [SNew(SHorizontalBox)
-									  + SHorizontalBox::Slot().FillWidth(1.0f)
-										  [SAssignNew(ApiKeyInputBox, SEditableTextBox)
-												  .HintText(LOCTEXT("ApiKeyHint", "sk-ant-..."))
-												  .IsPassword(true)]]
-
-							  // Step 3 / Verify button
-							  + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 8)
-								  [SNew(STextBlock)
-										  .Text(LOCTEXT("Step3", "3. Verify and save"))
-										  .ColorAndOpacity(FSlateColor(Color_White))]
-							  + SVerticalBox::Slot().AutoHeight().Padding(16, 0, 0, 0)
-								  [SNew(SButton)
-										  .Text(LOCTEXT("VerifyButton", "Verify & Save"))
-										  .OnClicked(this, &SClaireonREPLWidget::OnVerifyAndSaveClicked)
-										  .ButtonColorAndOpacity(Color_Amber)]
-
-							  // Status message
-							  + SVerticalBox::Slot().AutoHeight().Padding(0, 16, 0, 0)
-								  [SNew(STextBlock)
-										  .Text(this, &SClaireonREPLWidget::GetOnboardingStatusText)
-										  .AutoWrapText(true)
-										  .ColorAndOpacity(FSlateColor(Color_Gray_Light))]]];
+				// Title
+				+ SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 16)
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("OnboardingTitle", "Set up Claude"))
+					.ColorAndOpacity(FSlateColor(ClaireonTokens::Accent))
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 16))
+				]
+				// Subtitle
+				+ SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 24)
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("OnboardingSubtitle",
+						"Ask questions, search assets, run scripts — all from here."))
+					.ColorAndOpacity(FSlateColor(ClaireonTokens::Fg2))
+					.AutoWrapText(true)
+				]
+				// Step 1
+				+ SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 8)
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("Step1", "1. Get an Anthropic API key"))
+					.ColorAndOpacity(FSlateColor(ClaireonTokens::Fg1))
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(16, 0, 0, 16)
+				[
+					SNew(SButton)
+					.Text(LOCTEXT("GetKeyButton", "Open console.anthropic.com ->"))
+					.OnClicked(this, &SClaireonREPLWidget::OnGetApiKeyClicked)
+					.ButtonColorAndOpacity(ClaireonTokens::Bg3)
+				]
+				// Step 2
+				+ SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 8)
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("Step2", "2. Paste your API key here"))
+					.ColorAndOpacity(FSlateColor(ClaireonTokens::Fg1))
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(16, 0, 0, 16)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.0f)
+					[
+						SAssignNew(ApiKeyInputBox, SEditableTextBox)
+						.HintText(LOCTEXT("ApiKeyHint", "sk-ant-..."))
+						.IsPassword(true)
+					]
+				]
+				// Step 3 / Verify
+				+ SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 8)
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("Step3", "3. Verify and save"))
+					.ColorAndOpacity(FSlateColor(ClaireonTokens::Fg1))
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(16, 0, 0, 0)
+				[
+					SNew(SButton)
+					.Text(LOCTEXT("VerifyButton", "Verify & Save"))
+					.OnClicked(this, &SClaireonREPLWidget::OnVerifyAndSaveClicked)
+					.ButtonColorAndOpacity(ClaireonTokens::Accent)
+				]
+				// Status message
+				+ SVerticalBox::Slot().AutoHeight().Padding(0, 16, 0, 0)
+				[
+					SNew(STextBlock)
+					.Text(this, &SClaireonREPLWidget::GetOnboardingStatusText)
+					.AutoWrapText(true)
+					.ColorAndOpacity(FSlateColor(ClaireonTokens::Fg2))
+				]
+			]
+		];
 }
 
 FReply SClaireonREPLWidget::OnGetApiKeyClicked()
@@ -287,8 +345,7 @@ FReply SClaireonREPLWidget::OnVerifyAndSaveClicked()
 			{
 				// Save the key
 				UClaireonSettings* Settings = GetMutableDefault<UClaireonSettings>();
-				Settings->AnthropicApiKey = KeyCapture;
-				Settings->SaveConfig();
+				Settings->SetAnthropicApiKey(KeyCapture);
 
 				Self->OnboardingStatusMessage = TEXT("Key saved! Switching to chat...");
 				Self->CheckApiKeyAndSwitchView();
@@ -319,55 +376,274 @@ FText SClaireonREPLWidget::GetOnboardingStatusText() const
 
 TSharedRef<SWidget> SClaireonREPLWidget::BuildChatView()
 {
-	return SNew(SVerticalBox)
+	// Thinking row lives below ConversationBox in the same scroll container.
+	// Visibility is bound to bIsProcessing so it appears/disappears automatically.
+	// It is a sibling of ConversationBox so ClearChildren() on ConversationBox
+	// does not affect it.
+	TSharedRef<SWidget> ThinkingRow = BuildThinkingRowWidget();
 
-		// Conversation scroll area
-		+ SVerticalBox::Slot().FillHeight(1.0f)
-			  [SAssignNew(ConversationScroll, SScrollBox)
-					  .OnUserScrolled(FOnUserScrolled::CreateLambda([this](float)
-	{
-		// Auto-scroll is managed by scroll position check
-	})) + SScrollBox::Slot()[SAssignNew(ConversationBox, SVerticalBox)]]
+	// Wrap everything in an explicit --bg-1 background so the chat area
+	// doesn't inherit the editor dock's near-black.
+	return SNew(SBorder)
+		.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+		.BorderBackgroundColor(ClaireonTokens::BgPanel)
+		[
+			SNew(SVerticalBox)
 
-		// Input area
-		+ SVerticalBox::Slot().AutoHeight().Padding(4.0f, 4.0f, 4.0f, 0.0f)[SNew(SHorizontalBox)
+			// ---- Transcript scroll ----
+			+ SVerticalBox::Slot().FillHeight(1.0f)
+			[
+				SAssignNew(ConversationScroll, SScrollBox)
+				+ SScrollBox::Slot()
+				[
+					SNew(SVerticalBox)
+					// Messages
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SAssignNew(ConversationBox, SVerticalBox)
+					]
+					// Thinking row (collapsed when idle)
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						ThinkingRow
+					]
+				]
+			]
 
-			+ SHorizontalBox::Slot().FillWidth(1.0f)[SAssignNew(InputBox, SMultiLineEditableTextBox).HintText(LOCTEXT("InputHint", "Ask something...  (Shift+Enter for newline)")).OnTextCommitted(this, &SClaireonREPLWidget::OnInputTextCommitted).ModiferKeyForNewLine(EModifierKey::Shift).AllowMultiLine(true)]
+			// ---- Composer (hairline top border, then content) ----
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(SBorder)
+				.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+				.BorderBackgroundColor(ClaireonTokens::Line1)
+				.Padding(FMargin(0.0f, 1.0f, 0.0f, 0.0f))  // top hairline divider
+				[
+					BuildComposerWidget()
+				]
+			]
+		];
+}
 
-			// New Topic button (always visible, highlighted when fresh context suggested)
-			+ SHorizontalBox::Slot().AutoWidth().Padding(4.0f, 0.0f).VAlign(VAlign_Bottom)[SAssignNew(NewTopicButton, SButton).Text(this, &SClaireonREPLWidget::GetNewTopicButtonText).ButtonColorAndOpacity(this, &SClaireonREPLWidget::GetNewTopicButtonColor).OnClicked(this, &SClaireonREPLWidget::OnNewTopicClicked).ToolTipText(LOCTEXT("NewTopicTooltip", "Start a new conversation (Ctrl+Enter)"))]
+// Pulsing dot + "Claireon is working . <step>" + Stop link
+TSharedRef<SWidget> SClaireonREPLWidget::BuildThinkingRowWidget()
+{
+	return SNew(SBorder)
+		.BorderImage(FAppStyle::GetBrush("NoBrush"))
+		.Padding(FMargin(50.0f, 12.0f, 24.0f, 14.0f))   // 50px = body-hang matches cm-thinking
+		.Visibility_Lambda([this]() -> EVisibility
+		{
+			return bIsProcessing ? EVisibility::Visible : EVisibility::Collapsed;
+		})
+		[
+			SNew(SHorizontalBox)
 
-			// Send / Stop switcher
-			+ SHorizontalBox::Slot().AutoWidth().Padding(4.0f, 0.0f).VAlign(VAlign_Bottom)[SAssignNew(SendStopSwitcher, SWidgetSwitcher)
-				// index 0: Send
-				+ SWidgetSwitcher::Slot()[SNew(SButton).Text(LOCTEXT("SendButton", "Send")).OnClicked(this, &SClaireonREPLWidget::OnSendClicked).ButtonColorAndOpacity(Color_Amber).ToolTipText(LOCTEXT("SendTooltip", "Send message (Enter)"))]
-				// index 1: Stop
-				+ SWidgetSwitcher::Slot()[SNew(SButton).Text(LOCTEXT("StopButton", "Stop")).OnClicked(this, &SClaireonREPLWidget::OnStopClicked).ButtonColorAndOpacity(Color_Red).ToolTipText(LOCTEXT("StopTooltip", "Cancel request (Escape or Ctrl+.)"))]]]
+			// Pulsing accent dot
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.VAlign(VAlign_Center)
+			.Padding(FMargin(0.0f, 0.0f, 10.0f, 0.0f))
+			[
+				SNew(SBox)
+				.WidthOverride(7.0f)
+				.HeightOverride(7.0f)
+				[
+					SNew(SBorder)
+					.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+					.BorderBackgroundColor_Lambda([this]() -> FLinearColor
+					{
+						float Pulse = (PulseSequence.IsPlaying())
+							? FMath::Lerp(0.3f, 1.0f, PulseHandle.GetLerp())
+							: 1.0f;
+						return FLinearColor(
+							ClaireonTokens::Accent.R,
+							ClaireonTokens::Accent.G,
+							ClaireonTokens::Accent.B,
+							Pulse);
+					})
+				]
+			]
 
-		// Status bar
-		+ SVerticalBox::Slot().AutoHeight().Padding(4.0f, 2.0f)[SNew(SHorizontalBox)
+			// "Claireon is working"
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.VAlign(VAlign_Center)
+			[
+				SNew(STextBlock)
+				.Text(LOCTEXT("ThinkingLabel", "Claireon is working"))
+				.ColorAndOpacity(FSlateColor(ClaireonTokens::Fg2))
+				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 12))
+			]
 
-			// Pulse dot
-			+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f).VAlign(VAlign_Center)[SNew(SBorder).Padding(4.0f).BorderImage(FAppStyle::GetBrush("NoBrush")).ColorAndOpacity_Lambda([this]() -> FLinearColor
-	{
-		return GetStatusDotColor().GetSpecifiedColor();
-	})[SNew(SBox).WidthOverride(8.0f).HeightOverride(8.0f)]]
-
-			// Status text
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SAssignNew(StatusText, STextBlock).Text(this, &SClaireonREPLWidget::GetStatusText).ColorAndOpacity(FSlateColor(Color_Gray_Mid))]
+			// " . <step>"
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.VAlign(VAlign_Center)
+			.Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f))
+			[
+				SAssignNew(ThinkingStepText, STextBlock)
+				.ColorAndOpacity(FSlateColor(ClaireonTokens::Fg3))
+				.Font(FCoreStyle::GetDefaultFontStyle("Mono", 11))
+			]
 
 			+ SHorizontalBox::Slot().FillWidth(1.0f)[SNew(SSpacer)]
 
-			// Context indicator
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.0f, 0.0f)[SAssignNew(ContextIndicatorText, STextBlock).Text(this, &SClaireonREPLWidget::GetContextIndicatorText).ColorAndOpacity(this, &SClaireonREPLWidget::GetContextIndicatorColor)]
+			// Stop link (right-aligned)
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.VAlign(VAlign_Center)
+			[
+				SNew(SButton)
+				.ButtonStyle(FAppStyle::Get(), "SimpleButton")
+				.OnClicked(this, &SClaireonREPLWidget::OnStopClicked)
+				.ToolTipText(LOCTEXT("StopTooltip", "Cancel request (Escape or Ctrl+.)"))
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("StopLink", "Stop"))
+					.ColorAndOpacity(FSlateColor(ClaireonTokens::Fg3))
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 11))
+				]
+			]
+		];
+}
 
-			// Settings gear
-			+ SHorizontalBox::Slot().AutoWidth().Padding(4.0f, 0.0f)[SNew(SButton).Text(LOCTEXT("SettingsGear", "\u2699")).ButtonStyle(FAppStyle::Get(), "SimpleButton").OnClicked_Lambda([]() -> FReply
-	{
-		FModuleManager::LoadModuleChecked<ISettingsModule>("Settings")
-			.ShowViewer(TEXT("Editor"), TEXT("Plugins"), TEXT("Claireon"));
-		return FReply::Handled();
-	}).ToolTipText(LOCTEXT("SettingsTooltip", "Open Claireon settings"))]];
+// Composer: textarea + New topic/Send buttons + meta row (hint + ctx meter)
+TSharedRef<SWidget> SClaireonREPLWidget::BuildComposerWidget()
+{
+	// Two nested SBorders: outer for the focus-responsive border colour, inner for bg.
+	// We drive BorderBackgroundColor via lambda on the outer border so it reacts to
+	// keyboard focus on the inner SMultiLineEditableText.
+	return SNew(SBorder)
+		.BorderImage(FAppStyle::GetBrush("NoBrush"))
+		.Padding(FMargin(18.0f, 10.0f, 18.0f, 12.0f))
+		[
+			SNew(SVerticalBox)
+
+			// ---- Composer box (text + action column) ----
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				// Outer border: provides the 1px focus-responsive stroke
+				SNew(SBorder)
+				.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+				.BorderBackgroundColor_Lambda([this]() -> FLinearColor
+				{
+					return (InputBox.IsValid() && InputBox->HasKeyboardFocus())
+						? ClaireonTokens::AccentLine
+						: ClaireonTokens::Line2;
+				})
+				.Padding(FMargin(1.0f))
+				[
+					// Inner border: fills with Bg2 / Bg3 on focus
+					SNew(SBorder)
+					.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+					.BorderBackgroundColor_Lambda([this]() -> FLinearColor
+					{
+						return (InputBox.IsValid() && InputBox->HasKeyboardFocus())
+							? ClaireonTokens::Bg3
+							: ClaireonTokens::Bg2;
+					})
+					.Padding(FMargin(0.0f))
+					[
+						SNew(SHorizontalBox)
+
+						// Text area (fills width, no box wrapper so we own the border)
+						+ SHorizontalBox::Slot().FillWidth(1.0f)
+						[
+							SNew(SBorder)
+							.BorderImage(FAppStyle::GetBrush("NoBrush"))
+							.Padding(FMargin(12.0f, 9.0f, 12.0f, 10.0f))
+							[
+								SAssignNew(InputBox, SMultiLineEditableText)
+								.HintText(LOCTEXT("ComposerHint",
+									"Ask Claireon, or paste an error / asset path\u2026"))
+								.OnTextCommitted(this, &SClaireonREPLWidget::OnInputTextCommitted)
+								.ModiferKeyForNewLine(EModifierKey::Shift)
+								.AutoWrapText(true)
+							]
+						]
+
+						// Left divider + action buttons
+						+ SHorizontalBox::Slot().AutoWidth()
+						[
+							SNew(SBorder)
+							.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+							.BorderBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.10f))
+							.Padding(FMargin(6.0f))
+							[
+								SNew(SVerticalBox)
+
+								// New topic (ghost) -- ContentPadding overrides SimpleButton's
+								// tall default so the button stays compact and matches the mock.
+								+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.0f, 0.0f, 0.0f, 4.0f))
+								[
+									SAssignNew(NewTopicButton, SButton)
+									.ButtonStyle(FAppStyle::Get(), "SimpleButton")
+									.ContentPadding(FMargin(6.0f, 3.0f))
+									.OnClicked(this, &SClaireonREPLWidget::OnNewTopicClicked)
+									.ToolTipText(LOCTEXT("NewTopicTooltip",
+										"Clear history and start a new conversation (Ctrl+Enter)"))
+									[
+										SNew(STextBlock)
+										.Text(this, &SClaireonREPLWidget::GetNewTopicButtonText)
+										.ColorAndOpacity(FSlateColor(ClaireonTokens::Fg2))
+										.Font(FCoreStyle::GetDefaultFontStyle("Regular", 11))
+									]
+								]
+
+								// Send (primary, accent orange)
+								+ SVerticalBox::Slot().AutoHeight()
+								[
+									SNew(SButton)
+									.ButtonStyle(FAppStyle::Get(), "SimpleButton")
+									.IsEnabled_Lambda([this]() -> bool
+									{
+										return !bIsProcessing
+											&& InputBox.IsValid()
+											&& !InputBox->GetText().IsEmpty();
+									})
+									.ContentPadding(FMargin(0.0f))
+									.OnClicked(this, &SClaireonREPLWidget::OnSendClicked)
+									.ToolTipText(LOCTEXT("SendTooltip", "Send message (Enter)"))
+									[
+										SNew(SBorder)
+										.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+										.BorderBackgroundColor_Lambda([this]() -> FLinearColor
+										{
+											bool bEnabled = !bIsProcessing
+												&& InputBox.IsValid()
+												&& !InputBox->GetText().IsEmpty();
+											FLinearColor C = ClaireonTokens::Accent;
+											return bEnabled
+												? C
+												: FLinearColor(C.R, C.G, C.B, 0.55f);
+										})
+										.Padding(FMargin(6.0f, 3.0f))
+										[
+											SNew(STextBlock)
+											.Text(LOCTEXT("SendButton", "Send  \u23ce"))
+											.ColorAndOpacity(FSlateColor(ClaireonTokens::SendBtnText))
+											.Font(FCoreStyle::GetDefaultFontStyle("Bold", 11))
+										]
+									]
+								]
+							]
+						]
+					]
+				]
+			]
+
+			// ---- Meta row: Shift+Enter hint ----
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(2.0f, 6.0f, 2.0f, 0.0f))
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("ShiftEnterHint", "Shift+Enter for newline"))
+					.ColorAndOpacity(FSlateColor(ClaireonTokens::Fg3))
+					.Font(FCoreStyle::GetDefaultFontStyle("Mono", 10))
+				]
+			]
+		];
 }
 
 // ------- Event Handling -------
@@ -506,6 +782,12 @@ void SClaireonREPLWidget::OnREPLEvent(const FREPLEvent& Event)
 		}
 		case EREPLEventType::ToolCallStarted:
 		{
+			// Update thinking-row step label with the tool being invoked
+			if (ThinkingStepText.IsValid())
+			{
+				ThinkingStepText->SetText(FText::FromString(
+					FString::Printf(TEXT("· %s"), *Event.ToolName)));
+			}
 			FREPLConversationItem Item;
 			Item.ItemType = FREPLConversationItem::EItemType::ToolCard;
 			Item.ToolName = Event.ToolName;
@@ -561,6 +843,10 @@ void SClaireonREPLWidget::OnREPLEvent(const FREPLEvent& Event)
 			break;
 		}
 		case EREPLEventType::Finished:
+			if (ThinkingStepText.IsValid())
+			{
+				ThinkingStepText->SetText(FText::GetEmpty());
+			}
 			SetProcessingState(false);
 			UpdateContextIndicator();
 			break;
@@ -572,6 +858,12 @@ void SClaireonREPLWidget::OnREPLEvent(const FREPLEvent& Event)
 
 		case EREPLEventType::Retrying:
 		{
+			// Update thinking-row step label
+			if (ThinkingStepText.IsValid())
+			{
+				ThinkingStepText->SetText(FText::FromString(
+					FString::Printf(TEXT("· %s"), *Event.Text)));
+			}
 			FREPLConversationItem Item;
 			Item.ItemType = FREPLConversationItem::EItemType::SystemMessage;
 			Item.Text = Event.Text;
@@ -595,26 +887,21 @@ void SClaireonREPLWidget::SetProcessingState(bool bProcessing)
 {
 	bIsProcessing = bProcessing;
 
-	if (InputBox.IsValid())
-	{
-		InputBox->SetEnabled(!bProcessing);
-	}
-	if (SendStopSwitcher.IsValid())
-	{
-		SendStopSwitcher->SetActiveWidgetIndex(bProcessing ? 1 : 0);
-	}
+	// The Send button's IsEnabled_Lambda reads bIsProcessing, so no explicit
+	// widget update is needed.  The composer text field is kept editable so the
+	// user can draft the next message while the response streams.
 
 	if (bProcessing)
 	{
 		StartPulseAnimation();
-		// Return keyboard focus to widget (not input box) so Escape works
+		// Hold focus on the compound widget so Escape / Ctrl+. are captured
 		FSlateApplication::Get().SetKeyboardFocus(AsShared(),
 			EFocusCause::SetDirectly);
 	}
 	else
 	{
 		StopPulseAnimation();
-		// Return focus to input box
+		// Return focus to the composer text field
 		if (InputBox.IsValid())
 		{
 			FSlateApplication::Get().SetKeyboardFocus(InputBox,
@@ -626,7 +913,7 @@ void SClaireonREPLWidget::SetProcessingState(bool bProcessing)
 void SClaireonREPLWidget::CheckApiKeyAndSwitchView()
 {
 	const UClaireonSettings* Settings = UClaireonSettings::Get();
-	bool bHasKey = Settings && !Settings->AnthropicApiKey.IsEmpty();
+	bool bHasKey = Settings && Settings->HasAnthropicApiKey();
 	if (RootSwitcher.IsValid())
 	{
 		RootSwitcher->SetActiveWidgetIndex(bHasKey ? 1 : 0);
@@ -713,9 +1000,17 @@ void SClaireonREPLWidget::TriggerNewTopic(bool bWithHandoff)
 
 void SClaireonREPLWidget::UpdateContextIndicator()
 {
-	if (Client.IsValid() && ContextIndicatorText.IsValid())
+	if (!Client.IsValid())
+		return;
+
+	constexpr int32 ContextWindowTokens = 200000;
+	const int32 Used = Client->GetApproximateTokenCount();
+	const int32 NewPct = FMath::Clamp((Used * 100) / ContextWindowTokens, 0, 100);
+
+	// Only mark dirty when the integer percentage changes to keep paint cost flat
+	if (NewPct != ContextUsagePct)
 	{
-		// Widget will re-bind automatically
+		ContextUsagePct = NewPct;
 	}
 }
 
@@ -736,12 +1031,17 @@ void SClaireonREPLWidget::UpdateNewTopicButtonState(bool bHighlight,
 
 void SClaireonREPLWidget::AppendConversationItem(FREPLConversationItem&& Item)
 {
+	// Stamp creation time so it survives rebuilds
+	if (Item.Timestamp.IsEmpty())
+	{
+		Item.Timestamp = FDateTime::Now().ToString(TEXT("%H:%M:%S"));
+	}
 	ConversationItems.Add(Item);
 	if (ConversationBox.IsValid())
 	{
 		ConversationBox->AddSlot()
 			.AutoHeight()
-			.Padding(4.0f, 2.0f)
+			.Padding(FMargin(0.0f))
 				[BuildConversationItemWidget(ConversationItems.Last())];
 	}
 }
@@ -771,9 +1071,73 @@ void SClaireonREPLWidget::RebuildConversationDisplay()
 	{
 		ConversationBox->AddSlot()
 			.AutoHeight()
-			.Padding(4.0f, 2.0f)
+			.Padding(FMargin(0.0f))
 				[BuildConversationItemWidget(Item)];
 	}
+}
+
+// Small avatar chip: 16x16, rounded, "cl" (assistant) or "me" (user)
+TSharedRef<SWidget> SClaireonREPLWidget::BuildAvatarWidget(bool bIsAssistant)
+{
+	const FLinearColor AvatarBg = bIsAssistant
+		? ClaireonTokens::Hex(TEXT("E7873B"), 0.14f)
+		: ClaireonTokens::Bg3;
+	const FLinearColor AvatarBdr = bIsAssistant
+		? ClaireonTokens::AccentLine
+		: ClaireonTokens::Line2;
+	const FLinearColor AvatarFg = bIsAssistant
+		? ClaireonTokens::AccentHi
+		: ClaireonTokens::Fg2;
+	const FString Label = bIsAssistant ? TEXT("cl") : TEXT("me");
+
+	return SNew(SBox)
+		.WidthOverride(16.0f)
+		.HeightOverride(16.0f)
+		[
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+			.BorderBackgroundColor(AvatarBdr)
+			.Padding(FMargin(1.0f))
+			[
+				SNew(SBorder)
+				.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+				.BorderBackgroundColor(AvatarBg)
+				.HAlign(HAlign_Center)
+				.VAlign(VAlign_Center)
+				[
+					SNew(STextBlock)
+					.Text(FText::FromString(Label))
+					.ColorAndOpacity(FSlateColor(AvatarFg))
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 7))
+				]
+			]
+		];
+}
+
+// Body content for a message: markdown for assistant, plain text for user/system
+TSharedRef<SWidget> SClaireonREPLWidget::BuildMessageBodyContent(
+	const FREPLConversationItem& Item)
+{
+	using EItemType = FREPLConversationItem::EItemType;
+
+	if (Item.ItemType == EItemType::AssistantMessage
+		&& UClaireonSettings::Get()->bEnableRichText)
+	{
+		return BuildAssistantMessageWidget(Item.Text);
+	}
+
+	const FLinearColor TextColor = (Item.ItemType == EItemType::UserMessage)
+		? ClaireonTokens::Fg2
+		: (Item.bIsError ? ClaireonTokens::Err : ClaireonTokens::Fg3);
+
+	const FTextBlockStyle BodyStyle =
+		ClaireonREPLWidgetInternal::MakeColoredTextStyle(TextColor);
+
+	return SNew(SMultiLineEditableText)
+		.Text(FText::FromString(Item.Text))
+		.TextStyle(&BodyStyle)
+		.AutoWrapText(true)
+		.IsReadOnly(true);
 }
 
 TSharedRef<SWidget> SClaireonREPLWidget::BuildConversationItemWidget(
@@ -781,135 +1145,321 @@ TSharedRef<SWidget> SClaireonREPLWidget::BuildConversationItemWidget(
 {
 	using EItemType = FREPLConversationItem::EItemType;
 
+	// Tool cards: render as an inline cm-tool block with a thin assistant header row
 	if (Item.ItemType == EItemType::ToolCard)
 	{
-		return BuildToolCardWidget(Item);
+		return SNew(SBorder)
+			.BorderImage(FAppStyle::GetBrush("NoBrush"))
+			.Padding(FMargin(24.0f, 4.0f, 24.0f, 4.0f))
+			[
+				BuildToolCardWidget(Item)
+			];
 	}
 
-	// Determine color and label prefix
-	FLinearColor TextColor = Color_White;
-	FString Label;
-
-	switch (Item.ItemType)
+	// System messages: minimal mono annotation (no avatar chrome)
+	if (Item.ItemType == EItemType::SystemMessage)
 	{
-		case EItemType::UserMessage:
-			Label = TEXT("You");
-			TextColor = Color_White;
-			break;
-		case EItemType::AssistantMessage:
-			Label = TEXT("Claude");
-			TextColor = Color_Lavender;
-			break;
-		case EItemType::SystemMessage:
-			Label.Empty();
-			TextColor = Item.bIsError ? Color_Red : Color_Gray_Mid;
-			break;
-		default:
-			break;
+		return SNew(SBorder)
+			.BorderImage(FAppStyle::GetBrush("NoBrush"))
+			.Padding(FMargin(50.0f, 5.0f, 24.0f, 5.0f))
+			[
+				SNew(STextBlock)
+				.Text(FText::FromString(Item.Text))
+				.ColorAndOpacity(FSlateColor(Item.bIsError ? ClaireonTokens::Err : ClaireonTokens::Fg3))
+				.Font(FCoreStyle::GetDefaultFontStyle("Mono", 10))
+				.AutoWrapText(true)
+			];
 	}
 
-	TSharedRef<SVerticalBox> Content = SNew(SVerticalBox);
+	const bool bIsAssistant = (Item.ItemType == EItemType::AssistantMessage);
+	const FString AuthorText = bIsAssistant ? TEXT("Claireon") : TEXT("You");
+	const FString TimestampText = Item.Timestamp;
 
-	if (!Label.IsEmpty())
-	{
-		if (Item.ItemType == EItemType::AssistantMessage)
+	// We need the outer border ptr for hover-reveal of the tool buttons.
+	// Use a shared holder so the lambda can reference it after SAssignNew runs.
+	auto WeakHolder = MakeShared<TWeakPtr<SBorder>>();
+	FString TextCapture = Item.Text;
+
+	TSharedRef<SWidget> HoverTools =
+		SNew(SBox)
+		.Visibility_Lambda([WeakHolder]() -> EVisibility
 		{
-			// Assistant messages: label on left, copy button on right
-			FString RawMarkdown = Item.Text;
-			Content->AddSlot().AutoHeight()
-				[SNew(SHorizontalBox)
+			TSharedPtr<SBorder> B = WeakHolder->Pin();
+			return (B.IsValid() && B->IsHovered())
+				? EVisibility::Visible
+				: EVisibility::Hidden;
+		})
+		[
+			SNew(SHorizontalBox)
 
-					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
-						[SNew(STextBlock)
-								.Text(FText::FromString(Label))
-								.ColorAndOpacity(FSlateColor(Color_Gray_Light))
-								.Font(FCoreStyle::GetDefaultFontStyle("Bold", 9))]
+			// Copy
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				SNew(SButton)
+				.ButtonStyle(FAppStyle::Get(), "SimpleButton")
+				.ToolTipText(LOCTEXT("CopyTooltip", "Copy message"))
+				.OnClicked_Lambda([TextCapture]() -> FReply
+				{
+					FPlatformApplicationMisc::ClipboardCopy(*TextCapture);
+					return FReply::Handled();
+				})
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("CopyTool", "Copy"))
+					.ColorAndOpacity(FSlateColor(ClaireonTokens::Fg3))
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 11))
+				]
+			]
 
-					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-						[SNew(SButton)
-								.Text(LOCTEXT("CopyResponse", "Copy"))
-								.ButtonStyle(FAppStyle::Get(), "SimpleButton")
-								.TextStyle(FAppStyle::Get(), "SmallButtonText")
-								.OnClicked_Lambda([RawMarkdown]() -> FReply
-						{
-							FPlatformApplicationMisc::ClipboardCopy(*RawMarkdown);
-							return FReply::Handled();
-						})]];
-		}
-		else
+			// As feedback (assistant only)
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			[
+				SNew(SButton)
+				.Visibility(bIsAssistant ? EVisibility::Visible : EVisibility::Collapsed)
+				.ButtonStyle(FAppStyle::Get(), "SimpleButton")
+				.ToolTipText(LOCTEXT("AsFeedbackTooltip", "Open as feedback()"))
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("AsFeedbackTool", "As feedback"))
+					.ColorAndOpacity(FSlateColor(ClaireonTokens::Fg3))
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 11))
+				]
+			]
+		];
+
+	TSharedRef<SWidget> Body = BuildMessageBodyContent(Item);
+
+	// Full message: cm-head (avatar + author + ts + hover tools) + cm-body
+	TSharedRef<SWidget> MessageContent =
+		SNew(SVerticalBox)
+
+		// cm-head
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.0f, 0.0f, 0.0f, 6.0f))
+		[
+			SNew(SHorizontalBox)
+			// Avatar
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+			.Padding(FMargin(0.0f, 0.0f, 7.0f, 0.0f))
+			[
+				BuildAvatarWidget(bIsAssistant)
+			]
+			// Author name
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+			[
+				SNew(STextBlock)
+				.Text(FText::FromString(AuthorText))
+				.ColorAndOpacity(FSlateColor(ClaireonTokens::Fg1))
+				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 12))
+			]
+			// Timestamp
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+			.Padding(FMargin(10.0f, 0.0f, 0.0f, 0.0f))
+			[
+				SNew(STextBlock)
+				.Text(FText::FromString(TimestampText))
+				.ColorAndOpacity(FSlateColor(ClaireonTokens::Fg3))
+				.Font(FCoreStyle::GetDefaultFontStyle("Mono", 11))
+			]
+			// Spacer pushes hover tools right
+			+ SHorizontalBox::Slot().FillWidth(1.0f)
+			// Hover-revealed tools
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+			[
+				HoverTools
+			]
+		]
+
+		// cm-body (indented under avatar rail: 23px = 16px avatar + 7px gap)
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(23.0f, 0.0f, 0.0f, 0.0f))
+		[
+			Body
+		];
+
+	// Outer hover-tinted border; fill pointer AFTER construction so the
+	// WeakHolder lambda can resolve it at paint time.
+	TSharedPtr<SBorder> OuterBorder;
+	SAssignNew(OuterBorder, SBorder)
+		.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+		.BorderBackgroundColor_Lambda([WeakHolder]() -> FLinearColor
 		{
-			Content->AddSlot().AutoHeight()
-				[SNew(STextBlock)
-						.Text(FText::FromString(Label))
-						.ColorAndOpacity(FSlateColor(Color_Gray_Light))
-						.Font(FCoreStyle::GetDefaultFontStyle("Bold", 9))];
-		}
-	}
+			TSharedPtr<SBorder> B = WeakHolder->Pin();
+			return (B.IsValid() && B->IsHovered())
+				? ClaireonTokens::BgRowHover
+				: FLinearColor::Transparent;
+		})
+		.Padding(FMargin(24.0f, 14.0f))
+		[
+			MessageContent
+		];
 
-	const bool bRichText = UClaireonSettings::Get()->bEnableRichText;
-	if (Item.ItemType == EItemType::AssistantMessage && bRichText)
-	{
-		Content->AddSlot().AutoHeight()
-			[BuildAssistantMessageWidget(Item.Text)];
-	}
-	else
-	{
-		// User messages, system messages: keep SMultiLineEditableText
-		const FTextBlockStyle MessageTextStyle = ClaireonREPLWidgetInternal::MakeColoredTextStyle(TextColor);
-		Content->AddSlot().AutoHeight()
-			[SNew(SMultiLineEditableText)
-					.Text(FText::FromString(Item.Text))
-					.TextStyle(&MessageTextStyle)
-					.AutoWrapText(true)
-					.IsReadOnly(true)];
-	}
-
-	return SNew(SBorder)
-		.BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
-		.Padding(8.0f, 4.0f)
-			[Content];
+	*WeakHolder = OuterBorder;
+	return OuterBorder.ToSharedRef();
 }
 
 TSharedRef<SWidget> SClaireonREPLWidget::BuildToolCardWidget(
 	const FREPLConversationItem& Item)
 {
-	FLinearColor AccentColor = Item.bToolError ? Color_Red : Color_Amber;
-	FLinearColor StatusColor = Item.bToolRunning ? Color_Green
-												 : (Item.bToolError ? Color_Red : Color_Green);
+	// Status dot colour
+	const FLinearColor DotColor = Item.bToolRunning  ? ClaireonTokens::Warn
+		                        : Item.bToolError    ? ClaireonTokens::Err
+		                                             : ClaireonTokens::Ok;
 
-	FString HeaderText = Item.bToolRunning
-		? FString::Printf(TEXT("> %s"), *Item.ToolName)
-		: FString::Printf(TEXT("%s %s (%.0fms)"),
-			  Item.bToolError ? TEXT("x") : TEXT("ok"),
-			  *Item.ToolName,
-			  Item.ToolDurationMs);
+	// Method chip: python_execute -> mb.py (orange), anything else -> mb.ts (blue)
+	const bool bIsPy = Item.ToolName.Contains(TEXT("python"));
+	const FLinearColor ChipBg  = bIsPy ? ClaireonTokens::PyChipBg  : ClaireonTokens::TsChipBg;
+	const FLinearColor ChipBdr = bIsPy ? ClaireonTokens::PyChipBdr : ClaireonTokens::TsChipBdr;
+	const FLinearColor ChipFg  = bIsPy ? ClaireonTokens::AccentHi  : ClaireonTokens::TsText;
+	const FString ChipLabel    = bIsPy ? TEXT("py_exec") : TEXT("search");
 
-	FString ToolStatusText = Item.bToolRunning
-		? TEXT("Running\u2026")
-		: (Item.bToolError ? TEXT("Error") : Item.Text.Left(200));
+	// Status text and duration
+	const FString StatusLabel = Item.bToolRunning ? TEXT("running...")
+		: Item.bToolError ? TEXT("error") : TEXT("completed");
+	const FString DurationLabel = Item.bToolRunning
+		? FString()
+		: FString::Printf(TEXT("%.0fms"), Item.ToolDurationMs);
 
-	// SMultiLineEditableText uses TextStyle instead of ColorAndOpacity.
-	// Store locally; Slate copies the style data during SNew construction.
-	const FSlateFontInfo SmallRegularFont = FCoreStyle::GetDefaultFontStyle("Regular", 9);
-	const FTextBlockStyle ToolStatusTextStyle = ClaireonREPLWidgetInternal::MakeColoredTextStyle(StatusColor, &SmallRegularFont);
+	// Args and output wells (read-only, selectable)
+	const FSlateFontInfo MonoFont11 = FCoreStyle::GetDefaultFontStyle("Mono", 10);
+	const FTextBlockStyle ArgsStyle =
+		ClaireonREPLWidgetInternal::MakeColoredTextStyle(ClaireonTokens::Fg2, &MonoFont11);
+	const FTextBlockStyle OutStyle =
+		ClaireonREPLWidgetInternal::MakeColoredTextStyle(
+			Item.bToolError ? ClaireonTokens::ErrHi : ClaireonTokens::Ok, &MonoFont11);
 
+	TSharedRef<SVerticalBox> CardBody = SNew(SVerticalBox);
+
+	// --- Header row ---
+	CardBody->AddSlot().AutoHeight()
+	[
+		SNew(SBorder)
+		.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+		.BorderBackgroundColor(ClaireonTokens::Bg2)
+		.Padding(FMargin(10.0f, 6.0f))
+		[
+			SNew(SHorizontalBox)
+
+			// Status dot (6x6)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+			.Padding(FMargin(0.0f, 0.0f, 8.0f, 0.0f))
+			[
+				SNew(SBox).WidthOverride(6.0f).HeightOverride(6.0f)
+				[
+					SNew(SBorder)
+					.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+					.BorderBackgroundColor(DotColor)
+				]
+			]
+
+			// Method chip (mb.py / mb.ts)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+			.Padding(FMargin(0.0f, 0.0f, 8.0f, 0.0f))
+			[
+				SNew(SBorder)
+				.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+				.BorderBackgroundColor(ChipBdr)
+				.Padding(FMargin(1.0f))
+				[
+					SNew(SBorder)
+					.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+					.BorderBackgroundColor(ChipBg)
+					.Padding(FMargin(5.0f, 2.0f))
+					[
+						SNew(STextBlock)
+						.Text(FText::FromString(ChipLabel))
+						.ColorAndOpacity(FSlateColor(ChipFg))
+						.Font(FCoreStyle::GetDefaultFontStyle("Mono", 10))
+					]
+				]
+			]
+
+			// Status text
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+			[
+				SNew(STextBlock)
+				.Text(FText::FromString(StatusLabel))
+				.ColorAndOpacity(FSlateColor(ClaireonTokens::Fg3))
+				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 11))
+			]
+
+			// Right-align duration
+			+ SHorizontalBox::Slot().FillWidth(1.0f)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+			[
+				SNew(STextBlock)
+				.Text(FText::FromString(DurationLabel))
+				.ColorAndOpacity(FSlateColor(ClaireonTokens::Fg3))
+				.Font(FCoreStyle::GetDefaultFontStyle("Mono", 11))
+			]
+		]
+	];
+
+	// --- Args well (optional) ---
+	if (!Item.ToolArgsJson.IsEmpty())
+	{
+		CardBody->AddSlot().AutoHeight()
+		[
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+			.BorderBackgroundColor(ClaireonTokens::Bg3)
+			.Padding(FMargin(0.0f, 0.0f, 0.0f, 1.0f))  // bottom hairline
+			[
+				// Cap height at ~90px via SBox max
+				SNew(SBox).MaxDesiredHeight(90.0f)
+				[
+					SNew(SScrollBox)
+					+ SScrollBox::Slot()
+					[
+						SNew(SBorder)
+						.BorderImage(FAppStyle::GetBrush("NoBrush"))
+						.Padding(FMargin(12.0f, 8.0f))
+						[
+							SNew(SMultiLineEditableText)
+							.Text(FText::FromString(Item.ToolArgsJson))
+							.TextStyle(&ArgsStyle)
+							.AutoWrapText(false)
+							.IsReadOnly(true)
+						]
+					]
+				]
+			]
+		];
+	}
+
+	// --- Output well (optional) ---
+	if (!Item.Text.IsEmpty() && !Item.bToolRunning)
+	{
+		const FLinearColor OutBg = Item.bToolError ? ClaireonTokens::ErrSoft : ClaireonTokens::OkSoft;
+		CardBody->AddSlot().AutoHeight()
+		[
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+			.BorderBackgroundColor(OutBg)
+			.Padding(FMargin(12.0f, 8.0f))
+			[
+				SNew(SMultiLineEditableText)
+				.Text(FText::FromString(Item.Text))
+				.TextStyle(&OutStyle)
+				.AutoWrapText(true)
+				.IsReadOnly(true)
+			]
+		];
+	}
+
+	// Outer card border: bg-3, line-1 stroke
 	return SNew(SBorder)
-		.BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
-		.Padding(8.0f, 4.0f)
-			[SNew(SVerticalBox)
-
-				+ SVerticalBox::Slot().AutoHeight()
-					[SNew(STextBlock)
-							.Text(FText::FromString(HeaderText))
-							.ColorAndOpacity(FSlateColor(AccentColor))
-							.Font(FCoreStyle::GetDefaultFontStyle("Mono", 9))]
-
-				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
-					[SNew(SMultiLineEditableText)
-							.Text(FText::FromString(ToolStatusText))
-							.TextStyle(&ToolStatusTextStyle)
-							.AutoWrapText(true)
-							.IsReadOnly(true)]];
+		.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+		.BorderBackgroundColor(ClaireonTokens::Line1)
+		.Padding(FMargin(1.0f))
+		[
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+			.BorderBackgroundColor(ClaireonTokens::Bg3)
+			.Padding(FMargin(0.0f))
+			[
+				CardBody
+			]
+		];
 }
 
 // ------- Rich Text Rendering (Hybrid Vertical Box) -------
@@ -922,7 +1472,7 @@ TSharedRef<SWidget> SClaireonREPLWidget::BuildAssistantMessageWidget(
 	// Fallback: if parsing produces nothing, render as plain text
 	if (Blocks.Num() == 0)
 	{
-		const FTextBlockStyle PlainStyle = ClaireonREPLWidgetInternal::MakeColoredTextStyle(Color_Lavender);
+		const FTextBlockStyle PlainStyle = ClaireonREPLWidgetInternal::MakeColoredTextStyle(ClaireonTokens::Fg1);
 		return SNew(SMultiLineEditableText)
 			.Text(FText::FromString(InMarkdown))
 			.TextStyle(&PlainStyle)
@@ -1013,52 +1563,79 @@ TSharedRef<SWidget> SClaireonREPLWidget::BuildAssistantMessageWidget(
 TSharedRef<SWidget> SClaireonREPLWidget::BuildCodeBlockWidget(
 	const FString& InCode, const FString& InLanguage)
 {
-	const FTextBlockStyle CodeTextStyle =
-		FCoreStyle::Get().GetWidgetStyle<FTextBlockStyle>(TEXT("NormalText"));
+	// cm-code style: mono, fg-1, bg-3 background, line-1 border
+	const FSlateFontInfo MonoFont = FCoreStyle::GetDefaultFontStyle("Mono", 10);
+	FTextBlockStyle CodeBlockStyle =
+		ClaireonREPLWidgetInternal::MakeColoredTextStyle(ClaireonTokens::Fg1, &MonoFont);
 
-	FTextBlockStyle CodeBlockStyle(CodeTextStyle);
-	CodeBlockStyle.SetFont(FCoreStyle::GetDefaultFontStyle("Mono", 9));
-	CodeBlockStyle.SetColorAndOpacity(FSlateColor(Color_Amber));
-
-	// Capture code for clipboard copy lambda
 	FString CodeCapture = InCode;
 
 	return SNew(SBorder)
-		.BorderImage(FAppStyle::GetBrush("ToolPanel.DarkGroupBorder"))
-		.Padding(FMargin(8.0f, 4.0f))
-			[SNew(SVerticalBox)
+		.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+		.BorderBackgroundColor(ClaireonTokens::Line1)
+		.Padding(FMargin(1.0f))
+		[
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+			.BorderBackgroundColor(ClaireonTokens::Bg3)
+			.Padding(FMargin(0.0f))
+			[
+				SNew(SVerticalBox)
 
-				// Header: language label + copy button
+				// Header: optional language label + copy button
 				+ SVerticalBox::Slot().AutoHeight()
-					[SNew(SHorizontalBox)
-
+				[
+					SNew(SBorder)
+					.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+					.BorderBackgroundColor(ClaireonTokens::Bg2)
+					.Padding(FMargin(12.0f, 5.0f))
+					[
+						SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
-							[SNew(STextBlock)
-									.Text(FText::FromString(InLanguage))
-									.ColorAndOpacity(FSlateColor(Color_Gray_Mid))
-									.Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
-									.Visibility(InLanguage.IsEmpty()
-										? EVisibility::Collapsed
-										: EVisibility::Visible)]
-
+						[
+							SNew(STextBlock)
+							.Text(FText::FromString(InLanguage))
+							.ColorAndOpacity(FSlateColor(ClaireonTokens::Fg3))
+							.Font(FCoreStyle::GetDefaultFontStyle("Mono", 9))
+							.Visibility(InLanguage.IsEmpty()
+								? EVisibility::Collapsed : EVisibility::Visible)
+						]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-							[SNew(SButton)
-									.Text(LOCTEXT("CopyCode", "Copy"))
-									.ButtonStyle(FAppStyle::Get(), "SimpleButton")
-									.TextStyle(FAppStyle::Get(), "SmallButtonText")
-									.OnClicked_Lambda([CodeCapture]() -> FReply
+						[
+							SNew(SButton)
+							.ButtonStyle(FAppStyle::Get(), "SimpleButton")
+							.ToolTipText(LOCTEXT("CopyCodeTooltip", "Copy code"))
+							.OnClicked_Lambda([CodeCapture]() -> FReply
 							{
 								FPlatformApplicationMisc::ClipboardCopy(*CodeCapture);
 								return FReply::Handled();
-							})]]
+							})
+							[
+								SNew(STextBlock)
+								.Text(LOCTEXT("CopyCode", "Copy"))
+								.ColorAndOpacity(FSlateColor(ClaireonTokens::Fg3))
+								.Font(FCoreStyle::GetDefaultFontStyle("Regular", 10))
+							]
+						]
+					]
+				]
 
-				// Code content (selectable, copyable)
-				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
-					[SNew(SMultiLineEditableText)
-							.Text(FText::FromString(InCode))
-							.TextStyle(&CodeBlockStyle)
-							.AutoWrapText(false)
-							.IsReadOnly(true)]];
+				// Code content (read-only, selectable for copy-paste)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SBorder)
+					.BorderImage(FAppStyle::GetBrush("NoBrush"))
+					.Padding(FMargin(12.0f, 10.0f))
+					[
+						SNew(SMultiLineEditableText)
+						.Text(FText::FromString(InCode))
+						.TextStyle(&CodeBlockStyle)
+						.AutoWrapText(false)
+						.IsReadOnly(true)
+					]
+				]
+			]
+		];
 }
 
 TSharedRef<SWidget> SClaireonREPLWidget::BuildStyledTableCell(
@@ -1090,7 +1667,7 @@ TSharedRef<SWidget> SClaireonREPLWidget::BuildStyledTableCell(
 		if (Seg.StyleName.Contains(TEXT("Code")))
 		{
 			SegFont = FCoreStyle::GetDefaultFontStyle("Mono", 9);
-			SegColor = Color_Amber;
+			SegColor = ClaireonTokens::AccentHi;
 		}
 		else if (Seg.StyleName.Contains(TEXT("Bold")))
 		{
@@ -1098,7 +1675,7 @@ TSharedRef<SWidget> SClaireonREPLWidget::BuildStyledTableCell(
 		}
 		else if (Seg.StyleName.Contains(TEXT("AssetLink")))
 		{
-			SegColor = Color_Amber;
+			SegColor = ClaireonTokens::AccentHi;
 		}
 
 		HBox->AddSlot().AutoWidth()
@@ -1191,7 +1768,7 @@ TSharedRef<SWidget> SClaireonREPLWidget::BuildTableWidget(
 	// Header row
 	Table->AddSlot()
 		.AutoHeight()
-		[BuildRow(Block.TableHeaders, HeaderBg, HeaderFont, Color_White)];
+		[BuildRow(Block.TableHeaders, HeaderBg, HeaderFont, ClaireonTokens::Fg1)];
 
 	// Data rows
 	for (int32 RowIdx = 0; RowIdx < Block.TableRows.Num(); ++RowIdx)
@@ -1199,7 +1776,7 @@ TSharedRef<SWidget> SClaireonREPLWidget::BuildTableWidget(
 		const FLinearColor& RowBg = (RowIdx % 2 == 0) ? EvenRowBg : OddRowBg;
 		Table->AddSlot()
 			.AutoHeight()
-			[BuildRow(Block.TableRows[RowIdx], RowBg, CellFont, Color_Gray_Light)];
+			[BuildRow(Block.TableRows[RowIdx], RowBg, CellFont, ClaireonTokens::Fg2)];
 	}
 
 	// Wrap in horizontal scrollbox for wide tables
@@ -1279,42 +1856,35 @@ FText SClaireonREPLWidget::GetStatusText() const
 		return FText::FromString(
 			FString::Printf(TEXT("Idle \u00b7 %s"),
 				*UClaireonSettings::Get()->ModelId));
-	return LOCTEXT("StatusThinking", "Thinking\u2026");
+	return LOCTEXT("StatusThinking", "Working\u2026");
 }
 
 FSlateColor SClaireonREPLWidget::GetStatusDotColor() const
 {
 	if (bUserStopActive)
-		return FSlateColor(Color_Red);
+		return FSlateColor(ClaireonTokens::Err);
 	if (!bIsProcessing)
-		return FSlateColor(Color_Gray_Mid);
+		return FSlateColor(ClaireonTokens::Fg3);
 	float Pulse = PulseSequence.IsPlaying()
 		? FMath::Lerp(0.3f, 1.0f, PulseHandle.GetLerp())
 		: 1.0f;
-	return FSlateColor(FLinearColor(Color_Amber.R, Color_Amber.G, Color_Amber.B, Pulse));
+	return FSlateColor(FLinearColor(
+		ClaireonTokens::Accent.R,
+		ClaireonTokens::Accent.G,
+		ClaireonTokens::Accent.B,
+		Pulse));
 }
 
 FText SClaireonREPLWidget::GetContextIndicatorText() const
 {
-	if (!Client.IsValid())
-		return FText::GetEmpty();
-	// Haiku context window ~200K tokens; use rough estimate
-	constexpr int32 ContextWindowTokens = 200000;
-	int32 Used = Client->GetApproximateTokenCount();
-	int32 Pct = FMath::Clamp((Used * 100) / ContextWindowTokens, 0, 100);
-	return FText::FromString(FString::Printf(TEXT("ctx: %d%%"), Pct));
+	return FText::FromString(FString::Printf(TEXT("ctx %d%%"), ContextUsagePct));
 }
 
 FSlateColor SClaireonREPLWidget::GetContextIndicatorColor() const
 {
-	if (!Client.IsValid())
-		return FSlateColor(Color_Gray_Mid);
-	constexpr int32 ContextWindowTokens = 200000;
-	int32 Used = Client->GetApproximateTokenCount();
-	int32 Pct = (Used * 100) / ContextWindowTokens;
-	if (Pct >= 85)
-		return FSlateColor(Color_Amber);
-	return FSlateColor(Color_Gray_Mid);
+	if (ContextUsagePct >= 90) return FSlateColor(ClaireonTokens::Err);
+	if (ContextUsagePct >= 70) return FSlateColor(ClaireonTokens::Warn);
+	return FSlateColor(ClaireonTokens::Fg3);
 }
 
 FText SClaireonREPLWidget::GetNewTopicButtonText() const
@@ -1331,10 +1901,13 @@ FSlateColor SClaireonREPLWidget::GetNewTopicButtonColor() const
 		float Pulse = PulseSequence.IsPlaying()
 			? FMath::Lerp(0.4f, 1.0f, PulseHandle.GetLerp())
 			: 1.0f;
-		return FSlateColor(FLinearColor(Color_Amber.R, Color_Amber.G,
-			Color_Amber.B, Pulse));
+		return FSlateColor(FLinearColor(
+			ClaireonTokens::Accent.R,
+			ClaireonTokens::Accent.G,
+			ClaireonTokens::Accent.B,
+			Pulse));
 	}
-	return FSlateColor(FLinearColor(0.25f, 0.25f, 0.25f, 1.0f));
+	return FSlateColor(ClaireonTokens::Fg2);
 }
 
 // ------- Animation -------

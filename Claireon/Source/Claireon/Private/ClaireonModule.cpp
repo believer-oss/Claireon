@@ -77,6 +77,7 @@
 #include "Tools/ClaireonBlueprintGraphTool_ListGraphs.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddNode.h"
 #include "Tools/ClaireonBlueprintGraphTool_RemoveNode.h"
+#include "Tools/ClaireonBlueprintGraphTool_PruneReroutes.h"
 #include "Tools/ClaireonBlueprintGraphTool_ReconstructNode.h"
 #include "Tools/ClaireonBlueprintGraphTool_SetGameplayTags.h"
 #include "Tools/ClaireonBlueprintGraphTool_SuggestNode.h"
@@ -515,7 +516,6 @@
 #include "Tools/ClaireonTool_DataTableSearch.h"
 #include "Tools/ClaireonTool_DataTableGetInfo.h"
 #include "Tools/ClaireonTool_DataTableGetRows.h"
-#include "Tools/ClaireonTool_DataTableGetRow.h"
 #include "Tools/ClaireonTool_DataTableGetRowStructured.h"
 #include "Tools/ClaireonTool_DataTableFindRows.h"
 #include "Tools/ClaireonTool_DataTableAddRow.h"
@@ -524,6 +524,7 @@
 #include "Tools/ClaireonTool_DataTableRenameRow.h"
 #include "Tools/ClaireonTool_DataTableMoveRow.h"
 #include "Tools/ClaireonTool_DataTableSetRowValues.h"
+#include "Tools/ClaireonTool_DataTableGetRowJson.h"
 #include "Tools/ClaireonTool_DataTableExportJson.h"
 #include "Tools/ClaireonTool_DataTableImportJson.h"
 #include "Tools/ClaireonTool_DataTableExportCsv.h"
@@ -837,7 +838,7 @@ namespace ClaireonLaunch
 
 	/**
 	 * Resolve the live MCP port: prefer the in-process server, fall back to
-	 * Saved/MCPServer.json (in case the diagnostics tab hasn't auto-started yet),
+	 * Saved/Claireon/MCPServer.json (in case the diagnostics tab hasn't auto-started yet),
 	 * fall back to the default 8017.
 	 */
 	static uint32 ResolveLivePort()
@@ -851,7 +852,7 @@ namespace ClaireonLaunch
 			}
 		}
 
-		const FString PortFile = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("MCPServer.json"));
+		const FString PortFile = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Claireon"), TEXT("MCPServer.json"));
 		FString Contents;
 		if (FFileHelper::LoadFileToString(Contents, *PortFile))
 		{
@@ -1073,6 +1074,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_ListGraphs>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_AddNode>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_RemoveNode>());
+	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_PruneReroutes>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_ReconstructNode>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SetGameplayTags>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SuggestNode>());
@@ -1743,7 +1745,6 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_DataTableSearch>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableGetInfo>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableGetRows>());
-	Tools.Add(MakeShared<ClaireonTool_DataTableGetRow>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableGetRowStructured>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableFindRows>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableAddRow>());
@@ -1752,6 +1753,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_DataTableRenameRow>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableMoveRow>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableSetRowValues>());
+	Tools.Add(MakeShared<ClaireonTool_DataTableGetRowJson>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableExportJson>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableImportJson>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableExportCsv>());
@@ -2168,6 +2170,41 @@ void FClaireonModule::StartServer()
 		}
 	}
 
+	// Auto-detect: even without -EnableMCPProxy / bEnableProxy, join a proxy
+	// that is already running. Without this, UE's 0.0.0.0 bind and the proxy's
+	// 127.0.0.1 bind don't conflict on Windows, so TryStart always succeeds and
+	// the editor lands in DirectConnect regardless of the proxy's presence.
+	// PingProxyHealth is used (not EnsureProxyRunning) so we never spawn one --
+	// we only auto-join, never auto-start.
+	if (!bProxyHoldsOurPort && !bPortOverriddenByCommandLine)
+	{
+		if (!ProxyClient.IsValid())
+		{
+			ProxyClient = MakeUnique<FClaireonProxyClient>();
+		}
+		if (ProxyClient->PingProxyHealth())
+		{
+			bProxyHoldsOurPort = ProxyClient->EnsureWorktreeBound(
+				WorktreeRoot, static_cast<int32>(PreferredPort));
+			if (bProxyHoldsOurPort)
+			{
+				UE_LOG(LogClaireon, Display,
+					TEXT("[MCP] Auto-detected running Claireon proxy; promoting to proxy mode for worktree %s."),
+					*WorktreeRoot);
+			}
+			else
+			{
+				// Proxy is up but EnsureWorktreeBound failed; discard so we
+				// don't accidentally use it in the DirectConnect branch.
+				ProxyClient.Reset();
+			}
+		}
+		else
+		{
+			ProxyClient.Reset();
+		}
+	}
+
 	// Skip TryStart on the SHA port when the proxy has already claimed it.
 	// UE's HTTP server binds 0.0.0.0 while the proxy binds 127.0.0.1 -- on
 	// Windows those two binds do NOT conflict, so a naive TryStart would
@@ -2346,6 +2383,11 @@ FClaireonModule& FClaireonModule::Get()
 	return FModuleManager::GetModuleChecked<FClaireonModule>(TEXT("Claireon"));
 }
 
+/*static*/ void FClaireonModule::LaunchClaudeCode()
+{
+	ClaireonLaunch::LaunchClaudeCodeFromProjectDir();
+}
+
 void FClaireonModule::CollectToolsFromProviders()
 {
 	if (!Server.IsValid())
@@ -2500,51 +2542,146 @@ void FClaireonModule::RegisterMenus()
 	{
 		FGlobalTabmanager::Get()->TryInvokeTab(SClaireonDiagnosticsWidget::TabId);
 		return FReply::Handled();
-	}).ToolTip(SNew(SToolTip)[SNew(SVerticalBox) + SVerticalBox::Slot().AutoHeight().Padding(2.0f)[SNew(STextBlock).Text_Lambda([]() -> FText
-	{
-		if (FClaireonModule::Get().IsServerRunning())
-		{
-			return INVTEXT("MCP Server: Running");
-		}
-		return INVTEXT("MCP Server: Stopped");
-	}).Font(FCoreStyle::GetDefaultFontStyle("Bold", 10))]
-				+ SVerticalBox::Slot().AutoHeight().Padding(2.0f)[SNew(STextBlock).Text_Lambda([]() -> FText
-	{
-		FClaireonServer* Server = FClaireonModule::Get().GetServer();
-		if (Server && Server->IsRunning())
-		{
-			return FText::FromString(FString::Printf(TEXT("Port: %u"), Server->GetPort()));
-		}
-		return FText::GetEmpty();
-	})] + SVerticalBox::Slot().AutoHeight().Padding(2.0f)[SNew(STextBlock).Text_Lambda([]() -> FText
-	{
-		FClaireonServer* Server = FClaireonModule::Get().GetServer();
-		if (Server && Server->IsRunning())
-		{
-			FTimespan Uptime = FDateTime::Now() - Server->GetStartTime();
-			return FText::FromString(FString::Printf(TEXT("Uptime: %s"),
-				*Uptime.ToString(TEXT("%h:%m:%s"))));
-		}
-		return FText::GetEmpty();
-	})] + SVerticalBox::Slot().AutoHeight().Padding(2.0f)[SNew(STextBlock).Text_Lambda([]() -> FText
-	{
-		FClaireonServer* Server = FClaireonModule::Get().GetServer();
-		if (Server && Server->IsRunning())
-		{
-			return FText::FromString(FString::Printf(TEXT("Requests: %d"),
-				Server->GetTotalRequestCount()));
-		}
-		return FText::GetEmpty();
-	})] + SVerticalBox::Slot().AutoHeight().Padding(2.0f)[SNew(STextBlock).Text_Lambda([]() -> FText
-	{
-		FClaireonServer* Server = FClaireonModule::Get().GetServer();
-		if (Server && Server->IsRunning())
-		{
-			return FText::FromString(FString::Printf(TEXT("Errors: %d"),
-				Server->GetErrorCount()));
-		}
-		return FText::GetEmpty();
-	})]]).ContentPadding(FMargin(4.0f))[SNew(SBox).WidthOverride(16.0f).HeightOverride(16.0f)[SNew(SOverlay) + SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)[SNew(SImage).Image(FAppStyle::GetBrush(TEXT("Icons.Comment"))).DesiredSizeOverride(FVector2D(16.0f, 16.0f))] + SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Bottom)[SNew(SImage).Image(FClaireonToolbarStyle::Get().GetBrush(TEXT("ClaireonToolbar.StatusDot"))).ColorAndOpacity_Lambda(StatusDotColorLambda).DesiredSizeOverride(FVector2D(8.0f, 8.0f))]]];
+	}).ToolTip(
+		SNew(SToolTip)
+		[
+			// Compact hovercard mirroring the status strip
+			SNew(SVerticalBox)
+
+			// Header: badge + server state
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(6.0f, 6.0f, 6.0f, 3.0f))
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(SBorder)
+					.BorderImage(FAppStyle::GetBrush("ToolPanel.DarkGroupBorder"))
+					.Padding(FMargin(5.0f, 2.0f))
+					[
+						SNew(STextBlock)
+						.Text(INVTEXT("cl"))
+						.Font(FCoreStyle::GetDefaultFontStyle("Bold", 9))
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f)).VAlign(VAlign_Center)
+				[
+					SNew(STextBlock)
+					.Text_Lambda([]() -> FText
+					{
+						const FClaireonModule& M = FClaireonModule::Get();
+						if (!M.IsServerRunning())      return INVTEXT("MCP server stopped");
+						const FClaireonProxyClient* P = M.GetProxyClient();
+						if (!P)                        return INVTEXT("MCP server running");
+						switch (P->GetState())
+						{
+						case EClaireonProxyState::Registered:    return INVTEXT("MCP server running");
+						case EClaireonProxyState::RetryRegister: return INVTEXT("MCP server running");
+						case EClaireonProxyState::Failed:        return INVTEXT("Proxy disconnected");
+						default:                                   return INVTEXT("MCP server starting...");
+						}
+					})
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 9))
+				]
+			]
+
+			// Connection line
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(6.0f, 1.0f))
+			[
+				SNew(STextBlock)
+				.Text_Lambda([]() -> FText
+				{
+					const FClaireonModule& M = FClaireonModule::Get();
+					const FClaireonServer* S = M.GetServer();
+					uint32 Port = S ? S->GetPort() : 0;
+					const FClaireonProxyClient* P = M.GetProxyClient();
+					if (!P)
+					{
+						return FText::FromString(FString::Printf(TEXT("direct :%u"), Port));
+					}
+					switch (P->GetState())
+					{
+					case EClaireonProxyState::Registered:
+						return FText::FromString(FString::Printf(TEXT("proxy :%u registered"), Port));
+					case EClaireonProxyState::RetryRegister:
+						return FText::FromString(FString::Printf(TEXT("proxy :%u verifying..."), Port));
+					case EClaireonProxyState::Failed:
+						return FText::FromString(FString::Printf(TEXT("proxy :%u -- click to retry"), Port));
+					default:
+						return FText::FromString(FString::Printf(TEXT("proxy :%u starting..."), Port));
+					}
+				})
+				.Font(FCoreStyle::GetDefaultFontStyle("Mono", 8))
+			]
+
+			// k/v grid: Uptime | Requests | Errors
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(6.0f, 3.0f, 6.0f, 1.0f))
+			[
+				SNew(STextBlock)
+				.Text_Lambda([]() -> FText
+				{
+					const FClaireonServer* S = FClaireonModule::Get().GetServer();
+					if (!S || !S->IsRunning()) return FText::GetEmpty();
+					FTimespan Up = FDateTime::Now() - S->GetStartTime();
+					return FText::FromString(FString::Printf(TEXT("Uptime      %02d:%02d:%02d"),
+						(int32)Up.GetTotalHours(), Up.GetMinutes(), Up.GetSeconds()));
+				})
+				.Font(FCoreStyle::GetDefaultFontStyle("Mono", 8))
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(6.0f, 1.0f))
+			[
+				SNew(STextBlock)
+				.Text_Lambda([]() -> FText
+				{
+					const FClaireonServer* S = FClaireonModule::Get().GetServer();
+					if (!S || !S->IsRunning()) return FText::GetEmpty();
+					return FText::FromString(FString::Printf(TEXT("Requests    %d"), S->GetTotalRequestCount()));
+				})
+				.Font(FCoreStyle::GetDefaultFontStyle("Mono", 8))
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(6.0f, 1.0f, 6.0f, 6.0f))
+			[
+				SNew(STextBlock)
+				.Text_Lambda([]() -> FText
+				{
+					const FClaireonServer* S = FClaireonModule::Get().GetServer();
+					if (!S || !S->IsRunning()) return FText::GetEmpty();
+					return FText::FromString(FString::Printf(TEXT("Errors      %d"), S->GetErrorCount()));
+				})
+				.Font(FCoreStyle::GetDefaultFontStyle("Mono", 8))
+			]
+		]
+	).ContentPadding(FMargin(4.0f))
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+		.Padding(FMargin(0.0f, 0.0f, 4.0f, 0.0f))
+		[
+			SNew(STextBlock)
+			.Text(INVTEXT("Claireon"))
+			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 11))
+		]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+		.Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f))
+		[
+			SNew(SBox).WidthOverride(16.0f).HeightOverride(16.0f)
+			[
+				SNew(SOverlay)
+				+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)
+				[
+					SNew(SImage)
+					.Image(FAppStyle::GetBrush(TEXT("Icons.Comment")))
+					.DesiredSizeOverride(FVector2D(16.0f, 16.0f))
+				]
+				+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Bottom)
+				[
+					SNew(SImage)
+					.Image(FClaireonToolbarStyle::Get().GetBrush(TEXT("ClaireonToolbar.StatusDot")))
+					.ColorAndOpacity_Lambda(StatusDotColorLambda)
+					.DesiredSizeOverride(FVector2D(8.0f, 8.0f))
+				]
+			]
+		]
+	];
 
 	// Drive continuous repaint so the ColorAndOpacity_Lambda re-evaluates each frame of the
 	// blink window even when the user isn't hovering the button. Cost is one no-op invalidation
@@ -2564,20 +2701,8 @@ void FClaireonModule::RegisterMenus()
 	AIChatEntry.StyleNameOverride = "CalloutToolbar";
 	Section.AddEntry(AIChatEntry);
 
-	FToolMenuEntry LaunchClaudeCodeEntry = FToolMenuEntry::InitToolBarButton(
-		TEXT("LaunchClaudeCode"),
-		FUIAction(FExecuteAction::CreateLambda([]()
-	{
-		ClaireonLaunch::LaunchClaudeCodeFromProjectDir();
-	})),
-		LOCTEXT("LaunchClaudeCodeLabel", "Claude Code"),
-		LOCTEXT("LaunchClaudeCodeTooltip",
-			"Open a terminal at the project root and start Claude Code, pre-configured to talk to this editor's MCP server. "
-			"Inference is billed against your Claude.ai subscription, not the Anthropic API."),
-		FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Console")),
-		EUserInterfaceActionType::Button);
-	LaunchClaudeCodeEntry.StyleNameOverride = "CalloutToolbar";
-	Section.AddEntry(LaunchClaudeCodeEntry);
+	// Launch Agent button moved into the Claireon panel status strip (between proxy chip and UPTIME).
+	// See SClaireonDiagnosticsWidget::BuildStatusStrip and UClaireonSettings::bShowClaudeCodeButton.
 
 	// Window > AI Chat menu entry for discoverability
 	{

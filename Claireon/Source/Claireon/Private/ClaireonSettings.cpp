@@ -2,9 +2,65 @@
 // SPDX-License-Identifier: MIT
 
 #include "ClaireonSettings.h"
+#include "HAL/PlatformMisc.h"
+#include "Misc/ConfigCacheIni.h"
+
+namespace ClaireonSettingsCredentials
+{
+	static constexpr const TCHAR* StoreId = TEXT("Claireon");
+	static constexpr const TCHAR* SectionName = TEXT("Anthropic");
+	static constexpr const TCHAR* ApiKeyName = TEXT("ApiKey");
+	static constexpr const TCHAR* SettingsSection = TEXT("/Script/Claireon.ClaireonSettings");
+
+	static bool ReadStoredApiKey(FString& OutApiKey)
+	{
+		OutApiKey.Reset();
+		return FPlatformMisc::GetStoredValue(StoreId, SectionName, ApiKeyName, OutApiKey)
+			&& !OutApiKey.IsEmpty();
+	}
+
+	static void WriteStoredApiKey(const FString& NewApiKey)
+	{
+		const FString Trimmed = NewApiKey.TrimStartAndEnd();
+		if (Trimmed.IsEmpty())
+		{
+			FPlatformMisc::DeleteStoredValue(StoreId, SectionName, ApiKeyName);
+			return;
+		}
+
+		FPlatformMisc::SetStoredValue(StoreId, SectionName, ApiKeyName, Trimmed);
+	}
+
+	static FString MigrateLegacyConfigApiKey()
+	{
+		FString StoredKey;
+		if (ReadStoredApiKey(StoredKey))
+		{
+			return StoredKey;
+		}
+
+		FString LegacyKey;
+		if (GConfig &&
+			GConfig->GetString(SettingsSection, TEXT("AnthropicApiKey"), LegacyKey, GEditorPerProjectIni))
+		{
+			LegacyKey.TrimStartAndEndInline();
+			if (!LegacyKey.IsEmpty())
+			{
+				WriteStoredApiKey(LegacyKey);
+			}
+
+			GConfig->RemoveKey(SettingsSection, TEXT("AnthropicApiKey"), GEditorPerProjectIni);
+			GConfig->Flush(false, GEditorPerProjectIni);
+		}
+
+		return LegacyKey;
+	}
+}
 
 UClaireonSettings::UClaireonSettings()
 {
+    AnthropicApiKey = ClaireonSettingsCredentials::MigrateLegacyConfigApiKey();
+
     DisabledPIENetModes.Add(TEXT("Standalone"));
     DisabledPIENetModes.Add(TEXT("ListenServer"));
 
@@ -25,6 +81,25 @@ UClaireonSettings::UClaireonSettings()
 const UClaireonSettings* UClaireonSettings::Get()
 {
     return GetDefault<UClaireonSettings>();
+}
+
+FString UClaireonSettings::GetAnthropicApiKey() const
+{
+    FString StoredKey;
+    ClaireonSettingsCredentials::ReadStoredApiKey(StoredKey);
+    return StoredKey;
+}
+
+bool UClaireonSettings::HasAnthropicApiKey() const
+{
+    return !GetAnthropicApiKey().IsEmpty();
+}
+
+void UClaireonSettings::SetAnthropicApiKey(const FString& NewApiKey)
+{
+    const FString Trimmed = NewApiKey.TrimStartAndEnd();
+    ClaireonSettingsCredentials::WriteStoredApiKey(Trimmed);
+    AnthropicApiKey = Trimmed;
 }
 
 FString UClaireonSettings::GetEffectiveSystemPrompt() const
@@ -90,6 +165,11 @@ TArray<FString> UClaireonSettings::GetModelOptions() const
 void UClaireonSettings::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 {
     Super::PostEditChangeProperty(PropertyChangedEvent);
+    if (PropertyChangedEvent.Property &&
+        PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(UClaireonSettings, AnthropicApiKey))
+    {
+        SetAnthropicApiKey(AnthropicApiKey);
+    }
     OnSettingsChanged.Broadcast();
 }
 #endif

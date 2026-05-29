@@ -32,19 +32,22 @@ public:
     // binds the per-worktree SHA port computed by
     // Claireon::DeriveDefaultMcpPort; there is no editor-facing port setting.
 
-    /** Anthropic API key. Get one at https://console.anthropic.com/settings/keys */
-    UPROPERTY(Config, EditAnywhere, Category="Connection",
-        meta=(DisplayName="Anthropic API Key", PasswordField=true))
+    /** Anthropic API key. Stored via the platform credential store, not in config. */
+    UPROPERTY(Transient, EditAnywhere, Category="Connection",
+        meta=(DisplayName="Anthropic API Key", PasswordField=true,
+              EditCondition="bEnableREPLChat", HideEditConditionToggle))
     FString AnthropicApiKey;
 
     /** API endpoint. Override for proxies or local testing. */
     UPROPERTY(Config, EditAnywhere, Category="Connection",
-        meta=(DisplayName="API Endpoint URL"))
+        meta=(DisplayName="API Endpoint URL",
+              EditCondition="bEnableREPLChat", HideEditConditionToggle))
     FString ApiEndpointUrl = TEXT("https://api.anthropic.com/v1/messages");
 
     /** anthropic-version header value. */
     UPROPERTY(Config, EditAnywhere, Category="Connection",
-        meta=(DisplayName="Anthropic-Version Header"))
+        meta=(DisplayName="Anthropic-Version Header",
+              EditCondition="bEnableREPLChat", HideEditConditionToggle))
     FString AnthropicVersion = TEXT("2023-06-01");
 
     // --- Model ---
@@ -54,12 +57,14 @@ public:
      * Common options: claude-haiku-4-5, claude-sonnet-4-6, claude-opus-4-6
      */
     UPROPERTY(Config, EditAnywhere, Category="Model",
-        meta=(DisplayName="Model ID", GetOptions="GetModelOptions"))
+        meta=(DisplayName="Model ID", GetOptions="GetModelOptions",
+              EditCondition="bEnableREPLChat", HideEditConditionToggle))
     FString ModelId = TEXT("claude-haiku-4-5-20251001");
 
     /** Maximum tokens per response. */
     UPROPERTY(Config, EditAnywhere, Category="Model",
-        meta=(DisplayName="Max Tokens", ClampMin=256, ClampMax=16384))
+        meta=(DisplayName="Max Tokens", ClampMin=256, ClampMax=16384,
+              EditCondition="bEnableREPLChat", HideEditConditionToggle))
     int32 MaxTokens = 4096;
 
     /**
@@ -67,7 +72,8 @@ public:
      * Safety valve to prevent runaway tool chains.
      */
     UPROPERTY(Config, EditAnywhere, Category="Model",
-        meta=(DisplayName="Tool-Use Depth Limit", ClampMin=1, ClampMax=20))
+        meta=(DisplayName="Tool-Use Depth Limit", ClampMin=1, ClampMax=20,
+              EditCondition="bEnableREPLChat", HideEditConditionToggle))
     int32 ToolUseDepthLimit = 10;
 
     // --- Prompt ---
@@ -78,7 +84,8 @@ public:
      * Leave empty to use the built-in default prompt.
      */
     UPROPERTY(Config, EditAnywhere, Category="Prompt",
-        meta=(DisplayName="System Prompt Override", MultiLine=true))
+        meta=(DisplayName="System Prompt Override", MultiLine=true,
+              EditCondition="bEnableREPLChat", HideEditConditionToggle))
     FString SystemPromptOverride;
 
     // --- Display ---
@@ -86,24 +93,27 @@ public:
     /** Render assistant messages with rich formatting (bold, code blocks, tables).
      *  When unchecked, messages display as plain text. */
     UPROPERTY(Config, EditAnywhere, Category="Display",
-        meta=(DisplayName="Enable Rich Text Formatting"))
+        meta=(DisplayName="Enable Rich Text Formatting",
+              EditCondition="bEnableREPLChat", HideEditConditionToggle))
     bool bEnableRichText = true;
 
     // --- Logging ---
 
-    /** Directory for JSONL conversation log files. Relative to project root. */
-    UPROPERTY(Config, EditAnywhere, Category="Logging",
-        meta=(DisplayName="Log Directory", RelativeToGameDir))
-    FString LogDirectory = TEXT("Saved/Logs/MCPRepl");
+    /** Directory for JSONL conversation log files. Relative to project root. Fixed at Saved/Claireon/Logs. */
+    UPROPERTY(Config, VisibleAnywhere, Category="Logging",
+        meta=(DisplayName="Log Directory"))
+    FString LogDirectory = TEXT("Saved/Claireon/Logs");
 
     /** How often (seconds) to flush the log buffer to disk. */
     UPROPERTY(Config, EditAnywhere, Category="Logging",
-        meta=(DisplayName="Log Flush Interval (seconds)", ClampMin=1, ClampMax=60))
+        meta=(DisplayName="Log Flush Interval (seconds)", ClampMin=1, ClampMax=60,
+              EditCondition="bEnableREPLChat", HideEditConditionToggle))
     float LogFlushIntervalSeconds = 5.0f;
 
     /** Whether to write conversation logs at all. */
     UPROPERTY(Config, EditAnywhere, Category="Logging",
-        meta=(DisplayName="Enable Conversation Logging"))
+        meta=(DisplayName="Enable Conversation Logging",
+              EditCondition="bEnableREPLChat", HideEditConditionToggle))
     bool bEnableLogging = true;
 
     // --- Emergency Stop ---
@@ -120,33 +130,60 @@ public:
 
     /** Maximum number of automatic retry attempts for transient API failures (429, 5xx, timeouts). Set to 0 to disable retries. */
     UPROPERTY(Config, EditAnywhere, Category="Reliability",
-        meta=(DisplayName="Max Retry Attempts", ClampMin=0, ClampMax=10))
+        meta=(DisplayName="Max Retry Attempts", ClampMin=0, ClampMax=10,
+              EditCondition="bEnableREPLChat", HideEditConditionToggle))
     int32 MaxRetryAttempts = 10;
 
     /** Base delay in seconds for exponential backoff between retries. Actual delay: min(base * 2^attempt + jitter, max). */
     UPROPERTY(Config, EditAnywhere, Category="Reliability",
-        meta=(DisplayName="Initial Retry Delay (seconds)", ClampMin=0.5, ClampMax=10.0))
+        meta=(DisplayName="Initial Retry Delay (seconds)", ClampMin=0.5, ClampMax=10.0,
+              EditCondition="bEnableREPLChat", HideEditConditionToggle))
     float InitialRetryDelaySeconds = 1.0f;
 
     /** Maximum delay in seconds between retries. Caps exponential growth and Retry-After header values. */
     UPROPERTY(Config, EditAnywhere, Category="Reliability",
-        meta=(DisplayName="Max Retry Delay (seconds)", ClampMin=5.0, ClampMax=120.0))
+        meta=(DisplayName="Max Retry Delay (seconds)", ClampMin=5.0, ClampMax=120.0,
+              EditCondition="bEnableREPLChat", HideEditConditionToggle))
     float MaxRetryDelaySeconds = 30.0f;
 
     /** Minimum interval in seconds between outgoing API calls. Prevents burst traffic during tool-use loops. */
     UPROPERTY(Config, EditAnywhere, Category="Reliability",
-        meta=(DisplayName="Min Request Interval (seconds)", ClampMin=0.0, ClampMax=5.0))
+        meta=(DisplayName="Min Request Interval (seconds)", ClampMin=0.0, ClampMax=5.0,
+              EditCondition="bEnableREPLChat", HideEditConditionToggle))
     float MinRequestIntervalSeconds = 0.2f;
 
     /** HTTP request timeout in seconds. If the API does not respond within this time, the request is cancelled and retried. */
     UPROPERTY(Config, EditAnywhere, Category="Reliability",
-        meta=(DisplayName="Request Timeout (seconds)", ClampMin=10.0, ClampMax=300.0))
+        meta=(DisplayName="Request Timeout (seconds)", ClampMin=10.0, ClampMax=300.0,
+              EditCondition="bEnableREPLChat", HideEditConditionToggle))
     float RequestTimeoutSeconds = 60.0f;
 
     /** When enabled, log full request/response bodies on API errors. Useful for debugging but produces large log entries. */
     UPROPERTY(Config, EditAnywhere, Category="Reliability",
-        meta=(DisplayName="Verbose Network Logging"))
+        meta=(DisplayName="Verbose Network Logging",
+              EditCondition="bEnableREPLChat", HideEditConditionToggle))
     bool bVerboseNetworkLogging = false;
+
+    // --- Python Execution ---
+
+    /**
+     * Watchdog timeout for a single python_execute call (seconds).
+     * After this many seconds the watchdog injects a TimeoutError into the
+     * Python interpreter; the game thread unblocks once Python processes it.
+     *
+     * Limitations:
+     *   - The injection fires between Python bytecodes only. A blocking C
+     *     extension call (e.g. a slow claireon.* tool) will not be interrupted
+     *     mid-call; the error surfaces when that call returns to Python.
+     *   - Set to 0 to disable the watchdog entirely (not recommended -- a
+     *     hung script will freeze the editor until it is killed).
+     *
+     * Must be less than the proxy's HEARTBEAT_STALENESS_SECONDS (180 s) so the
+     * session is not evicted before the watchdog fires.
+     */
+    UPROPERTY(Config, EditAnywhere, Category="Python Execution",
+        meta=(DisplayName="Python Execution Timeout (seconds)", ClampMin=0.0, ClampMax=120.0))
+    float PythonExecutionTimeoutSeconds = 60.0f;
 
     // --- Search ---
 
@@ -205,18 +242,20 @@ public:
         meta=(DisplayName="Result Spill Ceiling (bytes)", ClampMin=1025, ClampMax=1073741824))
     int32 ResultSpillMaxBytes = 52428800;
 
-    /** When true, the connect-time sweep is skipped and stale spill directories are kept.
-     *  Useful for offline debugging of past runs. */
+    /** When true, spill directories are never swept on connect and accumulate indefinitely.
+     *  When false, spills older than ResultSpillRetentionDays are deleted on connect.
+     *  Default is true -- keep everything unless explicitly opted out. */
     UPROPERTY(Config, EditAnywhere, Category="Large Results",
         meta=(DisplayName="Keep Result Spills"))
-    bool bKeepResultSpills = false;
+    bool bKeepResultSpills = true;
 
     /** Age threshold (days) above which spill subdirectories are swept on connect.
-     *  Hidden when bKeepResultSpills is true. */
+     *  0 = never delete (same effect as enabling Keep Result Spills above).
+     *  Only active when Keep Result Spills is unchecked. */
     UPROPERTY(Config, EditAnywhere, Category="Large Results",
         meta=(DisplayName="Result Spill Retention (days)",
               EditCondition="!bKeepResultSpills",
-              ClampMin=1, ClampMax=365))
+              ClampMin=0, ClampMax=365))
     int32 ResultSpillRetentionDays = 7;
 
     // --- Debug ---
@@ -224,7 +263,8 @@ public:
     /** Log all REPL tool calls (name, arguments, results) to the Unreal output log.
      *  Also logs the full API request/response JSON for each turn. Very verbose. */
     UPROPERTY(Config, EditAnywhere, Category="Debug",
-        meta=(DisplayName="Log All Tool Calls"))
+        meta=(DisplayName="Log All Tool Calls",
+              EditCondition="bEnableREPLChat", HideEditConditionToggle))
     bool bLogAllToolCalls = false;
 
     // --- Engine Diagnostics ---
@@ -252,6 +292,12 @@ public:
     UPROPERTY(Config, EditAnywhere, Category="Claude Code Launch",
         meta=(DisplayName="Skip Permission Prompts on Launch"))
     bool bLaunchSkipPermissions = false;
+
+    /** Show the [ Claude Code ] launch button in the Claireon panel status strip.
+     *  Disable if you prefer to launch Claude Code another way. */
+    UPROPERTY(Config, EditAnywhere, Category="Claude Code Launch",
+        meta=(DisplayName="Show Claude Code Button"))
+    bool bShowClaudeCodeButton = true;
 
     // --- MCP Proxy ---
 
@@ -284,10 +330,42 @@ public:
         meta=(DisplayName="Proxy Forward Timeout (seconds)", ClampMin=5, ClampMax=3600))
     int32 ProxyForwardTimeoutSeconds = 600;
 
+    // --- Launch Agent ---
+
+    /**
+     * Command passed to the Launch Agent toolbar button. The default "claude"
+     * launches the Claude Code CLI. Override with a custom path or wrapper if
+     * needed. The command is launched in a terminal at the project root.
+     */
+    UPROPERTY(Config, EditAnywhere, Category="Launch Agent",
+        meta=(DisplayName="Agent Launch Command"))
+    FString AgentLaunchCommand = TEXT("claude");
+
+    // --- Advanced / REPL ---
+
+    /**
+     * Show the in-editor REPL Chat tab inside the Claireon panel.
+     * Disabled by default -- the primary interaction path is via the
+     * Launch Agent toolbar button (Claude Code CLI). Requires an
+     * Anthropic API key to be set in the Connection category above.
+     */
+    UPROPERTY(Config, EditAnywhere, Category="Advanced",
+        meta=(DisplayName="Enable In-Editor REPL Chat"))
+    bool bEnableREPLChat = false;
+
     // --- Helpers ---
 
     /** Returns the effective system prompt (override if set, else built-in default). */
     FString GetEffectiveSystemPrompt() const;
+
+    /** Read the Anthropic API key from platform storage. */
+    FString GetAnthropicApiKey() const;
+
+    /** True when an API key is available in platform storage. */
+    bool HasAnthropicApiKey() const;
+
+    /** Save or clear the Anthropic API key in platform storage. */
+    void SetAnthropicApiKey(const FString& NewApiKey);
 
     /** Broadcast when any property changes in the editor UI. */
     FOnClaireonSettingsChanged OnSettingsChanged;

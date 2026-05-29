@@ -142,7 +142,9 @@ FString ClaireonTool_SearchTools::GetDescription() const
 	return TEXT("Search and inspect tools. Always call this before invoking a non-trivial tool through python_execute -- "
 		"pass `tool_name=\"<name>\"` to get the tool's exact input schema, parameter tooltips, and example usage. "
 		"Without `tool_name`, returns a list of tools matching `query` (fuzzy, per-word union ranking; understands "
-		"abbreviations like 'bp' for blueprint, 'dt' for data table). Filter by `category` if you already know the area.");
+		"abbreviations like 'bp' for blueprint, 'dt' for data table). Filter by `category` if you already know the area. "
+		"TRANSPORT: all claireon.* tools listed here are invoked via mcp__claireon__python_execute: "
+		"`import claireon; result = claireon.<tool_name>(arg=value)`.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_SearchTools::GetInputSchema() const
@@ -1256,6 +1258,12 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 			TEXT("\ntip: call tool_search(name=\"%s\", detail=\"full\") "
 				 "for schema, examples, and patterns"),
 			*MatchingTools[0].Name);
+	}
+
+	// Always append the invocation reminder so callers know the transport.
+	if (MatchingTools.Num() > 0)
+	{
+		SummaryText += TEXT("\ninvoke via: mcp__claireon__python_execute with `import claireon; result = claireon.<tool_name>(...)`");
 	}
 
 	return MakeSuccessResult(DataObj, SummaryText);

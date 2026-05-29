@@ -122,6 +122,14 @@ public:
 	/** Get error count since server start */
 	int32 GetErrorCount() const { return ErrorCount; }
 
+	/** Average request duration in milliseconds since server start. 0 if no requests yet. */
+	int32 GetAverageDurationMs() const
+	{
+		return (TotalRequestCount > 0)
+			? static_cast<int32>(TotalDurationMs / TotalRequestCount)
+			: 0;
+	}
+
 	/** Get the server start time */
 	FDateTime GetStartTime() const { return StartTime; }
 
@@ -163,6 +171,13 @@ public:
 
 	/** Add a diagnostics entry to the ring buffer */
 	void AddDiagnosticsEntry(FMCPDiagnosticsEntry&& Entry);
+
+	/**
+	 * Inject an editor-generated informational message into the Activity log.
+	 * The entry is marked bIsSystemMessage=true and rendered with a distinct
+	 * style in the diagnostics widget.  Game thread only.
+	 */
+	void PostSystemMessage(const FString& Text);
 
 private:
 	/** In-memory registry entry loaded from a JSON file in Content/MCP/Prompts/. */
@@ -213,6 +228,9 @@ private:
 	/** Load all *.json files under Directory, inserting each into LoadedResources keyed by "claireon://" + relative-path-without-extension. */
 	void LoadResourcesFromDirectory(const FString& Directory);
 
+	/** Load all *.md files under Directory, inserting each as a prompt and resource template. */
+	void LoadInstructionsFromDirectory(const FString& Directory);
+
 	/** Replace {{name}} tokens with matching values from Variables. Unknown tokens are left intact. */
 	static FString SubstitutePlaceholders(const FString& Template, const TMap<FString, FString>& Variables);
 
@@ -233,7 +251,7 @@ private:
 	/** Serialize a JSON object to a UTF-8 string */
 	static FString SerializeJson(const TSharedPtr<FJsonObject>& JsonObject);
 
-	/** Write the port file to Saved/MCPServer.json */
+	/** Write the port file to Saved/Claireon/MCPServer.json */
 	void WritePortFile() const;
 
 	/** Delete the port file */
@@ -288,6 +306,9 @@ private:
 
 	/** Total errors since server start */
 	int32 ErrorCount = 0;
+
+	/** Cumulative DurationMs across all requests (for average computation). */
+	double TotalDurationMs = 0.0;
 
 	/** When the server started */
 	FDateTime StartTime;

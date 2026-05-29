@@ -5,7 +5,9 @@
 #include "ClaireonLog.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h"
+#include "HAL/PlatformProcess.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Serialization/JsonReader.h"
@@ -16,6 +18,60 @@ FClaireonFeedbackLog::FClaireonFeedbackLog()
 {
 }
 
+TArray<FString> FClaireonFeedbackLog::FindAllWorktreeFeedbackDirs()
+{
+	TArray<FString> Result;
+
+	// Run: git -C "<ProjectDir>" worktree list --porcelain
+	const FString ProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+	const FString Params = FString::Printf(TEXT("-C \"%s\" worktree list --porcelain"), *ProjectDir);
+
+	FString GitOut, GitErr;
+	int32 ReturnCode = 0;
+	const bool bOk = FPlatformProcess::ExecProcess(
+		TEXT("git"), *Params, &ReturnCode, &GitOut, &GitErr);
+
+	if (bOk && ReturnCode == 0)
+	{
+		TArray<FString> Lines;
+		GitOut.ParseIntoArrayLines(Lines, false);
+
+		for (const FString& Line : Lines)
+		{
+			// Each worktree block starts with "worktree <absolute-path>"
+			if (!Line.StartsWith(TEXT("worktree ")))
+			{
+				continue;
+			}
+
+			FString WorktreePath = Line.Mid(9 /* len("worktree ") */);
+			WorktreePath.TrimStartAndEndInline();
+			if (WorktreePath.IsEmpty())
+			{
+				continue;
+			}
+
+			// The feedback dir mirrors the current project layout:
+			// <worktree>/Saved/Claireon/Feedback
+			const FString FeedbackDir = FPaths::Combine(
+				WorktreePath, TEXT("Saved"), TEXT("Claireon"), TEXT("Feedback"));
+
+			if (IFileManager::Get().DirectoryExists(*FeedbackDir))
+			{
+				Result.AddUnique(FeedbackDir);
+			}
+		}
+	}
+
+	if (Result.Num() == 0)
+	{
+		// Fallback: just the current project
+		Result.Add(Get().GetFeedbackDir());
+	}
+
+	return Result;
+}
+
 FClaireonFeedbackLog& FClaireonFeedbackLog::Get()
 {
 	static FClaireonFeedbackLog Instance;
@@ -24,7 +80,7 @@ FClaireonFeedbackLog& FClaireonFeedbackLog::Get()
 
 FString FClaireonFeedbackLog::GetFeedbackDir() const
 {
-	return FPaths::ProjectSavedDir() / TEXT("MCP") / TEXT("Feedback");
+	return FPaths::ProjectSavedDir() / TEXT("Claireon") / TEXT("Feedback");
 }
 
 FString FClaireonFeedbackLog::GenerateEntryId() const

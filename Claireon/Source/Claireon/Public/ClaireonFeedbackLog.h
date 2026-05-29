@@ -11,7 +11,7 @@
  * Persists entries to disk so the log survives editor restarts.
  *
  * Storage layout:
- *   {ProjectSavedDir}/MCP/Feedback/
+ *   {ProjectSavedDir}/Claireon/Feedback/
  *     index.json
  *     entries/
  *       {EntryId}.json
@@ -36,8 +36,15 @@ public:
 		const FString& OperatorName,
 		const FString& ClientInfo);
 
-	/** Get the feedback log directory path */
+	/** Get the feedback log directory path for the current project */
 	FString GetFeedbackDir() const;
+
+	/**
+	 * Return the Saved/Claireon/Feedback paths for every git worktree that shares
+	 * this repository and has an existing feedback directory.  Falls back to
+	 * { GetFeedbackDir() } if git is not available or returns no output.
+	 */
+	static TArray<FString> FindAllWorktreeFeedbackDirs();
 
 private:
 	FClaireonFeedbackLog();

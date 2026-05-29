@@ -12,6 +12,7 @@
 #include "ClaireonLog.h"
 #include "ClaireonModule.h"
 #include "ClaireonServer.h"
+#include "ClaireonSettings.h"
 #include "ClaireonOutputGate.h"
 #include "ClaireonSafeExec.h"
 #include "ClaireonPythonAuditLog.h"
@@ -31,12 +32,58 @@
 #include "Serialization/JsonWriter.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 
-// CPython C API headers for timeout enforcement
+// CPython C API headers for watchdog timeout enforcement
 THIRD_PARTY_INCLUDES_START
 #include "Python.h"
 THIRD_PARTY_INCLUDES_END
 
 TAtomic<int32> ClaireonTool_ExecutePython::TempFileCounter(0);
+
+// ---------------------------------------------------------------------------
+// Python execution watchdog.
+//
+// The watchdog runs on a thread-pool thread while ExecPythonCommandEx blocks
+// the game thread.  On timeout it calls Py_AddPendingCall to inject a
+// TimeoutError into the Python eval loop at the next bytecode boundary.
+//
+// Thread-safety notes:
+//   - Py_AddPendingCall is explicitly documented as callable without the GIL
+//     from any thread (including threads with no Python thread state).  It
+//     uses CPython's internal eval-breaker atomic rather than the GIL.
+//   - PyExc_TimeoutError is a module-level singleton initialized at startup;
+//     reading it from any thread is safe.
+//   - The callback runs on the game thread with the GIL held (CPython
+//     guarantees this) so calling PyErr_SetString there is safe.
+//   - SPythonExecNonce is a static atomic bumped once per Execute() call.
+//     The callback receives a heap-allocated copy of the nonce at fire time;
+//     it frees the allocation and is a no-op if the nonce no longer matches
+//     the current execution (stale pending-call from a previous timeout).
+//   - Because Execute() calls WatchdogFuture.Wait() before returning, any
+//     stack-locals captured by reference in the watchdog lambda remain valid
+//     for the watchdog's entire lifetime.
+// ---------------------------------------------------------------------------
+static std::atomic<uint64_t> SPythonExecNonce{0};
+
+static int ClaireonPy_WatchdogRaiseTimeout(void* Arg)
+{
+	// Called on the game thread with the GIL held.
+	// Arg is a heap-allocated uint64_t* we own; always free it.
+	const uint64_t* pExpectedNonce = static_cast<uint64_t*>(Arg);
+	const uint64_t Expected = pExpectedNonce ? *pExpectedNonce : 0;
+	delete pExpectedNonce;
+
+	if (Expected == 0 || Expected != SPythonExecNonce.load(std::memory_order_acquire))
+	{
+		// Stale: either queue overflow gave us a null arg, or a new execution
+		// has already started.  Return 0 so no exception is raised.
+		return 0;
+	}
+
+	PyErr_SetString(PyExc_TimeoutError,
+		"claireon python_execute timed out -- increase PythonExecutionTimeoutSeconds "
+		"in Editor Preferences > Plugins > Claireon, or break the script into smaller steps");
+	return -1; // -1 tells CPython to raise the current exception
+}
 
 // Forward declaration of internal helper used by the public BuildHintFromLogs
 // method.  Defined in the Cl622PyHintInternal namespace below.
@@ -488,6 +535,9 @@ FString ClaireonTool_ExecutePython::GetDescription() const
 				"Before calling a non-trivial tool, use `tool_search(tool_name=\"<name>\")` to fetch its exact "
 				"input schema and example usage so you don't pass the wrong arguments. "
 				"Run `dir(claireon)` to list available tools or `help(claireon.<tool_name>)` for usage details. "
+				"SPILL: large results (>8 KB) are written to disk instead of returned inline; the response will "
+				"contain `__mcp_spilled__: true` and a `spilled_streams` array -- each entry has a `path` field "
+				"(absolute path under Saved/Claireon/Results/) that you should read with the Read tool. "
 				"Bypass-mode tool: the bridge will refuse this call if any other Claireon session "
 				"(per-asset or editor-wide) is currently held. Call session_release first if needed.");
 }
@@ -533,13 +583,6 @@ TSharedPtr<FJsonObject> ClaireonTool_ExecutePython::GetInputSchema() const
 	CodeProp->SetStringField(TEXT("description"), TEXT("Python code to execute. Has access to 'unreal' module and claireon.* bridge functions."));
 	Properties->SetObjectField(TEXT("code"), CodeProp);
 
-	// timeout_ms - optional
-	TSharedPtr<FJsonObject> TimeoutProp = MakeShared<FJsonObject>();
-	TimeoutProp->SetStringField(TEXT("type"), TEXT("integer"));
-	TimeoutProp->SetStringField(TEXT("description"), TEXT("Execution timeout in milliseconds."));
-	TimeoutProp->SetNumberField(TEXT("default"), DefaultTimeoutMs);
-	Properties->SetObjectField(TEXT("timeout_ms"), TimeoutProp);
-
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	TArray<TSharedPtr<FJsonValue>> Required;
@@ -583,19 +626,6 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 		return MakeErrorResult(
 			FString::Printf(TEXT("Script size %d bytes exceeds maximum of %d bytes. Break the code into smaller scripts."),
 				Code.Len(), MaxScriptSizeBytes));
-	}
-
-	// Read timeout_ms parameter
-	int32 TimeoutMs = DefaultTimeoutMs;
-	if (Arguments->HasField(TEXT("timeout_ms")))
-	{
-		double TimeoutVal = DefaultTimeoutMs;
-		Arguments->TryGetNumberField(TEXT("timeout_ms"), TimeoutVal);
-		TimeoutMs = static_cast<int32>(TimeoutVal);
-		if (TimeoutMs <= 0)
-		{
-			TimeoutMs = DefaultTimeoutMs;
-		}
 	}
 
 	// Step 2: Ensure bridge is registered
@@ -667,6 +697,63 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	FSlowHeartBeatScope SuspendHeartBeat;
 	FDisableHitchDetectorScope SuspendHitchDetector;
 
+	// Step 6b: Arm the watchdog.
+	// Read the timeout from settings (0 = watchdog disabled).
+	// Bump the execution nonce so any stale pending-call from a previous
+	// timed-out run is a no-op if it fires at the start of this execution.
+	const uint64_t ThisNonce = SPythonExecNonce.fetch_add(1, std::memory_order_acq_rel) + 1;
+	const float WatchdogTimeoutSeconds = UClaireonSettings::Get()->PythonExecutionTimeoutSeconds;
+	const bool bWatchdogEnabled = (WatchdogTimeoutSeconds > 0.f);
+
+	// Shared flags between Execute() (game thread) and the watchdog (pool thread).
+	// Both live on the stack; WatchdogFuture.Wait() below ensures the watchdog
+	// exits before Execute() returns, so these references are always valid.
+	std::atomic<bool> bWatchdogDone{false};
+	std::atomic<bool> bWatchdogFired{false};
+
+	TFuture<void> WatchdogFuture;
+	if (bWatchdogEnabled)
+	{
+		WatchdogFuture = Async(EAsyncExecution::ThreadPool,
+			[WatchdogTimeoutSeconds, ThisNonce, &bWatchdogDone, &bWatchdogFired]()
+			{
+				const double Deadline = FPlatformTime::Seconds() + static_cast<double>(WatchdogTimeoutSeconds);
+				constexpr float PollIntervalSec = 0.05f; // 50 ms poll
+
+				while (!bWatchdogDone.load(std::memory_order_acquire))
+				{
+					FPlatformProcess::Sleep(PollIntervalSec);
+
+					if (bWatchdogDone.load(std::memory_order_acquire))
+					{
+						break; // execution finished cleanly before deadline
+					}
+
+					if (FPlatformTime::Seconds() >= Deadline)
+					{
+						// Allocate the nonce arg on the heap; the callback owns and
+						// frees it (even if execution already ended by the time it fires).
+						uint64_t* pNonce = new uint64_t(ThisNonce);
+						if (Py_AddPendingCall(&ClaireonPy_WatchdogRaiseTimeout, pNonce) == 0)
+						{
+							bWatchdogFired.store(true, std::memory_order_release);
+						}
+						else
+						{
+							// CPython's pending-call queue is full (max 32 slots); unlikely
+							// but recoverable.  Free the allocation and log; the script
+							// will run until it finishes or the editor is killed.
+							delete pNonce;
+							UE_LOG(LogClaireon, Warning,
+								TEXT("[MCP Execute] Watchdog: Py_AddPendingCall queue full -- "
+								     "timeout injection skipped for this invocation"));
+						}
+						break; // fire once only
+					}
+				}
+			});
+	}
+
 	// Step 7: Execute with engine log capture at the top level.
 	// All claireon.* tool calls within Python flow through ClaireonBridge::MCPCallTool,
 	// so capturing here covers the entire execution scope.
@@ -674,7 +761,17 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	const double StartTimeSeconds = FPlatformTime::Seconds();
 	const bool bPythonSuccess = IPythonScriptPlugin::Get()->ExecPythonCommandEx(PythonCommand);
 	const double DurationMs = (FPlatformTime::Seconds() - StartTimeSeconds) * 1000.0;
-	const bool bTimedOut = false; // Watchdog timer not yet implemented — timeout_seconds is advisory only
+
+	// Signal the watchdog that execution has finished and wait for it to exit.
+	// Must happen before reading bWatchdogFired and before any stack-local the
+	// watchdog references goes out of scope.
+	bWatchdogDone.store(true, std::memory_order_release);
+	if (WatchdogFuture.IsValid())
+	{
+		WatchdogFuture.Wait();
+	}
+
+	const bool bTimedOut = bWatchdogFired.load(std::memory_order_acquire);
 
 	// Step 7b: Dispatch any deferred world-transition actions.
 	// The barrier runs inside each deferred action's lambda (right before the
@@ -758,7 +855,10 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	{
 		// Timeout — plain text error
 		FinalResult.bIsError = true;
-		FinalResult.ErrorMessage = FString::Printf(TEXT("Execution timed out after %dms. Break the operation into smaller steps, or increase timeout_ms."), TimeoutMs);
+		FinalResult.ErrorMessage = FString::Printf(
+			TEXT("Execution timed out after %.0fs. Break the operation into smaller steps, "
+			     "or increase PythonExecutionTimeoutSeconds in Editor Preferences > Plugins > Claireon."),
+			static_cast<double>(WatchdogTimeoutSeconds));
 	}
 	else if (!bPythonSuccess)
 	{

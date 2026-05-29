@@ -54,8 +54,14 @@ from typing import Any, Dict, Optional, Tuple
 # ---------------------------------------------------------------------------
 PROXY_REG_PORT = 43017
 HEARTBEAT_INTERVAL_SECONDS = 5
-HEARTBEAT_STALENESS_SECONDS = 60
+HEARTBEAT_STALENESS_SECONDS = 180
 FORWARD_DEFAULT_TIMEOUT_SECONDS = 600
+
+# How long after launch_editor was invoked the proxy will auto-wait on the first
+# forwarded tool call before falling back to the "build and launch" error. The
+# editor typically needs 60-120s to compile, load, and register. 120s is
+# intentionally generous; the wait returns early the moment the session is ready.
+_LAUNCH_PENDING_TIMEOUT_SECONDS = 120.0
 
 # Stale-session evictor tick cadence. Replaces the idle-exit loop; a constant
 # 10s tick is fine because the only work it does is per-worktree staleness
@@ -602,6 +608,11 @@ class WorktreeState:
     ready: bool = False
     # Tool count reported at /editor/ready; 0 until ready.
     tool_count: int = 0
+    # Monotonic timestamp set by the launch_editor proxy command after spawning
+    # the editor process. The first forwarded tool call will auto-wait up to
+    # _LAUNCH_PENDING_TIMEOUT_SECONDS instead of returning the "build and launch
+    # the editor first" error. Cleared to 0.0 when a session registers.
+    launch_pending_ts: float = 0.0
 
 
 # Runtime context shared with handler classes. Populated by main() before
@@ -788,6 +799,8 @@ def handle_register(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
         # I4 (#0000): new session is not ready until /editor/ready is received.
         wt.ready = False
         wt.tool_count = 0
+        # Clear any pending-launch marker now that the editor has registered.
+        wt.launch_pending_ts = 0.0
         wt.last_seen_ns = int(_mono_now() * 1_000_000_000)
         wt.version_hash = str(body["proxy_version"])
 
@@ -1535,11 +1548,6 @@ STATIC_TOOLS_LIST = [
                     "type": "string",
                     "description": "Python source to execute in the editor.",
                 },
-                "timeout_seconds": {
-                    "type": "number",
-                    "description": "Optional per-call timeout override.",
-                    "minimum": 1,
-                },
             },
             "required": ["code"],
         },
@@ -1913,8 +1921,19 @@ def _handle_proxy_command(
             return _jsonrpc_result(request_id, _proxy_text_result(
                 f"failed to spawn editor launch script: {exc!r}", is_error=True))
         log.info("proxy launch_editor: spawned pid=%d skip_build=%s", new_pid, bool(sub_args.get("skip_build")))
+        # Record pending-launch timestamp so the first forwarded tool call
+        # (python_execute, tool_search) auto-waits instead of erroring with
+        # "build and launch the editor first".
+        launch_canonical = canonicalize_worktree(worktree_root)
+        with SESSION_LOCK:
+            launch_wt = RUNTIME["worktrees"].get(launch_canonical)
+            if launch_wt is not None:
+                launch_wt.launch_pending_ts = _mono_now()
+                log.info("launch_pending_ts set worktree=%s", launch_canonical)
         return _jsonrpc_result(request_id, _proxy_text_result(
-            f"editor build/launch spawned (pid={new_pid}). Watch the spawned PowerShell window for build output."))
+            f"editor build/launch spawned (pid={new_pid}). "
+            f"The proxy will auto-wait up to {_LAUNCH_PENDING_TIMEOUT_SECONDS:.0f}s on the next "
+            f"python_execute or tool_search call; no explicit wait_for_editor needed."))
 
     return _jsonrpc_result(request_id, _proxy_text_result(
         f"Unknown subcommand: {command!r}. Call without 'command' (or with 'help') to list subcommands.",
@@ -1941,11 +1960,6 @@ def _resolve_session_for_listener(listener_port: Optional[int]) -> Optional[Dict
             return None
         wt = RUNTIME["worktrees"].get(canonical)
         if wt is None or wt.session is None:
-            return None
-        # I4 (#0000): do not forward to the editor until it signals /editor/ready.
-        # Returning None here causes _forward_payload_to_editor to call
-        # _check_warming_up and emit WARMING_UP_TEXT rather than FALLBACK_TEXT.
-        if not wt.ready:
             return None
         return {
             "editor_mcp_port": wt.session.editor_mcp_port,
@@ -2025,6 +2039,62 @@ def _check_warming_up(listener_port: Optional[int]) -> Optional[str]:
     return None
 
 
+def _has_pending_launch_locked(listener_port: Optional[int]) -> bool:
+    """True if launch_editor was recently triggered for this listener port's worktree.
+
+    MUST be called with SESSION_LOCK held. Returns False if the port is unmapped,
+    no WorktreeState exists, or the pending timestamp has expired.
+    """
+    if listener_port is None:
+        return False
+    canonical = RUNTIME["mcp_port_to_worktree"].get(listener_port)
+    if canonical is None:
+        return False
+    wt = RUNTIME["worktrees"].get(canonical)
+    if wt is None:
+        return False
+    ts = wt.launch_pending_ts
+    if ts == 0.0:
+        return False
+    return (_mono_now() - ts) <= _LAUNCH_PENDING_TIMEOUT_SECONDS
+
+
+def _auto_wait_for_session(
+    listener_port: Optional[int],
+    timeout_seconds: float = _LAUNCH_PENDING_TIMEOUT_SECONDS,
+) -> Optional[Dict[str, Any]]:
+    """Block-poll until an editor session is registered and ready for listener_port.
+
+    Called implicitly on the first forwarded tool call (python_execute, tool_search)
+    when launch_pending_ts is set for the worktree -- so callers do not need to
+    insert an explicit wait_for_editor call after launch_editor returns.
+
+    Returns a session snapshot dict on success, or None on timeout. Blocks the
+    calling handler thread (ThreadingHTTPServer spawns one thread per request,
+    so blocking here does not stall other MCP traffic).
+    """
+    deadline = _mono_now() + timeout_seconds
+    poll_interval = 1.0
+    log.info(
+        "auto_wait: launch pending for port=%s -- polling up to %.0fs for editor",
+        listener_port, timeout_seconds,
+    )
+    while True:
+        with SESSION_LOCK:
+            snap = _resolve_session_for_listener(listener_port)
+        if snap is not None:
+            log.info("auto_wait: editor ready (port=%s)", listener_port)
+            return snap
+        now = _mono_now()
+        if now >= deadline:
+            log.warning(
+                "auto_wait: timed out after %.1fs waiting for editor (port=%s)",
+                timeout_seconds, listener_port,
+            )
+            return None
+        time.sleep(min(poll_interval, deadline - now))
+
+
 def _forward_payload_to_editor(
     payload: Dict[str, Any], listener_port: Optional[int] = None
 ) -> Dict[str, Any]:
@@ -2055,6 +2125,7 @@ def _forward_payload_to_editor(
     """
     global singleton_session
     request_id = payload.get("id")
+    should_auto_wait = False
     with SESSION_LOCK:
         evict_singleton_stale_session_locked()
         session_snapshot = _resolve_session_for_listener(listener_port)
@@ -2063,10 +2134,32 @@ def _forward_payload_to_editor(
             # vs. no session at all (build and launch / port collision).
             warming_up_text = _check_warming_up(listener_port)
             if warming_up_text:
-                return _jsonrpc_result(request_id, {
-                    "content": [{"type": "text", "text": warming_up_text}],
-                    "isError": True,
-                })
+                if warming_up_text == WARMING_UP_TEXT:
+                    # Session registered but Python bridge not yet ready.
+                    # Auto-wait instead of erroring -- both phases of the startup
+                    # sequence (no-session and warming-up) deserve the same treatment.
+                    should_auto_wait = True
+                else:
+                    # Port collision or other unresolvable condition (I10); auto-wait
+                    # cannot fix this. Return the actionable diagnostic immediately.
+                    return _jsonrpc_result(request_id, {
+                        "content": [{"type": "text", "text": warming_up_text}],
+                        "isError": True,
+                    })
+            elif _has_pending_launch_locked(listener_port):
+                # No session yet but launch_editor was recently invoked.
+                # Defer the fallback and block-poll outside the lock.
+                should_auto_wait = True
+            else:
+                return _jsonrpc_result(request_id, _fallback_tool_result())
+
+    # Auto-wait: covers two startup phases --
+    #   1. launch_pending_ts set, no session yet (editor process starting)
+    #   2. session registered but wt.ready=False (Python bridge initializing)
+    # Returns early as soon as the session is fully ready.
+    if should_auto_wait:
+        session_snapshot = _auto_wait_for_session(listener_port)
+        if session_snapshot is None:
             return _jsonrpc_result(request_id, _fallback_tool_result())
 
     raw = json.dumps(payload).encode("utf-8")

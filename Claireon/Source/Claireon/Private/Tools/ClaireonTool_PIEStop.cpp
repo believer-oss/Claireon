@@ -15,7 +15,8 @@ FString ClaireonTool_PIEStop::GetOperation() const { return TEXT("stop_async"); 
 
 FString ClaireonTool_PIEStop::GetDescription() const
 {
-	return TEXT("Stop the current Play In Editor (PIE) session. "
+	return TEXT("Stop the current Play In Editor (PIE) session (calls RequestEndPlayMap). "
+		"Use this when a tool reports 'cannot be used while PIE is running'. "
 		"The PIE stop is deferred until after the current script finishes.");
 }
 

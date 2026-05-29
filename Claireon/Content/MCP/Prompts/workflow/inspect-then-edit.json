@@ -1,5 +1,0 @@
-{
-  "description": "Multi-tool workflow: inspect an asset, plan edits, execute via transaction",
-  "role": "user",
-  "text": "Step 1: Identify the target asset path\nStep 2: Use asset_search() or asset_list() to find the asset\nStep 3: Inspect its properties with the appropriate inspect tool (e.g., blueprint_inspect(), state_tree_inspect())\nStep 4: Plan your changes based on the inspected state\nStep 5: Begin a transaction with transaction_begin_group('description of changes')\nStep 6: Apply changes using the appropriate edit tool\nStep 7: Complete the transaction with transaction_end_group()\nStep 8: Re-inspect to verify the changes took effect"
-}

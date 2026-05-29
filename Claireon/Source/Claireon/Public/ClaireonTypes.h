@@ -92,6 +92,27 @@ struct FMCPDiagnosticsEntry
 
 	/** Truncated response body (first 2048 chars) */
 	FString ResponseBody;
+
+	/**
+	 * Hero column for the Activity log: first non-empty line extracted from
+	 * the request's tool arguments (code, query, text, etc.). Populated by
+	 * FClaireonServer::AddDiagnosticsEntry.
+	 */
+	FString ContentPreview;
+
+	/**
+	 * True when this entry contains a feedback() call -- either the tool name
+	 * matches "feedback" or the request body contains the substring "feedback(".
+	 * Populated by FClaireonServer::AddDiagnosticsEntry.
+	 */
+	bool bIsFeedbackCall = false;
+
+	/**
+	 * True when this entry was injected by the editor itself (not from MCP traffic).
+	 * System messages are displayed with a distinct style in the Activity panel
+	 * and do not affect request counts or error rates.
+	 */
+	bool bIsSystemMessage = false;
 };
 
 /** Delegate broadcast when a new diagnostics entry is added */

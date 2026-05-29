@@ -1174,6 +1174,9 @@ void FClaireonServer::WritePortFile() const
 	FString PortFilePath = GetPortFilePath();
 	FString TempFilePath = PortFilePath + TEXT(".tmp");
 
+	// Ensure parent directory exists (Saved/Claireon/)
+	IFileManager::Get().MakeDirectory(*FPaths::GetPath(PortFilePath), /*Tree=*/true);
+
 	// Write JSON with port and PID
 	TSharedPtr<FJsonObject> PortInfo = MakeShared<FJsonObject>();
 	PortInfo->SetNumberField(TEXT("port"), BoundPort);
@@ -1205,15 +1208,109 @@ void FClaireonServer::DeletePortFile() const
 
 FString FClaireonServer::GetPortFilePath() const
 {
-	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("MCPServer.json"));
+	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Claireon"), TEXT("MCPServer.json"));
+}
+
+// ---------------------------------------------------------------------------
+// Content-preview extraction helper
+// ---------------------------------------------------------------------------
+static FString ExtractContentPreviewFromEntry(const FString& RequestBody, const FString& ToolName)
+{
+	if (RequestBody.IsEmpty())
+	{
+		return ToolName;
+	}
+
+	TSharedPtr<FJsonObject> Root;
+	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(RequestBody);
+	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+	{
+		return ToolName;
+	}
+
+	// Navigate params.arguments
+	const TSharedPtr<FJsonObject>* ParamsPtr = nullptr;
+	if (!Root->TryGetObjectField(TEXT("params"), ParamsPtr))
+	{
+		return ToolName;
+	}
+	const TSharedPtr<FJsonObject>* ArgsPtr = nullptr;
+	if (!(*ParamsPtr)->TryGetObjectField(TEXT("arguments"), ArgsPtr))
+	{
+		return ToolName;
+	}
+
+	// Priority key list for meaningful content
+	static const TCHAR* PriorityKeys[] = {
+		TEXT("code"), TEXT("query"), TEXT("text"), TEXT("content"),
+		TEXT("message"), TEXT("feedback_text"), TEXT("prompt"), TEXT("expression")
+	};
+
+	FString Candidate;
+	for (const TCHAR* Key : PriorityKeys)
+	{
+		FString Val;
+		if ((*ArgsPtr)->TryGetStringField(Key, Val) && !Val.TrimStartAndEnd().IsEmpty())
+		{
+			Candidate = Val;
+			break;
+		}
+	}
+
+	// Fallback: first string-valued field
+	if (Candidate.IsEmpty())
+	{
+		for (const auto& Pair : (*ArgsPtr)->Values)
+		{
+			FString Val;
+			if (Pair.Value.IsValid() &&
+				Pair.Value->TryGetString(Val) &&
+				!Val.TrimStartAndEnd().IsEmpty())
+			{
+				Candidate = Val;
+				break;
+			}
+		}
+	}
+
+	if (Candidate.IsEmpty())
+	{
+		return ToolName;
+	}
+
+	// Take first non-empty line, cap at 120 chars
+	TArray<FString> Lines;
+	Candidate.ParseIntoArrayLines(Lines, false);
+	for (const FString& Line : Lines)
+	{
+		FString Trimmed = Line.TrimStartAndEnd();
+		if (!Trimmed.IsEmpty())
+		{
+			return Trimmed.Left(120);
+		}
+	}
+	return ToolName;
 }
 
 void FClaireonServer::AddDiagnosticsEntry(FMCPDiagnosticsEntry&& Entry)
 {
 	++TotalRequestCount;
+	TotalDurationMs += Entry.DurationMs;
 	if (Entry.bIsError)
 	{
 		++ErrorCount;
+	}
+
+	// Populate derived display fields if not already set
+	if (Entry.ContentPreview.IsEmpty())
+	{
+		Entry.ContentPreview = ExtractContentPreviewFromEntry(Entry.RequestBody, Entry.ToolName);
+	}
+	if (!Entry.bIsFeedbackCall)
+	{
+		Entry.bIsFeedbackCall =
+			Entry.ToolName.Contains(TEXT("feedback"), ESearchCase::IgnoreCase) ||
+			Entry.RequestBody.Contains(TEXT("feedback("), ESearchCase::IgnoreCase);
 	}
 
 	if (DiagnosticsEntries.Num() >= MaxDiagnosticsEntries)
@@ -1222,6 +1319,24 @@ void FClaireonServer::AddDiagnosticsEntry(FMCPDiagnosticsEntry&& Entry)
 	}
 	DiagnosticsEntries.Add(MoveTemp(Entry));
 
+	OnDiagnosticsEntryAdded.Broadcast(DiagnosticsEntries.Last());
+}
+
+void FClaireonServer::PostSystemMessage(const FString& Text)
+{
+	FMCPDiagnosticsEntry Entry;
+	Entry.Timestamp     = FDateTime::Now();
+	Entry.Method        = TEXT("system");
+	Entry.ContentPreview= Text;
+	Entry.bIsSystemMessage = true;
+
+	// System messages do not count as requests or errors -- bypass AddDiagnosticsEntry
+	// (which increments TotalRequestCount) and write directly to the ring buffer.
+	if (DiagnosticsEntries.Num() >= MaxDiagnosticsEntries)
+	{
+		DiagnosticsEntries.RemoveAt(0);
+	}
+	DiagnosticsEntries.Add(MoveTemp(Entry));
 	OnDiagnosticsEntryAdded.Broadcast(DiagnosticsEntries.Last());
 }
 
@@ -1512,6 +1627,7 @@ void FClaireonServer::LoadMCPContent()
 	const FString ContentRoot = FPaths::Combine(Plugin->GetBaseDir(), TEXT("Content"), TEXT("MCP"));
 	LoadPromptsFromDirectory(FPaths::Combine(ContentRoot, TEXT("Prompts")));
 	LoadResourcesFromDirectory(FPaths::Combine(ContentRoot, TEXT("Resources")));
+	LoadInstructionsFromDirectory(FPaths::Combine(ContentRoot, TEXT("Instructions")));
 
 	UE_LOG(LogClaireon, Display, TEXT("[MCP] Loaded %d prompt(s) and %d resource(s) from %s"),
 		LoadedPrompts.Num(), LoadedResources.Num(), *ContentRoot);
@@ -1613,6 +1729,134 @@ void FClaireonServer::LoadResourcesFromDirectory(const FString& Directory)
 
 		LoadedResources.Add(Uri, MoveTemp(Tmpl));
 	}
+}
+
+void FClaireonServer::LoadInstructionsFromDirectory(const FString& Directory)
+{
+	if (!FPaths::DirectoryExists(Directory))
+	{
+		UE_LOG(LogClaireon, Log, TEXT("[MCP] Instructions directory not found: %s"), *Directory);
+		return;
+	}
+
+	TArray<FString> Files;
+	IFileManager::Get().FindFilesRecursive(Files, *Directory, TEXT("*.md"), /*bFiles=*/true, /*bDirs=*/false);
+
+	int32 NumPrompts = 0;
+	int32 NumResources = 0;
+
+	for (const FString& AbsPath : Files)
+	{
+		FString Contents;
+		if (!FFileHelper::LoadFileToString(Contents, *AbsPath))
+		{
+			UE_LOG(LogClaireon, Warning, TEXT("[MCP] Failed to read instruction file: %s"), *AbsPath);
+			continue;
+		}
+
+		// --- Parse YAML frontmatter (flat key: value pairs between two "---" lines) ---
+		TMap<FString, FString> FM;
+		FString Body;
+
+		// Accept both LF and CRLF after the opening dashes.
+		const bool bLF   = Contents.StartsWith(TEXT("---\n"));
+		const bool bCRLF = !bLF && Contents.StartsWith(TEXT("---\r\n"));
+		if (bLF || bCRLF)
+		{
+			const int32 HeaderLen = bLF ? 4 : 5; // "---\n" or "---\r\n"
+			// Find the closing "---" on its own line.
+			const int32 ClosePos = Contents.Find(TEXT("\n---"), ESearchCase::CaseSensitive,
+				ESearchDir::FromStart, HeaderLen);
+			if (ClosePos != INDEX_NONE)
+			{
+				const FString FMBlock = Contents.Mid(HeaderLen, ClosePos - HeaderLen);
+
+				// Skip past "\n---" (4 chars) plus an optional trailing newline.
+				int32 BodyStart = ClosePos + 4;
+				if (BodyStart < Contents.Len() && Contents[BodyStart] == TEXT('\r')) ++BodyStart;
+				if (BodyStart < Contents.Len() && Contents[BodyStart] == TEXT('\n')) ++BodyStart;
+				Body = Contents.Mid(BodyStart);
+
+				TArray<FString> Lines;
+				FMBlock.ParseIntoArrayLines(Lines, /*bCullEmpty=*/false);
+				for (const FString& Line : Lines)
+				{
+					int32 ColonIdx;
+					if (Line.FindChar(TEXT(':'), ColonIdx) && ColonIdx > 0)
+					{
+						const FString Key   = Line.Left(ColonIdx).TrimStartAndEnd().ToLower();
+						const FString Value = Line.Mid(ColonIdx + 1).TrimStartAndEnd();
+						if (!Key.IsEmpty() && !Value.IsEmpty())
+						{
+							FM.Add(Key, Value);
+						}
+					}
+				}
+			}
+		}
+
+		if (FM.IsEmpty())
+		{
+			UE_LOG(LogClaireon, Warning,
+				TEXT("[MCP] Instruction file has no YAML frontmatter, skipping: %s"), *AbsPath);
+			continue;
+		}
+		if (Body.IsEmpty())
+		{
+			// Malformed closing ---; treat entire file as body so we don't silently drop content.
+			Body = Contents;
+		}
+
+		const FString TypeField = FM.FindRef(TEXT("type"));
+		const bool bIsResource  = TypeField.Equals(TEXT("resource"), ESearchCase::IgnoreCase);
+
+		if (bIsResource)
+		{
+			const FString Uri         = FM.FindRef(TEXT("uri"));
+			const FString Name        = FM.FindRef(TEXT("name"));
+			const FString Description = FM.FindRef(TEXT("description"));
+
+			if (Uri.IsEmpty())
+			{
+				UE_LOG(LogClaireon, Warning,
+					TEXT("[MCP] Resource instruction missing 'uri' frontmatter field, skipping: %s"), *AbsPath);
+				continue;
+			}
+
+			FResourceTemplate Tmpl;
+			Tmpl.Name        = Name.IsEmpty() ? FPaths::GetBaseFilename(AbsPath) : Name;
+			Tmpl.Description = Description;
+			Tmpl.MimeType    = TEXT("text/markdown");
+			Tmpl.TextTemplate = Body;
+			Tmpl.SourcePath  = AbsPath;
+			LoadedResources.Add(Uri, MoveTemp(Tmpl));
+			++NumResources;
+		}
+		else // type: prompt (default)
+		{
+			const FString Name        = FM.FindRef(TEXT("name"));
+			const FString Description = FM.FindRef(TEXT("description"));
+
+			if (Name.IsEmpty())
+			{
+				UE_LOG(LogClaireon, Warning,
+					TEXT("[MCP] Prompt instruction missing 'name' frontmatter field, skipping: %s"), *AbsPath);
+				continue;
+			}
+
+			FPromptTemplate Tmpl;
+			Tmpl.Description  = Description;
+			Tmpl.Role         = FM.Contains(TEXT("role")) ? FM[TEXT("role")] : TEXT("user");
+			Tmpl.TextTemplate = Body;
+			Tmpl.SourcePath   = AbsPath;
+			LoadedPrompts.Add(Name, MoveTemp(Tmpl));
+			++NumPrompts;
+		}
+	}
+
+	UE_LOG(LogClaireon, Display,
+		TEXT("[MCP] Instructions: loaded %d prompt(s) and %d resource(s) from %s"),
+		NumPrompts, NumResources, *Directory);
 }
 
 FString FClaireonServer::SubstitutePlaceholders(const FString& Template, const TMap<FString, FString>& Variables)

@@ -39,8 +39,10 @@ namespace ClaireonProxy
 	inline constexpr int32 HEARTBEAT_INTERVAL_SECONDS = 5;
 
 	// Proxy-side staleness threshold. A session is evicted after this many
-	// seconds with no heartbeat. Chosen to survive large-map opens.
-	inline constexpr int32 HEARTBEAT_STALENESS_SECONDS = 60;
+	// seconds with no heartbeat. Must exceed PythonExecutionTimeoutSeconds
+	// (Editor Preferences > Plugins > Claireon) so an in-flight python_execute
+	// call cannot evict the session before the watchdog fires.
+	inline constexpr int32 HEARTBEAT_STALENESS_SECONDS = 180;
 
 	// IDLE_AUTO_EXIT_HOURS removed. The singleton proxy runs until
 	// SIGINT/SIGTERM; port-as-lock is the source of truth for liveness, so a
