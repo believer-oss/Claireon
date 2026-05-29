@@ -149,7 +149,7 @@ namespace
 		return nullptr;
 	}
 
-	/** Regex matching the new outline grammar, per FRACTURE/04_outline_format.md. */
+	/** Regex matching the new outline grammar, per the outline-format spec. */
 	static const FString kOutlineRegex =
 		TEXT("^\\s*(\\d+)\\.\\s+(\\w+)\\s+([0-9a-fA-F]{8})\\s{2}(.+?)\\s{2}@\\s+\\((-?\\d+),\\s*(-?\\d+)\\)\\s*$");
 }

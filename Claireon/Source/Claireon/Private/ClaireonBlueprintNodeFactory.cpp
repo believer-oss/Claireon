@@ -277,7 +277,7 @@ namespace ClaireonBlueprintNodeFactory
 			if (NodeClass && NodeClass->IsChildOf(UK2Node_BaseAsyncTask::StaticClass()))
 			{
 				// AsyncAction branch: helper guarantees ResolvedFunction is a valid
-				// UBlueprintAsyncActionBase factory (Fracture 01, conjunct 4). No
+				// UBlueprintAsyncActionBase factory (conjunct 4). No
 				// FunctionReference set; InitializeProxyFromFunction populates the
 				// proxy fields directly.
 				UK2Node_AsyncAction* AsyncNode = NewObject<UK2Node_AsyncAction>(Graph);

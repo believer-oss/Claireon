@@ -14,9 +14,9 @@ class UEdGraphNode;
  * Single source of truth for K2 Blueprint node construction from a typed JSON spec.
  *
  * Used by all three Blueprint node-creation call sites:
- *   - blueprint_graph_add_node (session-mode, ClaireonBlueprintGraphTool_AddNode::AddNode_Impl)
- *   - blueprint_graph_apply_spec (batch, ClaireonSpecApplicator_Blueprint::ApplyPass1_CreateEntities)
- *   - blueprint_apply_graph (batch direct, ClaireonTool_ApplyBlueprintGraph::Execute)
+ *   - bp_add_node (session-mode, ClaireonBlueprintGraphTool_AddNode::AddNode_Impl)
+ *   - bp_apply_spec (batch, ClaireonSpecApplicator_Blueprint::ApplyPass1_CreateEntities)
+ *   - bp_apply_delta (batch direct, ClaireonTool_ApplyBlueprintDelta::Execute)
  *
  * Routes by node_type to typed branches that handle pin/property allocation,
  * AllocateDefaultPins, and (for dynamic-pin nodes) ReconstructNode.

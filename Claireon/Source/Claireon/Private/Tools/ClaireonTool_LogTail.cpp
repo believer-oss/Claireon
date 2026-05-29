@@ -46,7 +46,7 @@ TSharedPtr<FJsonObject> ClaireonTool_LogTail::GetInputSchema() const
 	TSharedPtr<FJsonObject> CategoryProp = MakeShared<FJsonObject>();
 	CategoryProp->SetStringField(TEXT("type"), TEXT("string"));
 	CategoryProp->SetStringField(TEXT("description"),
-		TEXT("Filter by parsed category name (case-insensitive, e.g. 'LogFSSpawner'). Applied AFTER the rendered-line `filter` regex."));
+		TEXT("Filter by parsed category name (case-insensitive, e.g. 'LogBlueprint'). Applied AFTER the rendered-line `filter` regex."));
 	Properties->SetObjectField(TEXT("category"), CategoryProp);
 
 	// Explicit severity filter on the parsed line's severity field.

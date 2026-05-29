@@ -981,7 +981,7 @@ FString ClaireonTool_GetBlueprintGraph::FormatNodeSummary(const UEdGraphNode* No
 	FString NodeClass = Node->GetClass()->GetName();
 	FVector2D NodePos(Node->NodePosX, Node->NodePosY);
 
-	// Outline mode: single-line grammar per FRACTURE/04_outline_format.md.
+	// Outline mode: single-line grammar per the outline-format spec.
 	// "<class> <guid8>  <clean_title>  @ (x, y)" — no embedded newlines. The
 	// caller (BuildGraphJsonSummary) prepends the "<index>. " prefix.
 	if (DetailLevel == TEXT("outline"))

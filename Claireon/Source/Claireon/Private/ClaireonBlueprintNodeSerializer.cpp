@@ -61,7 +61,7 @@ namespace
 		return Title;
 	}
 
-	/** Build the structured pin_type JSON object per the fracture spec. */
+	/** Build the structured pin_type JSON object per the pin-type spec. */
 	TSharedPtr<FJsonObject> BuildPinTypeJson(const FEdGraphPinType& PinType)
 	{
 		TSharedPtr<FJsonObject> TypeObj = MakeShared<FJsonObject>();

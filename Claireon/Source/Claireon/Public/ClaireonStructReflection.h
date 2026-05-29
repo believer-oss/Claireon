@@ -21,7 +21,7 @@ namespace ClaireonStructReflection
 	 *  - /Script/<Module>.<StructName>         (native C++ UScriptStruct)
 	 *  - /Game/<...>/<Asset>.<AssetName>       (user-defined struct asset)
 	 *  - /Game/<...>/<Asset>                   (bare BP asset path; asset name is inferred)
-	 *  - Bare struct name (e.g. "FFSLocoChooserOutputs") — best-effort fuzzy lookup via FindFirstObject
+	 *  - Bare struct name (e.g. "FNativeChooserOutputs") — best-effort fuzzy lookup via FindFirstObject
 	 */
 	CLAIREON_API UScriptStruct* ResolveStructPath(const FString& Path, FString& OutError);
 

@@ -1,11 +1,11 @@
 ﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Tests for blueprint_duplicate (fracture 04).
+// Tests for blueprint_duplicate.
 //
 // The project's Untest framework exposes UNTEST_UNIT and UNTEST_WORLD (plus a few
 // client/server variants); there is no standalone UNTEST_FUNCTIONAL macro. Per the
-// fracture-04 "collapse into one file" fallback, this single file contains both
+// the "collapse into one file" fallback, this single file contains both
 // unit-style parameter/error-surface tests and functional-style end-to-end tests.
 // Functional tests use UNTEST_UNIT (like other tool-exercising tests in this folder,
 // e.g. ClaireonApplySpecTests.cpp) and encode their category in the third macro
@@ -24,7 +24,7 @@
 //    a plain UBlueprint at test time; these are covered by the generic-reference
 //    rewrite tests instead.
 //  - "DuplicateAsset returns nullptr" and "SavePackage fails" cannot be simulated
-//    without invasive fakes and are omitted per the fracture's allowance.
+//    without invasive fakes and are omitted per the test-structure allowance.
 
 #if WITH_UNTESTED
 

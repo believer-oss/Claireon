@@ -61,15 +61,15 @@ namespace ClaireonToolUObjectInspectSpec
 	}
 }
 
-UNTEST_UNIT_OPTS(Claireon, UObjectInspect, ListsAFSSpawnerActorCdo, UNTEST_TIMEOUTMS(10000))
+UNTEST_UNIT_OPTS(Claireon, UObjectInspect, ListsAStaticMeshActorCdo, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonToolUObjectInspectSpec;
 
-	IClaireonTool::FToolResult Result = RunInspect(BuildArgs(TEXT("/Script/MyGame.FSSpawnerActor")));
+	IClaireonTool::FToolResult Result = RunInspect(BuildArgs(TEXT("/Script/Engine.StaticMeshActor")));
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 	UNTEST_ASSERT_TRUE(Result.Data.IsValid());
 
-	UNTEST_ASSERT_EQ(Result.Data->GetStringField(TEXT("class")), FString(TEXT("FSSpawnerActor")));
+	UNTEST_ASSERT_EQ(Result.Data->GetStringField(TEXT("class")), FString(TEXT("StaticMeshActor")));
 	UNTEST_ASSERT_TRUE(Result.Data->GetBoolField(TEXT("is_cdo")));
 
 	const TArray<TSharedPtr<FJsonValue>>* Properties = nullptr;

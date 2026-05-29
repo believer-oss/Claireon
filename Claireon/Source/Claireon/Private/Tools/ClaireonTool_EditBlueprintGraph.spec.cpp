@@ -5064,7 +5064,7 @@ bool FEditBlueprintGraphTest_InspectNode_AnimGraphRedirectSessionPath::RunTest(c
 	// Creating an Animation Blueprint requires a target skeleton asset not available
 	// in the automation fixture. The AnimGraph redirect is covered in the stateless
 	// spec (test 12b) and manually on real AnimBP assets. Documenting a skip here
-	// keeps the stage's test-count expectation aligned with FRACTURE/03 and lets the
+	// keeps the stage's test-count expectation aligned with the inspect-node spec and lets the
 	// harness surface the gap explicitly rather than silently dropping coverage.
 	AddInfo(TEXT("Skipped: AnimBP fixture creation requires a target skeleton; "
 		"AnimGraph redirect exercised by Claireon.InspectBlueprintNode.AnimGraphRedirectStatelessPath."));
