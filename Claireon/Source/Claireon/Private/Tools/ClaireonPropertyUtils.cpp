@@ -747,15 +747,31 @@ UObject* SetInstancedSubObject(
 
 	void* SlotPtr = ObjectProp->ContainerPtrToValuePtr<void>(Container);
 	UObject* PrevValue = ObjectProp->GetObjectPropertyValue(SlotPtr);
+
+	// Name the new sub-object after the UPROPERTY it fills (e.g. "SphereCenter") so
+	// the saved package's archetype graph keeps the property-name => default-subobject
+	// linkage that FAsyncPackage2::CreateExport relies on for cooked-client demand-load.
+	// NAME_None here would auto-generate a name like "<ClassName>_0" which works in
+	// the editor but causes "Could not find template object for <PropertyName>" errors
+	// on cooked-client demand-load when the slot's class was replaced.
+	const FName SubObjectName = ObjectProp->GetFName();
+
 	if (PrevValue)
 	{
+		// Free the FName so NewObject can reuse it without colliding. Rename to the
+		// transient package with an auto-generated unique name; MarkAsGarbage so the
+		// reflected pointer is treated as dead.
+		PrevValue->Rename(
+			nullptr,
+			GetTransientPackage(),
+			REN_DontCreateRedirectors | REN_NonTransactional | REN_ForceNoResetLoaders);
 		PrevValue->MarkAsGarbage();
 	}
 
 	EObjectFlags Flags = RF_Transactional;
 	Flags |= (Outer->GetFlags() & (RF_Public | RF_ArchetypeObject));
 
-	UObject* NewObj = NewObject<UObject>(Outer, SubObjectClass, NAME_None, Flags);
+	UObject* NewObj = NewObject<UObject>(Outer, SubObjectClass, SubObjectName, Flags);
 	if (!NewObj)
 	{
 		OutError = FString::Printf(
