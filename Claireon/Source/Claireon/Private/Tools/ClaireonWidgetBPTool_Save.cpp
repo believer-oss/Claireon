@@ -7,6 +7,7 @@
 #include "WidgetBlueprint.h"
 #include "ClaireonSafeExec.h"
 #include "UObject/Package.h"
+#include "Misc/PackageName.h"
 #include "UObject/SavePackage.h"
 #include "Serialization/JsonWriter.h"
 #include "Serialization/JsonSerializer.h"

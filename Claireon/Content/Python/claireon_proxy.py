@@ -1790,7 +1790,31 @@ def _handle_proxy_command(
 
     if command == "status":
         with SESSION_LOCK:
-            session = dict(singleton_session) if singleton_session is not None else None
+            # Prefer the per-worktree session for this listener port so that
+            # status reports the editor for THIS worktree, not whatever happened
+            # to register most recently across all worktrees (singleton_session
+            # is the global last-registered mirror and is misleading in
+            # multi-worktree setups).
+            session = None
+            session_source = "none"
+            if worktree_root:
+                _wt = RUNTIME["worktrees"].get(worktree_root)
+                if _wt is not None and _wt.session is not None:
+                    _s = _wt.session
+                    session = {
+                        "pid": _s.editor_pid,
+                        "worktree_root": worktree_root,
+                        "start_time_ns": _s.start_time_ns,
+                        "build_id": _s.build_id,
+                        "proxy_version": _wt.version_hash,
+                        "editor_mcp_port": _s.editor_mcp_port,
+                        "editor_mcp_token": _s.editor_mcp_token,
+                        "last_heartbeat_ts": _wt.last_seen_ns / 1_000_000_000,
+                    }
+                    session_source = "per_worktree"
+            if session is None and singleton_session is not None:
+                session = dict(singleton_session)
+                session_source = "singleton_fallback"
         info = {
             # Stage 012: worktree_root is the resolved listener-mapped
             # worktree (or None in singleton mode without a session).
@@ -1811,6 +1835,12 @@ def _handle_proxy_command(
                 "last_heartbeat_age_seconds": (
                     round(now - float(session.get("last_heartbeat_ts") or 0.0), 2)
                 ),
+                # "per_worktree" means this is the session for the connected
+                # worktree; "singleton_fallback" means the editor for THIS
+                # worktree is not running and a different worktree's editor
+                # is leaking through -- do not trust this session for tool calls.
+                "session_source": session_source,
+                "session_worktree": session.get("worktree_root"),
             }
         return _jsonrpc_result(request_id, _proxy_text_result(json.dumps(info, indent=2)))
 
@@ -1912,7 +1942,12 @@ def _handle_proxy_command(
         if not os.path.isfile(script):
             return _jsonrpc_result(request_id, _proxy_text_result(
                 f"Invoke-EditorBuildAndLaunch.ps1 not found at {script}", is_error=True))
-        cmd = [ps, "-NoProfile", "-File", script]
+        # Pass -ProjectPath explicitly so Find-MyGameProject is never
+        # called with the proxy's inherited CWD (which belongs to the worktree
+        # that first spawned the singleton, not necessarily this one).
+        project_file = os.path.join(worktree_root, "MyGame.uproject")
+        cmd = [ps, "-NoProfile", "-File", script,
+               "-ProjectPath", project_file, "-UseMCPProxy"]
         if bool(sub_args.get("skip_build")):
             cmd.append("-SkipBuild")
         try:

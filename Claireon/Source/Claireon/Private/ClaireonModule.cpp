@@ -67,6 +67,9 @@
 #include "Tools/ClaireonTool_GameplayTagsReload.h"
 #include "Tools/ClaireonTool_StructInspect.h"
 #include "Tools/ClaireonTool_UObjectInspect.h"
+#include "Tools/ClaireonTool_UObjectReferencers.h"
+#include "Tools/ClaireonTool_WPActorDescInspect.h"
+#include "Tools/ClaireonTool_WPGenerateStreaming.h"
 #include "Tools/ClaireonTool_UClassCheckAsyncActionDelegateSignatures.h"
 #include "Tools/ClaireonTool_ReplaceStructUsage.h"
 #include "Tools/ClaireonAnimGraphTools_CopyGraph.h"
@@ -545,6 +548,7 @@
 #include "Tools/ClaireonAnimInspectTool.h"
 #include "Tools/ClaireonCMCInspectTool.h"
 #include "Tools/ClaireonComponentTickInspectTool.h"
+
 
 // Animation MCP tools
 #include "Tools/ClaireonTool_AnimInspect.h"
@@ -1058,6 +1062,9 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_GameplayTagsReload>());
 	Tools.Add(MakeShared<ClaireonTool_StructInspect>());
 	Tools.Add(MakeShared<ClaireonTool_UObjectInspect>());
+	Tools.Add(MakeShared<ClaireonTool_UObjectReferencers>());
+	Tools.Add(MakeShared<ClaireonTool_WPActorDescInspect>());
+	Tools.Add(MakeShared<ClaireonTool_WPGenerateStreaming>());
 	Tools.Add(MakeShared<ClaireonTool_UClassCheckAsyncActionDelegateSignatures>());
 	Tools.Add(MakeShared<ClaireonTool_ReplaceStructUsage>());
 

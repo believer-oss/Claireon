@@ -1216,31 +1216,91 @@ FString FClaireonServer::GetPortFilePath() const
 // ---------------------------------------------------------------------------
 static FString ExtractContentPreviewFromEntry(const FString& RequestBody, const FString& ToolName)
 {
+	// Best-effort cosmetic extractor. Must NOT use FJsonSerializer / TJsonReader:
+	// a malformed body (unterminated string, truncated buffer, binary) trips the
+	// fatal check() in FBufferReaderBase::Serialize and takes down the editor.
+	// Everything below is plain substring scanning with hard bounds.
 	if (RequestBody.IsEmpty())
 	{
 		return ToolName;
 	}
 
-	TSharedPtr<FJsonObject> Root;
-	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(RequestBody);
-	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+	const int32 ArgsAnchor = RequestBody.Find(TEXT("\"arguments\""), ESearchCase::CaseSensitive, ESearchDir::FromStart);
+	if (ArgsAnchor == INDEX_NONE)
 	{
 		return ToolName;
 	}
 
-	// Navigate params.arguments
-	const TSharedPtr<FJsonObject>* ParamsPtr = nullptr;
-	if (!Root->TryGetObjectField(TEXT("params"), ParamsPtr))
-	{
-		return ToolName;
-	}
-	const TSharedPtr<FJsonObject>* ArgsPtr = nullptr;
-	if (!(*ParamsPtr)->TryGetObjectField(TEXT("arguments"), ArgsPtr))
-	{
-		return ToolName;
-	}
+	const int32 BodyLen = RequestBody.Len();
+	const int32 MaxScan = 4096;
 
-	// Priority key list for meaningful content
+	// Extract a JSON string value that starts at OpenQuoteIdx (which must point at the
+	// opening '"'). Returns true on success and fills OutValue with a minimally
+	// unescaped copy. Bounded by MaxScan characters of payload to keep this O(N).
+	auto ExtractStringAt = [&RequestBody, BodyLen, MaxScan](int32 OpenQuoteIdx, FString& OutValue) -> bool
+	{
+		if (OpenQuoteIdx < 0 || OpenQuoteIdx >= BodyLen || RequestBody[OpenQuoteIdx] != TEXT('"'))
+		{
+			return false;
+		}
+		const int32 ScanEnd = FMath::Min(BodyLen, OpenQuoteIdx + 1 + MaxScan);
+		FString Built;
+		Built.Reserve(128);
+		int32 i = OpenQuoteIdx + 1;
+		while (i < ScanEnd)
+		{
+			const TCHAR Ch = RequestBody[i];
+			if (Ch == TEXT('\\') && (i + 1) < ScanEnd)
+			{
+				const TCHAR Next = RequestBody[i + 1];
+				if (Next == TEXT('n'))      { Built.AppendChar(TEXT('\n')); }
+				else if (Next == TEXT('t')) { Built.AppendChar(TEXT('\t')); }
+				else if (Next == TEXT('r')) { Built.AppendChar(TEXT('\r')); }
+				else if (Next == TEXT('"')) { Built.AppendChar(TEXT('"'));  }
+				else if (Next == TEXT('\\')){ Built.AppendChar(TEXT('\\')); }
+				else                        { Built.AppendChar(Next); } // cosmetic; leave as-is
+				i += 2;
+				continue;
+			}
+			if (Ch == TEXT('"'))
+			{
+				OutValue = MoveTemp(Built);
+				return true;
+			}
+			Built.AppendChar(Ch);
+			++i;
+		}
+		return false; // no closing quote within window
+	};
+
+	// Given the index of a key's opening quote, locate the opening quote of its
+	// string value (skipping the closing quote of the key, then ':' and whitespace).
+	// Returns INDEX_NONE if the value is not a string or is too far away.
+	auto FindValueQuoteAfterKey = [&RequestBody, BodyLen](int32 KeyQuoteIdx, int32 KeyLen) -> int32
+	{
+		int32 j = KeyQuoteIdx + 1 + KeyLen + 1; // skip "key"
+		const int32 Limit = FMath::Min(BodyLen, j + 64); // colon + whitespace headroom
+		// Expect ':'
+		while (j < Limit && (RequestBody[j] == TEXT(' ') || RequestBody[j] == TEXT('\t') || RequestBody[j] == TEXT('\n') || RequestBody[j] == TEXT('\r')))
+		{
+			++j;
+		}
+		if (j >= Limit || RequestBody[j] != TEXT(':'))
+		{
+			return INDEX_NONE;
+		}
+		++j;
+		while (j < Limit && (RequestBody[j] == TEXT(' ') || RequestBody[j] == TEXT('\t') || RequestBody[j] == TEXT('\n') || RequestBody[j] == TEXT('\r')))
+		{
+			++j;
+		}
+		if (j >= BodyLen || RequestBody[j] != TEXT('"'))
+		{
+			return INDEX_NONE;
+		}
+		return j;
+	};
+
 	static const TCHAR* PriorityKeys[] = {
 		TEXT("code"), TEXT("query"), TEXT("text"), TEXT("content"),
 		TEXT("message"), TEXT("feedback_text"), TEXT("prompt"), TEXT("expression")
@@ -1249,27 +1309,66 @@ static FString ExtractContentPreviewFromEntry(const FString& RequestBody, const 
 	FString Candidate;
 	for (const TCHAR* Key : PriorityKeys)
 	{
-		FString Val;
-		if ((*ArgsPtr)->TryGetStringField(Key, Val) && !Val.TrimStartAndEnd().IsEmpty())
+		const FString Pattern = FString::Printf(TEXT("\"%s\""), Key);
+		const int32 KeyIdx = RequestBody.Find(Pattern, ESearchCase::CaseSensitive, ESearchDir::FromStart, ArgsAnchor);
+		if (KeyIdx == INDEX_NONE)
 		{
-			Candidate = Val;
+			continue;
+		}
+		const int32 ValQuote = FindValueQuoteAfterKey(KeyIdx, FCString::Strlen(Key));
+		if (ValQuote == INDEX_NONE)
+		{
+			continue;
+		}
+		FString Val;
+		if (ExtractStringAt(ValQuote, Val) && !Val.TrimStartAndEnd().IsEmpty())
+		{
+			Candidate = MoveTemp(Val);
 			break;
 		}
 	}
 
-	// Fallback: first string-valued field
+	// Fallback: first string value after the "arguments" anchor. Scan for a '"'
+	// that starts a key, locate its value-quote, extract that.
 	if (Candidate.IsEmpty())
 	{
-		for (const auto& Pair : (*ArgsPtr)->Values)
+		int32 Cursor = ArgsAnchor + 11; // past "arguments"
+		const int32 FallbackEnd = FMath::Min(BodyLen, Cursor + MaxScan);
+		while (Cursor < FallbackEnd)
 		{
-			FString Val;
-			if (Pair.Value.IsValid() &&
-				Pair.Value->TryGetString(Val) &&
-				!Val.TrimStartAndEnd().IsEmpty())
+			const int32 KeyQuote = RequestBody.Find(TEXT("\""), ESearchCase::CaseSensitive, ESearchDir::FromStart, Cursor);
+			if (KeyQuote == INDEX_NONE || KeyQuote >= FallbackEnd)
 			{
-				Candidate = Val;
 				break;
 			}
+			// Find the end of the key string.
+			int32 KeyEnd = INDEX_NONE;
+			{
+				int32 k = KeyQuote + 1;
+				const int32 KScanEnd = FMath::Min(BodyLen, k + 256);
+				while (k < KScanEnd)
+				{
+					if (RequestBody[k] == TEXT('\\') && (k + 1) < KScanEnd) { k += 2; continue; }
+					if (RequestBody[k] == TEXT('"')) { KeyEnd = k; break; }
+					++k;
+				}
+			}
+			if (KeyEnd == INDEX_NONE)
+			{
+				break;
+			}
+			const int32 KeyLen = KeyEnd - (KeyQuote + 1);
+			const int32 ValQuote = FindValueQuoteAfterKey(KeyQuote, KeyLen);
+			if (ValQuote != INDEX_NONE)
+			{
+				FString Val;
+				if (ExtractStringAt(ValQuote, Val) && !Val.TrimStartAndEnd().IsEmpty())
+				{
+					Candidate = MoveTemp(Val);
+					break;
+				}
+			}
+			Cursor = KeyEnd + 1;
 		}
 	}
 

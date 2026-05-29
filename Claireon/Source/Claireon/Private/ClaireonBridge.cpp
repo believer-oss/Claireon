@@ -448,21 +448,20 @@ PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 		return nullptr;
 	}
 
-	// Disk-spill routing for generic tools (per D6).
-	// python_execute routes its own stdout/uelog streams from inside its
-	// Execute method; skip here so we never double-route or emit a "data" stream
-	// for that tool.
-	if (ToolName != TEXT("python_execute"))
-	{
-		// Forward the invocation arguments so the spill manifest can echo
-		// originating_tool / originating_args; also honours the force_inline opt-out.
-		Result = FClaireonOutputGate::RouteResult(
-			MoveTemp(Result),
-			ToolName,
-			Arguments,
-			ConversationId,
-			EClaireonSpillStreamSet::GenericData);
-	}
+	// No spill routing on this path. ClaireonBridge is the in-process Python entry
+	// (claireon.<tool>(...) called from a python_execute script). The result becomes
+	// a Python dict consumed by the running script -- it never crosses a wire
+	// where spill saves context. Only the OUTER python_execute call benefits from
+	// spill, and that is owned by ClaireonTool_ExecutePython::Execute which routes
+	// its own stdout/uelog streams. HTTP `tools/call` requests reach the agent
+	// via ClaireonServer.cpp and are returned inline as well.
+	//
+	// Previously this path ran FClaireonOutputGate::RouteResult with GenericData,
+	// which spilled inner-tool results above 8 KiB and silently turned them into
+	// {"__mcp_spilled__": true, "spilled_streams": [...]} -- so naive script
+	// code like `claireon.uobject_inspect(...)["data"]["properties"]` returned [].
+	// Spill here was strictly harmful: it cost a disk write to save context that
+	// was never going to be sent anywhere.
 
 	// Serialize the result envelope: {"data": ..., "summary": "...", "warnings": [...]}
 	// Field shape is owned by BuildResultEnvelope so tests can exercise the
