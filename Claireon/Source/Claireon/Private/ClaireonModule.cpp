@@ -207,7 +207,6 @@
 // Meta tools
 #include "Tools/ClaireonTool_SearchTools.h"
 #include "Tools/ClaireonTool_FeedbackSubmit.h"
-#include "Tools/ClaireonTool_ApplySpecHelp.h"
 
 // Widget Blueprint MCP tools
 #include "Tools/ClaireonTool_GetWidgetBPTree.h"
@@ -1596,7 +1595,9 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	// Meta tools
 	Tools.Add(MakeShared<ClaireonTool_SearchTools>());
 	Tools.Add(MakeShared<ClaireonTool_FeedbackSubmit>());
-	Tools.Add(MakeShared<ClaireonTool_ApplySpecHelp>());
+	// apply_spec_help retired in #0000; replaced by tool_search deep-inspect on
+	// any apply_spec / instance_apply_spec tool, which embeds the matching
+	// ApplySpecCatalog.json entry under `spec_shape`.
 
 	// Transaction management (decomposed -- one tool per operation)
 	Tools.Add(MakeShared<ClaireonTool_TransactionUndo>());

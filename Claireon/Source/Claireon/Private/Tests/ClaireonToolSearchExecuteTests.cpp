@@ -19,6 +19,13 @@
 #include "ClaireonLogCapture.h"
 #include "ClaireonModule.h"
 #include "ClaireonServer.h"
+#include "IClaireonToolProvider.h"
+#include "Features/IModularFeatures.h"
+#include "Interfaces/IPluginManager.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "Tools/ClaireonTool_SearchTools.h"
 #include "Tools/IClaireonTool.h"
 #include "Dom/JsonObject.h"
@@ -543,6 +550,452 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, NameParameterWinsOverToolNameWithL
 	UNTEST_EXPECT_TRUE(CapturedLog.Contains(TEXT("both `name=` and `tool_name=` set")));
 
 	UnregisterStubs(*Server, Names);
+	if (bWeStartedServer) { Module.StopServer(); }
+	co_return;
+}
+
+// ===========================================================================
+// Stage 003 / Part B: tool_search upgrade-path footer on brief/standard hits.
+// ===========================================================================
+
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterPresentOnMultiHitStandard, UNTEST_TIMEOUTMS(15000))
+{
+	using namespace ClaireonToolSearchExecuteTestsNS;
+
+	FClaireonModule& Module = FClaireonModule::Get();
+	const bool bWeStartedServer = EnsureServer(Module);
+	FClaireonServer* Server = Module.GetServer();
+	UNTEST_ASSERT_PTR(Server);
+
+	const TArray<FString> Names = RegisterStubs(*Server, {
+		MakeTool(TEXT("foo"), TEXT("alpha_compile"), TEXT("compiles foo alpha widgets")),
+		MakeTool(TEXT("foo"), TEXT("beta_compile"),  TEXT("compiles foo beta widgets")),
+	});
+
+	ClaireonTool_SearchTools SearchTool;
+	IClaireonTool::FToolResult R = RunExecute(SearchTool, {
+		{ TEXT("query"), TEXT("compile") },
+	});
+
+	UNTEST_EXPECT_FALSE(R.bIsError);
+	UNTEST_EXPECT_TRUE(R.Summary.Contains(TEXT("tip: call tool_search(name=")));
+	UNTEST_EXPECT_TRUE(R.Summary.Contains(TEXT("detail=\"full\"")));
+
+	UnregisterStubs(*Server, Names);
+	if (bWeStartedServer) { Module.StopServer(); }
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterSuppressedOnDetailFull, UNTEST_TIMEOUTMS(15000))
+{
+	using namespace ClaireonToolSearchExecuteTestsNS;
+
+	FClaireonModule& Module = FClaireonModule::Get();
+	const bool bWeStartedServer = EnsureServer(Module);
+	FClaireonServer* Server = Module.GetServer();
+	UNTEST_ASSERT_PTR(Server);
+
+	const TArray<FString> Names = RegisterStubs(*Server, {
+		MakeTool(TEXT("foo"), TEXT("alpha_compile"), TEXT("compiles foo alpha widgets")),
+		MakeTool(TEXT("foo"), TEXT("beta_compile"),  TEXT("compiles foo beta widgets")),
+	});
+
+	ClaireonTool_SearchTools SearchTool;
+	IClaireonTool::FToolResult R = RunExecute(SearchTool, {
+		{ TEXT("query"),  TEXT("compile") },
+		{ TEXT("detail"), TEXT("full") },
+	});
+
+	UNTEST_EXPECT_FALSE(R.bIsError);
+	UNTEST_EXPECT_FALSE(R.Summary.Contains(TEXT("tip:")));
+
+	UnregisterStubs(*Server, Names);
+	if (bWeStartedServer) { Module.StopServer(); }
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterSuppressedOnDeepInspectByName, UNTEST_TIMEOUTMS(15000))
+{
+	using namespace ClaireonToolSearchExecuteTestsNS;
+
+	FClaireonModule& Module = FClaireonModule::Get();
+	const bool bWeStartedServer = EnsureServer(Module);
+	FClaireonServer* Server = Module.GetServer();
+	UNTEST_ASSERT_PTR(Server);
+
+	const TArray<FString> Names = RegisterStubs(*Server, {
+		MakeTool(TEXT("foo"), TEXT("alpha_compile"), TEXT("compiles foo alpha widgets")),
+	});
+
+	ClaireonTool_SearchTools SearchTool;
+	IClaireonTool::FToolResult R = RunExecute(SearchTool, {
+		{ TEXT("name"), TEXT("foo_alpha_compile") },
+	});
+
+	UNTEST_EXPECT_FALSE(R.bIsError);
+	UNTEST_EXPECT_FALSE(R.Summary.Contains(TEXT("tip:")));
+
+	UnregisterStubs(*Server, Names);
+	if (bWeStartedServer) { Module.StopServer(); }
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterSuppressedOnZeroHits, UNTEST_TIMEOUTMS(15000))
+{
+	using namespace ClaireonToolSearchExecuteTestsNS;
+
+	FClaireonModule& Module = FClaireonModule::Get();
+	const bool bWeStartedServer = EnsureServer(Module);
+	FClaireonServer* Server = Module.GetServer();
+	UNTEST_ASSERT_PTR(Server);
+
+	ClaireonTool_SearchTools SearchTool;
+	IClaireonTool::FToolResult R = RunExecute(SearchTool, {
+		{ TEXT("query"), TEXT("does_not_exist_xyzzy_zzz") },
+	});
+
+	UNTEST_EXPECT_FALSE(R.bIsError);
+	UNTEST_EXPECT_FALSE(R.Summary.Contains(TEXT("tip:")));
+
+	if (bWeStartedServer) { Module.StopServer(); }
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterSuppressedOnExactSingleMatch, UNTEST_TIMEOUTMS(15000))
+{
+	using namespace ClaireonToolSearchExecuteTestsNS;
+
+	FClaireonModule& Module = FClaireonModule::Get();
+	const bool bWeStartedServer = EnsureServer(Module);
+	FClaireonServer* Server = Module.GetServer();
+	UNTEST_ASSERT_PTR(Server);
+
+	const TArray<FString> Names = RegisterStubs(*Server, {
+		MakeTool(TEXT("uniqueprefix"), TEXT("xyzzy"), TEXT("unique stub, will be the only hit")),
+	});
+
+	ClaireonTool_SearchTools SearchTool;
+	IClaireonTool::FToolResult R = RunExecute(SearchTool, {
+		{ TEXT("query"), TEXT("uniqueprefix_xyzzy") },
+	});
+
+	UNTEST_EXPECT_FALSE(R.bIsError);
+	UNTEST_EXPECT_EQ(GetTotalMatching(R.Data), 1);
+	UNTEST_EXPECT_FALSE(R.Summary.Contains(TEXT("tip:")));
+
+	UnregisterStubs(*Server, Names);
+	if (bWeStartedServer) { Module.StopServer(); }
+	co_return;
+}
+
+// ===========================================================================
+// Stage 003 / Part C: tool_search surfaces GetPatterns() on full-detail and
+// deep-inspect paths; empty returns are suppressed.
+// ===========================================================================
+
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, DeepInspectBpAddNodeCarriesPatterns, UNTEST_TIMEOUTMS(15000))
+{
+	using namespace ClaireonToolSearchExecuteTestsNS;
+
+	FClaireonModule& Module = FClaireonModule::Get();
+	const bool bWeStartedServer = EnsureServer(Module);
+	FClaireonServer* Server = Module.GetServer();
+	UNTEST_ASSERT_PTR(Server);
+
+	// bp_add_node is provided by the built-in tool provider; assert that the
+	// real registered tool carries non-empty patterns under deep-inspect.
+	ClaireonTool_SearchTools SearchTool;
+	IClaireonTool::FToolResult R = RunExecute(SearchTool, {
+		{ TEXT("name"), TEXT("bp_add_node") },
+	});
+
+	UNTEST_EXPECT_FALSE(R.bIsError);
+	const TSharedPtr<FJsonObject>* InspectedTool = nullptr;
+	if (R.Data.IsValid()
+		&& R.Data->TryGetObjectField(TEXT("tool"), InspectedTool)
+		&& InspectedTool && (*InspectedTool).IsValid())
+	{
+		FString Patterns;
+		const bool bHasPatterns = (*InspectedTool)->TryGetStringField(
+			TEXT("patterns"), Patterns);
+		UNTEST_EXPECT_TRUE(bHasPatterns);
+		UNTEST_EXPECT_TRUE(Patterns.Contains(TEXT("## Common pitfalls")));
+		UNTEST_EXPECT_TRUE(Patterns.Contains(TEXT("## See also")));
+	}
+	else
+	{
+		UNTEST_EXPECT_TRUE(false);
+	}
+
+	if (bWeStartedServer) { Module.StopServer(); }
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, DeepInspectStubToolHasNoPatternsField, UNTEST_TIMEOUTMS(15000))
+{
+	using namespace ClaireonToolSearchExecuteTestsNS;
+
+	FClaireonModule& Module = FClaireonModule::Get();
+	const bool bWeStartedServer = EnsureServer(Module);
+	FClaireonServer* Server = Module.GetServer();
+	UNTEST_ASSERT_PTR(Server);
+
+	// Stub tools do NOT override GetPatterns() so the patterns field must be
+	// absent on deep-inspect.
+	const TArray<FString> Names = RegisterStubs(*Server, {
+		MakeTool(TEXT("nopat"), TEXT("inspect"), TEXT("stub with no patterns")),
+	});
+
+	ClaireonTool_SearchTools SearchTool;
+	IClaireonTool::FToolResult R = RunExecute(SearchTool, {
+		{ TEXT("name"), TEXT("nopat_inspect") },
+	});
+
+	UNTEST_EXPECT_FALSE(R.bIsError);
+	const TSharedPtr<FJsonObject>* InspectedTool = nullptr;
+	if (R.Data.IsValid()
+		&& R.Data->TryGetObjectField(TEXT("tool"), InspectedTool)
+		&& InspectedTool && (*InspectedTool).IsValid())
+	{
+		UNTEST_EXPECT_FALSE((*InspectedTool)->HasField(TEXT("patterns")));
+	}
+	else
+	{
+		UNTEST_EXPECT_TRUE(false);
+	}
+
+	UnregisterStubs(*Server, Names);
+	if (bWeStartedServer) { Module.StopServer(); }
+	co_return;
+}
+
+// ===========================================================================
+// Stage 004 / Part D: tool_search surfaces ApplySpecCatalog.json entry under
+// spec_shape for every apply_spec / instance_apply_spec family; non-apply_spec
+// tools have no spec_shape; catalog has 17 entries matching the registry;
+// apply_spec_help is no longer registered.
+// ===========================================================================
+
+namespace Cl622PartDHelpers
+{
+	// File-local discriminator per project memory.
+	static const TArray<TPair<FString, FString>>& Cl622_GetExpectedFamilyToolPairs()
+	{
+		// (catalog_key, registered tool name).  Doubled `instance` for the
+		// material_instance family is intentional under current naming.
+		static const TArray<TPair<FString, FString>> Pairs = {
+			{ TEXT("attenuation"),       TEXT("attenuation_apply_spec") },
+			{ TEXT("behaviortree"),      TEXT("behaviortree_apply_spec") },
+			{ TEXT("blackboard"),        TEXT("blackboard_apply_spec") },
+			{ TEXT("bp"),                TEXT("bp_apply_spec") },
+			{ TEXT("concurrency"),       TEXT("concurrency_apply_spec") },
+			{ TEXT("eqs"),               TEXT("eqs_apply_spec") },
+			{ TEXT("level_sequence"),    TEXT("level_sequence_apply_spec") },
+			{ TEXT("material"),          TEXT("material_apply_spec") },
+			{ TEXT("material_instance"), TEXT("material_instance_instance_apply_spec") },
+			{ TEXT("metasound"),         TEXT("metasound_apply_spec") },
+			{ TEXT("niagara"),           TEXT("niagara_apply_spec") },
+			{ TEXT("pcg"),               TEXT("pcg_apply_spec") },
+			{ TEXT("soundclass"),        TEXT("soundclass_apply_spec") },
+			{ TEXT("soundcue"),          TEXT("soundcue_apply_spec") },
+			{ TEXT("soundmix"),          TEXT("soundmix_apply_spec") },
+			{ TEXT("statetree"),         TEXT("statetree_apply_spec") },
+			{ TEXT("widgetbp"),          TEXT("widgetbp_apply_spec") },
+		};
+		return Pairs;
+	}
+
+	static TSharedPtr<FJsonObject> Cl622_LoadCatalogForTests()
+	{
+		TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("Claireon"));
+		if (!Plugin.IsValid()) { return nullptr; }
+		const FString Path = FPaths::Combine(Plugin->GetContentDir(),
+			TEXT("ApplySpecCatalog.json"));
+		FString Raw;
+		if (!FFileHelper::LoadFileToString(Raw, *Path)) { return nullptr; }
+		TSharedPtr<FJsonObject> Root;
+		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Raw);
+		if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+		{
+			return nullptr;
+		}
+		return Root;
+	}
+}
+
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, CatalogHasSeventeenFamilyEntries, UNTEST_TIMEOUTMS(15000))
+{
+	TSharedPtr<FJsonObject> Catalog = Cl622PartDHelpers::Cl622_LoadCatalogForTests();
+	UNTEST_ASSERT_TRUE(Catalog.IsValid());
+
+	int32 NonMetaCount = 0;
+	for (const TPair<FString, TSharedPtr<FJsonValue>>& KV : Catalog->Values)
+	{
+		if (KV.Key.StartsWith(TEXT("_"))) { continue; }
+		++NonMetaCount;
+	}
+	UNTEST_EXPECT_EQ(NonMetaCount, 17);
+
+	const TSharedPtr<FJsonObject>* MetaObj = nullptr;
+	if (Catalog->TryGetObjectField(TEXT("_meta"), MetaObj)
+		&& MetaObj && (*MetaObj).IsValid())
+	{
+		double EntryCount = 0.0;
+		if ((*MetaObj)->TryGetNumberField(TEXT("entry_count"), EntryCount))
+		{
+			UNTEST_EXPECT_EQ(static_cast<int32>(EntryCount), 17);
+		}
+	}
+
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, CatalogToolsMatchRegisteredTools, UNTEST_TIMEOUTMS(15000))
+{
+	// Bidirectional invariant ported from ClaireonApplySpecHelpTests:
+	//   (a) every catalog key matches the GetCategory() of some registered
+	//       tool whose GetOperation() is apply_spec or instance_apply_spec.
+	//   (b) every such registered tool has a catalog entry.
+	TSharedPtr<FJsonObject> Catalog = Cl622PartDHelpers::Cl622_LoadCatalogForTests();
+	UNTEST_ASSERT_TRUE(Catalog.IsValid());
+
+	TSet<FString> CatalogKeys;
+	for (const TPair<FString, TSharedPtr<FJsonValue>>& KV : Catalog->Values)
+	{
+		if (KV.Key.StartsWith(TEXT("_"))) { continue; }
+		CatalogKeys.Add(KV.Key);
+	}
+
+	TSet<FString> RegisteredApplySpecCategories;
+	TArray<IClaireonToolProvider*> Providers = IModularFeatures::Get()
+		.GetModularFeatureImplementations<IClaireonToolProvider>(
+			IClaireonToolProvider::FeatureName);
+	for (IClaireonToolProvider* Provider : Providers)
+	{
+		if (!Provider) { continue; }
+		for (const TSharedPtr<IClaireonTool>& Tool : Provider->GetTools())
+		{
+			if (!Tool.IsValid()) { continue; }
+			const FString Op = Tool->GetOperation();
+			if (Op == TEXT("apply_spec") || Op == TEXT("instance_apply_spec"))
+			{
+				RegisteredApplySpecCategories.Add(Tool->GetCategory());
+			}
+		}
+	}
+
+	// (a) catalog -> registered.
+	for (const FString& K : CatalogKeys)
+	{
+		UNTEST_EXPECT_TRUE(RegisteredApplySpecCategories.Contains(K));
+	}
+	// (b) registered -> catalog.
+	for (const FString& C : RegisteredApplySpecCategories)
+	{
+		UNTEST_EXPECT_TRUE(CatalogKeys.Contains(C));
+	}
+
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, ApplySpecHelpToolNoLongerRegistered, UNTEST_TIMEOUTMS(15000))
+{
+	using namespace ClaireonToolSearchExecuteTestsNS;
+
+	FClaireonModule& Module = FClaireonModule::Get();
+	const bool bWeStartedServer = EnsureServer(Module);
+	FClaireonServer* Server = Module.GetServer();
+	UNTEST_ASSERT_PTR(Server);
+
+	const TMap<FString, TSharedPtr<IClaireonTool>>& Tools = Server->GetTools();
+	UNTEST_EXPECT_FALSE(Tools.Contains(TEXT("apply_spec_help")));
+
+	if (bWeStartedServer) { Module.StopServer(); }
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, DeepInspectApplySpecFamiliesCarrySpecShape, UNTEST_TIMEOUTMS(60000))
+{
+	using namespace ClaireonToolSearchExecuteTestsNS;
+	using namespace Cl622PartDHelpers;
+
+	FClaireonModule& Module = FClaireonModule::Get();
+	const bool bWeStartedServer = EnsureServer(Module);
+	FClaireonServer* Server = Module.GetServer();
+	UNTEST_ASSERT_PTR(Server);
+
+	TSharedPtr<FJsonObject> Catalog = Cl622_LoadCatalogForTests();
+	UNTEST_ASSERT_TRUE(Catalog.IsValid());
+
+	ClaireonTool_SearchTools SearchTool;
+	for (const TPair<FString, FString>& Pair : Cl622_GetExpectedFamilyToolPairs())
+	{
+		const FString& Family = Pair.Key;
+		const FString& ToolName = Pair.Value;
+
+		// Skip families whose tool is not registered in the current run
+		// (would have failed the bidirectional invariant test above).
+		if (!Server->GetTools().Contains(ToolName)) { continue; }
+
+		IClaireonTool::FToolResult R = RunExecute(SearchTool, {
+			{ TEXT("name"), ToolName },
+		});
+
+		UNTEST_EXPECT_FALSE(R.bIsError);
+		const TSharedPtr<FJsonObject>* InspectedTool = nullptr;
+		if (R.Data.IsValid()
+			&& R.Data->TryGetObjectField(TEXT("tool"), InspectedTool)
+			&& InspectedTool && (*InspectedTool).IsValid())
+		{
+			const TSharedPtr<FJsonObject>* SpecShape = nullptr;
+			const bool bHasSpec = (*InspectedTool)->TryGetObjectField(
+				TEXT("spec_shape"), SpecShape);
+			UNTEST_EXPECT_TRUE(bHasSpec);
+			if (bHasSpec && SpecShape && (*SpecShape).IsValid())
+			{
+				FString CatalogToolField;
+				UNTEST_EXPECT_TRUE((*SpecShape)->TryGetStringField(
+					TEXT("tool"), CatalogToolField));
+				UNTEST_EXPECT_TRUE(CatalogToolField == ToolName);
+			}
+		}
+		else
+		{
+			UNTEST_EXPECT_TRUE(false);
+		}
+	}
+
+	if (bWeStartedServer) { Module.StopServer(); }
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, DeepInspectNonApplySpecToolHasNoSpecShape, UNTEST_TIMEOUTMS(15000))
+{
+	using namespace ClaireonToolSearchExecuteTestsNS;
+
+	FClaireonModule& Module = FClaireonModule::Get();
+	const bool bWeStartedServer = EnsureServer(Module);
+	FClaireonServer* Server = Module.GetServer();
+	UNTEST_ASSERT_PTR(Server);
+
+	ClaireonTool_SearchTools SearchTool;
+	IClaireonTool::FToolResult R = RunExecute(SearchTool, {
+		{ TEXT("name"), TEXT("bp_add_node") },
+	});
+
+	UNTEST_EXPECT_FALSE(R.bIsError);
+	const TSharedPtr<FJsonObject>* InspectedTool = nullptr;
+	if (R.Data.IsValid()
+		&& R.Data->TryGetObjectField(TEXT("tool"), InspectedTool)
+		&& InspectedTool && (*InspectedTool).IsValid())
+	{
+		UNTEST_EXPECT_FALSE((*InspectedTool)->HasField(TEXT("spec_shape")));
+	}
+	else
+	{
+		UNTEST_EXPECT_TRUE(false);
+	}
+
 	if (bWeStartedServer) { Module.StopServer(); }
 	co_return;
 }

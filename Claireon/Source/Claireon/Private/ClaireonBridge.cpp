@@ -34,6 +34,47 @@ THIRD_PARTY_INCLUDES_END
 #include "FileHelpers.h"
 #include "HAL/ThreadHeartBeat.h"
 
+TSharedPtr<FJsonObject> FClaireonBridge::BuildResultEnvelope(
+	const IClaireonTool::FToolResult& Result)
+{
+	TSharedPtr<FJsonObject> Envelope = MakeShared<FJsonObject>();
+
+	if (Result.Data.IsValid())
+	{
+		Envelope->SetObjectField(TEXT("data"), Result.Data);
+	}
+	else
+	{
+		Envelope->SetObjectField(TEXT("data"), MakeShared<FJsonObject>());
+	}
+
+	if (Result.Hint.IsValid())
+	{
+		Envelope->SetObjectField(TEXT("hint"), Result.Hint);
+	}
+
+	Envelope->SetStringField(TEXT("summary"), Result.Summary);
+
+	TArray<TSharedPtr<FJsonValue>> WarningsArray;
+	for (const FString& Warning : Result.Warnings)
+	{
+		WarningsArray.Add(MakeShared<FJsonValueString>(Warning));
+	}
+	Envelope->SetArrayField(TEXT("warnings"), WarningsArray);
+
+	if (!Result.Logs.IsEmpty())
+	{
+		Envelope->SetStringField(TEXT("logs"), Result.Logs);
+	}
+
+	if (!Result.UELog.IsEmpty())
+	{
+		Envelope->SetStringField(TEXT("ue_log"), Result.UELog);
+	}
+
+	return Envelope;
+}
+
 // Static member initialization
 bool FClaireonBridge::bIsRegistered = false;
 FClaireonServer* FClaireonBridge::GServerInstance = nullptr;
@@ -353,6 +394,11 @@ PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 			ErrorEnvelope->SetObjectField(TEXT("data"), MakeShared<FJsonObject>());
 		}
 
+		if (Result.Hint.IsValid())
+		{
+			ErrorEnvelope->SetObjectField(TEXT("hint"), Result.Hint);
+		}
+
 		ErrorEnvelope->SetStringField(TEXT("summary"), Result.Summary);
 
 		TArray<TSharedPtr<FJsonValue>> ErrorWarningsArray;
@@ -416,38 +462,9 @@ PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 	}
 
 	// Serialize the result envelope: {"data": ..., "summary": "...", "warnings": [...]}
-	TSharedPtr<FJsonObject> Envelope = MakeShared<FJsonObject>();
-
-	// Data field — use the tool's structured data, or empty object if null
-	if (Result.Data.IsValid())
-	{
-		Envelope->SetObjectField(TEXT("data"), Result.Data);
-	}
-	else
-	{
-		Envelope->SetObjectField(TEXT("data"), MakeShared<FJsonObject>());
-	}
-
-	// Summary field
-	Envelope->SetStringField(TEXT("summary"), Result.Summary);
-
-	// Warnings array
-	TArray<TSharedPtr<FJsonValue>> WarningsArray;
-	for (const FString& Warning : Result.Warnings)
-	{
-		WarningsArray.Add(MakeShared<FJsonValueString>(Warning));
-	}
-	Envelope->SetArrayField(TEXT("warnings"), WarningsArray);
-
-	if (!Result.Logs.IsEmpty())
-	{
-		Envelope->SetStringField(TEXT("logs"), Result.Logs);
-	}
-
-	if (!Result.UELog.IsEmpty())
-	{
-		Envelope->SetStringField(TEXT("ue_log"), Result.UELog);
-	}
+	// Field shape is owned by BuildResultEnvelope so tests can exercise the
+	// same code path without dragging in the CPython C API.
+	TSharedPtr<FJsonObject> Envelope = BuildResultEnvelope(Result);
 
 	// Serialize to condensed JSON string (no extra whitespace)
 	FString EnvelopeJson;

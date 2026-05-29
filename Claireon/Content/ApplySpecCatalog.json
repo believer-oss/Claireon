@@ -1,103 +1,204 @@
 {
   "_meta": {
-    "schema_version": 1,
-    "entry_count": 8,
-    "tools_must_match_registered": true
+    "source_lines": "apply_spec table (per-family entries derived from each tool's GetInputSchema and applicator)",
+    "schema_version": 2,
+    "entry_count": 17,
+    "tools_must_match_registered": true,
+    "keying_convention": "top-level keys equal each tool's GetCategory(); look up via tool_search(name=<family>_apply_spec, detail=\"full\")"
   },
-  "entries": [
-    {
-      "tool": "behaviortree_edit",
-      "spec_entry_types": ["nodes[]"],
-      "calling_convention": "params={asset_path, spec}",
-      "creates_asset_if_missing": false,
-      "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
-      "gotchas": [
-        "BT property values go through FProperty::ImportText_Direct; FValueOrBBKey_* properties auto-wrap a bare scalar as (DefaultValue=X), so 'WaitTime': '0.5' works",
-        "Class names are fuzzy-resolved (drop U/F prefix; partial matches allowed)",
-        "Spec is additive: applying to a BT that already has a root selector results in two trees under the BT root",
-        "Non-session behaviortree_inspect only walks the primary root child; use session-mode (open->structure->close) to see additions"
-      ]
-    },
-    {
-      "tool": "blackboard_edit",
-      "spec_entry_types": ["keys[]"],
-      "calling_convention": "params={asset_path, spec}",
-      "creates_asset_if_missing": false,
-      "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
-      "gotchas": [
-        "Each key requires id, name, type",
-        "type must be a valid blackboard key type string (Object, Bool, Float, Int, String, Vector, Rotator, Name, Class, Enum)"
-      ]
-    },
-    {
-      "tool": "bp",
-      "spec_entry_types": ["nodes[]", "connections[]", "variables[]"],
-      "calling_convention": "flat: asset_path, spec passed at top-level (matches the existing schema)",
-      "creates_asset_if_missing": true,
-      "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
-      "gotchas": [
-        "This is the ONLY apply_spec tool that auto-creates the asset; the other seven require the asset to already exist (duplicate first)",
-        "Connection pin names are fuzzy-resolved: 'exec' (input) and 'then' (output) work without knowing the canonical pin name",
-        "Class names are fuzzy-resolved (drop U/F prefix; partial matches allowed)",
-        "spec.graph names the target graph (e.g. 'EventGraph')"
-      ]
-    },
-    {
-      "tool": "eqs_edit",
-      "spec_entry_types": ["options[]"],
-      "calling_convention": "params={asset_path, spec}",
-      "creates_asset_if_missing": false,
-      "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
-      "gotchas": [
-        "Each option requires id, generator, and tests[]",
-        "Generator and test type strings are fuzzy-resolved (e.g. 'EnvQueryGenerator_SimpleGrid', 'EnvQueryTest_Distance')"
-      ]
-    },
-    {
-      "tool": "niagara_edit",
-      "spec_entry_types": ["parameters[]"],
-      "calling_convention": "params={asset_path, spec}",
-      "creates_asset_if_missing": false,
-      "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
-      "gotchas": [
-        "Niagara emitters[] is NOT yet implemented; only parameters[] mutates the asset (emitter creation requires Niagara template-system integration)",
-        "The applicator returns no error for emitters[] entries today; treat them as a stub",
-        "Each parameter requires id, name, type, value (where type is float, FLinearColor, FVector, etc.)"
-      ]
-    },
-    {
-      "tool": "pcg_edit",
-      "spec_entry_types": ["nodes[]", "connections[]"],
-      "calling_convention": "params={asset_path, spec}",
-      "creates_asset_if_missing": false,
-      "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
-      "gotchas": [
-        "PCG connection pin names are EXACT-match (no fuzzy resolution yet for PCG-specific port aliases)",
-        "Each connection requires source_node, source_pin, target_node, target_pin"
-      ]
-    },
-    {
-      "tool": "statetree_edit",
-      "spec_entry_types": ["states[]", "transitions[]", "evaluators[]", "global_tasks[]"],
-      "calling_convention": "params={asset_path, spec}",
-      "creates_asset_if_missing": false,
-      "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
-      "gotchas": [
-        "Transitions can be authored either per-state (states[i].transitions) or top-level (spec.transitions[]) -- both forms are equivalent and resolve from/to via id_mappings",
-        "Top-level transitions are useful when authoring transitions independently of state definitions",
-        "Each state requires id, name, type, parent (null for root)"
-      ]
-    },
-    {
-      "tool": "widgetbp_edit",
-      "spec_entry_types": ["widgets[]"],
-      "calling_convention": "params={asset_path, spec}",
-      "creates_asset_if_missing": false,
-      "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
-      "gotchas": [
-        "WidgetBP applicator opens existing Widget Blueprints only (no auto-create); duplicate a template and apply against the duplicate",
-        "Each widget requires id, type, parent (null for root), and optional children[] / properties / slot_properties"
-      ]
-    }
-  ]
+  "attenuation": {
+    "tool": "attenuation_apply_spec",
+    "spec_entry_types": ["properties"],
+    "calling_convention": "flat: kind=\"Attenuation\", asset_path, properties at top-level; one-shot stateless apply",
+    "creates_asset_if_missing": true,
+    "id_mapping_pattern": "n/a -- single asset target identified by asset_path",
+    "gotchas": [
+      "Non-session: no session_id required and no editor session is opened",
+      "Properties go through FProperty::ImportText_Direct; struct properties accept either nested objects or canonical text form",
+      "Asset is auto-created at asset_path if absent"
+    ]
+  },
+  "behaviortree": {
+    "tool": "behaviortree_apply_spec",
+    "spec_entry_types": ["nodes[]"],
+    "calling_convention": "params={asset_path, spec}",
+    "creates_asset_if_missing": false,
+    "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+    "gotchas": [
+      "BT property values go through FProperty::ImportText_Direct; FValueOrBBKey_* properties auto-wrap a bare scalar as (DefaultValue=X), so 'WaitTime': '0.5' works",
+      "Class names are fuzzy-resolved (drop U/F prefix; partial matches allowed)",
+      "Spec is additive: applying to a BT that already has a root selector results in two trees under the BT root",
+      "Non-session behaviortree_inspect only walks the primary root child; use session-mode (open->structure->close) to see additions"
+    ]
+  },
+  "blackboard": {
+    "tool": "blackboard_apply_spec",
+    "spec_entry_types": ["keys[]"],
+    "calling_convention": "params={asset_path, spec}",
+    "creates_asset_if_missing": false,
+    "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+    "gotchas": [
+      "Each key requires id, name, type",
+      "type must be a valid blackboard key type string (Object, Bool, Float, Int, String, Vector, Rotator, Name, Class, Enum)"
+    ]
+  },
+  "bp": {
+    "tool": "bp_apply_spec",
+    "spec_entry_types": ["nodes[]", "connections[]", "variables[]"],
+    "calling_convention": "flat: asset_path, spec passed at top-level (matches the existing schema)",
+    "creates_asset_if_missing": true,
+    "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+    "gotchas": [
+      "This is the ONLY apply_spec tool that auto-creates the asset; the other tools require the asset to already exist (duplicate first)",
+      "Connection pin names are fuzzy-resolved: 'exec' (input) and 'then' (output) work without knowing the canonical pin name",
+      "Class names are fuzzy-resolved (drop U/F prefix; partial matches allowed)",
+      "spec.graph names the target graph (e.g. 'EventGraph')"
+    ]
+  },
+  "concurrency": {
+    "tool": "concurrency_apply_spec",
+    "spec_entry_types": ["properties"],
+    "calling_convention": "flat: kind=\"Concurrency\", asset_path, properties at top-level; one-shot stateless apply",
+    "creates_asset_if_missing": true,
+    "id_mapping_pattern": "n/a -- single asset target identified by asset_path",
+    "gotchas": [
+      "Non-session: no session_id required and no editor session is opened",
+      "Properties go through FProperty::ImportText_Direct"
+    ]
+  },
+  "eqs": {
+    "tool": "eqs_apply_spec",
+    "spec_entry_types": ["options[]"],
+    "calling_convention": "params={asset_path, spec}",
+    "creates_asset_if_missing": false,
+    "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+    "gotchas": [
+      "Each option requires id, generator, and tests[]",
+      "Generator and test type strings are fuzzy-resolved (e.g. 'EnvQueryGenerator_SimpleGrid', 'EnvQueryTest_Distance')"
+    ]
+  },
+  "level_sequence": {
+    "tool": "level_sequence_apply_spec",
+    "spec_entry_types": ["playback_range", "bindings[]", "tracks[]", "sections[]", "keyframes[]"],
+    "calling_convention": "params={asset_path, spec, optional session_id}; opens its own session when session_id is not provided",
+    "creates_asset_if_missing": false,
+    "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+    "gotchas": [
+      "Asset must already exist; apply is non-destructive in that bindings/tracks/sections/keyframes are added/modified atomically",
+      "spec.playback_range is optional; omit to keep the existing range"
+    ]
+  },
+  "material": {
+    "tool": "material_apply_spec",
+    "spec_entry_types": ["expressions[]", "connections[]", "attribute_connections[]", "parameter_defaults[]", "shading_model", "blend_mode"],
+    "calling_convention": "params={asset_path, spec, optional session_id}; opens its own session when session_id is not provided",
+    "creates_asset_if_missing": false,
+    "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+    "gotchas": [
+      "Asset must already exist; duplicate a template first if you need a new material",
+      "Connection endpoints reference expressions by spec id; pin names are matched as authored"
+    ]
+  },
+  "material_instance": {
+    "tool": "material_instance_instance_apply_spec",
+    "spec_entry_types": ["parent", "parameter_overrides", "clears"],
+    "calling_convention": "params={asset_path, spec, optional session_id}; opens its own session when session_id is not provided",
+    "creates_asset_if_missing": false,
+    "id_mapping_pattern": "n/a -- single asset target identified by asset_path",
+    "gotchas": [
+      "Operation is instance_apply_spec; composed wire name is material_instance_instance_apply_spec (doubled instance is intentional under current category+operation naming)",
+      "Asset must already exist; instance pointing at the named parent is created by spec.parent",
+      "Clearing a parameter and overriding it in the same call: clears run first"
+    ]
+  },
+  "metasound": {
+    "tool": "metasound_apply_spec",
+    "spec_entry_types": ["graph", "inputs[]", "outputs[]", "interfaces[]"],
+    "calling_convention": "flat: kind=\"MetaSoundSource\", asset_path, spec body at top-level; one-shot stateless apply",
+    "creates_asset_if_missing": true,
+    "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+    "gotchas": [
+      "Non-session: no session_id required and no editor session is opened",
+      "Creates or locates the asset, then routes the spec body to the MetaSound applicator"
+    ]
+  },
+  "niagara": {
+    "tool": "niagara_apply_spec",
+    "spec_entry_types": ["parameters[]"],
+    "calling_convention": "params={asset_path, spec}",
+    "creates_asset_if_missing": false,
+    "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+    "gotchas": [
+      "Niagara emitters[] is NOT yet implemented; only parameters[] mutates the asset (emitter creation requires Niagara template-system integration)",
+      "The applicator returns no error for emitters[] entries today; treat them as a stub",
+      "Each parameter requires id, name, type, value (where type is float, FLinearColor, FVector, etc.)"
+    ]
+  },
+  "pcg": {
+    "tool": "pcg_apply_spec",
+    "spec_entry_types": ["nodes[]", "connections[]"],
+    "calling_convention": "params={asset_path, spec}",
+    "creates_asset_if_missing": false,
+    "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+    "gotchas": [
+      "PCG connection pin names are EXACT-match (no fuzzy resolution yet for PCG-specific port aliases)",
+      "Each connection requires source_node, source_pin, target_node, target_pin"
+    ]
+  },
+  "soundclass": {
+    "tool": "soundclass_apply_spec",
+    "spec_entry_types": ["properties", "child_classes[]"],
+    "calling_convention": "flat: kind=\"SoundClass\", asset_path, properties, child_classes at top-level; one-shot stateless apply",
+    "creates_asset_if_missing": true,
+    "id_mapping_pattern": "n/a -- single asset target identified by asset_path; child_classes by SoundClass path",
+    "gotchas": [
+      "Non-session: no session_id required and no editor session is opened",
+      "child_classes references SoundClass asset paths that must exist"
+    ]
+  },
+  "soundcue": {
+    "tool": "soundcue_apply_spec",
+    "spec_entry_types": ["nodes[]", "connections[]"],
+    "calling_convention": "flat: kind=\"SoundCue\", asset_path, nodes/connections at top-level; one-shot stateless apply",
+    "creates_asset_if_missing": true,
+    "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+    "gotchas": [
+      "Non-session: no session_id required and no editor session is opened",
+      "Two-pass cross-reference handling is preserved: referenced assets load first, then the cue graph is wired"
+    ]
+  },
+  "soundmix": {
+    "tool": "soundmix_apply_spec",
+    "spec_entry_types": ["envelope", "class_adjusters[]"],
+    "calling_convention": "flat: kind=\"SoundMix\", asset_path, envelope, class_adjusters at top-level; one-shot stateless apply",
+    "creates_asset_if_missing": true,
+    "id_mapping_pattern": "n/a -- single asset target identified by asset_path; class_adjusters by SoundClass path",
+    "gotchas": [
+      "Non-session: no session_id required and no editor session is opened",
+      "class_adjusters references SoundClass asset paths that must exist"
+    ]
+  },
+  "statetree": {
+    "tool": "statetree_apply_spec",
+    "spec_entry_types": ["states[]", "transitions[]", "evaluators[]", "global_tasks[]"],
+    "calling_convention": "params={asset_path, spec}",
+    "creates_asset_if_missing": false,
+    "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+    "gotchas": [
+      "Transitions can be authored either per-state (states[i].transitions) or top-level (spec.transitions[]) -- both forms are equivalent and resolve from/to via id_mappings",
+      "Top-level transitions are useful when authoring transitions independently of state definitions",
+      "Each state requires id, name, type, parent (null for root)"
+    ]
+  },
+  "widgetbp": {
+    "tool": "widgetbp_apply_spec",
+    "spec_entry_types": ["widgets[]"],
+    "calling_convention": "params={asset_path, spec}",
+    "creates_asset_if_missing": false,
+    "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
+    "gotchas": [
+      "WidgetBP applicator opens existing Widget Blueprints only (no auto-create); duplicate a template and apply against the duplicate",
+      "Each widget requires id, type, parent (null for root), and optional children[] / properties / slot_properties"
+    ]
+  }
 }

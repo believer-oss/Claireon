@@ -16,6 +16,7 @@ public:
 	// P1: hot-path metadata enrichment
 	virtual FString GetFullDescription() const override;
 	virtual FString GetExampleUsage() const override;
+	virtual FString GetPatterns() const override;
 	virtual TSharedPtr<FJsonObject> GetParameterTooltips() const override;
 
 	// P3: synonym/abbreviation keywords for search ranking

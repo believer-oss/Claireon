@@ -3,15 +3,21 @@
 #if WITH_UNTESTED
 
 #include "Untest.h"
+#include "ClaireonBridge.h"
 #include "ClaireonOutputGate.h"
 #include "ClaireonXmlFormatter.h"
 #include "ClaireonSettings.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
 #include "SquidTasks/Task.h"
+#include "Tools/IClaireonTool.h"
 
 // ===========================================================================
 // Anthropic wire tests (ClaireonAnthropicWireTests)
@@ -232,6 +238,143 @@ UNTEST_UNIT(Claireon, AnthropicWire, TruncatedDiagnosticsBodyContainsPath)
 	const FString Head = Xml.Left(2048);
 	UNTEST_EXPECT_TRUE(Head.Contains(TEXT("<summary>")));
 	UNTEST_EXPECT_TRUE(Head.Contains(TEXT("<path>")));
+
+	co_return;
+}
+
+// ===========================================================================
+// Stage 001: FToolResult::Hint plumbed through the bridge wire envelope
+// ===========================================================================
+// FClaireonBridge::BuildResultEnvelope is the shared chokepoint exercised by the
+// success-path inside MCPCallTool. The error path mirrors the same emit
+// contract for the data + hint fields (see ClaireonBridge.cpp).
+//
+// These cases assert that:
+//   1. A null Hint produces an envelope with NO "hint" field (back-compat).
+//   2. A populated Hint on a success result emits "hint" verbatim.
+//   3. A populated Hint on an error result emits "hint" verbatim (mirrors).
+//
+// All assertions JSON-roundtrip the envelope so we test the on-wire shape,
+// not the in-memory object graph.
+// ===========================================================================
+
+namespace ClaireonAnthropicWireHintTestHelpers_Wave001
+{
+	static FString SerializeEnvelope(const TSharedPtr<FJsonObject>& Envelope)
+	{
+		FString Out;
+		TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+			TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Out);
+		FJsonSerializer::Serialize(Envelope.ToSharedRef(), Writer);
+		Writer->Close();
+		return Out;
+	}
+
+	static TSharedPtr<FJsonObject> ParseJson(const FString& Json)
+	{
+		TSharedPtr<FJsonObject> Parsed;
+		TSharedRef<TJsonReader<TCHAR>> Reader = TJsonReaderFactory<TCHAR>::Create(Json);
+		FJsonSerializer::Deserialize(Reader, Parsed);
+		return Parsed;
+	}
+}
+
+UNTEST_UNIT(Claireon, AnthropicWire, HintFieldAbsentWhenNull)
+{
+	using namespace ClaireonAnthropicWireHintTestHelpers_Wave001;
+
+	IClaireonTool::FToolResult Result;
+	Result.Summary = TEXT("ok");
+	// Result.Hint left default-constructed (null TSharedPtr).
+
+	TSharedPtr<FJsonObject> Envelope = FClaireonBridge::BuildResultEnvelope(Result);
+
+	UNTEST_EXPECT_TRUE(Envelope.IsValid());
+	UNTEST_EXPECT_FALSE(Envelope->HasField(TEXT("hint")));
+
+	// JSON-roundtrip the envelope so the absence is asserted on the wire,
+	// not just the in-memory graph.
+	const FString Json = SerializeEnvelope(Envelope);
+	TSharedPtr<FJsonObject> Parsed = ParseJson(Json);
+	UNTEST_EXPECT_TRUE(Parsed.IsValid());
+	UNTEST_EXPECT_FALSE(Parsed->HasField(TEXT("hint")));
+
+	co_return;
+}
+
+UNTEST_UNIT(Claireon, AnthropicWire, HintFieldPresentOnSuccessWhenPopulated)
+{
+	using namespace ClaireonAnthropicWireHintTestHelpers_Wave001;
+
+	IClaireonTool::FToolResult Result;
+	Result.Summary = TEXT("ok");
+	TSharedPtr<FJsonObject> HintObj = MakeShared<FJsonObject>();
+	HintObj->SetStringField(TEXT("tool"), TEXT("tool_search"));
+	HintObj->SetStringField(TEXT("reason"), TEXT("unknown tool 'bp_open'"));
+	Result.Hint = HintObj;
+
+	TSharedPtr<FJsonObject> Envelope = FClaireonBridge::BuildResultEnvelope(Result);
+
+	UNTEST_EXPECT_TRUE(Envelope.IsValid());
+	UNTEST_EXPECT_TRUE(Envelope->HasField(TEXT("hint")));
+
+	const FString Json = SerializeEnvelope(Envelope);
+	TSharedPtr<FJsonObject> Parsed = ParseJson(Json);
+	UNTEST_EXPECT_TRUE(Parsed.IsValid());
+	UNTEST_EXPECT_TRUE(Parsed->HasField(TEXT("hint")));
+
+	const TSharedPtr<FJsonObject>* HintOut = nullptr;
+	const bool bGotHint = Parsed->TryGetObjectField(TEXT("hint"), HintOut);
+	UNTEST_EXPECT_TRUE(bGotHint);
+	if (bGotHint && HintOut && HintOut->IsValid())
+	{
+		FString ToolField;
+		UNTEST_EXPECT_TRUE((*HintOut)->TryGetStringField(TEXT("tool"), ToolField));
+		UNTEST_EXPECT_TRUE(ToolField == TEXT("tool_search"));
+
+		FString ReasonField;
+		UNTEST_EXPECT_TRUE((*HintOut)->TryGetStringField(TEXT("reason"), ReasonField));
+		UNTEST_EXPECT_TRUE(ReasonField.Contains(TEXT("unknown tool 'bp_open'")));
+	}
+
+	co_return;
+}
+
+UNTEST_UNIT(Claireon, AnthropicWire, HintFieldPresentOnErrorWhenPopulated)
+{
+	using namespace ClaireonAnthropicWireHintTestHelpers_Wave001;
+
+	// Error path: bIsError=true and a populated Hint -- BuildResultEnvelope
+	// emits the same shape regardless of error state (the error-arm in
+	// MCPCallTool replays the same field set).
+	IClaireonTool::FToolResult Result;
+	Result.bIsError = true;
+	Result.ErrorMessage = TEXT("boom");
+	Result.Summary = TEXT("error");
+	TSharedPtr<FJsonObject> HintObj = MakeShared<FJsonObject>();
+	HintObj->SetStringField(TEXT("tool"), TEXT("tool_search"));
+	HintObj->SetStringField(TEXT("reason"), TEXT("signature mismatch on bp_compile"));
+	Result.Hint = HintObj;
+
+	TSharedPtr<FJsonObject> Envelope = FClaireonBridge::BuildResultEnvelope(Result);
+
+	UNTEST_EXPECT_TRUE(Envelope.IsValid());
+	UNTEST_EXPECT_TRUE(Envelope->HasField(TEXT("hint")));
+
+	const FString Json = SerializeEnvelope(Envelope);
+	TSharedPtr<FJsonObject> Parsed = ParseJson(Json);
+	UNTEST_EXPECT_TRUE(Parsed.IsValid());
+	UNTEST_EXPECT_TRUE(Parsed->HasField(TEXT("hint")));
+
+	const TSharedPtr<FJsonObject>* HintOut = nullptr;
+	const bool bGotHint = Parsed->TryGetObjectField(TEXT("hint"), HintOut);
+	UNTEST_EXPECT_TRUE(bGotHint);
+	if (bGotHint && HintOut && HintOut->IsValid())
+	{
+		FString ReasonField;
+		UNTEST_EXPECT_TRUE((*HintOut)->TryGetStringField(TEXT("reason"), ReasonField));
+		UNTEST_EXPECT_TRUE(ReasonField.Contains(TEXT("signature mismatch")));
+	}
 
 	co_return;
 }

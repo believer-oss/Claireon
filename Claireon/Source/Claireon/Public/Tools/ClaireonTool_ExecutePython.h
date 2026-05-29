@@ -31,6 +31,18 @@ public:
 	 */
 	static void RegisterToolCatalogBindings(void* UnrealModuleDict);
 
+	/**
+	 * Parse a captured python_execute log block for one of four signature-class
+	 * error patterns and produce a structured hint that tool_search can act on.
+	 *
+	 * Returns null when no pattern matches, when SyntaxError is detected
+	 * (intentionally not nudged), or when a TypeError signature references a
+	 * tool name that is not currently registered (avoids hinting on
+	 * non-claireon library functions).  Exposed publicly so the test harness
+	 * can exercise the parser without spinning up python_execute itself.
+	 */
+	static TSharedPtr<FJsonObject> BuildHintFromLogs(const FString& Logs);
+
 private:
 	/** Maximum allowed script size in bytes */
 	static constexpr int32 MaxScriptSizeBytes = 64 * 1024;
