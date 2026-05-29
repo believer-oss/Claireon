@@ -39,8 +39,22 @@ TSharedPtr<FJsonObject> ClaireonTool_LogTail::GetInputSchema() const
 	TSharedPtr<FJsonObject> FilterProp = MakeShared<FJsonObject>();
 	FilterProp->SetStringField(TEXT("type"), TEXT("string"));
 	FilterProp->SetStringField(TEXT("description"),
-		TEXT("Regex pattern to filter log lines (e.g. 'Error|Warning', 'LogAbilitySystem')"));
+		TEXT("Regex pattern to filter log lines (e.g. 'Error|Warning', 'LogAbilitySystem'). Matched against the rendered line."));
 	Properties->SetObjectField(TEXT("filter"), FilterProp);
+
+	// Explicit category filter on the parsed line's category field.
+	TSharedPtr<FJsonObject> CategoryProp = MakeShared<FJsonObject>();
+	CategoryProp->SetStringField(TEXT("type"), TEXT("string"));
+	CategoryProp->SetStringField(TEXT("description"),
+		TEXT("Filter by parsed category name (case-insensitive, e.g. 'LogFSSpawner'). Applied AFTER the rendered-line `filter` regex."));
+	Properties->SetObjectField(TEXT("category"), CategoryProp);
+
+	// Explicit severity filter on the parsed line's severity field.
+	TSharedPtr<FJsonObject> SeverityProp = MakeShared<FJsonObject>();
+	SeverityProp->SetStringField(TEXT("type"), TEXT("string"));
+	SeverityProp->SetStringField(TEXT("description"),
+		TEXT("Filter by parsed severity (case-insensitive). Accepts 'Fatal', 'Error', 'Warning', 'Display', 'Log', 'Verbose', 'VeryVerbose'."));
+	Properties->SetObjectField(TEXT("severity"), SeverityProp);
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
@@ -55,6 +69,15 @@ IClaireonTool::FToolResult ClaireonTool_LogTail::Execute(const TSharedPtr<FJsonO
 
 	FString FilterPattern;
 	Arguments->TryGetStringField(TEXT("filter"), FilterPattern);
+
+	// Explicit category / severity filters operate on the parsed line fields,
+	// not the rendered text, so they survive case-only or punctuation drift.
+	FString CategoryFilter;
+	Arguments->TryGetStringField(TEXT("category"), CategoryFilter);
+	CategoryFilter = CategoryFilter.TrimStartAndEnd();
+	FString SeverityFilter;
+	Arguments->TryGetStringField(TEXT("severity"), SeverityFilter);
+	SeverityFilter = SeverityFilter.TrimStartAndEnd();
 
 	// Locate the log file
 	FString CurrentLogPath = FPlatformOutputDevices::GetAbsoluteLogFilename();
@@ -111,9 +134,17 @@ IClaireonTool::FToolResult ClaireonTool_LogTail::Execute(const TSharedPtr<FJsonO
 	int32 ErrorCount = 0;
 	int32 WarningCount = 0;
 
-	// Simple log line parser: [timestamp][category][verbosity] message
-	// Example: [2026.01.01-12.00.00:000][  0]LogTemp: Error: Something failed
-	const FRegexPattern LogPattern(TEXT("^\\[([^\\]]+)\\]\\[.*?\\](\\w+):.*?(Error|Warning)?:(.*)$"));
+	// UE log lines come in two well-known shapes:
+	//   1. Standard:  [2026.01.01-12.00.00:000][  0]LogCategory: Verbosity: message
+	//   2. Standard (no explicit verbosity, == Log): [2026...][  0]LogCategory: message
+	// The original single regex captured Error/Warning only and dropped the third group
+	// for any Display/Log/Verbose line. The new pair of regexes always populates
+	// timestamp/category/severity (or sets a parse_warning); the fallback below covers
+	// any remaining unparseable lines.
+	const FRegexPattern LogPatternFull(
+		TEXT("^\\[([^\\]]+)\\]\\[[^\\]]*\\](\\w+):\\s*(Fatal|Error|Warning|Display|Log|Verbose|VeryVerbose):\\s*(.*)$"));
+	const FRegexPattern LogPatternBare(
+		TEXT("^\\[([^\\]]+)\\]\\[[^\\]]*\\](\\w+):\\s*(.*)$"));
 
 	for (int32 i = StartIdx; i < FilteredLines.Num(); ++i)
 	{
@@ -126,19 +157,35 @@ IClaireonTool::FToolResult ClaireonTool_LogTail::Execute(const TSharedPtr<FJsonO
 		FString Category;
 		FString Severity = TEXT("Log");
 		FString Message = RawLine;
+		bool bParseOk = false;
 
-		FRegexMatcher Matcher(LogPattern, RawLine);
-		if (Matcher.FindNext())
 		{
-			Timestamp = Matcher.GetCaptureGroup(1);
-			Category = Matcher.GetCaptureGroup(2);
-			const FString SeverityCapture = Matcher.GetCaptureGroup(3);
-			Message = Matcher.GetCaptureGroup(4).TrimStartAndEnd();
-			if (!SeverityCapture.IsEmpty()) { Severity = SeverityCapture; }
+			FRegexMatcher MatcherFull(LogPatternFull, RawLine);
+			if (MatcherFull.FindNext())
+			{
+				Timestamp = MatcherFull.GetCaptureGroup(1);
+				Category = MatcherFull.GetCaptureGroup(2);
+				Severity = MatcherFull.GetCaptureGroup(3);
+				Message = MatcherFull.GetCaptureGroup(4).TrimStartAndEnd();
+				bParseOk = true;
+			}
+			else
+			{
+				FRegexMatcher MatcherBare(LogPatternBare, RawLine);
+				if (MatcherBare.FindNext())
+				{
+					Timestamp = MatcherBare.GetCaptureGroup(1);
+					Category = MatcherBare.GetCaptureGroup(2);
+					Severity = TEXT("Log");
+					Message = MatcherBare.GetCaptureGroup(3).TrimStartAndEnd();
+					bParseOk = true;
+				}
+			}
 		}
-		else
+
+		if (!bParseOk)
 		{
-			// Fallback: check for Error/Warning keywords
+			// Fallback: check for Error/Warning keywords inside an unparseable line.
 			if (RawLine.Contains(TEXT("Error:")))
 			{
 				Severity = TEXT("Error");
@@ -147,10 +194,22 @@ IClaireonTool::FToolResult ClaireonTool_LogTail::Execute(const TSharedPtr<FJsonO
 			{
 				Severity = TEXT("Warning");
 			}
+			LineObj->SetStringField(TEXT("parse_warning"),
+				TEXT("Line did not match standard [timestamp][frame]Category: Severity: shape; fields populated best-effort."));
 		}
 
-		if (Severity == TEXT("Error")) { ErrorCount++; }
-		else if (Severity == TEXT("Warning")) { WarningCount++; }
+		// Post-parse filters on category + severity (case-insensitive).
+		if (!CategoryFilter.IsEmpty() && !Category.Equals(CategoryFilter, ESearchCase::IgnoreCase))
+		{
+			continue;
+		}
+		if (!SeverityFilter.IsEmpty() && !Severity.Equals(SeverityFilter, ESearchCase::IgnoreCase))
+		{
+			continue;
+		}
+
+		if (Severity.Equals(TEXT("Error"), ESearchCase::IgnoreCase)) { ErrorCount++; }
+		else if (Severity.Equals(TEXT("Warning"), ESearchCase::IgnoreCase)) { WarningCount++; }
 
 		LineObj->SetStringField(TEXT("timestamp"), Timestamp);
 		LineObj->SetStringField(TEXT("category"), Category);
@@ -162,6 +221,14 @@ IClaireonTool::FToolResult ClaireonTool_LogTail::Execute(const TSharedPtr<FJsonO
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetArrayField(TEXT("lines"), LinesArray);
 	Data->SetNumberField(TEXT("total_lines"), LinesArray.Num());
+	if (!CategoryFilter.IsEmpty())
+	{
+		Data->SetStringField(TEXT("category_filter"), CategoryFilter);
+	}
+	if (!SeverityFilter.IsEmpty())
+	{
+		Data->SetStringField(TEXT("severity_filter"), SeverityFilter);
+	}
 
 	const FString Summary = FString::Printf(TEXT("Last %d log entries (%d errors, %d warnings)"),
 		LinesArray.Num(), ErrorCount, WarningCount);

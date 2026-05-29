@@ -1,9 +1,10 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
 #include "Tools/ClaireonBlueprintGraphTool_ApplySpec.h"
 #include "Tools/FToolSchemaBuilder.h"
+#include "Editor.h"
 #include "ClaireonBlueprintHelpers.h"
 #include "Dom/JsonObject.h"
 #include "Tools/ClaireonSpecApplicator_Blueprint.h"
@@ -139,12 +140,30 @@ FToolResult ClaireonBlueprintGraphTool_ApplySpec::Execute(const TSharedPtr<FJson
 		return MakeErrorResult(TEXT("apply_spec requires 'spec' parameter (JSON object)"));
 	}
 
+	// Optional: dry_run validates without applying.
+	bool bDryRun = false;
+	Params->TryGetBoolField(TEXT("dry_run"), bDryRun);
+
+	// PIE block. Mutating apply is rejected while PIE is running; dry_run
+	// is honored unconditionally because the dry-run path below never invokes the
+	// applicator and so cannot mutate state.
+	if (!bDryRun && IsValid(GEditor) && GEditor->IsPlaySessionInProgress())
+	{
+		return MakeErrorResult(TEXT("apply_spec cannot be applied while PIE is running. Stop PIE first, or pass dry_run=true to validate the spec without mutating Blueprint state."));
+	}
+
+	// Forward dry_run into the base-class applicator so it short-circuits
+	// BEFORE OpenOrCreateAsset (which would otherwise create the asset on
+	// disk for dry_run=true on a missing path). The base class also skips
+	// the mutating passes + SaveAsset + AssetRegistry + MarkPackageDirty
+	// path; nothing on disk changes under dry_run.
+
 	// Optional: reuse an existing session
 	FString SessionId;
 	Params->TryGetStringField(TEXT("session_id"), SessionId);
 
 	FClaireonSpecApplicator_Blueprint Applicator;
-	return Applicator.ApplySpec(*SpecPtr, AssetPath, SessionId);
+	return Applicator.ApplySpec(*SpecPtr, AssetPath, SessionId, bDryRun);
 }
 
 #undef LOCTEXT_NAMESPACE

@@ -13,7 +13,7 @@
 class UObject;
 
 /**
- * Two-pass applicator for audio `apply_spec` manifests (Stage 006, D4).
+ * Two-pass applicator for audio `apply_spec` manifests.
  *
  * Pass 1 materializes every entry (creates missing `define` entries, loads link-only and existing
  * `define` entries). Pass 2 walks `define` bodies, writes fields through ClaireonPropertyUtils, and

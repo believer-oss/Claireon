@@ -28,9 +28,9 @@ public:
     static const UClaireonSettings* Get();
 
     // --- Connection ---
-    // (Stage 012) Server > Server Port deleted. The editor's MCP listener
-    // binds the per-worktree SHA port computed by Claireon::DeriveDefaultMcpPort
-    // (Stage 010); there is no editor-facing port setting any more.
+    // Server > Server Port is no longer exposed: the editor's MCP listener
+    // binds the per-worktree SHA port computed by
+    // Claireon::DeriveDefaultMcpPort; there is no editor-facing port setting.
 
     /** Anthropic API key. Get one at https://console.anthropic.com/settings/keys */
     UPROPERTY(Config, EditAnywhere, Category="Connection",
@@ -262,18 +262,17 @@ public:
      *  becomes the sole ingress for MCP traffic.
      *  Command-line override: `-EnableMCPProxy` forces this to true regardless of the setting.
      *
-     *  Note (Stage 010): even with bEnableProxy=false, the editor auto-promotes
-     *  into proxy-attached mode when the SHA port is already held by a Claireon
-     *  proxy on 43017. This keeps the Claude Code button transparent across
-     *  modes; this setting now only controls whether StartServer proactively
+     *  Note: even with bEnableProxy=false, the editor auto-promotes into
+     *  proxy-attached mode when the SHA port is already held by a Claireon
+     *  proxy on 43017. This keeps the toolbar button transparent across
+     *  modes; this setting only controls whether StartServer proactively
      *  spawns the proxy. */
     UPROPERTY(Config, EditAnywhere, Category="MCP Proxy",
         meta=(DisplayName="Enable MCP Proxy"))
     bool bEnableProxy = false;
 
-    // (Stage 012) ProxyIdleTimeoutSeconds deleted. Stage 009 (D2) removed the
-    // proxy's idle-exit; the singleton runs until SIGINT/SIGTERM, so the
-    // setting has no consumer.
+    // ProxyIdleTimeoutSeconds is no longer exposed: the singleton proxy runs
+    // until SIGINT/SIGTERM, so the setting has no consumer.
 
     /** Extra arguments appended to the proxy spawn command line (whitespace-separated). */
     UPROPERTY(Config, EditAnywhere, Category="MCP Proxy",

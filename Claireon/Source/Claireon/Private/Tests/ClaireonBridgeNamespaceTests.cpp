@@ -32,9 +32,8 @@
 
 namespace ClaireonBridgeNamespaceTestsNS
 {
-	// File-local discriminator (per feedback_anon_namespace_unity_collision.md):
-	// keep helpers under a named namespace to dodge unity-batched anon-NS
-	// collisions with other Tests TUs.
+	// File-local discriminator: keep helpers under a named namespace to dodge
+	// unity-batched anon-NS collisions with other Tests TUs.
 
 	/** Stub IClaireonTool with configurable namespace + name. Used to seed the
 	 *  registry from tests without depending on real tool implementations. */

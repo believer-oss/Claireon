@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_BlueprintTranslateStatus.h"
+#include "Tools/ClaireonBlueprintGraphEditToolBase.h" // kBPCategory
 
 #include "ClaireonBPTranslateSession.h"
 
-FString ClaireonTool_BlueprintTranslateStatus::GetCategory() const { return TEXT("bp"); }
+FString ClaireonTool_BlueprintTranslateStatus::GetCategory() const { return kBPCategory; }
 FString ClaireonTool_BlueprintTranslateStatus::GetOperation() const { return TEXT("translate_status"); }
 
 FString ClaireonTool_BlueprintTranslateStatus::GetDescription() const

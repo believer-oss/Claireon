@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -164,6 +164,9 @@ FToolResult ClaireonBlueprintGraphTool_GetComponentDetails::Execute(const TShare
 	TSharedPtr<FJsonObject> Details = MakeShared<FJsonObject>();
 	Details->SetStringField(TEXT("name"), Node->GetVariableName().ToString());
 	Details->SetStringField(TEXT("component_name"), Node->GetVariableName().ToString());
+	// expose the SCS_Node VariableGuid so callers can bind a rename-stable
+	// ComponentBoundEvent (resolves by guid, not by name).
+	Details->SetStringField(TEXT("component_guid"), Node->VariableGuid.ToString());
 	Details->SetStringField(TEXT("class"), ComponentTemplate->GetClass()->GetName());
 
 	// is_root: check against scene root

@@ -272,6 +272,37 @@ bool ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(
 		}
 	}
 
+	// Step 2b (B31): explicit native-subobject prefix. Walk the CDO's default
+	// subobjects (which includes inherited native components like
+	// StateTreeAIComponent on a custom AIController). Match by FName so that
+	// `MyComponent.SomeProperty` resolves to the inherited template even when
+	// the BP does not redeclare it in SCS.
+	{
+		TArray<UObject*> DefaultSubobjects;
+		CDO->GetDefaultSubobjects(DefaultSubobjects);
+		for (UObject* Subobject : DefaultSubobjects)
+		{
+			if (!Subobject)
+			{
+				continue;
+			}
+			if (Subobject->GetFName().ToString() == BareFirst)
+			{
+				if (Remainder.IsEmpty())
+				{
+					OutError = FString::Printf(TEXT("'%s' is a subobject name, not a property. Use 'SubobjectName.PropertyName' syntax."), *FirstSegment);
+					return false;
+				}
+				OutResolved.TargetObject = Subobject;
+				OutResolved.ResolvedOn = Subobject->GetName();
+				OutResolved.RemainingPath = Remainder;
+				OutResolved.QualifiedPath = PropertyPath;
+				OutResolved.Note = TEXT("Resolved via explicit native subobject name prefix");
+				return true;
+			}
+		}
+	}
+
 	// Step 3: Check CDO class
 	if (CDO->GetClass()->FindPropertyByName(FName(*BareFirst)))
 	{
@@ -304,6 +335,32 @@ bool ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(
 		}
 	}
 
+	// Step 4b (B31): walk CDO's native subobject templates as a fallback for
+	// callers who name the property without the "Subobject." prefix. The
+	// inherited native template owns the property on its own class; the
+	// resolver redirects the write to that template.
+	{
+		TArray<UObject*> DefaultSubobjects;
+		CDO->GetDefaultSubobjects(DefaultSubobjects);
+		for (UObject* Subobject : DefaultSubobjects)
+		{
+			if (!Subobject)
+			{
+				continue;
+			}
+			if (Subobject->GetClass()->FindPropertyByName(FName(*BareFirst)))
+			{
+				const FString SubobjectName = Subobject->GetName();
+				OutResolved.TargetObject = Subobject;
+				OutResolved.ResolvedOn = SubobjectName;
+				OutResolved.RemainingPath = PropertyPath;
+				OutResolved.QualifiedPath = SubobjectName + TEXT(".") + PropertyPath;
+				OutResolved.Note = FString::Printf(TEXT("Property not found on CDO; found on inherited native subobject '%s'"), *SubobjectName);
+				return true;
+			}
+		}
+	}
+
 	// Step 5: Not found -- build descriptive error
 	OutError = FString::Printf(TEXT("Property '%s' not found. Searched: %s (CDO)"), *FirstSegment, *CDO->GetClass()->GetName());
 	if (Blueprint->SimpleConstructionScript)
@@ -315,6 +372,19 @@ bool ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(
 				continue;
 			}
 			OutError += FString::Printf(TEXT(", %s (%s)"), *Node->ComponentTemplate->GetClass()->GetName(), *Node->GetVariableName().ToString());
+		}
+	}
+	{
+		TArray<UObject*> DefaultSubobjects;
+		CDO->GetDefaultSubobjects(DefaultSubobjects);
+		for (UObject* Subobject : DefaultSubobjects)
+		{
+			if (!Subobject)
+			{
+				continue;
+			}
+			OutError += FString::Printf(TEXT(", %s (%s) [inherited]"),
+				*Subobject->GetClass()->GetName(), *Subobject->GetName());
 		}
 	}
 	return false;

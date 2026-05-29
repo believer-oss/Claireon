@@ -9,10 +9,11 @@
 // ===========================================================================
 // Matcher tests (ClaireonToolCatalogMatcherTests)
 // ===========================================================================
-// Uses a fixed 20-tool fixture built in-test as a TArray<FClaireonToolCatalogEntry>.
-// The fixture seeds at least one entry per shape (asset_search, blueprint_*,
-// data_table_*, python_execute, pie_start) plus one ability_system_* entry so
-// the "gas" abbreviation target exists.
+// Cases 3a-3e per CLAIREON_DISK_RESULTS/test-plan.md section 3.  Uses a fixed
+// 20-tool fixture built in-test as a TArray<FClaireonToolCatalogEntry>.  The
+// fixture seeds at least one entry per shape called out in the plan
+// (asset_search, blueprint_*, data_table_*, python_execute, pie_start) plus
+// one ability_system_* entry so the "gas" abbreviation target exists.
 // ===========================================================================
 
 namespace ClaireonToolCatalogMatcherTestsHelpers
@@ -81,7 +82,7 @@ namespace ClaireonToolCatalogMatcherTestsHelpers
 }
 
 // ===========================================================================
-// Build -> FindNearest returns a non-empty result
+// Case 3a: Build -> FindNearest returns a non-empty result
 // ===========================================================================
 
 UNTEST_UNIT(Claireon, ToolCatalogMatcher, BuildAndFindNearestNonEmpty)
@@ -98,7 +99,7 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, BuildAndFindNearestNonEmpty)
 }
 
 // ===========================================================================
-// Exact-name query returns the tool at rank 0 with the highest score
+// Case 3b: exact-name query returns the tool at rank 0 with the highest score
 // ===========================================================================
 
 UNTEST_UNIT(Claireon, ToolCatalogMatcher, ExactNameMatchRanksFirst)
@@ -122,7 +123,7 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, ExactNameMatchRanksFirst)
 }
 
 // ===========================================================================
-// Abbreviation queries surface tools of the expected category
+// Case 3c: abbreviation queries surface tools of the expected category
 // ===========================================================================
 
 UNTEST_UNIT(Claireon, ToolCatalogMatcher, AbbreviationQueriesSurfaceCategory)
@@ -183,7 +184,7 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, AbbreviationQueriesSurfaceCategory)
 }
 
 // ===========================================================================
-// Clear() empties the catalog
+// Case 3d: Clear() empties the catalog
 // ===========================================================================
 
 UNTEST_UNIT(Claireon, ToolCatalogMatcher, ClearEmptiesCatalog)
@@ -201,7 +202,7 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, ClearEmptiesCatalog)
 }
 
 // ===========================================================================
-// Rebuild determinism -- identical rankings across clear-and-rebuild
+// Case 3e: rebuild determinism -- identical rankings across clear-and-rebuild
 // ===========================================================================
 
 UNTEST_UNIT(Claireon, ToolCatalogMatcher, RebuildIsDeterministic)
@@ -229,7 +230,8 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, RebuildIsDeterministic)
 // ===========================================================================
 // Union ranking: query "blueprint chooser proxy" must surface tools that
 // match only one of the three tokens (not just tools that match all three).
-// Locks in the per-word independent scoring semantics.
+// Locks in the per-word independent scoring described in PLAN.md section
+// "tool_search union-ranking semantics" / F08 item 8.
 // ===========================================================================
 
 UNTEST_UNIT(Claireon, ToolCatalogMatcher, UnionRankedReturnsDisjointTokenMatches)
@@ -273,7 +275,7 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, UnionRankedReturnsDisjointTokenMatches
 }
 
 // ===========================================================================
-// Query-side >2-char cutoff -- short tokens drop unless every token is short.
+// query-side >2-char cutoff -- short tokens drop unless every token is short.
 // ===========================================================================
 
 UNTEST_UNIT(Claireon, ToolCatalogMatcher, ThreeCharMinTermCutoff)
@@ -296,7 +298,7 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, ThreeCharMinTermCutoff)
 	// because that is the stable invariant (long-token scoring always fires).
 	// Note: ai_decisions_inspect's appearance is the correct post-feature behaviour --
 	// the old assertion EXPECT_FALSE(bSawAiDecisions) was written before the
-	// short-token whole-word match feature landed in stage 020 (#0000).
+	// short-token whole-word match feature was added to the matcher.
 	{
 		TArray<FClaireonToolCatalogMatch> Top = FClaireonToolCatalogMatcher::FindNearest(TEXT("ai create"), 5);
 		bool bSawAssetCreate = false;
@@ -418,12 +420,12 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, AbbreviationExpansionInCpp)
 }
 
 // ===========================================================================
-// #0000: animation-blueprint discoverability after the animgraph -> animbp
-// rename. Mirrors the goal-shape from #0000: a colloquial query
-// ("animation blueprint") must surface the renamed wire-name (animbp_inspect)
-// in the top-3 matcher results, exercising both the abbreviation reverse-
-// expansion path (animbp -> "animation blueprint animgraph anim_graph anim
-// animbp") and the search-keyword path.
+// Animation-blueprint discoverability after the animgraph -> animbp
+// rename: a colloquial query ("animation blueprint") must surface the
+// renamed wire-name (animbp_inspect) in the top-3 matcher results,
+// exercising both the abbreviation reverse-expansion path (animbp ->
+// "animation blueprint animgraph anim_graph anim animbp") and the
+// search-keyword path.
 // ===========================================================================
 
 UNTEST_UNIT(Claireon, ToolCatalogMatcher, AnimationBlueprintQueryRanksAnimbpInspect)
@@ -452,8 +454,7 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, AnimationBlueprintQueryRanksAnimbpInsp
 	// Find the rank of animbp_inspect using a plain for-loop. Do NOT
 	// use a lambda (Algo::FindByPredicate, std::find_if): UNTEST_ASSERT_*
 	// and UNTEST_EXPECT_* expand to co_return, and lambdas have no
-	// coroutine promise_type -- the linux-build-server-v2 non-unity
-	// build rejects this. See feedback_untest_macros_lambda_coroutine.md.
+	// coroutine promise_type -- non-unity Linux clang strict rejects this.
 	int32 FoundIndex = INDEX_NONE;
 	for (int32 i = 0; i < Top.Num(); ++i)
 	{

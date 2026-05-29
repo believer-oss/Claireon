@@ -4,37 +4,43 @@
 #include "Tools/ClaireonMaterialInstanceTool_ClearParameterOverride.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "Tools/ClaireonMaterialHelpers.h"
+#include "ClaireonLog.h"
 #include "Materials/MaterialInstanceConstant.h"
 
 using FToolResult = IClaireonTool::FToolResult;
 
 namespace
 {
-	static bool ParseMICParameterTypeString(const FString& Type, EMaterialParameterType& OutType)
+	static bool ParseMICParameterTypeString(const FString& Type, EMaterialParameterType& OutType, FString& OutPerTypeToolName)
 	{
 		if (Type.Equals(TEXT("scalar"), ESearchCase::IgnoreCase))
 		{
 			OutType = EMaterialParameterType::Scalar;
+			OutPerTypeToolName = TEXT("instance_clear_scalar_override");
 			return true;
 		}
 		if (Type.Equals(TEXT("vector"), ESearchCase::IgnoreCase))
 		{
 			OutType = EMaterialParameterType::Vector;
+			OutPerTypeToolName = TEXT("instance_clear_vector_override");
 			return true;
 		}
 		if (Type.Equals(TEXT("texture"), ESearchCase::IgnoreCase))
 		{
 			OutType = EMaterialParameterType::Texture;
+			OutPerTypeToolName = TEXT("instance_clear_texture_override");
 			return true;
 		}
 		if (Type.Equals(TEXT("static_switch"), ESearchCase::IgnoreCase))
 		{
 			OutType = EMaterialParameterType::StaticSwitch;
+			OutPerTypeToolName = TEXT("instance_clear_static_switch_override");
 			return true;
 		}
 		if (Type.Equals(TEXT("static_component_mask"), ESearchCase::IgnoreCase))
 		{
 			OutType = EMaterialParameterType::StaticComponentMask;
+			OutPerTypeToolName = TEXT("instance_clear_static_component_mask_override");
 			return true;
 		}
 		return false;
@@ -43,11 +49,12 @@ namespace
 
 FString ClaireonMaterialInstanceTool_ClearParameterOverride::GetOperation() const { return TEXT("instance_clear_parameter_override"); }
 
-// TODO(#0000-followup): This tool dispatches on an action enum and could be
-// decomposed into per-action sub-tools.
 FString ClaireonMaterialInstanceTool_ClearParameterOverride::GetDescription() const
 {
-    return TEXT("Clear a parameter override on a UMaterialInstanceConstant; the parameter will fall through to the parent material. Session-mode tool: open via material_instance_open first.");
+	return TEXT("DEPRECATED: dispatches on parameter_type. Use the per-type tools instead: "
+	            "instance_clear_scalar_override, instance_clear_vector_override, "
+	            "instance_clear_texture_override, instance_clear_static_switch_override, "
+	            "instance_clear_static_component_mask_override. Session-mode tool: open via material_instance_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialInstanceTool_ClearParameterOverride::GetInputSchema() const
@@ -83,10 +90,16 @@ FToolResult ClaireonMaterialInstanceTool_ClearParameterOverride::Execute(const T
 	}
 
 	EMaterialParameterType Type;
-	if (!ParseMICParameterTypeString(ParameterType, Type))
+	FString PerTypeToolName;
+	if (!ParseMICParameterTypeString(ParameterType, Type, PerTypeToolName))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Unknown parameter_type '%s' (expected scalar|vector|texture|static_switch|static_component_mask)"), *ParameterType));
 	}
+
+	UE_LOG(LogClaireon, Warning,
+		TEXT("[instance_clear_parameter_override] DEPRECATED: forward this call to '%s' (per-type tool). "
+		     "The dispatcher will be removed in a future release."),
+		*PerTypeToolName);
 
 	UMaterialInstanceConstant* Instance = Data->Instance.Get();
 	FString Err;

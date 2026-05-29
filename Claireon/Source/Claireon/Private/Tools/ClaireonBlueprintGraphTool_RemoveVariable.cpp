@@ -161,7 +161,7 @@ FToolResult ClaireonBlueprintGraphTool_RemoveVariable::Execute(const TSharedPtr<
 
 	TArray<FString> AccumulatedWarnings;
 
-	// Step 2-3: referrer scan (skipped when force=true per [D2]).
+	// Step 2-3: referrer scan (skipped when force=true).
 	struct FReferrer
 	{
 		FString Graph;
@@ -262,7 +262,7 @@ FToolResult ClaireonBlueprintGraphTool_RemoveVariable::Execute(const TSharedPtr<
 		}
 	}
 
-	// Step 5-7: remove, mark structurally modified, compile (per [D1]).
+	// Step 5-7: remove, mark structurally modified, compile.
 	{
 		FScopedTransaction Transaction(LOCTEXT("RemoveVariable", "Remove Blueprint Variable"));
 		Blueprint->Modify();

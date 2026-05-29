@@ -49,6 +49,19 @@ TSharedPtr<FJsonObject> ClaireonTool_AssetReferences::GetInputSchema() const
 	DepthProp->SetStringField(TEXT("description"), TEXT("Maximum recursion depth when recursive=true (default: 5)"));
 	Properties->SetObjectField(TEXT("depth_limit"), DepthProp);
 
+	// class_filter - optional
+	// Filters both `referencers` and `dependencies` to entries whose asset class short-name
+	// (case-insensitive) is contained in this list (e.g. ["Blueprint", "DataTable"]).
+	TSharedPtr<FJsonObject> ClassFilterProp = MakeShared<FJsonObject>();
+	ClassFilterProp->SetStringField(TEXT("type"), TEXT("array"));
+	{
+		TSharedPtr<FJsonObject> ItemSchema = MakeShared<FJsonObject>();
+		ItemSchema->SetStringField(TEXT("type"), TEXT("string"));
+		ClassFilterProp->SetObjectField(TEXT("items"), ItemSchema);
+	}
+	ClassFilterProp->SetStringField(TEXT("description"), TEXT("Optional list of class short-names (case-insensitive). Only assets whose class matches any entry are emitted. Filters both referencers and dependencies."));
+	Properties->SetObjectField(TEXT("class_filter"), ClassFilterProp);
+
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	TArray<TSharedPtr<FJsonValue>> Required;
@@ -74,6 +87,21 @@ IClaireonTool::FToolResult ClaireonTool_AssetReferences::Execute(const TSharedPt
 
 	int32 DepthLimit = 5;
 	Arguments->TryGetNumberField(TEXT("depth_limit"), DepthLimit);
+
+	// class_filter -- case-insensitive set of asset class short-names. Empty = no filter.
+	TSet<FString> ClassFilter;
+	const TArray<TSharedPtr<FJsonValue>>* ClassFilterArr = nullptr;
+	if (Arguments->TryGetArrayField(TEXT("class_filter"), ClassFilterArr) && ClassFilterArr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *ClassFilterArr)
+		{
+			FString S;
+			if (V.IsValid() && V->TryGetString(S) && !S.IsEmpty())
+			{
+				ClassFilter.Add(S.ToLower());
+			}
+		}
+	}
 
 	// Resolve asset path
 	auto ResolveResult = ClaireonPathResolver::Resolve(AssetPath);
@@ -124,6 +152,21 @@ IClaireonTool::FToolResult ClaireonTool_AssetReferences::Execute(const TSharedPt
 	// Build referencers array
 	int32 RedirectorRefsSkipped = 0;
 	int32 RedirectorDepsSkipped = 0;
+	int32 ClassFiltered = 0;
+	auto ClassPassesFilter = [&ClassFilter](const TArray<FAssetData>& Assets) -> bool
+	{
+		if (ClassFilter.IsEmpty())
+		{
+			return true;
+		}
+		if (Assets.Num() == 0)
+		{
+			return false;
+		}
+		const FString Cls = Assets[0].AssetClassPath.GetAssetName().ToString().ToLower();
+		return ClassFilter.Contains(Cls);
+	};
+
 	TArray<TSharedPtr<FJsonValue>> ReferencersArray;
 	for (const FName& RefName : ReferencerNames)
 	{
@@ -134,6 +177,12 @@ IClaireonTool::FToolResult ClaireonTool_AssetReferences::Execute(const TSharedPt
 		if (Assets.Num() > 0 && Assets[0].IsRedirector())
 		{
 			++RedirectorRefsSkipped;
+			continue;
+		}
+
+		if (!ClassPassesFilter(Assets))
+		{
+			++ClassFiltered;
 			continue;
 		}
 
@@ -161,6 +210,12 @@ IClaireonTool::FToolResult ClaireonTool_AssetReferences::Execute(const TSharedPt
 		if (Assets.Num() > 0 && Assets[0].IsRedirector())
 		{
 			++RedirectorDepsSkipped;
+			continue;
+		}
+
+		if (!ClassPassesFilter(Assets))
+		{
+			++ClassFiltered;
 			continue;
 		}
 

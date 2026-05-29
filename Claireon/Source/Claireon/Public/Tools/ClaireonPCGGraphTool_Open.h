@@ -13,6 +13,6 @@ public:
 	TSharedPtr<FJsonObject> GetInputSchema() const override;
 	FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;
 
-	// P3: synonym/abbreviation keywords for search ranking
+	// synonym/abbreviation keywords for search ranking
 	virtual TArray<FString> GetSearchKeywords() const override;
 };

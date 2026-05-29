@@ -39,7 +39,7 @@ public:
 	bool Start(uint32 Port);
 
 	/**
-	 * Stage 010 (D3 + direct-connect): single-attempt bind on the given port.
+	 * Single-attempt bind on the given port.
 	 *
 	 * @param Port The port to bind. Typically the per-worktree SHA port
 	 *             returned by Claireon::DeriveDefaultMcpPort.
@@ -48,16 +48,16 @@ public:
 	 *         decides whether to abort, retry, or auto-promote.
 	 *
 	 * Note on SO_EXCLUSIVEADDRUSE: UE's IHttpRouter owns the underlying
-	 * listener, so the editor cannot directly set socket options. Stage 009's
-	 * proxy-side bind already enforces exclusivity for the SHA port (the
-	 * proxy holds it whenever it runs). For the editor's direct-connect
+	 * listener, so the editor cannot directly set socket options. The
+	 * proxy-side bind enforces exclusivity for the SHA port (the proxy holds
+	 * it whenever it runs). For the editor's direct-connect
 	 * branch, the ordering of "TryStart -> EADDRINUSE -> probe 43017 ->
 	 * auto-promote" is what guarantees we don't double-bind by accident.
 	 */
 	bool TryStart(uint16 Port);
 
 	/**
-	 * Stage 010 (auto-promote): bind a local listener on a kernel-picked
+	 * Auto-promote: bind a local listener on a kernel-picked
 	 * ephemeral port (port 0). Returns the port the listener actually bound
 	 * to, or 0 on failure. Used by the auto-promote path in StartServer
 	 * when the proxy already owns the SHA port.

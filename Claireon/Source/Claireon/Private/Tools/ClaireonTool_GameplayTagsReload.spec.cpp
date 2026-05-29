@@ -1,8 +1,8 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Specs for claireon.gameplay_tags_reload (#0000).
-// Strategy 1 cleanup: tests use a transient tag source under
+// Specs for claireon.gameplay_tags_reload.
+// Tests use a transient tag source under
 // FPaths::ProjectIntermediateDir() / "ClaireonSpecs" so Config/DefaultGameplayTags.ini
 // is never touched.
 

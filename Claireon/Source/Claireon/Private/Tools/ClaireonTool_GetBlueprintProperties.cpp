@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_GetBlueprintProperties.h"
+#include "Tools/ClaireonBlueprintGraphEditToolBase.h" // kBPCategory
 #include "ClaireonBlueprintHelpers.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonLog.h"
+#include "Tools/ClaireonPropertyUtils.h"
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
 #include "Engine/MemberReference.h"
@@ -15,10 +17,11 @@
 #include "Animation/AnimBlueprint.h"
 #include "WidgetBlueprint.h"
 #include "UObject/CoreNetTypes.h"
+#include "UObject/UnrealType.h"
 #include "GameFramework/Actor.h"
 #include "Components/ActorComponent.h"
 
-FString ClaireonTool_GetBlueprintProperties::GetCategory() const { return TEXT("bp"); }
+FString ClaireonTool_GetBlueprintProperties::GetCategory() const { return kBPCategory; }
 FString ClaireonTool_GetBlueprintProperties::GetOperation() const { return TEXT("get_properties"); }
 
 TArray<FString> ClaireonTool_GetBlueprintProperties::GetSearchKeywords() const
@@ -34,7 +37,8 @@ FString ClaireonTool_GetBlueprintProperties::GetDescription() const
 		"By default, the components, variables, and functions arrays only include items declared on this Blueprint (SCS-only for components). "
 		"Pass include_inherited=true to also include items inherited from ancestor Blueprints and (for actor-derived BPs) from native parent CDOs -- this matches what unreal.Actor.get_components_by_class(unreal.ActorComponent) returns when called on the editor CDO. "
 		"Note that native subobjects guarded by WITH_EDITORONLY_DATA only appear in editor builds. "
-		"Every entry in components, variables, and functions always carries is_inherited (bool) and source_class (short class name) fields regardless of include_inherited, providing a stable schema for callers. Immediate-mode tool: no session required.");
+		"Every entry in components, variables, and functions always carries is_inherited (bool) and source_class (short class name) fields regardless of include_inherited, providing a stable schema for callers. "
+		"Pass include_cdo=true to also serialize the Blueprint CDO's reflected field values into a flat map under data.cdo_fields (read-only; mirrors uobject_inspect's value serialization). Immediate-mode tool: no session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_GetBlueprintProperties::GetInputSchema() const
@@ -55,6 +59,13 @@ TSharedPtr<FJsonObject> ClaireonTool_GetBlueprintProperties::GetInputSchema() co
 	InheritedProp->SetStringField(TEXT("type"), TEXT("boolean"));
 	InheritedProp->SetStringField(TEXT("description"), TEXT("Include inherited properties from parent classes. Default: false."));
 	Properties->SetObjectField(TEXT("include_inherited"), InheritedProp);
+
+	// include_cdo - optional (B32)
+	TSharedPtr<FJsonObject> CdoProp = MakeShared<FJsonObject>();
+	CdoProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	CdoProp->SetStringField(TEXT("description"),
+		TEXT("When true, also serialize the Blueprint CDO's reflected field values into a flat map under data.cdo_fields. Default: false."));
+	Properties->SetObjectField(TEXT("include_cdo"), CdoProp);
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
@@ -85,6 +96,12 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 	if (Arguments->HasField(TEXT("include_inherited")))
 	{
 		bIncludeInherited = Arguments->GetBoolField(TEXT("include_inherited"));
+	}
+
+	bool bIncludeCdo = false;
+	if (Arguments->HasField(TEXT("include_cdo")))
+	{
+		bIncludeCdo = Arguments->GetBoolField(TEXT("include_cdo"));
 	}
 
 	// Load Blueprint
@@ -590,6 +607,40 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 	MetadataObj->SetNumberField(TEXT("num_replicated_properties"), NumReplicatedProps);
 
 	Data->SetObjectField(TEXT("metadata"), MetadataObj);
+
+	// when requested, serialize the CDO's reflected field values into a
+	// flat map. Uses the same ClaireonPropertyUtils::PropertyToJsonValue helper
+	// that uobject_inspect uses, so the two tools cannot drift. Walks the full
+	// reflected chain (super included) so callers can read inherited fields
+	// like bAllowGlobalHost / ActivationMode / StopBehavior in a single call.
+	if (bIncludeCdo && Blueprint->GeneratedClass)
+	{
+		UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject(/*bCreateIfNeeded=*/false);
+		if (CDO)
+		{
+			TSharedPtr<FJsonObject> CdoFields = MakeShared<FJsonObject>();
+			constexpr int32 CdoSerializationDepth = 2;
+			for (TFieldIterator<FProperty> PropIt(CDO->GetClass()); PropIt; ++PropIt)
+			{
+				FProperty* Property = *PropIt;
+				if (!Property)
+				{
+					continue;
+				}
+				// Mirror uobject_inspect: do not filter by Transient/Deprecated;
+				// the goal is to surface every reflected field so callers can
+				// read CDO-state-only fields like bAllowGlobalHost.
+				const void* ValuePtr = Property->ContainerPtrToValuePtr<void>(CDO);
+				TSharedPtr<FJsonValue> SerializedValue =
+					ClaireonPropertyUtils::PropertyToJsonValue(Property, ValuePtr, CDO, CdoSerializationDepth);
+				if (SerializedValue.IsValid())
+				{
+					CdoFields->SetField(Property->GetName(), SerializedValue);
+				}
+			}
+			Data->SetObjectField(TEXT("cdo_fields"), CdoFields);
+		}
+	}
 
 	// Extract asset name for summary. When include_inherited=true and there is
 	// at least one inherited entry of a given kind, append " (N inherited)" to

@@ -2,10 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 // Lint tests for tool descriptions across ALL registered Claireon tools.
-// Post-#0000 the scope is widened from the original five P5-scoped prefixes
-// (bp_*, anim_*, blendspace_*, statetree_*, widgetbp_*) to the
-// full tool registry so future tool additions that drift from the bar are
-// caught at test time. Validates the P5 audit acceptance criteria:
+// The scope is the full tool registry so future tool additions that drift
+// from the bar are caught at test time. Validates the description acceptance
+// criteria:
 //
 //   1. Length: 80 <= len(description) <= 400 characters.
 //   2. Verb-opener: the first word is a recognized authoring verb (Add,
@@ -52,10 +51,10 @@ namespace ClaireonDescriptionLintHelpers
 	}
 
 	/**
-	 * Post-#0000: every registered Claireon tool must clear the P5 description
-	 * bar. This helper is preserved as a deliberate no-op so the diff records
-	 * the scope-widening; callers should treat its result as "no tool is
-	 * exempt". Add an exemption here only with a documented justification.
+	 * Every registered Claireon tool must clear the description-quality bar.
+	 * This helper is preserved as a deliberate no-op so callers can treat
+	 * its result as "no tool is exempt". Add an exemption here only with
+	 * a documented justification.
 	 */
 	bool IsP5ExemptTool(const FString& /*ToolName*/)
 	{
@@ -100,8 +99,8 @@ namespace ClaireonDescriptionLintHelpers
 			TEXT("Copy"), TEXT("Patch"), TEXT("Promote"), TEXT("Drag"), TEXT("Drop"),
 			TEXT("Place"), TEXT("Show"), TEXT("Hide"), TEXT("Toggle"), TEXT("Batch"),
 			TEXT("Step"),
-			// Added in #0000 widened lint to cover legitimate authoring verbs
-			// surfaced when the lint scope expanded to all registered tools.
+			// Legitimate authoring verbs surfaced when the lint scope expanded
+			// to all registered tools.
 			TEXT("Snapshot"), TEXT("Capture"), TEXT("Wait"), TEXT("Begin"),
 			TEXT("End"), TEXT("Poll"), TEXT("Cancel"), TEXT("Redo"), TEXT("Undo"),
 			TEXT("Resave"), TEXT("Recompile"), TEXT("Wire"), TEXT("Append"),
@@ -231,7 +230,7 @@ UNTEST_UNIT(Claireon, DescriptionLint, AllP5CategoriesConformToTemplate)
 }
 
 // ---------------------------------------------------------------------------
-// Stage 003 / Part C: GetPatterns() output lint sweep.
+// GetPatterns() output lint sweep.
 //
 // Every tool that overrides GetPatterns() with a non-empty body must:
 //   - return only ASCII code points (reject em/en dashes + NBSP).

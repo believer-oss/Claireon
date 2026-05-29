@@ -16,6 +16,9 @@
 #if __has_include("MetasoundSource.h")
 #include "MetasoundSource.h"
 #endif
+#if __has_include("Metasound.h")
+#include "Metasound.h" // UMetaSoundPatch
+#endif
 
 FString FClaireonTool_AudioInspect::GetCategory() const { return TEXT("audio"); }
 FString FClaireonTool_AudioInspect::GetOperation() const { return TEXT("inspect"); }
@@ -115,6 +118,17 @@ IClaireonTool::FToolResult FClaireonTool_AudioInspect::Execute(const TSharedPtr<
 		const UMetaSoundSource* MS = Cast<UMetaSoundSource>(Obj);
 		ClaireonAudioHelpers::FormatMetaSoundDocument(MS, Data.ToSharedRef(), DetailLevel, FocusHint);
 		Summary = FString::Printf(TEXT("MetaSoundSource %s"), *MS->GetName());
+		break;
+	}
+#endif
+#if __has_include("Metasound.h")
+	// MetaSoundPatch shares IMetaSoundDocumentInterface with MetaSoundSource, so
+	// FormatMetaSoundDocument (widened to UObject*) emits the same shape.
+	case EClaireonAudioAssetKind::MetaSoundPatch:
+	{
+		const UMetaSoundPatch* MP = Cast<UMetaSoundPatch>(Obj);
+		ClaireonAudioHelpers::FormatMetaSoundDocument(MP, Data.ToSharedRef(), DetailLevel, FocusHint);
+		Summary = FString::Printf(TEXT("MetaSoundPatch %s"), *MP->GetName());
 		break;
 	}
 #endif

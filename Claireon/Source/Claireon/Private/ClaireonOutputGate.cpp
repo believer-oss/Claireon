@@ -327,6 +327,17 @@ IClaireonTool::FToolResult FClaireonOutputGate::RouteResult(
 	const FString& ConversationId,
 	EClaireonSpillStreamSet StreamSet)
 {
+	// Forward to the args-aware overload with an empty Arguments payload.
+	return RouteResult(MoveTemp(Result), ToolName, /*Arguments=*/ nullptr, ConversationId, StreamSet);
+}
+
+IClaireonTool::FToolResult FClaireonOutputGate::RouteResult(
+	IClaireonTool::FToolResult Result,
+	const FString& ToolName,
+	const TSharedPtr<FJsonObject>& InvocationArguments,
+	const FString& ConversationId,
+	EClaireonSpillStreamSet StreamSet)
+{
 	using namespace ClaireonOutputGateInternal;
 
 	const UClaireonSettings* Settings = UClaireonSettings::Get();
@@ -336,6 +347,19 @@ IClaireonTool::FToolResult FClaireonOutputGate::RouteResult(
 	const int64 Ceiling = Settings
 		? static_cast<int64>(Settings->ResultSpillMaxBytes)
 		: 52428800;
+
+	// force_inline short-circuits the entire spill pipeline. The caller is
+	// signalling that it would rather pay the context cost than chase a
+	// spill file (e.g. known-small-result queries, agentic short-tail discovery).
+	bool bForceInline = false;
+	if (InvocationArguments.IsValid())
+	{
+		InvocationArguments->TryGetBoolField(TEXT("force_inline"), bForceInline);
+	}
+	if (bForceInline)
+	{
+		return Result;
+	}
 
 	const FString EffectiveConversationId = ConversationId.IsEmpty() ? FString(TEXT("default")) : ConversationId;
 
@@ -424,6 +448,16 @@ IClaireonTool::FToolResult FClaireonOutputGate::RouteResult(
 	}
 	Manifest->SetBoolField(TEXT("__mcp_spilled__"), true);
 
+	// Always echo originating tool + invocation arguments on the spill
+	// manifest so a downstream reader of a spilled response (or the on-disk
+	// spill file, after StreamManifestToJson copies these fields) knows
+	// which call wrote it.
+	Manifest->SetStringField(TEXT("originating_tool"), ToolName);
+	if (InvocationArguments.IsValid())
+	{
+		Manifest->SetObjectField(TEXT("originating_args"), InvocationArguments);
+	}
+
 	TArray<TSharedPtr<FJsonValue>> StreamsJson;
 	StreamsJson.Reserve(SpilledStreams.Num());
 	for (const FClaireonSpillStream& Stream : SpilledStreams)
@@ -432,24 +466,108 @@ IClaireonTool::FToolResult FClaireonOutputGate::RouteResult(
 	}
 	Manifest->SetArrayField(TEXT("spilled_streams"), StreamsJson);
 
+	// Track which logical fields were stripped from the inline envelope so
+	// agents reading data.<field> see a missing-field signal AND a structured
+	// hint pointing at the spill file (kill silent-empty-array).
+	TArray<TSharedPtr<FJsonValue>> InlineOmittedJson;
+
+	// Build a loud-marker prefix for Summary that names the first successfully-spilled
+	// absolute path. Agents who only consume <summary> text now cannot miss the spill.
+	FString FirstSpilledPath;
+
 	// Clear inline blobs whose contents are now on disk.
 	for (const FClaireonSpillStream& Stream : SpilledStreams)
 	{
+		if (FirstSpilledPath.IsEmpty() && !Stream.bWriteFailed && !Stream.AbsolutePath.IsEmpty())
+		{
+			FirstSpilledPath = Stream.AbsolutePath;
+		}
+
 		if (StreamSet == EClaireonSpillStreamSet::GenericData && Stream.Name == TEXT("data"))
 		{
 			// The entire Result.Data blob spilled; preserve only the manifest fields.
 			TSharedPtr<FJsonObject> NewData = MakeShared<FJsonObject>();
 			NewData->SetBoolField(TEXT("__mcp_spilled__"), true);
 			NewData->SetArrayField(TEXT("spilled_streams"), StreamsJson);
+			// Keep the originating-call breadcrumbs on the post-spill manifest.
+			NewData->SetStringField(TEXT("originating_tool"), ToolName);
+			if (InvocationArguments.IsValid())
+			{
+				NewData->SetObjectField(TEXT("originating_args"), InvocationArguments);
+			}
+			// Keep small scalar identity fields inline so the agent can still
+			// see session_id / state_id / asset_path / kind / status without
+			// having to read the spill file. Only scalar (string / number / bool / null)
+			// fields under PreservedScalarMaxBytes (matches typical id-field widths) are
+			// preserved; nested objects, arrays, and oversized strings go to the spill.
+			const int32 PreservedScalarMaxBytes = 512;
+			if (Result.Data.IsValid())
+			{
+				for (const auto& Pair : Result.Data->Values)
+				{
+					if (!Pair.Value.IsValid()) continue;
+					switch (Pair.Value->Type)
+					{
+					case EJson::Number:
+					case EJson::Boolean:
+					case EJson::Null:
+						NewData->SetField(Pair.Key, Pair.Value);
+						break;
+					case EJson::String:
+					{
+						FString S;
+						if (Pair.Value->TryGetString(S) && S.Len() <= PreservedScalarMaxBytes)
+						{
+							NewData->SetField(Pair.Key, Pair.Value);
+						}
+						break;
+					}
+					default:
+						break;
+					}
+				}
+			}
 			Manifest = NewData;
+			InlineOmittedJson.Add(MakeShared<FJsonValueString>(TEXT("data")));
 		}
 		else if (Stream.Name == TEXT("stdout"))
 		{
 			Result.Logs.Empty();
+			InlineOmittedJson.Add(MakeShared<FJsonValueString>(TEXT("logs")));
 		}
 		else if (Stream.Name == TEXT("uelog"))
 		{
 			Result.UELog.Empty();
+			InlineOmittedJson.Add(MakeShared<FJsonValueString>(TEXT("uelog")));
+		}
+	}
+
+	// Surface an error_hint pointing at the spill file so agents that
+	// read data.<field> and get a missing-field signal also see a structured
+	// instruction telling them where the data lives.
+	if (FirstSpilledPath.IsEmpty())
+	{
+		// All spills failed to write; preserve the manifest but skip the hint.
+		Manifest->SetArrayField(TEXT("inline_omitted"), InlineOmittedJson);
+	}
+	else
+	{
+		Manifest->SetArrayField(TEXT("inline_omitted"), InlineOmittedJson);
+		Manifest->SetStringField(
+			TEXT("error_hint"),
+			FString::Printf(
+				TEXT("Response exceeded inline ceiling and was written to disk. ")
+				TEXT("The inline payload for the listed fields is NOT on the wire. ")
+				TEXT("Read the JSON / text file at spilled_streams[0].absolute_path (%s) ")
+				TEXT("or re-call with a smaller scope (e.g. max_nodes=N, format='summary', anchor_node_guid=...)."),
+				*FirstSpilledPath));
+
+		// Prepend a loud marker to Summary so consumers that only parse the
+		// summary text cannot silently miss the spill (the B2 footgun).
+		const FString Marker = FString::Printf(TEXT("[SPILLED -> %s] "), *FirstSpilledPath);
+		if (!Result.Summary.StartsWith(TEXT("[SPILLED")))
+		{
+			Result.Summary = Marker + Result.Summary;
 		}
 	}
 

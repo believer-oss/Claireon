@@ -149,7 +149,7 @@ FToolResult ClaireonWidgetBPTool_EditMVVMBinding::Execute(const TSharedPtr<FJson
 		Binding->DestinationPath = NewDestPath;
 	}
 
-	// Optional: conversion_function (Stage 004)
+	// Optional: conversion_function
 	FString ConversionFunctionStr;
 	if (Params->TryGetStringField(TEXT("conversion_function"), ConversionFunctionStr))
 	{

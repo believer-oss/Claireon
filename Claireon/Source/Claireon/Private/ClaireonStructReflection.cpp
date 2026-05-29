@@ -23,8 +23,9 @@ namespace
 {
 	// Maximum recursion depth for value serialization. Cyclic struct references and very
 	// deeply nested rows hit this cap; truncation emits the sentinel below.
-	// Anon-namespace + per-file discriminator suffix per feedback_anon_namespace_unity_collision.md
-	// and feedback_static_constexpr_header_v2_linux.md (do NOT use `static constexpr` at namespace scope).
+	// Anon-namespace + per-file discriminator suffix to avoid unity-batched
+	// collisions; do NOT use `static constexpr` at namespace scope (clang
+	// strict can fire -Wunused-const-variable on partial-include TUs).
 	constexpr int32 ClaireonStructReflection_MaxDepth = 32;
 
 	// Forward declare the recursive impls so the public API can dispatch into them.

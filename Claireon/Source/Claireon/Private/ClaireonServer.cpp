@@ -144,8 +144,8 @@ bool FClaireonServer::TryStart(uint16 Port)
 
 uint16 FClaireonServer::StartEphemeral()
 {
-	// Stage 010 (auto-promote): UE's HTTP server module does not expose an
-	// "OS-picked port" entrypoint cleanly. We sweep an ephemeral-range scan
+	// UE's HTTP server module does not expose an "OS-picked port" entrypoint
+	// cleanly. We sweep an ephemeral-range scan
 	// (the same pattern claireon_proxy.py uses for cross-worktree binds) so a
 	// healthy port falls out within a few attempts. The walk caps at 32
 	// attempts; a busy box that fails 32 ephemeral binds in a row is broken
@@ -183,7 +183,7 @@ bool FClaireonServer::Start(uint32 Port)
 
 	FHttpServerModule& HttpModule = FHttpServerModule::Get();
 
-	// Legacy increment-on-failure path. Stage 010: prefer TryStart / StartEphemeral.
+	// Legacy increment-on-failure path. Prefer TryStart / StartEphemeral.
 	// Try binding to the requested port, incrementing on failure
 	TSharedPtr<IHttpRouter> Router;
 	uint32 AttemptPort = Port;

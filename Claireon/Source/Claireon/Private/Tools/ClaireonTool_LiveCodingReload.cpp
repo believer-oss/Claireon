@@ -21,8 +21,17 @@ FString ClaireonTool_LiveCodingReload::GetOperation() const { return TEXT("live_
 
 FString ClaireonTool_LiveCodingReload::GetDescription() const
 {
+	// UE upstream: UChildActorComponent live-coding crash via
+	// KismetReinstanceUtilities.cpp IsInAsyncLoadingThread() assertion when
+	// StaticDuplicateObjectEx is invoked on a worker thread. Documented here
+	// so callers know to escalate to live_coding_rebuild_full in that case.
 	return TEXT("Trigger a Live Coding reload for .cpp changes. The reload is deferred until "
-		"after the current script finishes. Blocks if header files have changed (requires full rebuild).");
+		"after the current script finishes. Blocks if header files have changed (requires "
+		"full rebuild -- use claireon.live_coding_rebuild_full for the kill+build+relaunch "
+		"sequence). KNOWN ENGINE BUG: live-coding through a UChildActorComponent template "
+		"can crash with an IsInAsyncLoadingThread() assertion in KismetReinstanceUtilities. "
+		"If you hit that, avoid live-coding through child-actor templates; use "
+		"claireon.live_coding_rebuild_full instead.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_LiveCodingReload::GetInputSchema() const

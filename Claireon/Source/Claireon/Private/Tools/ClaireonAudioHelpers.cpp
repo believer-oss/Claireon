@@ -27,6 +27,12 @@
 #if __has_include("MetasoundSource.h")
 #include "MetasoundSource.h"
 #endif
+#if __has_include("Metasound.h")
+#include "Metasound.h" // UMetaSoundPatch
+#endif
+#if __has_include("MetasoundDocumentInterface.h")
+#include "MetasoundDocumentInterface.h" // IMetaSoundDocumentInterface
+#endif
 #if __has_include("MetasoundFrontendDocument.h")
 #include "MetasoundFrontendDocument.h"
 #endif
@@ -229,6 +235,7 @@ FString AudioAssetKindToString(EClaireonAudioAssetKind Kind)
 	{
 	case EClaireonAudioAssetKind::SoundCue:        return TEXT("sound_cue");
 	case EClaireonAudioAssetKind::MetaSoundSource: return TEXT("metasound_source");
+	case EClaireonAudioAssetKind::MetaSoundPatch:  return TEXT("metasound_patch");
 	case EClaireonAudioAssetKind::SoundClass:      return TEXT("sound_class");
 	case EClaireonAudioAssetKind::SoundMix:        return TEXT("sound_mix");
 	case EClaireonAudioAssetKind::Attenuation:     return TEXT("attenuation");
@@ -243,6 +250,7 @@ EClaireonAudioAssetKind AudioAssetKindFromString(FStringView Str)
 {
 	if (Str.Equals(TEXTVIEW("sound_cue")))         return EClaireonAudioAssetKind::SoundCue;
 	if (Str.Equals(TEXTVIEW("metasound_source")))  return EClaireonAudioAssetKind::MetaSoundSource;
+	if (Str.Equals(TEXTVIEW("metasound_patch")))   return EClaireonAudioAssetKind::MetaSoundPatch;
 	if (Str.Equals(TEXTVIEW("sound_class")))       return EClaireonAudioAssetKind::SoundClass;
 	if (Str.Equals(TEXTVIEW("sound_mix")))         return EClaireonAudioAssetKind::SoundMix;
 	if (Str.Equals(TEXTVIEW("attenuation")))       return EClaireonAudioAssetKind::Attenuation;
@@ -294,6 +302,11 @@ namespace ClaireonAudioHelpers
 		if (Obj->IsA(USoundCue::StaticClass()))          return EClaireonAudioAssetKind::SoundCue;
 #if __has_include("MetasoundSource.h")
 		if (Obj->IsA(UMetaSoundSource::StaticClass()))   return EClaireonAudioAssetKind::MetaSoundSource;
+#endif
+#if __has_include("Metasound.h")
+		// UMetaSoundPatch is a UObject (NOT a USoundBase subclass), declared in Metasound.h.
+		// Implements IMetaSoundDocumentInterface, so it shares the read/edit path with MetaSoundSource.
+		if (Obj->IsA(UMetaSoundPatch::StaticClass()))    return EClaireonAudioAssetKind::MetaSoundPatch;
 #endif
 		if (Obj->IsA(USoundClass::StaticClass()))        return EClaireonAudioAssetKind::SoundClass;
 		if (Obj->IsA(USoundMix::StaticClass()))          return EClaireonAudioAssetKind::SoundMix;
@@ -440,14 +453,22 @@ namespace ClaireonAudioHelpers
 		OutJson->SetArrayField(TEXT("nodes"), NodesArr);
 	}
 
-	void FormatMetaSoundDocument(const UMetaSoundSource* Source, const TSharedRef<FJsonObject>& OutJson,
+	void FormatMetaSoundDocument(const UObject* DocumentObject, const TSharedRef<FJsonObject>& OutJson,
 								 EClaireonAudioDetailLevel /*DetailLevel*/, const FString& /*FocusHint*/)
 	{
-		if (!Source) return;
-		OutJson->SetStringField(TEXT("asset_path"), Source->GetPathName());
+		if (!DocumentObject) return;
+		OutJson->SetStringField(TEXT("asset_path"), DocumentObject->GetPathName());
 
-#if __has_include("MetasoundFrontendDocument.h")
-		const FMetasoundFrontendDocument& Doc = Source->GetConstDocument();
+#if __has_include("MetasoundFrontendDocument.h") && __has_include("MetasoundDocumentInterface.h")
+		// Dispatch via IMetaSoundDocumentInterface so this routine works for both
+		// UMetaSoundSource and UMetaSoundPatch (and any future class implementing the interface).
+		const IMetaSoundDocumentInterface* DocIFace = Cast<IMetaSoundDocumentInterface>(DocumentObject);
+		if (!DocIFace)
+		{
+			OutJson->SetStringField(TEXT("note"), TEXT("Asset does not implement IMetaSoundDocumentInterface"));
+			return;
+		}
+		const FMetasoundFrontendDocument& Doc = DocIFace->GetConstDocument();
 		const FMetasoundFrontendGraphClass& Root = Doc.RootGraph;
 
 		// Inputs from the root class (declared interface of the graph)

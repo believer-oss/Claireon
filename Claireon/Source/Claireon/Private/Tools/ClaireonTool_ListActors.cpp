@@ -7,6 +7,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Editor.h"
+#include "Engine/Engine.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
@@ -16,7 +17,9 @@ FString ClaireonTool_ListActors::GetOperation() const { return TEXT("list_actors
 
 FString ClaireonTool_ListActors::GetDescription() const
 {
-    return TEXT("List actors in the currently loaded map. Optionally filter by class name or label wildcard pattern. Returns actor labels, classes, locations, rotations, and full paths. Stateless / read-only / non-session.");
+    return TEXT("List actors in the currently loaded map. Optionally filter by class name or label wildcard pattern. "
+        "PIE-aware: world_context='auto' (default) returns PIE actors when PIE is running, editor actors otherwise. "
+        "Returns actor labels, classes, locations, rotations, and full paths. Stateless / read-only / non-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ListActors::GetInputSchema() const
@@ -38,6 +41,20 @@ TSharedPtr<FJsonObject> ClaireonTool_ListActors::GetInputSchema() const
 	LabelProp->SetStringField(TEXT("description"), TEXT("Filter by actor label using wildcard matching (e.g. *Player*, SM_Wall*)"));
 	Properties->SetObjectField(TEXT("label_pattern"), LabelProp);
 
+	// world_context - optional
+	TSharedPtr<FJsonObject> WorldCtxProp = MakeShared<FJsonObject>();
+	WorldCtxProp->SetStringField(TEXT("type"), TEXT("string"));
+	WorldCtxProp->SetStringField(TEXT("description"),
+		TEXT("Which world to list actors from: 'auto' (default) uses PIE world if PIE is running, else editor world; "
+			 "'pie' forces PIE world (errors if PIE not running); 'editor' forces editor world."));
+	TArray<TSharedPtr<FJsonValue>> WorldCtxEnum;
+	WorldCtxEnum.Add(MakeShared<FJsonValueString>(TEXT("auto")));
+	WorldCtxEnum.Add(MakeShared<FJsonValueString>(TEXT("pie")));
+	WorldCtxEnum.Add(MakeShared<FJsonValueString>(TEXT("editor")));
+	WorldCtxProp->SetArrayField(TEXT("enum"), WorldCtxEnum);
+	WorldCtxProp->SetStringField(TEXT("default"), TEXT("auto"));
+	Properties->SetObjectField(TEXT("world_context"), WorldCtxProp);
+
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	return Schema;
@@ -45,11 +62,57 @@ TSharedPtr<FJsonObject> ClaireonTool_ListActors::GetInputSchema() const
 
 IClaireonTool::FToolResult ClaireonTool_ListActors::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	checkf(GEditor && GEditor->GetEditorWorldContext().World(),
-		TEXT("RequiresEditorWorld() tool reached Execute without a valid world. This indicates a dispatch path that bypasses precondition checks."));
-	UWorld* World = GEditor->GetEditorWorldContext().World();
+	// Parse world_context ('auto', 'pie', 'editor'; default 'auto').
+	FString WorldContext;
+	if (!Arguments->TryGetStringField(TEXT("world_context"), WorldContext) || WorldContext.IsEmpty())
+	{
+		WorldContext = TEXT("auto");
+	}
 
-	// Parse arguments
+	// Resolve the target world based on world_context.
+	// Auto-route to PIE world when PIE is running so callers see live gameplay
+	// actors rather than editor-world actors during PIE.
+	UWorld* World = nullptr;
+	FString UsedContext;
+
+	if (WorldContext != TEXT("editor"))
+	{
+		// Look for a live PIE world.
+		if (GEngine)
+		{
+			for (const FWorldContext& WorldCtx : GEngine->GetWorldContexts())
+			{
+				if (WorldCtx.WorldType == EWorldType::PIE && WorldCtx.World())
+				{
+					World = WorldCtx.World();
+					UsedContext = TEXT("pie");
+					break;
+				}
+			}
+		}
+
+		if (!World && WorldContext == TEXT("pie"))
+		{
+			return MakeErrorResult(TEXT("PIE is not running. Start a PIE session first, or use world_context='editor' to list editor-world actors."));
+		}
+	}
+
+	if (!World)
+	{
+		// Fall through to editor world.
+		if (!GEditor)
+		{
+			return MakeErrorResult(TEXT("Editor is not available. Wait for the editor to finish initializing."));
+		}
+		World = GEditor->GetEditorWorldContext().World();
+		if (!World)
+		{
+			return MakeErrorResult(TEXT("No world loaded. Use open_map to load a map first."));
+		}
+		UsedContext = TEXT("editor");
+	}
+
+	// Parse remaining arguments
 	FString ClassFilter;
 	if (Arguments->HasField(TEXT("class_filter")))
 	{
@@ -138,6 +201,7 @@ IClaireonTool::FToolResult ClaireonTool_ListActors::Execute(const TSharedPtr<FJs
 	Data->SetArrayField(TEXT("actors"), ActorsArray);
 	Data->SetNumberField(TEXT("total_count"), TotalCount);
 	Data->SetStringField(TEXT("map_name"), MapName);
+	Data->SetStringField(TEXT("world_context"), UsedContext);
 
 	// Build summary
 	FString Summary = FString::Printf(TEXT("Found %d actors in %s"), TotalCount, *MapName);

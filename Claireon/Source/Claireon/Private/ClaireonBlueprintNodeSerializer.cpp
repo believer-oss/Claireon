@@ -200,6 +200,39 @@ namespace ClaireonBlueprintNodeSerializer
 		}
 
 		// Pins ------------------------------------------------------------------
+		// Pre-compute duplicate-name counts so latent nodes like AwaitDelay
+		// (UCancellableAsyncAction-backed) with multiple "then" pins emit
+		// unique disambiguated names. We count per-direction so an
+		// input "Target" and output "Target" do not collide. When a duplicate
+		// is detected, prefer PinFriendlyName as the suffix (each
+		// BlueprintAssignable delegate's exec pin carries the delegate display
+		// name on the friendly-name field); fall back to an indexed [N] form
+		// when no friendly name is available.
+		TMap<TPair<FName, EEdGraphPinDirection>, int32> PinNameCounts;
+		for (const UEdGraphPin* PinScan : Node->Pins)
+		{
+			if (!PinScan)
+			{
+				continue;
+			}
+			++PinNameCounts.FindOrAdd(MakeTuple(PinScan->PinName, PinScan->Direction));
+		}
+		TMap<TPair<FName, EEdGraphPinDirection>, int32> PinNameRunningIndex;
+
+		auto SanitizeFriendlySuffix = [](const FString& Friendly) -> FString
+		{
+			FString Out;
+			Out.Reserve(Friendly.Len());
+			for (TCHAR Ch : Friendly)
+			{
+				if (FChar::IsAlnum(Ch) || Ch == TEXT('_'))
+				{
+					Out.AppendChar(Ch);
+				}
+			}
+			return Out;
+		};
+
 		TArray<TSharedPtr<FJsonValue>> PinValues;
 		PinValues.Reserve(Node->Pins.Num());
 		for (const UEdGraphPin* Pin : Node->Pins)
@@ -212,7 +245,35 @@ namespace ClaireonBlueprintNodeSerializer
 			TSharedPtr<FJsonObject> PinObj = MakeShared<FJsonObject>();
 			PinObj->SetStringField(TEXT("pin_id"),
 				Pin->PinId.ToString(EGuidFormats::DigitsWithHyphens));
-			PinObj->SetStringField(TEXT("pin_name"), Pin->PinName.ToString());
+
+			const FString RawPinName = Pin->PinName.ToString();
+			const TPair<FName, EEdGraphPinDirection> NameKey = MakeTuple(Pin->PinName, Pin->Direction);
+			const int32 NameCount = PinNameCounts.FindRef(NameKey);
+			FString DisplayPinName = RawPinName;
+			if (NameCount > 1)
+			{
+				const FString FriendlyName = Pin->PinFriendlyName.ToString();
+				const FString FriendlySuffix = SanitizeFriendlySuffix(FriendlyName);
+				if (!FriendlySuffix.IsEmpty() && !FriendlySuffix.Equals(RawPinName, ESearchCase::IgnoreCase))
+				{
+					DisplayPinName = FString::Printf(TEXT("%s_%s"), *RawPinName, *FriendlySuffix);
+				}
+				else
+				{
+					const int32 Ordinal = PinNameRunningIndex.FindOrAdd(NameKey)++;
+					DisplayPinName = FString::Printf(TEXT("%s[%d]"), *RawPinName, Ordinal);
+				}
+			}
+			PinObj->SetStringField(TEXT("pin_name"), DisplayPinName);
+			if (DisplayPinName != RawPinName)
+			{
+				PinObj->SetStringField(TEXT("pin_name_raw"), RawPinName);
+				PinObj->SetBoolField(TEXT("pin_name_disambiguated"), true);
+			}
+			if (!Pin->PinFriendlyName.IsEmpty())
+			{
+				PinObj->SetStringField(TEXT("pin_friendly_name"), Pin->PinFriendlyName.ToString());
+			}
 			PinObj->SetStringField(TEXT("direction"),
 				Pin->Direction == EGPD_Input ? TEXT("input") : TEXT("output"));
 			PinObj->SetObjectField(TEXT("pin_type"), BuildPinTypeJson(Pin->PinType));

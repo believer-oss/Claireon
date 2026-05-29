@@ -1,9 +1,8 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Stage 029 rewrite: MVVM setup helpers now use the decomposed
-// ClaireonWidgetBPTool_* classes instead of the deleted
-// ClaireonTool_EditWidgetBP shim. The tool-under-test
+// MVVM setup helpers use the decomposed ClaireonWidgetBPTool_* classes
+// instead of the deleted ClaireonTool_EditWidgetBP shim. The tool-under-test
 // (ClaireonTool_GetWidgetBPTree) is untouched.
 
 #include "Misc/AutomationTest.h"

@@ -1,11 +1,11 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Stage 029 rewrite: these specs now exercise the decomposed
-// ClaireonWidgetBPTool_* tools directly. The legacy monolithic shim
-// (ClaireonTool_EditWidgetBP) and its envelope dispatcher were deleted in
-// stage 024; every test below instantiates the matching decomposed tool
-// per operation and flattens the legacy envelope via FlattenLegacyEnvelope.
+// These specs exercise the decomposed ClaireonWidgetBPTool_* tools directly.
+// The legacy monolithic shim (ClaireonTool_EditWidgetBP) and its envelope
+// dispatcher have been deleted; every test below instantiates the matching
+// decomposed tool per operation and flattens the legacy envelope via
+// FlattenLegacyEnvelope.
 
 #include "Misc/AutomationTest.h"
 #include "Dom/JsonObject.h"
@@ -547,9 +547,9 @@ bool FEditWidgetBPTest_SessionLifecycle::RunTest(const FString& Parameters)
 // Test 4: ErrorHandling
 // Unknown-session error, missing session_id, invalid asset path, invalid widget class.
 //
-// NOTE (stage 029): the legacy "invalid operation" case no longer has an
-// analog under the decomposed model (operation identity is encoded by the tool
-// class itself). The sub-scope is re-pointed to a session-not-found case on a
+// The legacy "invalid operation" case no longer has an analog under the
+// decomposed model (operation identity is encoded by the tool class itself).
+// The sub-scope is re-pointed to a session-not-found case on a
 // session-required decomposed tool, preserving 4 sub-scopes.
 // ===========================================================================
 
@@ -663,11 +663,10 @@ bool FEditWidgetBPTest_ErrorHandling::RunTest(const FString& Parameters)
 // Test 5: AnimationLifecycle
 // Create, rename, duplicate, set_property, delete animations.
 //
-// NOTE (stage 029): 9 of the 10 animation ops are stubs that return
-// "<op> is not yet implemented; tracked in Dispatch Backlog: <url>". Only
-// list_animations is implemented. The assertions below reflect that: the
-// mutating calls are expected to error with the stub message, list_animations
-// is the only success expectation.
+// 9 of the 10 animation ops are stubs that return
+// "<op> is not yet implemented". Only list_animations is implemented. The
+// assertions below reflect that: the mutating calls are expected to error
+// with the stub message, list_animations is the only success expectation.
 // ===========================================================================
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditWidgetBPTest_AnimationLifecycle,
@@ -843,7 +842,7 @@ bool FEditWidgetBPTest_AnimationLifecycle::RunTest(const FString& Parameters)
 		TestFalse("compile should succeed", Result.bIsError);
 	}
 
-	// --- Step 11 (stage 014 persistence): save, close, reopen, verify count ---
+	// --- Step 11: persistence -- save, close, reopen, verify count ---
 	{
 		ClaireonWidgetBPTool_Save SaveTool;
 		auto SaveResult = SaveTool.Execute(FlattenLegacyEnvelope(MakeEnvelope(TEXT("save"), MakeShared<FJsonObject>())));
@@ -884,11 +883,10 @@ bool FEditWidgetBPTest_AnimationLifecycle::RunTest(const FString& Parameters)
 // Test 6: AnimationBindingTracksKeyframes
 // Create animation, bind widget, add track, add keyframes, remove keyframe.
 //
-// NOTE (stage 029): every animation mutator (create_animation,
-// add_animation_binding, add_animation_track, add_animation_keyframe,
-// remove_animation_keyframe, get_animation_details) is a stub returning
-// the "not yet implemented; tracked in Dispatch Backlog" error. Assertions
-// are flipped accordingly.
+// Every animation mutator (create_animation, add_animation_binding,
+// add_animation_track, add_animation_keyframe, remove_animation_keyframe,
+// get_animation_details) is a stub returning the "not yet implemented"
+// error. Assertions are flipped accordingly.
 // ===========================================================================
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditWidgetBPTest_AnimationBindingTracksKeyframes,

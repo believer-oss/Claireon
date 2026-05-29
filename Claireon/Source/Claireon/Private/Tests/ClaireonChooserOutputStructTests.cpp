@@ -144,7 +144,7 @@ UNTEST_UNIT_OPTS(Claireon, ChooserOutputStruct, RootBoundStructBindingSeeded, UN
 	FOutputStructColumn* OutStructCol = InsertedColumn.GetMutablePtr<FOutputStructColumn>();
 	UNTEST_ASSERT_PTR(OutStructCol);
 
-	// F1 acceptance: Binding base + typed-metadata fields.
+	// acceptance: Binding base + typed-metadata fields.
 	UNTEST_ASSERT_TRUE(OutStructCol->InputValue.IsValid());
 	FStructContextProperty& Param = OutStructCol->InputValue.GetMutable<FStructContextProperty>();
 	UNTEST_EXPECT_TRUE(Param.Binding.IsBoundToRoot);
@@ -153,7 +153,7 @@ UNTEST_UNIT_OPTS(Claireon, ChooserOutputStruct, RootBoundStructBindingSeeded, UN
 	UNTEST_EXPECT_PTR(Param.Binding.StructType.Get());
 	UNTEST_EXPECT_TRUE(Param.Binding.StructType == OutputStructType);
 
-	// F2 acceptance: StructTypeChanged() seeds DefaultRowValue / FallbackValue.
+	// acceptance: StructTypeChanged() seeds DefaultRowValue / FallbackValue.
 	OutStructCol->StructTypeChanged();
 	UNTEST_EXPECT_TRUE(OutStructCol->DefaultRowValue.GetScriptStruct() == OutputStructType);
 	UNTEST_EXPECT_TRUE(OutStructCol->FallbackValue.GetScriptStruct() == OutputStructType);
@@ -278,7 +278,7 @@ UNTEST_UNIT_OPTS(Claireon, ChooserOutputStruct, SetColumnCellValueRescuesUniniti
 	FString OutError;
 	const bool bOk = ClaireonChooserHelpers::SetColumnCellValue(InsertedColumn, /*RowIndex=*/0, Value, OutError);
 
-	// F3 rescue: should succeed AND the row should now be typed.
+	// rescue: should succeed AND the row should now be typed.
 	UNTEST_EXPECT_TRUE(bOk);
 	UNTEST_EXPECT_TRUE(OutError.IsEmpty());
 

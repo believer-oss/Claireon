@@ -32,7 +32,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "Misc/DefaultValueHelper.h"
 
-// F5: Director Blueprint authoring
+// Director Blueprint authoring
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
 #include "EdGraph/EdGraph.h"
@@ -412,6 +412,8 @@ FString FClaireonSequenceHelpers::FormatSequenceStructure(const ULevelSequence* 
 	const TRange<FFrameNumber> PlaybackRange = MovieScene->GetPlaybackRange();
 	FString PBStart = TEXT("-inf");
 	FString PBEnd = TEXT("+inf");
+	FString PBStartDisplay = TEXT("-inf");
+	FString PBEndDisplay = TEXT("+inf");
 	double StartSeconds = 0.0;
 	double EndSeconds = 0.0;
 	if (PlaybackRange.HasLowerBound())
@@ -419,15 +421,22 @@ FString FClaireonSequenceHelpers::FormatSequenceStructure(const ULevelSequence* 
 		const FFrameNumber StartFrame = PlaybackRange.GetLowerBoundValue();
 		PBStart = FString::Printf(TEXT("%d"), StartFrame.Value);
 		StartSeconds = TickResolution.AsSeconds(FFrameTime(StartFrame));
+		// Display-rate annotation: callers using set_playback_range with default
+		// frame_units="display" see these values back here on inspect, eliminating the
+		// "I passed 30, the response says 24000" confusion.
+		const FFrameTime DisplayTime = FFrameRate::TransformTime(FFrameTime(StartFrame), TickResolution, DisplayRate);
+		PBStartDisplay = FString::Printf(TEXT("%d"), DisplayTime.FrameNumber.Value);
 	}
 	if (PlaybackRange.HasUpperBound())
 	{
 		const FFrameNumber EndFrame = PlaybackRange.GetUpperBoundValue();
 		PBEnd = FString::Printf(TEXT("%d"), EndFrame.Value);
 		EndSeconds = TickResolution.AsSeconds(FFrameTime(EndFrame));
+		const FFrameTime DisplayTime = FFrameRate::TransformTime(FFrameTime(EndFrame), TickResolution, DisplayRate);
+		PBEndDisplay = FString::Printf(TEXT("%d"), DisplayTime.FrameNumber.Value);
 	}
-	Output += FString::Printf(TEXT("Playback Range: [%s, %s) frames (%.4f - %.4f s)\n"),
-		*PBStart, *PBEnd, StartSeconds, EndSeconds);
+	Output += FString::Printf(TEXT("Playback Range: [%s, %s) ticks  [%s, %s) display-rate  (%.4f - %.4f s)\n"),
+		*PBStart, *PBEnd, *PBStartDisplay, *PBEndDisplay, StartSeconds, EndSeconds);
 
 	// Marked frames
 	const TArray<FMovieSceneMarkedFrame>& MarkedFrames = MovieScene->GetMarkedFrames();
@@ -513,8 +522,8 @@ bool FClaireonSequenceHelpers::CoerceKeyframeValue(UMovieSceneTrack* Track, cons
 			OutError = TEXT("float track requires numeric payload or {\"value\": <float>}");
 			return false;
 		}
-		// The actual key insertion is the caller's job (F2 stage 011 wires the section
-		// add path); this helper only validates the payload shape.
+		// The actual key insertion is the caller's job (the section add path
+		// wires it up); this helper only validates the payload shape.
 		return true;
 	}
 
@@ -585,7 +594,7 @@ bool FClaireonSequenceHelpers::CoerceKeyframeValue(UMovieSceneTrack* Track, cons
 }
 
 // ---------------------------------------------------------------------------
-// F5 -- Director Blueprint event endpoint authoring (stage 013)
+// Director Blueprint event endpoint authoring
 // ---------------------------------------------------------------------------
 
 UBlueprint* FClaireonSequenceHelpers::EnsureDirectorBlueprint(ULevelSequence* Sequence, FString& OutError)

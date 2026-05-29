@@ -27,9 +27,9 @@
 class CLAIREON_API ClaireonTool_ReplaceStructUsage : public IClaireonTool
 {
 public:
-	FString GetName() const override;
+	FString GetOperation() const override;
 	FString GetDescription() const override;
-	FString GetCategory() const override { return TEXT("bp"); }
+	FString GetCategory() const override;
 	bool RequiresNoPIE() const override { return true; }
 	TSharedPtr<FJsonObject> GetInputSchema() const override;
 	FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;

@@ -85,6 +85,12 @@ IClaireonTool::FToolResult ClaireonTool_ChooserSetColumnValue::Execute(const TSh
 		return MakeErrorResult(Error);
 	}
 
+	// Enforce binding invariant: a column whose binding chain is empty must have
+	// IsBoundToRoot=true, otherwise the binding silently dies after recompile. Repair
+	// in-place and surface via binding_warning.
+	bool bBindingFixed = false;
+	ClaireonChooserHelpers::EnsureBindingInvariant(Chooser->ColumnsStructs[ColIndex], bBindingFixed);
+
 	if (!ClaireonChooserHelpers::SaveChooserTable(Chooser, Error))
 	{
 		return MakeErrorResult(Error);
@@ -94,6 +100,15 @@ IClaireonTool::FToolResult ClaireonTool_ChooserSetColumnValue::Execute(const TSh
 	Data->SetStringField(TEXT("asset_path"), Chooser->GetPathName());
 	Data->SetNumberField(TEXT("row_index"), RowIndex);
 	Data->SetNumberField(TEXT("column_index"), ColIndex);
+	if (bBindingFixed)
+	{
+		Data->SetStringField(TEXT("binding_warning"),
+			TEXT("Column had empty PropertyBindingChain with IsBoundToRoot=false (dead binding). "
+				 "Set IsBoundToRoot=true. Recompile the chooser if not already done."));
+	}
 
-	return MakeSuccessResult(Data, FString::Printf(TEXT("Set column %d value at row %d"), ColIndex, RowIndex));
+	const FString Summary = bBindingFixed
+		? FString::Printf(TEXT("Set column %d value at row %d (repaired dead binding -> IsBoundToRoot=true)"), ColIndex, RowIndex)
+		: FString::Printf(TEXT("Set column %d value at row %d"), ColIndex, RowIndex);
+	return MakeSuccessResult(Data, Summary);
 }

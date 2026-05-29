@@ -841,7 +841,7 @@ IClaireonTool::FToolResult ClaireonTool_CMCInspectPredictionData::Execute(const 
 			ServerObj->SetBoolField(TEXT("resolvingTimeDiscrepancy"),
 				ServerData->bResolvingTimeDiscrepancy);
 
-			// H2 reconciliation: the tracker-card "LastClientAdjustmentTime" /
+			// reconciliation: the tracker-card "LastClientAdjustmentTime" /
 			// "LastClientGoodMoveAckTime" fields live on the CMC itself, not on
 			// FNetworkPredictionData_Server_Character. CMC fields are protected
 			// UPROPERTY(Transient) at CharacterMovementComponent.h:662 / :666.

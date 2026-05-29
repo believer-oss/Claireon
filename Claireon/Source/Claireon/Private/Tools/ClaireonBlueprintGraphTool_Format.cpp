@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -206,21 +206,23 @@ FToolResult ClaireonBlueprintGraphTool_Format::Execute(const TSharedPtr<FJsonObj
 }
 
 // ----------------------------------------------------------------------------
-// P1: hot-path metadata enrichment
+// hot-path metadata enrichment
 // ----------------------------------------------------------------------------
 
 FString ClaireonBlueprintGraphTool_Format::GetFullDescription() const
 {
     return TEXT(
-        "Auto-layouts the current session's graph nodes using a simple "
-        "left-to-right exec-flow layout. bp_format requires an open "
-        "session and operates on the in-session graph state. When given "
-        "asset_path instead of session_id it auto-opens a transient "
-        "session, formats, and closes -- no prior bp_open needed. Use "
-        "session_id to format inside an existing workflow cycle (see the "
-        "per-tool authoring guidance) before calling bp_save. If "
-        "BlueprintAssist plugin is present, the layout uses BA's smart "
-        "routing; otherwise a deterministic fallback grid layout is used.");
+        "Auto-layouts a blueprint graph's nodes using a simple left-to-right "
+        "exec-flow layout. Accepts either session_id (operates on the open "
+        "in-session graph) or asset_path (auto-opens a transient session, "
+        "formats, and closes -- no prior bp_open needed). Use session_id to "
+        "format inside an existing workflow cycle (see "
+        "the per-tool authoring guidance) before calling bp_save; use "
+        "asset_path for one-shot formatting outside of an edit session. If "
+        "the BlueprintAssist plugin is present, the layout uses BA's smart "
+        "routing; otherwise a deterministic fallback grid layout is used. "
+        "Returns the standard session state response (response_mode "
+        "'full' | 'changed' | 'status', default 'changed').");
 }
 
 FString ClaireonBlueprintGraphTool_Format::GetExampleUsage() const

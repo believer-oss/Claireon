@@ -85,7 +85,7 @@ FToolResult ClaireonStateTreeTool_ModifyTransition::Execute(const TSharedPtr<FJs
 			Arguments->TryGetStringField(TEXT("target_state_id"), TargetStateIdProbe) && !TargetStateIdProbe.IsEmpty();
 		if (bHasTargetStateId)
 		{
-			// D3: target_state_id only meaningful when target_type=GotoState was supplied
+			// target_state_id only meaningful when target_type=GotoState was supplied
 			// alongside it. There is intentionally no accept-if-existing-is-GotoState path.
 			if (!ParsedType.IsSet() || ParsedType.GetValue() != EStateTreeTransitionType::GotoState)
 			{

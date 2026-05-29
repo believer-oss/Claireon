@@ -75,6 +75,16 @@ namespace ClaireonChooserHelpers
 	bool SetColumnCellValue(FInstancedStruct& ColumnStruct, int32 RowIndex,
 		const TSharedPtr<FJsonValue>& Value, FString& OutError);
 
+	/**
+	 * Enforce the chooser-binding invariant: when PropertyBindingChain is empty,
+	 * IsBoundToRoot MUST be true (otherwise the binding is dead). Inspect the column's
+	 * InputValue.Binding (when one exists), repair the flag in-place when violated, and
+	 * report via bOutFixed. Returns false only when the column has no InputValue binding
+	 * (in which case the invariant does not apply). Idempotent and safe to call on every
+	 * cell-write path.
+	 */
+	bool EnsureBindingInvariant(FInstancedStruct& ColumnStruct, bool& bOutFixed);
+
 	/** Construct a row result FInstancedStruct from a type name and asset path. */
 	bool MakeRowResult(const FString& ResultType, const FString& ResultValue,
 		FInstancedStruct& OutResult, FString& OutError);

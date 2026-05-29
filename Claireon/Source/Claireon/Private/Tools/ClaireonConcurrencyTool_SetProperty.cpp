@@ -14,7 +14,7 @@
 
 namespace
 {
-	// I4: discriminator-prefixed file-local helper (avoids unity collisions across cohort .cpp files).
+	// discriminator-prefixed file-local helper (avoids unity collisions across cohort .cpp files).
 	FString ConcurrencySetProperty_JsonValueToString(const TSharedPtr<FJsonValue>& V)
 	{
 		if (!V.IsValid()) return FString();

@@ -34,7 +34,7 @@
 
 namespace ClaireonToolSearchExecuteTestsNS
 {
-	// File-local discriminator to avoid translation-unit collisions under unity builds.
+	// File-local discriminator to avoid anon-NS collisions under unity batching.
 
 	/** Configurable stub tool: callers pick Category / Operation explicitly so
 	 *  GetName() yields the desired wire name without underscore-splitting heuristics. */
@@ -188,7 +188,7 @@ namespace ClaireonToolSearchExecuteTestsNS
 }
 
 // ===========================================================================
-// Exact-name pin bypasses category filter; near-exact respects it.
+// exact-name pin bypasses category filter; near-exact respects it.
 // ===========================================================================
 
 UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, ExactNamePrecedencePinsWithCategoryMismatch, UNTEST_TIMEOUTMS(15000))
@@ -220,7 +220,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, ExactNamePrecedencePinsWithCategor
 }
 
 // ===========================================================================
-// Hyphen/underscore equivalence for exact-name normalisation.
+// hyphen/underscore equivalence for exact-name normalisation.
 // ===========================================================================
 
 UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, ExactNameHyphenUnderscoreEquivalence, UNTEST_TIMEOUTMS(15000))
@@ -302,7 +302,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, LevenshteinNearMatchPinsTypo, UNTE
 }
 
 // ===========================================================================
-// Near-exact pin respects category filter (zero results when mismatched).
+// near-exact pin respects category filter (zero results when mismatched).
 // ===========================================================================
 
 UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, NearExactRespectsCategoryFilter, UNTEST_TIMEOUTMS(15000))
@@ -363,7 +363,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, OnToolsChangedAutoInvalidates, UNT
 
 	// Step 2: mutate the registry -- unregister widget_create, register widget_make.
 	// Net tool count is unchanged, so the count-based heuristic does NOT trip;
-	// the dirty bit is what forces the rebuild.
+	// the dirty bit (D8) is what forces the rebuild.
 	Server->UnregisterTool(TEXT("widget_create"));
 	TSharedPtr<IClaireonTool> MakeStub = MakeTool(TEXT("widget"), TEXT("make"), TEXT("make a widget asset"));
 	Server->RegisterTool(MakeStub);
@@ -384,11 +384,11 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, OnToolsChangedAutoInvalidates, UNT
 }
 
 // ===========================================================================
-// "asset create" must return at least one asset_* tool. Uses controlled stub
-// fixture so the test does not depend on the live tool set.
+// (end-to-end): "asset create" must return at least one asset_* tool.
+// Uses controlled stub fixture so the test does not depend on the live tool set.
 // ===========================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, AssetCreateReturnsAssetTool, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, Issue1AssetCreateReturnsAssetTool, UNTEST_TIMEOUTMS(15000))
 {
 	using namespace ClaireonToolSearchExecuteTestsNS;
 
@@ -417,7 +417,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, AssetCreateReturnsAssetTool, UNTES
 }
 
 // ===========================================================================
-// Defensive substring-fallback merge -- substring hits unioned in when
+// defensive substring-fallback merge -- substring hits unioned in when
 // fuzzy results don't contain any query word as a substring.
 // ===========================================================================
 
@@ -555,7 +555,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, NameParameterWinsOverToolNameWithL
 }
 
 // ===========================================================================
-// Stage 003 / Part B: tool_search upgrade-path footer on brief/standard hits.
+// tool_search upgrade-path footer on brief/standard hits.
 // ===========================================================================
 
 UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterPresentOnMultiHitStandard, UNTEST_TIMEOUTMS(15000))
@@ -689,8 +689,8 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterSuppressedOnExact
 }
 
 // ===========================================================================
-// Stage 003 / Part C: tool_search surfaces GetPatterns() on full-detail and
-// deep-inspect paths; empty returns are suppressed.
+// tool_search surfaces GetPatterns() on full-detail and deep-inspect paths;
+// empty returns are suppressed.
 // ===========================================================================
 
 UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, DeepInspectBpAddNodeCarriesPatterns, UNTEST_TIMEOUTMS(15000))
@@ -770,15 +770,15 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, DeepInspectStubToolHasNoPatternsFi
 }
 
 // ===========================================================================
-// Stage 004 / Part D: tool_search surfaces ApplySpecCatalog.json entry under
-// spec_shape for every apply_spec / instance_apply_spec family; non-apply_spec
-// tools have no spec_shape; catalog has 17 entries matching the registry;
+// tool_search surfaces ApplySpecCatalog.json entry under spec_shape for
+// every apply_spec / instance_apply_spec family; non-apply_spec tools
+// have no spec_shape; catalog has 17 entries matching the registry;
 // apply_spec_help is no longer registered.
 // ===========================================================================
 
 namespace Cl622PartDHelpers
 {
-	// File-local discriminator per project memory.
+	// File-local discriminator to avoid anon-NS collisions under unity batching.
 	static const TArray<TPair<FString, FString>>& Cl622_GetExpectedFamilyToolPairs()
 	{
 		// (catalog_key, registered tool name).  Doubled `instance` for the

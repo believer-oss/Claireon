@@ -32,7 +32,8 @@ namespace ClaireonTool_SearchToolsInternal
 // (add/remove); rename-in-place changes leave the count constant and were
 // silently mis-ranked. To close that gap we subscribe to
 // FClaireonServer::OnToolsChanged and set a dirty bit; Execute() drains
-// the bit before each search and rebuilds if set.
+// the bit before each search and rebuilds if set. The pattern mirrors
+// FClaireonBridge's `bClaireonModuleStale` (see ClaireonBridge.cpp:127-133).
 // ---------------------------------------------------------------------------
 FDelegateHandle ToolCatalogChangedHandle;
 FClaireonServer* LastSubscribedServer = nullptr;
@@ -66,7 +67,7 @@ TArray<FString> SplitWholeWordCaseInsensitive(const FString& In, const TCHAR* Wo
 }
 
 // ---------------------------------------------------------------------------
-// Stage 4 / Part D (#0000): apply_spec catalog loader.
+// apply_spec catalog loader.
 //
 // Loads `ApplySpecCatalog.json` on demand, caches by file mtime so per-search
 // IO is avoided in the common case.  Returns the parsed root JSON object, or
@@ -74,8 +75,7 @@ TArray<FString> SplitWholeWordCaseInsensitive(const FString& In, const TCHAR* Wo
 // are logged at Warning level for ops visibility but never surface to the
 // agent -- the deep-inspect branch just omits the `spec_shape` field.
 //
-// File-local discriminator `Cl622SearchSpec_` per project memory about
-// anonymous-namespace name collisions under unity batching.
+// File-local discriminator to avoid anon-NS collisions under unity batching.
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonObject> Cl622SearchSpec_LoadCatalog()
 {
@@ -155,9 +155,19 @@ TSharedPtr<FJsonObject> ClaireonTool_SearchTools::GetInputSchema() const
 	// query - optional
 	TSharedPtr<FJsonObject> QueryProp = MakeShared<FJsonObject>();
 	QueryProp->SetStringField(TEXT("type"), TEXT("string"));
-	QueryProp->SetStringField(TEXT("description"), TEXT("Search query to match against tool names and descriptions. Supports abbreviations (bp, bt, st, dt, pie, fx, etc.). Empty string returns all tools."));
+	QueryProp->SetStringField(TEXT("description"), TEXT("Search query to match against tool names and descriptions. Supports abbreviations (bp, bt, st, dt, pie, fx, etc.). Empty string returns all tools. Special form: 'select:nameA,nameB' returns full schema records for the named tools (deferred-tool selector)."));
 	QueryProp->SetStringField(TEXT("default"), TEXT(""));
 	Properties->SetObjectField(TEXT("query"), QueryProp);
+
+	// mode - optional
+	TSharedPtr<FJsonObject> ModeProp = MakeShared<FJsonObject>();
+	ModeProp->SetStringField(TEXT("type"), TEXT("string"));
+	ModeProp->SetStringField(TEXT("description"),
+		TEXT("Discovery mode. 'categories' returns just category names + tool counts (cheap discovery, ~200 bytes). Default (omitted) runs the full search/inspect pipeline."));
+	TArray<TSharedPtr<FJsonValue>> ModeEnum;
+	ModeEnum.Add(MakeShared<FJsonValueString>(TEXT("categories")));
+	ModeProp->SetArrayField(TEXT("enum"), ModeEnum);
+	Properties->SetObjectField(TEXT("mode"), ModeProp);
 
 	// category - optional
 	TSharedPtr<FJsonObject> CategoryProp = MakeShared<FJsonObject>();
@@ -493,6 +503,146 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 	Category = Category.TrimStartAndEnd();
 	InspectToolName = InspectToolName.TrimStartAndEnd();
 
+	// The documented deferred-tool selector syntax `select:nameA,nameB`
+	// short-circuits the SQL/fuzzy pipeline entirely and returns deep-inspect-shape
+	// records for each named tool. Previously the prefix leaked into the SQLite
+	// pipeline and surfaced as `no such column: select`, which broke the convention
+	// documented at the top of every Claude prompt.
+	const TMap<FString, TSharedPtr<IClaireonTool>>& ToolsMap = Server->GetTools();
+	if (Query.StartsWith(TEXT("select:"), ESearchCase::IgnoreCase))
+	{
+		const FString Selector = Query.Mid(FString(TEXT("select:")).Len()).TrimStartAndEnd();
+		TArray<FString> RequestedNames;
+		Selector.ParseIntoArray(RequestedNames, TEXT(","), /*InCullEmpty=*/ true);
+		for (FString& N : RequestedNames)
+		{
+			N = N.TrimStartAndEnd();
+		}
+
+		TArray<TSharedPtr<FJsonValue>> Results;
+		TArray<FString> NotFound;
+		Results.Reserve(RequestedNames.Num());
+		for (const FString& WantedName : RequestedNames)
+		{
+			if (WantedName.IsEmpty()) { continue; }
+			const TSharedPtr<IClaireonTool>* FoundTool = ToolsMap.Find(WantedName);
+			if (!FoundTool || !FoundTool->IsValid())
+			{
+				NotFound.Add(WantedName);
+				continue;
+			}
+			const TSharedPtr<IClaireonTool>& Tool = *FoundTool;
+
+			TSharedPtr<FJsonObject> ToolObj = MakeShared<FJsonObject>();
+			ToolObj->SetStringField(TEXT("name"), Tool->GetName());
+			ToolObj->SetStringField(TEXT("category"), Tool->GetCategory());
+			ToolObj->SetStringField(TEXT("description"), Tool->GetDescription());
+			ToolObj->SetStringField(TEXT("signature"),
+				FClaireonXmlFormatter::GenerateTypeSignature(Tool->GetName(), Tool->GetInputSchema()));
+			if (TSharedPtr<FJsonObject> InputSchema = Tool->GetInputSchema())
+			{
+				ToolObj->SetObjectField(TEXT("input_schema"), InputSchema);
+			}
+			const FString Example = Tool->GetExampleUsage();
+			if (!Example.IsEmpty())
+			{
+				ToolObj->SetStringField(TEXT("example_usage"), Example);
+			}
+			const FString Patterns = Tool->GetPatterns();
+			if (!Patterns.IsEmpty())
+			{
+				ToolObj->SetStringField(TEXT("patterns"), Patterns);
+			}
+			if (TSharedPtr<FJsonObject> Tooltips = Tool->GetParameterTooltips())
+			{
+				ToolObj->SetObjectField(TEXT("parameter_tooltips"), Tooltips);
+			}
+			Results.Add(MakeShared<FJsonValueObject>(ToolObj));
+		}
+
+		TSharedPtr<FJsonObject> SelectData = MakeShared<FJsonObject>();
+		SelectData->SetBoolField(TEXT("select"), true);
+		SelectData->SetArrayField(TEXT("tools"), Results);
+		if (NotFound.Num() > 0)
+		{
+			TArray<TSharedPtr<FJsonValue>> NotFoundJson;
+			for (const FString& N : NotFound)
+			{
+				NotFoundJson.Add(MakeShared<FJsonValueString>(N));
+			}
+			SelectData->SetArrayField(TEXT("not_found"), NotFoundJson);
+		}
+
+		FString SelectSummary;
+		if (NotFound.Num() == 0)
+		{
+			SelectSummary = FString::Printf(TEXT("Selected %d tool(s)"), Results.Num());
+		}
+		else
+		{
+			SelectSummary = FString::Printf(TEXT("Selected %d tool(s); %d not found"),
+				Results.Num(), NotFound.Num());
+		}
+		return MakeSuccessResult(SelectData, SelectSummary);
+	}
+
+	// Cheap discovery mode -- return category names + tool counts only.
+	// ~200 bytes regardless of catalog size, so agents can list-then-drill without
+	// paying for the full per-tool surface.
+	FString Mode;
+	if (Arguments.IsValid())
+	{
+		Arguments->TryGetStringField(TEXT("mode"), Mode);
+	}
+	Mode = Mode.TrimStartAndEnd().ToLower();
+	if (Mode == TEXT("categories"))
+	{
+		TMap<FString, int32> CategoryCounts;
+		int32 TotalToolCount = 0;
+		for (const auto& Pair : ToolsMap)
+		{
+			const TSharedPtr<IClaireonTool>& T = Pair.Value;
+			if (!T.IsValid()) { continue; }
+			const FString Name = T->GetName();
+			if (Name == TEXT("python_execute") || Name == TEXT("tool_search")) { continue; }
+			++TotalToolCount;
+			CategoryCounts.FindOrAdd(T->GetCategory(), 0)++;
+		}
+		TArray<FString> CategoryKeys;
+		CategoryCounts.GetKeys(CategoryKeys);
+		CategoryKeys.Sort();
+
+		TArray<TSharedPtr<FJsonValue>> Cats;
+		Cats.Reserve(CategoryKeys.Num());
+		for (const FString& CatName : CategoryKeys)
+		{
+			TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+			Obj->SetStringField(TEXT("name"), CatName);
+			Obj->SetNumberField(TEXT("tool_count"), CategoryCounts[CatName]);
+			Cats.Add(MakeShared<FJsonValueObject>(Obj));
+		}
+		TSharedPtr<FJsonObject> CatData = MakeShared<FJsonObject>();
+		CatData->SetArrayField(TEXT("categories"), Cats);
+		CatData->SetNumberField(TEXT("total_categories"), CategoryKeys.Num());
+		CatData->SetNumberField(TEXT("total_tools"), TotalToolCount);
+		const FString CatSummary = FString::Printf(TEXT("Found %d categories spanning %d tools"),
+			CategoryKeys.Num(), TotalToolCount);
+		return MakeSuccessResult(CatData, CatSummary);
+	}
+
+	// When detail='full' and the caller did not explicitly override
+	// max_results, clamp the default to 5 so include_schema/include_examples does
+	// not return an 85k-character response that overflows assistant context.
+	if (Detail == TEXT("full"))
+	{
+		const bool bExplicitMaxResults = Arguments.IsValid()
+			&& Arguments->HasField(TEXT("max_results"));
+		if (!bExplicitMaxResults && MaxResults > 5)
+		{
+			MaxResults = 5;
+		}
+	}
+
 	// Strip boolean operators and quote/paren punctuation so callers that write
 	// pseudo-boolean queries ("blueprint AND chooser") still benefit from per-word
 	// union ranking. The C++ matcher's tokeniser drops <2-char tokens, so any
@@ -507,8 +657,6 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 		Query = Query.Replace(TEXT(")"), TEXT(" "), ESearchCase::CaseSensitive);
 		Query = Query.Replace(TEXT("\""), TEXT(" "), ESearchCase::CaseSensitive);
 	}
-
-	const TMap<FString, TSharedPtr<IClaireonTool>>& ToolsMap = Server->GetTools();
 
 	// --- Deep-inspect bypass: when tool_name is provided, return that tool's full metadata. ---
 	if (!InspectToolName.IsEmpty())
@@ -539,19 +687,19 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 		{
 			ToolObj->SetStringField(TEXT("example_usage"), Example);
 		}
-		// Part C (#0000): deep-inspect always surfaces GetPatterns() when
-		// non-empty.  Empty returns are dropped so deep-inspect responses for
-		// non-overriding tools stay byte-identical.
+		// Deep-inspect always surfaces GetPatterns() when non-empty. Empty
+		// returns are dropped so deep-inspect responses for non-overriding
+		// tools stay byte-identical.
 		const FString InspectPatterns = Tool->GetPatterns();
 		if (!InspectPatterns.IsEmpty())
 		{
 			ToolObj->SetStringField(TEXT("patterns"), InspectPatterns);
 		}
-		// Part D (#0000): for apply_spec / instance_apply_spec families, look up
-		// the bare GetCategory() in ApplySpecCatalog.json and surface the
-		// matching entry under `spec_shape`.  No-match path (missing plugin,
-		// missing file, parse error, or unknown family) silently omits the
-		// field; the tool still succeeds.
+		// For apply_spec / instance_apply_spec families, look up the bare
+		// GetCategory() in ApplySpecCatalog.json and surface the matching
+		// entry under `spec_shape`. No-match path (missing plugin, missing
+		// file, parse error, or unknown family) silently omits the field;
+		// the tool still succeeds.
 		const FString InspectOp = Tool->GetOperation();
 		if (InspectOp == TEXT("apply_spec") || InspectOp == TEXT("instance_apply_spec"))
 		{
@@ -616,7 +764,7 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 	const FString QueryExactKey = NormaliseForExactName(Query);
 	const bool bHasCategoryFilter = !Category.IsEmpty();
 	TSharedPtr<IClaireonTool> ExactNameTool;
-	FString                 ExactNameToolKey;     // lex-first key when collisions exist.
+	FString                 ExactNameToolKey;     // lex-first key when collisions exist (per M9).
 	TSharedPtr<IClaireonTool> NearExactNameTool;
 	int32                   NearExactDistance = INT32_MAX;
 	FString                 NearExactToolKey;
@@ -664,7 +812,7 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 				continue;
 			}
 
-			// Near-exact RESPECTS the category filter.
+			// Near-exact: RESPECTS the category filter.
 			if (bHasCategoryFilter && !Tool->GetCategory().Equals(Category, ESearchCase::IgnoreCase))
 			{
 				continue;
@@ -685,13 +833,16 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 
 	// Determine the pinned tool: exact wins over near-exact.
 	TSharedPtr<IClaireonTool> PinnedTool;
+	float PinnedScore = 0.0f;
 	if (ExactNameTool.IsValid())
 	{
 		PinnedTool = ExactNameTool;
+		PinnedScore = 1.0f;
 	}
 	else if (NearExactNameTool.IsValid() && NearExactDistance <= 2)
 	{
 		PinnedTool = NearExactNameTool;
+		PinnedScore = 1.0f - (static_cast<float>(NearExactDistance) / 3.0f);
 	}
 	const FString PinnedName = PinnedTool.IsValid() ? PinnedTool->GetName() : FString();
 
@@ -705,9 +856,9 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 	{
 		// Ensure catalog is built (or rebuilt if tool count changed OR the
 		// OnToolsChanged dirty bit was set by a rename-in-place / unregister
-		// path that did not change the count). exchange(false) atomically drains
-		// the bit so a concurrent broadcast queues the next rebuild instead of
-		// racing the current one.
+		// path that did not change the count). exchange(false) atomically
+		// drains the bit so a concurrent broadcast queues the next rebuild
+		// instead of racing the current one.
 		const bool bCountChanged = (LastCatalogToolCount != ToolsMap.Num());
 		const bool bDirtyDrained = ClaireonTool_SearchToolsInternal::bToolCatalogDirty.exchange(false);
 		if (bCountChanged || bDirtyDrained)
@@ -769,11 +920,12 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 		FString Source;
 		TSharedPtr<FJsonObject> InputSchema;
 		FString ExampleUsage;
-		/** Per-tool markdown patterns block. Populated only when Detail == "full"
-		 *  AND Tool->GetPatterns() returned a non-empty string. Surfaced as
-		 *  `patterns` on the per-result JSON object; never emitted when empty so
-		 *  full-detail responses do not pick up a `"patterns": ""` field for the
-		 *  200+ tools that do not override GetPatterns(). */
+		/** Per-tool markdown patterns block. Populated only when
+		 *  Detail == "full" AND Tool->GetPatterns() returned a non-empty
+		 *  string. Surfaced as `patterns` on the per-result JSON object;
+		 *  never emitted when empty so deep-inspect / full-detail responses
+		 *  do not pick up a `"patterns": ""` field for the 200+ tools that
+		 *  do not override GetPatterns(). */
 		FString Patterns;
 		/** Distinct query tokens that matched this entry (surfaced as `query_tokens_matched`). */
 		int32 QueryTokensMatched = 0;
@@ -816,8 +968,8 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 
 		// Apply category filter -- exact-name pin (distance 0) bypasses it.
 		// Near-exact pins still respect category (already checked above), so
-		// they don't need a bypass here; we let the already-validated
-		// near-exact pin through too for symmetry.
+		// they don't need a bypass here; but for symmetry / clarity we let
+		// the already-validated near-exact pin through too.
 		if (!CategoryLower.IsEmpty() && ToolCategory.ToLower() != CategoryLower && !bIsExactPin)
 		{
 			continue;
@@ -914,9 +1066,9 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 			Entry.ExampleUsage = Tool->GetExampleUsage();
 		}
 
-		// Part C (#0000): patterns block surfaces only on the full-detail tier;
-		// empty returns are dropped so non-overriding tools do not advertise an
-		// empty `patterns` field.
+		// Patterns block surfaces only on the full-detail tier; empty returns
+		// are dropped so non-overriding tools do not advertise an empty
+		// `patterns` field.
 		if (Detail == TEXT("full"))
 		{
 			Entry.Patterns = Tool->GetPatterns();
@@ -931,8 +1083,8 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 
 		// query_tokens_matched: prefer the matcher-reported count when this
 		// entry came from the fuzzy ranker; fall back to the substring-fallback
-		// per-tool count when fuzzy did not contribute. Pinned entries use
-		// the count of query tokens that survived the >2-char cutoff.
+		// per-tool count when fuzzy did not contribute. Pinned entries use the
+		// count of query tokens that survived the >2-char cutoff.
 		if (bIsPinned)
 		{
 			Entry.QueryTokensMatched = PinnedQueryTokenCount;
@@ -1038,8 +1190,8 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 			ToolObj->SetStringField(TEXT("name"), Entry->Name);
 			ToolObj->SetStringField(TEXT("description"), Entry->Description);
 			ToolObj->SetStringField(TEXT("signature"), Entry->TypeSignature);
-			// Always emit `query_tokens_matched` so future zero-result regressions
-			// are diagnosable.
+			// Always emit `query_tokens_matched` (no debug= gate) so future
+			// zero-result regressions are diagnosable.
 			ToolObj->SetNumberField(TEXT("query_tokens_matched"), Entry->QueryTokensMatched);
 			if (!Entry->Source.IsEmpty())
 			{
@@ -1083,14 +1235,14 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 		SummaryText += FString::Printf(TEXT(" (showing %d of %d)"), MatchingTools.Num(), TotalMatching);
 	}
 
-	// Part B (#0000): upgrade-path footer.  Tells the agent how to escalate to
-	// full detail without a follow-up search.  Suppressed when:
+	// Upgrade-path footer. Tells the agent how to escalate to full detail
+	// without a follow-up search. Suppressed when:
 	//   - already at full detail (nothing to escalate to);
 	//   - the deep-inspect bypass already short-circuited earlier (defensive --
 	//     deep-inspect returns at MakeSuccessResult above);
 	//   - no hits to recommend;
 	//   - exactly one match whose canonical name equals the trimmed query
-	//     (per operator D5: the agent already has the canonical name).
+	//     (the agent already has the canonical name).
 	const bool bSuppressFooter =
 		Detail == TEXT("full") ||
 		!InspectToolName.IsEmpty() ||

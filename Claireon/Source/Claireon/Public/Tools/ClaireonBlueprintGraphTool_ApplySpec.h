@@ -5,4 +5,6 @@
 
 #include "Tools/ClaireonBlueprintGraphEditToolBase.h"
 
-DECLARE_BPGRAPH_TOOL(ClaireonBlueprintGraphTool_ApplySpec);
+// apply_spec drops the static PIE block. Execute() checks IsPlaySessionInProgress
+// at runtime and rejects non-dry-run during PIE; dry_run=true is honored at any time.
+DECLARE_BPGRAPH_TOOL_PIE_OK(ClaireonBlueprintGraphTool_ApplySpec);

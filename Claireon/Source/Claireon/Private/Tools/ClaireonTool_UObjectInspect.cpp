@@ -184,6 +184,18 @@ IClaireonTool::FToolResult ClaireonTool_UObjectInspect::Execute(const TSharedPtr
 				*PropertyPath, *PathError));
 	}
 
+	// / O5 guard: classify the leaf's access BEFORE reading. uobject_inspect
+	// itself goes through ContainerPtrToValuePtr (raw memory offset), which does
+	// NOT crash on protected fields. But callers consulting the response value
+	// without seeing the access level can later forward the same path to
+	// `unreal.get_editor_property`, which DOES SEH-crash on engine fields like
+	// UStateTree::Schema. Surface the access level + a Warning so the caller's
+	// next step is informed.
+	const EPropertyFlags LeafFlags = LeafProperty->GetPropertyFlags();
+	const FString LeafAccess = ClaireonToolUObjectInspect_Internal::DeriveAccess(LeafFlags);
+	const FString LeafBpAccess = ClaireonToolUObjectInspect_Internal::DeriveBpAccess(LeafFlags);
+	const FString LeafEditorAccess = ClaireonToolUObjectInspect_Internal::DeriveEditorAccess(LeafFlags);
+
 	// ResolvePropertyByPath returns Container; for array-leaf elements the
 	// container IS the element data and the leaf property is the inner.
 	// ClaireonPropertyUtils internally normalizes this in ReadPropertyByPath
@@ -203,13 +215,31 @@ IClaireonTool::FToolResult ClaireonTool_UObjectInspect::Execute(const TSharedPtr
 	Data->SetStringField(TEXT("property_path"), PropertyPath);
 	Data->SetStringField(TEXT("kind"), ClaireonStructReflection::ClassifyProperty(LeafProperty));
 	Data->SetStringField(TEXT("cpp_type"), ClaireonStructReflection::GetPropertySubtypePath(LeafProperty));
+	Data->SetStringField(TEXT("access"), LeafAccess);
+	Data->SetStringField(TEXT("bp_access"), LeafBpAccess);
+	Data->SetStringField(TEXT("editor_access"), LeafEditorAccess);
 	Data->SetField(TEXT("value"), SerializedValue);
 
 	const FString Summary = FString::Printf(
 		TEXT("uobject_inspect: %s.%s"),
 		*Object->GetName(),
 		*PropertyPath);
-	return MakeSuccessResult(Data, Summary);
+	FToolResult Result = MakeSuccessResult(Data, Summary);
+
+	// Warn when the field is C++-protected/private AND has no BP/editor access:
+	// this is the exact shape of UStateTree::Schema and the other known SEH
+	// triggers. Callers re-routing the same path through raw get_editor_property
+	// would hit the access-checked engine accessor and crash.
+	const bool bIsRestrictedCppAccess = (LeafAccess != TEXT("public"));
+	const bool bNoBpExposure = (LeafBpAccess == TEXT("none"));
+	const bool bNoEditorExposure = (LeafEditorAccess == TEXT("none"));
+	if (bIsRestrictedCppAccess && bNoBpExposure && bNoEditorExposure)
+	{
+		Result.Warnings.Add(FString::Printf(
+			TEXT("Property '%s' is %s with no BP or editor exposure; raw `unreal.get_editor_property` on it can SEH-crash the editor (E15 / O5). Continue using uobject_inspect or the relevant claireon.* helper."),
+			*PropertyPath, *LeafAccess));
+	}
+	return Result;
 }
 
 namespace ClaireonToolUObjectInspect_Internal

@@ -406,6 +406,29 @@ namespace
 			*StateTreeHelpers_GetSelectionBehaviorName(State->SelectionBehavior),
 			*EnabledStr, *FocusMarker);
 
+#if WITH_EDITORONLY_DATA
+		// surface the linked asset path for LinkedAsset states, and the linked
+		// subtree name + GUID for Linked (subtree-link) states. Without this, callers
+		// see e.g. "(LinkedAsset, InOrder)" but cannot tell *which* asset the state
+		// links to without a separate get_editor_property call.
+		if (State->Type == EStateTreeStateType::LinkedAsset)
+		{
+			const UStateTree* LinkedAsset = State->LinkedAsset.Get();
+			const FString LinkedPath = LinkedAsset ? LinkedAsset->GetPathName() : FString(TEXT("(null)"));
+			Output += FString::Printf(TEXT("%sLinkedAsset: %s\n"), *ChildIndent, *LinkedPath);
+		}
+		else if (State->Type == EStateTreeStateType::Linked)
+		{
+			const FString LinkedName = State->LinkedSubtree.Name.IsNone()
+				? FString(TEXT("(unset)"))
+				: State->LinkedSubtree.Name.ToString();
+			const FString LinkedGuid = State->LinkedSubtree.ID.IsValid()
+				? State->LinkedSubtree.ID.ToString(EGuidFormats::DigitsWithHyphensLower)
+				: FString(TEXT("(invalid)"));
+			Output += FString::Printf(TEXT("%sLinkedSubtree: %s [%s]\n"), *ChildIndent, *LinkedName, *LinkedGuid);
+		}
+#endif // WITH_EDITORONLY_DATA
+
 		// Enter conditions
 		if (State->EnterConditions.Num() > 0)
 		{
@@ -720,11 +743,44 @@ UScriptStruct* ClaireonStateTreeHelpers::ResolveNodeStruct(const FString& Struct
 		return nullptr;
 	}
 
+	// accept both the bare struct name (e.g. "MySTT_MoveTo") and the
+	// full UE script path form (e.g. "/Script/MyGame.FMySTT_MoveTo").
+	// ClaireonNameResolver::ResolveStructName uses FindFirstObject on bare names, so
+	// a leading "/Script/<Module>." prefix bypasses it. Strip the prefix here and
+	// preserve the original input for the error path so we can hint clearly.
+	FString CandidateName = StructName;
+	if (CandidateName.StartsWith(TEXT("/Script/")))
+	{
+		int32 DotIdx = INDEX_NONE;
+		if (CandidateName.FindChar(TEXT('.'), DotIdx) && DotIdx >= 0 && DotIdx + 1 < CandidateName.Len())
+		{
+			CandidateName = CandidateName.Mid(DotIdx + 1);
+		}
+	}
+
 	ClaireonNameResolver::FNameResolveResult NameResult;
-	UScriptStruct* FoundStruct = ClaireonNameResolver::ResolveStructName(StructName, NameResult);
+	UScriptStruct* FoundStruct = ClaireonNameResolver::ResolveStructName(CandidateName, NameResult);
 	if (!FoundStruct)
 	{
-		OutError = NameResult.Error;
+		// Build a richer error so the next attempt has a fighting chance. The plain
+		// "Struct not found" message from the resolver does not tell callers that
+		// stripping a /Script/<Module>.F prefix is the most common fix.
+		const bool bHadScriptPrefix = StructName.StartsWith(TEXT("/Script/"));
+		const bool bHadFPrefix = CandidateName.Len() > 1 && CandidateName[0] == TEXT('F') && FChar::IsUpper(CandidateName[1]);
+		FString Hint;
+		if (bHadScriptPrefix)
+		{
+			Hint = FString::Printf(TEXT(" Tried '%s' after stripping '/Script/...' prefix. Pass the bare struct name instead (e.g. 'MySTT_MoveTo')."), *CandidateName);
+		}
+		else if (bHadFPrefix)
+		{
+			Hint = TEXT(" Try without the leading 'F' (UE struct names drop the C++ prefix).");
+		}
+		else
+		{
+			Hint = TEXT(" Use the bare struct name without '/Script/<Module>.' or leading 'F' prefix.");
+		}
+		OutError = NameResult.Error + Hint;
 		return nullptr;
 	}
 

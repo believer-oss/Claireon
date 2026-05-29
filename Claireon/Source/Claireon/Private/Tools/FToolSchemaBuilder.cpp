@@ -70,6 +70,18 @@ void FToolSchemaBuilder::AddObject(const FString& Name, const FString& Descripti
 	}
 }
 
+void FToolSchemaBuilder::AddArray(const FString& Name, const FString& Description, bool bRequired)
+{
+	TSharedPtr<FJsonObject> Prop = MakeShared<FJsonObject>();
+	Prop->SetStringField(TEXT("type"), TEXT("array"));
+	Prop->SetStringField(TEXT("description"), Description);
+	Properties->SetObjectField(Name, Prop);
+	if (bRequired)
+	{
+		RequiredFields.Add(MakeShared<FJsonValueString>(Name));
+	}
+}
+
 void FToolSchemaBuilder::AddEnum(const FString& Name, const FString& Description, const TArray<FString>& Values, bool bRequired)
 {
 	TSharedPtr<FJsonObject> Prop = MakeShared<FJsonObject>();

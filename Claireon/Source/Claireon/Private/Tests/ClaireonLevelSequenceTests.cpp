@@ -104,10 +104,10 @@ ULevelSequence* CreateRebindFixtureSequence(
 }  // namespace ClaireonLevelSequenceTestsHelpers
 
 // ============================================================================
-// F1: FClaireonSequenceHelpers
+// FClaireonSequenceHelpers
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_ResolveTrackClass, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, ResolveTrackClass, UNTEST_TIMEOUTMS(5000))
 {
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("transform"))  == UMovieScene3DTransformTrack::StaticClass());
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("visibility")) == UMovieSceneVisibilityTrack::StaticClass());
@@ -116,7 +116,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_ResolveTrackClass, UNTEST_TIMEOUTMS
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("camera_cut")) == UMovieSceneCameraCutTrack::StaticClass());
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("float"))      == UMovieSceneFloatTrack::StaticClass());
 
-	// Widget-common track types (#0000 stage 002)
+	// Widget-common track types
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("color"))           == UMovieSceneColorTrack::StaticClass());
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("margin"))          == UMovieSceneMarginTrack::StaticClass());
 	UNTEST_EXPECT_TRUE(FClaireonSequenceHelpers::ResolveTrackClass(TEXT("2d_transform"))    == UMovieScene2DTransformTrack::StaticClass());
@@ -130,7 +130,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_ResolveTrackClass, UNTEST_TIMEOUTMS
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_LoadInvalidPath, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, LoadInvalidPath, UNTEST_TIMEOUTMS(5000))
 {
 	FString Error;
 	ULevelSequence* Seq = FClaireonSequenceHelpers::LoadLevelSequenceAsset(
@@ -140,7 +140,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_LoadInvalidPath, UNTEST_TIMEOUTMS(5
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_LoadEmptyPath, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, LoadEmptyPath, UNTEST_TIMEOUTMS(5000))
 {
 	FString Error;
 	ULevelSequence* Seq = FClaireonSequenceHelpers::LoadLevelSequenceAsset(TEXT(""), Error);
@@ -149,7 +149,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_LoadEmptyPath, UNTEST_TIMEOUTMS(500
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_FormatRoundTrip, UNTEST_TIMEOUTMS(10000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, FormatRoundTrip, UNTEST_TIMEOUTMS(10000))
 {
 	ULevelSequence* Seq = ClaireonLevelSequenceTestsHelpers::CreateInMemoryFixtureSequence();
 	UNTEST_ASSERT_TRUE(Seq != nullptr);
@@ -171,7 +171,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_FormatRoundTrip, UNTEST_TIMEOUTMS(1
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_FormatOmitsSectionsWhenRequested, UNTEST_TIMEOUTMS(10000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, FormatOmitsSectionsWhenRequested, UNTEST_TIMEOUTMS(10000))
 {
 	ULevelSequence* Seq = ClaireonLevelSequenceTestsHelpers::CreateInMemoryFixtureSequence();
 	UNTEST_ASSERT_TRUE(Seq != nullptr);
@@ -184,7 +184,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_FormatOmitsSectionsWhenRequested, U
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_FrameSecondsRoundTrip, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, FrameSecondsRoundTrip, UNTEST_TIMEOUTMS(5000))
 {
 	ULevelSequence* Seq = ClaireonLevelSequenceTestsHelpers::CreateInMemoryFixtureSequence();
 	UNTEST_ASSERT_TRUE(Seq != nullptr);
@@ -197,7 +197,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_FrameSecondsRoundTrip, UNTEST_TIMEO
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_CoerceKeyframeFloatAccepts, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, CoerceKeyframeFloatAccepts, UNTEST_TIMEOUTMS(5000))
 {
 	// Build a bare float track for type dispatch testing.
 	UMovieSceneFloatTrack* Track = NewObject<UMovieSceneFloatTrack>(GetTransientPackage());
@@ -211,7 +211,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_CoerceKeyframeFloatAccepts, UNTEST_
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_CoerceKeyframeTransformAccepts, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, CoerceKeyframeTransformAccepts, UNTEST_TIMEOUTMS(5000))
 {
 	UMovieScene3DTransformTrack* Track = NewObject<UMovieScene3DTransformTrack>(GetTransientPackage());
 	UNTEST_ASSERT_TRUE(Track != nullptr);
@@ -226,7 +226,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_CoerceKeyframeTransformAccepts, UNT
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_CoerceKeyframeVisibilityAccepts, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, CoerceKeyframeVisibilityAccepts, UNTEST_TIMEOUTMS(5000))
 {
 	UMovieSceneVisibilityTrack* Track = NewObject<UMovieSceneVisibilityTrack>(GetTransientPackage());
 	UNTEST_ASSERT_TRUE(Track != nullptr);
@@ -239,7 +239,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_CoerceKeyframeVisibilityAccepts, UN
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_CoerceKeyframeEventAccepts, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, CoerceKeyframeEventAccepts, UNTEST_TIMEOUTMS(5000))
 {
 	UMovieSceneEventTrack* Track = NewObject<UMovieSceneEventTrack>(GetTransientPackage());
 	UNTEST_ASSERT_TRUE(Track != nullptr);
@@ -251,7 +251,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_CoerceKeyframeEventAccepts, UNTEST_
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_CoerceKeyframeUnsupportedFails, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, CoerceKeyframeUnsupportedFails, UNTEST_TIMEOUTMS(5000))
 {
 	UMovieSceneCameraCutTrack* Track = NewObject<UMovieSceneCameraCutTrack>(GetTransientPackage());
 	UNTEST_ASSERT_TRUE(Track != nullptr);
@@ -263,10 +263,10 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_CoerceKeyframeUnsupportedFails, UNT
 }
 
 // ============================================================================
-// F1: claireon.sequence_inspect
+// sequence_inspect
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_InspectMissingAssetPath, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, InspectMissingAssetPath, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_SequenceInspect Tool;
 
@@ -277,7 +277,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_InspectMissingAssetPath, UNTEST_TIM
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_InspectError, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, InspectError, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_SequenceInspect Tool;
 
@@ -289,7 +289,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_InspectError, UNTEST_TIMEOUTMS(5000
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_InspectHappyPath, UNTEST_TIMEOUTMS(10000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, InspectHappyPath, UNTEST_TIMEOUTMS(10000))
 {
 	// We can't load via asset_path for an in-memory sequence, so the happy-path
 	// test builds the fixture and invokes LoadLevelSequenceAsset's wrapper via
@@ -337,16 +337,14 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F1_InspectHappyPath, UNTEST_TIMEOUTMS(
 }
 
 // ============================================================================
-// F3: claireon.sequence_list_track_types
+// sequence_list_track_types
 // ============================================================================
 //
-// NOTE: stage-008 test mode is build_time_only_deferred_to_021. These Untest
-// blocks are compiled (catching API drift / missing includes / signature
-// mismatches at build time) but the runtime Automation suite for them is not
-// executed until the aggregate stage-021 final-validation run. Mirrors the F1
-// and F7 deferral pattern for this feature set.
+// NOTE: build-time-only test mode. These Untest blocks are compiled (catching
+// API drift / missing includes / signature mismatches at build time) but the
+// runtime Automation suite for them is exercised manually via real MCP calls.
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F3_EnumerationHappyPath, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, EnumerationHappyPath, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_SequenceListTrackTypes Tool;
 
@@ -395,7 +393,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F3_EnumerationHappyPath, UNTEST_TIMEOU
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F3_UClassValidity, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, UClassValidity, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_SequenceListTrackTypes Tool;
 
@@ -431,7 +429,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F3_UClassValidity, UNTEST_TIMEOUTMS(50
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F3_SymmetryWithHelper, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, SymmetryWithHelper, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_SequenceListTrackTypes Tool;
 
@@ -462,7 +460,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F3_SymmetryWithHelper, UNTEST_TIMEOUTM
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F3_MetadataAndSchema, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, ListTrackTypes_MetadataAndSchema, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_SequenceListTrackTypes Tool;
 
@@ -492,21 +490,19 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F3_MetadataAndSchema, UNTEST_TIMEOUTMS
 }
 
 // ============================================================================
-// F4: claireon.sequence_actor_place
+// sequence_actor_place
 // ============================================================================
 //
-// NOTE: stage-010 test mode is build_time_only_deferred_to_021. These Untest
-// blocks are compiled (catching API drift / missing includes / signature
-// mismatches at build time) but the runtime Automation suite for them is not
-// executed until the aggregate stage-021 final-validation run. Mirrors the F1,
-// F7, and F3 deferral pattern for this feature set.
+// NOTE: build-time-only test mode. These Untest blocks are compiled (catching
+// API drift / missing includes / signature mismatches at build time) but the
+// runtime Automation suite is exercised manually via real MCP calls.
 //
 // Happy-path / replicated / PlaybackSettings reflection / save_map opt-in /
-// PIE-guard behaviour requires a real map + editor world and is exercised via
-// MCP end-to-end in stage 010 step 2 (real MCP call) and re-run in stage 021.
-// These build-time blocks assert tool metadata + schema shape to catch drift.
+// PIE-guard behaviour requires a real map + editor world and is exercised
+// via MCP end-to-end manually. These build-time blocks assert tool metadata
+// + schema shape to catch drift.
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F4_MetadataAndSchema, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, ActorPlace_MetadataAndSchema, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_SequenceActorPlace Tool;
 
@@ -559,7 +555,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F4_MetadataAndSchema, UNTEST_TIMEOUTMS
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F4_MissingRequiredFields, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, MissingRequiredFields, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_SequenceActorPlace Tool;
 
@@ -590,7 +586,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F4_MissingRequiredFields, UNTEST_TIMEO
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F4_NullSequenceError, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, NullSequenceError, UNTEST_TIMEOUTMS(5000))
 {
 	// Invalid sequence asset path -> structured error before spawn / transaction.
 	ClaireonTool_SequenceActorPlace Tool;
@@ -606,7 +602,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F4_NullSequenceError, UNTEST_TIMEOUTMS
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F4_ClassResolutionSanity, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, ClassResolutionSanity, UNTEST_TIMEOUTMS(5000))
 {
 	// Verifies the Level Sequence actor classes used in Execute resolve at runtime,
 	// so refactors/relocations in the engine don't silently break F4 spawning.
@@ -629,28 +625,26 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F4_ClassResolutionSanity, UNTEST_TIMEO
 }
 
 // ============================================================================
-// F2: claireon.sequence_edit
+// sequence_edit
 // ============================================================================
 //
-// NOTE: stage-012 test mode is build_time_only_deferred_to_021. These Untest
-// blocks are compiled (catching API drift / missing includes / signature
-// mismatches at build time) but the runtime Automation suite for them is not
-// executed until the aggregate stage-021 final-validation run. Mirrors the F1,
-// F3, F4, and F7 deferral pattern.
+// NOTE: build-time-only test mode. These Untest blocks are compiled (catching
+// API drift / missing includes / signature mismatches at build time) but the
+// runtime Automation suite is exercised manually via real MCP calls.
 //
 // Happy-path round-trip (open create_if_missing -> add_possessable -> add_track
 // -> add_section -> add_keyframe -> save -> close -> reopen) requires a real
 // /Game/ package path + full editor context and is exercised via MCP
-// end-to-end in stage 012 step 2 and re-run in stage 021. These build-time
-// blocks assert tool metadata, schema shape, and error-path behaviour to catch
-// drift.
+// end-to-end manually. These build-time blocks assert tool metadata, schema
+// shape, and error-path behaviour to catch drift.
 
-// Stage 026: claireon.sequence_edit was decomposed into 20 claireon.level_sequence_*
-// tools. The monolith-envelope tests below predate decomposition; they will be
-// rewritten against the decomposed tools in a follow-up (mirrors stages 023/024
-// BP + WidgetBP monolith test rewrite). Disabled here to keep the build green.
+// sequence_edit was decomposed into 20 level_sequence_* tools. The
+// monolith-envelope tests below predate decomposition; they will be
+// rewritten against the decomposed tools in a follow-up (mirrors the
+// BP + WidgetBP monolith test rewrite). Disabled here to keep the build
+// green.
 #if 0 // MONOLITH_ENVELOPE_TESTS
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_MetadataAndSchema, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, MetadataAndSchema, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_SequenceEdit Tool;
 
@@ -676,8 +670,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_MetadataAndSchema, UNTEST_TIMEOUTMS
 	UNTEST_EXPECT_TRUE((*PropertiesObj)->HasField(TEXT("session_id")));
 	UNTEST_EXPECT_TRUE((*PropertiesObj)->HasField(TEXT("params")));
 
-	// 'operation' must enumerate all F2 + F5 ops. create_event_endpoint joined the
-	// enum when F5 shipped in stage 013.
+	// 'operation' must enumerate all sequence_edit + director-blueprint ops.
 	const TSharedPtr<FJsonObject>* OpObj = nullptr;
 	UNTEST_ASSERT_TRUE((*PropertiesObj)->TryGetObjectField(TEXT("operation"), OpObj));
 	const TArray<TSharedPtr<FJsonValue>>* OpEnum = nullptr;
@@ -730,7 +723,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_MetadataAndSchema, UNTEST_TIMEOUTMS
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_MissingOperation, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, MissingOperation, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_SequenceEdit Tool;
 
@@ -741,7 +734,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_MissingOperation, UNTEST_TIMEOUTMS(
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_MissingSessionId, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, MissingSessionId, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_SequenceEdit Tool;
 
@@ -754,7 +747,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_MissingSessionId, UNTEST_TIMEOUTMS(
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_UnknownOperation, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, UnknownOperation, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_SequenceEdit Tool;
 
@@ -770,7 +763,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_UnknownOperation, UNTEST_TIMEOUTMS(
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_OpenRequiresAssetPath, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, OpenRequiresAssetPath, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_SequenceEdit Tool;
 
@@ -783,7 +776,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_OpenRequiresAssetPath, UNTEST_TIMEO
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_OpenLoadFailureNoCreate, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, OpenLoadFailureNoCreate, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_SequenceEdit Tool;
 
@@ -802,7 +795,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_OpenLoadFailureNoCreate, UNTEST_TIM
 }
 #endif // MONOLITH_ENVELOPE_TESTS
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_SessionDataStruct, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, SessionDataStruct, UNTEST_TIMEOUTMS(5000))
 {
 	// Verify FSequenceEditToolData default-constructs cleanly and exposes the
 	// documented cursor-history behaviour (pushes preserve binding/track pairs).
@@ -828,7 +821,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_SessionDataStruct, UNTEST_TIMEOUTMS
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_CursorHistoryCap, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, CursorHistoryCap, UNTEST_TIMEOUTMS(5000))
 {
 	// PushHistory caps at MaxHistorySize (FIFO eviction).
 	FSequenceEditToolData Data;
@@ -847,23 +840,21 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F2_CursorHistoryCap, UNTEST_TIMEOUTMS(
 }
 
 // ============================================================================
-// F5: claireon.sequence_edit.create_event_endpoint
+// sequence_edit.create_event_endpoint
 // ============================================================================
 //
-// NOTE: stage-014 test mode is build_time_only_deferred_to_021. These Untest
-// blocks are compiled (catching API drift / missing includes / signature
-// mismatches at build time) but the runtime Automation suite for them is not
-// executed until the aggregate stage-021 final-validation run. Mirrors the F1,
-// F3, F4, F2, and F7 deferral pattern for this feature set.
+// NOTE: build-time-only test mode. These Untest blocks are compiled (catching
+// API drift / missing includes / signature mismatches at build time) but the
+// runtime Automation suite is exercised manually via real MCP calls.
 //
-// Happy-path round-trip (open create_if_missing -> create_event_endpoint NoParams
-// + BoundObject -> save -> reopen -> inspect Director BP) requires a real
-// /Game/ package path + FKismetEditorUtilities::CompileBlueprint execution
-// against a live Editor world and is exercised via MCP end-to-end in stage 014
-// step 2 (real MCP call) and re-run in stage 021. These build-time blocks
-// assert metadata + schema shape + error-path behaviour to catch drift.
+// Happy-path round-trip (open create_if_missing -> create_event_endpoint
+// NoParams + BoundObject -> save -> reopen -> inspect Director BP) requires
+// a real /Game/ package path + FKismetEditorUtilities::CompileBlueprint
+// execution against a live Editor world and is exercised via MCP
+// end-to-end manually. These build-time blocks assert metadata + schema
+// shape + error-path behaviour to catch drift.
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_SignatureEnumValues, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, SignatureEnumValues, UNTEST_TIMEOUTMS(5000))
 {
 	// Underlying enum values are load-bearing -- dispatcher casts signature
 	// strings to these values. Drift here would silently change behaviour.
@@ -872,7 +863,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_SignatureEnumValues, UNTEST_TIMEOUT
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_EnsureDirectorNullSequence, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, EnsureDirectorNullSequence, UNTEST_TIMEOUTMS(5000))
 {
 	// Null sequence -> structured error, no crash.
 	FString Error;
@@ -882,7 +873,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_EnsureDirectorNullSequence, UNTEST_
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_CreateEventEndpointNullBP, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, CreateEventEndpointNullBP, UNTEST_TIMEOUTMS(5000))
 {
 	// Null director BP -> structured error.
 	FString Error;
@@ -893,7 +884,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_CreateEventEndpointNullBP, UNTEST_T
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_CreateEventEndpointEmptyName, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, CreateEventEndpointEmptyName, UNTEST_TIMEOUTMS(5000))
 {
 	// Empty endpoint name -> structured error, no graph mutation.
 	FString Error;
@@ -907,8 +898,8 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_CreateEventEndpointEmptyName, UNTES
 	co_return;
 }
 
-#if 0 // MONOLITH_ENVELOPE_TESTS -- stage 026 decomposed claireon.sequence_edit
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_DispatcherUnknownSignature, UNTEST_TIMEOUTMS(5000))
+#if 0 // MONOLITH_ENVELOPE_TESTS -- sequence_edit was decomposed
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, DispatcherUnknownSignature, UNTEST_TIMEOUTMS(5000))
 {
 	// create_event_endpoint with an unknown signature string must error with a
 	// clear message BEFORE attempting to mutate the Director BP. Uses bogus
@@ -934,7 +925,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_DispatcherUnknownSignature, UNTEST_
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_DispatcherMissingEndpointName, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, DispatcherMissingEndpointName, UNTEST_TIMEOUTMS(5000))
 {
 	// create_event_endpoint without endpoint_name must error. Routes through
 	// missing-session_id first since that is checked earlier; either path
@@ -954,7 +945,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_DispatcherMissingEndpointName, UNTE
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_DispatcherAdvertisesOp, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, DispatcherAdvertisesOp, UNTEST_TIMEOUTMS(5000))
 {
 	// Schema enum must advertise create_event_endpoint now that F5 has landed.
 	// Paired with the assertion in F2_MetadataAndSchema above.
@@ -986,20 +977,19 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F5_DispatcherAdvertisesOp, UNTEST_TIME
 #endif // MONOLITH_ENVELOPE_TESTS
 
 // ============================================================================
-// F6: claireon.sequence_edit.apply_spec (FClaireonSpecApplicator_LevelSequence)
+// sequence_edit.apply_spec (FClaireonSpecApplicator_LevelSequence)
 // ============================================================================
 //
-// NOTE: stage-016 test mode is build_time_only_deferred_to_021. These Untest
-// blocks are compiled (catching API drift / missing includes / signature
-// mismatches at build time) but the runtime Automation suite for them is not
-// executed until the aggregate stage-021 final-validation run. Mirrors the F1,
-// F2, F3, F4, F5, F7 deferral pattern for this feature set.
+// NOTE: build-time-only test mode. These Untest blocks are compiled (catching
+// API drift / missing includes / signature mismatches at build time) but the
+// runtime Automation suite is exercised manually via real MCP calls.
 //
-// Idempotency (applying the same spec twice -> zero new ops) is the load-
-// bearing invariant and is re-run in stage 021 against a real /Game/ asset.
-// The build-time block here covers tool-spec validation + dispatcher surface.
+// Idempotency (applying the same spec twice -> zero new ops) is the
+// load-bearing invariant and is exercised manually against a real /Game/
+// asset. The build-time block here covers tool-spec validation + dispatcher
+// surface.
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6_ValidateSpecEmpty, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, ValidateSpecEmpty, UNTEST_TIMEOUTMS(5000))
 {
 	FClaireonSpecApplicator_LevelSequence Applicator;
 	TSharedPtr<FJsonObject> Spec = MakeShared<FJsonObject>();
@@ -1012,8 +1002,8 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6_ValidateSpecEmpty, UNTEST_TIMEOUTMS
 	co_return;
 }
 
-#if 0 // MONOLITH_ENVELOPE_TESTS -- stage 026 decomposed claireon.sequence_edit
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6_DispatcherAdvertisesApplySpec, UNTEST_TIMEOUTMS(5000))
+#if 0 // MONOLITH_ENVELOPE_TESTS -- sequence_edit was decomposed
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, DispatcherAdvertisesApplySpec, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_SequenceEdit Tool;
 
@@ -1041,7 +1031,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6_DispatcherAdvertisesApplySpec, UNTE
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6_ApplySpecRequiresAssetPath, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, ApplySpecRequiresAssetPath, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_SequenceEdit Tool;
 
@@ -1058,7 +1048,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6_ApplySpecRequiresAssetPath, UNTEST_
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6_ApplySpecRequiresSpecObject, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, ApplySpecRequiresSpecObject, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonTool_SequenceEdit Tool;
 
@@ -1077,7 +1067,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6_ApplySpecRequiresSpecObject, UNTEST
 }
 #endif // MONOLITH_ENVELOPE_TESTS
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6_UnknownBindingKindRejected, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, UnknownBindingKindRejected, UNTEST_TIMEOUTMS(5000))
 {
 	// Tool-specific validation must reject unknown binding kinds with a clear message.
 	FClaireonSpecApplicator_LevelSequence Applicator;
@@ -1099,10 +1089,10 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6_UnknownBindingKindRejected, UNTEST_
 }
 
 // ============================================================================
-// #0000: ApplyRebindActor (claireon.level_sequence_rebind_actor handler)
+// ApplyRebindActor (claireon.level_sequence_rebind_actor handler)
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_ByGuid_Resolves, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_ByGuid_Resolves, UNTEST_TIMEOUTMS(5000))
 {
 	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
 	UNTEST_ASSERT_TRUE(World != nullptr);
@@ -1130,7 +1120,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_ByGuid_Resolves, UNTEST_T
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_PreservesCameraCutSection_Parameters, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_PreservesCameraCutSection_Parameters, UNTEST_TIMEOUTMS(5000))
 {
 	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
 	UNTEST_ASSERT_TRUE(World != nullptr);
@@ -1181,7 +1171,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_PreservesCameraCutSection
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_ByLabel_RepairsUnresolved, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_ByLabel_RepairsUnresolved, UNTEST_TIMEOUTMS(5000))
 {
 	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
 	UNTEST_ASSERT_TRUE(World != nullptr);
@@ -1246,7 +1236,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_ByLabel_RepairsUnresolved
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_TwiceToDifferentActors_OneReference, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_TwiceToDifferentActors_OneReference, UNTEST_TIMEOUTMS(5000))
 {
 	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
 	UNTEST_ASSERT_TRUE(World != nullptr);
@@ -1278,7 +1268,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_TwiceToDifferentActors_On
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_WrongClass_Errors, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_WrongClass_Errors, UNTEST_TIMEOUTMS(5000))
 {
 #if WITH_EDITORONLY_DATA
 	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
@@ -1301,7 +1291,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_WrongClass_Errors, UNTEST
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_OnSpawnable_Errors, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_OnSpawnable_Errors, UNTEST_TIMEOUTMS(5000))
 {
 	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
 	UNTEST_ASSERT_TRUE(World != nullptr);
@@ -1331,7 +1321,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_OnSpawnable_Errors, UNTES
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_ChildPossessable_Errors, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_ChildPossessable_Errors, UNTEST_TIMEOUTMS(5000))
 {
 	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
 	UNTEST_ASSERT_TRUE(World != nullptr);
@@ -1361,7 +1351,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_ChildPossessable_Errors, 
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, LevelSequence, F6521_Rebind_Clear_DropsReferences_KeepsGuid, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_Clear_DropsReferences_KeepsGuid, UNTEST_TIMEOUTMS(5000))
 {
 	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
 	UNTEST_ASSERT_TRUE(World != nullptr);

@@ -284,30 +284,200 @@ bool ApplyAddKeyframe(UMovieSceneSection* Section, FFrameNumber Frame, const FSt
 		TSharedPtr<FJsonObject> Obj = ClaireonSequenceEditHandlersInternal::ParseJsonObject(ValueJson);
 		if (!Obj.IsValid())
 		{
-			OutError = TEXT("transform channel expects {\"location\":[x,y,z],\"rotation\":[p,y,r]}");
+			OutError = TEXT("transform channel expects {\"location\":[x,y,z],\"rotation\":[p,y,r],\"scale\":[sx,sy,sz]?} "
+				"or per-channel {translation_x,...,rotation_x,...,scale_x,...}");
 			return false;
 		}
+
+		// Accept either compact form (location/rotation/scale arrays) or
+		// per-channel form (translation_x, translation_y, ..., scale_z). Per-channel
+		// form lets a caller key a single sub-channel without touching the others
+		// (Sequencer engine code paths assume per-channel writes, so this matches
+		// 9-channel transform-section expectations).
+		double Loc[3] = { 0.0, 0.0, 0.0 };
+		double Rot[3] = { 0.0, 0.0, 0.0 };
+		double Scl[3] = { 1.0, 1.0, 1.0 };
+		bool bHasLocAny = false, bHasRotAny = false, bHasSclAny = false;
+		bool bSetLoc[3] = { false, false, false };
+		bool bSetRot[3] = { false, false, false };
+		bool bSetScl[3] = { false, false, false };
+
+		// Compact array form first.
 		const TArray<TSharedPtr<FJsonValue>>* LocArr = nullptr;
 		const TArray<TSharedPtr<FJsonValue>>* RotArr = nullptr;
-		const bool bHasLoc = Obj->TryGetArrayField(TEXT("location"), LocArr) && LocArr && LocArr->Num() == 3;
-		const bool bHasRot = Obj->TryGetArrayField(TEXT("rotation"), RotArr) && RotArr && RotArr->Num() == 3;
-		if (!bHasLoc || !bHasRot)
+		const TArray<TSharedPtr<FJsonValue>>* SclArr = nullptr;
+		if (Obj->TryGetArrayField(TEXT("location"), LocArr) && LocArr && LocArr->Num() == 3)
 		{
-			OutError = TEXT("transform channel requires 3-element location + rotation arrays");
+			for (int32 i = 0; i < 3; ++i) { Loc[i] = (*LocArr)[i]->AsNumber(); bSetLoc[i] = true; }
+			bHasLocAny = true;
+		}
+		if (Obj->TryGetArrayField(TEXT("rotation"), RotArr) && RotArr && RotArr->Num() == 3)
+		{
+			for (int32 i = 0; i < 3; ++i) { Rot[i] = (*RotArr)[i]->AsNumber(); bSetRot[i] = true; }
+			bHasRotAny = true;
+		}
+		if (Obj->TryGetArrayField(TEXT("scale"), SclArr) && SclArr && SclArr->Num() == 3)
+		{
+			for (int32 i = 0; i < 3; ++i) { Scl[i] = (*SclArr)[i]->AsNumber(); bSetScl[i] = true; }
+			bHasSclAny = true;
+		}
+
+		// Per-channel named-axis form (overrides compact form for any explicitly-named axis).
+		static const TCHAR* const Axes[3] = { TEXT("x"), TEXT("y"), TEXT("z") };
+		auto TryReadAxis = [&Obj](const FString& Prefix, const TCHAR* Axis, double& OutValue) -> bool
+		{
+			double V = 0.0;
+			if (Obj->TryGetNumberField(FString::Printf(TEXT("%s_%s"), *Prefix, Axis), V))
+			{
+				OutValue = V;
+				return true;
+			}
+			return false;
+		};
+		for (int32 i = 0; i < 3; ++i)
+		{
+			if (TryReadAxis(TEXT("translation"), Axes[i], Loc[i])) { bSetLoc[i] = true; bHasLocAny = true; }
+			if (TryReadAxis(TEXT("rotation"),    Axes[i], Rot[i])) { bSetRot[i] = true; bHasRotAny = true; }
+			if (TryReadAxis(TEXT("scale"),       Axes[i], Scl[i])) { bSetScl[i] = true; bHasSclAny = true; }
+		}
+
+		if (!bHasLocAny && !bHasRotAny && !bHasSclAny)
+		{
+			OutError = TEXT("transform channel requires at least one of: location[], rotation[], scale[], or per-axis "
+				"translation_x/.../scale_z");
 			return false;
 		}
-		const double Loc[3] = {
-			(*LocArr)[0]->AsNumber(), (*LocArr)[1]->AsNumber(), (*LocArr)[2]->AsNumber() };
-		const double Rot[3] = {
-			(*RotArr)[0]->AsNumber(), (*RotArr)[1]->AsNumber(), (*RotArr)[2]->AsNumber() };
+
+		// Apply location (channels 0-2) and rotation (channels 3-5). Scale (channels 6-8)
+		// only if the section has >=9 channels (full 3D Transform section).
 		for (int32 i = 0; i < 3; ++i)
 		{
-			DoubleChannels[i]->GetData().UpdateOrAddKey(Frame, FMovieSceneDoubleValue(Loc[i]));
+			if (bSetLoc[i])
+			{
+				DoubleChannels[i]->GetData().UpdateOrAddKey(Frame, FMovieSceneDoubleValue(Loc[i]));
+			}
+			if (bSetRot[i])
+			{
+				DoubleChannels[3 + i]->GetData().UpdateOrAddKey(Frame, FMovieSceneDoubleValue(Rot[i]));
+			}
 		}
-		for (int32 i = 0; i < 3; ++i)
+		if (DoubleChannels.Num() >= 9)
 		{
-			DoubleChannels[3 + i]->GetData().UpdateOrAddKey(Frame, FMovieSceneDoubleValue(Rot[i]));
+			for (int32 i = 0; i < 3; ++i)
+			{
+				if (bSetScl[i])
+				{
+					DoubleChannels[6 + i]->GetData().UpdateOrAddKey(Frame, FMovieSceneDoubleValue(Scl[i]));
+				}
+			}
 		}
+		else if (bHasSclAny)
+		{
+			OutError = FString::Printf(
+				TEXT("scale keys requested but section has only %d channels (need 9 for scale)"),
+				DoubleChannels.Num());
+			return false;
+		}
+		return true;
+	}
+
+	// 2 or 3-channel double tracks (e.g. Vector2D / Vector / Translation / Scale)
+	// accept either a flat `{x, y, z}` JSON object or an array `[x, y, z]`. UMG widget
+	// animation Translation/Scale tracks live here -- before this branch the only payload
+	// shape was the 6-channel transform path above, so vector-typed widget tracks failed
+	// with "no supported channel".
+	if (DoubleChannels.Num() == 2 || DoubleChannels.Num() == 3)
+	{
+		double Comps[3] = { 0.0, 0.0, 0.0 };
+		bool bParsed = false;
+
+		TSharedPtr<FJsonObject> Obj = ClaireonSequenceEditHandlersInternal::ParseJsonObject(ValueJson);
+		if (Obj.IsValid())
+		{
+			// Try array form first: { "value": [x, y, z] } or {"location": [x, y, z]}
+			const TArray<TSharedPtr<FJsonValue>>* ArrPtr = nullptr;
+			if ((Obj->TryGetArrayField(TEXT("value"), ArrPtr) || Obj->TryGetArrayField(TEXT("location"), ArrPtr))
+				&& ArrPtr && ArrPtr->Num() >= DoubleChannels.Num())
+			{
+				for (int32 i = 0; i < DoubleChannels.Num(); ++i)
+				{
+					Comps[i] = (*ArrPtr)[i]->AsNumber();
+				}
+				bParsed = true;
+			}
+			// Try named-axis form: { "X": .., "Y": .., "Z": .. } (case-insensitive)
+			if (!bParsed)
+			{
+				static const TCHAR* const AxisNames[3] = { TEXT("X"), TEXT("Y"), TEXT("Z") };
+				int32 Hits = 0;
+				for (int32 i = 0; i < DoubleChannels.Num(); ++i)
+				{
+					double V = 0.0;
+					if (Obj->TryGetNumberField(AxisNames[i], V))
+					{
+						Comps[i] = V;
+						++Hits;
+					}
+				}
+				if (Hits == DoubleChannels.Num())
+				{
+					bParsed = true;
+				}
+			}
+		}
+		// Bare JSON array form: "[x, y, z]"
+		if (!bParsed)
+		{
+			TSharedPtr<FJsonValue> ArrayValue;
+			TSharedRef<TJsonReader<>> ArrReader = TJsonReaderFactory<>::Create(ValueJson);
+			if (FJsonSerializer::Deserialize(ArrReader, ArrayValue) && ArrayValue.IsValid())
+			{
+				const TArray<TSharedPtr<FJsonValue>>* ArrPtr = nullptr;
+				if (ArrayValue->TryGetArray(ArrPtr) && ArrPtr && ArrPtr->Num() >= DoubleChannels.Num())
+				{
+					for (int32 i = 0; i < DoubleChannels.Num(); ++i)
+					{
+						Comps[i] = (*ArrPtr)[i]->AsNumber();
+					}
+					bParsed = true;
+				}
+			}
+		}
+
+		if (!bParsed)
+		{
+			OutError = FString::Printf(
+				TEXT("%d-channel vector track expects {\"value\":[x,y,z]}, {\"x\":..,\"y\":..,\"z\":..}, or a bare JSON array"),
+				DoubleChannels.Num());
+			return false;
+		}
+
+		for (int32 i = 0; i < DoubleChannels.Num(); ++i)
+		{
+			DoubleChannels[i]->GetData().UpdateOrAddKey(Frame, FMovieSceneDoubleValue(Comps[i]));
+		}
+		return true;
+	}
+
+	// 1-channel double track (e.g. Color subchannel / scalar property animation).
+	if (DoubleChannels.Num() == 1)
+	{
+		double ValueD = 0.0;
+		const FString Trim = ValueJson.TrimStartAndEnd();
+		bool bParsed = FDefaultValueHelper::ParseDouble(Trim, ValueD);
+		if (!bParsed)
+		{
+			if (TSharedPtr<FJsonObject> Obj = ClaireonSequenceEditHandlersInternal::ParseJsonObject(ValueJson))
+			{
+				bParsed = Obj->TryGetNumberField(TEXT("value"), ValueD);
+			}
+		}
+		if (!bParsed)
+		{
+			OutError = TEXT("double channel expects numeric payload or {\"value\": <number>}");
+			return false;
+		}
+		DoubleChannels[0]->GetData().UpdateOrAddKey(Frame, FMovieSceneDoubleValue(ValueD));
 		return true;
 	}
 

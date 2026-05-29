@@ -74,7 +74,7 @@ FToolResult ClaireonStateTreeTool_AddTransition::Execute(const TSharedPtr<FJsonO
 	}
 	const EStateTreeTransitionType TransType = ParsedType.GetValue();
 
-	// D3: target_state_id only meaningful when target_type=GotoState. Reject silent drop.
+	// target_state_id only meaningful when target_type=GotoState. Reject silent drop.
 	{
 		FString TargetStateIdProbe;
 		const bool bHasTargetStateId =

@@ -9,15 +9,20 @@
 #include "Editor.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Misc/ScopeExit.h"
 
 IClaireonTool::FToolResult FClaireonSpecApplicatorBase::ApplySpec(
 	const TSharedPtr<FJsonObject>& Spec,
 	const FString& AssetPath,
-	const FString& ExistingSessionId)
+	const FString& ExistingSessionId,
+	bool bInDryRun)
 {
 	// 1. Reset accumulated state
 	Reset();
+
+	// Stash spec for subclass OpenOrCreateAsset access; clear on any exit path.
 	ActiveSpec = Spec;
+	ON_SCOPE_EXIT { ActiveSpec.Reset(); };
 
 	UE_LOG(LogClaireon, Log, TEXT("[apply_spec:%s] Starting apply_spec for %s"), *GetToolName(), *AssetPath);
 
@@ -113,9 +118,10 @@ IClaireonTool::FToolResult FClaireonSpecApplicatorBase::ApplySpec(
 			return BuildResult(false);
 		}
 
-		// 7. Compile asset
-		UE_LOG(LogClaireon, Log, TEXT("[apply_spec:%s] Compiling asset"), *GetToolName());
+		// 7. Compile asset (skipped under dry_run; compile dirties package state we'll roll back)
+		if (!bInDryRun)
 		{
+			UE_LOG(LogClaireon, Log, TEXT("[apply_spec:%s] Compiling asset"), *GetToolName());
 			FString CompileError;
 			if (!CompileAsset(SessionId, CompileError))
 			{
@@ -123,14 +129,25 @@ IClaireonTool::FToolResult FClaireonSpecApplicatorBase::ApplySpec(
 			}
 		}
 
-		// 8. Save asset
-		UE_LOG(LogClaireon, Log, TEXT("[apply_spec:%s] Saving asset"), *GetToolName());
+		// 8. Save asset (skipped under dry_run; explicit disk write)
+		if (!bInDryRun)
 		{
+			UE_LOG(LogClaireon, Log, TEXT("[apply_spec:%s] Saving asset"), *GetToolName());
 			FString SaveError;
 			if (!SaveAsset(SessionId, SaveError))
 			{
 				AddWarning(FString::Printf(TEXT("Save failed: %s"), *SaveError));
 			}
+		}
+
+		// Under dry_run, undo the scoped transaction explicitly. This rolls
+		// back any asset-auto-create, Pass1 entity-creation, and Pass2
+		// wiring before the transaction commits, so dry_run leaves zero
+		// on-disk state changes.
+		if (bInDryRun && GEditor)
+		{
+			UE_LOG(LogClaireon, Log, TEXT("[apply_spec:%s] dry_run: rolling back transaction"), *GetToolName());
+			GEditor->UndoTransaction();
 		}
 	} // End FScopedTransaction
 

@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonSpecApplicator_WidgetBP.h"
 #include "ClaireonWidgetHelpers.h"
+#include "ClaireonNameResolver.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSessionManager.h"
 #include "ClaireonSafeExec.h"
@@ -12,8 +13,13 @@
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "FileHelpers.h"
+#include "Misc/PackageName.h"
+#include "Misc/Paths.h"
+#include "HAL/FileManager.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "WidgetBlueprint.h"
 #include "Blueprint/WidgetTree.h"
+#include "Blueprint/UserWidget.h"
 #include "Components/Widget.h"
 #include "Components/PanelWidget.h"
 #include "Components/PanelSlot.h"
@@ -132,10 +138,92 @@ bool FClaireonSpecApplicator_WidgetBP::OpenOrCreateAsset(const FString& AssetPat
 	UWidgetBlueprint* WBP = LoadObject<UWidgetBlueprint>(nullptr, *ResolvedPath);
 	if (!WBP)
 	{
-		// WidgetBP supports creation -- but it requires the full widget factory
-		// For now, require the asset to exist
-		OutError = FString::Printf(TEXT("Widget Blueprint not found: %s"), *ResolvedPath);
-		return false;
+		// auto-create the Widget Blueprint when it doesn't exist, mirroring the
+		// behavior of bp_apply_spec. Reads optional parent_class from the active spec
+		// (defaults to UserWidget). The root widget is not pre-seeded here; the spec's
+		// widgets[] array creates the root widget in Pass 1.
+		// Note: local var renamed from ActiveSpec to LocalSpec to avoid shadowing
+		// the FClaireonSpecApplicatorBase::ActiveSpec member (C4458 promoted to error
+		// under MSVC strict).
+		const TSharedPtr<FJsonObject>& LocalSpec = GetActiveSpec();
+
+		FString ParentClassName = TEXT("UserWidget");
+		if (LocalSpec.IsValid())
+		{
+			FString SpecParentClass;
+			if (LocalSpec->TryGetStringField(TEXT("parent_class"), SpecParentClass) && !SpecParentClass.IsEmpty())
+			{
+				ParentClassName = SpecParentClass;
+			}
+		}
+
+		ClaireonNameResolver::FNameResolveResult ParentClassResult;
+		UClass* ParentClass = ClaireonNameResolver::ResolveClassName(ParentClassName, nullptr, ParentClassResult);
+		if (!ParentClass || !ParentClass->IsChildOf(UUserWidget::StaticClass()))
+		{
+			OutError = FString::Printf(TEXT("widgetbp_apply_spec auto-create: parent_class '%s' not found or not a UUserWidget subclass"), *ParentClassName);
+			return false;
+		}
+
+		// Derive package name from the resolved asset path (strip object subpath if present)
+		FString PackageName = ResolvedPath;
+		FString AssetName;
+		{
+			int32 DotIdx;
+			if (PackageName.FindLastChar('.', DotIdx))
+			{
+				PackageName = PackageName.Left(DotIdx);
+			}
+			int32 LastSlash;
+			if (PackageName.FindLastChar('/', LastSlash))
+			{
+				AssetName = PackageName.Mid(LastSlash + 1);
+			}
+			else
+			{
+				AssetName = PackageName;
+			}
+		}
+
+		// Remove a stale file if one exists with a different class (rare, but prevents partial-load errors)
+		FString PackageFileName = FPackageName::LongPackageNameToFilename(PackageName, FPackageName::GetAssetPackageExtension());
+		if (FPaths::FileExists(PackageFileName))
+		{
+			UE_LOG(LogClaireon, Warning,
+				TEXT("[apply_spec:WidgetBP] auto-create: existing file at %s will be replaced"), *PackageFileName);
+			IFileManager::Get().Delete(*PackageFileName, false, true);
+		}
+
+		UPackage* Package = CreatePackage(*PackageName);
+		if (!Package)
+		{
+			OutError = FString::Printf(TEXT("widgetbp_apply_spec auto-create: failed to create package '%s'"), *PackageName);
+			return false;
+		}
+
+		UBlueprint* CreatedBP = FKismetEditorUtilities::CreateBlueprint(
+			ParentClass,
+			Package,
+			FName(*AssetName),
+			BPTYPE_Normal,
+			UWidgetBlueprint::StaticClass(),
+			UBlueprintGeneratedClass::StaticClass(),
+			NAME_None);
+
+		WBP = Cast<UWidgetBlueprint>(CreatedBP);
+		if (!WBP)
+		{
+			OutError = FString::Printf(TEXT("widgetbp_apply_spec auto-create: FKismetEditorUtilities::CreateBlueprint failed for '%s'"), *PackageName);
+			return false;
+		}
+
+		Package->SetIsExternallyReferenceable(true);
+		Package->MarkPackageDirty();
+		FAssetRegistryModule::AssetCreated(WBP);
+
+		UE_LOG(LogClaireon, Log,
+			TEXT("[apply_spec:WidgetBP] Auto-created Widget Blueprint '%s' (parent: %s)"),
+			*PackageName, *ParentClassName);
 	}
 
 	const FString WBPPathName = WBP->GetPathName();
@@ -347,9 +435,21 @@ bool FClaireonSpecApplicator_WidgetBP::ApplyPass2_WireRelationships(const FStrin
 			}
 			else if (SlotPropsObj.IsValid())
 			{
-				// Set slot properties
+				// Set slot properties (AddChildToPanel already applied them from SlotPropsObj;
+				// this second pass is a no-op because AddChildToPanel consumed the same object --
+				// kept for explicitness but the loop is a double-apply guard).
+				// warn on nested JSON rather than silently discarding it.
 				for (const auto& Prop : SlotPropsObj->Values)
 				{
+					if (Prop.Value.IsValid() &&
+						(Prop.Value->Type == EJson::Object || Prop.Value->Type == EJson::Array))
+					{
+						AddWarning(FString::Printf(
+							TEXT("slot_properties[\"%s\"] on widget '%s': nested JSON object rejected; "
+								 "use engine flat-struct string form."),
+							*Prop.Key, *SpecId));
+						continue;
+					}
 					FString PropValue;
 					if (Prop.Value->TryGetString(PropValue))
 					{

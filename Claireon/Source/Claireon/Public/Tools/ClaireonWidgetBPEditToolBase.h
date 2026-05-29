@@ -50,17 +50,18 @@ public:
 	virtual bool RequiresNoPIE() const override { return true; }
 	virtual FString GetCategory() const override { return TEXT("widgetbp"); }
 
-protected:
-	// ========================================================================
-	// Session Delegate
-	// ========================================================================
-
-	/** Called by FClaireonSessionManager when any session is closed; cleans up our tool data. */
-	static void HandleSessionClosed(const FMCPSessionClosedInfo& Info);
+	// Tool-specific data storage (keyed by session ID from FClaireonSessionManager).
+	// Public so cross-class clients (apply_delta applicator) can read/write the map
+	// without needing to inherit from this base.
+	static TMap<FString, FWidgetBPEditToolData> ToolData;
 
 	/** Whether we have registered our delegate with the session manager. */
 	static bool bDelegateRegistered;
 
+	/** Called by FClaireonSessionManager when any session is closed; cleans up our tool data. */
+	static void HandleSessionClosed(const FMCPSessionClosedInfo& Info);
+
+protected:
 	// Helpers
 	FToolResult BuildStateResponse(const FString& SessionId, FWidgetBPEditToolData* Data);
 
@@ -77,9 +78,6 @@ protected:
 		FString& OutSessionId,
 		FWidgetBPEditToolData*& OutData,
 		FToolResult& OutError);
-
-	// Tool-specific data storage (keyed by session ID from FClaireonSessionManager).
-	static TMap<FString, FWidgetBPEditToolData> ToolData;
 };
 
 // Macro used by the decomposed tool headers to reduce boilerplate.

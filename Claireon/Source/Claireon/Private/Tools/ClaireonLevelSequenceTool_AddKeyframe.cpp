@@ -19,17 +19,26 @@ FString ClaireonLevelSequenceTool_AddKeyframe::GetOperation() const { return TEX
 
 FString ClaireonLevelSequenceTool_AddKeyframe::GetDescription() const
 {
-	return TEXT("Insert a keyframe on the focused section. Payload shape depends on channel type "
-				"(scalar, bool, or transform object).");
+	// Payload shape depends on the section's channel layout (introspect via the
+	// focused track's section in the structure dump). 3D Transform (9-channel) sections
+	// accept both compact-array and per-axis forms.
+	return TEXT("Insert a keyframe on the focused section. Payload shape depends on channel type:\n"
+				"  - Float channel: number, or {\"value\": <float>}\n"
+				"  - Bool channel: true/false, or {\"value\": <bool>}\n"
+				"  - Vector2D/Vector (2 or 3 double channels): [x,y[,z]], {x:..,y:..[,z:..]}, or {\"value\":[..]}\n"
+				"  - 3D Transform (6 or 9 double channels): compact {\"location\":[x,y,z],\"rotation\":[p,y,r],\"scale\":[sx,sy,sz]}, "
+				"OR per-axis {\"translation_x\":.., \"translation_y\":.., \"translation_z\":.., "
+				"\"rotation_x\":.., \"rotation_y\":.., \"rotation_z\":.., \"scale_x\":.., \"scale_y\":.., \"scale_z\":..}. "
+				"Per-axis keys allow writing a single sub-channel; scale fields are accepted only on 9-channel sections.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_AddKeyframe::GetInputSchema() const
 {
 	FToolSchemaBuilder Builder;
 	Builder.AddString(TEXT("session_id"), TEXT("Session identifier from open."), true);
-	Builder.AddInteger(TEXT("frame"), TEXT("Frame number for the keyframe."), true);
+	Builder.AddInteger(TEXT("frame"), TEXT("Frame number for the keyframe (tick units; raw MovieScene frame, not display-rate)."), true);
 	Builder.AddInteger(TEXT("section_index"), TEXT("Optional explicit section index (defaults to first section on focused track)."));
-	Builder.AddObject(TEXT("value"), TEXT("Keyframe payload. Float: number. Bool: true/false. Transform: {location:[x,y,z],rotation:[p,y,r]}."), true);
+	Builder.AddObject(TEXT("value"), TEXT("Keyframe payload (see operation description for per-channel shape). 3D Transform accepts compact arrays or per-axis translation_x/y/z, rotation_x/y/z, scale_x/y/z."), true);
 	Builder.AddBoolean(TEXT("suppress_output"), TEXT("If true, returns brief status instead of full state."));
 	return Builder.Build();
 }

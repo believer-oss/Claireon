@@ -3,16 +3,16 @@
 #if WITH_UNTESTED
 
 // ============================================================================
-// Stage 002 / Part A coverage: python_execute hint emission.
+// python_execute hint emission coverage.
 //
 // Exercises ClaireonTool_ExecutePython::BuildHintFromLogs against the four
 // signature-class nudge patterns (NameError, AttributeError, TypeError
 // unexpected-keyword, TypeError missing-positional), plus the explicit
 // SyntaxError-no-hint case and a cold-start best-match populated case.
 //
-// Per project memory, UNTEST_ASSERT_* macros expand to co_return and cannot
-// live inside lambda bodies, and anonymous-namespace helpers under unity
-// batching need a file-local discriminator.  Helpers below carry the
+// UNTEST_ASSERT_* macros expand to co_return and cannot live inside lambda
+// bodies, and anonymous-namespace helpers under unity batching need a
+// file-local discriminator.  Helpers below carry the
 // `PyHintTests622_` prefix and stay outside any lambda.
 // ============================================================================
 

@@ -5,4 +5,5 @@
 
 #include "Tools/ClaireonBlueprintGraphEditToolBase.h"
 
-DECLARE_BPGRAPH_TOOL(ClaireonBlueprintGraphTool_ListGraphs);
+// list_graphs is read-only; allowed during PIE.
+DECLARE_BPGRAPH_TOOL_PIE_OK(ClaireonBlueprintGraphTool_ListGraphs);

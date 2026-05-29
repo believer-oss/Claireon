@@ -232,7 +232,7 @@ namespace ClaireonBlueprintNodeFactory
 
 			// Resolve owner class up-front. When function_class is supplied but
 			// cannot be resolved, surface a warning instead of silently falling
-			// through to SetSelfMember (review [A2]/[U3]).
+			// through to SetSelfMember.
 			UClass* ResolvedOwnerClass = nullptr;
 			if (!FunctionClass.IsEmpty())
 			{
@@ -307,10 +307,11 @@ namespace ClaireonBlueprintNodeFactory
 		}
 		else if (NodeType == TEXT("AsyncAction"))
 		{
-			// Explicit AsyncAction surface: callers state intent directly instead
-			// of relying on CallFunction helper-detection. Both paths construct
-			// the same node; this one skips the helper-detection guard for callers
-			// who already know they want an AsyncAction node.
+			// Explicit AsyncAction surface: callers state intent directly
+			// instead of relying on the CallFunction-helper-detection conjunction
+			// in PickK2NodeClassForFunction. Both paths construct the same
+			// node; this one skips the four-conjunct guard for callers who
+			// already know they want an AsyncAction node.
 			FString FunctionName, FunctionClass;
 			if (!Params->TryGetStringField(TEXT("function_name"), FunctionName))
 			{
@@ -408,7 +409,7 @@ namespace ClaireonBlueprintNodeFactory
 		{
 			// "ExecutionSequence" accepted as an alias: it is the canonical TypeTag
 			// emitted by ClaireonTool_BlueprintDiff, so round-tripping diff output
-			// through apply_graph must accept either spelling.
+			// through apply_delta must accept either spelling.
 			NewNode = NewObject<UK2Node_ExecutionSequence>(Graph);
 			Desc = TEXT("Sequence");
 		}
@@ -705,14 +706,17 @@ namespace ClaireonBlueprintNodeFactory
 			bWroteProperties = (*PropsObj)->Values.Num() > 0;
 		}
 
-		// Loud-failure guard for Generic + UK2Node_BaseAsyncTask subclasses (e.g.
-		// K2Node_AsyncAction, K2Node_LatentAbilityCall) constructed without the
-		// proxy bag. The engine's AllocateDefaultPins synthesizes the
-		// BlueprintAssignable delegate exec pins from ProxyFactoryClass +
+		// Loud-failure guard for Generic + UK2Node_BaseAsyncTask subclasses
+		// (e.g. K2Node_AsyncAction, K2Node_LatentAbilityCall) constructed
+		// without the proxy bag. The engine's AllocateDefaultPins synthesizes
+		// the BlueprintAssignable delegate exec pins from ProxyFactoryClass +
 		// ProxyFactoryFunctionName + ProxyClass; if any are unset (via
-		// node_properties), the result is the inert "Async Task: Missing Function"
-		// stub. The three proxy fields are protected on UK2Node_BaseAsyncTask
-		// with no public accessors, so we read them via reflection.
+		// node_properties), the result is the inert "Async Task: Missing
+		// Function" stub.
+		//
+		// The three proxy fields are protected on UK2Node_BaseAsyncTask with no
+		// public accessors, so we read them via the same reflection idiom used in
+		// ClaireonBPNodeMapper.cpp:2155-2179 (MapAsyncActionNode).
 		if (NewNode && NewNode->IsA<UK2Node_BaseAsyncTask>())
 		{
 			auto ReadObjProp = [&](const TCHAR* PropName) -> UClass*
@@ -758,7 +762,7 @@ namespace ClaireonBlueprintNodeFactory
 		Graph->AddNode(NewNode, false, false);
 		NewNode->AllocateDefaultPins();
 
-		// H2: Dynamic-pin nodes regenerate their real pin set in ReconstructNode.
+		// Dynamic-pin nodes regenerate their real pin set in ReconstructNode.
 		// Fire ReconstructNode either when reflection wrote properties OR when
 		// the node is one of the typed branches whose pins are derived from a
 		// resolved engine reference (UFunction, UScriptStruct, UEnum, macro graph,

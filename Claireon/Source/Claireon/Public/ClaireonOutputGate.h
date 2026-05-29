@@ -101,6 +101,21 @@ public:
 		EClaireonSpillStreamSet StreamSet);
 
 	/**
+	 * Args-aware overload. Behaves identically to the four-arg form except
+	 * that the on-disk spill manifest carries `originating_tool` (== ToolName)
+	 * and `originating_args` (== InvocationArguments) so a consumer reading
+	 * only the spill file knows which call produced it. When InvocationArguments
+	 * has `force_inline: true`, spill is suppressed even if the payload exceeds
+	 * the threshold -- the caller has already accepted the context cost.
+	 */
+	static IClaireonTool::FToolResult RouteResult(
+		IClaireonTool::FToolResult Result,
+		const FString& ToolName,
+		const TSharedPtr<FJsonObject>& InvocationArguments,
+		const FString& ConversationId,
+		EClaireonSpillStreamSet StreamSet);
+
+	/**
 	 * Connect-time sweep: deletes spill subdirectories under <ProjectSavedDir>/Claireon/Results/
 	 * whose most-recent-modified mtime is older than RetentionDays.  Idempotent; callers guard
 	 * their own fire-once semantics via a bHasSwept flag.

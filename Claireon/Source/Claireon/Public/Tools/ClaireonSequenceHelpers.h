@@ -17,7 +17,7 @@ struct FMovieSceneChannelProxy;
 
 /**
  * Event endpoint signature used when creating Director Blueprint endpoints
- * via sequence_edit.create_event_endpoint (F5 -- stage 013).
+ * via sequence_edit.create_event_endpoint.
  *
  * NOTE: This is a plain C++ enum (not UENUM) because this header has no
  * .generated.h; the enum is only referenced from C++ API signatures.
@@ -29,17 +29,16 @@ enum class ESequenceEventEndpointSignature : uint8
 };
 
 /**
- * Helpers for Level Sequence MCP tools (F1 + F5).
+ * Helpers for Level Sequence MCP tools.
  *
- * - F1 surface: asset loading, structure formatting, class resolution, frame/time coercion.
- * - F5 surface: Director Blueprint ensure + event endpoint creation (stage 013 impls).
- *
- * All methods are stubs in stage 001 and return safe defaults with TODO error strings.
+ * - Asset surface: asset loading, structure formatting, class resolution,
+ *   frame/time coercion.
+ * - Director surface: Director Blueprint ensure + event endpoint creation.
  */
 class CLAIREON_API FClaireonSequenceHelpers
 {
 public:
-	// F1 API (impls in stage 003)
+	// Asset API
 	static ULevelSequence* LoadLevelSequenceAsset(const FString& Path, FString& OutError);
 	static FString FormatSequenceStructure(const ULevelSequence* Sequence, bool bIncludeKeyframes, bool bIncludeSections);
 	static UClass* ResolveTrackClass(const FString& TypeName);
@@ -51,7 +50,7 @@ public:
 	static FFrameNumber SecondsToFrame(const ULevelSequence* Sequence, double Seconds);
 	static double FrameToSeconds(const ULevelSequence* Sequence, FFrameNumber Frame);
 
-	// F5 API (impls in stage 013)
+	// Director-Blueprint API
 	static UBlueprint* EnsureDirectorBlueprint(ULevelSequence* Sequence, FString& OutError);
 	static UFunction* CreateEventEndpointNode(UBlueprint* DirectorBlueprint, FName EndpointName, ESequenceEventEndpointSignature Signature, FString& OutError);
 };

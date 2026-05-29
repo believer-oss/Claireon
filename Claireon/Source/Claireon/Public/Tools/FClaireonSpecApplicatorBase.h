@@ -33,12 +33,17 @@ public:
 	 * @param Spec The parsed spec JSON object
 	 * @param AssetPath UE asset path (e.g. "/Game/AI/BT_EnemyAI")
 	 * @param ExistingSessionId Optional session ID to reuse (empty = open new session)
+	 * @param bInDryRun If true, validate and run Pass1/Pass2 in-memory but skip
+	 *   Compile + Save and roll the transaction back so no on-disk state survives.
+	 *   This explicit rollback guards the auto-create branch which would
+	 *   otherwise touch disk even under dry_run.
 	 * @return FToolResult with id_mappings, per-entry status, warnings, errors
 	 */
 	IClaireonTool::FToolResult ApplySpec(
 		const TSharedPtr<FJsonObject>& Spec,
 		const FString& AssetPath,
-		const FString& ExistingSessionId = FString());
+		const FString& ExistingSessionId = FString(),
+		bool bInDryRun = false);
 
 protected:
 	// === Subclass overrides ===
@@ -111,6 +116,10 @@ protected:
 	bool IsIdCreated(const FString& SpecId) const;
 
 private:
+	/** The spec body currently being applied. Stashed by ApplySpec on entry, cleared on exit.
+	 *  Available to subclass overrides via GetActiveSpec(). */
+	TSharedPtr<FJsonObject> ActiveSpec;
+
 	/** ID map: spec_id -> actual_id (GUIDs, indices, node names, etc.) */
 	TMap<FString, FString> IdMap;
 
@@ -132,9 +141,6 @@ private:
 
 	/** Whether a critical error has occurred */
 	bool bCriticalError = false;
-
-	/** Spec currently being applied. Set at the start of Apply(); cleared at the end. */
-	TSharedPtr<FJsonObject> ActiveSpec;
 
 	/** Build the FToolResult from accumulated state */
 	IClaireonTool::FToolResult BuildResult(bool bSuccess) const;

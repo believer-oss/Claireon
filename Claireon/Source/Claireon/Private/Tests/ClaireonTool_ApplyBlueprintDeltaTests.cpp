@@ -28,7 +28,7 @@
 // ---------------------------------------------------------------------------
 // Test asset path + helpers
 // ---------------------------------------------------------------------------
-static const TCHAR* ApplyBPGraphPinsTestPath = TEXT("/Game/__MCPTests/BP_ApplyBlueprintGraphPinsTest");
+static const TCHAR* ApplyBPDeltaPinsTestPath = TEXT("/Game/__MCPTests/BP_ApplyBlueprintGraphPinsTest");
 
 namespace
 {
@@ -72,8 +72,8 @@ TSharedPtr<FJsonValue> ApplyGraphTests_MakeObj(const TSharedPtr<FJsonObject>& Ob
 	return MakeShared<FJsonValueObject>(Obj);
 }
 
-// Build an apply_graph args object with a single node entry.
-TSharedPtr<FJsonObject> MakeApplyGraphArgsSingle(const FString& SessionId, const TSharedPtr<FJsonObject>& Node)
+// Build an apply_delta args object with a single node entry.
+TSharedPtr<FJsonObject> MakeApplyDeltaArgsSingle(const FString& SessionId, const TSharedPtr<FJsonObject>& Node)
 {
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 	Args->SetStringField(TEXT("session_id"), SessionId);
@@ -128,8 +128,8 @@ bool NodeHasPin(UEdGraphNode* Node, const TCHAR* PinName)
 
 UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, KismetSystemLibrary_PrintString_HasAllPins, UNTEST_TIMEOUTMS(30000))
 {
-	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
-	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
+	ApplyGraphTests_CleanupTestAsset(ApplyBPDeltaPinsTestPath);
+	FString SessionId = OpenTestSession(ApplyBPDeltaPinsTestPath);
 	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
 
 	TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
@@ -139,7 +139,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, KismetSystemLibrary_PrintSt
 	Node->SetStringField(TEXT("function_class"), TEXT("KismetSystemLibrary"));
 
 	ClaireonTool_ApplyBlueprintDelta Tool;
-	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
+	auto Result = Tool.Execute(MakeApplyDeltaArgsSingle(SessionId, Node));
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 
 	UEdGraphNode* Created = ResolveCreatedNode(Result, TEXT("print1"), SessionId);
@@ -151,7 +151,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, KismetSystemLibrary_PrintSt
 	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("then")));
 	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("InString")));
 
-	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	ApplyGraphTests_CleanupTestAsset(ApplyBPDeltaPinsTestPath);
 	co_return;
 }
 
@@ -165,12 +165,11 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, KismetSystemLibrary_PrintSt
 UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins,
     FlowprintAwait_Delay_AsyncAction_HasOnComplete, UNTEST_TIMEOUTMS(30000))
 {
-	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
-	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
+	ApplyGraphTests_CleanupTestAsset(ApplyBPDeltaPinsTestPath);
+	FString SessionId = OpenTestSession(ApplyBPDeltaPinsTestPath);
 	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
 
-	// Custom latent-factory referenced by string only -- no #include, no
-	// Build.cs edge. The test skips if the named class is not loaded.
+	// Custom latent-factory referenced by string only -- no #include, no Build.cs edge.
 	TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
 	Node->SetStringField(TEXT("id"), TEXT("delay1"));
 	Node->SetStringField(TEXT("node_type"), TEXT("CallFunction"));
@@ -179,7 +178,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins,
 		TEXT("/Script/Engine.AsyncActionLoadPrimaryAsset"));
 
 	ClaireonTool_ApplyBlueprintDelta Tool;
-	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
+	auto Result = Tool.Execute(MakeApplyDeltaArgsSingle(SessionId, Node));
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 
 	UEdGraphNode* Created = ResolveCreatedNode(Result, TEXT("delay1"), SessionId);
@@ -200,27 +199,29 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins,
 	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("execute")));
 	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("then")));
 
-	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	ApplyGraphTests_CleanupTestAsset(ApplyBPDeltaPinsTestPath);
 	co_return;
 }
 
 // ============================================================================
-// AsyncAction typed branch. The new node_type='AsyncAction' surface in
-// ClaireonBlueprintNodeFactory::CreateNode constructs the same UK2Node_AsyncAction
-// the helper-detection path produces, but without requiring node_type='CallFunction'
-// + the four-conjunct helper guard. Callers who already know they want an async
-// node state intent directly.
+// AsyncAction typed branch. The node_type='AsyncAction' surface in
+// ClaireonBlueprintNodeFactory::CreateNode constructs the same
+// UK2Node_AsyncAction the CallFunction helper-detection path produces, but
+// without requiring node_type='CallFunction' + the four-conjunct helper
+// guard. Callers who already know they want an async node state intent
+// directly.
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins,
     AsyncActionNodeType_HasOnComplete, UNTEST_TIMEOUTMS(30000))
 {
-	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
-	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
+	ApplyGraphTests_CleanupTestAsset(ApplyBPDeltaPinsTestPath);
+	FString SessionId = OpenTestSession(ApplyBPDeltaPinsTestPath);
 	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
 
-	// Differs from the auto-pick sibling test ONLY in node_type: 'AsyncAction'
-	// instead of 'CallFunction'.
+	// Custom latent-factory referenced by string only -- no #include, no Build.cs edge.
+	// Differs from the CallFunction-helper-detection sibling test ONLY in
+	// node_type: 'AsyncAction' instead of 'CallFunction'.
 	TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
 	Node->SetStringField(TEXT("id"), TEXT("delay1"));
 	Node->SetStringField(TEXT("node_type"), TEXT("AsyncAction"));
@@ -229,7 +230,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins,
 		TEXT("/Script/Engine.AsyncActionLoadPrimaryAsset"));
 
 	ClaireonTool_ApplyBlueprintDelta Tool;
-	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
+	auto Result = Tool.Execute(MakeApplyDeltaArgsSingle(SessionId, Node));
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 
 	UEdGraphNode* Created = ResolveCreatedNode(Result, TEXT("delay1"), SessionId);
@@ -254,35 +255,35 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins,
 	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("execute")));
 	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("then")));
 
-	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	ApplyGraphTests_CleanupTestAsset(ApplyBPDeltaPinsTestPath);
 	co_return;
 }
 
 // ============================================================================
-// Generic + K2Node_AsyncAction without node_properties. Pre-fix, this produced
-// the inert "Async Task: Missing Function" stub silently (exec pins only, no
-// delegate output). Post-fix, the loud-failure guard in
-// ClaireonBlueprintNodeFactory::CreateNode catches the half-populated proxy bag
-// and returns an error that points the caller at the node_type='AsyncAction'
-// surface.
+// Generic + K2Node_AsyncAction without node_properties.
+// Pre-fix, this produced the inert "Async Task: Missing Function" stub
+// silently (exec pins only, no delegate output). Post-fix, the loud-failure
+// guard in ClaireonBlueprintNodeFactory::CreateNode catches the half-populated
+// proxy bag and returns an error that points the caller at the
+// node_type='AsyncAction' surface.
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins,
     GenericK2NodeAsyncAction_WithoutProxyBag_FailsLoudly, UNTEST_TIMEOUTMS(30000))
 {
-	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
-	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
+	ApplyGraphTests_CleanupTestAsset(ApplyBPDeltaPinsTestPath);
+	FString SessionId = OpenTestSession(ApplyBPDeltaPinsTestPath);
 	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
 
 	// Generic surface with class_name='K2Node_AsyncAction' and NO
-	// node_properties -- the silent-stub failure mode the guard catches.
+	// node_properties -- the silent-stub failure mode the card identifies.
 	TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
 	Node->SetStringField(TEXT("id"), TEXT("stub1"));
 	Node->SetStringField(TEXT("node_type"), TEXT("Generic"));
 	Node->SetStringField(TEXT("class_name"), TEXT("K2Node_AsyncAction"));
 
 	ClaireonTool_ApplyBlueprintDelta Tool;
-	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
+	auto Result = Tool.Execute(MakeApplyDeltaArgsSingle(SessionId, Node));
 
 	// The factory's loud-failure guard must short-circuit before
 	// Graph->AddNode runs. bIsError must be true.
@@ -294,7 +295,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins,
 	UNTEST_EXPECT_TRUE(Result.ErrorMessage.Contains(TEXT("AsyncAction")));
 	UNTEST_EXPECT_TRUE(Result.ErrorMessage.Contains(TEXT("ProxyFactoryFunctionName")));
 
-	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	ApplyGraphTests_CleanupTestAsset(ApplyBPDeltaPinsTestPath);
 	co_return;
 }
 
@@ -306,8 +307,8 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins,
 
 UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, Actor_SetHiddenInGame_SelfBound_HasPins, UNTEST_TIMEOUTMS(30000))
 {
-	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
-	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
+	ApplyGraphTests_CleanupTestAsset(ApplyBPDeltaPinsTestPath);
+	FString SessionId = OpenTestSession(ApplyBPDeltaPinsTestPath);
 	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
 
 	// SetLifeSpan is a self-bound BlueprintCallable on AActor; no function_class.
@@ -317,7 +318,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, Actor_SetHiddenInGame_SelfB
 	Node->SetStringField(TEXT("function_name"), TEXT("SetLifeSpan"));
 
 	ClaireonTool_ApplyBlueprintDelta Tool;
-	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
+	auto Result = Tool.Execute(MakeApplyDeltaArgsSingle(SessionId, Node));
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 
 	UEdGraphNode* Created = ResolveCreatedNode(Result, TEXT("setls1"), SessionId);
@@ -329,7 +330,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, Actor_SetHiddenInGame_SelfB
 	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("then")));
 	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("InLifespan")));
 
-	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	ApplyGraphTests_CleanupTestAsset(ApplyBPDeltaPinsTestPath);
 	co_return;
 }
 
@@ -340,8 +341,8 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, Actor_SetHiddenInGame_SelfB
 
 UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, Sequence_HasThen0_Then1, UNTEST_TIMEOUTMS(30000))
 {
-	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
-	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
+	ApplyGraphTests_CleanupTestAsset(ApplyBPDeltaPinsTestPath);
+	FString SessionId = OpenTestSession(ApplyBPDeltaPinsTestPath);
 	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
 
 	TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
@@ -349,7 +350,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, Sequence_HasThen0_Then1, UN
 	Node->SetStringField(TEXT("node_type"), TEXT("Sequence"));
 
 	ClaireonTool_ApplyBlueprintDelta Tool;
-	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
+	auto Result = Tool.Execute(MakeApplyDeltaArgsSingle(SessionId, Node));
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 
 	UEdGraphNode* Created = ResolveCreatedNode(Result, TEXT("seq1"), SessionId);
@@ -359,7 +360,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, Sequence_HasThen0_Then1, UN
 	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("then_0")));
 	UNTEST_EXPECT_TRUE(NodeHasPin(Created, TEXT("then_1")));
 
-	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	ApplyGraphTests_CleanupTestAsset(ApplyBPDeltaPinsTestPath);
 	co_return;
 }
 
@@ -370,8 +371,8 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, Sequence_HasThen0_Then1, UN
 
 UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, VariableGet_TypedOutput, UNTEST_TIMEOUTMS(30000))
 {
-	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
-	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
+	ApplyGraphTests_CleanupTestAsset(ApplyBPDeltaPinsTestPath);
+	FString SessionId = OpenTestSession(ApplyBPDeltaPinsTestPath);
 	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
 
 	// Add a float variable to the blueprint first.
@@ -391,7 +392,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, VariableGet_TypedOutput, UN
 	Node->SetStringField(TEXT("variable_name"), TEXT("TestHealth"));
 
 	ClaireonTool_ApplyBlueprintDelta Tool;
-	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
+	auto Result = Tool.Execute(MakeApplyDeltaArgsSingle(SessionId, Node));
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 
 	UEdGraphNode* Created = ResolveCreatedNode(Result, TEXT("varget1"), SessionId);
@@ -410,7 +411,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, VariableGet_TypedOutput, UN
 	UNTEST_ASSERT_PTR(OutPin);
 	UNTEST_EXPECT_TRUE(OutPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Real);
 
-	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	ApplyGraphTests_CleanupTestAsset(ApplyBPDeltaPinsTestPath);
 	co_return;
 }
 
@@ -421,8 +422,8 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, VariableGet_TypedOutput, UN
 
 UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, CallFunction_BadFunctionClass_EmitsWarning, UNTEST_TIMEOUTMS(30000))
 {
-	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
-	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
+	ApplyGraphTests_CleanupTestAsset(ApplyBPDeltaPinsTestPath);
+	FString SessionId = OpenTestSession(ApplyBPDeltaPinsTestPath);
 	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
 
 	TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
@@ -432,7 +433,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, CallFunction_BadFunctionCla
 	Node->SetStringField(TEXT("function_class"), TEXT("NonexistentClassXYZ"));
 
 	ClaireonTool_ApplyBlueprintDelta Tool;
-	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
+	auto Result = Tool.Execute(MakeApplyDeltaArgsSingle(SessionId, Node));
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 
 	bool bFoundWarning = false;
@@ -462,7 +463,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, CallFunction_BadFunctionCla
 	}
 	UNTEST_EXPECT_LE(NonExecPinCount, 1); // self pin is ok; function params are not
 
-	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
+	ApplyGraphTests_CleanupTestAsset(ApplyBPDeltaPinsTestPath);
 	co_return;
 }
 

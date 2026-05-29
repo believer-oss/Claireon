@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonNiagaraTool_RemoveParameter.h"
+#include "Tools/ClaireonNiagaraHelpers.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "NiagaraSystem.h"
 #include "NiagaraTypes.h"
@@ -40,39 +41,18 @@ FToolResult ClaireonNiagaraTool_RemoveParameter::Execute(const TSharedPtr<FJsonO
 		return MakeErrorResult(TEXT("Missing required parameter: name"));
 	}
 
-	FString FullName = Name;
-	if (!FullName.StartsWith(TEXT("User.")))
-	{
-		FullName = TEXT("User.") + FullName;
-	}
-
 	UNiagaraSystem* System = Data->System.Get();
 
-	TArray<FNiagaraVariable> UserParams;
-	System->GetExposedParameters().GetUserParameters(UserParams);
-
-	const FNiagaraVariable* FoundVar = nullptr;
-	for (const FNiagaraVariable& Param : UserParams)
-	{
-		if (Param.GetName().ToString().Equals(FullName, ESearchCase::IgnoreCase))
-		{
-			FoundVar = &Param;
-			break;
-		}
-	}
-
-	if (!FoundVar)
-	{
-		return MakeErrorResult(FString::Printf(TEXT("Parameter '%s' not found in exposed parameters"), *FullName));
-	}
-
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Remove Niagara Parameter")));
-	System->Modify();
 
-	System->GetExposedParameters().RemoveParameter(*FoundVar);
+	FString NormalizedName;
+	FString OpError;
+	if (!ClaireonNiagaraHelpers::RemoveUserParameter(System, Name, NormalizedName, OpError))
+	{
+		Transaction.Cancel();
+		return MakeErrorResult(OpError);
+	}
 
-	System->MarkPackageDirty();
-
-	Data->LastOperationStatus = FString::Printf(TEXT("remove_parameter -> Removed '%s'"), *FullName);
+	Data->LastOperationStatus = FString::Printf(TEXT("remove_parameter -> Removed '%s'"), *NormalizedName);
 	return BuildStateResponse(SessionId, Data);
 }

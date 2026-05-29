@@ -28,6 +28,9 @@
 #if __has_include("MetasoundSource.h")
 #include "MetasoundSource.h"
 #endif
+#if __has_include("Metasound.h")
+#include "Metasound.h" // UMetaSoundPatch
+#endif
 
 namespace
 {
@@ -38,6 +41,9 @@ namespace
 		case EClaireonAudioAssetKind::SoundCue:        return USoundCue::StaticClass();
 #if __has_include("MetasoundSource.h")
 		case EClaireonAudioAssetKind::MetaSoundSource: return UMetaSoundSource::StaticClass();
+#endif
+#if __has_include("Metasound.h")
+		case EClaireonAudioAssetKind::MetaSoundPatch:  return UMetaSoundPatch::StaticClass();
 #endif
 		case EClaireonAudioAssetKind::SoundClass:      return USoundClass::StaticClass();
 		case EClaireonAudioAssetKind::SoundMix:        return USoundMix::StaticClass();
@@ -631,6 +637,61 @@ bool FClaireonSpecApplicator_Audio::ApplySoundCueSpec(const TSharedPtr<FJsonObje
 	return true;
 }
 
+// MetaSound write-side apply_spec is conditionally compiled in if the engine ships the builder
+// API headers. Without them we fall back to the asset-only stub (load/create then save).
+#if __has_include("MetasoundDocumentBuilderRegistry.h") && __has_include("MetasoundBuilderSubsystem.h") && __has_include("MetasoundFrontendLiteral.h")
+#define CLAIREON_HAS_METASOUND_APPLY_API 1
+#else
+#define CLAIREON_HAS_METASOUND_APPLY_API 0
+#endif
+
+#if CLAIREON_HAS_METASOUND_APPLY_API
+#include "MetasoundDocumentBuilderRegistry.h"
+#include "MetasoundBuilderSubsystem.h"
+#include "MetasoundFrontendLiteral.h"
+
+namespace
+{
+	// File-local discriminator (MSApplySpec_) avoids unity-batch name collisions.
+	bool MSApplySpec_BuildLiteralFromJson(FName DataType, const TSharedPtr<FJsonValue>& Value, FMetasoundFrontendLiteral& Out)
+	{
+		const FString TypeStr = DataType.ToString();
+		if (TypeStr == TEXT("Bool"))
+		{
+			bool B = false;
+			if (Value.IsValid() && Value->TryGetBool(B)) { Out.Set(B); return true; }
+			return false;
+		}
+		if (TypeStr == TEXT("Float") || TypeStr == TEXT("Time"))
+		{
+			double N = 0;
+			if (Value.IsValid() && Value->TryGetNumber(N)) { Out.Set(static_cast<float>(N)); return true; }
+			return false;
+		}
+		if (TypeStr == TEXT("Int32"))
+		{
+			double N = 0;
+			if (Value.IsValid() && Value->TryGetNumber(N)) { Out.Set(static_cast<int32>(N)); return true; }
+			return false;
+		}
+		if (TypeStr == TEXT("String"))
+		{
+			FString S;
+			if (Value.IsValid() && Value->TryGetString(S)) { Out.Set(S); return true; }
+			return false;
+		}
+		if (Value.IsValid())
+		{
+			bool B; double N; FString S;
+			if (Value->TryGetBool(B)) { Out.Set(B); return true; }
+			if (Value->TryGetNumber(N)) { Out.Set(static_cast<float>(N)); return true; }
+			if (Value->TryGetString(S)) { Out.Set(S); return true; }
+		}
+		return false;
+	}
+}
+#endif
+
 bool FClaireonSpecApplicator_Audio::ApplyMetaSoundSpec(const TSharedPtr<FJsonObject>& Spec, FString& OutSummary, FString& OutError)
 {
 	IdToAsset.Empty();
@@ -648,9 +709,10 @@ bool FClaireonSpecApplicator_Audio::ApplyMetaSoundSpec(const TSharedPtr<FJsonObj
 		return false;
 	}
 	const EClaireonAudioAssetKind Kind = AudioAssetKindFromString(FStringView(KindStr));
-	if (Kind != EClaireonAudioAssetKind::MetaSoundSource)
+	// Accept both MetaSoundSource and MetaSoundPatch -- they share IMetaSoundDocumentInterface.
+	if (Kind != EClaireonAudioAssetKind::MetaSoundSource && Kind != EClaireonAudioAssetKind::MetaSoundPatch)
 	{
-		OutError = FString::Printf(TEXT("ApplyMetaSoundSpec: kind '%s' is not MetaSoundSource"), *KindStr);
+		OutError = FString::Printf(TEXT("ApplyMetaSoundSpec: kind '%s' is not MetaSoundSource or MetaSoundPatch"), *KindStr);
 		return false;
 	}
 	FString AssetPath;
@@ -672,11 +734,240 @@ bool FClaireonSpecApplicator_Audio::ApplyMetaSoundSpec(const TSharedPtr<FJsonObj
 	Asset->Modify();
 	Asset->MarkPackageDirty();
 
-	// Full inputs/outputs/nodes/edges materialization via per-cohort apply_spec is deferred to the
-	// dedicated session-based MetaSound tools. Per-cohort apply_spec here creates/locates the asset.
-	OutSummary = FString::Printf(TEXT("metasound_apply_spec ok (asset only): %s%s"),
+#if !CLAIREON_HAS_METASOUND_APPLY_API
+	OutSummary = FString::Printf(TEXT("metasound_apply_spec ok (asset only -- builder API unavailable): %s%s"),
 		*Asset->GetPathName(), bCreated ? TEXT(" (created)") : TEXT(""));
 	return true;
+#else
+	using namespace Metasound::Engine;
+	FDocumentBuilderRegistry& Registry = FDocumentBuilderRegistry::GetChecked();
+	UMetaSoundBuilderBase& BuilderObj = Registry.FindOrBeginBuilding<UMetaSoundBuilderBase>(*Asset);
+
+	auto RollbackAll = [&]()
+	{
+		Transaction.Cancel();
+		for (const TWeakObjectPtr<UObject>& Weak : AssetsCreatedThisCall)
+		{
+			if (UObject* Obj = Weak.Get()) ObjectTools::DeleteSingleObject(Obj, /*bPerformReferenceCheck=*/false);
+		}
+	};
+
+	int32 InputsAdded = 0, OutputsAdded = 0, NodesAdded = 0, InterfacesAdded = 0, EdgesAdded = 0, DefaultsSet = 0;
+
+	// Pass 1a: interfaces
+	const TArray<TSharedPtr<FJsonValue>>* IFArr = nullptr;
+	if (Spec->TryGetArrayField(TEXT("interfaces"), IFArr) && IFArr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *IFArr)
+		{
+			FString IName;
+			if (!V.IsValid() || !V->TryGetString(IName) || IName.IsEmpty()) continue;
+			EMetaSoundBuilderResult R = EMetaSoundBuilderResult::Failed;
+			BuilderObj.AddInterface(FName(*IName), R);
+			if (R != EMetaSoundBuilderResult::Succeeded)
+			{
+				OutError = FString::Printf(TEXT("AddInterface failed for '%s' (use claireon.metasound_list_available_interfaces to discover valid names)"), *IName);
+				RollbackAll();
+				return false;
+			}
+			++InterfacesAdded;
+		}
+	}
+
+	// Pass 1b: inputs
+	const TArray<TSharedPtr<FJsonValue>>* InsArr = nullptr;
+	if (Spec->TryGetArrayField(TEXT("inputs"), InsArr) && InsArr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *InsArr)
+		{
+			if (!V.IsValid()) continue;
+			const TSharedPtr<FJsonObject>* InObj = nullptr;
+			if (!V->TryGetObject(InObj) || !InObj || !InObj->IsValid()) continue;
+			FString Name, Type;
+			if (!(*InObj)->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) { OutError = TEXT("input missing 'name'"); RollbackAll(); return false; }
+			if (!(*InObj)->TryGetStringField(TEXT("type"), Type) || Type.IsEmpty()) { OutError = TEXT("input missing 'type'"); RollbackAll(); return false; }
+			FMetasoundFrontendLiteral Default;
+			MSApplySpec_BuildLiteralFromJson(FName(*Type), (*InObj)->TryGetField(TEXT("default")), Default);
+			EMetaSoundBuilderResult R = EMetaSoundBuilderResult::Failed;
+			BuilderObj.AddGraphInputNode(FName(*Name), FName(*Type), Default, R, /*bIsConstructorInput=*/false);
+			if (R != EMetaSoundBuilderResult::Succeeded)
+			{
+				OutError = FString::Printf(TEXT("AddGraphInputNode failed for '%s' (type %s)"), *Name, *Type);
+				RollbackAll();
+				return false;
+			}
+			++InputsAdded;
+		}
+	}
+
+	// Pass 1c: outputs
+	const TArray<TSharedPtr<FJsonValue>>* OutsArr = nullptr;
+	if (Spec->TryGetArrayField(TEXT("outputs"), OutsArr) && OutsArr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *OutsArr)
+		{
+			if (!V.IsValid()) continue;
+			const TSharedPtr<FJsonObject>* OObj = nullptr;
+			if (!V->TryGetObject(OObj) || !OObj || !OObj->IsValid()) continue;
+			FString Name, Type;
+			if (!(*OObj)->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) { OutError = TEXT("output missing 'name'"); RollbackAll(); return false; }
+			if (!(*OObj)->TryGetStringField(TEXT("type"), Type) || Type.IsEmpty()) { OutError = TEXT("output missing 'type'"); RollbackAll(); return false; }
+			FMetasoundFrontendLiteral Default;
+			MSApplySpec_BuildLiteralFromJson(FName(*Type), (*OObj)->TryGetField(TEXT("default")), Default);
+			EMetaSoundBuilderResult R = EMetaSoundBuilderResult::Failed;
+			BuilderObj.AddGraphOutputNode(FName(*Name), FName(*Type), Default, R, /*bIsConstructorOutput=*/false);
+			if (R != EMetaSoundBuilderResult::Succeeded)
+			{
+				OutError = FString::Printf(TEXT("AddGraphOutputNode failed for '%s' (type %s)"), *Name, *Type);
+				RollbackAll();
+				return false;
+			}
+			++OutputsAdded;
+		}
+	}
+
+	// Pass 1d: nodes (class_namespace + class_name)
+	const TArray<TSharedPtr<FJsonValue>>* NodesArr = nullptr;
+	if (Spec->TryGetArrayField(TEXT("nodes"), NodesArr) && NodesArr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *NodesArr)
+		{
+			if (!V.IsValid()) continue;
+			const TSharedPtr<FJsonObject>* NObj = nullptr;
+			if (!V->TryGetObject(NObj) || !NObj || !NObj->IsValid()) continue;
+			FString NSp, Name, Variant;
+			(*NObj)->TryGetStringField(TEXT("class_namespace"), NSp);
+			if (!(*NObj)->TryGetStringField(TEXT("class_name"), Name) || Name.IsEmpty())
+			{
+				OutError = TEXT("node missing 'class_name'");
+				RollbackAll();
+				return false;
+			}
+			(*NObj)->TryGetStringField(TEXT("class_variant"), Variant);
+			// UE 5.5 UMetaSoundBuilderBase::AddNodeByClassName signature is
+			// (FMetasoundFrontendClassName, EMetaSoundBuilderResult& OutResult).
+			// MajorVersion is part of FMetasoundFrontendClassName itself (set via
+			// the constructor in a future overload not yet exposed); for now we
+			// document the requested major_version in the error path on failure
+			// but cannot select between versions at the builder API surface.
+			int32 MajorVersion = 1;
+			{
+				int32 MV = 0;
+				if ((*NObj)->TryGetNumberField(TEXT("major_version"), MV)) MajorVersion = MV;
+			}
+			// Brace init forces variable definition (parens would be parsed as a function
+			// declaration in MSVC -- "most vexing parse" because FName(*NSp) is itself a
+			// constructor that the compiler reads as a function-pointer type).
+			FMetasoundFrontendClassName ClassName{FName(*NSp), FName(*Name), FName(*Variant)};
+			EMetaSoundBuilderResult R = EMetaSoundBuilderResult::Failed;
+			BuilderObj.AddNodeByClassName(ClassName, R);
+			if (R != EMetaSoundBuilderResult::Succeeded)
+			{
+				OutError = FString::Printf(TEXT("AddNodeByClassName failed for %s.%s (requested v%d)"), *NSp, *Name, MajorVersion);
+				RollbackAll();
+				return false;
+			}
+			++NodesAdded;
+		}
+	}
+
+	// Pass 2a: input defaults (after inputs are created)
+	const TArray<TSharedPtr<FJsonValue>>* DefsArr = nullptr;
+	if (Spec->TryGetArrayField(TEXT("input_defaults"), DefsArr) && DefsArr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *DefsArr)
+		{
+			if (!V.IsValid()) continue;
+			const TSharedPtr<FJsonObject>* DObj = nullptr;
+			if (!V->TryGetObject(DObj) || !DObj || !DObj->IsValid()) continue;
+			FString Name, Type;
+			if (!(*DObj)->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) { OutError = TEXT("input_default missing 'name'"); RollbackAll(); return false; }
+			if (!(*DObj)->TryGetStringField(TEXT("type"), Type) || Type.IsEmpty()) { OutError = TEXT("input_default missing 'type'"); RollbackAll(); return false; }
+			FMetasoundFrontendLiteral Lit;
+			if (!MSApplySpec_BuildLiteralFromJson(FName(*Type), (*DObj)->TryGetField(TEXT("value")), Lit))
+			{
+				OutError = FString::Printf(TEXT("input_default '%s' value could not be converted to type %s"), *Name, *Type);
+				RollbackAll();
+				return false;
+			}
+			EMetaSoundBuilderResult R = EMetaSoundBuilderResult::Failed;
+			BuilderObj.SetGraphInputDefault(FName(*Name), Lit, R);
+			if (R != EMetaSoundBuilderResult::Succeeded)
+			{
+				OutError = FString::Printf(TEXT("SetGraphInputDefault failed for '%s'"), *Name);
+				RollbackAll();
+				return false;
+			}
+			++DefaultsSet;
+		}
+	}
+
+	// Pass 2b: connect input-node -> output-node by name (matches connect_pins shape).
+	const TArray<TSharedPtr<FJsonValue>>* EdgesArr = nullptr;
+	if (Spec->TryGetArrayField(TEXT("connections"), EdgesArr) && EdgesArr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *EdgesArr)
+		{
+			if (!V.IsValid()) continue;
+			const TSharedPtr<FJsonObject>* CObj = nullptr;
+			if (!V->TryGetObject(CObj) || !CObj || !CObj->IsValid()) continue;
+			FString GraphInputName, GraphOutputName;
+			if (!(*CObj)->TryGetStringField(TEXT("graph_input_name"), GraphInputName) || GraphInputName.IsEmpty())
+			{
+				OutError = TEXT("connection missing 'graph_input_name'"); RollbackAll(); return false;
+			}
+			if (!(*CObj)->TryGetStringField(TEXT("graph_output_name"), GraphOutputName) || GraphOutputName.IsEmpty())
+			{
+				OutError = TEXT("connection missing 'graph_output_name'"); RollbackAll(); return false;
+			}
+			EMetaSoundBuilderResult FindR = EMetaSoundBuilderResult::Failed;
+			FMetaSoundNodeHandle InputNode = BuilderObj.FindGraphInputNode(FName(*GraphInputName), FindR);
+			if (FindR != EMetaSoundBuilderResult::Succeeded)
+			{
+				OutError = FString::Printf(TEXT("Graph input '%s' not found"), *GraphInputName);
+				RollbackAll();
+				return false;
+			}
+			FindR = EMetaSoundBuilderResult::Failed;
+			FMetaSoundNodeHandle OutputNode = BuilderObj.FindGraphOutputNode(FName(*GraphOutputName), FindR);
+			if (FindR != EMetaSoundBuilderResult::Succeeded)
+			{
+				OutError = FString::Printf(TEXT("Graph output '%s' not found"), *GraphOutputName);
+				RollbackAll();
+				return false;
+			}
+			TArray<FMetaSoundBuilderNodeOutputHandle> InOutputs = BuilderObj.FindNodeOutputs(InputNode, FindR);
+			if (FindR != EMetaSoundBuilderResult::Succeeded || InOutputs.Num() == 0)
+			{
+				OutError = FString::Printf(TEXT("Input node '%s' has no output pin"), *GraphInputName);
+				RollbackAll();
+				return false;
+			}
+			TArray<FMetaSoundBuilderNodeInputHandle> OutInputs = BuilderObj.FindNodeInputs(OutputNode, FindR);
+			if (FindR != EMetaSoundBuilderResult::Succeeded || OutInputs.Num() == 0)
+			{
+				OutError = FString::Printf(TEXT("Output node '%s' has no input pin"), *GraphOutputName);
+				RollbackAll();
+				return false;
+			}
+			EMetaSoundBuilderResult ConnR = EMetaSoundBuilderResult::Failed;
+			BuilderObj.ConnectNodes(InOutputs[0], OutInputs[0], ConnR);
+			if (ConnR != EMetaSoundBuilderResult::Succeeded)
+			{
+				OutError = FString::Printf(TEXT("ConnectNodes failed (input=%s, output=%s)"), *GraphInputName, *GraphOutputName);
+				RollbackAll();
+				return false;
+			}
+			++EdgesAdded;
+		}
+	}
+
+	OutSummary = FString::Printf(
+		TEXT("metasound_apply_spec ok: %s%s -- %d interface(s), %d input(s), %d output(s), %d node(s), %d default(s), %d edge(s)"),
+		*Asset->GetPathName(), bCreated ? TEXT(" (created)") : TEXT(""),
+		InterfacesAdded, InputsAdded, OutputsAdded, NodesAdded, DefaultsSet, EdgesAdded);
+	return true;
+#endif
 }
 
 bool FClaireonSpecApplicator_Audio::ApplySoundMixSpec(const TSharedPtr<FJsonObject>& Spec, FString& OutSummary, FString& OutError)

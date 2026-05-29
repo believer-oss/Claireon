@@ -15,6 +15,39 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
+namespace
+{
+	// resolve a JSON value from slot_properties to its string form for WriteSlotProperty.
+	// String values pass through directly. Object values (nested JSON) are rejected with a
+	// descriptive error rather than silently emitting "" (the bug). The caller should use the
+	// flat engine-text form, e.g. "(Minimum=(X=0,Y=0),Maximum=(X=1,Y=1))" for Anchors.
+	// Returns true on success; false and populates OutError on nested-object rejection.
+	bool AddWidget_SlotPropJsonValueToString(
+		const FString& PropKey,
+		const TSharedPtr<FJsonValue>& JsonVal,
+		FString& OutValue,
+		FString& OutError)
+	{
+		if (!JsonVal.IsValid())
+		{
+			OutValue = TEXT("");
+			return true;
+		}
+		if (JsonVal->Type == EJson::Object || JsonVal->Type == EJson::Array)
+		{
+			OutError = FString::Printf(
+				TEXT("slot_properties[\"%s\"]: nested JSON object/array is not accepted. "
+					 "Use the engine flat-struct string form instead, e.g. for Anchors: "
+					 "\"(Minimum=(X=0,Y=0),Maximum=(X=1,Y=1))\", or use the follow-up "
+					 "widgetbp_set_slot_property tool."),
+				*PropKey);
+			return false;
+		}
+		OutValue = JsonVal->AsString();
+		return true;
+	}
+} // namespace
+
 FString ClaireonWidgetBPTool_AddWidget::GetOperation() const { return TEXT("add_widget"); }
 
 FString ClaireonWidgetBPTool_AddWidget::GetDescription() const
@@ -136,8 +169,17 @@ FToolResult ClaireonWidgetBPTool_AddWidget::Execute(const TSharedPtr<FJsonObject
 			{
 				for (auto& Pair : SlotProperties->Values)
 				{
+					// reject nested JSON with a helpful error rather than silently
+					// passing "" (what AsString() returns for object/array values).
+					FString PropStrVal;
+					FString PropConvErr;
+					if (!AddWidget_SlotPropJsonValueToString(Pair.Key, Pair.Value, PropStrVal, PropConvErr))
+					{
+						UE_LOG(LogClaireon, Warning, TEXT("[EditWidgetBP] add_widget: %s"), *PropConvErr);
+						continue;
+					}
 					FString SlotError;
-					ClaireonWidgetHelpers::WriteSlotProperty(Slot, Pair.Key, Pair.Value->AsString(), SlotError);
+					ClaireonWidgetHelpers::WriteSlotProperty(Slot, Pair.Key, PropStrVal, SlotError);
 				}
 			}
 		}

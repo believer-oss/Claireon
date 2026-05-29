@@ -1,19 +1,17 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Smoke tests for the decomposed MCP tool inventory produced by
-// DECOMPOSE_TOOLS stages 003-017. Each decomposed tool class is instantiated
-// directly and asserted to expose a non-empty Name, non-empty Description,
-// and a valid InputSchema. This guarantees that every decomposed tool is at
-// least discoverable through the standard IClaireonTool surface, satisfying
-// stage 019's "at least one smoke test per decomposed tool" requirement.
+// Smoke tests for the decomposed MCP tool inventory. Each decomposed tool
+// class is instantiated directly and asserted to expose a non-empty Name,
+// non-empty Description, and a valid InputSchema. Guarantees every
+// decomposed tool is discoverable through the standard IClaireonTool surface.
 
 #if WITH_UNTESTED
 
 #include "Untest.h"
 #include "Tools/IClaireonTool.h"
 
-// Transaction (stage 003)
+// Transaction
 #include "Tools/ClaireonTool_TransactionUndo.h"
 #include "Tools/ClaireonTool_TransactionRedo.h"
 #include "Tools/ClaireonTool_TransactionHistory.h"
@@ -21,7 +19,7 @@
 #include "Tools/ClaireonTool_TransactionEndGroup.h"
 #include "Tools/ClaireonTool_TransactionRollbackGroup.h"
 
-// Blackboard (stage 004)
+// Blackboard
 #include "Tools/ClaireonBlackboardTool_Open.h"
 #include "Tools/ClaireonBlackboardTool_Close.h"
 #include "Tools/ClaireonBlackboardTool_Save.h"
@@ -33,26 +31,26 @@
 #include "Tools/ClaireonBlackboardTool_SetParent.h"
 #include "Tools/ClaireonBlackboardTool_ApplySpec.h"
 
-// EQS (stage 005)
+// EQS
 #include "Tools/ClaireonEQSTool_ApplySpec.h"
 
-// PCG (stage 006)
+// PCG
 #include "Tools/ClaireonPCGGraphTool_ApplySpec.h"
 
-// Behavior Tree (stage 007)
+// Behavior Tree
 #include "Tools/ClaireonBehaviorTreeTool_ApplySpec.h"
 
-// Niagara (stage 014)
+// Niagara
 #include "Tools/ClaireonNiagaraTool_ApplySpec.h"
 
-// StateTree (stage 015)
+// StateTree
 #include "Tools/ClaireonStateTreeTool_ApplySpec.h"
 
-// Blueprint Graph (stage 016)
+// Blueprint Graph
 #include "Tools/ClaireonBlueprintGraphTool_ApplySpec.h"
 #include "Tools/ClaireonBlueprintGraphTool_Create.h"
 
-// Widget BP (stage 017)
+// Widget BP
 #include "Tools/ClaireonWidgetBPTool_ApplySpec.h"
 #include "Tools/ClaireonWidgetBPTool_Create.h"
 #include "Tools/ClaireonWidgetBPTool_AddWidget.h"

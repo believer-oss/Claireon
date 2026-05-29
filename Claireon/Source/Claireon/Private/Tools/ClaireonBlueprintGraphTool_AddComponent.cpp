@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -213,6 +213,13 @@ FToolResult ClaireonBlueprintGraphTool_AddComponent::Execute(const TSharedPtr<FJ
 		*ComponentName, *ComponentClass);
 
 	FToolResult AddCompResult = BuildStateResponse(SessionId, Data);
+	// surface the SCS_Node VariableGuid so callers can later bind a
+	// ComponentBoundEvent with rename-stable resolution.
+	if (AddCompResult.Data.IsValid())
+	{
+		AddCompResult.Data->SetStringField(TEXT("component_guid"), NewNode->VariableGuid.ToString());
+		AddCompResult.Data->SetStringField(TEXT("component_name"), NewNode->GetVariableName().ToString());
+	}
 	AddCompResult.Warnings.Append(ResolutionWarnings);
 	return AddCompResult;
 }

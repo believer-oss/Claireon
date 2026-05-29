@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 #if WITH_UNTESTED
 
@@ -199,7 +199,7 @@ UNTEST_UNIT(Claireon, OutputGate, LargeGenericDataSpillsAsData)
 	UNTEST_EXPECT_EQ(Arr->Num(), 1);
 	UNTEST_EXPECT_TRUE(EnvelopeHasStream(Routed.Data, TEXT("data")));
 
-	// D6 negative invariants: generic envelope never carries stdout/uelog streams.
+	// negative invariants: generic envelope never carries stdout/uelog streams.
 	UNTEST_EXPECT_FALSE(EnvelopeHasStream(Routed.Data, TEXT("stdout")));
 	UNTEST_EXPECT_FALSE(EnvelopeHasStream(Routed.Data, TEXT("uelog")));
 
@@ -515,6 +515,180 @@ UNTEST_UNIT_OPTS(Claireon, OutputGate, PythonUELogOverCeiling, UNTEST_TIMEOUTMS(
 	// stdout stays inline (small).
 	UNTEST_EXPECT_STREQ(*Routed.Logs, *Stdout);
 	UNTEST_EXPECT_FALSE(EnvelopeHasStream(Routed.Data, TEXT("stdout")));
+
+	co_return;
+}
+
+// ===========================================================================
+// Silent-empty-array footgun is loud, not silent. When a generic-tool
+// data stream spills, the Summary must carry a loud
+// "[SPILLED -> <path>]" prefix AND the data envelope must carry a structured
+// error_hint pointing at the spill file plus an inline_omitted list naming
+// the stripped logical fields. Agents that only consume <summary> text or
+// only read data.<field> can no longer silently miss a spill.
+// ===========================================================================
+
+// File-IO tests need a generous timeout: spill routing writes to the project's
+// Saved/ tree, which on cold disk caches can exceed the 0.5ms default budget.
+UNTEST_UNIT_OPTS(Claireon, OutputGate, GenericDataSpillSummaryCarriesLoudMarker, UNTEST_TIMEOUTMS(30000))
+{
+	using namespace ClaireonOutputGateTestsHelpers;
+	FScopedTestRoot Scope(TEXT("GenericDataSpillSummaryCarriesLoudMarker"));
+
+	const UClaireonSettings* S = UClaireonSettings::Get();
+	const int32 Threshold = S ? S->ResultSpillThresholdBytes : 8192;
+
+	IClaireonTool::FToolResult R = MakeGenericDataResult(Threshold * 2, TEXT("EventGraph: 33 nodes, 12 connections"));
+	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
+		MoveTemp(R), TEXT("blueprint_get_graph"), TEXT("test_conv"),
+		EClaireonSpillStreamSet::GenericData);
+
+	// Loud-marker prefix on Summary.
+	UNTEST_EXPECT_TRUE(Routed.Summary.StartsWith(TEXT("[SPILLED -> ")));
+	// Original summary text must still be present after the marker.
+	UNTEST_EXPECT_TRUE(Routed.Summary.Contains(TEXT("EventGraph: 33 nodes, 12 connections")));
+
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, OutputGate, GenericDataSpillEnvelopeCarriesErrorHintAndInlineOmitted, UNTEST_TIMEOUTMS(30000))
+{
+	using namespace ClaireonOutputGateTestsHelpers;
+	FScopedTestRoot Scope(TEXT("GenericDataSpillEnvelopeCarriesErrorHintAndInlineOmitted"));
+
+	const UClaireonSettings* S = UClaireonSettings::Get();
+	const int32 Threshold = S ? S->ResultSpillThresholdBytes : 8192;
+
+	IClaireonTool::FToolResult R = MakeGenericDataResult(Threshold * 2);
+	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
+		MoveTemp(R), TEXT("blueprint_get_graph"), TEXT("test_conv"),
+		EClaireonSpillStreamSet::GenericData);
+
+	UNTEST_ASSERT_TRUE(Routed.Data.IsValid());
+
+	// error_hint field is set and references absolute_path / spilled_streams.
+	FString Hint;
+	UNTEST_ASSERT_TRUE(Routed.Data->TryGetStringField(TEXT("error_hint"), Hint));
+	UNTEST_EXPECT_TRUE(Hint.Contains(TEXT("spilled_streams[0].absolute_path")));
+
+	// inline_omitted lists "data" for the GenericData class.
+	const TArray<TSharedPtr<FJsonValue>>* OmittedArr = nullptr;
+	UNTEST_ASSERT_TRUE(Routed.Data->TryGetArrayField(TEXT("inline_omitted"), OmittedArr) && OmittedArr);
+	bool bSawData = false;
+	for (const TSharedPtr<FJsonValue>& V : *OmittedArr)
+	{
+		if (V.IsValid() && V->AsString() == TEXT("data"))
+		{
+			bSawData = true;
+			break;
+		}
+	}
+	UNTEST_EXPECT_TRUE(bSawData);
+
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, OutputGate, GenericDataSpillPreservesSmallScalarIdentityFields, UNTEST_TIMEOUTMS(30000))
+{
+	using namespace ClaireonOutputGateTestsHelpers;
+	FScopedTestRoot Scope(TEXT("GenericDataSpillPreservesSmallScalarIdentityFields"));
+
+	const UClaireonSettings* S = UClaireonSettings::Get();
+	const int32 Threshold = S ? S->ResultSpillThresholdBytes : 8192;
+
+	// Build a result with a session_id (small scalar) and a payload large enough to spill.
+	IClaireonTool::FToolResult R;
+	R.Summary = TEXT("ok");
+	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+	Data->SetStringField(TEXT("session_id"), TEXT("AB12CD34-EF56-7890-1234-56789ABCDEF0"));
+	Data->SetStringField(TEXT("asset_path"), TEXT("/Game/AI/ST_MobBehavior"));
+	Data->SetNumberField(TEXT("state_count"), 42);
+	Data->SetBoolField(TEXT("dirty"), false);
+	Data->SetStringField(TEXT("payload"), FString::ChrN(Threshold * 2, TEXT('x')));
+	R.Data = Data;
+
+	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
+		MoveTemp(R), TEXT("statetree_open"), TEXT("test_conv"),
+		EClaireonSpillStreamSet::GenericData);
+
+	UNTEST_ASSERT_TRUE(Routed.Data.IsValid());
+	bool bSpilled = false;
+	UNTEST_ASSERT_TRUE(Routed.Data->TryGetBoolField(TEXT("__mcp_spilled__"), bSpilled) && bSpilled);
+
+	// small scalars (session_id, asset_path, state_count, dirty) MUST be preserved
+	// inline so the agent doesn't have to read the spill file just to see them.
+	FString SessionId;
+	UNTEST_ASSERT_TRUE(Routed.Data->TryGetStringField(TEXT("session_id"), SessionId));
+	UNTEST_EXPECT_TRUE(SessionId == TEXT("AB12CD34-EF56-7890-1234-56789ABCDEF0"));
+
+	FString AssetPath;
+	UNTEST_ASSERT_TRUE(Routed.Data->TryGetStringField(TEXT("asset_path"), AssetPath));
+	UNTEST_EXPECT_TRUE(AssetPath == TEXT("/Game/AI/ST_MobBehavior"));
+
+	int32 StateCount = 0;
+	UNTEST_ASSERT_TRUE(Routed.Data->TryGetNumberField(TEXT("state_count"), StateCount));
+	UNTEST_EXPECT_EQ(StateCount, 42);
+
+	bool Dirty = true;
+	UNTEST_ASSERT_TRUE(Routed.Data->TryGetBoolField(TEXT("dirty"), Dirty));
+	UNTEST_EXPECT_FALSE(Dirty);
+
+	// Big payload should NOT appear inline (spilled to disk).
+	UNTEST_EXPECT_FALSE(Routed.Data->HasField(TEXT("payload")));
+
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, OutputGate, PythonStdoutSpillSummaryCarriesLoudMarker, UNTEST_TIMEOUTMS(30000))
+{
+	using namespace ClaireonOutputGateTestsHelpers;
+	FScopedTestRoot Scope(TEXT("PythonStdoutSpillSummaryCarriesLoudMarker"));
+
+	const UClaireonSettings* S = UClaireonSettings::Get();
+	const int32 Threshold = S ? S->ResultSpillThresholdBytes : 8192;
+
+	const FString Big = FString::ChrN(Threshold * 2, TEXT('s'));
+	IClaireonTool::FToolResult R = MakePythonResult(Big, TEXT("uelog ok"));
+	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
+		MoveTemp(R), TEXT("python_execute"), TEXT("test_conv"),
+		EClaireonSpillStreamSet::PythonStdoutAndUELog);
+
+	// python_execute summary also gets the loud marker so agents that only
+	// read <summary> see the spill even when their wrapper hides
+	// data.spilled_streams from view (Q4 systemic gap).
+	UNTEST_EXPECT_TRUE(Routed.Summary.StartsWith(TEXT("[SPILLED -> ")));
+	UNTEST_EXPECT_TRUE(Routed.Summary.Contains(TEXT("python ok")));
+
+	// inline_omitted names "logs" (stdout was stripped from inline).
+	const TArray<TSharedPtr<FJsonValue>>* OmittedArr = nullptr;
+	UNTEST_ASSERT_TRUE(Routed.Data->TryGetArrayField(TEXT("inline_omitted"), OmittedArr) && OmittedArr);
+	bool bSawLogs = false;
+	for (const TSharedPtr<FJsonValue>& V : *OmittedArr)
+	{
+		if (V.IsValid() && V->AsString() == TEXT("logs"))
+		{
+			bSawLogs = true;
+			break;
+		}
+	}
+	UNTEST_EXPECT_TRUE(bSawLogs);
+
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, OutputGate, SmallGenericDataSummaryHasNoSpillMarker, UNTEST_TIMEOUTMS(30000))
+{
+	using namespace ClaireonOutputGateTestsHelpers;
+	FScopedTestRoot Scope(TEXT("SmallGenericDataSummaryHasNoSpillMarker"));
+
+	IClaireonTool::FToolResult R = MakeGenericDataResult(/*TargetBytes=*/64, TEXT("ok summary text"));
+	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
+		MoveTemp(R), TEXT("asset_search"), TEXT("test_conv"),
+		EClaireonSpillStreamSet::GenericData);
+
+	// No spill -> Summary unchanged; no marker.
+	UNTEST_EXPECT_FALSE(Routed.Summary.StartsWith(TEXT("[SPILLED")));
+	UNTEST_EXPECT_STREQ(*Routed.Summary, TEXT("ok summary text"));
 
 	co_return;
 }

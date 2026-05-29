@@ -26,6 +26,7 @@ class USoundMix;
 class USoundAttenuation;
 class USoundConcurrency;
 class UMetaSoundSource;
+class UMetaSoundPatch;
 struct FSoundClassProperties;
 
 /**
@@ -38,6 +39,7 @@ enum class EClaireonAudioAssetKind : uint8
 	Unknown,
 	SoundCue,
 	MetaSoundSource,
+	MetaSoundPatch,
 	SoundClass,
 	SoundMix,
 	Attenuation,
@@ -96,8 +98,9 @@ namespace ClaireonAudioHelpers
 							 EClaireonAudioDetailLevel DetailLevel, const FString& FocusHint);
 
 	/** Uses IMetaSoundDocumentInterface::GetConstDocument() and Metasound::Frontend graph-handle API.
-	 *  Emits graph nodes, inputs, outputs, output format GUID. Read-only. */
-	void FormatMetaSoundDocument(const UMetaSoundSource* Source, const TSharedRef<FJsonObject>& OutJson,
+	 *  Emits graph nodes, inputs, outputs, output format GUID. Read-only. Accepts any UObject that
+	 *  implements IMetaSoundDocumentInterface (UMetaSoundSource, UMetaSoundPatch) [D1/D2]. */
+	void FormatMetaSoundDocument(const UObject* DocumentObject, const TSharedRef<FJsonObject>& OutJson,
 								 EClaireonAudioDetailLevel DetailLevel, const FString& FocusHint);
 
 	/** Dumps FSoundAttenuationSettings via reflection: shape, distance model, spatialization toggle,

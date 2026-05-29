@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonSpecApplicator_Blueprint.h"
-#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonBlueprintHelpers.h"
+#include "ClaireonBlueprintNodeFactory.h"
 #include "ClaireonNameResolver.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSessionManager.h"
@@ -30,15 +30,69 @@
 #include "K2Node_Select.h"
 #include "K2Node_MakeArray.h"
 #include "K2Node_SpawnActorFromClass.h"
-#include "K2Node_Event.h"
-#include "K2Node_AsyncAction.h"
-#include "K2Node_GetArrayItem.h"
 #include "EdGraphNode_Comment.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+
+// File-static helper. The name suffix '_BlueprintApplicator' is a discriminator
+// to satisfy the v2-Linux non-unity collision rule for free functions across TUs.
+// Anonymous namespace is intentionally avoided per the same rule (unity batching
+// can collide anon-NS helpers across Module.X.<N>.cpp files).
+static TSharedPtr<FJsonObject> NormalizeNodeSpecForFactory_BlueprintApplicator(
+	const TSharedPtr<FJsonObject>& NodeObj,
+	const FString& NodeType)
+{
+	TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+
+	// 1. Copy all fields verbatim.
+	for (const TPair<FString, TSharedPtr<FJsonValue>>& Kv : NodeObj->Values)
+	{
+		Out->SetField(Kv.Key, Kv.Value);
+	}
+
+	// 2. Rename legacy 'function' -> factory canonical 'function_name'.
+	if (Out->HasField(TEXT("function")) && !Out->HasField(TEXT("function_name")))
+	{
+		FString FuncName;
+		Out->TryGetStringField(TEXT("function"), FuncName);
+		Out->SetStringField(TEXT("function_name"), FuncName);
+		Out->RemoveField(TEXT("function"));
+	}
+
+	// 3. Map legacy K2Node_* class names to factory canonical short forms.
+	//    Set 'node_type' on the output; the factory's alias resolver handles further normalization.
+	FString CanonicalType = NodeType;
+	if (CanonicalType == TEXT("K2Node_CallFunction"))           { CanonicalType = TEXT("CallFunction"); }
+	else if (CanonicalType == TEXT("K2Node_VariableGet"))       { CanonicalType = TEXT("VariableGet"); }
+	else if (CanonicalType == TEXT("K2Node_VariableSet"))       { CanonicalType = TEXT("VariableSet"); }
+	else if (CanonicalType == TEXT("K2Node_IfThenElse"))        { CanonicalType = TEXT("Branch"); }
+	else if (CanonicalType == TEXT("K2Node_ExecutionSequence")) { CanonicalType = TEXT("Sequence"); }
+	else if (CanonicalType == TEXT("K2Node_CustomEvent"))       { CanonicalType = TEXT("CustomEvent"); }
+	else if (CanonicalType == TEXT("K2Node_DynamicCast"))       { CanonicalType = TEXT("Cast"); }
+	else if (CanonicalType == TEXT("K2Node_Knot"))              { CanonicalType = TEXT("Reroute"); }
+	else if (CanonicalType == TEXT("K2Node_Select"))            { CanonicalType = TEXT("Select"); }
+	else if (CanonicalType == TEXT("K2Node_MakeArray"))         { CanonicalType = TEXT("MakeArray"); }
+	else if (CanonicalType == TEXT("K2Node_SpawnActorFromClass")) { CanonicalType = TEXT("SpawnActorFromClass"); }
+	else if (CanonicalType == TEXT("EdGraphNode_Comment"))      { CanonicalType = TEXT("Comment"); }
+	else if (CanonicalType == TEXT("K2Node_Delay"))
+	{
+		// Delay is rewritten as a KismetSystemLibrary::Delay CallFunction node.
+		CanonicalType = TEXT("CallFunction");
+		Out->SetStringField(TEXT("function_name"), TEXT("Delay"));
+		Out->SetStringField(TEXT("function_class"), TEXT("KismetSystemLibrary"));
+	}
+	else if (CanonicalType.StartsWith(TEXT("K2Node_")))
+	{
+		// Strip the K2Node_ prefix; the factory's alias resolver handles the remainder.
+		CanonicalType = CanonicalType.Mid(7);
+	}
+	Out->SetStringField(TEXT("node_type"), CanonicalType);
+
+	return Out;
+}
 
 bool FClaireonSpecApplicator_Blueprint::ValidateToolSpec(const TSharedPtr<FJsonObject>& Spec, TArray<FString>& OutErrors)
 {
@@ -132,8 +186,6 @@ bool FClaireonSpecApplicator_Blueprint::ValidateToolSpec(const TSharedPtr<FJsonO
 
 bool FClaireonSpecApplicator_Blueprint::OpenOrCreateAsset(const FString& AssetPath, FString& OutSessionId, FString& OutError)
 {
-	const TSharedPtr<FJsonObject>& Spec = GetActiveSpec();
-
 	// Resolve path
 	auto ResolveResult = ClaireonPathResolver::Resolve(AssetPath);
 	if (!ResolveResult.bSuccess)
@@ -155,92 +207,39 @@ bool FClaireonSpecApplicator_Blueprint::OpenOrCreateAsset(const FString& AssetPa
 			return false;
 		}
 
-		FString PackageName = ResolvedPath;
-		FString AssetName;
-		if (ResolvedPath.Contains(TEXT(".")))
+		// Resolve parent_class from the active spec (top-level field), defaulting to Actor.
+		FString ParentClassName = TEXT("Actor");
+		if (TSharedPtr<FJsonObject> Spec = GetActiveSpec())
 		{
-			ResolvedPath.Split(TEXT("."), &PackageName, &AssetName);
-		}
-		else
-		{
-			int32 LastSlash;
-			if (PackageName.FindLastChar('/', LastSlash))
-			{
-				AssetName = PackageName.Mid(LastSlash + 1);
-			}
-			else
-			{
-				AssetName = TEXT("NewBlueprint");
-			}
+			Spec->TryGetStringField(TEXT("parent_class"), ParentClassName);
 		}
 
-		// Delete existing file if present
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(PackageName, FPackageName::GetAssetPackageExtension());
-		if (FPaths::FileExists(PackageFileName))
+		ClaireonNameResolver::FNameResolveResult ParentClassResult;
+		UClass* ParentClass = ClaireonNameResolver::ResolveClassName(
+			ParentClassName, nullptr, ParentClassResult);
+		if (!ParentClass)
 		{
-			IFileManager::Get().Delete(*PackageFileName, false, true);
-		}
-
-		UPackage* Package = CreatePackage(*PackageName);
-		if (!Package)
-		{
-			OutError = FString::Printf(TEXT("Failed to create package: %s"), *PackageName);
+			OutError = FString::Printf(TEXT("Failed to resolve parent_class '%s': %s"),
+				*ParentClassName, *ParentClassResult.Error);
 			return false;
 		}
-
-		// Resolve parent_class from spec if provided; otherwise default to Actor for
-		// backward compatibility.
-		UClass* ResolvedParentClass = AActor::StaticClass();
-		if (Spec.IsValid())
+		if (!ParentClassResult.ResolutionNote.IsEmpty())
 		{
-			FString ParentClassName;
-			if (Spec->TryGetStringField(TEXT("parent_class"), ParentClassName) && !ParentClassName.IsEmpty())
-			{
-				ClaireonNameResolver::FNameResolveResult PR;
-				UClass* PC = ClaireonNameResolver::ResolveClassName(ParentClassName, nullptr, PR);
-				if (PC)
-				{
-					ResolvedParentClass = PC;
-				}
-				else
-				{
-					OutError = FString::Printf(TEXT("Failed to resolve parent_class '%s': %s"), *ParentClassName, *PR.Error);
-					return false;
-				}
-			}
+			AddWarning(ParentClassResult.ResolutionNote);
 		}
 
-		BP = FKismetEditorUtilities::CreateBlueprint(
-			ResolvedParentClass,
-			Package,
-			FName(*AssetName),
-			BPTYPE_Normal,
-			UBlueprint::StaticClass(),
-			UBlueprintGeneratedClass::StaticClass(),
-			NAME_None);
-
-		if (!BP)
+		ClaireonBlueprintHelpers::FCreateBlueprintResult CreateResult;
+		ClaireonBlueprintHelpers::CreateBlueprint(ResolvedPath, ParentClass, CreateResult);
+		if (!CreateResult.IsOk())
 		{
-			OutError = FString::Printf(TEXT("Failed to create Blueprint at %s"), *ResolvedPath);
+			OutError = CreateResult.Error;
 			return false;
 		}
-
-		Package->SetIsExternallyReferenceable(true);
-		Package->MarkPackageDirty();
-		FAssetRegistryModule::AssetCreated(BP);
-
+		for (const FString& W : CreateResult.Warnings)
 		{
-			FString AssertError;
-			if (!ClaireonAssetUtils::AssertInnerNameMatchesPackage(BP, AssertError))
-			{
-				// bool-returning caller -- propagate via OutError + return false.
-				// Cleanup mirrors the BP-create path: clear flags + garbage.
-				BP->ClearFlags(RF_Public | RF_Standalone);
-				BP->MarkAsGarbage();
-				OutError = AssertError;
-				return false;
-			}
+			AddWarning(W);
 		}
+		BP = CreateResult.Blueprint;
 	}
 
 	// Find graph
@@ -286,12 +285,48 @@ bool FClaireonSpecApplicator_Blueprint::ApplyPass1_CreateEntities(const FString&
 		return false;
 	}
 
-	int32 SuccessCount = 0;
+	// === VARIABLES (runs FIRST so VariableGet/Set nodes see FProperty by Pass 1.5) ===
+	const TArray<TSharedPtr<FJsonValue>>* VariablesArray = nullptr;
+	if (Spec->TryGetArrayField(TEXT("variables"), VariablesArray) && VariablesArray)
+	{
+		int32 VarSuccessCount = 0;
+		for (int32 i = 0; i < VariablesArray->Num(); ++i)
+		{
+			const TSharedPtr<FJsonObject>& VarObj = (*VariablesArray)[i]->AsObject();
+			if (!VarObj.IsValid()) continue;
 
-	// --- Create nodes ---
+			FString VarId;
+			VarObj->TryGetStringField(TEXT("id"), VarId);
+
+			FString CreateError;
+			if (!ClaireonBlueprintHelpers::CreateVariableFromSpec(BP, VarObj, /*OutResult=*/nullptr, CreateError))
+			{
+				RecordEntryFailure(VarId, CreateError);
+				continue;
+			}
+
+			FString VarName;
+			if (!VarObj->TryGetStringField(TEXT("variable_name"), VarName))
+			{
+				VarObj->TryGetStringField(TEXT("name"), VarName);
+			}
+			RegisterIdMapping(VarId, VarName);
+			RecordEntrySuccess(VarId, VarName);
+			VarSuccessCount++;
+		}
+		if (VarSuccessCount > 0)
+		{
+			FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
+		}
+		UE_LOG(LogClaireon, Log, TEXT("[apply_spec:Blueprint] Pass 1: Created %d/%d variables"),
+			VarSuccessCount, VariablesArray->Num());
+	}
+
+	// === NODES (runs SECOND, through factory) ===
 	const TArray<TSharedPtr<FJsonValue>>* NodesArray = nullptr;
 	if (Spec->TryGetArrayField(TEXT("nodes"), NodesArray) && NodesArray)
 	{
+		int32 NodeSuccessCount = 0;
 		for (int32 i = 0; i < NodesArray->Num(); ++i)
 		{
 			const TSharedPtr<FJsonObject>& NodeObj = (*NodesArray)[i]->AsObject();
@@ -301,7 +336,8 @@ bool FClaireonSpecApplicator_Blueprint::ApplyPass1_CreateEntities(const FString&
 			NodeObj->TryGetStringField(TEXT("id"), SpecId);
 			NodeObj->TryGetStringField(TEXT("type"), NodeType);
 
-			// Parse optional position
+			// Parse legacy array-form position into FVector2D; the factory accepts position
+			// via its FVector2D parameter rather than in the JSON params object.
 			FVector2D Position(i * 300.0, 0.0);
 			const TArray<TSharedPtr<FJsonValue>>* PosArray = nullptr;
 			if (NodeObj->TryGetArrayField(TEXT("position"), PosArray) && PosArray && PosArray->Num() >= 2)
@@ -310,295 +346,50 @@ bool FClaireonSpecApplicator_Blueprint::ApplyPass1_CreateEntities(const FString&
 				Position.Y = (*PosArray)[1]->AsNumber();
 			}
 
-			UEdGraphNode* NewNode = nullptr;
+			TSharedPtr<FJsonObject> FactoryParams =
+				NormalizeNodeSpecForFactory_BlueprintApplicator(NodeObj, NodeType);
 
-			if (NodeType == TEXT("K2Node_CallFunction"))
-			{
-				FString FunctionName;
-				if (!NodeObj->TryGetStringField(TEXT("function"), FunctionName))
-				{
-					NodeObj->TryGetStringField(TEXT("function_name"), FunctionName);
-				}
-				FString FunctionClass;
-				NodeObj->TryGetStringField(TEXT("function_class"), FunctionClass);
+			ClaireonBlueprintNodeFactory::FCreateResult R =
+				ClaireonBlueprintNodeFactory::CreateNode(BP, Graph, FactoryParams, Position);
 
-				UK2Node_CallFunction* CallNode = NewObject<UK2Node_CallFunction>(Graph);
-				if (!FunctionClass.IsEmpty())
-				{
-					UClass* OwnerClass = FindFirstObject<UClass>(*FunctionClass);
-					if (OwnerClass)
-					{
-						CallNode->FunctionReference.SetExternalMember(FName(*FunctionName), OwnerClass);
-					}
-					else
-					{
-						CallNode->FunctionReference.SetSelfMember(FName(*FunctionName));
-					}
-				}
-				else
-				{
-					// For common functions like PrintString, try library classes
-					UClass* LibClass = FindFirstObject<UClass>(TEXT("KismetSystemLibrary"));
-					if (LibClass && LibClass->FindFunctionByName(FName(*FunctionName)))
-					{
-						CallNode->FunctionReference.SetExternalMember(FName(*FunctionName), LibClass);
-					}
-					else
-					{
-						CallNode->FunctionReference.SetSelfMember(FName(*FunctionName));
-					}
-				}
-				NewNode = CallNode;
-			}
-			else if (NodeType == TEXT("K2Node_VariableGet"))
+			if (!R.IsOk())
 			{
-				FString VarName;
-				NodeObj->TryGetStringField(TEXT("variable_name"), VarName);
-				UK2Node_VariableGet* VarNode = NewObject<UK2Node_VariableGet>(Graph);
-				VarNode->VariableReference.SetSelfMember(FName(*VarName));
-				NewNode = VarNode;
-			}
-			else if (NodeType == TEXT("K2Node_VariableSet"))
-			{
-				FString VarName;
-				NodeObj->TryGetStringField(TEXT("variable_name"), VarName);
-				UK2Node_VariableSet* VarNode = NewObject<UK2Node_VariableSet>(Graph);
-				VarNode->VariableReference.SetSelfMember(FName(*VarName));
-				NewNode = VarNode;
-			}
-			else if (NodeType == TEXT("K2Node_IfThenElse") || NodeType == TEXT("Branch"))
-			{
-				NewNode = NewObject<UK2Node_IfThenElse>(Graph);
-			}
-			else if (NodeType == TEXT("K2Node_ExecutionSequence") || NodeType == TEXT("Sequence"))
-			{
-				NewNode = NewObject<UK2Node_ExecutionSequence>(Graph);
-			}
-			else if (NodeType == TEXT("K2Node_CustomEvent"))
-			{
-				FString EventName;
-				NodeObj->TryGetStringField(TEXT("event_name"), EventName);
-				UK2Node_CustomEvent* EventNode = NewObject<UK2Node_CustomEvent>(Graph);
-				EventNode->CustomFunctionName = FName(*EventName);
-				NewNode = EventNode;
-			}
-			else if (NodeType == TEXT("K2Node_DynamicCast") || NodeType == TEXT("Cast"))
-			{
-				FString TargetClass;
-				NodeObj->TryGetStringField(TEXT("target_class"), TargetClass);
-				UK2Node_DynamicCast* CastNode = NewObject<UK2Node_DynamicCast>(Graph);
-				if (!TargetClass.IsEmpty())
-				{
-					UClass* CastClass = FindFirstObject<UClass>(*TargetClass);
-					if (CastClass)
-					{
-						CastNode->TargetType = CastClass;
-					}
-				}
-				NewNode = CastNode;
-			}
-			else if (NodeType == TEXT("K2Node_Knot") || NodeType == TEXT("Reroute"))
-			{
-				NewNode = NewObject<UK2Node_Knot>(Graph);
-			}
-			else if (NodeType == TEXT("K2Node_Select"))
-			{
-				NewNode = NewObject<UK2Node_Select>(Graph);
-			}
-			else if (NodeType == TEXT("K2Node_MakeArray"))
-			{
-				NewNode = NewObject<UK2Node_MakeArray>(Graph);
-			}
-			else if (NodeType == TEXT("K2Node_SpawnActorFromClass"))
-			{
-				NewNode = NewObject<UK2Node_SpawnActorFromClass>(Graph);
-			}
-			else if (NodeType == TEXT("EdGraphNode_Comment") || NodeType == TEXT("Comment"))
-			{
-				UEdGraphNode_Comment* CommentNode = NewObject<UEdGraphNode_Comment>(Graph);
-				FString CommentText;
-				if (NodeObj->TryGetStringField(TEXT("comment_text"), CommentText))
-				{
-					CommentNode->NodeComment = CommentText;
-				}
-				NewNode = CommentNode;
-			}
-			else if (NodeType == TEXT("K2Node_Delay"))
-			{
-				// Delay is actually a CallFunction to Delay
-				UK2Node_CallFunction* DelayNode = NewObject<UK2Node_CallFunction>(Graph);
-				UClass* LibClass = FindFirstObject<UClass>(TEXT("KismetSystemLibrary"));
-				if (LibClass)
-				{
-					DelayNode->FunctionReference.SetExternalMember(FName(TEXT("Delay")), LibClass);
-				}
-				NewNode = DelayNode;
-			}
-			else if (NodeType == TEXT("K2Node_Event"))
-			{
-				FString EventName, EventClass;
-				NodeObj->TryGetStringField(TEXT("event_name"), EventName);
-				NodeObj->TryGetStringField(TEXT("event_class"), EventClass);
-				bool bOverride = false;
-				NodeObj->TryGetBoolField(TEXT("override_function"), bOverride);
-
-				UK2Node_Event* EventNode = NewObject<UK2Node_Event>(Graph);
-				EventNode->bOverrideFunction = bOverride;
-				if (!EventClass.IsEmpty())
-				{
-					UClass* OwnerClass = FindFirstObject<UClass>(*EventClass, EFindFirstObjectOptions::NativeFirst);
-					if (OwnerClass && !EventName.IsEmpty())
-					{
-						EventNode->EventReference.SetExternalMember(FName(*EventName), OwnerClass);
-					}
-				}
-				NewNode = EventNode;
-			}
-			else if (NodeType == TEXT("K2Node_AsyncAction"))
-			{
-				FString ProxyClassName, ProxyFactoryFunc;
-				NodeObj->TryGetStringField(TEXT("proxy_class"), ProxyClassName);
-				if (!NodeObj->TryGetStringField(TEXT("proxy_factory_function"), ProxyFactoryFunc))
-				{
-					NodeObj->TryGetStringField(TEXT("function_name"), ProxyFactoryFunc);
-				}
-
-				UK2Node_AsyncAction* AsyncNode = NewObject<UK2Node_AsyncAction>(Graph);
-				if (!ProxyClassName.IsEmpty())
-				{
-					UClass* ProxyClass = FindFirstObject<UClass>(*ProxyClassName, EFindFirstObjectOptions::NativeFirst);
-					if (ProxyClass)
-					{
-						// UK2Node_BaseAsyncTask's ProxyClass/ProxyFactoryClass/ProxyFactoryFunctionName are
-						// `protected` C++ fields but are reflected (UPROPERTY); write via reflection.
-						UClass* BaseClass = UK2Node_AsyncAction::StaticClass();
-						if (FObjectProperty* PC = CastField<FObjectProperty>(BaseClass->FindPropertyByName(TEXT("ProxyClass"))))
-						{
-							PC->SetObjectPropertyValue_InContainer(AsyncNode, ProxyClass);
-						}
-						if (FObjectProperty* PFC = CastField<FObjectProperty>(BaseClass->FindPropertyByName(TEXT("ProxyFactoryClass"))))
-						{
-							PFC->SetObjectPropertyValue_InContainer(AsyncNode, ProxyClass);
-						}
-						if (!ProxyFactoryFunc.IsEmpty())
-						{
-							if (FNameProperty* PFFN = CastField<FNameProperty>(BaseClass->FindPropertyByName(TEXT("ProxyFactoryFunctionName"))))
-							{
-								PFFN->SetPropertyValue_InContainer(AsyncNode, FName(*ProxyFactoryFunc));
-							}
-						}
-					}
-				}
-				NewNode = AsyncNode;
-			}
-			else if (NodeType == TEXT("K2Node_GetArrayItem"))
-			{
-				NewNode = NewObject<UK2Node_GetArrayItem>(Graph);
-			}
-			else
-			{
-				// Generic fallback: try to find the class by name
-				UClass* NodeClass = FindFirstObject<UClass>(*NodeType, EFindFirstObjectOptions::NativeFirst);
-				if (NodeClass && NodeClass->IsChildOf(UEdGraphNode::StaticClass()))
-				{
-					NewNode = NewObject<UEdGraphNode>(Graph, NodeClass);
-				}
-				else
-				{
-					RecordEntryFailure(SpecId, FString::Printf(TEXT("Unknown node type: %s"), *NodeType));
-					continue;
-				}
+				RecordEntryFailure(SpecId, R.Error);
+				continue;
 			}
 
-			if (NewNode)
-			{
-				NewNode->NodePosX = Position.X;
-				NewNode->NodePosY = Position.Y;
-				NewNode->CreateNewGuid();
-				NewNode->PostPlacedNewNode();
-				NewNode->AllocateDefaultPins();
-				Graph->AddNode(NewNode, true, false);
-
-				FString GuidStr = NewNode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphensLower);
-				RegisterIdMapping(SpecId, GuidStr);
-				RecordEntrySuccess(SpecId, GuidStr);
-				SuccessCount++;
-			}
+			// Factory already added the node to Graph and called AllocateDefaultPins +
+			// ReconstructNode (for typed branches that need it). Just record the IdMap entry.
+			const FString GuidStr = R.Node->NodeGuid.ToString(EGuidFormats::DigitsWithHyphensLower);
+			RegisterIdMapping(SpecId, GuidStr);
+			RecordEntrySuccess(SpecId, GuidStr);
+			for (const FString& W : R.Warnings) { AddWarning(W); }
+			NodeSuccessCount++;
 		}
-
 		UE_LOG(LogClaireon, Log, TEXT("[apply_spec:Blueprint] Pass 1: Created %d/%d nodes"),
-			SuccessCount, NodesArray->Num());
+			NodeSuccessCount, NodesArray->Num());
 	}
 
-	// --- Create variables ---
-	const TArray<TSharedPtr<FJsonValue>>* VariablesArray = nullptr;
-	if (Spec->TryGetArrayField(TEXT("variables"), VariablesArray) && VariablesArray)
+	// === PASS 1.5: narrow safety-net ReconstructNode for VariableGet / VariableSet ===
+	// The factory's typed-branch reconstruct list excludes these because AllocateDefaultPins
+	// reads the FProperty directly. With vars-first (above), the FProperty exists by the
+	// time the node was created. This walk is a safety net for future spec extensions that
+	// may register a variable after a VariableGet is constructed.
+	for (const TPair<FString, FString>& Pair : GetIdMappings())
 	{
-		for (int32 i = 0; i < VariablesArray->Num(); ++i)
+		const FString& GuidStr = Pair.Value;
+		FGuid NodeGuid;
+		if (!FGuid::Parse(GuidStr, NodeGuid)) continue;  // skip non-GUID entries (variables)
+		UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
+		if (!Node) continue;
+		if (Node->IsA<UK2Node_VariableGet>() || Node->IsA<UK2Node_VariableSet>())
 		{
-			const TSharedPtr<FJsonObject>& VarObj = (*VariablesArray)[i]->AsObject();
-			if (!VarObj.IsValid()) continue;
-
-			FString VarId, VarName, VarType;
-			VarObj->TryGetStringField(TEXT("id"), VarId);
-			VarObj->TryGetStringField(TEXT("name"), VarName);
-			VarObj->TryGetStringField(TEXT("type"), VarType);
-
-			// Check for duplicate
-			bool bDuplicate = false;
-			for (const FBPVariableDescription& Existing : BP->NewVariables)
-			{
-				if (Existing.VarName == FName(*VarName))
-				{
-					bDuplicate = true;
-					break;
-				}
-			}
-			if (bDuplicate)
-			{
-				RecordEntryFailure(VarId, FString::Printf(TEXT("Variable '%s' already exists"), *VarName));
-				continue;
-			}
-
-			ClaireonBlueprintHelpers::FParseVariableTypeResult VarParseResult = ClaireonBlueprintHelpers::ParseVariableTypeChecked(VarType);
-			if (!VarParseResult.bSucceeded)
-			{
-				RecordEntryFailure(VarId, FString::Printf(TEXT("Failed to parse variable type '%s': %s"), *VarType, *VarParseResult.Error));
-				continue;
-			}
-			FEdGraphPinType PinType = VarParseResult.PinType;
-
-			FBPVariableDescription NewVar;
-			NewVar.VarName = FName(*VarName);
-			NewVar.VarType = PinType;
-			NewVar.FriendlyName = VarName;
-			NewVar.Category = FText::FromString(TEXT("Default"));
-
-			// Parse flags
-			const TArray<TSharedPtr<FJsonValue>>* FlagsArray = nullptr;
-			if (VarObj->TryGetArrayField(TEXT("flags"), FlagsArray) && FlagsArray)
-			{
-				TArray<FString> Flags;
-				for (const TSharedPtr<FJsonValue>& FlagVal : *FlagsArray)
-				{
-					Flags.Add(FlagVal->AsString());
-				}
-				NewVar.PropertyFlags = ClaireonBlueprintHelpers::ParsePropertyFlags(Flags);
-			}
-
-			// Default value
-			FString DefaultValue;
-			if (VarObj->TryGetStringField(TEXT("default_value"), DefaultValue))
-			{
-				NewVar.DefaultValue = DefaultValue;
-			}
-
-			BP->NewVariables.Add(NewVar);
-			RegisterIdMapping(VarId, VarName);
-			RecordEntrySuccess(VarId, VarName);
+			const int32 PrevX = Node->NodePosX;
+			const int32 PrevY = Node->NodePosY;
+			Node->ReconstructNode();
+			Node->NodePosX = PrevX;
+			Node->NodePosY = PrevY;
 		}
-
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
 	}
 
 	return true;

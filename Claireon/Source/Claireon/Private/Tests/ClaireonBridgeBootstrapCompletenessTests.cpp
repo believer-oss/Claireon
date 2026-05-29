@@ -32,7 +32,7 @@
 
 namespace ClaireonBridgeBootstrapCompletenessTestsNS
 {
-	// File-local discriminator (per feedback_anon_namespace_unity_collision.md).
+	// File-local discriminator to avoid anon-NS collisions under unity batching.
 
 	static FString RunPython(const FString& Code, bool& bOutError, FString& OutErrMsg)
 	{

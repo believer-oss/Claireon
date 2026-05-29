@@ -315,7 +315,7 @@ UNTEST_UNIT(Claireon, PathResolver, DotDotResolution)
 }
 
 // ===========================================================================
-// Stage 0 Object-Path Append Tests (F01)
+// Object-Path Append Tests
 // ===========================================================================
 
 UNTEST_UNIT(Claireon, PathResolver, ObjectNameAppendedForPackagePath)

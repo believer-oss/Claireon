@@ -2576,7 +2576,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 }
 
 // ============================================================================
-// Stage 003: suggest_node (read-only authoring-pattern lookup)
+// suggest_node (read-only authoring-pattern lookup)
 // ============================================================================
 
 namespace ClaireonTool_SuggestNodeSpecHelpers
@@ -2817,7 +2817,7 @@ bool FEditBlueprintGraphTest_SuggestNode_StructureKeys::RunTest(const FString& P
 }
 
 // ============================================================================
-// Stage 004: add_node macro-name shorthand (auto-resolves MacroInstance)
+// add_node macro-name shorthand (auto-resolves MacroInstance)
 // ============================================================================
 
 namespace ClaireonTool_MacroShorthandSpecHelpers
@@ -3114,7 +3114,7 @@ bool FEditBlueprintGraphTest_MacroShorthand_AllResolve::RunTest(const FString& P
 }
 
 // ============================================================================
-// Stage 005: add_variable pin-type string parser
+// add_variable pin-type string parser
 // ============================================================================
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_AddVariable_ParseFString,
@@ -3190,7 +3190,7 @@ bool FEditBlueprintGraphTest_AddVariable_UnknownTypeFallsBackToString::RunTest(c
 // Test: ComponentBoundEvent add_node branch
 // ============================================================================
 //
-// Verifies Stage 001 of the Blueprint Pin Type & Event Binding Fidelity work:
+// Verifies the ComponentBoundEvent add_node branch:
 // - add_node with node_type='ComponentBoundEvent' binds an SCS component
 //   event (component_name + delegate_name).
 // - The resulting UK2Node_ComponentBoundEvent has ComponentPropertyName,
@@ -3550,7 +3550,7 @@ bool FEditBlueprintGraphTest_ComponentBoundEvent::RunTest(const FString& Paramet
 // Test: Wildcard pin resolution on connect_pins
 // ============================================================================
 //
-// Verifies Stage 002 of the Blueprint Pin Type & Event Binding Fidelity work:
+// Verifies wildcard pin resolution on connect_pins:
 // - Connecting a typed array output (TArray<FName>) to the wildcard
 //   TargetArray pin on Array_Length (UKismetArrayLibrary::Array_Length)
 //   resolves the wildcard to the concrete element type (PC_Name).
@@ -3796,7 +3796,7 @@ bool FEditBlueprintGraphTest_WildcardPinResolution::RunTest(const FString& Param
 
 
 // ===========================================================================
-// Stage 02: CursorHistory tests (FRACTURE/01_cursor_history.md)
+// CursorHistory tests
 // ===========================================================================
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_CursorHistory_PushRecordsGraphName,
@@ -4156,8 +4156,8 @@ bool FEditBlueprintGraphTest_CursorHistory_FunctionOverridePushesOldGraph::RunTe
 }
 
 // ===========================================================================
-// Stage 03: SwitchGraph tests (FRACTURE/02_switch_graph.md)
-// Tests 16 + 16a (integration) held back for stage_07.
+// SwitchGraph tests
+// Tests 16 + 16a (integration) are in the integration block below.
 // ===========================================================================
 
 // Shared helper: create a BP, add_function_override on a native event so the
@@ -5072,10 +5072,8 @@ bool FEditBlueprintGraphTest_InspectNode_AnimGraphRedirectSessionPath::RunTest(c
 }
 
 // ===========================================================================
-// Stage 07: Integration tests 16 + 16a (FRACTURE/02_switch_graph.md)
-// These tests exercise the end-to-end refinement loop (switch_graph +
-// inspect_node) and cross-graph cursor_back surface. Held back until both
-// switch_graph (stage_03) and inspect_node (stage_04/05) had landed.
+// Integration tests 16 + 16a: exercise the end-to-end refinement loop
+// (switch_graph + inspect_node) and cross-graph cursor_back surface.
 // ===========================================================================
 
 namespace
@@ -5912,8 +5910,8 @@ bool FEditBlueprintGraphTest_ApplyGraphRollback::RunTest(const FString& Paramete
 		ClaireonTool_ApplyBlueprintDelta ApplyTool;
 		IClaireonTool::FToolResult Result = ApplyTool.Execute(ApplyArgs);
 
-		TestTrue(TEXT("apply_graph with bad connection must return error"), Result.bIsError);
-		TestEqual(TEXT("graph node count must be unchanged after failed apply_graph"),
+		TestTrue(TEXT("apply_delta with bad connection must return error"), Result.bIsError);
+		TestEqual(TEXT("graph node count must be unchanged after failed apply_delta"),
 			Graph->Nodes.Num(), InitialNodeCount);
 	}
 
@@ -5936,7 +5934,7 @@ bool FEditBlueprintGraphTest_ApplyGraphRollback::RunTest(const FString& Paramete
 		ClaireonTool_ApplyBlueprintDelta ApplyTool;
 		IClaireonTool::FToolResult Result = ApplyTool.Execute(ApplyArgs);
 
-		TestFalse(TEXT("apply_graph retry with valid connection must succeed"), Result.bIsError);
+		TestFalse(TEXT("apply_delta retry with valid connection must succeed"), Result.bIsError);
 		TestEqual(TEXT("retry must leave exactly 2 new nodes (not 4 -- previous call's leaked nodes)"),
 			Graph->Nodes.Num(), InitialNodeCount + 2);
 	}
@@ -6226,9 +6224,64 @@ bool FEditBlueprintGraphTest_ResolveByTitle_UnknownTitle::RunTest(const FString&
 }
 
 // =====================================================================================
-// ITEM_03 Test 4: component-details alias coverage. get_component_details response
-// Details object carries BOTH 'name' and 'component_name', equal values. This test is
-// unconditional (Stage 004 preserves the aliases when restructuring the payload).
+// multi-line title normalization. CallFunction nodes auto-append "Target is X" via
+// ENodeTitleType::ListView. Callers typically only know the first line ("Print String").
+// FindNodesByTitle strips after the first newline on both sides before comparing, so a
+// caller's first-line input must still resolve a node whose stored title is multi-line.
+// We exercise this end-to-end by passing a synthetic multi-line title to inspect_node;
+// the first-line strip lets it resolve the BeginPlay event.
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ResolveByTitle_MultiLineFirstLineMatch,
+	"Claireon.EditBlueprintGraph.ResolveByTitle.MultiLineFirstLineMatch",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_ResolveByTitle_MultiLineFirstLineMatch::RunTest(const FString& Parameters)
+{
+	FString SessionId;
+	FString PrintStringGuid;
+	if (!SetupInspectNodeFixture(*this, TEXT("/Game/__MCPTests/BP_ResolveByTitleMultiLine"), SessionId, PrintStringGuid))
+	{
+		return false;
+	}
+
+	// Caller passes a multi-line title; the first-line strip should still resolve the
+	// node whose visible name is just "Event BeginPlay".
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("operation"), TEXT("inspect_node"));
+	Args->SetStringField(TEXT("session_id"), SessionId);
+	Args->SetStringField(TEXT("node_title"), TEXT("Event BeginPlay\nTarget is Self"));
+
+	auto Result = DispatchBundledEnvelope(Args);
+	if (Result.bIsError)
+	{
+		AddError(FString::Printf(TEXT("inspect_node with multi-line title failed: %s"), *Result.GetContentAsString()));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> PayloadObj = ParsePayload(Result.GetContentAsString());
+	if (!PayloadObj.IsValid())
+	{
+		AddError(TEXT("inspect_node payload not JSON"));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+	FString NodeIdStr;
+	if (!PayloadObj->TryGetStringField(TEXT("node_id"), NodeIdStr) || NodeIdStr.IsEmpty())
+	{
+		AddError(TEXT("Payload missing 'node_id'"));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	CloseInspectNodeFixture(SessionId);
+	return true;
+}
+
+// =====================================================================================
+// Component-details alias coverage. The get_component_details response
+// Details object carries BOTH 'name' and 'component_name', equal values.
 // =====================================================================================
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_FieldAliases_ComponentDetailsAliases,
@@ -6280,11 +6333,11 @@ bool FEditBlueprintGraphTest_FieldAliases_ComponentDetailsAliases::RunTest(const
 	}
 
 	// The Details object is surfaced inside the tool's response data. Check both on the
-	// legacy summary (if present in content) AND the data.component path (Stage 004).
+	// legacy summary (if present in content) AND the data.component path.
 	bool bFoundAlias = false;
 	if (GR.Data.IsValid())
 	{
-		// Direct lookup: data.component (Stage 004 pattern) or top-level fields (legacy).
+		// Direct lookup: data.component or top-level fields (legacy).
 		const TSharedPtr<FJsonObject>* Comp = nullptr;
 		TSharedPtr<FJsonObject> Target = GR.Data;
 		if (GR.Data->TryGetObjectField(TEXT("component"), Comp) && Comp && (*Comp).IsValid())
@@ -6518,7 +6571,7 @@ bool FEditBlueprintGraphTest_ComponentDetails_ResponseModeSurvival::RunTest(cons
 }
 
 // =====================================================================================
-// ITEM_04 Test 1 / 2 / 3: node position round-trip through apply_graph + get_state.
+// ITEM_04 Test 1 / 2 / 3: node position round-trip through apply_delta + get_state.
 // Uses the factual position preservation across ReconstructNode in the factory
 // (implementer choice: ambiguities[1] option 3, narrowed to bWroteProperties path).
 // Parses summary lines by GUID (not title) per Item 4 test-strategy guidance.
@@ -6586,7 +6639,7 @@ bool FEditBlueprintGraphTest_GetStatePositions_SingleNode::RunTest(const FString
 	const FString SessionId = ClaireonTool_EditBlueprintGraph_SpecInternal::ExtractSessionIdFromResponse(CR.GetContentAsString());
 	if (SessionId.IsEmpty()) { return false; }
 
-	// apply_graph with one PrintString node at (-1200, -800).
+	// apply_delta with one PrintString node at (-1200, -800).
 	{
 		TSharedPtr<FJsonObject> ApplyArgs = MakeShared<FJsonObject>();
 		ApplyArgs->SetStringField(TEXT("session_id"), SessionId);
@@ -6607,7 +6660,7 @@ bool FEditBlueprintGraphTest_GetStatePositions_SingleNode::RunTest(const FString
 		auto AR = ApplyTool.Execute(ApplyArgs);
 		if (AR.bIsError)
 		{
-			AddError(FString::Printf(TEXT("apply_graph failed: %s"), *AR.GetContentAsString()));
+			AddError(FString::Printf(TEXT("apply_delta failed: %s"), *AR.GetContentAsString()));
 			CloseInspectNodeFixture(SessionId);
 			return false;
 		}
@@ -6709,14 +6762,14 @@ bool FEditBlueprintGraphTest_GetStatePositions_MultiNode::RunTest(const FString&
 	auto AR = ApplyTool.Execute(ApplyArgs);
 	if (AR.bIsError)
 	{
-		AddError(FString::Printf(TEXT("apply_graph failed: %s"), *AR.GetContentAsString()));
+		AddError(FString::Printf(TEXT("apply_delta failed: %s"), *AR.GetContentAsString()));
 		CloseInspectNodeFixture(SessionId);
 		return false;
 	}
 
 	if (!AR.Data.IsValid())
 	{
-		AddError(TEXT("apply_graph returned null Data")); CloseInspectNodeFixture(SessionId); return false;
+		AddError(TEXT("apply_delta returned null Data")); CloseInspectNodeFixture(SessionId); return false;
 	}
 
 	// Load the blueprint and check live NodePosX/Y on each Branch node: the primary-fix
@@ -7028,5 +7081,201 @@ bool FEditBlueprintGraphTest_SessionHint_BelowThresholdNoFire::RunTest(const FSt
 		AddError(TEXT("session_hint should NOT fire at count 1"));
 		return false;
 	}
+	return true;
+}
+
+// =====================================================================================
+// regression: bp open must NOT silently re-bind a session to a different graph.
+// Sequence: create -> open(EventGraph) -> open(SelectDropLocation) on same session.
+// Pre-fix: second open silently dropped the requested graph and the session kept
+// editing EventGraph. Post-fix: second open returns an error pointing the caller to
+// close + reopen.
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_OpenRefusesDifferentGraphOnReuse,
+	"Claireon.EditBlueprintGraph.Open.RefusesDifferentGraphOnReuse",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_OpenRefusesDifferentGraphOnReuse::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_OpenGraphNameRefuse");
+
+	// Create a Blueprint child of Actor.
+	FString SessionId;
+	{
+		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+		CreateParams->SetStringField(TEXT("operation"), TEXT("create"));
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), AssetPath);
+		Params->SetStringField(TEXT("parent_class"), TEXT("Actor"));
+		CreateParams->SetObjectField(TEXT("params"), Params);
+
+		auto Result = DispatchBundledEnvelope(CreateParams);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("Failed to create blueprint: %s"), *Result.GetContentAsString()));
+			return false;
+		}
+
+		const FString ResultText = Result.GetContentAsString();
+		const int32 SessionIdStart = ResultText.Find(TEXT("Session ID: "));
+		if (SessionIdStart != INDEX_NONE)
+		{
+			const int32 SessionIdValueStart = SessionIdStart + 12;
+			const int32 SessionIdEnd = ResultText.Find(TEXT("\n"), ESearchCase::IgnoreCase, ESearchDir::FromStart, SessionIdValueStart);
+			SessionId = ResultText.Mid(SessionIdValueStart, SessionIdEnd - SessionIdValueStart);
+		}
+		if (SessionId.IsEmpty())
+		{
+			AddError(TEXT("Failed to extract session ID from create result"));
+			return false;
+		}
+	}
+
+	// Add the SelectDropLocation override so its function graph exists in the BP.
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("operation"), TEXT("add_function_override"));
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		Args->SetStringField(TEXT("function_name"), TEXT("SelectDropLocation"));
+
+		auto Result = DispatchBundledEnvelope(Args);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("add_function_override failed: %s"), *Result.GetContentAsString()));
+			return false;
+		}
+	}
+
+	// The session is now tracking some non-default graph (SelectDropLocation after the override).
+	// Try to reopen the SAME asset with graph_name="EventGraph" via the standard open op.
+	// The fix in ClaireonBlueprintGraphTool_Open::Execute must refuse with an error mentioning
+	// the existing graph and pointing the caller at bp_close.
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("operation"), TEXT("open"));
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), AssetPath);
+		Params->SetStringField(TEXT("graph_name"), TEXT("EventGraph"));
+		Args->SetObjectField(TEXT("params"), Params);
+
+		auto Result = DispatchBundledEnvelope(Args);
+		if (!Result.bIsError)
+		{
+			AddError(TEXT("Expected error refusing to reopen session against a different graph; got success"));
+			return false;
+		}
+		const FString ErrText = Result.GetContentAsString();
+		if (!ErrText.Contains(TEXT("already tracking")) || !ErrText.Contains(TEXT("bp_close")))
+		{
+			AddError(FString::Printf(TEXT("Refusal error message did not mention 'already tracking' + 'bp_close': %s"), *ErrText));
+			return false;
+		}
+	}
+
+	// Close session to keep the test isolated.
+	{
+		TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
+		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
+		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
+		CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
+		DispatchBundledEnvelope(CloseArgs);
+	}
+
+	return true;
+}
+
+// =====================================================================================
+// regression: bp add_node response.data.created_node_guid must be a non-empty,
+// FGuid::Parse-able GUID string surfaced directly so callers don't have to regex
+// the Cursor block out of the summary text. The in-memory NodeGuid is allocated
+// by UEdGraphNode's constructor (CreateNewGuid) before any save, so this fires
+// even on a never-saved blueprint.
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_AddNodeResponseHasCreatedNodeGuid,
+	"Claireon.EditBlueprintGraph.AddNode.ResponseHasCreatedNodeGuid",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_AddNodeResponseHasCreatedNodeGuid::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_CreatedNodeGuidExposure");
+
+	// Create a fresh BP and grab the session_id.
+	FString SessionId;
+	{
+		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+		CreateParams->SetStringField(TEXT("operation"), TEXT("create"));
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), AssetPath);
+		Params->SetStringField(TEXT("parent_class"), TEXT("Actor"));
+		CreateParams->SetObjectField(TEXT("params"), Params);
+
+		auto Result = DispatchBundledEnvelope(CreateParams);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("create failed: %s"), *Result.GetContentAsString()));
+			return false;
+		}
+		const FString ResultText = Result.GetContentAsString();
+		const int32 SessionIdStart = ResultText.Find(TEXT("Session ID: "));
+		if (SessionIdStart != INDEX_NONE)
+		{
+			const int32 SessionIdValueStart = SessionIdStart + 12;
+			const int32 SessionIdEnd = ResultText.Find(TEXT("\n"), ESearchCase::IgnoreCase, ESearchDir::FromStart, SessionIdValueStart);
+			SessionId = ResultText.Mid(SessionIdValueStart, SessionIdEnd - SessionIdValueStart);
+		}
+		if (SessionId.IsEmpty())
+		{
+			AddError(TEXT("failed to extract session id"));
+			return false;
+		}
+	}
+
+	// add_node a PrintString. Assert response.data has a parseable created_node_guid.
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("operation"), TEXT("add_node"));
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		TSharedPtr<FJsonObject> NodeParams = MakeShared<FJsonObject>();
+		NodeParams->SetStringField(TEXT("node_type"), TEXT("CallFunction"));
+		NodeParams->SetStringField(TEXT("function_name"), TEXT("PrintString"));
+		NodeParams->SetStringField(TEXT("function_class"), TEXT("KismetSystemLibrary"));
+		Args->SetObjectField(TEXT("params"), NodeParams);
+
+		auto Result = DispatchBundledEnvelope(Args);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("add_node failed: %s"), *Result.GetContentAsString()));
+			return false;
+		}
+		if (!Result.Data.IsValid())
+		{
+			AddError(TEXT("add_node returned no structured Data"));
+			return false;
+		}
+		FString CreatedGuidStr;
+		if (!Result.Data->TryGetStringField(TEXT("created_node_guid"), CreatedGuidStr) || CreatedGuidStr.IsEmpty())
+		{
+			AddError(TEXT("add_node response.data is missing created_node_guid"));
+			return false;
+		}
+		FGuid Parsed;
+		if (!FGuid::Parse(CreatedGuidStr, Parsed) || !Parsed.IsValid())
+		{
+			AddError(FString::Printf(TEXT("created_node_guid is not a valid GUID: %s"), *CreatedGuidStr));
+			return false;
+		}
+	}
+
+	// Close session.
+	{
+		TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
+		CloseArgs->SetStringField(TEXT("operation"), TEXT("close"));
+		CloseArgs->SetStringField(TEXT("session_id"), SessionId);
+		CloseArgs->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
+		DispatchBundledEnvelope(CloseArgs);
+	}
+
 	return true;
 }

@@ -16,8 +16,7 @@ namespace
 {
 	// AssetCheckInnerNameInvariant_*: discriminator-prefixed file-local
 	// helpers to avoid unity-batch collisions with similarly-named
-	// helpers across cohort files (see MEMORY.md
-	// feedback_anon_namespace_unity_collision.md).
+	// helpers across cohort files.
 
 	static constexpr int32 AssetCheckInnerNameInvariant_MaxResults = 500;
 }

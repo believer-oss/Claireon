@@ -14,6 +14,7 @@
 #include "Tools/ClaireonBehaviorTreeTool_ApplySpec.h"
 #include "Tools/ClaireonBlueprintGraphTool_ApplySpec.h"
 #include "Tools/ClaireonBlueprintGraphTool_Create.h"
+#include "Tools/ClaireonBlueprintGraphTool_AddVariable.h"
 #include "Tools/ClaireonStateTreeTool_ApplySpec.h"
 #include "Tools/ClaireonBlackboardTool_ApplySpec.h"
 #include "Tools/ClaireonEQSTool_ApplySpec.h"
@@ -35,6 +36,7 @@
 // UE includes
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Engine/Blueprint.h"
 #include "ObjectTools.h"
 
 // ---------------------------------------------------------------------------
@@ -44,6 +46,8 @@ static const TCHAR* ApplySpecTestBTPath        = TEXT("/Game/BP/AI/BT/BT_CombatA
 static const TCHAR* ApplySpecTestBBPath        = TEXT("/Game/BP/AI/BT/BB_AI_Default");
 static const TCHAR* ApplySpecTestEQSPath       = TEXT("/Game/BP/AI/EQS/EQS_CombatWaiting_Strafe");
 static const TCHAR* ApplySpecTestBPPath        = TEXT("/Game/__MCPTests/BP_ApplySpecTest");
+static const TCHAR* ApplySpecTestBPParityPath_A = TEXT("/Game/__MCPTests/BP_ApplySpecTest_ParityA");
+static const TCHAR* ApplySpecTestBPParityPath_B = TEXT("/Game/__MCPTests/BP_ApplySpecTest_ParityB");
 static const TCHAR* ApplySpecTestSTPath        = TEXT("/Game/BP/AI/ST/ST_TestDummy");
 static const TCHAR* ApplySpecTestNiagaraPath   = TEXT("/Game/Art_Lib/VOL/NS_LocalVolumeFog");
 static const TCHAR* ApplySpecTestWidgetPath    = TEXT("/Game/__MCPTests/WBP_ApplySpecTest");
@@ -686,6 +690,114 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_Validation, RejectsMissingNodeId, UNTEST_TI
 	UNTEST_ASSERT_TRUE(Result.bIsError);
 	UNTEST_EXPECT_TRUE(Result.GetContentAsString().Contains(TEXT("id")));
 
+	co_return;
+}
+
+// ============================================================================
+// Blueprint parity -- the standalone-tool sequence and apply_spec must agree
+// on the helper outputs (parent_class via CreateBlueprint, variables via
+// CreateVariableFromSpec).
+// ============================================================================
+
+UNTEST_UNIT_OPTS(Claireon, ApplySpecBlueprintParity, BlueprintParity, UNTEST_TIMEOUTMS(60000))
+{
+	// Clean any leftovers from prior runs.
+	CleanupTestAsset(ApplySpecTestBPParityPath_A);
+	CleanupTestAsset(ApplySpecTestBPParityPath_B);
+
+	// ----------------------------------------------------------------------
+	// PATH A: standalone tools (Create -> AddVariable). Both route through the
+	// shared helpers (ClaireonBlueprintHelpers::CreateBlueprint and
+	// ClaireonBlueprintHelpers::CreateVariableFromSpec) per stages 003/004.
+	// ----------------------------------------------------------------------
+	FString SessionIdA;
+	{
+		ClaireonBlueprintGraphTool_Create CreateTool;
+		TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
+		CreateArgs->SetStringField(TEXT("asset_path"), ApplySpecTestBPParityPath_A);
+		CreateArgs->SetStringField(TEXT("parent_class"), TEXT("Actor"));
+		IClaireonTool::FToolResult CreateResultA = CreateTool.Execute(CreateArgs);
+		UNTEST_ASSERT_FALSE(CreateResultA.bIsError);
+		UNTEST_ASSERT_TRUE(CreateResultA.Data.IsValid());
+		UNTEST_ASSERT_TRUE(CreateResultA.Data->TryGetStringField(TEXT("session_id"), SessionIdA));
+		UNTEST_ASSERT_FALSE(SessionIdA.IsEmpty());
+
+		ClaireonBlueprintGraphTool_AddVariable AddVarTool;
+		TSharedPtr<FJsonObject> AddVarArgs = MakeShared<FJsonObject>();
+		AddVarArgs->SetStringField(TEXT("session_id"), SessionIdA);
+		AddVarArgs->SetStringField(TEXT("variable_name"), TEXT("TestHealth"));
+		AddVarArgs->SetStringField(TEXT("variable_type"), TEXT("float"));
+		AddVarArgs->SetStringField(TEXT("category"), TEXT("Combat"));
+		AddVarArgs->SetStringField(TEXT("tooltip"), TEXT("Health for parity test"));
+		AddVarArgs->SetBoolField(TEXT("instance_editable"), true);
+		IClaireonTool::FToolResult AddVarResultA = AddVarTool.Execute(AddVarArgs);
+		UNTEST_ASSERT_FALSE(AddVarResultA.bIsError);
+	}
+
+	// ----------------------------------------------------------------------
+	// PATH B: apply_spec single-call (parent_class + same variable). Goes
+	// through OpenOrCreateAsset -> CreateBlueprint and
+	// ApplyPass1_CreateEntities -> CreateVariableFromSpec.
+	// ----------------------------------------------------------------------
+	{
+		ClaireonBlueprintGraphTool_ApplySpec ApplySpecTool;
+		TSharedPtr<FJsonObject> Spec = MakeShared<FJsonObject>();
+		Spec->SetStringField(TEXT("parent_class"), TEXT("Actor"));
+
+		TArray<TSharedPtr<FJsonValue>> Variables;
+		{
+			TSharedPtr<FJsonObject> Var = MakeShared<FJsonObject>();
+			Var->SetStringField(TEXT("id"), TEXT("var_health"));
+			Var->SetStringField(TEXT("name"), TEXT("TestHealth"));
+			Var->SetStringField(TEXT("type"), TEXT("float"));
+			Var->SetStringField(TEXT("category"), TEXT("Combat"));
+			Var->SetStringField(TEXT("tooltip"), TEXT("Health for parity test"));
+			Var->SetBoolField(TEXT("instance_editable"), true);
+			Variables.Add(MakeObj(Var));
+		}
+		Spec->SetArrayField(TEXT("variables"), Variables);
+
+		IClaireonTool::FToolResult ResultB = ApplySpecTool.Execute(
+			MakeApplySpecArgsFlat(ApplySpecTestBPParityPath_B, Spec));
+		UNTEST_ASSERT_TRUE(VerifyApplySpecResult(ResultB, 1));
+	}
+
+	// ----------------------------------------------------------------------
+	// PARITY ASSERTIONS
+	// ----------------------------------------------------------------------
+	UBlueprint* BP_A = LoadObject<UBlueprint>(nullptr, ApplySpecTestBPParityPath_A);
+	UBlueprint* BP_B = LoadObject<UBlueprint>(nullptr, ApplySpecTestBPParityPath_B);
+	UNTEST_ASSERT_TRUE(BP_A != nullptr);
+	UNTEST_ASSERT_TRUE(BP_B != nullptr);
+
+	// (1) Same ParentClass. Both paths resolve "Actor" to AActor via
+	// ClaireonNameResolver::ResolveClassName and pass it to CreateBlueprint.
+	UNTEST_EXPECT_EQ(BP_A->ParentClass, BP_B->ParentClass);
+
+	// (2) Same variable count.
+	UNTEST_ASSERT_EQ(BP_A->NewVariables.Num(), BP_B->NewVariables.Num());
+
+	// (3) Per-variable parity: same name, type, flags, and category.
+	for (int32 i = 0; i < BP_A->NewVariables.Num(); ++i)
+	{
+		const FBPVariableDescription& VarA = BP_A->NewVariables[i];
+		const FName VarAName = VarA.VarName;
+		const FBPVariableDescription* VarB = nullptr;
+		for (const FBPVariableDescription& V : BP_B->NewVariables)
+		{
+			if (V.VarName == VarAName) { VarB = &V; break; }
+		}
+		UNTEST_ASSERT_TRUE(VarB != nullptr);
+		UNTEST_EXPECT_EQ(VarA.PropertyFlags, VarB->PropertyFlags);
+		UNTEST_EXPECT_EQ(VarA.Category.ToString(), VarB->Category.ToString());
+		UNTEST_EXPECT_EQ(VarA.RepNotifyFunc, VarB->RepNotifyFunc);
+		UNTEST_EXPECT_EQ(static_cast<int32>(VarA.ReplicationCondition),
+		                 static_cast<int32>(VarB->ReplicationCondition));
+		UNTEST_EXPECT_TRUE(VarA.VarType == VarB->VarType);
+	}
+
+	CleanupTestAsset(ApplySpecTestBPParityPath_A);
+	CleanupTestAsset(ApplySpecTestBPParityPath_B);
 	co_return;
 }
 

@@ -227,6 +227,108 @@ FString ExtractAssetFromGitRevision(const FString& GitRelativePath, const FStrin
 	}
 
 	UE_LOG(LogClaireon, Display, TEXT("[MCP] Extracted %lld bytes to %s"), FileSize, *TempFilePath);
+
+	// LFS-pointer detection. git show <rev>:<path> on an LFS-tracked file emits the
+	// LFS pointer text (<300 bytes typically: "version https://git-lfs.github.com/spec/v1\n
+	// oid sha256:<hex>\nsize <N>\n") instead of the real binary. .uasset payloads we care
+	// about are far larger than this, so the heuristic is: if the file is small AND begins
+	// with "version https://git-lfs.github.com/", smudge it through `git lfs smudge`.
+	if (FileSize < 4096)
+	{
+		TArray<uint8> Head;
+		if (FFileHelper::LoadFileToArray(Head, *AbsTempFilePath) && Head.Num() > 0)
+		{
+			// Treat as ASCII text only when no NULs in first 256 bytes.
+			const int32 Probe = FMath::Min<int32>(Head.Num(), 256);
+			bool bAscii = true;
+			for (int32 i = 0; i < Probe; ++i)
+			{
+				if (Head[i] == 0)
+				{
+					bAscii = false;
+					break;
+				}
+			}
+			if (bAscii)
+			{
+				const FString HeadStr(Probe, reinterpret_cast<const char*>(Head.GetData()));
+				if (HeadStr.StartsWith(TEXT("version https://git-lfs.github.com/")))
+				{
+					UE_LOG(LogClaireon, Display, TEXT("[MCP] LFS pointer detected; smudging %s"), *GitRelativePath);
+
+					// Smudge: feed the pointer text through `git lfs smudge -- <path>` whose stdin is the
+					// pointer; stdout becomes the real object content. Use the same cmd.exe redirection
+					// pattern as the show call above.
+					const FString SmudgeOut = AbsTempFilePath + TEXT(".smudged");
+					const FString SmudgeErr = AbsTempFilePath + TEXT(".smudge.err");
+					const FString SmudgeCommand = FString::Printf(
+						TEXT("git -C \"%s\" lfs smudge -- %s"),
+						*ProjectDir, *GitPath);
+					const FString SmudgeCmdArgs = FString::Printf(
+						TEXT("/C \"%s < \"%s\" > \"%s\" 2>\"%s\"\""),
+						*SmudgeCommand, *AbsTempFilePath, *SmudgeOut, *SmudgeErr);
+
+					FProcHandle SmudgeProc = FPlatformProcess::CreateProc(
+						TEXT("cmd.exe"), *SmudgeCmdArgs,
+						true, true, true, nullptr, 0, nullptr, nullptr, nullptr);
+					if (!SmudgeProc.IsValid())
+					{
+						CleanupTempFile(SmudgeOut);
+						CleanupTempFile(SmudgeErr);
+						OutError = TEXT("Failed to launch git lfs smudge process");
+						CleanupTempFile(TempFilePath);
+						return FString();
+					}
+
+					const double SmudgeStart = FPlatformTime::Seconds();
+					bool bSmudgeTimedOut = false;
+					while (FPlatformProcess::IsProcRunning(SmudgeProc))
+					{
+						FPlatformProcess::Sleep(0.1f);
+						if (FPlatformTime::Seconds() - SmudgeStart > 60.0)  // LFS fetch can be slow
+						{
+							bSmudgeTimedOut = true;
+							FPlatformProcess::TerminateProc(SmudgeProc, true);
+							break;
+						}
+					}
+					int32 SmudgeRet = -1;
+					FPlatformProcess::GetProcReturnCode(SmudgeProc, &SmudgeRet);
+					FPlatformProcess::CloseProc(SmudgeProc);
+
+					if (bSmudgeTimedOut || SmudgeRet != 0)
+					{
+						FString SmudgeStdErr;
+						FFileHelper::LoadFileToString(SmudgeStdErr, *SmudgeErr);
+						SmudgeStdErr.TrimStartAndEndInline();
+						CleanupTempFile(SmudgeOut);
+						CleanupTempFile(SmudgeErr);
+						CleanupTempFile(TempFilePath);
+						OutError = FString::Printf(
+							TEXT("git lfs smudge failed for %s:%s (exit %d): %s"),
+							*Revision, *GitRelativePath, SmudgeRet, *SmudgeStdErr);
+						return FString();
+					}
+
+					CleanupTempFile(SmudgeErr);
+
+					// Replace pointer file with smudged content.
+					if (!IFileManager::Get().Move(*AbsTempFilePath, *SmudgeOut, /*bReplace*/true, /*bEvenIfReadOnly*/true))
+					{
+						CleanupTempFile(SmudgeOut);
+						CleanupTempFile(TempFilePath);
+						OutError = TEXT("Failed to replace LFS-pointer temp file with smudged content");
+						return FString();
+					}
+
+					const int64 SmudgedSize = IFileManager::Get().FileSize(*AbsTempFilePath);
+					UE_LOG(LogClaireon, Display, TEXT("[MCP] LFS smudge produced %lld bytes for %s"),
+						SmudgedSize, *GitRelativePath);
+				}
+			}
+		}
+	}
+
 	return TempFilePath;
 }
 

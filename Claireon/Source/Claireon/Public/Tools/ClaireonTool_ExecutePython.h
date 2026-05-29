@@ -17,10 +17,12 @@ public:
 	virtual FString GetOperation() const override;
 	virtual EClaireonToolSessionMode GetSessionMode() const override { return EClaireonToolSessionMode::Bypass; }
 	virtual FString GetDescription() const override;
+	virtual FString GetFullDescription() const override;
+	virtual FString GetPatterns() const override;
 	virtual TSharedPtr<FJsonObject> GetInputSchema() const override;
 	virtual FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;
 
-	// P3: synonym/abbreviation keywords for tool_search ranking
+	// synonym/abbreviation keywords for tool_search ranking
 	virtual TArray<FString> GetSearchKeywords() const override;
 
 	/**

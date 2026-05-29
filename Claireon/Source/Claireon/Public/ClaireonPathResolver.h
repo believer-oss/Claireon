@@ -18,7 +18,7 @@ namespace ClaireonPathResolver
 	struct FResolvedPath
 	{
 		// The normalized canonical path. For PackagePath kind, this has the form
-		// "/Game/Foo/Bar.Bar" (object-path canonical) after Stage 0. For NativeClassPath
+		// "/Game/Foo/Bar.Bar" (object-path canonical) after normalization. For NativeClassPath
 		// kind, this is the "/Script/Module.ClassName" form unchanged.
 		FString Path;
 

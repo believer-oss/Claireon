@@ -345,7 +345,7 @@ int32 FClaireonToolCatalogMatcher::DistanceBounded(const FString& A, const FStri
 
 namespace ClaireonToolCatalogMatcherInternal
 {
-	// Field weights compiled in for v1.
+	// Field weights compiled in (name > category/keywords/operation > description).
 	static constexpr float WeightName        = 8.0f;
 	static constexpr float WeightCategory    = 4.0f;
 	static constexpr float WeightKeywords    = 3.0f;
@@ -385,10 +385,9 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolCatalogMatcher::FindNearest(const
 	TArray<FString> TokeniseRawTokens;
 	Tokenise(Query, TokeniseRawTokens);
 
-	// Query-side min-length cutoff: drop fuzzy-match terms of length <= 2
+	// query-side min-length cutoff: drop fuzzy-match terms of length <= 2
 	// unless every token in the query is short. The asymmetry vs the index
-	// (which keeps 2-char tokens) is intentional -- short tokens like `ing`
-	// would otherwise match hundreds of unrelated tools.
+	// (which keeps 2-char tokens) is intentional -- see 03_ISSUE2 / M6.
 	TArray<FString> KeptTokens;
 	TArray<FString> DroppedTokens;
 	for (const FString& T : TokeniseRawTokens)
@@ -466,7 +465,8 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolCatalogMatcher::FindNearest(const
 	// Per-entry weighted score accumulator + distinct-query-tokens-matched
 	// counter. Each per-token contribution = MAX_OVER_FIELDS(weight) * hit-class
 	// multiplier (exact 2.0, prefix 1.0, fuzzy 0.5). "Name prefix = 4.0" falls
-	// out naturally as Name's exact weight (8) * the prefix multiplier (0.5).
+	// out naturally as Name's exact weight (8) * the prefix multiplier (0.5),
+	// matching the proposal table (8 exact, 4 prefix).
 	TArray<float> WeightedScore; WeightedScore.Init(0.0f, GCatalogEntries.Num());
 	TArray<int32> DistinctTokenHits; DistinctTokenHits.Init(0, GCatalogEntries.Num());
 
@@ -630,7 +630,7 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolCatalogMatcher::FindNearest(const
 
 	Scored.Sort([](const FScoredEntry& A, const FScoredEntry& B)
 	{
-		// 1st: more distinct query tokens hit wins.
+		// 1st tie-break: more distinct query tokens hit wins.
 		if (A.DistinctTokens != B.DistinctTokens)
 		{
 			return A.DistinctTokens > B.DistinctTokens;

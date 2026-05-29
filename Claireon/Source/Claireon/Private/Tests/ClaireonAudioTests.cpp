@@ -48,6 +48,9 @@ UNTEST_UNIT_OPTS(Claireon, Audio, KindStringRoundTrip, UNTEST_TIMEOUTMS(5000))
 	using K = EClaireonAudioAssetKind;
 	UNTEST_EXPECT_TRUE(AudioAssetKindFromString(AudioAssetKindToString(K::SoundCue))        == K::SoundCue);
 	UNTEST_EXPECT_TRUE(AudioAssetKindFromString(AudioAssetKindToString(K::MetaSoundSource)) == K::MetaSoundSource);
+	// MetaSoundPatch must also round-trip; was a missing branch in EClaireonAudioAssetKind.
+	UNTEST_EXPECT_TRUE(AudioAssetKindFromString(AudioAssetKindToString(K::MetaSoundPatch))  == K::MetaSoundPatch);
+	UNTEST_EXPECT_TRUE(AudioAssetKindToString(K::MetaSoundPatch).Equals(TEXT("metasound_patch")));
 	UNTEST_EXPECT_TRUE(AudioAssetKindFromString(AudioAssetKindToString(K::SoundClass))      == K::SoundClass);
 	UNTEST_EXPECT_TRUE(AudioAssetKindFromString(AudioAssetKindToString(K::SoundMix))        == K::SoundMix);
 	UNTEST_EXPECT_TRUE(AudioAssetKindFromString(AudioAssetKindToString(K::Attenuation))     == K::Attenuation);
@@ -357,7 +360,7 @@ UNTEST_UNIT_OPTS(Claireon, Audio, EditSoundCue_AddRemoveNode, UNTEST_TIMEOUTMS(2
 	auto Add = AddTool.Execute(AddArgs);
 	UNTEST_EXPECT_FALSE(Add.bIsError);
 
-	// I5 invariant: AllNodes and EdGraph stay in sync after the decomposed call.
+	// invariant: AllNodes and EdGraph stay in sync after the decomposed call.
 	FString CuePath;
 	Open.Data->TryGetStringField(TEXT("asset_path"), CuePath);
 	USoundCue* Cue = LoadObject<USoundCue>(nullptr, *CuePath);

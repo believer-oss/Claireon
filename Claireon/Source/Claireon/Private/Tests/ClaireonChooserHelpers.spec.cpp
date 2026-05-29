@@ -16,7 +16,7 @@
 // Each unit constructs a standalone FObjectColumn via FInstancedStruct (no
 // UChooserTable host required) and exercises SetColumnCellValue directly.
 // All UNTEST_ASSERT_* macros live in the coroutine body (never inside
-// lambdas) per feedback_untest_macros_lambda_coroutine.
+// lambdas) -- the macros expand to co_return, which a lambda cannot host.
 // ---------------------------------------------------------------------------
 
 UNTEST_UNIT_OPTS(Claireon, ChooserHelpers, BareStringSetsValueAndDefaultsMatchEqual, UNTEST_TIMEOUTMS(5000))

@@ -14,6 +14,26 @@
 FString ClaireonTool_ConsoleExecute::GetCategory() const { return TEXT("console"); }
 FString ClaireonTool_ConsoleExecute::GetOperation() const { return TEXT("execute"); }
 
+namespace ClaireonToolConsoleExecuteInternal
+{
+	// Parse "Log <Cat> <Verbosity>" into (Cat, Verbosity). Returns true on
+	// match. The engine accepts both `log` and `Log`; case-insensitive on the
+	// command keyword but the category name itself is passed through unchanged.
+	// File-local discriminator to avoid anon-NS name collisions under unity batching.
+	static bool Cl625ConsoleExec_ParseLogVerbosityCommand(
+		const FString& Command, FString& OutCategory, FString& OutVerbosity)
+	{
+		FString Trim = Command.TrimStartAndEnd();
+		TArray<FString> Parts;
+		Trim.ParseIntoArray(Parts, TEXT(" "), /*InCullEmpty=*/ true);
+		if (Parts.Num() != 3) { return false; }
+		if (!Parts[0].Equals(TEXT("Log"), ESearchCase::IgnoreCase)) { return false; }
+		OutCategory = Parts[1];
+		OutVerbosity = Parts[2];
+		return true;
+	}
+}
+
 FString ClaireonTool_ConsoleExecute::GetDescription() const
 {
 	return TEXT("Execute an Unreal console command and return its output. "
@@ -189,14 +209,65 @@ IClaireonTool::FToolResult ClaireonTool_ConsoleExecute::Execute(const TSharedPtr
 		return MakeErrorResult(TEXT("No world loaded. Use open_map to load a map first."));
 	}
 
+	// Detect `Log <Cat> <Verbosity>` so we can (a) echo the
+	// verbosity-change to OutputDevice (without this echo the engine's response is
+	// empty), and (b) re-issue the command against the active PIE world so the
+	// filter change applies to PIE logs as well as editor logs.
+	FString LogVerbosityCat;
+	FString LogVerbosityLevel;
+	const bool bIsLogVerbosityCmd =
+		ClaireonToolConsoleExecuteInternal::Cl625ConsoleExec_ParseLogVerbosityCommand(
+			Command, LogVerbosityCat, LogVerbosityLevel);
+
 	FStringOutputDevice OutputDevice;
 	GEngine->Exec(EditorWorld, *Command, OutputDevice);
+
+	// also apply to the PIE world if one is active. `Log <Cat> <Verbosity>`
+	// is world-scoped at the GLog redirector level, but exec dispatch goes through
+	// world-bound parsing for some console paths. Re-execing on the PIE world is a
+	// cheap idempotent way to ensure both filters move together.
+	if (bIsLogVerbosityCmd)
+	{
+		UWorld* PIEWorldForLog = nullptr;
+		for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
+		{
+			if (WorldContext.WorldType == EWorldType::PIE && WorldContext.World())
+			{
+				PIEWorldForLog = WorldContext.World();
+				break;
+			}
+		}
+		if (PIEWorldForLog)
+		{
+			FStringOutputDevice PIEDev;
+			GEngine->Exec(PIEWorldForLog, *Command, PIEDev);
+			if (!PIEDev.Output.IsEmpty())
+			{
+				if (!OutputDevice.Output.IsEmpty()) { OutputDevice.Output += TEXT("\n"); }
+				OutputDevice.Output += PIEDev.Output;
+			}
+		}
+
+		// echo the requested filter change so callers do not see an empty
+		// response. The engine's `Log <Cat> <Verbosity>` exec is silent on success;
+		// without this echo the result looks like the command had no effect.
+		const FString EchoLine = FString::Printf(TEXT("Log: %s -> %s"),
+			*LogVerbosityCat, *LogVerbosityLevel);
+		if (!OutputDevice.Output.IsEmpty()) { OutputDevice.Output += TEXT("\n"); }
+		OutputDevice.Output += EchoLine;
+	}
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("command"), Command);
 	Data->SetStringField(TEXT("output"), OutputDevice.Output);
 	Data->SetBoolField(TEXT("success"), true);
 	Data->SetStringField(TEXT("usedContext"), TEXT("editor"));
+	if (bIsLogVerbosityCmd)
+	{
+		Data->SetStringField(TEXT("log_category"), LogVerbosityCat);
+		Data->SetStringField(TEXT("log_verbosity"), LogVerbosityLevel);
+		Data->SetBoolField(TEXT("verbosity_change"), true);
+	}
 
 	const FString Summary = FString::Printf(TEXT("Executed '%s' via editor context"),
 		*Command);

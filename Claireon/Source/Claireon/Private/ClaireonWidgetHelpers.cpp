@@ -4,6 +4,8 @@
 #include "ClaireonWidgetHelpers.h"
 #include "ClaireonNameResolver.h"
 #include "ClaireonLog.h"
+#include "Tools/ClaireonPropertyUtils.h"
+#include "JsonObjectConverter.h"
 #include "Blueprint/WidgetTree.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/Widget.h"
@@ -26,6 +28,7 @@
 #include "MVVMBlueprintViewConversionFunction.h"
 #include "WidgetBlueprintExtension.h"
 #include "Types/MVVMBindingMode.h"
+#include "Kismet2/BlueprintEditorUtils.h"
 
 // ============================================================================
 // SerializeWidgetTree
@@ -349,8 +352,22 @@ UPanelSlot* ClaireonWidgetHelpers::AddChildToPanel(UPanelWidget* Parent, UWidget
 	{
 		for (auto& Pair : SlotProperties->Values)
 		{
+			// detect nested JSON objects/arrays and warn rather than silently
+			// passing "" (the result of AsString() on a non-string JSON value).
+			// Callers must use the engine flat-struct string form for struct properties.
+			if (Pair.Value.IsValid() &&
+				(Pair.Value->Type == EJson::Object || Pair.Value->Type == EJson::Array))
+			{
+				UE_LOG(LogClaireon, Warning,
+					TEXT("[AddChildToPanel] slot_properties[\"%s\"]: nested JSON object/array rejected. "
+						 "Use engine flat-struct string form, e.g. \"(Minimum=(X=0,Y=0),Maximum=(X=1,Y=1))\". "
+						 "Slot property was not applied."),
+					*Pair.Key);
+				continue;
+			}
+			FString PropStrVal = Pair.Value.IsValid() ? Pair.Value->AsString() : TEXT("");
 			FString Error;
-			WriteSlotProperty(Slot, Pair.Key, Pair.Value->AsString(), Error);
+			WriteSlotProperty(Slot, Pair.Key, PropStrVal, Error);
 		}
 	}
 
@@ -395,11 +412,53 @@ bool ClaireonWidgetHelpers::WriteWidgetProperty(UWidget* Widget, const FString& 
 		return false;
 	}
 
+	// When PropertyName contains a dot or '[' index, route through the
+	// generic dotted-path resolver so callers can address struct sub-fields directly
+	// (e.g. "Font.Size", "Brush.ImageSize.X"). Single-token names continue to use the
+	// direct FindPropertyByName + ImportText_Direct path for back-compat.
+	if (PropertyName.Contains(TEXT(".")) || PropertyName.Contains(TEXT("[")))
+	{
+		FString WriteError;
+		if (ClaireonPropertyUtils::WritePropertyByPath(Widget, PropertyName, Value, WriteError))
+		{
+			return true;
+		}
+		OutError = MoveTemp(WriteError);
+		return false;
+	}
+
 	FProperty* Prop = Widget->GetClass()->FindPropertyByName(*PropertyName);
 	if (!Prop)
 	{
 		OutError = FString::Printf(TEXT("Property '%s' not found on %s"), *PropertyName, *Widget->GetClass()->GetName());
 		return false;
+	}
+
+	// When Value is a JSON object and Prop is a struct property, try
+	// JSON -> UStruct deserialization first so callers can set FSlateBrush /
+	// FSlateColor / FMargin / FSlateFontInfo via a typed payload. Falls back to
+	// ImportText_Direct on JSON-parse failure so the existing UE-text-format path
+	// keeps working.
+	const FString Trim = Value.TrimStartAndEnd();
+	if (FStructProperty* StructProp = CastField<FStructProperty>(Prop))
+	{
+		if (Trim.StartsWith(TEXT("{")) && Trim.EndsWith(TEXT("}")))
+		{
+			TSharedPtr<FJsonObject> JsonObj;
+			TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Trim);
+			if (FJsonSerializer::Deserialize(Reader, JsonObj) && JsonObj.IsValid())
+			{
+				void* ValuePtr = StructProp->ContainerPtrToValuePtr<void>(Widget);
+				if (FJsonObjectConverter::JsonObjectToUStruct(
+					JsonObj.ToSharedRef(),
+					StructProp->Struct,
+					ValuePtr,
+					0, 0))
+				{
+					return true;
+				}
+			}
+		}
 	}
 
 	void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Widget);
@@ -840,4 +899,59 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeMVVMBinding(const UWidge
 	BindingObj->SetObjectField(TEXT("conversion"), ConversionObj);
 
 	return BindingObj;
+}
+
+// ============================================================================
+// MoveWidget (shared by ClaireonWidgetBPTool_MoveWidget and widgetbp_apply_delta phase 4)
+// ============================================================================
+
+bool ClaireonWidgetHelpers::MoveWidget(
+	UWidgetBlueprint* WidgetBP,
+	UWidget* WidgetToMove,
+	UWidget* NewParent,
+	int32 InsertIndex,
+	FString& OutError)
+{
+	if (!WidgetBP || !WidgetBP->WidgetTree)
+	{
+		OutError = TEXT("Widget Blueprint or WidgetTree is no longer valid");
+		return false;
+	}
+	if (!WidgetToMove)
+	{
+		OutError = TEXT("WidgetToMove is null");
+		return false;
+	}
+	if (!NewParent)
+	{
+		OutError = TEXT("NewParent is null");
+		return false;
+	}
+	UPanelWidget* NewParentPanel = Cast<UPanelWidget>(NewParent);
+	if (!NewParentPanel)
+	{
+		OutError = FString::Printf(TEXT("New parent widget '%s' is not a panel widget"), *NewParent->GetName());
+		return false;
+	}
+
+	UWidgetTree* Tree = WidgetBP->WidgetTree;
+	Tree->SetFlags(RF_Transactional);
+	Tree->Modify();
+
+	if (UPanelWidget* OldParent = Cast<UPanelWidget>(WidgetToMove->GetParent()))
+	{
+		OldParent->RemoveChild(WidgetToMove);
+	}
+
+	if (InsertIndex >= 0)
+	{
+		NewParentPanel->InsertChildAt(InsertIndex, WidgetToMove);
+	}
+	else
+	{
+		NewParentPanel->AddChild(WidgetToMove);
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
+	return true;
 }

@@ -243,7 +243,7 @@ UNTEST_UNIT(Claireon, AnthropicWire, TruncatedDiagnosticsBodyContainsPath)
 }
 
 // ===========================================================================
-// Stage 001: FToolResult::Hint plumbed through the bridge wire envelope
+// FToolResult::Hint plumbed through the bridge wire envelope
 // ===========================================================================
 // FClaireonBridge::BuildResultEnvelope is the shared chokepoint exercised by the
 // success-path inside MCPCallTool. The error path mirrors the same emit

@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_AddVariable::GetSearchKeywords() cons
 
 FString ClaireonBlueprintGraphTool_AddVariable::GetDescription() const
 {
-    return TEXT("Add a member variable to the Blueprint in the open editing session. Transactional. Pass variable_type for primitives/classes/structs, or variable_type_spec (base + signature_function/subtype) for delegate/multicast/soft-class/soft-object/instanced-struct. Common pitfall: plain delegate names in variable_type silently fail. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+    return TEXT("Add a member variable to the Blueprint in the open editing session. Transactional. Pass variable_type for primitives/classes/structs, or variable_type_spec (base + signature_function/subtype) for delegate/multicast/soft/instanced-struct. Plain delegate names in variable_type silently fail. Accepts session_id or asset_path; auto-opens when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddVariable::GetInputSchema() const
@@ -168,11 +168,10 @@ FToolResult ClaireonBlueprintGraphTool_AddVariable::Execute(const TSharedPtr<FJs
 		return MakeErrorResult(TEXT("Missing required field: variable_type (or variable_type_spec)"));
 	}
 
-	// Get optional default value
-	FString DefaultValue;
-	Params->TryGetStringField(TEXT("default_value"), DefaultValue);
-
 	// Parse variable type; surface structured parser errors through data.type_parser_error.
+	// We pre-parse here only to (a) produce the structured `type_parser_error` payload that
+	// callers depend on, and (b) capture the ResolutionNote warning. The helper re-parses
+	// internally; that double parse is cheap relative to the asset edit.
 	ClaireonBlueprintHelpers::FParseVariableTypeResult ParseResult = bHasTypeSpec
 		? ClaireonBlueprintHelpers::ParseVariableTypeSpec(*TypeSpecObj)
 		: ClaireonBlueprintHelpers::ParseVariableTypeChecked(VarType);
@@ -198,7 +197,6 @@ FToolResult ClaireonBlueprintGraphTool_AddVariable::Execute(const TSharedPtr<FJs
 		ErrResult.Data = DataObj;
 		return ErrResult;
 	}
-	FEdGraphPinType PinType = ParseResult.PinType;
 	// Resolution note (e.g. fuzzy class match) surfaces as a non-fatal warning.
 	TArray<FString> ResolutionWarnings;
 	if (!ParseResult.ResolutionNote.IsEmpty())
@@ -212,56 +210,46 @@ FToolResult ClaireonBlueprintGraphTool_AddVariable::Execute(const TSharedPtr<FJs
 		(*TypeSpecObj)->TryGetStringField(TEXT("base"), VarType);
 	}
 
-	// Check if variable already exists
-	for (const FBPVariableDescription& ExistingVar : Blueprint->NewVariables)
-	{
-		if (ExistingVar.VarName == FName(*VarName))
-		{
-			return MakeErrorResult(FString::Printf(TEXT("Variable '%s' already exists"), *VarName));
-		}
-	}
-
 	// Create variable using transaction
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Add Blueprint Variable")));
 	Blueprint->Modify();
 
-	// Default flags mirror the editor's "+" button: CPF_Edit (visible in Class Defaults)
-	// + CPF_BlueprintVisible (visible in the My Blueprint Variables panel and Get/Set
-	// available in graphs). Callers can override via instance_editable / blueprint_read_only
-	// / clear_flags.
-	FBPVariableDescription NewVar;
-	NewVar.VarName = FName(*VarName);
-	NewVar.VarType = PinType;
-	NewVar.FriendlyName = VarName;
-	NewVar.Category = FText::FromString(TEXT("Default"));
-	NewVar.PropertyFlags = CPF_Edit | CPF_BlueprintVisible;
-
-	bool bInstanceEditable = true;
-	if (Params->TryGetBoolField(TEXT("instance_editable"), bInstanceEditable) && !bInstanceEditable)
-	{
-		NewVar.PropertyFlags |= CPF_DisableEditOnInstance;
-	}
-
-	bool bBlueprintReadOnly = false;
-	if (Params->TryGetBoolField(TEXT("blueprint_read_only"), bBlueprintReadOnly) && bBlueprintReadOnly)
-	{
-		NewVar.PropertyFlags |= CPF_BlueprintReadOnly;
-	}
-
-	// Set default value if provided
-	if (!DefaultValue.IsEmpty())
-	{
-		NewVar.DefaultValue = DefaultValue;
-	}
-
-	// Add to Blueprint
-	int32 VarIndex = Blueprint->NewVariables.Add(NewVar);
-
-	// Apply optional properties (flags, category, replication, metadata, etc.)
-	// Must be called after the variable is added to NewVariables since the
-	// FBlueprintEditorUtils setter functions look up the variable by name.
+	// Route the duplicate-check + FBPVariableDescription construction + default-flag set
+	// + ApplyVariableProperties through the shared helper. The helper sets the same
+	// CPF_Edit | CPF_BlueprintVisible defaults the inline block did.
 	ClaireonBlueprintHelpers::FApplyVariableResult ApplyResult;
-	ClaireonBlueprintHelpers::ApplyVariableProperties(Blueprint, FName(*VarName), Params, &ApplyResult);
+	FString CreateError;
+	if (!ClaireonBlueprintHelpers::CreateVariableFromSpec(Blueprint, Params, &ApplyResult, CreateError))
+	{
+		return MakeErrorResult(CreateError);
+	}
+
+	// Apply standalone-tool-only field overrides on top of the helper defaults.
+	// These two JSON keys are only consumed by add_variable, not by the applicator,
+	// so they live here rather than in CreateVariableFromSpec / ApplyVariableProperties.
+	FBPVariableDescription* VarDesc = nullptr;
+	for (FBPVariableDescription& Var : Blueprint->NewVariables)
+	{
+		if (Var.VarName == FName(*VarName))
+		{
+			VarDesc = &Var;
+			break;
+		}
+	}
+	if (VarDesc)
+	{
+		bool bInstanceEditable = true;
+		if (Params->TryGetBoolField(TEXT("instance_editable"), bInstanceEditable) && !bInstanceEditable)
+		{
+			VarDesc->PropertyFlags |= CPF_DisableEditOnInstance;
+		}
+
+		bool bBlueprintReadOnly = false;
+		if (Params->TryGetBoolField(TEXT("blueprint_read_only"), bBlueprintReadOnly) && bBlueprintReadOnly)
+		{
+			VarDesc->PropertyFlags |= CPF_BlueprintReadOnly;
+		}
+	}
 
 	// Mark Blueprint as structurally modified
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
@@ -290,7 +278,7 @@ FToolResult ClaireonBlueprintGraphTool_AddVariable::Execute(const TSharedPtr<FJs
 }
 
 // ----------------------------------------------------------------------------
-// P1: hot-path metadata enrichment
+// hot-path metadata enrichment
 // ----------------------------------------------------------------------------
 
 FString ClaireonBlueprintGraphTool_AddVariable::GetFullDescription() const

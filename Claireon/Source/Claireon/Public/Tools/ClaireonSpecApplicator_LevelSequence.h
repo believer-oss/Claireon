@@ -9,7 +9,7 @@
 class ULevelSequence;
 
 /**
- * apply_spec applicator for Level Sequence assets (F6 -- stage 015 impls).
+ * apply_spec applicator for Level Sequence assets.
  *
  * Spec schema:
  * {

@@ -3,8 +3,11 @@
 
 #include "Tools/ClaireonStateTreeTool_Save.h"
 #include "Tools/FToolSchemaBuilder.h"
+#include "ClaireonLog.h"
 #include "ClaireonSafeExec.h"
 #include "StateTree.h"
+#include "StateTreeCompilerLog.h"
+#include "StateTreeEditingSubsystem.h"
 #include "UObject/Package.h"
 #include "FileHelpers.h"
 
@@ -40,6 +43,23 @@ FToolResult ClaireonStateTreeTool_Save::Execute(const TSharedPtr<FJsonObject>& A
 	}
 
 	UStateTree* StateTree = Data->StateTree.Get();
+
+	// compile-before-save through the same toolkit path
+	// (UStateTreeEditingSubsystem::CompileStateTree). Without this the saved blob warns
+	// "could not compile. Please resave" at cold load because LastCompiledEditorDataHash and
+	// the derived runtime data are out of sync with EditorData. The toolkit's Save button
+	// goes through this same path; the MCP-only path was skipping it.
+	{
+		FStateTreeCompilerLog CompilerLog;
+		const bool bCompiled = UStateTreeEditingSubsystem::CompileStateTree(StateTree, CompilerLog);
+		if (!bCompiled)
+		{
+			CompilerLog.DumpToLog(LogClaireon);
+			Data->LastOperationStatus = TEXT("save -> Pre-save compile failed");
+			return MakeErrorResult(TEXT("Pre-save compile failed; aborted save. Check LogClaireon for compiler diagnostics."));
+		}
+	}
+
 	UPackage* Package = StateTree->GetPackage();
 	Package->SetDirtyFlag(true);
 

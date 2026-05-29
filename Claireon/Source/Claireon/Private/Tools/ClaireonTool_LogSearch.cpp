@@ -31,18 +31,26 @@ TSharedPtr<FJsonObject> ClaireonTool_LogSearch::GetInputSchema() const
 
 	TSharedPtr<FJsonObject> Properties = MakeShared<FJsonObject>();
 
-	// pattern - required
+	// pattern - required (H6: `query` kwarg accepted as alias).
 	TSharedPtr<FJsonObject> PatternProp = MakeShared<FJsonObject>();
 	PatternProp->SetStringField(TEXT("type"), TEXT("string"));
 	PatternProp->SetStringField(TEXT("description"),
-		TEXT("Regex pattern to search for (e.g. 'Error.*Blueprint', 'LogAbilitySystem')"));
+		TEXT("Regex pattern to search for (e.g. 'Error.*Blueprint', 'LogAbilitySystem'). The `query` kwarg is accepted as a synonym."));
 	Properties->SetObjectField(TEXT("pattern"), PatternProp);
+
+	// query= as an alias for pattern=. Not required individually because at
+	// least one of {pattern, query} must be provided (enforced in Execute).
+	TSharedPtr<FJsonObject> QueryAliasProp = MakeShared<FJsonObject>();
+	QueryAliasProp->SetStringField(TEXT("type"), TEXT("string"));
+	QueryAliasProp->SetStringField(TEXT("description"),
+		TEXT("Alias for `pattern`. If both are provided, `pattern` wins."));
+	Properties->SetObjectField(TEXT("query"), QueryAliasProp);
 
 	// max_results - optional
 	TSharedPtr<FJsonObject> MaxProp = MakeShared<FJsonObject>();
 	MaxProp->SetStringField(TEXT("type"), TEXT("integer"));
 	MaxProp->SetStringField(TEXT("description"),
-		TEXT("Maximum number of matches to return (default: 50, max: 200)"));
+		TEXT("Maximum number of matches to return (default: 50, max: 200). The response always carries `total_matches` and `truncated` so 'returned < total' is detectable."));
 	Properties->SetObjectField(TEXT("max_results"), MaxProp);
 
 	// context_lines - optional
@@ -52,8 +60,18 @@ TSharedPtr<FJsonObject> ClaireonTool_LogSearch::GetInputSchema() const
 		TEXT("Number of context lines before and after each match (default: 0, max: 5)"));
 	Properties->SetObjectField(TEXT("context_lines"), CtxProp);
 
+	// Caller can force the inline response (skipping spill).
+	TSharedPtr<FJsonObject> ForceInlineProp = MakeShared<FJsonObject>();
+	ForceInlineProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	ForceInlineProp->SetStringField(TEXT("description"),
+		TEXT("If true, signals downstream consumers (and the spill router via `prefers_inline`) that the caller wants the result on the wire even at the cost of context. Default: false."));
+	ForceInlineProp->SetBoolField(TEXT("default"), false);
+	Properties->SetObjectField(TEXT("force_inline"), ForceInlineProp);
+
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
+	// pattern XOR query is required; the schema lists pattern as required for
+	// MCP-clients that don't know about the alias, while Execute() accepts either.
 	TArray<TSharedPtr<FJsonValue>> Required;
 	Required.Add(MakeShared<FJsonValueString>(TEXT("pattern")));
 	Schema->SetArrayField(TEXT("required"), Required);
@@ -63,10 +81,17 @@ TSharedPtr<FJsonObject> ClaireonTool_LogSearch::GetInputSchema() const
 
 IClaireonTool::FToolResult ClaireonTool_LogSearch::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
+	// Accept `query` as an alias for `pattern`. `pattern` wins when both are
+	// set so existing callers stay byte-identical.
 	FString Pattern;
-	if (!Arguments->TryGetStringField(TEXT("pattern"), Pattern) || Pattern.IsEmpty())
+	Arguments->TryGetStringField(TEXT("pattern"), Pattern);
+	if (Pattern.IsEmpty())
 	{
-		return MakeErrorResult(TEXT("Missing required field: pattern"));
+		Arguments->TryGetStringField(TEXT("query"), Pattern);
+	}
+	if (Pattern.IsEmpty())
+	{
+		return MakeErrorResult(TEXT("Missing required field: pattern (or `query` alias)"));
 	}
 
 	int32 MaxResults = 50;
@@ -76,6 +101,11 @@ IClaireonTool::FToolResult ClaireonTool_LogSearch::Execute(const TSharedPtr<FJso
 	int32 ContextLines = 0;
 	Arguments->TryGetNumberField(TEXT("context_lines"), ContextLines);
 	ContextLines = FMath::Clamp(ContextLines, 0, 5);
+
+	// Caller-driven preference -- echoed on the response so spill observers
+	// and downstream consumers can act on it.
+	bool bForceInline = false;
+	Arguments->TryGetBoolField(TEXT("force_inline"), bForceInline);
 
 	// Locate the log file
 	FString CurrentLogPath = FPlatformOutputDevices::GetAbsoluteLogFilename();
@@ -146,14 +176,50 @@ IClaireonTool::FToolResult ClaireonTool_LogSearch::Execute(const TSharedPtr<FJso
 		}
 	}
 
+	// Explicit `truncated` flag so callers cannot confuse a paginated
+	// 0-match-in-page response with a true 0-total-match response. The
+	// summary distinguishes "no matches" / "N returned, M total" /
+	// "N returned, truncated".
+	const bool bTruncated = (TotalMatches > MatchesArray.Num());
+
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetArrayField(TEXT("matches"), MatchesArray);
 	Data->SetNumberField(TEXT("total_matches"), TotalMatches);
 	Data->SetNumberField(TEXT("total_lines"), AllLines.Num());
 	Data->SetStringField(TEXT("pattern"), Pattern);
+	Data->SetBoolField(TEXT("truncated"), bTruncated);
+	Data->SetNumberField(TEXT("returned"), MatchesArray.Num());
+	Data->SetNumberField(TEXT("max_results"), MaxResults);
+	// Echo the caller's force_inline preference so spill/observers see it.
+	if (bForceInline)
+	{
+		Data->SetBoolField(TEXT("force_inline"), true);
+	}
+	// When context_lines>0, mark per_array truncation. The before/after
+	// arrays are full-line copies so they are not currently mid-line clipped, but the
+	// flag is true whenever the parent response is truncated -- callers should treat
+	// it as "context arrays for missing matches are absent" rather than "context is
+	// clipped within a single line".
+	if (ContextLines > 0)
+	{
+		Data->SetBoolField(TEXT("truncated_per_array"), bTruncated);
+	}
 
-	const FString Summary = FString::Printf(TEXT("Found %d matches for '%s' in %d log lines (showing %d)"),
-		TotalMatches, *Pattern, AllLines.Num(), MatchesArray.Num());
+	FString Summary;
+	if (TotalMatches == 0)
+	{
+		Summary = FString::Printf(TEXT("No matches for '%s' in %d log lines"), *Pattern, AllLines.Num());
+	}
+	else if (bTruncated)
+	{
+		Summary = FString::Printf(TEXT("%d returned, truncated; %d total matches for '%s' in %d log lines"),
+			MatchesArray.Num(), TotalMatches, *Pattern, AllLines.Num());
+	}
+	else
+	{
+		Summary = FString::Printf(TEXT("Found %d matches for '%s' in %d log lines (showing %d)"),
+			TotalMatches, *Pattern, AllLines.Num(), MatchesArray.Num());
+	}
 
 	return MakeSuccessResult(Data, Summary);
 }

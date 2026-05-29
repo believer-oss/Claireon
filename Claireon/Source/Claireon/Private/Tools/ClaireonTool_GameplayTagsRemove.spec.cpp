@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Specs for claireon.gameplay_tags_remove (#0000). Round-trip add-then-remove
+// Specs for claireon.gameplay_tags_remove. Round-trip add-then-remove
 // case depends on claireon.gameplay_tags_add. Uses a transient tag source under
 // FPaths::ProjectIntermediateDir() / "ClaireonSpecs" so
 // Config/DefaultGameplayTags.ini is never modified.
@@ -67,7 +67,7 @@ namespace
 }
 
 // =====================================================================================
-// Test 1: Round-trip add -> remove. Depends on stage 003 (gameplay_tags_add).
+// Test 1: Round-trip add -> remove. Depends on claireon.gameplay_tags_add.
 // =====================================================================================
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonGameplayTagsRemoveTest_RoundTrip,

@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -229,7 +229,7 @@ FToolResult ClaireonBlueprintGraphTool_SetPinValue::SetPinValue_Impl(
 }
 
 // ----------------------------------------------------------------------------
-// P1: hot-path metadata enrichment
+// hot-path metadata enrichment
 // ----------------------------------------------------------------------------
 
 FString ClaireonBlueprintGraphTool_SetPinValue::GetFullDescription() const

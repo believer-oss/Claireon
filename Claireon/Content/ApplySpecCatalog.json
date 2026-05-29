@@ -1,10 +1,11 @@
 {
   "_meta": {
     "source_lines": "apply_spec table (per-family entries derived from each tool's GetInputSchema and applicator)",
-    "schema_version": 2,
+    "schema_version": 3,
     "entry_count": 17,
     "tools_must_match_registered": true,
-    "keying_convention": "top-level keys equal each tool's GetCategory(); look up via tool_search(name=<family>_apply_spec, detail=\"full\")"
+    "keying_convention": "top-level keys equal each tool's GetCategory(); look up via tool_search(name=<family>_apply_spec, detail=\"full\")",
+    "apply_delta_field": "schema_version >= 3: every entry carries an apply_delta object describing per-family imperative-batch support. When supported==true, the entry names the registered <family>_apply_delta tool and lists supported_phases (subset of [\"disconnect\",\"remove_nodes\",\"nodes\",\"connect\"]). When supported==false, the entry carries a reason string. The 8 in-scope apply_delta families ship with #0000 (behaviortree, eqs, level_sequence, material, niagara, pcg, statetree, widgetbp); bp_apply_delta is registered independently as ClaireonTool_ApplyBlueprintDelta (#0000)."
   },
   "attenuation": {
     "tool": "attenuation_apply_spec",
@@ -16,7 +17,11 @@
       "Non-session: no session_id required and no editor session is opened",
       "Properties go through FProperty::ImportText_Direct; struct properties accept either nested objects or canonical text form",
       "Asset is auto-created at asset_path if absent"
-    ]
+    ],
+    "apply_delta": {
+      "supported": false,
+      "reason": "flat property set; not graph-shaped"
+    }
   },
   "behaviortree": {
     "tool": "behaviortree_apply_spec",
@@ -29,7 +34,13 @@
       "Class names are fuzzy-resolved (drop U/F prefix; partial matches allowed)",
       "Spec is additive: applying to a BT that already has a root selector results in two trees under the BT root",
       "Non-session behaviortree_inspect only walks the primary root child; use session-mode (open->structure->close) to see additions"
-    ]
+    ],
+    "apply_delta": {
+      "supported": true,
+      "tool": "behaviortree_apply_delta",
+      "supported_phases": ["disconnect", "remove_nodes", "nodes", "connect"],
+      "notes": "connect = attach child-to-parent"
+    }
   },
   "blackboard": {
     "tool": "blackboard_apply_spec",
@@ -40,7 +51,11 @@
     "gotchas": [
       "Each key requires id, name, type",
       "type must be a valid blackboard key type string (Object, Bool, Float, Int, String, Vector, Rotator, Name, Class, Enum)"
-    ]
+    ],
+    "apply_delta": {
+      "supported": false,
+      "reason": "flat key list; no graph shape. Use bb_add_key / bb_remove_key for incremental edits."
+    }
   },
   "bp": {
     "tool": "bp_apply_spec",
@@ -53,7 +68,13 @@
       "Connection pin names are fuzzy-resolved: 'exec' (input) and 'then' (output) work without knowing the canonical pin name",
       "Class names are fuzzy-resolved (drop U/F prefix; partial matches allowed)",
       "spec.graph names the target graph (e.g. 'EventGraph')"
-    ]
+    ],
+    "apply_delta": {
+      "supported": true,
+      "tool": "bp_apply_delta",
+      "supported_phases": ["disconnect", "remove_nodes", "nodes", "connect"],
+      "notes": "bp apply_delta is the existing ClaireonTool_ApplyBlueprintDelta (#0000); operates on UEdGraph nodes/pins; not authored by this catalog row but registered separately"
+    }
   },
   "concurrency": {
     "tool": "concurrency_apply_spec",
@@ -64,7 +85,11 @@
     "gotchas": [
       "Non-session: no session_id required and no editor session is opened",
       "Properties go through FProperty::ImportText_Direct"
-    ]
+    ],
+    "apply_delta": {
+      "supported": false,
+      "reason": "flat property set; not graph-shaped"
+    }
   },
   "eqs": {
     "tool": "eqs_apply_spec",
@@ -75,7 +100,13 @@
     "gotchas": [
       "Each option requires id, generator, and tests[]",
       "Generator and test type strings are fuzzy-resolved (e.g. 'EnvQueryGenerator_SimpleGrid', 'EnvQueryTest_Distance')"
-    ]
+    ],
+    "apply_delta": {
+      "supported": true,
+      "tool": "eqs_apply_delta",
+      "supported_phases": ["remove_nodes", "nodes"],
+      "notes": "options[] + tests[]; remove+create only; no disconnect/connect phases (no inter-option wiring)"
+    }
   },
   "level_sequence": {
     "tool": "level_sequence_apply_spec",
@@ -86,7 +117,13 @@
     "gotchas": [
       "Asset must already exist; apply is non-destructive in that bindings/tracks/sections/keyframes are added/modified atomically",
       "spec.playback_range is optional; omit to keep the existing range"
-    ]
+    ],
+    "apply_delta": {
+      "supported": true,
+      "tool": "level_sequence_apply_delta",
+      "supported_phases": ["remove_nodes", "nodes"],
+      "notes": "remove+create only; composite identity (binding_label, track_name, row_index, start_frame); no disconnect/connect phases"
+    }
   },
   "material": {
     "tool": "material_apply_spec",
@@ -97,7 +134,13 @@
     "gotchas": [
       "Asset must already exist; duplicate a template first if you need a new material",
       "Connection endpoints reference expressions by spec id; pin names are matched as authored"
-    ]
+    ],
+    "apply_delta": {
+      "supported": true,
+      "tool": "material_apply_delta",
+      "supported_phases": ["disconnect", "remove_nodes", "nodes", "connect"],
+      "notes": "UMaterial expression graph; connect phase handles both expr-to-expr and expr-to-material-attribute wires"
+    }
   },
   "material_instance": {
     "tool": "material_instance_instance_apply_spec",
@@ -109,7 +152,11 @@
       "Operation is instance_apply_spec; composed wire name is material_instance_instance_apply_spec (doubled instance is intentional under current category+operation naming)",
       "Asset must already exist; instance pointing at the named parent is created by spec.parent",
       "Clearing a parameter and overriding it in the same call: clears run first"
-    ]
+    ],
+    "apply_delta": {
+      "supported": false,
+      "reason": "flat parameter-override set; not graph-shaped. Use the discrete material_instance_* tools for incremental edits."
+    }
   },
   "metasound": {
     "tool": "metasound_apply_spec",
@@ -120,7 +167,11 @@
     "gotchas": [
       "Non-session: no session_id required and no editor session is opened",
       "Creates or locates the asset, then routes the spec body to the MetaSound applicator"
-    ]
+    ],
+    "apply_delta": {
+      "supported": false,
+      "reason": "MetaSound graph apply_delta out of scope this PR; revisit when MetaSound family lands incremental editing"
+    }
   },
   "niagara": {
     "tool": "niagara_apply_spec",
@@ -132,7 +183,13 @@
       "Niagara emitters[] is NOT yet implemented; only parameters[] mutates the asset (emitter creation requires Niagara template-system integration)",
       "The applicator returns no error for emitters[] entries today; treat them as a stub",
       "Each parameter requires id, name, type, value (where type is float, FLinearColor, FVector, etc.)"
-    ]
+    ],
+    "apply_delta": {
+      "supported": true,
+      "tool": "niagara_apply_delta",
+      "supported_phases": ["remove_nodes", "nodes"],
+      "notes": "parameters-only delta; emitters[] not yet supported (stub); no disconnect/connect phases (see F1 follow-up)"
+    }
   },
   "pcg": {
     "tool": "pcg_apply_spec",
@@ -143,7 +200,13 @@
     "gotchas": [
       "PCG connection pin names are EXACT-match (no fuzzy resolution yet for PCG-specific port aliases)",
       "Each connection requires source_node, source_pin, target_node, target_pin"
-    ]
+    ],
+    "apply_delta": {
+      "supported": true,
+      "tool": "pcg_apply_delta",
+      "supported_phases": ["disconnect", "remove_nodes", "nodes", "connect"],
+      "notes": "PCG pin names are exact-match; no fuzzy resolution"
+    }
   },
   "soundclass": {
     "tool": "soundclass_apply_spec",
@@ -154,7 +217,11 @@
     "gotchas": [
       "Non-session: no session_id required and no editor session is opened",
       "child_classes references SoundClass asset paths that must exist"
-    ]
+    ],
+    "apply_delta": {
+      "supported": false,
+      "reason": "flat property set; not graph-shaped"
+    }
   },
   "soundcue": {
     "tool": "soundcue_apply_spec",
@@ -165,7 +232,11 @@
     "gotchas": [
       "Non-session: no session_id required and no editor session is opened",
       "Two-pass cross-reference handling is preserved: referenced assets load first, then the cue graph is wired"
-    ]
+    ],
+    "apply_delta": {
+      "supported": false,
+      "reason": "SoundCue graph apply_delta out of scope this PR"
+    }
   },
   "soundmix": {
     "tool": "soundmix_apply_spec",
@@ -176,7 +247,11 @@
     "gotchas": [
       "Non-session: no session_id required and no editor session is opened",
       "class_adjusters references SoundClass asset paths that must exist"
-    ]
+    ],
+    "apply_delta": {
+      "supported": false,
+      "reason": "flat envelope + class-adjusters; not graph-shaped"
+    }
   },
   "statetree": {
     "tool": "statetree_apply_spec",
@@ -188,17 +263,30 @@
       "Transitions can be authored either per-state (states[i].transitions) or top-level (spec.transitions[]) -- both forms are equivalent and resolve from/to via id_mappings",
       "Top-level transitions are useful when authoring transitions independently of state definitions",
       "Each state requires id, name, type, parent (null for root)"
-    ]
+    ],
+    "apply_delta": {
+      "supported": true,
+      "tool": "statetree_apply_delta",
+      "supported_phases": ["disconnect", "remove_nodes", "nodes", "connect"],
+      "notes": "transitions = connect phase; accepts both top-level transitions[] and per-state nested transitions (dedupe by id, then by from->to pair)"
+    }
   },
   "widgetbp": {
     "tool": "widgetbp_apply_spec",
-    "spec_entry_types": ["widgets[]"],
-    "calling_convention": "params={asset_path, spec}",
-    "creates_asset_if_missing": false,
+    "spec_entry_types": ["widgets[]", "animations[]"],
+    "calling_convention": "params={asset_path, spec, optional parent_class}",
+    "creates_asset_if_missing": true,
     "id_mapping_pattern": "spec ids are looked up in id_mappings, not by name",
     "gotchas": [
-      "WidgetBP applicator opens existing Widget Blueprints only (no auto-create); duplicate a template and apply against the duplicate",
+      "Auto-creates the Widget Blueprint when asset_path does not exist (closes F2 gap); optional spec.parent_class selects the UUserWidget subclass (defaults to UserWidget)",
+      "slot_properties values must be engine flat-struct strings (e.g. \"(Minimum=(X=0,Y=0),Maximum=(X=1,Y=1))\"); nested JSON objects are rejected with a warning (C13)",
       "Each widget requires id, type, parent (null for root), and optional children[] / properties / slot_properties"
-    ]
+    ],
+    "apply_delta": {
+      "supported": true,
+      "tool": "widgetbp_apply_delta",
+      "supported_phases": ["remove_nodes", "nodes", "connect"],
+      "notes": "connect phase = reparent (move widget to new parent+slot); no disconnect phase (widgets always parented)"
+    }
   }
 }

@@ -12,7 +12,7 @@
 #include <atomic>
 
 // File-local namespace (NOT raw `namespace { ... }`) to avoid unity-batched
-// symbol collisions per feedback_anon_namespace_unity_collision.md.
+// symbol collisions across other Tests TUs.
 namespace ClaireonLogCaptureSpec
 {
 	static constexpr int32 kStressThreads = 4;

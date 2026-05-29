@@ -1,10 +1,9 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Stage 029 rewrite: setup helpers now use the decomposed
-// ClaireonBlueprintGraphTool_* classes instead of the deleted
-// ClaireonTool_EditBlueprintGraph shim. The tool-under-test
-// (ClaireonTool_GetBlueprintGraph) is untouched.
+// Setup helpers use the decomposed ClaireonBlueprintGraphTool_* classes
+// instead of the deleted ClaireonTool_EditBlueprintGraph shim. The
+// tool-under-test (ClaireonTool_GetBlueprintGraph) is untouched.
 
 #include "Tools/ClaireonTool_GetBlueprintGraph.h"
 #include "Tools/ClaireonTool_ApplyBlueprintDelta.h"
@@ -13,6 +12,11 @@
 #include "Tools/ClaireonBlueprintGraphTool_MoveNode.h"
 #include "Tools/ClaireonBlueprintGraphTool_Close.h"
 #include "ClaireonBlueprintHelpers.h"
+#include "ClaireonOutputGate.h"
+#include "Misc/Guid.h"
+#include "Misc/Paths.h"
+#include "Misc/ScopeExit.h"
+#include "HAL/FileManager.h"
 
 #include "Misc/AutomationTest.h"
 #include "Dom/JsonObject.h"
@@ -718,7 +722,7 @@ bool FGetBlueprintGraphTest_NodeIdCrossToolHandoff::RunTest(const FString& Param
 }
 
 // =====================================================================================
-// ITEM_02 Test 3: apply_graph id_map format. After apply_graph creates nodes, every
+// ITEM_02 Test 3: apply_delta id_map format. After apply_delta creates nodes, every
 // value in the returned id_map must be in DigitsWithHyphens format (hyphenated) and
 // parse via FGuid::ParseExact(DigitsWithHyphens). Closes the third emission site
 // referenced by ITEM_02.
@@ -735,7 +739,7 @@ bool FGetBlueprintGraphTest_ApplyGraphIdMapFormat::RunTest(const FString& Parame
 	const FString SessionId = CreateBlueprintSession(*this, AssetPath);
 	if (SessionId.IsEmpty()) { return false; }
 
-	// Build minimal apply_graph payload: two CallFunction nodes by local-id.
+	// Build minimal apply_delta payload: two CallFunction nodes by local-id.
 	TSharedPtr<FJsonObject> ApplyArgs = MakeShared<FJsonObject>();
 	ApplyArgs->SetStringField(TEXT("session_id"), SessionId);
 
@@ -755,14 +759,14 @@ bool FGetBlueprintGraphTest_ApplyGraphIdMapFormat::RunTest(const FString& Parame
 	auto AR = ApplyTool.Execute(ApplyArgs);
 	if (AR.bIsError)
 	{
-		AddError(FString::Printf(TEXT("apply_graph failed: %s"), *AR.GetContentAsString()));
+		AddError(FString::Printf(TEXT("apply_delta failed: %s"), *AR.GetContentAsString()));
 		CloseSession(SessionId);
 		return false;
 	}
 
 	if (!AR.Data.IsValid())
 	{
-		AddError(TEXT("apply_graph returned null Data"));
+		AddError(TEXT("apply_delta returned null Data"));
 		CloseSession(SessionId);
 		return false;
 	}
@@ -770,7 +774,7 @@ bool FGetBlueprintGraphTest_ApplyGraphIdMapFormat::RunTest(const FString& Parame
 	const TSharedPtr<FJsonObject>* IdMapObj = nullptr;
 	if (!AR.Data->TryGetObjectField(TEXT("id_map"), IdMapObj) || !IdMapObj || !(*IdMapObj).IsValid())
 	{
-		AddError(TEXT("apply_graph Data missing 'id_map' object"));
+		AddError(TEXT("apply_delta Data missing 'id_map' object"));
 		CloseSession(SessionId);
 		return false;
 	}
@@ -814,8 +818,9 @@ bool FGetBlueprintGraphTest_ApplyGraphIdMapFormat::RunTest(const FString& Parame
 }
 
 // =====================================================================================
-// ITEM_03 Test 1: graph-tools alias coverage. Every graph has BOTH graph_name and name;
-// every node has BOTH node_title and title, node_class and class. Equal values.
+// canonical field-name shape. Every graph has graph_name; every node has
+// node_title and node_class. Short-form aliases (name/title/class) were dropped
+// to align with the rest of the BP output surface (node_id, pin_name, etc.).
 // =====================================================================================
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetBlueprintGraphTest_FieldAliases_GraphAndNodeObjects,
@@ -857,19 +862,15 @@ bool FGetBlueprintGraphTest_FieldAliases_GraphAndNodeObjects::RunTest(const FStr
 	{
 		const TSharedPtr<FJsonObject>* G = nullptr;
 		if (!GV->TryGetObject(G) || !G) { continue; }
-		FString GraphName, NameAlias;
+		FString GraphName;
 		if (!(*G)->TryGetStringField(TEXT("graph_name"), GraphName) || GraphName.IsEmpty())
 		{
 			AddError(TEXT("Graph object missing graph_name")); CloseSession(SessionId); return false;
 		}
-		if (!(*G)->TryGetStringField(TEXT("name"), NameAlias) || NameAlias.IsEmpty())
+		// Short-form `name` alias must NOT be present anymore (B11).
+		if ((*G)->HasField(TEXT("name")))
 		{
-			AddError(TEXT("Graph object missing 'name' alias")); CloseSession(SessionId); return false;
-		}
-		if (GraphName != NameAlias)
-		{
-			AddError(FString::Printf(TEXT("graph_name '%s' != name '%s'"), *GraphName, *NameAlias));
-			CloseSession(SessionId); return false;
+			AddError(TEXT("Graph object should not carry the dropped 'name' alias")); CloseSession(SessionId); return false;
 		}
 
 		const TArray<TSharedPtr<FJsonValue>>* Nodes = nullptr;
@@ -879,34 +880,24 @@ bool FGetBlueprintGraphTest_FieldAliases_GraphAndNodeObjects::RunTest(const FStr
 			const TSharedPtr<FJsonObject>* N = nullptr;
 			if (!NV->TryGetObject(N) || !N) { continue; }
 
-			FString Title, TitleAlias;
+			FString Title;
 			if (!(*N)->TryGetStringField(TEXT("node_title"), Title))
 			{
 				AddError(TEXT("Node missing node_title")); CloseSession(SessionId); return false;
 			}
-			if (!(*N)->TryGetStringField(TEXT("title"), TitleAlias))
+			if ((*N)->HasField(TEXT("title")))
 			{
-				AddError(TEXT("Node missing 'title' alias")); CloseSession(SessionId); return false;
-			}
-			if (Title != TitleAlias)
-			{
-				AddError(FString::Printf(TEXT("node_title '%s' != title '%s'"), *Title, *TitleAlias));
-				CloseSession(SessionId); return false;
+				AddError(TEXT("Node should not carry the dropped 'title' alias")); CloseSession(SessionId); return false;
 			}
 
-			FString Class, ClassAlias;
+			FString Class;
 			if (!(*N)->TryGetStringField(TEXT("node_class"), Class))
 			{
 				AddError(TEXT("Node missing node_class")); CloseSession(SessionId); return false;
 			}
-			if (!(*N)->TryGetStringField(TEXT("class"), ClassAlias))
+			if ((*N)->HasField(TEXT("class")))
 			{
-				AddError(TEXT("Node missing 'class' alias")); CloseSession(SessionId); return false;
-			}
-			if (Class != ClassAlias)
-			{
-				AddError(FString::Printf(TEXT("node_class '%s' != class '%s'"), *Class, *ClassAlias));
-				CloseSession(SessionId); return false;
+				AddError(TEXT("Node should not carry the dropped 'class' alias")); CloseSession(SessionId); return false;
 			}
 		}
 	}
@@ -962,6 +953,122 @@ bool FGetBlueprintGraphTest_FieldAliases_ResponseSizeSmoke::RunTest(const FStrin
 	if (Serialized.Len() > MaxBytes)
 	{
 		AddError(FString::Printf(TEXT("Response size %d exceeds 256 KB cap"), Serialized.Len()));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	CloseSession(SessionId);
+	return true;
+}
+
+// =====================================================================================
+// get_graph spill no longer silently empties data.graphs.
+// Force a spill by directing the OutputGate at a scoped test-results root, route
+// a 100-node graph result through the gate, and assert (a) the Summary carries the
+// loud "[SPILLED -> <path>]" marker and (b) the data envelope carries
+// __mcp_spilled__=true plus inline_omitted listing "data" and an error_hint.
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetBlueprintGraphTest_Spill_LoudOnSilentEmpty,
+	"Claireon.GetBlueprintGraph.Spill.LoudOnSilentEmpty",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGetBlueprintGraphTest_Spill_LoudOnSilentEmpty::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/__MCPTests/BP_SpillLoudOnSilentEmpty");
+
+	const FString SessionId = CreateBlueprintSession(*this, AssetPath);
+	if (SessionId.IsEmpty()) { return false; }
+
+	// Build a graph guaranteed to exceed the default 8 KiB spill threshold once
+	// serialised at node_detail_level='full'. 100 PrintString nodes at full
+	// detail produce well over 8 KiB of JSON.
+	for (int32 i = 0; i < 100; ++i)
+	{
+		const FString G = AddPrintStringNode(*this, SessionId);
+		if (G.IsEmpty()) { CloseSession(SessionId); return false; }
+	}
+
+	ClaireonTool_GetBlueprintGraph GetTool;
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("asset_path"), AssetPath);
+	Args->SetStringField(TEXT("node_detail_level"), TEXT("full"));
+	Args->SetStringField(TEXT("format"), TEXT("json"));
+	Args->SetNumberField(TEXT("max_nodes"), 0); // unlimited
+	auto R = GetTool.Execute(Args);
+	if (R.bIsError)
+	{
+		AddError(FString::Printf(TEXT("get_graph failed: %s"), *R.GetContentAsString()));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	// Redirect the spill root to a scoped, throw-away dir so we don't pollute
+	// ProjectSavedDir/Claireon/Results/ during automation runs.
+	const FString ScopedRoot = FPaths::ProjectIntermediateDir()
+		/ TEXT("ClaireonTests")
+		/ TEXT("GetBlueprintGraph_Spill")
+		/ FGuid::NewGuid().ToString(EGuidFormats::Short);
+	IFileManager::Get().MakeDirectory(*ScopedRoot, /*Tree*/ true);
+	FClaireonOutputGate::SetResultsRootOverrideForTests(ScopedRoot);
+	ON_SCOPE_EXIT
+	{
+		FClaireonOutputGate::SetResultsRootOverrideForTests(FString());
+		IFileManager::Get().DeleteDirectory(*ScopedRoot, /*bRequireExists*/ false, /*Tree*/ true);
+	};
+
+	auto Routed = FClaireonOutputGate::RouteResult(
+		MoveTemp(R), TEXT("blueprint_get_graph"), TEXT("test_conv_spill_loud"),
+		EClaireonSpillStreamSet::GenericData);
+
+	// (a) Summary carries the loud spill marker.
+	if (!Routed.Summary.StartsWith(TEXT("[SPILLED -> ")))
+	{
+		AddError(FString::Printf(TEXT("Expected Summary to start with '[SPILLED -> ', got: %s"), *Routed.Summary));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	// (b) __mcp_spilled__ is true and inline_omitted lists "data".
+	if (!Routed.Data.IsValid())
+	{
+		AddError(TEXT("Routed.Data is not valid after spill"));
+		CloseSession(SessionId);
+		return false;
+	}
+	bool bSpilled = false;
+	Routed.Data->TryGetBoolField(TEXT("__mcp_spilled__"), bSpilled);
+	if (!bSpilled)
+	{
+		AddError(TEXT("Expected __mcp_spilled__=true after forced 100-node full-detail spill"));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	FString Hint;
+	if (!Routed.Data->TryGetStringField(TEXT("error_hint"), Hint) || Hint.IsEmpty())
+	{
+		AddError(TEXT("Expected error_hint field naming the spill path"));
+		CloseSession(SessionId);
+		return false;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* OmittedArr = nullptr;
+	bool bSawDataOmitted = false;
+	if (Routed.Data->TryGetArrayField(TEXT("inline_omitted"), OmittedArr) && OmittedArr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *OmittedArr)
+		{
+			if (V.IsValid() && V->AsString() == TEXT("data"))
+			{
+				bSawDataOmitted = true;
+				break;
+			}
+		}
+	}
+	if (!bSawDataOmitted)
+	{
+		AddError(TEXT("Expected inline_omitted to contain 'data' for the GenericData stream class"));
 		CloseSession(SessionId);
 		return false;
 	}

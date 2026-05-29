@@ -27,16 +27,17 @@ FString FClaireonMetaSoundTool_Open::GetOperation() const { return TEXT("open");
 
 FString FClaireonMetaSoundTool_Open::GetDescription() const
 {
-	return TEXT("Open a UMetaSoundSource editing session and lock the asset under tool name "
-				"'audio_edit' (I1) so SoundCue and MetaSound mutually exclude on the same asset path. "
-				"Eagerly attaches the FMetaSoundFrontendDocumentBuilder so subsequent session ops "
-				"(add_node, connect_pins, set_default, save) never have to first-touch the registry.");
+	return TEXT("Open a UMetaSoundSource or UMetaSoundPatch editing session and lock the asset under "
+				"tool name 'audio_edit' (I1) so SoundCue and MetaSound mutually exclude on the same "
+				"asset path. Eagerly attaches the FMetaSoundFrontendDocumentBuilder via "
+				"IMetaSoundDocumentInterface so subsequent session ops (add_node, connect_pins, "
+				"set_default, save) never have to first-touch the registry.");
 }
 
 TSharedPtr<FJsonObject> FClaireonMetaSoundTool_Open::GetInputSchema() const
 {
 	FToolSchemaBuilder S;
-	S.AddString(TEXT("asset_path"), TEXT("Path to the UMetaSoundSource asset"), true);
+	S.AddString(TEXT("asset_path"), TEXT("Path to the UMetaSoundSource or UMetaSoundPatch asset"), true);
 	return S.Build();
 }
 
@@ -59,15 +60,17 @@ IClaireonTool::FToolResult FClaireonMetaSoundTool_Open::Execute(const TSharedPtr
 	FString LoadError;
 	UObject* Asset = ClaireonAudioHelpers::LoadAudioAsset(AssetPath, Kind, LoadError);
 	if (!Asset) return MakeErrorResult(LoadError);
-	if (Kind != EClaireonAudioAssetKind::MetaSoundSource)
+	// accept either MetaSoundSource OR MetaSoundPatch -- the builder API at the FindOrBeginBuilding
+	// site below dispatches via IMetaSoundDocumentInterface and handles both polymorphically.
+	if (Kind != EClaireonAudioAssetKind::MetaSoundSource && Kind != EClaireonAudioAssetKind::MetaSoundPatch)
 	{
-		return MakeErrorResult(FString::Printf(TEXT("Asset is not a MetaSoundSource: %s"), *AssetPath));
+		return MakeErrorResult(FString::Printf(TEXT("Asset is not a MetaSoundSource or MetaSoundPatch: %s"), *AssetPath));
 	}
 
 	ClaireonAudioSessionRegistry::EnsureDelegateRegistered();
 
 	const FString ResolvedPath = Asset->GetPathName();
-	// I1: lock string is the literal "audio_edit" (preserved across cohorts per D3=B).
+	// lock string is the literal "audio_edit" (preserved across cohorts per D3=B).
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(ResolvedPath, TEXT("audio_edit"));
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{
@@ -118,7 +121,7 @@ IClaireonTool::FToolResult FClaireonMetaSoundTool_Open::Execute(const TSharedPtr
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("session_id"), SessionId);
 	Data->SetStringField(TEXT("asset_path"), ResolvedPath);
-	Data->SetStringField(TEXT("kind"), TEXT("metasound_source"));
+	Data->SetStringField(TEXT("kind"), AudioAssetKindToString(Kind));
 	return MakeSuccessResult(Data, FString::Printf(TEXT("Opened MetaSound session %s on %s"), *SessionId, *ResolvedPath));
 #endif
 }

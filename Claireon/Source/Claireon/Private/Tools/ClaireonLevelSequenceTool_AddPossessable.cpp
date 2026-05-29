@@ -16,7 +16,16 @@ FString ClaireonLevelSequenceTool_AddPossessable::GetOperation() const { return 
 
 FString ClaireonLevelSequenceTool_AddPossessable::GetDescription() const
 {
-    return TEXT("Add a possessable binding (a reference to an existing world actor) to the Level Sequence and focus the new binding. Session-mode tool: open via level_sequence_open first.");
+    // add_possessable only creates a binding entry on the MovieScene. It does NOT
+    // resolve the binding to a runtime actor instance. Without a follow-up rebind, the
+    // binding will not animate any actor at PIE time. Use level_sequence_rebind_actor
+    // (preferred when GUID is known) or level_sequence_focus_binding + downstream tools
+    // to attach the binding to a specific world actor.
+    return TEXT("Add a possessable binding (a typed slot for a world actor) to the Level "
+                "Sequence and focus the new binding. NOTE: the binding has no actor "
+                "reference yet -- call level_sequence_rebind_actor(guid|label, "
+                "actor_path|actor_label) to attach a world actor to the new binding so "
+                "it resolves at PIE time. Session-mode tool: open via level_sequence_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_AddPossessable::GetInputSchema() const

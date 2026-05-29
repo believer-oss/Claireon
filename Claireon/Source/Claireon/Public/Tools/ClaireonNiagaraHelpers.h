@@ -48,7 +48,51 @@ namespace ClaireonNiagaraHelpers
 	FString FormatObjectProperties(const UObject* Object, const FString& Indent);
 
 	// ========================================================================
-	// Stack Resolution + Graph Traversal (Stage 001)
+	// User Parameter helpers (shared by niagara_add_parameter,
+	// niagara_remove_parameter, niagara_set_parameter_value, and
+	// niagara_apply_delta). See work item #0000 AR7. The helpers
+	// operate on raw niagara types and return success/failure plus an
+	// error message; the calling MCP tool wraps the result in an
+	// FToolResult.
+	// ========================================================================
+
+	/**
+	 * Resolve a niagara user-parameter type string (Float/Vector/Color/
+	 * LinearColor/Bool/Int) to an FNiagaraTypeDefinition. On failure,
+	 * fills OutError and returns an invalid type def.
+	 */
+	bool ResolveUserParameterTypeDef(const FString& TypeStr, FNiagaraTypeDefinition& OutTypeDef, FString& OutError);
+
+	/**
+	 * Add or update a User.<Name> parameter on the niagara system's
+	 * exposed parameter store. ParameterName may be the bare name
+	 * ("Color") or the namespaced form ("User.Color"); the helper
+	 * normalizes to the namespaced form. The transaction is the
+	 * caller's responsibility; the helper calls System->Modify() but
+	 * does not open its own FScopedTransaction.
+	 * Returns true on success.
+	 */
+	bool AddOrUpdateUserParameter(
+		UNiagaraSystem* System,
+		const FString& ParameterName,
+		const FNiagaraTypeDefinition& TypeDef,
+		FString& OutNormalizedName,
+		FString& OutError);
+
+	/**
+	 * Remove a User.<Name> parameter from the niagara system's
+	 * exposed parameter store. ParameterName may be the bare name
+	 * or the namespaced form. Returns true if removed; false if the
+	 * parameter was not present (fills OutError).
+	 */
+	bool RemoveUserParameter(
+		UNiagaraSystem* System,
+		const FString& ParameterName,
+		FString& OutNormalizedName,
+		FString& OutError);
+
+	// ========================================================================
+	// Stack Resolution + Graph Traversal
 	// ========================================================================
 
 	/** Map human-readable stack name to ENiagaraScriptUsage. Returns false if name is invalid. */

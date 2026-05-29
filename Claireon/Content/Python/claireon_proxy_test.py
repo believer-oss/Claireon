@@ -1456,6 +1456,159 @@ class TestAdminEndpoints(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# I4 + I9 + I10 (#0000): ready flag, mcp_ready_status, warming-up message.
+# ---------------------------------------------------------------------------
+
+
+class TestReadyFlag(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.mkdtemp(prefix="claireon-proxy-ready-")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        _reset_proxy_runtime(self.tmp)
+
+    def _register(self, **kwargs) -> Dict[str, Any]:
+        body = _well_formed_register_body(self.tmp, **kwargs)
+        claireon_proxy.handle_register(body)
+        return body
+
+    def test_ready_false_after_register(self) -> None:
+        """Session registered but /editor/ready not sent -> ready=false."""
+        body = self._register()
+        canonical = claireon_proxy.canonicalize_worktree(self.tmp)
+        with claireon_proxy.SESSION_LOCK:
+            wt = claireon_proxy.RUNTIME["worktrees"][canonical]
+            self.assertFalse(wt.ready)
+
+    def test_ready_true_after_editor_ready(self) -> None:
+        """After /editor/ready POST, WorktreeState.ready flips to True."""
+        body = self._register()
+        ready_body = {
+            "worktree_root": self.tmp,
+            "pid": body["pid"],
+            "start_time_ns": body["start_time_ns"],
+            "tool_count": 42,
+        }
+        status, resp = claireon_proxy.handle_editor_ready(ready_body)
+        self.assertEqual(status, 200)
+        self.assertTrue(resp.get("ok"))
+        canonical = claireon_proxy.canonicalize_worktree(self.tmp)
+        with claireon_proxy.SESSION_LOCK:
+            wt = claireon_proxy.RUNTIME["worktrees"][canonical]
+            self.assertTrue(wt.ready)
+            self.assertEqual(wt.tool_count, 42)
+
+    def test_warming_up_message_when_not_ready(self) -> None:
+        """I10: when session exists but ready=False, fallback shows warming-up text."""
+        body = self._register()
+        canonical = claireon_proxy.canonicalize_worktree(self.tmp)
+        # Map the listener port to this worktree so _check_warming_up can resolve it.
+        with claireon_proxy.SESSION_LOCK:
+            wt = claireon_proxy.RUNTIME["worktrees"].get(canonical)
+            if wt:
+                wt.mcp_port = 50001
+                claireon_proxy.RUNTIME["mcp_port_to_worktree"][50001] = canonical
+        resp = claireon_proxy.forward_tool_call({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "python_execute", "arguments": {"code": "1"}},
+        }, listener_port=50001)
+        self.assertIn("result", resp)
+        self.assertTrue(resp["result"]["isError"])
+        # Should be warming-up text, NOT the bare FALLBACK_TEXT
+        text = resp["result"]["content"][0]["text"]
+        self.assertNotEqual(text, claireon_proxy.FALLBACK_TEXT)
+        self.assertIn("warming up", text.lower())
+
+    def test_no_editor_still_returns_fallback(self) -> None:
+        """I10: when no session at all, fallback text (or port-collision text) is returned."""
+        # listener_port=50002 has no mapping -> port-collision branch
+        resp = claireon_proxy.forward_tool_call({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": "tool_search", "arguments": {"query": "x"}},
+        }, listener_port=50002)
+        self.assertIn("result", resp)
+        self.assertTrue(resp["result"]["isError"])
+        text = resp["result"]["content"][0]["text"]
+        # Should mention "no editor" or "not registered" or "build and launch"
+        lower = text.lower()
+        self.assertTrue(
+            "editor" in lower or "proxy" in lower or "build" in lower,
+            msg=f"Unexpected fallback text: {text!r}",
+        )
+
+    def test_mcp_ready_status_no_session(self) -> None:
+        """I9: mcp_ready_status returns ready=false when no session registered."""
+        resp = claireon_proxy.forward_tool_call({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {"name": "mcp_ready_status", "arguments": {}},
+        })
+        self.assertIn("result", resp)
+        self.assertFalse(resp["result"].get("isError"))
+        data = json.loads(resp["result"]["content"][0]["text"])
+        self.assertIsNone(data["active_editor"])
+        self.assertFalse(data["ready"])
+        self.assertEqual(data["tool_count"], 0)
+
+    def test_mcp_ready_status_with_ready_session(self) -> None:
+        """I9: mcp_ready_status returns ready=true after /editor/ready."""
+        body = self._register(editor_mcp_port=60001)
+        # Map listener port so routing works.
+        canonical = claireon_proxy.canonicalize_worktree(self.tmp)
+        with claireon_proxy.SESSION_LOCK:
+            wt = claireon_proxy.RUNTIME["worktrees"].get(canonical)
+            if wt:
+                wt.mcp_port = 50003
+                claireon_proxy.RUNTIME["mcp_port_to_worktree"][50003] = canonical
+        # Send /editor/ready
+        claireon_proxy.handle_editor_ready({
+            "worktree_root": self.tmp,
+            "pid": body["pid"],
+            "start_time_ns": body["start_time_ns"],
+            "tool_count": 99,
+        })
+        # Now mcp_ready_status should show ready=true
+        resp = claireon_proxy.forward_tool_call({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {"name": "mcp_ready_status", "arguments": {}},
+        }, listener_port=50003)
+        self.assertIn("result", resp)
+        data = json.loads(resp["result"]["content"][0]["text"])
+        self.assertTrue(data["ready"])
+        self.assertEqual(data["tool_count"], 99)
+
+    def test_ready_flag_resets_on_new_session(self) -> None:
+        """I4: when the editor re-registers (new session), ready flag resets."""
+        body = self._register()
+        claireon_proxy.handle_editor_ready({
+            "worktree_root": self.tmp,
+            "pid": body["pid"],
+            "start_time_ns": body["start_time_ns"],
+            "tool_count": 10,
+        })
+        canonical = claireon_proxy.canonicalize_worktree(self.tmp)
+        with claireon_proxy.SESSION_LOCK:
+            wt = claireon_proxy.RUNTIME["worktrees"][canonical]
+            self.assertTrue(wt.ready)
+        # New registration resets ready.
+        body2 = self._register(start_time_ns=999)
+        with claireon_proxy.SESSION_LOCK:
+            wt2 = claireon_proxy.RUNTIME["worktrees"][canonical]
+            self.assertFalse(wt2.ready)
+
+    def test_mcp_ready_status_in_static_tools_list(self) -> None:
+        """I9: mcp_ready_status must appear in STATIC_TOOLS_LIST."""
+        names = [t["name"] for t in claireon_proxy.STATIC_TOOLS_LIST]
+        self.assertIn("mcp_ready_status", names)
+
+
+# ---------------------------------------------------------------------------
 # Smoke entrypoint for CI.
 # ---------------------------------------------------------------------------
 

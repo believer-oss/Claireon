@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -209,6 +209,24 @@ FToolResult ClaireonBlueprintGraphTool_Open::Execute(const TSharedPtr<FJsonObjec
 
 		UE_LOG(LogClaireon, Log, TEXT("[EditBlueprintGraph] Created session %s for Blueprint %s"), *SessionId, *Blueprint->GetPathName());
 	}
+	else
+	{
+		// fix: a session was reused, and the caller is now requesting a (possibly
+		// different) graph. Before this fix the requested Graph was silently dropped
+		// and subsequent edits landed in whatever graph the session was already
+		// tracking -- the worst-of-three open-policy outcomes. Refuse with an error
+		// that points the caller at bp_close + reopen if the prior session is tracking
+		// a different graph. This is the "refuse" policy (option (a) of B3); it is
+		// safer than the silent swap and observable to callers.
+		UEdGraph* ExistingGraph = Data->Graph.Get();
+		if (ExistingGraph && ExistingGraph != Graph)
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("Session '%s' is already tracking graph '%s' on '%s'; cannot reopen with graph_name='%s'. "
+				     "Close the existing session via bp_close (or mcp_release_sessions) and reopen against the desired graph."),
+				*SessionId, *ExistingGraph->GetName(), *Blueprint->GetPathName(), *GraphName));
+		}
+	}
 
 	Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Opened Blueprint %s, Graph %s"), *AssetPath, *GraphName);
 
@@ -220,7 +238,7 @@ FToolResult ClaireonBlueprintGraphTool_Open::Execute(const TSharedPtr<FJsonObjec
 }
 
 // ----------------------------------------------------------------------------
-// P1: hot-path metadata enrichment
+// hot-path metadata enrichment
 // ----------------------------------------------------------------------------
 
 FString ClaireonBlueprintGraphTool_Open::GetFullDescription() const

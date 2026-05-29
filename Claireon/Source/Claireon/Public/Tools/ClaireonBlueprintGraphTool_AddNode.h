@@ -13,13 +13,13 @@ public:
 	TSharedPtr<FJsonObject> GetInputSchema() const override;
 	FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;
 
-	// P1: hot-path metadata enrichment
+	// hot-path metadata enrichment
 	virtual FString GetFullDescription() const override;
 	virtual FString GetExampleUsage() const override;
 	virtual FString GetPatterns() const override;
 	virtual TSharedPtr<FJsonObject> GetParameterTooltips() const override;
 
-	// P3: synonym/abbreviation keywords for search ranking
+	// synonym/abbreviation keywords for search ranking
 	virtual TArray<FString> GetSearchKeywords() const override;
 
 private:

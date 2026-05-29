@@ -11,6 +11,8 @@
 #include "MovieSceneBinding.h"
 #include "MovieSceneTrack.h"
 #include "Tracks/MovieSceneEventTrack.h"
+#include "Tracks/MovieSceneCameraCutTrack.h"
+#include "Tracks/MovieSceneAudioTrack.h"
 #include "ScopedTransaction.h"
 
 using FToolResult = IClaireonTool::FToolResult;
@@ -19,7 +21,20 @@ FString ClaireonLevelSequenceTool_AddTrack::GetOperation() const { return TEXT("
 
 FString ClaireonLevelSequenceTool_AddTrack::GetDescription() const
 {
-    return TEXT("Add a track of the given type to the focused binding (or as a root track for event tracks). Session-mode tool: open via level_sequence_open first.");
+    // Root-context tracks (event, camera_cut, audio) are added to UMovieScene
+    // directly -- no focused binding required. Binding-context tracks
+    // (transform, visibility, float, ...) require a focused binding. Mirrors
+    // `binding_context` from level_sequence_list_track_types.
+    // The new track is NOT focused automatically; call focus_track to make
+    // subsequent section/keyframe ops target it.
+    return TEXT("Add a track of the given type. Root-context tracks (event, camera_cut, audio) "
+                "are added at sequence root and do not require a focused binding; "
+                "binding-context tracks (transform, visibility, float, color, margin, "
+                "2d_transform, widget_material) require focus_binding first. See "
+                "level_sequence_list_track_types for the binding_context of each type. "
+                "Note: the new track is NOT auto-focused -- call focus_track to make "
+                "subsequent section/keyframe ops target it. "
+                "Session-mode tool: open via level_sequence_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_AddTrack::GetInputSchema() const
@@ -57,12 +72,22 @@ FToolResult ClaireonLevelSequenceTool_AddTrack::Execute(const TSharedPtr<FJsonOb
 
 	UMovieScene* MovieScene = Data->Sequence->GetMovieScene();
 	FGuid BindingGuid;
-	const bool bIsEvent = TrackClass->IsChildOf(UMovieSceneEventTrack::StaticClass());
-	if (!bIsEvent)
+	// Root-context tracks: classes that live on UMovieScene (no binding parent).
+	// Mirrors the `binding_context = "root"` / `"possessable_or_root"` rows in
+	// level_sequence_list_track_types. Audio is `possessable_or_root` -- if a binding
+	// is focused, attach to it; otherwise add at root. Event/camera_cut are root-only.
+	const bool bIsRootOnly =
+		TrackClass->IsChildOf(UMovieSceneEventTrack::StaticClass()) ||
+		TrackClass->IsChildOf(UMovieSceneCameraCutTrack::StaticClass());
+	const bool bIsRootOrPossessable =
+		TrackClass->IsChildOf(UMovieSceneAudioTrack::StaticClass());
+	const bool bRequiresBinding = !bIsRootOnly && !bIsRootOrPossessable;
+	if (bRequiresBinding)
 	{
 		if (Data->FocusedBindingIndex == INDEX_NONE)
 		{
-			return MakeErrorResult(TEXT("add_track requires a focused binding for non-event tracks"));
+			return MakeErrorResult(TEXT("add_track requires a focused binding for binding-context tracks; "
+				"call focus_binding first or use a root-context track (event, camera_cut, audio)"));
 		}
 		const TArray<FMovieSceneBinding>& Bindings = MovieScene->GetBindings();
 		if (Data->FocusedBindingIndex >= Bindings.Num())
@@ -70,6 +95,15 @@ FToolResult ClaireonLevelSequenceTool_AddTrack::Execute(const TSharedPtr<FJsonOb
 			return MakeErrorResult(TEXT("Focused binding index out of range"));
 		}
 		BindingGuid = Bindings[Data->FocusedBindingIndex].GetObjectGuid();
+	}
+	else if (bIsRootOrPossessable && Data->FocusedBindingIndex != INDEX_NONE)
+	{
+		// Audio: attach to focused binding when one is set.
+		const TArray<FMovieSceneBinding>& Bindings = MovieScene->GetBindings();
+		if (Data->FocusedBindingIndex < Bindings.Num())
+		{
+			BindingGuid = Bindings[Data->FocusedBindingIndex].GetObjectGuid();
+		}
 	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Add Track")));

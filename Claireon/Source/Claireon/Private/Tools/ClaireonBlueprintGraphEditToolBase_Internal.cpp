@@ -166,7 +166,7 @@ namespace ClaireonNodeTypeAlias
 			M.Emplace(UK2Node_FunctionResult::StaticClass(),      TEXT("FunctionResult"));
 			M.Emplace(UK2Node_Tunnel::StaticClass(),              TEXT("Tunnel"));
 
-			// [T7] Structural drift check: every key non-null, every value non-empty,
+			// Structural drift check: every key non-null, every value non-empty,
 			// and every value drawn from the known-alias whitelist.
 			static const TCHAR* const KnownAliases[] = {
 				TEXT("CallFunction"),

@@ -28,8 +28,7 @@
  * (because some other call already owns the lifetime).
  *
  * NOTE: Editor-wide sessions held when this helper is constructed will cause
- * acquisition to fail with BlockedByOtherTool (per stage 002's OpenSession
- * extension), which is the correct behavior.
+ * acquisition to fail with BlockedByOtherTool, which is the correct behavior.
  */
 class CLAIREON_API FClaireonScopedAssetLock
 {

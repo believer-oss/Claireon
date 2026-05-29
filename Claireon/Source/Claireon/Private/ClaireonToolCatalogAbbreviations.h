@@ -12,7 +12,7 @@ namespace ClaireonToolCatalogAbbreviations
 	 * time by the tool catalog matcher. Keys are common abbreviations or
 	 * alternate terms; values are space-separated expansions.
 	 *
-	 * Single source of truth: the previous Python-side mirror of this table
+	 * Single source of truth; the previous Python-side mirror of this table
 	 * was removed when the wire format was simplified to send raw fields
 	 * only.
 	 */

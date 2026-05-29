@@ -63,6 +63,27 @@ namespace ClaireonWidgetHelpers
 	/** Write a slot property value from a string. */
 	bool WriteSlotProperty(UPanelSlot* Slot, const FString& PropertyName, const FString& Value, FString& OutError);
 
+	/**
+	 * Move (reparent) WidgetToMove under NewParent in the widget tree, optionally
+	 * inserting at InsertIndex (negative = append). The new parent must be a
+	 * UPanelWidget; non-panel widgets cannot host children.
+	 *
+	 * Side effects: marks the widget tree transactional, calls Tree->Modify(),
+	 * removes the widget from its current parent (if any), reparents it, and calls
+	 * MarkBlueprintAsStructurallyModified on the widget blueprint.
+	 *
+	 * Shared by ClaireonWidgetBPTool_MoveWidget and FClaireonDeltaApplicator_WidgetBP
+	 * (D5 reparent path). The caller owns the surrounding FScopedTransaction.
+	 *
+	 * Returns true on success; on failure, fills OutError.
+	 */
+	bool MoveWidget(
+		UWidgetBlueprint* WidgetBP,
+		UWidget* WidgetToMove,
+		UWidget* NewParent,
+		int32 InsertIndex,
+		FString& OutError);
+
 	/** Validate an asset path for widget blueprint operations. */
 	bool ValidateWidgetBPAssetPath(const FString& AssetPath, FString& OutError);
 

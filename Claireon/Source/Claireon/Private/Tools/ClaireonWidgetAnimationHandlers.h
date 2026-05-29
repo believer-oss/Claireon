@@ -54,6 +54,18 @@ bool ApplyAddAnimationTrack(
 	UMovieSceneTrack*& OutTrack,
 	FString& OutError);
 
+/**
+ * Remove a track on a UWidgetAnimation. Tracks are addressed by binding
+ * GUID + track name (case-insensitive against UMovieSceneTrack::GetTrackName, falling
+ * back to the track class name). Returns false with OutError populated if the binding
+ * or track cannot be resolved.
+ */
+bool ApplyRemoveAnimationTrack(
+	UWidgetAnimation* Anim,
+	const FGuid& BindingGuid,
+	const FString& TrackNameOrProperty,
+	FString& OutError);
+
 /** Helper: find a UWidgetAnimation on the WBP by case-sensitive FName match. */
 UWidgetAnimation* FindWidgetAnimationByName(UWidgetBlueprint* WBP, const FString& AnimationName);
 

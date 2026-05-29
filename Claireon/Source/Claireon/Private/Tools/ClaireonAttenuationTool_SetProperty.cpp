@@ -14,7 +14,7 @@
 
 namespace
 {
-	// I4: discriminator-prefixed file-local helper to avoid unity collisions with similarly-named
+	// discriminator-prefixed file-local helper to avoid unity collisions with similarly-named
 	// helpers across cohort files (e.g. ClaireonConcurrencyTool_SetProperty.cpp uses the same shape).
 	FString AttenuationSetProperty_JsonValueToString(const TSharedPtr<FJsonValue>& V)
 	{

@@ -175,6 +175,23 @@ public:
 	 */
 	void Unregister();
 
+	/**
+	 * POST /editor/ready to signal the proxy that the tool catalog is
+	 * populated and the Python bridge is initialized. Called once by the
+	 * module after FClaireonBridge::EnsureRegistered() completes.
+	 *
+	 * Without this signal the proxy shows "build and launch editor first"
+	 * for the ~60s startup window where the editor is registered but Python
+	 * is still initializing. After this call the proxy shows "warming up"
+	 * only if /editor/ready was never received, and allows forward traffic
+	 * once ready=true.
+	 *
+	 * No-ops if not registered (proxy not running or registration pending).
+	 * Best-effort: a transport failure is logged but does not propagate.
+	 * Returns true on 200/ok from the proxy.
+	 */
+	bool NotifyReady(int32 ToolCount);
+
 	/** True while a /editor/register has succeeded and no Unregister has run. */
 	bool IsRegistered() const { return bIsRegistered; }
 
@@ -220,15 +237,26 @@ public:
 	 * and tolerates a proxy that is mid-spawn or temporarily unreachable.
 	 *
 	 * Replaces the previous synchronous EnsureProxyRunning + Register call
-	 * sequence at module-startup time per D4.
+	 * sequence at module-startup time.
 	 */
 	void BeginRetryRegister(int32 EditorMCPPort, const FString& EditorMCPToken, const FString& BuildId);
+
+	/**
+	 * After a successful synchronous RegisterAndReturnAccepted, start only
+	 * the heartbeat ticker without triggering a re-registration.
+	 * Use this instead of BeginRetryRegister when the sync path has already
+	 * confirmed the proxy accepted the session, so the ticker just keeps the
+	 * heartbeat alive without sending another /editor/register.
+	 *
+	 * Sets ProxyState to Registered and starts the ticker.
+	 */
+	void StartHeartbeatTickerOnly(int32 EditorMCPPort, const FString& EditorMCPToken, const FString& BuildId);
 
 	/** PROXY_REG_PORT derivative used for composing editor-registration URLs. */
 	static FString GetRegistrationBaseUrl();
 
 	/**
-	 * Stage 010 (auto-promote): GET http://127.0.0.1:43017/admin/health with a
+	 * Auto-promote probe: GET http://127.0.0.1:43017/admin/health with a
 	 * tight timeout and parse the response. On 200 with a `version_hash` field
 	 * present, caches the proxy's reported pid in CachedProxyPid for the
 	 * diagnostics tab and returns true. On any failure (transport error, non-
@@ -258,7 +286,7 @@ public:
 	uint32 GetCachedProxyPid() const { return CachedProxyPid; }
 
 	/**
-	 * Stage 010: tell the client which port the editor's local MCP listener
+	 * Tell the client which port the editor's local MCP listener
 	 * is bound to. Called by the auto-promote path in StartServer after
 	 * StartEphemeral picks a port; used by the next /editor/register payload.
 	 */
@@ -352,9 +380,9 @@ private:
 	/**
 	 * Single attempt at /editor/register. Returns Accepted on {accepted:true},
 	 * TerminalAuthOrMalformed on a 4xx with an "auth"/"malformed_request"-shaped
-	 * reason, Transient otherwise. Stage 005 dropped the version_mismatch
-	 * respawn path: the proxy now treats version drift as advisory (D5), so
-	 * the editor never sees that rejection. Used by both BeginRetryRegister
+	 * reason, Transient otherwise. The version_mismatch respawn path was
+	 * dropped: the proxy now treats version drift as advisory, so the editor
+	 * never sees that rejection. Used by both BeginRetryRegister
 	 * (initial wiring) and the heartbeat tick state machine.
 	 *
 	 * RegisterAndReturnAccepted remains as a bool-returning helper for the

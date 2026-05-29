@@ -221,8 +221,7 @@ bool FCameraAssetLifecycle_Duplicate_MissingSource::RunTest(const FString& /*Par
 // =====================================================================================
 // Test: Save_RoundTrip
 // Create asset -> AddRig -> camera_asset_save -> unload package -> reload from disk ->
-// verify the rig persisted. Exercises the BuildCamera-pre-run + SavePackages contract
-// established in Stage 011.
+// verify the rig persisted. Exercises the BuildCamera-pre-run + SavePackages contract.
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetLifecycle_Save_RoundTrip,
 	"Claireon.CameraAsset.Lifecycle.Save_RoundTrip",

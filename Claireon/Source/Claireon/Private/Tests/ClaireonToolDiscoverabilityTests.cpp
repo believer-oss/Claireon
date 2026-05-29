@@ -13,8 +13,8 @@
 //
 // Row 18 ("bp" single-token) asserts the short-token fallback path returns
 // at least one bp_* tool -- position is unconstrained ("first page").
-// Row 19 ("bp create") is the load-bearing test for Stage 020 step 4:
-// the short-token whole-word path must rank bp_create at position <= 1.
+// Row 19 ("bp create") is the load-bearing test for the short-token whole-
+// word match path: bp_create must rank at position <= 1.
 // Rows 34-35 are negative rows that lock in the short-token substring-
 // exclusion rule.
 
@@ -28,7 +28,8 @@
 
 namespace ClaireonToolDiscoverabilityTestsNS
 {
-	// File-local discriminator per feedback_anon_namespace_unity_collision.md.
+	// File-local discriminator to avoid anonymous-namespace symbol collisions
+	// when unity batching combines this TU with other tests.
 
 	/** Build FClaireonToolCatalogMatcher from the live server's registered tools.
 	 *  Mirrors the relevant portion of ClaireonTool_SearchTools::RebuildCatalog()
@@ -93,9 +94,9 @@ namespace ClaireonToolDiscoverabilityTestsNS
 	 * Returns true when FClaireonToolCatalogMatcher::FindNearest(Query, 10) returns
 	 * ExpectedName at index <= MaxPosition (0-indexed).
 	 *
-	 * UNTEST_* macros must NOT be called inside this helper
-	 * (memory feedback_untest_macros_lambda_coroutine): they expand to co_return.
-	 * The caller must call UNTEST_EXPECT_TRUE on the returned bool.
+	 * UNTEST_* macros must NOT be called inside this helper: they expand
+	 * to co_return and require a coroutine context. The caller must call
+	 * UNTEST_EXPECT_TRUE on the returned bool.
 	 */
 	static bool AssertSearchHitCheck(const FString& Query, const FString& ExpectedName, int32 MaxPosition)
 	{
@@ -398,10 +399,11 @@ UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_BpSingleToken, U
 	co_return;
 }
 
-// Row 19: "bp create" -- load-bearing test for Stage 020 step 4 short-token
-// whole-word exact-match path. "bp" exact-matches name token "bp"; "create"
+// Row 19: "bp create" -- load-bearing test for the short-token whole-word
+// exact-match path. "bp" exact-matches name token "bp"; "create"
 // exact-matches name token "create". bp_create gets both match weights and
-// must rank at position <= 1. Failure here is a regression in Stage 020.
+// must rank at position <= 1. Failure here is a regression in the short-
+// token whole-word match path.
 UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_BpCreate, UNTEST_TIMEOUTMS(15000))
 {
 	using namespace ClaireonToolDiscoverabilityTestsNS;
@@ -583,12 +585,12 @@ UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_TranslateBluepri
 
 // ===========================================================================
 // Negative rows (34-35): lock in short-token substring-exclusion rule.
-// These rows pass ONLY when Stage 020 step 4 is in place.
+// These rows pass ONLY when the short-token whole-word match path is in place.
 // ===========================================================================
 
 // Row 34: "ed" must NOT surface tools whose names contain "edit" but do NOT
 // have "ed" as a whole underscore-delimited token. Locks in the substring-
-// prohibition rule for short (<=2 char) tokens.
+// prohibition rule for short (<=2 char) tokens in the matcher.
 UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_EdDoesNotMatchEdit, UNTEST_TIMEOUTMS(15000))
 {
 	using namespace ClaireonToolDiscoverabilityTestsNS;
@@ -664,7 +666,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_BpInDescriptionE
 		{
 			UE_LOG(LogTemp, Error,
 				TEXT("[ToolDiscoverability] Row35 FAIL: '%s' has 'bp' only in description "
-				     "but appeared in top-10 for query '%s'. Stage 020 step 4 "
+				     "but appeared in top-10 for query '%s'. The short-token "
 				     "description-exclusion rule is broken."),
 				*M.Name, *Query);
 			bAnyViolation = true;

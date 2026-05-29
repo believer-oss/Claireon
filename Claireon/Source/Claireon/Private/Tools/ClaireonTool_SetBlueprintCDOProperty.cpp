@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_SetBlueprintCDOProperty.h"
+#include "Tools/ClaireonBlueprintGraphEditToolBase.h" // kBPCategory
 #include "ClaireonPathResolver.h"
 #include "ClaireonBlueprintHelpers.h"
 #include "Tools/ClaireonPropertyResolver.h"
@@ -17,7 +18,7 @@ FString ClaireonTool_SetBlueprintCDOProperty::GetOperation() const { return TEXT
 
 FString ClaireonTool_SetBlueprintCDOProperty::GetCategory() const
 {
-	return TEXT("bp");
+	return kBPCategory;
 }
 
 FString ClaireonTool_SetBlueprintCDOProperty::GetDescription() const

@@ -152,7 +152,7 @@ FToolResult ClaireonWidgetBPTool_AddMVVMBinding::Execute(const TSharedPtr<FJsonO
 	NewBinding.bEnabled = bEnabled;
 	NewBinding.bCompile = true;
 
-	// Stage 004: Conversion function support
+	// Conversion function support
 	if (!ConversionFunctionStr.IsEmpty())
 	{
 		FString ConvError;

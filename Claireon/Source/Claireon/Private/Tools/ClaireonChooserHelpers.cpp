@@ -1110,6 +1110,64 @@ TSharedPtr<FJsonObject> SerializeInstancedStructToJson(const FInstancedStruct& S
 }
 
 // ============================================================================
+// Binding-invariant fixup
+// ============================================================================
+
+bool EnsureBindingInvariant(FInstancedStruct& ColumnStruct, bool& bOutFixed)
+{
+	bOutFixed = false;
+	if (!ColumnStruct.IsValid())
+	{
+		return false;
+	}
+
+	const UScriptStruct* ColStructType = ColumnStruct.GetScriptStruct();
+	if (!ColStructType)
+	{
+		return false;
+	}
+
+	// Mirror SetupColumnBinding's path: look up InputValue (FInstancedStruct member), find
+	// the FChooserPropertyBinding-typed Binding member on the param struct, repair flags.
+	const FStructProperty* InputValueProp = CastField<FStructProperty>(
+		ColStructType->FindPropertyByName(TEXT("InputValue")));
+	if (!InputValueProp || InputValueProp->Struct != TBaseStructure<FInstancedStruct>::Get())
+	{
+		return false;
+	}
+
+	FInstancedStruct* InputValuePtr = InputValueProp->ContainerPtrToValuePtr<FInstancedStruct>(
+		ColumnStruct.GetMutableMemory());
+	if (!InputValuePtr || !InputValuePtr->IsValid())
+	{
+		return false;
+	}
+
+	const UScriptStruct* ParamStruct = InputValuePtr->GetScriptStruct();
+	if (!ParamStruct)
+	{
+		return false;
+	}
+
+	const FProperty* BindingProp = ParamStruct->FindPropertyByName(TEXT("Binding"));
+	if (!BindingProp)
+	{
+		return false;
+	}
+
+	uint8* ParamMemory = InputValuePtr->GetMutableMemory();
+	FChooserPropertyBinding* Binding = reinterpret_cast<FChooserPropertyBinding*>(
+		ParamMemory + BindingProp->GetOffset_ForInternal());
+
+	if (Binding->PropertyBindingChain.Num() == 0 && !Binding->IsBoundToRoot)
+	{
+		Binding->IsBoundToRoot = true;
+		bOutFixed = true;
+	}
+	return true;
+}
+
+// ============================================================================
 // Column Cell Value Writing
 // ============================================================================
 

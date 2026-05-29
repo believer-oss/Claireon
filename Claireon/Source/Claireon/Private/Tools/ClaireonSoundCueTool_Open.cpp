@@ -54,7 +54,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_Open::Execute(const TSharedPtr<
 	ClaireonAudioSessionRegistry::EnsureDelegateRegistered();
 
 	const FString ResolvedPath = Asset->GetPathName();
-	// I1: lock string is the literal "audio_edit" (preserved across cohorts per D3=B).
+	// lock string is the literal "audio_edit" (preserved across cohorts per D3=B).
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(ResolvedPath, TEXT("audio_edit"));
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{

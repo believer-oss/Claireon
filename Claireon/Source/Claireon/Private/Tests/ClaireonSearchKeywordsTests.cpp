@@ -1,9 +1,9 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Tests for GetSearchKeywords coverage on top-30 tools (P3, Stage 009).
+// Tests for GetSearchKeywords coverage on the top-tier picklist tools.
 // Validates two acceptance criteria:
-//   1. Each of the 30 picklist tools returns >= 3 search keywords.
+//   1. Each picklist tool returns >= 3 search keywords.
 //   2. Representative synonyms appear in the documented target tool's
 //      keyword list, so the tool_search ranker has the vocabulary it
 //      needs to surface the target. (Direct ranker invocation is covered
@@ -102,7 +102,7 @@ namespace SearchKeywordsTestHelpers
 }
 
 // ---------------------------------------------------------------------------
-// 1: Per-tool keyword count for all 30 P3 picklist tools.
+// 1: Per-tool keyword count for the picklist tools.
 // ---------------------------------------------------------------------------
 UNTEST_UNIT(Claireon, SearchKeywords, TierA_SessionEntryPoints)
 {
@@ -153,7 +153,6 @@ UNTEST_UNIT(Claireon, SearchKeywords, TierC_ReadInspectDiscovery)
 // ---------------------------------------------------------------------------
 // 2: Synonym -> target-tool keyword presence.
 //
-// These mappings document the synonym/target intent from P3 acceptance #3.
 // Direct ranker validation lives in ClaireonToolCatalogMatcherTests; here we
 // guarantee that the source-of-truth keyword list contains the words the
 // matcher will index. The matcher applies the C++ abbreviation table
@@ -161,14 +160,14 @@ UNTEST_UNIT(Claireon, SearchKeywords, TierC_ReadInspectDiscovery)
 // presence of any one keyword from the synonym phrase is sufficient for
 // top-N rank.
 //
-// Substitutions vs. P3:
-//   - 'bt task' -> behaviortree_open (P3 cited behaviortree_edit
-//      which is a session-name constant, not a registered tool; nearest
-//      registered representative is _open).
+// Substitutions:
+//   - 'bt task' -> behaviortree_open (behaviortree_edit is a session-name
+//      constant, not a registered tool; nearest registered representative
+//      is _open).
 //   - 'VB chain' / 'upperbody' synonyms target skeleton/anim tools outside
-//      the 30-tool picklist; they are intentionally NOT asserted here so the
-//      test stays scoped to Stage 009 deliverables. They remain in scope for
-//      the broader Stage 013 description-audit lint.
+//      the picklist; they are intentionally NOT asserted here so the test
+//      stays scoped. They remain in scope for the broader description-audit
+//      lint.
 // ---------------------------------------------------------------------------
 UNTEST_UNIT(Claireon, SearchKeywords, AnimgraphSynonymMapsToAnimGraphInspect)
 {

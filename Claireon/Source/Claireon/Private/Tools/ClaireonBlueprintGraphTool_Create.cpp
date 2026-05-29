@@ -4,7 +4,6 @@
 
 #include "Tools/ClaireonBlueprintGraphTool_Create.h"
 #include "Tools/FToolSchemaBuilder.h"
-#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonBlueprintHelpers.h"
 #include "Dom/JsonObject.h"
 #include "Tools/ClaireonSpecApplicator_Blueprint.h"
@@ -161,85 +160,21 @@ FToolResult ClaireonBlueprintGraphTool_Create::Execute(const TSharedPtr<FJsonObj
 		ResolutionWarnings.Add(ParentClassResult.ResolutionNote);
 	}
 
-	// Extract package and asset name from path
-	FString PackageName = AssetPath;
-	FString AssetName;
-	if (AssetPath.Contains(TEXT(".")))
+	// Route package + Blueprint creation through the shared helper. The helper handles
+	// asset-path splitting, existing-file deletion, package creation, blueprint creation,
+	// externally-referenceable flag, asset-registry notification, and EventGraph capture.
+	ClaireonBlueprintHelpers::FCreateBlueprintResult BPCreateResult;
+	ClaireonBlueprintHelpers::CreateBlueprint(AssetPath, ParentClass, BPCreateResult);
+	if (!BPCreateResult.IsOk())
 	{
-		AssetPath.Split(TEXT("."), &PackageName, &AssetName);
+		return MakeErrorResult(BPCreateResult.Error);
 	}
-	else
+	for (const FString& W : BPCreateResult.Warnings)
 	{
-		// Asset name from last path component
-		int32 LastSlash;
-		if (PackageName.FindLastChar('/', LastSlash))
-		{
-			AssetName = PackageName.Mid(LastSlash + 1);
-		}
-		else
-		{
-			AssetName = TEXT("NewBlueprint");
-		}
+		ResolutionWarnings.Add(W);
 	}
-
-	// Check if package already exists on disk (e.g., from previous test run)
-	// If it does, we must delete it first to avoid "partially loaded" errors
-	FString PackageFileName = FPackageName::LongPackageNameToFilename(PackageName, FPackageName::GetAssetPackageExtension());
-	if (FPaths::FileExists(PackageFileName))
-	{
-		UE_LOG(LogClaireon, Warning, TEXT("[EditBlueprintGraph] Create: Deleting existing file %s"), *PackageFileName);
-		IFileManager::Get().Delete(*PackageFileName, false, true);
-	}
-
-	// Create package
-	UPackage* Package = CreatePackage(*PackageName);
-	if (!Package)
-	{
-		return MakeErrorResult(FString::Printf(TEXT("Failed to create package: %s"), *PackageName));
-	}
-
-	// Create Blueprint with proper flags matching editor workflow
-	UBlueprint* Blueprint = FKismetEditorUtilities::CreateBlueprint(
-		ParentClass,
-		Package,
-		FName(*AssetName),
-		BPTYPE_Normal,
-		UBlueprint::StaticClass(),
-		UBlueprintGeneratedClass::StaticClass(),
-		NAME_None);
-
-	if (!Blueprint)
-	{
-		return MakeErrorResult(FString::Printf(TEXT("Failed to create Blueprint at %s"), *AssetPath));
-	}
-
-	// Configure package to match editor workflow (see UBlueprintFactory and FAssetToolsImpl::CreateAsset)
-	Package->SetIsExternallyReferenceable(true); // Mark as externally referenceable asset
-	Package->MarkPackageDirty();
-
-	// Notify asset registry
-	FAssetRegistryModule::AssetCreated(Blueprint);
-
-	{
-		FString AssertError;
-		if (!ClaireonAssetUtils::AssertInnerNameMatchesPackage(Blueprint, AssertError))
-		{
-			// No FScopedTransaction wrapper in this path. Mark the
-			// partially-created Blueprint garbage so it does not linger
-			// past GC.
-			Blueprint->ClearFlags(RF_Public | RF_Standalone);
-			Blueprint->MarkAsGarbage();
-			return MakeErrorResult(AssertError);
-		}
-	}
-
-	// Get EventGraph (created by default)
-	UEdGraph* EventGraph = nullptr;
-	if (Blueprint->UbergraphPages.Num() > 0)
-	{
-		EventGraph = Blueprint->UbergraphPages[0];
-	}
-
+	UBlueprint* Blueprint = BPCreateResult.Blueprint;
+	UEdGraph* EventGraph = BPCreateResult.EventGraph;
 	if (!EventGraph)
 	{
 		return MakeErrorResult(TEXT("Failed to find EventGraph in newly created Blueprint"));

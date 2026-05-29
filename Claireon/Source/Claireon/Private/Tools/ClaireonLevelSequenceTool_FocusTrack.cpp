@@ -14,7 +14,12 @@ FString ClaireonLevelSequenceTool_FocusTrack::GetOperation() const { return TEXT
 
 FString ClaireonLevelSequenceTool_FocusTrack::GetDescription() const
 {
-    return TEXT("Focus a track (by index) on the currently-focused binding. Subsequent section/keyframe ops target this track. Session-mode tool: open via level_sequence_open first.");
+    // add_track does NOT auto-focus the new track; callers must explicitly focus_track
+    // before add_section / add_keyframe / set_track_property.
+    return TEXT("Focus a track (by index) on the currently-focused binding. Subsequent "
+                "section/keyframe/track-property ops target this track. add_track does NOT "
+                "auto-focus the new track -- always call focus_track immediately after "
+                "add_track. Session-mode tool: open via level_sequence_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_FocusTrack::GetInputSchema() const

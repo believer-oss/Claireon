@@ -7,16 +7,15 @@
 
 namespace
 {
-	// File-local discriminator on the anonymous namespace -- per
-	// feedback_anon_namespace_unity_collision.md, anon-NS helper names
-	// can collide under non-unity Linux clang strict if another TU
-	// happens to define the same name. The "PortDerivation_" prefix
-	// makes these names unique across the module.
+	// File-local discriminator on the anonymous namespace: anon-NS helper
+	// names can collide under non-unity Linux clang strict if another TU
+	// defines the same name. The "PortDerivation_" prefix makes these
+	// names unique across the module.
 
 	// Self-contained SHA-256 implementation. UE on Windows lacks a
 	// stock SHA-256 helper (FPlatformMisc::GetSHA256Signature asserts as
 	// unimplemented), and pulling OpenSSL into the public Claireon
-	// surface is out of scope for this stage. The hash is a pure content
+	// surface is out of scope here. The hash is a pure content
 	// fingerprint -- not a security boundary -- so a clean-room reference
 	// implementation is appropriate.
 

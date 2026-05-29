@@ -72,7 +72,9 @@ namespace ClaireonOutputGateSweepHelpers
 // Case 2a: empty root sweeps cleanly
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, OutputGateSweep, EmptyRootNoop)
+// File-IO test needs a generous timeout: SweepStaleSpills enumerates the
+// results root and may exceed the 0.5ms default budget on cold disk caches.
+UNTEST_UNIT_OPTS(Claireon, OutputGateSweep, EmptyRootNoop, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace ClaireonOutputGateSweepHelpers;
 	FScopedTestRoot Scope(TEXT("EmptyRootNoop"));

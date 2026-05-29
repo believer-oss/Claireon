@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Functional tests for asset_check_inner_name_invariant (#0000). The
+// Functional tests for asset_check_inner_name_invariant. The
 // tool is registry-driven and stateless, so the test covers (a) the
 // discoverable surface, (b) the empty-args happy path, (c) the
 // invalid-content-path clean result, and (d) the read-only invariant

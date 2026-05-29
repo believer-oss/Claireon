@@ -76,33 +76,14 @@ FToolResult ClaireonWidgetBPTool_MoveWidget::Execute(const TSharedPtr<FJsonObjec
 		return MakeErrorResult(FString::Printf(TEXT("New parent widget '%s' not found"), *NewParentName));
 	}
 
-	UPanelWidget* NewParentPanel = Cast<UPanelWidget>(NewParentWidget);
-	if (!NewParentPanel)
-	{
-		return MakeErrorResult(FString::Printf(TEXT("New parent widget '%s' is not a panel widget"), *NewParentName));
-	}
-
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Move Widget")));
-	Tree->SetFlags(RF_Transactional);
-	Tree->Modify();
 
-	// Remove from old parent if it has one
-	if (UPanelWidget* OldParent = Cast<UPanelWidget>(Widget->GetParent()))
+	FString MoveError;
+	if (!ClaireonWidgetHelpers::MoveWidget(WBP, Widget, NewParentWidget, InsertIndex, MoveError))
 	{
-		OldParent->RemoveChild(Widget);
+		return MakeErrorResult(MoveError);
 	}
 
-	// Add to new parent
-	if (InsertIndex >= 0)
-	{
-		NewParentPanel->InsertChildAt(InsertIndex, Widget);
-	}
-	else
-	{
-		NewParentPanel->AddChild(Widget);
-	}
-
-	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
 	Data->bModified = true;
 
 	UE_LOG(LogClaireon, Log, TEXT("[EditWidgetBP] Moved widget '%s' to parent '%s'"), *WidgetName, *NewParentName);

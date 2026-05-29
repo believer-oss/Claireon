@@ -17,7 +17,7 @@
 #include "Tracks/MovieSceneFloatTrack.h"
 
 // ---------------------------------------------------------------------------
-// F3 track-type table
+// track-type table
 // ---------------------------------------------------------------------------
 //
 // Hard-coded table mirroring FClaireonSequenceHelpers::ResolveTrackClass.

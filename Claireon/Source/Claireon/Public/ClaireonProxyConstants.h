@@ -30,10 +30,9 @@ namespace ClaireonProxy
 	// All constants here use `inline constexpr` (C++17) rather than
 	// `static constexpr` so they have external linkage and do NOT trip
 	// clang's -Wunused-const-variable / -Wunused-variable in any including
-	// translation unit that references only a subset of them. The Linux v2
-	// build lane (non-unity, -Werror) treats internal-linkage unused
-	// const variables as hard errors; unity Linux and MSVC silently accept
-	// them. See feedback_respect_v2_linux.md.
+	// translation unit that references only a subset of them. Non-unity
+	// Linux clang strict (-Werror) treats internal-linkage unused const
+	// variables as hard errors; unity Linux and MSVC silently accept them.
 	inline constexpr int32 PROXY_REG_PORT = 43017;
 
 	// Heartbeat cadence (editor -> proxy). See PROTOCOL.md "Shared constants".
@@ -43,14 +42,14 @@ namespace ClaireonProxy
 	// seconds with no heartbeat. Chosen to survive large-map opens.
 	inline constexpr int32 HEARTBEAT_STALENESS_SECONDS = 60;
 
-	// Stage 009 (D2): IDLE_AUTO_EXIT_HOURS removed. The singleton proxy runs
-	// until SIGINT/SIGTERM; D3 port-as-lock is the source of truth for
-	// liveness, so a long-lived idle proxy is harmless.
+	// IDLE_AUTO_EXIT_HOURS removed. The singleton proxy runs until
+	// SIGINT/SIGTERM; port-as-lock is the source of truth for liveness, so a
+	// long-lived idle proxy is harmless.
 
 	// Default timeout (seconds) for the proxy's outbound MCP forward to the
 	// editor. Overridden by UClaireonSettings::ProxyForwardTimeoutSeconds
-	// at runtime (stage-09). Long default so slow tools (asset cook, large
-	// map validations) don't trip it.
+	// at runtime. Long default so slow tools (asset cook, large map
+	// validations) don't trip it.
 	inline constexpr int32 FORWARD_DEFAULT_TIMEOUT_SECONDS = 600;
 
 	// Endpoint path constants. Declared here so the editor-side proxy client
@@ -64,6 +63,11 @@ namespace ClaireonProxy
 	// warning in the proxy log on every editor boot, polluting real
 	// validation failures. /health is the cheap, side-effect-free alternative.
 	inline constexpr const TCHAR* HealthEndpoint     = TEXT("/health");
+	// Editor POSTs this after FClaireonBridge::EnsureRegistered()
+	// to signal that the tool catalog is populated and the Python bridge is
+	// initialized. Until this POST is received the proxy returns a
+	// "warming up" error rather than "build and launch editor first".
+	inline constexpr const TCHAR* ReadyEndpoint      = TEXT("/editor/ready");
 	// Admin endpoint that asks the proxy to bind a worktree's SHA-derived
 	// MCP port. The editor calls this after EnsureProxyRunning so a proxy
 	// spawned by a different worktree still ends up holding our SHA port --

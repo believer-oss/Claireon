@@ -48,8 +48,7 @@
 namespace
 {
 	// File-local prefix on every helper to avoid collisions under unity
-	// batching (anon-namespace helpers can otherwise alias on Linux v2;
-	// see MEMORY: feedback_anon_namespace_unity_collision.md).
+	// batching (anon-namespace helpers can otherwise alias on Linux clang).
 
 	/** Stub tool used to seed the server's tools/list with a known name. */
 	class FDirectConnectSmoke_StubTool : public IClaireonTool
@@ -117,8 +116,7 @@ namespace
 	 * deadline elapses. Returns true with OutStatus / OutBody populated on
 	 * success; false otherwise. This MUST live outside any UNTEST_*
 	 * assertion lambda -- UNTEST macros expand to co_return and cannot be
-	 * used inside non-coroutine callables (MEMORY:
-	 * feedback_untest_macros_lambda_coroutine.md).
+	 * used inside non-coroutine callables.
 	 */
 	bool DirectConnectSmoke_PostJsonRpc(
 		uint32 Port,

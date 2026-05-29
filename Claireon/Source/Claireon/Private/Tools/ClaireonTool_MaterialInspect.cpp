@@ -33,11 +33,17 @@ TSharedPtr<FJsonObject> ClaireonTool_MaterialInspect::GetInputSchema() const
 
 	TSharedPtr<FJsonObject> Properties = MakeShared<FJsonObject>();
 
-	// asset_path - required
+	// asset_path - required (alias: `path`)
 	TSharedPtr<FJsonObject> AssetPathProp = MakeShared<FJsonObject>();
 	AssetPathProp->SetStringField(TEXT("type"), TEXT("string"));
-	AssetPathProp->SetStringField(TEXT("description"), TEXT("Unreal asset path to the UMaterial (e.g. /Game/Art/Materials/M_Foo)"));
+	AssetPathProp->SetStringField(TEXT("description"), TEXT("Unreal asset path to the UMaterial (e.g. /Game/Art/Materials/M_Foo). Alias: `path`."));
 	Properties->SetObjectField(TEXT("asset_path"), AssetPathProp);
+
+	// path - alias for asset_path
+	TSharedPtr<FJsonObject> PathAliasProp = MakeShared<FJsonObject>();
+	PathAliasProp->SetStringField(TEXT("type"), TEXT("string"));
+	PathAliasProp->SetStringField(TEXT("description"), TEXT("Alias for asset_path. Use either; asset_path wins if both present."));
+	Properties->SetObjectField(TEXT("path"), PathAliasProp);
 
 	// detail - optional
 	TSharedPtr<FJsonObject> DetailProp = MakeShared<FJsonObject>();
@@ -53,8 +59,10 @@ TSharedPtr<FJsonObject> ClaireonTool_MaterialInspect::GetInputSchema() const
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
+	// asset_path OR path is required; we validate at runtime since JSON Schema doesn't
+	// express "one of A/B required" cleanly. The runtime check in Execute() returns a clear
+	// error message if neither is provided.
 	TArray<TSharedPtr<FJsonValue>> Required;
-	Required.Add(MakeShared<FJsonValueString>(TEXT("asset_path")));
 	Schema->SetArrayField(TEXT("required"), Required);
 
 	return Schema;
@@ -67,10 +75,15 @@ FToolResult ClaireonTool_MaterialInspect::Execute(const TSharedPtr<FJsonObject>&
 		return MakeErrorResult(TEXT("Missing arguments"));
 	}
 
+	// Accept either `asset_path` or `path` as alias; most other claireon.* tools accept
+	// `path`, and prior versions of this tool diverged from that convention.
 	FString AssetPath;
 	if (!Arguments->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
-		return MakeErrorResult(TEXT("Missing required field: asset_path"));
+		if (!Arguments->TryGetStringField(TEXT("path"), AssetPath) || AssetPath.IsEmpty())
+		{
+			return MakeErrorResult(TEXT("Missing required field: asset_path (or path)"));
+		}
 	}
 
 	FString DetailLevel = TEXT("summary");

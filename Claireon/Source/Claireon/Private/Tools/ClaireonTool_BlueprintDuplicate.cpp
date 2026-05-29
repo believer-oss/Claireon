@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_BlueprintDuplicate.h"
+#include "Tools/ClaireonBlueprintGraphEditToolBase.h" // kBPCategory
 
 #include "ClaireonBlueprintHelpers.h"
 #include "ClaireonLog.h"
@@ -32,7 +33,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonTool_BlueprintDuplicate::GetCategory() const { return TEXT("bp"); }
+FString ClaireonTool_BlueprintDuplicate::GetCategory() const { return kBPCategory; }
 FString ClaireonTool_BlueprintDuplicate::GetOperation() const { return TEXT("duplicate"); }
 
 FString ClaireonTool_BlueprintDuplicate::GetDescription() const
@@ -93,7 +94,7 @@ TSharedPtr<FJsonObject> ClaireonTool_BlueprintDuplicate::GetInputSchema() const
 }
 
 // -----------------------------------------------------------------------------
-// D5 reference rewrite helper
+// reference rewrite helper
 // -----------------------------------------------------------------------------
 
 namespace ClaireonTool_BlueprintDuplicateInternal

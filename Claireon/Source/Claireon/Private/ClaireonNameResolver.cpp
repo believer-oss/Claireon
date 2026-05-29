@@ -334,23 +334,187 @@ namespace ClaireonNameResolver
 			return DirectionHint == EGPD_MAX || Pin->Direction == DirectionHint;
 		};
 
+		// Handle the Claireon-serialized disambiguated form
+		// (`name_FriendlySuffix` or `name[N]`). Latent nodes like AwaitDelay
+		// can carry multiple pins with the same PinName; the serializer emits
+		// disambiguated names so callers can target each one. Engine-side
+		// PinName is still the raw form, so we resolve to the matching pin
+		// by walking duplicates and matching the suffix.
+		auto SanitizeFriendlySuffix = [](const FString& Friendly) -> FString
+		{
+			FString Out;
+			Out.Reserve(Friendly.Len());
+			for (TCHAR Ch : Friendly)
+			{
+				if (FChar::IsAlnum(Ch) || Ch == TEXT('_'))
+				{
+					Out.AppendChar(Ch);
+				}
+			}
+			return Out;
+		};
+		auto TryResolveDisambiguatedForm = [&](const FString& Spec) -> UEdGraphPin*
+		{
+			// Indexed form: "name[N]"
+			int32 OpenBracket = INDEX_NONE;
+			if (Spec.FindChar(TEXT('['), OpenBracket) && Spec.EndsWith(TEXT("]")))
+			{
+				const FString BaseName = Spec.Left(OpenBracket);
+				const FString IndexStr = Spec.Mid(OpenBracket + 1, Spec.Len() - OpenBracket - 2);
+				if (IndexStr.IsNumeric())
+				{
+					const int32 TargetIndex = FCString::Atoi(*IndexStr);
+					int32 SeenIndex = 0;
+					for (UEdGraphPin* Pin : Node->Pins)
+					{
+						if (!Pin || !PassesDirection(Pin))
+						{
+							continue;
+						}
+						if (Pin->GetName().Equals(BaseName, ESearchCase::CaseSensitive))
+						{
+							if (SeenIndex == TargetIndex)
+							{
+								return Pin;
+							}
+							++SeenIndex;
+						}
+					}
+				}
+			}
+			// Suffix form: "name_FriendlySuffix"
+			int32 UnderscorePos = INDEX_NONE;
+			if (Spec.FindLastChar(TEXT('_'), UnderscorePos))
+			{
+				const FString BaseName = Spec.Left(UnderscorePos);
+				const FString Suffix = Spec.Mid(UnderscorePos + 1);
+				if (!BaseName.IsEmpty() && !Suffix.IsEmpty())
+				{
+					for (UEdGraphPin* Pin : Node->Pins)
+					{
+						if (!Pin || !PassesDirection(Pin))
+						{
+							continue;
+						}
+						if (!Pin->GetName().Equals(BaseName, ESearchCase::CaseSensitive))
+						{
+							continue;
+						}
+						const FString FriendlySuffix = SanitizeFriendlySuffix(Pin->PinFriendlyName.ToString());
+						if (FriendlySuffix.Equals(Suffix, ESearchCase::IgnoreCase))
+						{
+							return Pin;
+						}
+					}
+				}
+			}
+			return nullptr;
+		};
+
 		// Step 1: Exact match with direction, then without
 		if (DirectionHint != EGPD_MAX)
 		{
 			if (UEdGraphPin* Found = Node->FindPin(*Input, DirectionHint))
 			{
+				// Count duplicates -- if more than one, the bare name is
+				// ambiguous and we must require the disambiguated form.
+				int32 DupCount = 0;
+				for (UEdGraphPin* Pin : Node->Pins)
+				{
+					if (Pin && Pin->Direction == DirectionHint && Pin->PinName == Found->PinName)
+					{
+						++DupCount;
+					}
+				}
+				if (DupCount <= 1)
+				{
+					OutResult.bSuccess = true;
+					OutResult.ResolvedName = Found->GetName();
+					return Found;
+				}
+			}
+			else if (UEdGraphPin* Disambiguated = TryResolveDisambiguatedForm(Input))
+			{
 				OutResult.bSuccess = true;
-				OutResult.ResolvedName = Found->GetName();
-				return Found;
+				OutResult.ResolvedName = Disambiguated->GetName();
+				OutResult.ResolutionNote = FString::Printf(
+					TEXT("Resolved '%s' to duplicate pin via disambiguated form"), *Input);
+				return Disambiguated;
 			}
 		}
 		if (UEdGraphPin* Found = Node->FindPin(*Input))
 		{
 			if (PassesDirection(Found))
 			{
-				OutResult.bSuccess = true;
-				OutResult.ResolvedName = Found->GetName();
-				return Found;
+				int32 DupCount = 0;
+				for (UEdGraphPin* Pin : Node->Pins)
+				{
+					if (Pin && Pin->PinName == Found->PinName && PassesDirection(Pin))
+					{
+						++DupCount;
+					}
+				}
+				if (DupCount <= 1)
+				{
+					OutResult.bSuccess = true;
+					OutResult.ResolvedName = Found->GetName();
+					return Found;
+				}
+			}
+		}
+		// If bare name was ambiguous (DupCount > 1), fall through to try the
+		// disambiguated form; if THAT also fails we emit an ambiguity error
+		// listing the available disambiguated names.
+		if (UEdGraphPin* Disambiguated = TryResolveDisambiguatedForm(Input))
+		{
+			OutResult.bSuccess = true;
+			OutResult.ResolvedName = Disambiguated->GetName();
+			OutResult.ResolutionNote = FString::Printf(
+				TEXT("Resolved '%s' to duplicate pin via disambiguated form"), *Input);
+			return Disambiguated;
+		}
+		// Detect bare-name ambiguity and report it as a structured error.
+		{
+			TArray<FString> AmbiguousOptions;
+			TMap<FName, int32> PinNameCounts;
+			for (UEdGraphPin* Pin : Node->Pins)
+			{
+				if (Pin && PassesDirection(Pin))
+				{
+					++PinNameCounts.FindOrAdd(Pin->PinName);
+				}
+			}
+			for (UEdGraphPin* Pin : Node->Pins)
+			{
+				if (!Pin || !PassesDirection(Pin))
+				{
+					continue;
+				}
+				if (!Pin->GetName().Equals(Input, ESearchCase::IgnoreCase))
+				{
+					continue;
+				}
+				if (PinNameCounts.FindRef(Pin->PinName) <= 1)
+				{
+					continue;
+				}
+				const FString FriendlySuffix = SanitizeFriendlySuffix(Pin->PinFriendlyName.ToString());
+				if (!FriendlySuffix.IsEmpty() && !FriendlySuffix.Equals(Pin->GetName(), ESearchCase::IgnoreCase))
+				{
+					AmbiguousOptions.Add(FString::Printf(TEXT("%s_%s"), *Pin->GetName(), *FriendlySuffix));
+				}
+				else
+				{
+					AmbiguousOptions.Add(FString::Printf(TEXT("%s[%d]"), *Pin->GetName(), AmbiguousOptions.Num()));
+				}
+			}
+			if (AmbiguousOptions.Num() > 1)
+			{
+				OutResult.Error = FString::Printf(
+					TEXT("Pin name '%s' is ambiguous on this node (%d pins share the name). Specify the disambiguated form: %s"),
+					*Input, AmbiguousOptions.Num(),
+					*FString::Join(AmbiguousOptions, TEXT(", ")));
+				return nullptr;
 			}
 		}
 

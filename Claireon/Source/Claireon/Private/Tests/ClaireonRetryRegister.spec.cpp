@@ -24,8 +24,7 @@
 namespace
 {
 	// File-local prefix on every helper to avoid colliding with other anon-NS
-	// helpers under unity batching (MEMORY:
-	// feedback_anon_namespace_unity_collision.md).
+	// helpers under unity batching.
 
 	/** Synthesise an FHeartbeatResult Ok=true (heartbeat 200 OK). */
 	FHeartbeatResult RetryRegisterSpec_HeartbeatOk()

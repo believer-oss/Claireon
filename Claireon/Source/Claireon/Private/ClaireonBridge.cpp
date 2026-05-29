@@ -454,9 +454,12 @@ PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 	// for that tool.
 	if (ToolName != TEXT("python_execute"))
 	{
+		// Forward the invocation arguments so the spill manifest can echo
+		// originating_tool / originating_args; also honours the force_inline opt-out.
 		Result = FClaireonOutputGate::RouteResult(
 			MoveTemp(Result),
 			ToolName,
+			Arguments,
 			ConversationId,
 			EClaireonSpillStreamSet::GenericData);
 	}

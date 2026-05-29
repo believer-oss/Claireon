@@ -10,6 +10,16 @@
 struct FMCPSessionClosedInfo;
 
 /**
+ * Single source of truth for the "bp" category string returned by all
+ * Blueprint-related Claireon tools (graph edit family, translate family, CDO
+ * helpers, etc.). Using a shared constant keeps a future category rename to
+ * a one-line edit. Declared inline constexpr (not static constexpr at
+ * namespace scope) to avoid -Wunused-const-variable on Linux clang strict
+ * when a TU references only a subset of consts.
+ */
+inline constexpr TCHAR kBPCategory[] = TEXT("bp");
+
+/**
  * Shared base class for decomposed Blueprint graph editor MCP tools.
  *
  * Each operation is its own top-level MCP tool (ClaireonBlueprintGraphTool_Open,
@@ -24,7 +34,7 @@ class CLAIREON_API ClaireonBlueprintGraphEditToolBase : public IClaireonTool
 {
 public:
 	virtual bool RequiresNoPIE() const override { return true; }
-	virtual FString GetCategory() const override { return TEXT("bp"); }
+	virtual FString GetCategory() const override { return kBPCategory; }
 
 protected:
 	// ========================================================================
@@ -116,6 +126,21 @@ public:
 	{ \
 	public: \
 		FString GetName() const override; \
+		FString GetDescription() const override; \
+		TSharedPtr<FJsonObject> GetInputSchema() const override; \
+		FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override; \
+	}
+
+// Variant for read-only inspection tools that are safe during PIE. The default base
+// class blocks all bp_graph ops while a PIE session is live; this variant relaxes
+// that for tools that never mutate Blueprint state. apply_spec uses this too and
+// gates non-dry-run inside Execute (see ClaireonBlueprintGraphTool_ApplySpec.cpp).
+#define DECLARE_BPGRAPH_TOOL_PIE_OK(ClassName) \
+	class CLAIREON_API ClassName : public ClaireonBlueprintGraphEditToolBase \
+	{ \
+	public: \
+		bool RequiresNoPIE() const override { return false; } \
+		FString GetOperation() const override; \
 		FString GetDescription() const override; \
 		TSharedPtr<FJsonObject> GetInputSchema() const override; \
 		FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override; \

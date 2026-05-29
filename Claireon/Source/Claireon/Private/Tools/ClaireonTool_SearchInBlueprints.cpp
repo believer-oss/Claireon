@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_SearchInBlueprints.h"
+#include "Tools/ClaireonBlueprintGraphEditToolBase.h" // kBPCategory
 #include "ClaireonLog.h"
 #include "ClaireonSettings.h"
 #include "FindInBlueprintManager.h"
 #include "HAL/PlatformProcess.h"
 
-FString ClaireonTool_SearchInBlueprints::GetCategory() const { return TEXT("bp"); }
+FString ClaireonTool_SearchInBlueprints::GetCategory() const { return kBPCategory; }
 FString ClaireonTool_SearchInBlueprints::GetOperation() const { return TEXT("search"); }
 
 TArray<FString> ClaireonTool_SearchInBlueprints::GetSearchKeywords() const

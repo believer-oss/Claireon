@@ -756,13 +756,15 @@ bool FClaireonAnthropicClient::ExecuteToolUses(
 				bFoundTool = true;
 				ToolResult = (*FoundTool)->Execute(ToolInput);
 
-				// Route generic-tool results through the disk-spill gate (per D6).
+				// Route generic-tool results through the disk-spill gate.
 				// python_execute routes its own stdout/uelog streams internally.
 				if (!ToolResult.bIsError && ToolName != TEXT("python_execute"))
 				{
+					// Forward args so the spill manifest carries originating context.
 					ToolResult = FClaireonOutputGate::RouteResult(
 						MoveTemp(ToolResult),
 						ToolName,
+						ToolInput,
 						CurrentConversationId,
 						EClaireonSpillStreamSet::GenericData);
 				}

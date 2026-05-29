@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_BlueprintTranslateScaffold.h"
+#include "Tools/ClaireonBlueprintGraphEditToolBase.h" // kBPCategory
 
 #include "ClaireonBPNodeMapper.h"
 #include "ClaireonBPTranslateSession.h"
@@ -486,7 +487,7 @@ namespace ScaffoldInternal
 		}
 		else if (MapResult.bIsLatentSplit)
 		{
-			// V8: Latent split -- emit timer setup + return. Do NOT follow exec chain.
+			// Latent split -- emit timer setup + return. Do NOT follow exec chain.
 			// Continuation is emitted in the post-emission callback pass.
 			Result.SourceCode += MapResult.Code;
 		}
@@ -927,7 +928,7 @@ namespace ScaffoldInternal
 	}
 }
 
-FString ClaireonTool_BlueprintTranslateScaffold::GetCategory() const { return TEXT("bp"); }
+FString ClaireonTool_BlueprintTranslateScaffold::GetCategory() const { return kBPCategory; }
 FString ClaireonTool_BlueprintTranslateScaffold::GetOperation() const { return TEXT("translate_scaffold"); }
 
 FString ClaireonTool_BlueprintTranslateScaffold::GetDescription() const
@@ -1019,8 +1020,44 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 	}
 
 	FString ApiMacro = TargetModule.ToUpper() + TEXT("_API");
-	FString AbsTargetDir = FPaths::Combine(FPaths::ProjectDir(), TargetDirectory);
-	FPaths::NormalizeDirectoryName(AbsTargetDir);
+
+	// target_directory normalization. Accept three input shapes:
+	//   1. Relative to project root: "Source/MyModule/Translated"
+	//   2. Absolute path INSIDE the project: "W:/sable/Source/MyModule/Translated"
+	//   3. Absolute path OUTSIDE the project: error.
+	// Previously case 2 produced "W:/sable/W:/sable/..." double-prefix paths.
+	FString AbsTargetDir;
+	const FString ProjectDirAbs = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+	{
+		FString NormalizedInput = TargetDirectory;
+		FPaths::NormalizeDirectoryName(NormalizedInput);
+		FString InputAbs = NormalizedInput;
+		// Detect absolute path: drive letter (Windows) or starts with /.
+		const bool bAbsolute = (NormalizedInput.Len() >= 2 && NormalizedInput[1] == TEXT(':'))
+			|| NormalizedInput.StartsWith(TEXT("/"));
+		if (bAbsolute)
+		{
+			InputAbs = FPaths::ConvertRelativePathToFull(NormalizedInput);
+			FString ProjectDirNoTrailing = ProjectDirAbs;
+			if (ProjectDirNoTrailing.EndsWith(TEXT("/")))
+			{
+				ProjectDirNoTrailing = ProjectDirNoTrailing.LeftChop(1);
+			}
+			if (!InputAbs.StartsWith(ProjectDirNoTrailing))
+			{
+				return MakeErrorResult(FString::Printf(
+					TEXT("target_directory '%s' is an absolute path outside the project tree ('%s'). "
+						 "Use a path relative to the project root, or under the project's tree."),
+					*TargetDirectory, *ProjectDirAbs));
+			}
+			AbsTargetDir = InputAbs;
+		}
+		else
+		{
+			AbsTargetDir = FPaths::Combine(ProjectDirAbs, NormalizedInput);
+		}
+		FPaths::NormalizeDirectoryName(AbsTargetDir);
+	}
 
 	// Step 1: Pre-validation -- load and compile all blueprints
 	TArray<UBlueprint*> Blueprints;
@@ -2174,7 +2211,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 					}
 				}
 
-				// V8: Latent K2Node_CallFunction callbacks
+				// Latent K2Node_CallFunction callbacks
 				if (const UK2Node_CallFunction* CallNode = Cast<UK2Node_CallFunction>(Node))
 				{
 					if (const UFunction* TargetFunc = CallNode->GetTargetFunction())

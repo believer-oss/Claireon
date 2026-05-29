@@ -1106,9 +1106,10 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowStructuredIncludeSchema, UNTEST_TIME
 	co_return;
 }
 
-// Recursion-cap test: per Stage 005, this is best-effort. We do not ship a self-referential
-// fixture in this PR, so we document the cap behavior here (MaxDepth=32, sentinel shape) without
-// runtime coverage. The cap is exercised manually via the tool description.
+// Recursion-cap test: best-effort. We do not ship a self-referential
+// fixture, so we document the cap behavior here (MaxDepth=32, sentinel
+// shape) without runtime coverage. The cap is exercised manually via the
+// tool description.
 
 // Friendly-name collision test: same situation -- behavior is documented but no convenient
 // fixture exists in the test project, so it is not exercised at runtime.

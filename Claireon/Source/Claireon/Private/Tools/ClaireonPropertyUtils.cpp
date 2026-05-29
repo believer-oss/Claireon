@@ -410,6 +410,50 @@ TSharedPtr<FJsonValue> PropertyToJsonValue(FProperty* Prop, const void* ValuePtr
 		return MakeShared<FJsonValueArray>(JsonArray);
 	}
 
+	// TMap support. Emit as a JSON array of {key, value} pairs to preserve key types
+	// that aren't valid JSON object keys (FName/FStruct/GameplayTag keys etc.). Callers that
+	// know keys are strings can post-process trivially. FScriptMapHelper walks valid pairs
+	// only (skipping deleted slots).
+	if (FMapProperty* MapProp = CastField<FMapProperty>(Prop))
+	{
+		TArray<TSharedPtr<FJsonValue>> Entries;
+		FScriptMapHelper MapHelper(MapProp, ValuePtr);
+		const int32 MaxIndex = MapHelper.GetMaxIndex();
+		for (int32 i = 0; i < MaxIndex; ++i)
+		{
+			if (!MapHelper.IsValidIndex(i))
+			{
+				continue;
+			}
+			const uint8* KeyPtr   = MapHelper.GetKeyPtr(i);
+			const uint8* ValuePtrM = MapHelper.GetValuePtr(i);
+
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetField(TEXT("key"),   PropertyToJsonValue(MapProp->KeyProp,   KeyPtr,    OwnerObject, Depth));
+			Entry->SetField(TEXT("value"), PropertyToJsonValue(MapProp->ValueProp, ValuePtrM, OwnerObject, Depth));
+			Entries.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		return MakeShared<FJsonValueArray>(Entries);
+	}
+
+	// TSet support, symmetric with TMap. Same valid-slot filter via FScriptSetHelper.
+	if (FSetProperty* SetProp = CastField<FSetProperty>(Prop))
+	{
+		TArray<TSharedPtr<FJsonValue>> Elems;
+		FScriptSetHelper SetHelper(SetProp, ValuePtr);
+		const int32 MaxIndex = SetHelper.GetMaxIndex();
+		for (int32 i = 0; i < MaxIndex; ++i)
+		{
+			if (!SetHelper.IsValidIndex(i))
+			{
+				continue;
+			}
+			const void* ElemPtr = SetHelper.GetElementPtr(i);
+			Elems.Add(PropertyToJsonValue(SetProp->ElementProp, ElemPtr, OwnerObject, Depth));
+		}
+		return MakeShared<FJsonValueArray>(Elems);
+	}
+
 	if (FSoftObjectProperty* SoftObjProp = CastField<FSoftObjectProperty>(Prop))
 	{
 		FString Value;

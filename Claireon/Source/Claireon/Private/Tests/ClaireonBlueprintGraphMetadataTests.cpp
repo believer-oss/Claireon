@@ -1,7 +1,7 @@
 ﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Tests for bp_* metadata overrides (P1, Stage 007). Asserts
+// Tests for bp_* metadata overrides. Asserts
 // that each of the 10 hot-path tools returns rich GetFullDescription /
 // GetExampleUsage, that the 4 spec'd tools return GetParameterTooltips,
 // and that the workflow rules from the per-tool authoring guidance
@@ -91,14 +91,17 @@ UNTEST_UNIT(Claireon, BlueprintGraphMetadata, AddNodeFullDescriptionMentionsAuto
 }
 
 // ---------------------------------------------------------------------------
-// 4: format-tool gotcha surfaces -- the in-session formatter mentions the
-// standalone twin blueprint_format_graph.
+// 4: format-tool description mentions the asset_path auto-open path. After
+// the namespace collapse, bp_format accepts either session_id (in-session)
+// or asset_path (auto-opens a transient session, formats, closes); the
+// description must surface that ergonomic.
 // ---------------------------------------------------------------------------
-UNTEST_UNIT(Claireon, BlueprintGraphMetadata, FormatFullDescriptionMentionsStandaloneTwin)
+UNTEST_UNIT(Claireon, BlueprintGraphMetadata, FormatFullDescriptionMentionsAutoOpenPath)
 {
 	ClaireonBlueprintGraphTool_Format Tool;
 	const FString Full = Tool.GetFullDescription();
-	UNTEST_EXPECT_TRUE(Full.Contains(TEXT("blueprint_format_graph")));
+	UNTEST_EXPECT_TRUE(Full.Contains(TEXT("asset_path")));
+	UNTEST_EXPECT_TRUE(Full.Contains(TEXT("auto-opens")));
 	co_return;
 }
 
@@ -153,9 +156,8 @@ UNTEST_UNIT(Claireon, BlueprintGraphMetadata, AddVariableParameterTooltipsCoverR
 }
 
 // ===========================================================================
-// Stage 003 / Part C: bp_add_node GetPatterns() is non-empty, ASCII-clean
-// (no em-dash), and the migrated content no longer lives in
-// GetFullDescription().
+// bp_add_node GetPatterns() is non-empty, ASCII-clean (no em-dash), and
+// the migrated content no longer lives in GetFullDescription().
 // ===========================================================================
 
 UNTEST_UNIT(Claireon, BlueprintGraphMetadata, AddNodePatternsNonEmptyAndAscii)

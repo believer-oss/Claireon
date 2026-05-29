@@ -15,9 +15,9 @@ namespace Claireon
 	 * Tests/ClaireonPortDerivation.spec.cpp) is the canary against the
 	 * editor and Python helpers drifting apart.
 	 *
-	 * Stage 010: the editor uses this port directly in DirectConnect mode
-	 * (the proxy would otherwise own it). On EADDRINUSE the editor probes
-	 * 43017 to decide whether to auto-promote into ProxyAttached mode.
+	 * The editor uses this port directly in DirectConnect mode (the proxy
+	 * would otherwise own it). On EADDRINUSE the editor probes 43017 to
+	 * decide whether to auto-promote into ProxyAttached mode.
 	 */
 	uint16 DeriveDefaultMcpPort(const FString& WorktreeRoot);
 }

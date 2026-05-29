@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -15,6 +15,7 @@
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraphSchema_K2.h"
+#include "K2Node.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_CallArrayFunction.h"
 #include "K2Node_CallDataTableFunction.h"
@@ -116,10 +117,10 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ConnectPins::GetInputSchema()
     Builder.AddString(TEXT("asset_path"), TEXT("Blueprint asset path (alternative to session_id)."), false);
     Builder.AddString(TEXT("source_node_title"), TEXT("Title of the source node."));
     Builder.AddString(TEXT("source_node_guid"), TEXT("GUID of the source node (alternative to source_node_title)."));
-    Builder.AddString(TEXT("source_pin"), TEXT("Source pin name."), true);
+    Builder.AddString(TEXT("source_pin_name"), TEXT("Source pin name."), true);
     Builder.AddString(TEXT("target_node_title"), TEXT("Title of the target node."));
     Builder.AddString(TEXT("target_node_guid"), TEXT("GUID of the target node (alternative to target_node_title)."));
-    Builder.AddString(TEXT("target_pin"), TEXT("Target pin name."), true);
+    Builder.AddString(TEXT("target_pin_name"), TEXT("Target pin name."), true);
     Builder.AddString(TEXT("response_mode"), TEXT("Response verbosity: 'full' | 'changed' | 'status' (default 'changed')."));
     return Builder.Build();
 }
@@ -310,6 +311,93 @@ FToolResult ClaireonBlueprintGraphTool_ConnectPins::ConnectPins_Impl(
 		return MakeErrorResult(TEXT("TryCreateConnection failed (schema rejected the link)"));
 	}
 
+	// Explicit wildcard resolution sweep. TryCreateConnection's K2 schema path
+	// resolves wildcards on UK2Node_CallArrayFunction / UK2Node_Select / UK2Node_MakeArray,
+	// but generic wildcard pins on tunnels/knots/macro instances can survive with category
+	// "wildcard" after the link is made. Run a fixed-point loop: for each wildcard pin still
+	// holding category=wildcard, if its linked neighbors have a resolved category, propagate
+	// the neighbor's type onto the pin. NotifyPinConnectionListChanged on both nodes lets the
+	// owning K2 node re-coerce sibling pins. 16-iter cap guards against pathological cycles
+	// in macro graphs.
+	{
+		const FName WildcardCat = UEdGraphSchema_K2::PC_Wildcard;
+		auto IsWildcard = [&](const UEdGraphPin* Pin) -> bool
+		{
+			return Pin && Pin->PinType.PinCategory == WildcardCat;
+		};
+
+		for (int32 Iter = 0; Iter < 16; ++Iter)
+		{
+			bool bChangedAny = false;
+
+			TArray<UEdGraphNode*> NodesToScan = { SourceNode, TargetNode };
+			// Expand to include any node touched by our endpoints' current links.
+			for (UEdGraphPin* Pin : SourceNode->Pins)
+			{
+				if (!Pin) { continue; }
+				for (UEdGraphPin* Linked : Pin->LinkedTo)
+				{
+					if (Linked) { NodesToScan.AddUnique(Linked->GetOwningNodeUnchecked()); }
+				}
+			}
+			for (UEdGraphPin* Pin : TargetNode->Pins)
+			{
+				if (!Pin) { continue; }
+				for (UEdGraphPin* Linked : Pin->LinkedTo)
+				{
+					if (Linked) { NodesToScan.AddUnique(Linked->GetOwningNodeUnchecked()); }
+				}
+			}
+
+			for (UEdGraphNode* N : NodesToScan)
+			{
+				if (!N) { continue; }
+				for (UEdGraphPin* WildPin : N->Pins)
+				{
+					if (!IsWildcard(WildPin) || WildPin->LinkedTo.Num() == 0) { continue; }
+					// Find a linked neighbor whose category is resolved.
+					const UEdGraphPin* ResolvedNeighbor = nullptr;
+					for (UEdGraphPin* Linked : WildPin->LinkedTo)
+					{
+						if (Linked && Linked->PinType.PinCategory != WildcardCat)
+						{
+							ResolvedNeighbor = Linked;
+							break;
+						}
+					}
+					if (!ResolvedNeighbor) { continue; }
+
+					// Copy the neighbor's pin type (preserves container kind: Array / Set / Map
+					// / Single). This is the same propagation pattern UK2Node_CallArrayFunction
+					// uses internally.
+					WildPin->PinType = ResolvedNeighbor->PinType;
+					if (UEdGraphNode* Owner = WildPin->GetOwningNodeUnchecked())
+					{
+						// NotifyPinConnectionListChanged is K2-specific; UEdGraphNode base class
+						// doesn't expose it. Cast first; if not a K2Node, fall back to graph-level
+						// notification which UK2Node's override also routes through.
+						// Local renamed from Graph -> OwnerGraph to avoid shadowing the outer
+						// `Graph` declared earlier in this function (C4456 promoted to error).
+						if (UK2Node* K2Owner = Cast<UK2Node>(Owner))
+						{
+							K2Owner->NotifyPinConnectionListChanged(WildPin);
+						}
+						else if (UEdGraph* OwnerGraph = Owner->GetGraph())
+						{
+							OwnerGraph->NotifyGraphChanged();
+						}
+					}
+					bChangedAny = true;
+				}
+			}
+
+			if (!bChangedAny)
+			{
+				break;
+			}
+		}
+	}
+
 	// Capture node titles AFTER TryCreateConnection has run (wildcard
 	// propagation can rebuild pin arrays, but the node objects survive).
 	const FString SourceTitle = SourceNode->GetNodeTitle(ENodeTitleType::ListView).ToString();
@@ -358,7 +446,7 @@ FToolResult ClaireonBlueprintGraphTool_ConnectPins::ConnectPins_Impl(
 }
 
 // ----------------------------------------------------------------------------
-// P1: hot-path metadata enrichment
+// hot-path metadata enrichment
 // ----------------------------------------------------------------------------
 
 FString ClaireonBlueprintGraphTool_ConnectPins::GetFullDescription() const

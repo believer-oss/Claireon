@@ -630,7 +630,7 @@ FClaireonBPMacroResult FClaireonBPMacroHandler::HandleSwitchHasAuthority(const U
 	return Result;
 }
 
-// V3 scope-tree: HandleMacroEx returns FMapNodeResult with branch metadata
+// scope-tree: HandleMacroEx returns FMapNodeResult with branch metadata
 
 FMapNodeResult FClaireonBPMacroHandler::HandleMacroEx(const UEdGraphNode* Node, int32 IndentLevel, const UEdGraphPin* ArrivalPin) const
 {

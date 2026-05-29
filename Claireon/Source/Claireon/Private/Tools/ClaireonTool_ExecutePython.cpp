@@ -51,7 +51,7 @@ TSharedPtr<FJsonObject> ClaireonTool_ExecutePython::BuildHintFromLogs(const FStr
 }
 
 // ---------------------------------------------------------------------------
-// Hint-emission helpers (Stage 002 / Part A of #0000).
+// Hint-emission helpers.
 //
 // Parses the Python traceback emitted by the user-script template at :332-343
 // for four signature-class error patterns and constructs an
@@ -287,6 +287,24 @@ namespace Cl622PyHintInternal
 					return Hint;
 				}
 			}
+
+			// SoftObjectPath -> Object nativize hint. The Python error text is
+			// "Cannot nativize SoftObjectPath as Object" (originates from the unreal
+			// Python bridge when set_editor_property receives a soft path for a UPROPERTY
+			// of UObject* type). The fix is to load the asset first via SoftObjectPath.try_load()
+			// (or LoadAsset). Emit a hint pointing the caller at the correct sequence.
+			if (Line.Contains(TEXT("Cannot nativize SoftObjectPath as Object"), ESearchCase::CaseSensitive)
+				|| Line.Contains(TEXT("Cannot nativize 'SoftObjectPath' as 'Object'"), ESearchCase::CaseSensitive))
+			{
+				TSharedPtr<FJsonObject> Hint = MakeShared<FJsonObject>();
+				Hint->SetStringField(TEXT("tool"), TEXT("python_execute"));
+				Hint->SetStringField(TEXT("reason"),
+					TEXT("set_editor_property on an Object UPROPERTY received a SoftObjectPath; "
+						 "load the asset first: `obj = unreal.SoftObjectPath('/Game/Path/Asset').try_load()` "
+						 "or `obj = unreal.EditorAssetLibrary.load_asset('/Game/Path/Asset')` and pass `obj` "
+						 "as the value."));
+				return Hint;
+			}
 		}
 
 		return nullptr;
@@ -388,8 +406,8 @@ namespace ClaireonToolCatalogBindings
 		TArray<FClaireonToolCatalogMatch> Matches = FClaireonToolCatalogMatcher::FindNearest(Query, K);
 
 		// Serialise to JSON array of { name, category, score, tokens_matched }.
-		// `tokens_matched` is the count of distinct query tokens that produced
-		// any exact/prefix/fuzzy hit; consumed by ClaireonTool_SearchTools::Execute
+		// `tokens_matched` is the count of distinct query tokens that
+		// produced any exact/prefix/fuzzy hit; consumed by ClaireonTool_SearchTools::Execute
 		// to surface `query_tokens_matched` per result and to detect pathological
 		// fuzzy responses that warrant a substring-fallback merge.
 		TArray<TSharedPtr<FJsonValue>> OutArr;
@@ -472,6 +490,34 @@ FString ClaireonTool_ExecutePython::GetDescription() const
 				"Run `dir(claireon)` to list available tools or `help(claireon.<tool_name>)` for usage details. "
 				"Bypass-mode tool: the bridge will refuse this call if any other Claireon session "
 				"(per-asset or editor-wide) is currently held. Call session_release first if needed.");
+}
+
+FString ClaireonTool_ExecutePython::GetFullDescription() const
+{
+	return GetDescription() + TEXT("\n\n")
+		+ TEXT("EDITOR-CRASH GUARD-RAIL (E15 / O5 / O6):\n")
+		+ TEXT(" - unreal.get_editor_property('Schema') on a UStateTree SEH-crashes the editor (0x00004000). Use claireon.statetree_get_schema(asset_path=...) instead.\n")
+		+ TEXT(" - unreal.BlueprintEditorLibrary.generated_class(bp) SEH-crashes intermittently after add_variable + compile (0xC0000005). Use claireon.blueprint_get_generated_class(asset_path=...) instead.\n")
+		+ TEXT(" - For any protected/private UPROPERTY on a UObject, prefer claireon.uobject_inspect(object_path=..., property_path=...). It uses FProperty reflection directly, bypassing the access-checked editor-property path that triggers the crashes above.");
+}
+
+FString ClaireonTool_ExecutePython::GetPatterns() const
+{
+	return TEXT("Known editor-crashing reflection calls (use these safe alternatives):\n")
+		TEXT("\n")
+		TEXT("- UStateTree.Schema (SEH 0x00004000): use claireon.statetree_get_schema(asset_path=...).\n")
+		TEXT("- UBlueprint.generated_class (SEH 0xC0000005, after add_variable + compile): use claireon.blueprint_get_generated_class(asset_path=...).\n")
+		TEXT("- Any protected/private UPROPERTY: use claireon.uobject_inspect(object_path=..., property_path=...).\n")
+		TEXT("\n")
+		TEXT("Raw unreal.get_editor_property on a property the engine flags inaccessible takes the access-checked path that SEHs out. The claireon.* alternatives go straight through FProperty and survive.\n")
+		TEXT("\n")
+		TEXT("Common patterns:\n")
+		TEXT("\n")
+		TEXT("- Editor world: claireon.world_get_active_world() (claireon-side, PIE-safe). The deprecated unreal.EditorLevelLibrary.get_editor_world() and its replacement unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world() both return null in PIE.\n")
+		TEXT("- WorldSettings: world.get_world_settings() (not world.get_editor_property('persistent_level') / 'world_settings' -- those are engine-protected and raise).\n")
+		TEXT("- Enum subscript naming: a C++ UENUM `EFooBar::CamelCase` is exposed in Python as `unreal.FooBar.UPPER_SNAKE_CASE`. Drop the leading `E`, convert each CamelCase token to UPPER_SNAKE_CASE (e.g. `EComponentMobility::Movable` -> `unreal.ComponentMobility.MOVABLE`).\n")
+		TEXT("- MovieSceneObjectBindingID (UE upstream issue): the no-arg constructor + `set_editor_property('Guid', binding.get_id())` is the only working pattern; the FGuid-taking ctor exposed to Python is non-functional. Default-construct, then set Guid via reflection.\n")
+		TEXT("- LevelSequence binding removal: there is no `level_sequence.remove_possessable(guid)` Python API. Use `binding.remove()` on the FMovieSceneBinding (resolve binding via `for b in level_sequence.get_bindings(): if b.get_id() == guid: ...`). Claireon's session-mode tool `claireon.level_sequence_remove_possessable` wraps this.\n");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ExecutePython::GetInputSchema() const
@@ -574,7 +620,7 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	const FString TempFilePath = PythonDir / TempFileName;
 
 	// Indent user code by 4 spaces so it can be wrapped in try-except.
-	// This lets us capture Python exceptions and surface them to the LLM
+	// This lets us capture Python exceptions and surface them to the caller
 	// instead of the opaque "Python execution failed with no error details."
 	FString IndentedCode;
 	{
@@ -701,12 +747,11 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	FinalResult.Logs = Logs;
 	FinalResult.UELog = EngineOutput;
 
-	// Stage 002 / Part A: scan the traceback (regardless of bPythonSuccess --
-	// the user-script template's bare-except branch can absorb the exception
-	// while still printing the traceback to stdout, so the hint signal must
-	// be available on both result paths). The bridge from Stage 001 surfaces
-	// Result.Hint on the wire envelope only when valid; null leaves the wire
-	// shape byte-identical.
+	// Scan the traceback (regardless of bPythonSuccess -- the user-script
+	// template's bare-except branch can absorb the exception while still
+	// printing the traceback to stdout, so the hint signal must be available
+	// on both result paths). The bridge surfaces Result.Hint on the wire
+	// envelope only when valid; null leaves the wire shape byte-identical.
 	FinalResult.Hint = Cl622PyHintInternal::Cl622Py_BuildHintFromLogs(Logs);
 
 	if (bTimedOut)

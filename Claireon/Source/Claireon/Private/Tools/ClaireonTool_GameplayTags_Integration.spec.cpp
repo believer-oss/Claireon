@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Cross-tool integration specs for the claireon.gameplay_tags_* family (#0000).
+// Cross-tool integration specs for the claireon.gameplay_tags_* family.
 // Tests the realistic operator workflow (add -> reload -> remove) and verifies
 // the cleanup invariant that Config/DefaultGameplayTags.ini is byte-for-byte
 // unchanged after every spec run.

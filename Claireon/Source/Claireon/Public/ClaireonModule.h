@@ -12,11 +12,10 @@ class FClaireonProxyClient;
 class IClaireonTool;
 
 /**
- * Stage 010 (D4 + direct-connect): which way the editor's MCP traffic is
- * flowing. DirectConnect means the editor itself owns the per-worktree SHA
- * port and Claude talks to it directly. ProxyAttached means the singleton
- * proxy owns the SHA port and the editor binds an ephemeral local listener
- * that the proxy forwards to.
+ * Which way the editor's MCP traffic is flowing. DirectConnect means the
+ * editor itself owns the per-worktree SHA port and the client talks to it
+ * directly. ProxyAttached means the singleton proxy owns the SHA port and
+ * the editor binds an ephemeral local listener that the proxy forwards to.
  */
 enum class EClaireonMcpMode : uint8
 {
@@ -62,11 +61,11 @@ public:
 	/**
 	 * Get the proxy client (may be null when proxy wiring is disabled, i.e.
 	 * direct-connect mode). The diagnostics widget reads ProxyState through
-	 * this and exposes a Reconnect button when state is Failed (D4).
+	 * this and exposes a Reconnect button when state is Failed.
 	 */
 	FClaireonProxyClient* GetProxyClient() const { return ProxyClient.Get(); }
 
-	/** Stage 010: current ingress mode for diagnostics-tab display. */
+	/** Current ingress mode for diagnostics-tab display. */
 	EClaireonMcpMode GetMcpMode() const { return CurrentMcpMode; }
 
 	/** Get the module instance */
@@ -92,7 +91,7 @@ private:
 	TSharedPtr<FClaireonServer> Server;
 
 	/**
-	 * Always-on MCP proxy client (stage-06). Null when proxy wiring is
+	 * Always-on MCP proxy client. Null when proxy wiring is
 	 * disabled (the default). Opt in with the `-EnableMCPProxy` command-line
 	 * flag or by setting bEnableProxy=true in Editor Preferences. When non-null,
 	 * the proxy is the sole ingress for MCP traffic; the server runs token-gated.
@@ -108,7 +107,7 @@ private:
 	/** True if -MCPServerPort= was passed on the command line; suppresses settings-change restart. */
 	bool bPortOverriddenByCommandLine = false;
 
-	/** Stage 010: which path StartServer settled on (DirectConnect / ProxyAttached). */
+	/** Which path StartServer settled on (DirectConnect / ProxyAttached). */
 	EClaireonMcpMode CurrentMcpMode = EClaireonMcpMode::Unstarted;
 
 	/** Handle for IPythonScriptPlugin::OnPythonInitialized subscription.

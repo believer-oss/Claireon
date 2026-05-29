@@ -6,7 +6,7 @@
 
 namespace
 {
-	// I4: namespace-isolated helpers. Names are unique enough across the Claireon module that no
+	// namespace-isolated helpers. Names are unique enough across the Claireon module that no
 	// further file-local discriminator prefix is needed (verified by basename uniqueness scan).
 	TMap<FString, FAudioEditToolData>& GetSoundCueSessions()
 	{
@@ -55,7 +55,7 @@ void ClaireonAudioSessionRegistry::ReleaseSession(const FString& SessionId, ESou
 
 void ClaireonAudioSessionRegistry::HandleSessionClosed(const FMCPSessionClosedInfo& Info)
 {
-	// I1: filter on the literal "audio_edit" so external tests/callers continue to observe
+	// filter on the literal "audio_edit" so external tests/callers continue to observe
 	// the same lock-name string after decomposition.
 	if (Info.ToolName == TEXT("audio_edit"))
 	{

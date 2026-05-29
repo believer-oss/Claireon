@@ -20,6 +20,7 @@
 #include "ClaireonDiagnosticsWidget.h"
 #include "ClaireonSettings.h"
 #include "IClaireonToolProvider.h"
+#include "IPythonScriptPlugin.h"
 #include "Modules/ModuleManager.h"
 #include "Features/IModularFeatures.h"
 #include "ToolMenus.h"
@@ -47,14 +48,30 @@
 #include "Tools/ClaireonTool_GetBlueprintProperties.h"
 #include "Tools/ClaireonTool_GetBlueprintGraph.h"
 #include "Tools/ClaireonTool_SearchInBlueprints.h"
+#include "Tools/ClaireonTool_SearchInBlueprintsIndexStatus.h"
+#include "Tools/ClaireonTool_ListBlueprintGraphNodes.h"
 #include "Tools/ClaireonTool_ApplyBlueprintDelta.h"
+
+// Per-family apply_delta tools (work item #0000)
+#include "Tools/ClaireonBehaviorTreeTool_ApplyDelta.h"
+#include "Tools/ClaireonEQSTool_ApplyDelta.h"
+#include "Tools/ClaireonLevelSequenceTool_ApplyDelta.h"
+#include "Tools/ClaireonMaterialTool_ApplyDelta.h"
+#include "Tools/ClaireonNiagaraTool_ApplyDelta.h"
+#include "Tools/ClaireonPCGTool_ApplyDelta.h"
+#include "Tools/ClaireonStateTreeTool_ApplyDelta.h"
+#include "Tools/ClaireonWidgetBPTool_ApplyDelta.h"
 #include "Tools/ClaireonTool_GameplayTagsList.h"
+#include "Tools/ClaireonTool_GameplayTagsAdd.h"
+#include "Tools/ClaireonTool_GameplayTagsRemove.h"
+#include "Tools/ClaireonTool_GameplayTagsReload.h"
 #include "Tools/ClaireonTool_StructInspect.h"
 #include "Tools/ClaireonTool_UObjectInspect.h"
+#include "Tools/ClaireonTool_UClassCheckAsyncActionDelegateSignatures.h"
 #include "Tools/ClaireonTool_ReplaceStructUsage.h"
 #include "Tools/ClaireonAnimGraphTools_CopyGraph.h"
 
-// Blueprint graph editing (decomposed -- one tool per operation, stage 016)
+// Blueprint graph editing (decomposed -- one tool per operation)
 #include "Tools/ClaireonBlueprintGraphTool_Open.h"
 #include "Tools/ClaireonBlueprintGraphTool_Create.h"
 #include "Tools/ClaireonBlueprintGraphTool_ListGraphs.h"
@@ -66,6 +83,7 @@
 #include "Tools/ClaireonBlueprintGraphTool_ConnectPins.h"
 #include "Tools/ClaireonBlueprintGraphTool_DisconnectPin.h"
 #include "Tools/ClaireonBlueprintGraphTool_SetPinValue.h"
+#include "Tools/ClaireonBlueprintGraphTool_SetNodeProperty.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddPin.h"
 #include "Tools/ClaireonBlueprintGraphTool_RemovePin.h"
 #include "Tools/ClaireonBlueprintGraphTool_SplitPin.h"
@@ -101,7 +119,7 @@
 #include "Tools/ClaireonBlueprintGraphTool_RemoveInterface.h"
 #include "Tools/ClaireonBlueprintGraphTool_ApplySpec.h"
 
-// New tools (stage 001 stubs)
+// New tools
 #include "Tools/ClaireonTool_PythonAuditLog.h"
 #include "Tools/ClaireonTool_ProjectInfo.h"
 #include "Tools/ClaireonTool_EngineInfo.h"
@@ -113,6 +131,7 @@
 #include "Tools/ClaireonTool_PIEStatus.h"
 #include "Tools/ClaireonTool_PIEGetPlayerPawn.h"
 #include "Tools/ClaireonTool_PIEGetActor.h"
+#include "Tools/ClaireonTool_PIERegisterActor.h"
 #include "Tools/ClaireonTool_PIECheckInitState.h"
 #include "Tools/ClaireonTool_PIEWaitFor.h"
 #include "Tools/ClaireonTool_PIESpawnEnemy.h"
@@ -128,9 +147,24 @@
 #include "Tools/ClaireonTool_AssetFixupRedirectors.h"
 #include "Tools/ClaireonTool_BlueprintCompileBatch.h"
 #include "Tools/ClaireonTool_BlueprintDuplicate.h"
+#include "Tools/ClaireonTool_BlueprintGetGeneratedClass.h"
 #include "Tools/ClaireonTool_CommandletRun.h"
 #include "Tools/ClaireonTool_AssetResave.h"
 #include "Tools/ClaireonTool_AssetCook.h"
+// Asset/material wrappers
+#include "Tools/ClaireonTool_AssetIsDirty.h"
+#include "Tools/ClaireonTool_AssetReload.h"
+#include "Tools/ClaireonTool_AssetMove.h"
+#include "Tools/ClaireonTool_AssetFindActorsByLabel.h"
+#include "Tools/ClaireonTool_MaterialListExpressions.h"
+#include "Tools/ClaireonTool_MaterialRenameParameter.h"
+// Live-coding helper
+#include "Tools/ClaireonTool_LiveCodingRebuildFull.h"
+// Enum fixup + raw property read
+#include "Tools/ClaireonTool_FixupStaleEnumValues.h"
+#include "Tools/ClaireonTool_GetEditorPropertyRaw.h"
+// CDO property setter via FProperty (TSubclassOf workaround)
+#include "Tools/ClaireonTool_BlueprintSetCdoProperty.h"
 #include "Tools/ClaireonTool_LogTail.h"
 #include "Tools/ClaireonTool_LogSearch.h"
 #include "Tools/ClaireonTool_MessageLogGet.h"
@@ -143,6 +177,7 @@
 #include "Tools/ClaireonTool_StateTreeListBindingSources.h"
 #include "Tools/ClaireonTool_StateTreeRuntimeInspect.h"
 #include "Tools/ClaireonTool_StateTreeRuntimeSendEvent.h"
+#include "Tools/ClaireonStateTreeTool_Create.h"
 #include "Tools/ClaireonStateTreeTool_Open.h"
 #include "Tools/ClaireonStateTreeTool_Close.h"
 #include "Tools/ClaireonStateTreeTool_Status.h"
@@ -178,6 +213,7 @@
 #include "Tools/ClaireonStateTreeTool_Compile.h"
 #include "Tools/ClaireonStateTreeTool_Save.h"
 #include "Tools/ClaireonStateTreeTool_ApplySpec.h"
+#include "Tools/ClaireonStateTreeTool_AssetStatus.h"
 
 // Diff MCP tools
 #include "Tools/ClaireonTool_AssetDiffProperties.h"
@@ -202,6 +238,7 @@
 
 // Blueprint CDO tools
 #include "Tools/ClaireonTool_SetBlueprintCDOProperty.h"
+#include "Tools/ClaireonTool_AppendBlueprintCDOArrayInstanced.h"
 #include "Tools/ClaireonTool_SetBlueprintMetadata.h"
 
 // Meta tools
@@ -240,7 +277,7 @@
 #include "Tools/ClaireonWidgetBPTool_EditMVVMBinding.h"
 #include "Tools/ClaireonWidgetBPTool_RemoveMVVMBinding.h"
 #include "Tools/ClaireonWidgetBPTool_ApplySpec.h"
-// Widget Blueprint animation extras (stubbed pending dispatch backlog; see stage 017 commit)
+// Widget Blueprint animation extras
 #include "Tools/ClaireonWidgetBPTool_CreateAnimation.h"
 #include "Tools/ClaireonWidgetBPTool_DeleteAnimation.h"
 #include "Tools/ClaireonWidgetBPTool_RenameAnimation.h"
@@ -250,6 +287,11 @@
 #include "Tools/ClaireonWidgetBPTool_AddAnimationTrack.h"
 #include "Tools/ClaireonWidgetBPTool_AddAnimationKeyframe.h"
 #include "Tools/ClaireonWidgetBPTool_RemoveAnimationKeyframe.h"
+#include "Tools/ClaireonWidgetBPTool_RemoveAnimationTrack.h"
+#include "Tools/ClaireonTool_WaitSeconds.h"
+#include "Tools/ClaireonTool_WorldGetActive.h"
+#include "Tools/ClaireonTool_IsAssetEditorOpen.h"
+#include "Tools/ClaireonTool_PIETick.h"
 #include "Tools/ClaireonWidgetBPTool_SetAnimationProperty.h"
 
 // Behavior Tree + EQS MCP tools
@@ -357,6 +399,8 @@
 #include "Tools/ClaireonTool_MaterialInspect.h"
 #include "Tools/ClaireonTool_MaterialInstanceInspect.h"
 #include "Tools/ClaireonTool_MaterialApply.h"
+#include "Tools/ClaireonMaterialTool_ApplyToActor.h"
+#include "Tools/ClaireonMaterialTool_ApplyToBlueprint.h"
 
 // Material editing (decomposed -- one tool per operation)
 #include "Tools/ClaireonMaterialTool_Open.h"
@@ -390,9 +434,18 @@
 #include "Tools/ClaireonMaterialInstanceTool_SetStaticSwitchParameter.h"
 #include "Tools/ClaireonMaterialInstanceTool_SetStaticComponentMaskParameter.h"
 #include "Tools/ClaireonMaterialInstanceTool_ClearParameterOverride.h"
+#include "Tools/ClaireonMaterialInstanceTool_ClearScalarOverride.h"
+#include "Tools/ClaireonMaterialInstanceTool_ClearVectorOverride.h"
+#include "Tools/ClaireonMaterialInstanceTool_ClearTextureOverride.h"
+#include "Tools/ClaireonMaterialInstanceTool_ClearStaticSwitchOverride.h"
+#include "Tools/ClaireonMaterialInstanceTool_ClearStaticComponentMaskOverride.h"
 
 // Audio MCP tools
 #include "Tools/ClaireonTool_AudioInspect.h"
+#include "Tools/ClaireonAudioTool_PlaceAmbientSound.h"
+#include "Tools/ClaireonAudioTool_PlaceAudioVolume.h"
+#include "Tools/ClaireonAudioTool_AttachAudioComponent.h"
+#include "Tools/ClaireonAudioTool_SetAudioProperty.h"
 #include "Tools/ClaireonTool_AudioApply.h"
 
 // Audio decomposed tools (42)
@@ -421,6 +474,9 @@
 #include "Tools/ClaireonMetaSoundTool_ConnectPins.h"
 #include "Tools/ClaireonMetaSoundTool_Create.h"
 #include "Tools/ClaireonMetaSoundTool_ApplySpec.h"
+#include "Tools/ClaireonMetaSoundTool_ListActiveSessions.h"
+#include "Tools/ClaireonMetaSoundTool_ListAvailableInterfaces.h"
+#include "Tools/ClaireonMetaSoundTool_DumpGraph.h"
 #include "Tools/ClaireonCameraAssetTool_Create.h"
 #include "Tools/ClaireonCameraAssetTool_Duplicate.h"
 #include "Tools/ClaireonCameraAssetTool_Save.h"
@@ -451,12 +507,16 @@
 #include "Tools/ClaireonConcurrencyTool_SetProperty.h"
 #include "Tools/ClaireonConcurrencyTool_Create.h"
 #include "Tools/ClaireonConcurrencyTool_ApplySpec.h"
+#include "Tools/ClaireonDataAssetTool_Create.h"
+#include "Tools/ClaireonTool_AssetExists.h"
+#include "Tools/ClaireonDeveloperSettingsTool_Get.h"
 
 // Data Table MCP tools
 #include "Tools/ClaireonTool_DataTableSearch.h"
 #include "Tools/ClaireonTool_DataTableGetInfo.h"
 #include "Tools/ClaireonTool_DataTableGetRows.h"
 #include "Tools/ClaireonTool_DataTableGetRow.h"
+#include "Tools/ClaireonTool_DataTableGetRowStructured.h"
 #include "Tools/ClaireonTool_DataTableFindRows.h"
 #include "Tools/ClaireonTool_DataTableAddRow.h"
 #include "Tools/ClaireonTool_DataTableRemoveRow.h"
@@ -557,6 +617,8 @@
 // Landscape and foliage MCP tools
 #include "Tools/ClaireonTool_LandscapeInspect.h"
 #include "Tools/ClaireonTool_LandscapeImport.h"
+#include "Tools/ClaireonLandscapeTool_ImportHeightmap.h"
+#include "Tools/ClaireonLandscapeTool_ImportWeightmap.h"
 
 // Landscape editing (decomposed -- one tool per operation)
 #include "Tools/ClaireonLandscapeTool_Open.h"
@@ -607,7 +669,7 @@
 // Chooser / Proxy Table MCP tools
 #include "Tools/ClaireonTool_ChooserInspect.h"
 #include "Tools/ClaireonChooserTools_Lifecycle.h"
-// Decomposed chooser edit tools (#0000)
+// Decomposed chooser edit tools
 #include "Tools/ClaireonChooserTool_SetResultType.h"
 #include "Tools/ClaireonChooserTool_SetOutputClass.h"
 #include "Tools/ClaireonChooserTool_AddContextParameter.h"
@@ -628,13 +690,13 @@
 #include "Tools/ClaireonTool_ChooserFindRows.h"
 #include "Tools/ClaireonTool_ChooserTraverse.h"
 #include "Tools/ClaireonProxyTools_Lifecycle.h"
-// Decomposed proxyasset edit tools (#0000)
+// Decomposed proxyasset edit tools
 #include "Tools/ClaireonProxyAssetTool_SetType.h"
 #include "Tools/ClaireonProxyAssetTool_SetResultType.h"
 #include "Tools/ClaireonProxyAssetTool_AddContextParameter.h"
 #include "Tools/ClaireonProxyAssetTool_RemoveContextParameter.h"
 #include "Tools/ClaireonProxyAssetTool_SetContextParameterDirection.h"
-// Decomposed proxytable edit tools (#0000)
+// Decomposed proxytable edit tools
 #include "Tools/ClaireonProxyTableTool_AddInherit.h"
 #include "Tools/ClaireonProxyTableTool_RemoveInherit.h"
 #include "Tools/ClaireonProxyTableTool_AddEntry.h"
@@ -661,6 +723,11 @@
 // Blueprint-to-C++ translation tools
 #include "Tools/ClaireonTool_BlueprintTranslateScaffold.h"
 #include "Tools/ClaireonTool_BlueprintTranslateImplement.h"
+#include "Tools/ClaireonBlueprintTranslateTool_Inspect.h"
+#include "Tools/ClaireonBlueprintTranslateTool_Implement.h"
+#include "Tools/ClaireonBlueprintTranslateTool_ForceImplement.h"
+#include "Tools/ClaireonBlueprintTranslateTool_Skip.h"
+#include "Tools/ClaireonBlueprintTranslateTool_MarkComplete.h"
 #include "Tools/ClaireonTool_BlueprintTranslateStatus.h"
 
 DEFINE_LOG_CATEGORY(LogClaireon);
@@ -710,7 +777,7 @@ namespace ClaireonLaunch
 	 * Resolve a PowerShell executable using canonical Windows install paths first,
 	 * with a PATH-search fallback. Canonical paths are reliable even when the editor
 	 * process inherits a stripped or non-default PATH (which can happen when launched
-	 * by external tooling or as a child of a non-shell parent).
+	 * by tooling like Launcher or as a child of a non-shell parent).
 	 *
 	 * Order: PowerShell 7 (preferred) -> Windows PowerShell 5.1 (always in-box on Win10+).
 	 */
@@ -850,7 +917,7 @@ namespace ClaireonLaunch
 	{
 		const FString ProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 
-		// External-launcher-spawned editors don't pass -StartMCPServer, so the MCP
+		// Launcher-launched editors don't pass -StartMCPServer, so the MCP
 		// server is dormant until the user explicitly asks for Claude. Starting
 		// it here means clicking "Claude Code" is sufficient -- the user does not
 		// need to first open the diagnostics tab to bring the server up.
@@ -971,20 +1038,36 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	TArray<TSharedPtr<IClaireonTool>> Tools;
 
 	Tools.Add(MakeShared<ClaireonTool_ApplyBlueprintDelta>());
+
+	// Per-family apply_delta tools (work item #0000; alphabetical by family)
+	Tools.Add(MakeShared<FClaireonBehaviorTreeTool_ApplyDelta>());
+	Tools.Add(MakeShared<FClaireonEQSTool_ApplyDelta>());
+	Tools.Add(MakeShared<FClaireonLevelSequenceTool_ApplyDelta>());
+	Tools.Add(MakeShared<FClaireonMaterialTool_ApplyDelta>());
+	Tools.Add(MakeShared<FClaireonNiagaraTool_ApplyDelta>());
+	Tools.Add(MakeShared<FClaireonPCGTool_ApplyDelta>());
+	Tools.Add(MakeShared<FClaireonStateTreeTool_ApplyDelta>());
+	Tools.Add(MakeShared<FClaireonWidgetBPTool_ApplyDelta>());
 	Tools.Add(MakeShared<ClaireonTool_AssetReferences>());
 	Tools.Add(MakeShared<ClaireonTool_AssetSearch>());
 	Tools.Add(MakeShared<ClaireonTool_ExecutePython>());
 	Tools.Add(MakeShared<ClaireonTool_GameplayTagsList>());
+	Tools.Add(MakeShared<ClaireonTool_GameplayTagsAdd>());
+	Tools.Add(MakeShared<ClaireonTool_GameplayTagsRemove>());
+	Tools.Add(MakeShared<ClaireonTool_GameplayTagsReload>());
 	Tools.Add(MakeShared<ClaireonTool_StructInspect>());
 	Tools.Add(MakeShared<ClaireonTool_UObjectInspect>());
+	Tools.Add(MakeShared<ClaireonTool_UClassCheckAsyncActionDelegateSignatures>());
 	Tools.Add(MakeShared<ClaireonTool_ReplaceStructUsage>());
 
 	// Blueprint MCP tools
 	Tools.Add(MakeShared<ClaireonTool_GetBlueprintProperties>());
 	Tools.Add(MakeShared<ClaireonTool_GetBlueprintGraph>());
 	Tools.Add(MakeShared<ClaireonTool_SearchInBlueprints>());
+	Tools.Add(MakeShared<ClaireonTool_SearchInBlueprintsIndexStatus>());
+	Tools.Add(MakeShared<ClaireonTool_ListBlueprintGraphNodes>());
 
-	// Blueprint graph editing (decomposed -- one tool per operation, stage 016)
+	// Blueprint graph editing (decomposed -- one tool per operation)
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_Open>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_Create>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_ListGraphs>());
@@ -996,6 +1079,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_ConnectPins>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_DisconnectPin>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SetPinValue>());
+	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SetNodeProperty>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_AddPin>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_RemovePin>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SplitPin>());
@@ -1031,7 +1115,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_RemoveInterface>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_ApplySpec>());
 
-	// New tools (stage 001 stubs -- implementations filled in later stages)
+	// New tools
 	Tools.Add(MakeShared<ClaireonTool_PythonAuditLog>());
 	Tools.Add(MakeShared<ClaireonTool_ProjectInfo>());
 	Tools.Add(MakeShared<ClaireonTool_EngineInfo>());
@@ -1043,8 +1127,15 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_PIEStatus>());
 	Tools.Add(MakeShared<ClaireonTool_PIEGetPlayerPawn>());
 	Tools.Add(MakeShared<ClaireonTool_PIEGetActor>());
+	Tools.Add(MakeShared<ClaireonTool_PIERegisterActor>());
 	Tools.Add(MakeShared<ClaireonTool_PIECheckInitState>());
 	Tools.Add(MakeShared<ClaireonTool_PIEWaitFor>());
+	// PIE + world wait/sleep/probe primitives.
+	Tools.Add(MakeShared<ClaireonTool_WaitSeconds>());
+	Tools.Add(MakeShared<ClaireonTool_WorldGetActive>());
+	Tools.Add(MakeShared<ClaireonTool_IsAssetEditorOpen>());
+	Tools.Add(MakeShared<ClaireonTool_PIETick>());
+	Tools.Add(MakeShared<ClaireonTool_PIESleep>());
 	Tools.Add(MakeShared<ClaireonTool_PIESpawnEnemy>());
 	Tools.Add(MakeShared<ClaireonTool_PIEGetComponent>());
 	Tools.Add(MakeShared<ClaireonTool_PIERegisterDamageListener>());
@@ -1165,9 +1256,24 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonSkeletonTool_RemoveBlendMask>()); // Intentional stub — always errors (engine bug)
 	Tools.Add(MakeShared<ClaireonTool_BlueprintCompileBatch>());
 	Tools.Add(MakeShared<ClaireonTool_BlueprintDuplicate>());
+	Tools.Add(MakeShared<ClaireonTool_BlueprintGetGeneratedClass>());
 	Tools.Add(MakeShared<ClaireonTool_CommandletRun>());
 	Tools.Add(MakeShared<ClaireonTool_AssetResave>());
 	Tools.Add(MakeShared<ClaireonTool_AssetCook>());
+	// Asset/material wrappers
+	Tools.Add(MakeShared<ClaireonTool_AssetIsDirty>());
+	Tools.Add(MakeShared<ClaireonTool_AssetReload>());
+	Tools.Add(MakeShared<ClaireonTool_AssetMove>());
+	Tools.Add(MakeShared<ClaireonTool_AssetFindActorsByLabel>());
+	Tools.Add(MakeShared<ClaireonTool_MaterialListExpressions>());
+	Tools.Add(MakeShared<ClaireonTool_MaterialRenameParameter>());
+	// Live-coding helper
+	Tools.Add(MakeShared<ClaireonTool_LiveCodingRebuildFull>());
+	// Enum fixup + raw property read
+	Tools.Add(MakeShared<ClaireonTool_FixupStaleEnumValues>());
+	Tools.Add(MakeShared<ClaireonTool_GetEditorPropertyRaw>());
+	// CDO property setter (TSubclassOf workaround)
+	Tools.Add(MakeShared<ClaireonTool_BlueprintSetCdoProperty>());
 	Tools.Add(MakeShared<ClaireonTool_LogTail>());
 	Tools.Add(MakeShared<ClaireonTool_LogSearch>());
 	Tools.Add(MakeShared<ClaireonTool_MessageLogGet>());
@@ -1181,6 +1287,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_StateTreeRuntimeInspect>());
 	Tools.Add(MakeShared<ClaireonTool_StateTreeRuntimeSendEvent>());
 	// State Tree edit (decomposed per-operation tools)
+	Tools.Add(MakeShared<ClaireonStateTreeTool_Create>());
 	Tools.Add(MakeShared<ClaireonStateTreeTool_Open>());
 	Tools.Add(MakeShared<ClaireonStateTreeTool_Close>());
 	Tools.Add(MakeShared<ClaireonStateTreeTool_Status>());
@@ -1216,6 +1323,8 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonStateTreeTool_Compile>());
 	Tools.Add(MakeShared<ClaireonStateTreeTool_Save>());
 	Tools.Add(MakeShared<ClaireonStateTreeTool_ApplySpec>());
+	// stateless asset-level health check (asset_status), distinct from the session-level status tool.
+	Tools.Add(MakeShared<FClaireonStateTreeTool_AssetStatus>());
 
 	// Diff MCP tools
 	Tools.Add(MakeShared<ClaireonTool_AssetDiffProperties>());
@@ -1275,6 +1384,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonWidgetBPTool_AddAnimationTrack>());
 	Tools.Add(MakeShared<ClaireonWidgetBPTool_AddAnimationKeyframe>());
 	Tools.Add(MakeShared<ClaireonWidgetBPTool_RemoveAnimationKeyframe>());
+	Tools.Add(MakeShared<ClaireonWidgetBPTool_RemoveAnimationTrack>());
 	Tools.Add(MakeShared<ClaireonWidgetBPTool_SetAnimationProperty>());
 
 	// Behavior Tree + EQS MCP tools
@@ -1387,7 +1497,9 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	// Material MCP tools
 	Tools.Add(MakeShared<ClaireonTool_MaterialInspect>());
 	Tools.Add(MakeShared<ClaireonTool_MaterialInstanceInspect>());
-	Tools.Add(MakeShared<ClaireonTool_MaterialApply>());
+	Tools.Add(MakeShared<ClaireonTool_MaterialApply>()); // DEPRECATED: dispatch stub, see per-kind tools below
+	Tools.Add(MakeShared<ClaireonMaterialTool_ApplyToActor>());
+	Tools.Add(MakeShared<ClaireonMaterialTool_ApplyToBlueprint>());
 
 	// Material editing (decomposed -- one tool per operation)
 	Tools.Add(MakeShared<ClaireonMaterialTool_Open>());
@@ -1420,13 +1532,22 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonMaterialInstanceTool_SetTextureParameter>());
 	Tools.Add(MakeShared<ClaireonMaterialInstanceTool_SetStaticSwitchParameter>());
 	Tools.Add(MakeShared<ClaireonMaterialInstanceTool_SetStaticComponentMaskParameter>());
-	Tools.Add(MakeShared<ClaireonMaterialInstanceTool_ClearParameterOverride>());
+	Tools.Add(MakeShared<ClaireonMaterialInstanceTool_ClearParameterOverride>()); // DEPRECATED: dispatch stub, see per-type tools below
+	Tools.Add(MakeShared<ClaireonMaterialInstanceTool_ClearScalarOverride>());
+	Tools.Add(MakeShared<ClaireonMaterialInstanceTool_ClearVectorOverride>());
+	Tools.Add(MakeShared<ClaireonMaterialInstanceTool_ClearTextureOverride>());
+	Tools.Add(MakeShared<ClaireonMaterialInstanceTool_ClearStaticSwitchOverride>());
+	Tools.Add(MakeShared<ClaireonMaterialInstanceTool_ClearStaticComponentMaskOverride>());
 
 	// Audio MCP tools
 	Tools.Add(MakeShared<FClaireonTool_AudioInspect>());
-	Tools.Add(MakeShared<FClaireonTool_AudioApply>());
+	Tools.Add(MakeShared<FClaireonTool_AudioApply>()); // DEPRECATED: dispatch stub, see per-op tools below
+	Tools.Add(MakeShared<FClaireonAudioTool_PlaceAmbientSound>());
+	Tools.Add(MakeShared<FClaireonAudioTool_PlaceAudioVolume>());
+	Tools.Add(MakeShared<FClaireonAudioTool_AttachAudioComponent>());
+	Tools.Add(MakeShared<FClaireonAudioTool_SetAudioProperty>());
 
-	// Audio decomposed tools (42; replaces the bundled claireon.audio_edit umbrella)
+	// Audio decomposed tools (42; replaces the bundled audio_edit umbrella)
 	// SoundCue (14)
 	Tools.Add(MakeShared<FClaireonSoundCueTool_Open>());
 	Tools.Add(MakeShared<FClaireonSoundCueTool_Close>());
@@ -1442,7 +1563,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<FClaireonSoundCueTool_Create>());
 	Tools.Add(MakeShared<FClaireonSoundCueTool_ListNodeTypes>());
 	Tools.Add(MakeShared<FClaireonSoundCueTool_ApplySpec>());
-	// MetaSound (11)
+	// MetaSound (14)
 	Tools.Add(MakeShared<FClaireonMetaSoundTool_Open>());
 	Tools.Add(MakeShared<FClaireonMetaSoundTool_Close>());
 	Tools.Add(MakeShared<FClaireonMetaSoundTool_Status>());
@@ -1454,6 +1575,10 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<FClaireonMetaSoundTool_ConnectPins>());
 	Tools.Add(MakeShared<FClaireonMetaSoundTool_Create>());
 	Tools.Add(MakeShared<FClaireonMetaSoundTool_ApplySpec>());
+	// Stateless discoverability + session-recovery tools
+	Tools.Add(MakeShared<FClaireonMetaSoundTool_ListActiveSessions>());
+	Tools.Add(MakeShared<FClaireonMetaSoundTool_ListAvailableInterfaces>());
+	Tools.Add(MakeShared<FClaireonMetaSoundTool_DumpGraph>());
 	// Camera Asset (13)
 	Tools.Add(MakeShared<FClaireonCameraAssetTool_Create>());
 	Tools.Add(MakeShared<FClaireonCameraAssetTool_Duplicate>());
@@ -1489,6 +1614,10 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<FClaireonConcurrencyTool_SetProperty>());
 	Tools.Add(MakeShared<FClaireonConcurrencyTool_Create>());
 	Tools.Add(MakeShared<FClaireonConcurrencyTool_ApplySpec>());
+	// Data-asset / asset-exists / developer-settings (3)
+	Tools.Add(MakeShared<FClaireonDataAssetTool_Create>());
+	Tools.Add(MakeShared<ClaireonTool_AssetExists>());
+	Tools.Add(MakeShared<FClaireonDeveloperSettingsTool_Get>());
 
 	// PCG Graph MCP tools
 	Tools.Add(MakeShared<ClaireonTool_PCGGraphInspect>());
@@ -1538,7 +1667,9 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 
 	// Landscape and foliage MCP tools
 	Tools.Add(MakeShared<ClaireonTool_LandscapeInspect>());
-	Tools.Add(MakeShared<ClaireonTool_LandscapeImport>());
+	Tools.Add(MakeShared<ClaireonTool_LandscapeImport>()); // DEPRECATED: dispatch stub, see per-type tools below
+	Tools.Add(MakeShared<ClaireonLandscapeTool_ImportHeightmap>());
+	Tools.Add(MakeShared<ClaireonLandscapeTool_ImportWeightmap>());
 
 	// Landscape editing (decomposed -- one tool per operation)
 	Tools.Add(MakeShared<ClaireonLandscapeTool_Open>());
@@ -1590,14 +1721,15 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 
 	// Blueprint CDO tools
 	Tools.Add(MakeShared<ClaireonTool_SetBlueprintCDOProperty>());
+	Tools.Add(MakeShared<ClaireonTool_AppendBlueprintCDOArrayInstanced>());
 	Tools.Add(MakeShared<ClaireonTool_SetBlueprintMetadata>());
 
 	// Meta tools
 	Tools.Add(MakeShared<ClaireonTool_SearchTools>());
 	Tools.Add(MakeShared<ClaireonTool_FeedbackSubmit>());
-	// apply_spec_help retired in #0000; replaced by tool_search deep-inspect on
-	// any apply_spec / instance_apply_spec tool, which embeds the matching
-	// ApplySpecCatalog.json entry under `spec_shape`.
+	// apply_spec_help is retired: tool_search deep-inspect on any apply_spec /
+	// instance_apply_spec tool embeds the matching ApplySpecCatalog.json entry
+	// under `spec_shape`.
 
 	// Transaction management (decomposed -- one tool per operation)
 	Tools.Add(MakeShared<ClaireonTool_TransactionUndo>());
@@ -1612,6 +1744,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_DataTableGetInfo>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableGetRows>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableGetRow>());
+	Tools.Add(MakeShared<ClaireonTool_DataTableGetRowStructured>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableFindRows>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableAddRow>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableRemoveRow>());
@@ -1628,7 +1761,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_ChooserInspect>());
 	Tools.Add(MakeShared<ClaireonTool_ChooserCreate>());
 	Tools.Add(MakeShared<ClaireonTool_ChooserDuplicate>());
-	// Decomposed chooser edit tools (#0000)
+	// Decomposed chooser edit tools
 	Tools.Add(MakeShared<ClaireonTool_ChooserSetResultType>());
 	Tools.Add(MakeShared<ClaireonTool_ChooserSetOutputClass>());
 	Tools.Add(MakeShared<ClaireonTool_ChooserAddContextParameter>());
@@ -1658,13 +1791,13 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_ProxyTableDuplicate>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyAssetCreate>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyAssetDuplicate>());
-	// Decomposed proxyasset edit tools (#0000)
+	// Decomposed proxyasset edit tools
 	Tools.Add(MakeShared<ClaireonTool_ProxyAssetSetType>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyAssetSetResultType>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyAssetAddContextParameter>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyAssetRemoveContextParameter>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyAssetSetContextParameterDirection>());
-	// Decomposed proxytable edit tools (#0000)
+	// Decomposed proxytable edit tools
 	Tools.Add(MakeShared<ClaireonTool_ProxyTableAddInherit>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyTableRemoveInherit>());
 	Tools.Add(MakeShared<ClaireonTool_ProxyTableAddEntry>());
@@ -1731,7 +1864,12 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 
 	// Blueprint-to-C++ translation tools
 	Tools.Add(MakeShared<ClaireonTool_BlueprintTranslateScaffold>());
-	Tools.Add(MakeShared<ClaireonTool_BlueprintTranslateImplement>());
+	Tools.Add(MakeShared<ClaireonTool_BlueprintTranslateImplement>()); // DEPRECATED: dispatch stub, see per-action tools below
+	Tools.Add(MakeShared<ClaireonBlueprintTranslateTool_Inspect>());
+	Tools.Add(MakeShared<ClaireonBlueprintTranslateTool_Implement>());
+	Tools.Add(MakeShared<ClaireonBlueprintTranslateTool_ForceImplement>());
+	Tools.Add(MakeShared<ClaireonBlueprintTranslateTool_Skip>());
+	Tools.Add(MakeShared<ClaireonBlueprintTranslateTool_MarkComplete>());
 	Tools.Add(MakeShared<ClaireonTool_BlueprintTranslateStatus>());
 
 	return Tools;
@@ -1770,11 +1908,66 @@ void FClaireonModule::StartupModule()
 	IModularFeatures::Get().RegisterModularFeature(
 		IClaireonToolProvider::FeatureName, BuiltinToolProvider.Get());
 
+	// Construct the in-process tool registry eagerly so the Python bridge can
+	// be bootstrapped from OnPythonInitialized (Spec D) without depending on
+	// whether the HTTP listener has been brought up yet. After this point,
+	// Server.IsValid() means "registry constructed"; Server->IsRunning() means
+	// "HTTP listener is up". Place this BEFORE the modular-feature listener
+	// hooks so any registration callbacks that fire during StartupModule see
+	// a valid Server pointer.
+	Server = MakeShared<FClaireonServer>();
+	FClaireonBridge::SetToolRegistry(Server.Get());
+	CollectToolsFromProviders();
+
 	// Listen for modular feature registration/unregistration
 	IModularFeatures::Get().OnModularFeatureRegistered().AddRaw(
 		this, &FClaireonModule::OnModularFeatureRegistered);
 	IModularFeatures::Get().OnModularFeatureUnregistered().AddRaw(
 		this, &FClaireonModule::OnModularFeatureUnregistered);
+
+	// Bootstrap the Claireon Python bridge as early as Python permits, so that
+	// any user Python (init_unreal.py, deferred slate-tick imports) sees a
+	// fully populated `claireon` (and other namespaces') module on first import.
+	// Replaces the previous 1.0s FTSTicker deferral that lost the import race.
+	//
+	// We rely exclusively on IPythonScriptPlugin::OnPythonInitialized rather
+	// than IPythonScriptPlugin::IsPythonAvailable(): the latter can return
+	// true while CPython's gilstate machinery is still uninitialised
+	// (autoTSSkey null), which crashes PyGILState_Ensure at offset 0x28.
+	// OnPythonInitialized only fires after the interpreter is fully usable
+	// and BEFORE init_unreal.py runs. If the delegate has already fired by
+	// the time we reach this point (very rare; we load at PostEngineInit),
+	// the existing lazy `EnsureRegistered()` call on first MCP tool call
+	// covers us.
+	if (IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get())
+	{
+		PythonInitHandle = PythonPlugin->OnPythonInitialized().AddLambda([]()
+		{
+			FClaireonBridge::EnsureRegistered();
+			// Signal the proxy that the tool catalog is populated and the
+			// Python bridge is initialized. The proxy holds ready=false until
+			// this POST arrives, showing "warming up" instead of "build and
+			// launch editor first" during the startup gap.
+			if (FClaireonModule* Module = FModuleManager::GetModulePtr<FClaireonModule>(TEXT("Claireon")))
+			{
+				if (FClaireonProxyClient* PC = Module->GetProxyClient())
+				{
+					const int32 ToolCount = Module->GetServer()
+						? static_cast<int32>(Module->GetServer()->GetTools().Num())
+						: 0;
+					PC->NotifyReady(ToolCount);
+				}
+			}
+		});
+	}
+	else
+	{
+		// Python plugin unavailable in this configuration (unlikely for editor
+		// builds). The bridge will register lazily via the existing
+		// EnsureRegistered call sites if Python is brought up later.
+		UE_LOG(LogClaireon, Verbose,
+			TEXT("[MCP Bootstrap] IPythonScriptPlugin not available at module load -- bridge will register lazily."));
+	}
 
 	// Check for -StartMCPServer command-line flag
 	if (FParse::Param(FCommandLine::Get(), TEXT("StartMCPServer")))
@@ -1797,6 +1990,16 @@ void FClaireonModule::ShutdownModule()
 	IModularFeatures::Get().OnModularFeatureRegistered().RemoveAll(this);
 	IModularFeatures::Get().OnModularFeatureUnregistered().RemoveAll(this);
 
+	// Unsubscribe from Python initialisation delegate (Spec D).
+	if (PythonInitHandle.IsValid())
+	{
+		if (IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get())
+		{
+			PythonPlugin->OnPythonInitialized().Remove(PythonInitHandle);
+		}
+		PythonInitHandle.Reset();
+	}
+
 	// Unsubscribe from settings changes
 	if (SettingsChangedHandle.IsValid())
 	{
@@ -1811,6 +2014,15 @@ void FClaireonModule::ShutdownModule()
 	}
 
 	StopServer();
+
+	// Detach the bridge from the registry pointer before destroying Server.
+	// (The bridge captures Server.Get(); leaving a dangling pointer in the
+	// bridge until the next module load is unsafe if any callsite probes it.)
+	FClaireonBridge::SetToolRegistry(nullptr);
+
+	// Final tear-down of the Server registry that StartupModule constructed.
+	Server.Reset();
+
 	SClaireonDiagnosticsWidget::UnregisterTabSpawner();
 
 	// Unregister built-in tool provider
@@ -1824,16 +2036,21 @@ void FClaireonModule::ShutdownModule()
 
 void FClaireonModule::StartServer()
 {
-	if (Server.IsValid() && Server->IsRunning())
+	if (!Server.IsValid())
+	{
+		// StartupModule constructs Server. This branch indicates a misuse
+		// (StartServer called before StartupModule, or in a configuration
+		// where StartupModule short-circuited via the GIsEditor/commandlet
+		// guard). Log and bail; do NOT lazy-construct here -- the bridge has
+		// already been wired against the StartupModule-time registry pointer.
+		UE_LOG(LogClaireon, Error, TEXT("[MCP] StartServer called before Server was constructed (StartupModule did not run?)."));
+		return;
+	}
+	if (Server->IsRunning())
 	{
 		UE_LOG(LogClaireon, Warning, TEXT("[MCP] Server is already running"));
 		return;
 	}
-
-	Server = MakeShared<FClaireonServer>();
-
-	// Set the bridge's tool registry pointer so Python can dispatch tool calls
-	FClaireonBridge::SetToolRegistry(Server.Get());
 
 	// Decide whether to front this editor with the always-on MCP proxy. When
 	// enabled, the editor generates a fresh per-session bearer token, hands it
@@ -1872,25 +2089,14 @@ void FClaireonModule::StartServer()
 		Server->SetSessionToken(SessionToken);
 	}
 
-	// Defer bridge registration + Python import pre-warming to next tick.
-	// Python may not be fully initialized yet during StartupModule, and calling
-	// CPython C API too early causes access violations. Deferring to next tick
-	// ensures Python is ready, and pre-warming avoids blocking the game thread
-	// for >6s during the first execute call (which triggers UE's audio mixer abort).
-	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda(
-											 [](float) -> bool
-	{
-		FClaireonBridge::EnsureRegistered();
-		return false; // one-shot
-	}),
-		1.0f);
+	// Bridge registration is now driven by IPythonScriptPlugin::OnPythonInitialized
+	// from StartupModule (Spec D). The previous 1.0s FTSTicker deferral was
+	// removed because it lost the import race with init_unreal.py's
+	// deferred-tick callbacks.
 
-	// Collect tools from all registered providers
-	CollectToolsFromProviders();
-
-	// Stage 010 (direct-connect SHA port + auto-promote): the editor's MCP
-	// listener binds the per-worktree SHA-256-derived port -- the same port
-	// .mcp.json points Claude at -- not the legacy Settings::ServerPort.
+	// Direct-connect SHA port + auto-promote: the editor's MCP listener
+	// binds the per-worktree SHA-256-derived port -- the same port .mcp.json
+	// points the client at.
 	//
 	// Decision tree:
 	//   1. Compute SHA port from this worktree's canonical realpath.
@@ -1904,8 +2110,7 @@ void FClaireonModule::StartServer()
 	//          process holds the port; the operator must clean up).
 	//
 	// -MCPServerPort= command-line override is preserved as a developer
-	// escape hatch. Settings::ServerPort is no longer read (Stage 012
-	// deletes the property; Stage 010 stops reading it here).
+	// escape hatch. Settings::ServerPort is no longer read.
 	const FString WorktreeRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 	uint16 PreferredPort = Claireon::DeriveDefaultMcpPort(WorktreeRoot);
 
@@ -1939,13 +2144,41 @@ void FClaireonModule::StartServer()
 	// Spawning hint: when bEnableProxy is opted in, bring the proxy up first
 	// so the SHA port is held by the singleton when we try to bind below.
 	// EnsureProxyRunning is idempotent (attaches if already up).
+	//
+	// EnsureProxyRunning() only gets the listener up; it does NOT make the
+	// proxy claim our worktree's SHA port. A proxy spawned by some other
+	// worktree only holds its own SHA port, and proxy startup logs
+	// "Awaiting /admin/ensure_worktree" -- the proxy binds per-worktree MCP
+	// ports lazily on that endpoint. Without an explicit EnsureWorktreeBound,
+	// TryStart(PreferredPort) below succeeds because nothing holds our port,
+	// the auto-promote branch never fires, and the editor lands in
+	// DirectConnect mode while still token-gated -- causing Claude Code's
+	// requests to be rejected as 401 because the proxy is not in the path.
+	// EnsureWorktreeBound makes the proxy bind PreferredPort first, so the
+	// editor's TryStart EADDRINUSEs out into the auto-promote branch, which
+	// is what bEnableProxy is supposed to mean.
+	bool bProxyHoldsOurPort = false;
 	if (bEnableProxy)
 	{
 		ProxyClient = MakeUnique<FClaireonProxyClient>();
-		ProxyClient->EnsureProxyRunning();
+		if (ProxyClient->EnsureProxyRunning() && !bPortOverriddenByCommandLine)
+		{
+			bProxyHoldsOurPort = ProxyClient->EnsureWorktreeBound(
+				WorktreeRoot, static_cast<int32>(PreferredPort));
+		}
 	}
 
-	if (Server->TryStart(PreferredPort))
+	// Skip TryStart on the SHA port when the proxy has already claimed it.
+	// UE's HTTP server binds 0.0.0.0 while the proxy binds 127.0.0.1 -- on
+	// Windows those two binds do NOT conflict, so a naive TryStart would
+	// succeed even though the proxy already owns the port. The editor would
+	// then land in DirectConnect mode, the proxy would forward incoming
+	// traffic to "127.0.0.1:<SHA>" and loop back into itself (the proxy is
+	// what's listening there), producing "Editor connection failed".
+	// Instead, when EnsureWorktreeBound returned true we go straight to
+	// the auto-promote path: bind an ephemeral listener and let the proxy
+	// forward to it.
+	if (!bProxyHoldsOurPort && Server->TryStart(PreferredPort))
 	{
 		// DirectConnect mode -- we own the SHA port. The proxy (if any) is
 		// not in the path; .mcp.json still points Claude at this port.
@@ -1964,11 +2197,20 @@ void FClaireonModule::StartServer()
 		return;
 	}
 
-	// EADDRINUSE on the SHA port. Probe 43017 to decide between auto-
-	// promote and abort.
-	UE_LOG(LogClaireon, Display,
-		TEXT("[MCP] Port %u busy; probing 43017 for an existing Claireon proxy."),
-		static_cast<uint32>(PreferredPort));
+	if (bProxyHoldsOurPort)
+	{
+		UE_LOG(LogClaireon, Display,
+			TEXT("[MCP] Proxy is fronting port %u for worktree %s; binding ephemeral editor listener."),
+			static_cast<uint32>(PreferredPort), *WorktreeRoot);
+	}
+	else
+	{
+		// EADDRINUSE on the SHA port. Probe 43017 to decide between auto-
+		// promote and abort.
+		UE_LOG(LogClaireon, Display,
+			TEXT("[MCP] Port %u busy; probing 43017 for an existing Claireon proxy."),
+			static_cast<uint32>(PreferredPort));
+	}
 
 	if (!ProxyClient.IsValid())
 	{
@@ -2011,11 +2253,65 @@ void FClaireonModule::StartServer()
 	}
 
 	CurrentMcpMode = EClaireonMcpMode::ProxyAttached;
-	ProxyClient->BeginRetryRegister(
-		static_cast<int32>(Server->GetPort()), SessionToken, MakeBuildId());
+
+	// Attempt a synchronous first registration so we detect failure
+	// immediately rather than silently landing in a proxy-attached mode
+	// where tool calls fail. RegisterAndReturnAccepted is a blocking
+	// single-shot attempt; on success we move to BeginRetryRegister for
+	// the heartbeat lifecycle. On failure we fall back to direct-connect
+	// mode so tool calls still reach the editor directly.
+	const FString BuildId = MakeBuildId();
+	const bool bRegisteredSync = ProxyClient->RegisterAndReturnAccepted(
+		static_cast<int32>(Server->GetPort()), SessionToken, BuildId);
+	if (!bRegisteredSync)
+	{
+		UE_LOG(LogClaireon, Error,
+			TEXT("[MCP] Synchronous proxy registration failed in auto-promote path "
+				 "(proxy rejected or transport error). "
+				 "Falling back to direct-connect mode on ephemeral port %u. "
+				 "Cause: proxy may have rejected the registration (stale worktree mapping, "
+				 "auth mismatch, or version drift). Check proxy.log for details."),
+			static_cast<uint32>(EphemeralPort));
+		// Fall back: re-bind on SHA port in direct-connect mode if possible.
+		Server->Stop();
+		CurrentMcpMode = EClaireonMcpMode::Unstarted;
+		if (Server->TryStart(PreferredPort))
+		{
+			CurrentMcpMode = EClaireonMcpMode::DirectConnect;
+			UE_LOG(LogClaireon, Display,
+				TEXT("[MCP] Fallback direct-connect bound on SHA port %u."),
+				static_cast<uint32>(PreferredPort));
+		}
+		else
+		{
+			// SHA port may still be proxy-held. Bind another ephemeral as direct-connect.
+			const uint16 FallbackPort = Server->StartEphemeral();
+			if (FallbackPort != 0)
+			{
+				CurrentMcpMode = EClaireonMcpMode::DirectConnect;
+				UE_LOG(LogClaireon, Display,
+					TEXT("[MCP] Fallback direct-connect bound on ephemeral port %u."),
+					static_cast<uint32>(FallbackPort));
+			}
+			else
+			{
+				UE_LOG(LogClaireon, Error,
+					TEXT("[MCP] Fallback direct-connect failed: no available port. MCP server inactive."));
+			}
+		}
+		return;
+	}
+
+	// Registration succeeded synchronously. Start ONLY the heartbeat ticker
+	// -- do not re-register (which would reset the proxy's ready flag and
+	// require another /editor/ready round-trip after Python initializes).
+	// StartHeartbeatTickerOnly stays in Registered state and just keeps
+	// heartbeats flowing.
+	ProxyClient->StartHeartbeatTickerOnly(
+		static_cast<int32>(Server->GetPort()), SessionToken, BuildId);
 	UE_LOG(LogClaireon, Display,
-		TEXT("[MCP] Joined proxy session despite bEnableProxy=%s because a ")
-		TEXT("Claireon proxy was already running (pid=%u). Editor MCP listener bound on %u."),
+		TEXT("[MCP] Joined proxy session (bEnableProxy=%s, proxy pid=%u). "
+			 "Editor MCP listener bound on %u."),
 		bEnableProxy ? TEXT("true") : TEXT("false"),
 		ProxyClient->GetCachedProxyPid(),
 		static_cast<uint32>(EphemeralPort));
@@ -2035,7 +2331,8 @@ void FClaireonModule::StopServer()
 	if (Server.IsValid())
 	{
 		Server->Stop();
-		Server.Reset();
+		// Do NOT reset Server -- the registry must remain valid across
+		// stop/start cycles (post-Spec-C). ShutdownModule fully tears it down.
 	}
 }
 

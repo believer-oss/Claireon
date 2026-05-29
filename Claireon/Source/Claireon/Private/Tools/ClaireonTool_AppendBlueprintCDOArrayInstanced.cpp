@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_AppendBlueprintCDOArrayInstanced.h"
+#include "Tools/ClaireonBlueprintGraphEditToolBase.h" // kBPCategory
 #include "ClaireonPathResolver.h"
 #include "Tools/ClaireonPropertyResolver.h"
 #include "Tools/ClaireonPropertyUtils.h"
@@ -14,7 +15,7 @@
 
 FString ClaireonTool_AppendBlueprintCDOArrayInstanced::GetCategory() const
 {
-	return TEXT("bp");
+	return kBPCategory;
 }
 
 FString ClaireonTool_AppendBlueprintCDOArrayInstanced::GetOperation() const

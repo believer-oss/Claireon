@@ -24,6 +24,7 @@ struct CLAIREON_API FToolSchemaBuilder
 	void AddInteger(const FString& Name, const FString& Description, bool bRequired = false);
 	void AddBoolean(const FString& Name, const FString& Description, bool bRequired = false);
 	void AddObject(const FString& Name, const FString& Description, bool bRequired = false);
+	void AddArray(const FString& Name, const FString& Description, bool bRequired = false);
 	void AddEnum(const FString& Name, const FString& Description, const TArray<FString>& Values, bool bRequired = false);
 
 	/** Finalize and return the schema. Sets the required array if any fields were marked required. */

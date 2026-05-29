@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_BlueprintCompileBatch.h"
+#include "Tools/ClaireonBlueprintGraphEditToolBase.h" // kBPCategory
 #include "ClaireonBlueprintHelpers.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonLog.h"
@@ -15,7 +16,7 @@
 #include "Kismet2/KismetEditorUtilities.h"
 #include "UObject/SoftObjectPath.h"
 
-FString ClaireonTool_BlueprintCompileBatch::GetCategory() const { return TEXT("bp"); }
+FString ClaireonTool_BlueprintCompileBatch::GetCategory() const { return kBPCategory; }
 FString ClaireonTool_BlueprintCompileBatch::GetOperation() const { return TEXT("compile_batch"); }
 
 TArray<FString> ClaireonTool_BlueprintCompileBatch::GetSearchKeywords() const

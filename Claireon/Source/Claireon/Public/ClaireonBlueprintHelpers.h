@@ -8,8 +8,10 @@
 #include "Dom/JsonObject.h"
 
 class UBlueprint;
+class UClass;
 class UEdGraph;
 class UEdGraphNode;
+class UPackage;
 class SGraphEditor;
 class FBlueprintEditor;
 
@@ -367,6 +369,31 @@ namespace ClaireonBlueprintHelpers
 	};
 
 	/**
+	 * Result of CreateBlueprint. Populated on both success and failure paths.
+	 */
+	struct FCreateBlueprintResult
+	{
+		UBlueprint* Blueprint = nullptr;
+		UEdGraph* EventGraph = nullptr;
+		UPackage* Package = nullptr;
+		FString Error;
+		TArray<FString> Warnings;
+
+		bool IsOk() const { return Error.IsEmpty() && Blueprint != nullptr; }
+	};
+
+	/**
+	 * Create a new Blueprint asset at the given asset path with the given parent class.
+	 * Handles package creation, externally-referenceable flag, asset-registry notification,
+	 * and overwrites any existing file on disk at that path.
+	 *
+	 * @param AssetPath UE asset path (e.g. "/Game/MyBlueprint" or "/Game/MyBlueprint.MyBlueprint")
+	 * @param ParentClass The parent UClass for the new Blueprint.
+	 * @param OutResult Receives Blueprint + EventGraph + Package handles and warnings/error.
+	 */
+	void CreateBlueprint(const FString& AssetPath, UClass* ParentClass, FCreateBlueprintResult& OutResult);
+
+	/**
 	 * Apply optional variable properties (category, tooltip, replication, flags, metadata)
 	 * to an existing Blueprint variable. Used by both set_variable_properties and add_variable.
 	 *
@@ -379,6 +406,26 @@ namespace ClaireonBlueprintHelpers
 	void ApplyVariableProperties(UBlueprint* Blueprint, FName VarName,
 	                             const TSharedPtr<FJsonObject>& Params,
 	                             FApplyVariableResult* OutResult = nullptr);
+
+	/**
+	 * Create a new FBPVariableDescription on the Blueprint from a JSON spec, then call
+	 * ApplyVariableProperties to populate the full option set.
+	 *
+	 * Accepts both factory-canonical and applicator-legacy field names:
+	 *   - "variable_name" or "name" (required)
+	 *   - "variable_type" or "type" (legacy applicator alias) or "variable_type_spec" (object form)
+	 *   - "default_value" (optional)
+	 *   - "flags" (optional string array)
+	 *   - All keys consumed by ApplyVariableProperties.
+	 *
+	 * Default PropertyFlags = CPF_Edit | CPF_BlueprintVisible.
+	 *
+	 * @return true on success.
+	 */
+	bool CreateVariableFromSpec(UBlueprint* Blueprint,
+	                            const TSharedPtr<FJsonObject>& Params,
+	                            FApplyVariableResult* OutResult,
+	                            FString& OutError);
 
 	/**
 	 * Get the first output pin on a node (for cursor positioning).

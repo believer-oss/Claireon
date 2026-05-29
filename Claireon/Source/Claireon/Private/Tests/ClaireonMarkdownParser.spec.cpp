@@ -173,7 +173,7 @@ UNTEST_UNIT_OPTS(Claireon, MarkdownParser, MarkupValidationFail, UNTEST_TIMEOUTM
 }
 
 // ---------------------------------------------------------------------------
-// Style set registration (Stage 006)
+// Style set registration
 // ---------------------------------------------------------------------------
 
 UNTEST_UNIT_OPTS(Claireon, MarkdownParser, StyleSetRegistered, UNTEST_TIMEOUTMS(5000))
@@ -205,7 +205,7 @@ UNTEST_UNIT_OPTS(Claireon, MarkdownParser, StyleSetRegistered, UNTEST_TIMEOUTMS(
 }
 
 // ---------------------------------------------------------------------------
-// Code blocks (Stage 008)
+// Code blocks
 // ---------------------------------------------------------------------------
 
 UNTEST_UNIT_OPTS(Claireon, MarkdownParser, CodeBlockBasic, UNTEST_TIMEOUTMS(5000))
@@ -246,7 +246,7 @@ UNTEST_UNIT_OPTS(Claireon, MarkdownParser, CodeBlockMultiline, UNTEST_TIMEOUTMS(
 }
 
 // ---------------------------------------------------------------------------
-// Asset path detection (Stage 010)
+// Asset path detection
 // ---------------------------------------------------------------------------
 
 UNTEST_UNIT_OPTS(Claireon, MarkdownParser, AssetPathGame, UNTEST_TIMEOUTMS(5000))
@@ -325,7 +325,7 @@ UNTEST_UNIT_OPTS(Claireon, MarkdownParser, NotAnAssetPath, UNTEST_TIMEOUTMS(5000
 }
 
 // ---------------------------------------------------------------------------
-// ParseToBlocks — structured output (Stage 013+)
+// ParseToBlocks - structured output
 // ---------------------------------------------------------------------------
 
 UNTEST_UNIT_OPTS(Claireon, MarkdownParser, BlocksEmpty, UNTEST_TIMEOUTMS(5000))

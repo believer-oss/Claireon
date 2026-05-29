@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonTool_ReplaceStructUsage.h"
 #include "Tools/ClaireonAnimEditToolBase.h" // FToolSchemaBuilder
+#include "Tools/ClaireonBlueprintGraphEditToolBase.h" // kBPCategory
 #include "Tools/ClaireonAnimGraphHelpers.h"
 #include "ClaireonStructReflection.h"
 #include "ClaireonNameResolver.h"
@@ -108,7 +109,7 @@ namespace
 			K2Schema->SplitPin(Parent, /*bNotify=*/false);
 		}
 
-		// K2 schema names sub-pins as Parent_SubName (underscore-joined).
+		// schema names sub-pins as Parent_SubName (underscore-joined).
 		const FString ExpectedCompound = ParentName + TEXT("_") + SubName;
 		for (UEdGraphPin* Sub : Parent->SubPins)
 		{
@@ -253,6 +254,7 @@ namespace
 }
 
 FString ClaireonTool_ReplaceStructUsage::GetOperation() const { return TEXT("replace_struct_usage"); }
+FString ClaireonTool_ReplaceStructUsage::GetCategory() const { return kBPCategory; }
 
 FString ClaireonTool_ReplaceStructUsage::GetDescription() const
 {

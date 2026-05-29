@@ -251,4 +251,57 @@ bool ApplyAddAnimationTrack(UWidgetAnimation* Anim, const FGuid& BindingGuid, co
 	return true;
 }
 
+bool ApplyRemoveAnimationTrack(UWidgetAnimation* Anim, const FGuid& BindingGuid,
+	const FString& TrackNameOrProperty, FString& OutError)
+{
+	OutError.Reset();
+	if (!Anim)
+	{
+		OutError = TEXT("animation is null");
+		return false;
+	}
+	UMovieScene* MS = Anim->GetMovieScene();
+	if (!MS)
+	{
+		OutError = TEXT("animation has no MovieScene");
+		return false;
+	}
+	if (!BindingGuid.IsValid())
+	{
+		OutError = TEXT("binding_guid is invalid");
+		return false;
+	}
+	const FMovieSceneBinding* Binding = MS->GetBindings().FindByPredicate(
+		[&](const FMovieSceneBinding& B) { return B.GetObjectGuid() == BindingGuid; });
+	if (!Binding)
+	{
+		OutError = TEXT("binding not found on this animation");
+		return false;
+	}
+	UMovieSceneTrack* Found = nullptr;
+	const FName Wanted(*TrackNameOrProperty);
+	for (UMovieSceneTrack* T : Binding->GetTracks())
+	{
+		if (!T) { continue; }
+		if (T->GetTrackName() == Wanted
+			|| T->GetClass()->GetName() == TrackNameOrProperty
+			|| T->GetClass()->GetName().Equals(TrackNameOrProperty, ESearchCase::IgnoreCase))
+		{
+			Found = T;
+			break;
+		}
+	}
+	if (!Found)
+	{
+		OutError = FString::Printf(TEXT("track '%s' not found on binding"), *TrackNameOrProperty);
+		return false;
+	}
+	if (!MS->RemoveTrack(*Found))
+	{
+		OutError = TEXT("RemoveTrack returned false");
+		return false;
+	}
+	return true;
+}
+
 }  // namespace Claireon::WidgetAnimation

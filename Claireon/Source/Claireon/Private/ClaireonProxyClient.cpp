@@ -162,7 +162,7 @@ FClaireonProxyClient::~FClaireonProxyClient()
 
 int64 FClaireonProxyClient::GetSelfStartTimeNs()
 {
-	// D8 newest-wins discriminator. Mirrors claireon_proxy.py
+	// newest-wins discriminator. Mirrors claireon_proxy.py
 	// _process_start_time_ns() so the (pid, start_time_ns) tuple compares
 	// cleanly across editor and proxy on the same host. Returns 0 on
 	// failure; the proxy treats 0 as a valid value (pid alone is unique
@@ -221,8 +221,8 @@ FString FClaireonProxyClient::GetRegistrationBaseUrl()
 
 bool FClaireonProxyClient::PingProxyHealth()
 {
-	// Stage 010 auto-promote probe: GET /admin/health with a tight timeout.
-	// The response shape (per claireon_proxy.py::handle_admin_health) is
+	// Auto-promote probe: GET /admin/health with a tight timeout. The
+	// response shape (per claireon_proxy.py::handle_admin_health) is
 	// {version_hash, pid, worktrees:[...]}. A non-Claireon occupant of 43017
 	// will either fail to answer or answer without that shape.
 	const FString Url = FString::Printf(
@@ -422,10 +422,10 @@ bool FClaireonProxyClient::SpawnDetachedProxy()
 		return false;
 	}
 
-	// Stage 009 (D2/D3): the singleton serves every worktree; --worktree-root
-	// is no longer a CLI argument. /admin/ensure_worktree adds worktrees on
-	// demand, and /editor/register implicitly creates the slot for the
-	// editor's own worktree on first connect.
+	// The singleton serves every worktree; --worktree-root is not a CLI
+	// argument. /admin/ensure_worktree adds worktrees on demand, and
+	// /editor/register implicitly creates the slot for the editor's own
+	// worktree on first connect.
 	const FString CmdLine = FString::Printf(TEXT("\"%s\""), *ScriptPath);
 
 	// Spawn python with its working directory set to the runtime dir under
@@ -612,15 +612,14 @@ ERegisterResult FClaireonProxyClient::RegisterOnce()
 	const FString ProxyHash = ComputeProxyScriptHash();
 	const FString WorktreeRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 
-	// Stage 005 multi-tenant wire: identify the session by (pid,
-	// start_time_ns); session_uuid was dropped. StartTimeNs was populated
-	// in BeginRetryRegister and is the same across every retry, so the
-	// proxy can compare identities deterministically. start_time_ns is
-	// sent as a decimal string -- the value is a Windows FILETIME (~1.3e17
-	// today) which exceeds JSON Number / IEEE-754 double precision, and
-	// UE's TJsonWriter would emit it in scientific notation otherwise.
-	// The proxy stores the string verbatim and uses string equality for
-	// session-identity matching (no parse round-trip needed).
+	// Multi-tenant wire: identify the session by (pid, start_time_ns).
+	// StartTimeNs was populated in BeginRetryRegister and is the same across
+	// every retry, so the proxy can compare identities deterministically.
+	// start_time_ns is sent as a decimal string -- the value is a Windows
+	// FILETIME (~1.3e17 today) which exceeds JSON Number / IEEE-754 double
+	// precision, and UE's TJsonWriter would emit it in scientific notation
+	// otherwise. The proxy stores the string verbatim and uses string
+	// equality for session-identity matching (no parse round-trip needed).
 	TSharedRef<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetNumberField(TEXT("pid"), FPlatformProcess::GetCurrentProcessId());
 	Payload->SetStringField(TEXT("worktree_root"), WorktreeRoot);
@@ -668,9 +667,9 @@ ERegisterResult FClaireonProxyClient::RegisterOnce()
 		TEXT("[MCP Proxy] /editor/register rejected: reason=%s status=%d"),
 		*Reason, Status);
 
-	// Stage 005: version_mismatch is gone (advisory on the proxy side, D5),
-	// singleton_session is gone (newest-wins, D6), worktree_mismatch is gone
-	// (multi-tenant). Only auth/malformed remain as 4xx terminal cases.
+	// version_mismatch is advisory on the proxy side, singleton_session was
+	// dropped (newest-wins), worktree_mismatch was dropped (multi-tenant).
+	// Only auth/malformed remain as 4xx terminal cases.
 	if (Reason == TEXT("malformed_request") || Reason == TEXT("bad_request")
 		|| Reason == TEXT("unauthorized") || Reason == TEXT("auth_required"))
 	{
@@ -688,7 +687,7 @@ bool FClaireonProxyClient::RegisterAndReturnAccepted(int32 EditorMCPPort, const 
 	CachedEditorMCPPort = EditorMCPPort;
 	CachedEditorMCPToken = EditorMCPToken;
 	CachedBuildId = BuildId;
-	// Stage 005: ensure StartTimeNs is populated before RegisterOnce uses it.
+	// Ensure StartTimeNs is populated before RegisterOnce uses it.
 	// BeginRetryRegister latches it once for the production path; this
 	// synchronous wrapper (used by the smoke test) needs the same guarantee.
 	if (StartTimeNs == 0)
@@ -705,10 +704,10 @@ void FClaireonProxyClient::BeginRetryRegister(int32 EditorMCPPort, const FString
 	CachedEditorMCPToken = EditorMCPToken;
 	CachedBuildId = BuildId;
 
-	// Stage 005: latch this editor's start_time_ns once. Every retry uses
-	// the same tuple, so the proxy can compare identities deterministically
-	// across the RetryRegister loop. Reads 0 if the OS query fails -- still
-	// valid, the proxy treats pid alone as unique on a live host.
+	// Latch this editor's start_time_ns once. Every retry uses the same
+	// tuple, so the proxy can compare identities deterministically across
+	// the RetryRegister loop. Reads 0 if the OS query fails -- still valid,
+	// the proxy treats pid alone as unique on a live host.
 	if (StartTimeNs == 0)
 	{
 		StartTimeNs = GetSelfStartTimeNs();
@@ -722,6 +721,66 @@ void FClaireonProxyClient::BeginRetryRegister(int32 EditorMCPPort, const FString
 	LastWarnedAtSeconds = 0.0;
 	CurrentBackoffSeconds = 0.25;
 	StartHeartbeatTicker();
+}
+
+bool FClaireonProxyClient::NotifyReady(int32 ToolCount)
+{
+	if (!bIsRegistered)
+	{
+		// Not registered yet -- /editor/ready will be sent after the async
+		// registration completes. This path fires if Python initialized before
+		// the first heartbeat tick. A subsequent call from EnsureRegistered
+		// will retry once bIsRegistered flips.
+		return false;
+	}
+
+	const FString WorktreeRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+	TSharedRef<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("worktree_root"), WorktreeRoot);
+	Payload->SetNumberField(TEXT("pid"), FPlatformProcess::GetCurrentProcessId());
+	Payload->SetStringField(TEXT("start_time_ns"), FString::Printf(TEXT("%lld"), StartTimeNs));
+	Payload->SetNumberField(TEXT("tool_count"), ToolCount);
+
+	FString Body;
+	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Body);
+	FJsonSerializer::Serialize(Payload, Writer);
+
+	int32 Status = 0;
+	FString ResponseBody;
+	const bool bOk = SyncPostJson(
+		MakeRegUrl(ClaireonProxy::ReadyEndpoint),
+		Body, /*TimeoutSeconds=*/ 3, Status, ResponseBody);
+
+	if (!bOk)
+	{
+		UE_LOG(LogClaireon, Warning,
+			TEXT("[MCP Proxy] /editor/ready failed: status=%d body=%s"),
+			Status, *ResponseBody);
+		return false;
+	}
+
+	UE_LOG(LogClaireon, Display,
+		TEXT("[MCP Proxy] /editor/ready acknowledged by proxy (tool_count=%d)"), ToolCount);
+	return true;
+}
+
+void FClaireonProxyClient::StartHeartbeatTickerOnly(int32 EditorMCPPort, const FString& EditorMCPToken, const FString& BuildId)
+{
+	CachedEditorMCPPort = EditorMCPPort;
+	CachedEditorMCPToken = EditorMCPToken;
+	CachedBuildId = BuildId;
+
+	// Already registered by the synchronous path. Stay in Registered state;
+	// do NOT move to RetryRegister (which would cause a re-registration on
+	// the next tick and reset the proxy's ready flag).
+	if (ProxyState != EClaireonProxyState::Registered)
+	{
+		ProxyState = EClaireonProxyState::Registered;
+	}
+	bIsRegistered = true;
+	StartHeartbeatTicker();
+	UE_LOG(LogClaireon, Display,
+		TEXT("[MCP Proxy] StartHeartbeatTickerOnly: heartbeat started (skip re-register)."));
 }
 
 void FClaireonProxyClient::RequestReconnect()
@@ -771,11 +830,11 @@ void FClaireonProxyClient::Unregister()
 		return;
 	}
 
-	// Stage 005 multi-tenant wire: identify the session by (worktree_root,
-	// pid, start_time_ns). The proxy clears the slot only if the tuple
-	// matches the current session, so a racing newest-wins eviction is
-	// safe. start_time_ns is sent as a decimal string for the same reason
-	// as register (see the register payload comment).
+	// Multi-tenant wire: identify the session by (worktree_root, pid,
+	// start_time_ns). The proxy clears the slot only if the tuple matches
+	// the current session, so a racing newest-wins eviction is safe.
+	// start_time_ns is sent as a decimal string for the same reason as
+	// register (see the register payload comment).
 	const FString WorktreeRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 	TSharedRef<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("worktree_root"), WorktreeRoot);
@@ -820,7 +879,7 @@ FHeartbeatResult FClaireonProxyClient::SendHeartbeat()
 {
 	FHeartbeatResult Out;
 
-	// Stage 005 multi-tenant wire: heartbeat body is (worktree_root, pid,
+	// Multi-tenant wire: heartbeat body is (worktree_root, pid,
 	// start_time_ns). The proxy uses (pid, start_time_ns) as the session
 	// identity; an absent local StartTimeNs is OK -- the proxy treats "0"
 	// as a valid value. start_time_ns is sent as a decimal string for the
@@ -856,7 +915,7 @@ FHeartbeatResult FClaireonProxyClient::SendHeartbeat()
 
 	const FString Reason = JsonString(ResponseJson, TEXT("reason"));
 
-	// D6 newest-wins: an evicted_by sub-object on the heartbeat reply means
+	// newest-wins: an evicted_by sub-object on the heartbeat reply means
 	// another editor took our worktree slot. Read it defensively -- today's
 	// per-worktree proxy never sets it, so an absent field is treated as
 	// staleness (the correct fallback for the legacy proxy).

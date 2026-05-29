@@ -6,9 +6,9 @@
 #include "Tools/IClaireonTool.h"
 
 /**
- * MCP tool for reading the structure of audio assets (SoundCue, MetaSoundSource, SoundClass,
- * SoundMix, SoundAttenuation, SoundConcurrency). Stateless read-only surface.
- * Implementations for each asset kind land in stage 001+.
+ * MCP tool for reading the structure of audio assets (SoundCue, MetaSoundSource,
+ * SoundClass, SoundMix, SoundAttenuation, SoundConcurrency). Stateless
+ * read-only surface.
  */
 class FClaireonTool_AudioInspect : public IClaireonTool
 {

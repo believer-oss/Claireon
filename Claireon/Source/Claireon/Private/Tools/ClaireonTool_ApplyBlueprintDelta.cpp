@@ -101,6 +101,7 @@ namespace
 // ============================================================================
 
 FString ClaireonTool_ApplyBlueprintDelta::GetOperation() const { return TEXT("apply_delta"); }
+FString ClaireonTool_ApplyBlueprintDelta::GetCategory() const { return kBPCategory; }
 
 FString ClaireonTool_ApplyBlueprintDelta::GetDescription() const
 {
@@ -115,10 +116,10 @@ TSharedPtr<FJsonObject> ClaireonTool_ApplyBlueprintDelta::GetInputSchema() const
 {
 	FToolSchemaBuilder S;
 	S.AddString(TEXT("session_id"), TEXT("Session ID from a prior bp_open or bp_create call"), true);
-	S.AddObject(TEXT("disconnect"), TEXT("Array of connections to break first. Each: {node (GUID/title/local_id), pin, target_node? (for selective disconnect)}"));
-	S.AddObject(TEXT("remove_nodes"), TEXT("Array of node GUIDs or titles to remove"));
-	S.AddObject(TEXT("nodes"), TEXT("Array of nodes to create. Each: {id (local ref), node_type, position?: {x,y}, ...typed params (function_name, struct_type, ...), node_properties?: {}, num_extra_pins?: int}"));
-	S.AddObject(TEXT("connections"), TEXT("Array of connections. Each: {from (local id/GUID/title), from_pin, to (local id/GUID/title), to_pin}"));
+	S.AddArray(TEXT("disconnect"), TEXT("Array of connections to break first. Each: {node (GUID/title/local_id), pin, target_node? (for selective disconnect)}"));
+	S.AddArray(TEXT("remove_nodes"), TEXT("Array of node GUIDs or titles to remove"));
+	S.AddArray(TEXT("nodes"), TEXT("Array of nodes to create. Each: {id (local ref), node_type, position?: {x,y}, ...typed params (function_name, struct_type, ...), node_properties?: {}, num_extra_pins?: int}"));
+	S.AddArray(TEXT("connections"), TEXT("Array of connections. Each: {from (local id/GUID/title), from_pin, to (local id/GUID/title), to_pin}. Deprecated dict form {connections:[...]} is accepted with a warning."));
 	return S.Build();
 }
 
@@ -161,7 +162,7 @@ FToolResult ClaireonTool_ApplyBlueprintDelta::Execute(const TSharedPtr<FJsonObje
 	Data->LastOperationAffectedNodes.Reset();
 	TArray<UEdGraphNode*> CreatedNodesThisCall;
 
-	// H1: transaction rollback helper. Every error-return after this point must
+	// transaction rollback helper. Every error-return after this point must
 	// go through CancelAndError so the FScopedTransaction destructor discards the
 	// partial work instead of committing half-created nodes with no connections.
 	auto CancelAndError = [&](const FString& Msg)
@@ -368,9 +369,41 @@ FToolResult ClaireonTool_ApplyBlueprintDelta::Execute(const TSharedPtr<FJsonObje
 	// ========================================================================
 	// Phase 4: Connect
 	// ========================================================================
+	// accept the deprecated dict form {connections:[...]} in addition to the
+	// correct array form. When a caller passes connections as an object that has a
+	// nested "connections" array key, unwrap it and emit a deprecation warning so
+	// the caller knows to switch to the array form.
+	//
+	// The canonical form is a top-level JSON array:
+	//   "connections": [ {from, from_pin, to, to_pin}, ... ]
+	// The deprecated dict form that arrived from older callers:
+	//   "connections": { "connections": [ {from, from_pin, to, to_pin}, ... ] }
+	TArray<TSharedPtr<FJsonValue>> ApplySpecDeltaStateTree_UnwrappedConnections; // storage for the unwrapped copy
+	const TArray<TSharedPtr<FJsonValue>>* ConnDictFallback = nullptr;
+	{
+		const TSharedPtr<FJsonObject>* ConnDictPtr = nullptr;
+		if (Arguments->TryGetObjectField(TEXT("connections"), ConnDictPtr) && ConnDictPtr)
+		{
+			const TArray<TSharedPtr<FJsonValue>>* InnerArray = nullptr;
+			if ((*ConnDictPtr)->TryGetArrayField(TEXT("connections"), InnerArray) && InnerArray)
+			{
+				Warnings.Add(TEXT("Deprecated: 'connections' was passed as a dict with a nested 'connections' array. Pass connections directly as a JSON array. The inner array was unwrapped for this call."));
+				ApplySpecDeltaStateTree_UnwrappedConnections = *InnerArray;
+				ConnDictFallback = &ApplySpecDeltaStateTree_UnwrappedConnections;
+			}
+			else
+			{
+				Warnings.Add(TEXT("'connections' was passed as an object but no inner 'connections' array was found; 0 connections will be made. Pass connections as a JSON array."));
+			}
+		}
+	}
 	int32 ConnectionsMade = 0;
 	const TArray<TSharedPtr<FJsonValue>>* ConnArray = nullptr;
-	if (Arguments->TryGetArrayField(TEXT("connections"), ConnArray))
+	if (!Arguments->TryGetArrayField(TEXT("connections"), ConnArray))
+	{
+		ConnArray = ConnDictFallback;
+	}
+	if (ConnArray)
 	{
 		for (const TSharedPtr<FJsonValue>& Entry : *ConnArray)
 		{

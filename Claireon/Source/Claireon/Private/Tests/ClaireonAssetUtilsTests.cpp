@@ -168,7 +168,7 @@ UNTEST_UNIT(Claireon, AssetUtils_Json, AssetDataToJson)
 }
 
 // ---------------------------------------------------------------------------
-// AssertInnerNameMatchesPackage tests (work item #0000)
+// AssertInnerNameMatchesPackage tests
 // ---------------------------------------------------------------------------
 
 UNTEST_UNIT(Claireon, AssetUtils_Assert, AssertInnerNameMatchesPackage_NullAssetFails)

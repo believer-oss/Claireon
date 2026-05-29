@@ -262,7 +262,7 @@ FString ClaireonNiagaraHelpers::FormatEmitterStructure(const UNiagaraSystem* Sys
 	// Local space
 	Output += FString::Printf(TEXT("  Local Space: %s\n"), EmitterData->bLocalSpace ? TEXT("true") : TEXT("false"));
 
-	// Module stacks (Stage 009)
+	// Module stacks
 	if (System)
 	{
 		Output += TEXT("  Stacks:\n");
@@ -508,7 +508,7 @@ bool ClaireonNiagaraHelpers::SetObjectProperty(UObject* Object, const FString& P
 }
 
 // ============================================================================
-// Stack Resolution + Graph Traversal (Stage 001)
+// Stack Resolution + Graph Traversal
 // ============================================================================
 
 bool ClaireonNiagaraHelpers::ResolveStackName(const FString& StackName, ENiagaraScriptUsage& OutUsage, FString& OutError)
@@ -796,4 +796,132 @@ FString ClaireonNiagaraHelpers::FormatModuleInfo(UNiagaraNodeFunctionCall* Modul
 	}
 
 	return Output;
+}
+
+// ============================================================================
+// User Parameter helpers (AR7, #0000)
+// ============================================================================
+
+namespace
+{
+	FString ClaireonNiagaraHelpers_NormalizeUserParamName(const FString& In)
+	{
+		if (In.StartsWith(TEXT("User.")))
+		{
+			return In;
+		}
+		return TEXT("User.") + In;
+	}
+}
+
+bool ClaireonNiagaraHelpers::ResolveUserParameterTypeDef(const FString& TypeStr, FNiagaraTypeDefinition& OutTypeDef, FString& OutError)
+{
+	if (TypeStr.Equals(TEXT("Float"), ESearchCase::IgnoreCase))
+	{
+		OutTypeDef = FNiagaraTypeDefinition::GetFloatDef();
+		return true;
+	}
+	if (TypeStr.Equals(TEXT("Vector"), ESearchCase::IgnoreCase))
+	{
+		OutTypeDef = FNiagaraTypeDefinition::GetVec3Def();
+		return true;
+	}
+	if (TypeStr.Equals(TEXT("Color"), ESearchCase::IgnoreCase)
+		|| TypeStr.Equals(TEXT("LinearColor"), ESearchCase::IgnoreCase))
+	{
+		OutTypeDef = FNiagaraTypeDefinition::GetColorDef();
+		return true;
+	}
+	if (TypeStr.Equals(TEXT("Bool"), ESearchCase::IgnoreCase))
+	{
+		OutTypeDef = FNiagaraTypeDefinition::GetBoolDef();
+		return true;
+	}
+	if (TypeStr.Equals(TEXT("Int"), ESearchCase::IgnoreCase))
+	{
+		OutTypeDef = FNiagaraTypeDefinition::GetIntDef();
+		return true;
+	}
+	OutError = FString::Printf(
+		TEXT("Unsupported parameter type: '%s'. Valid types: Float, Vector, Color, LinearColor, Bool, Int"),
+		*TypeStr);
+	return false;
+}
+
+bool ClaireonNiagaraHelpers::AddOrUpdateUserParameter(
+	UNiagaraSystem* System,
+	const FString& ParameterName,
+	const FNiagaraTypeDefinition& TypeDef,
+	FString& OutNormalizedName,
+	FString& OutError)
+{
+	if (!System)
+	{
+		OutError = TEXT("AddOrUpdateUserParameter: null system");
+		return false;
+	}
+	if (!TypeDef.IsValid())
+	{
+		OutError = TEXT("AddOrUpdateUserParameter: invalid type def");
+		return false;
+	}
+
+	OutNormalizedName = ClaireonNiagaraHelpers_NormalizeUserParamName(ParameterName);
+
+	System->Modify();
+
+	FNiagaraVariable Variable(TypeDef, FName(*OutNormalizedName));
+	System->GetExposedParameters().AddParameter(Variable, true);
+
+	System->MarkPackageDirty();
+	return true;
+}
+
+bool ClaireonNiagaraHelpers::RemoveUserParameter(
+	UNiagaraSystem* System,
+	const FString& ParameterName,
+	FString& OutNormalizedName,
+	FString& OutError)
+{
+	if (!System)
+	{
+		OutError = TEXT("RemoveUserParameter: null system");
+		return false;
+	}
+
+	OutNormalizedName = ClaireonNiagaraHelpers_NormalizeUserParamName(ParameterName);
+
+	// GetUserParameters returns the SIMPLE-named variant (no "User." prefix), so we
+	// match on the simple form too. Both forms are accepted.
+	FString SimpleName = OutNormalizedName;
+	if (SimpleName.StartsWith(TEXT("User.")))
+	{
+		SimpleName = SimpleName.RightChop(5);
+	}
+
+	TArray<FNiagaraVariable> UserParams;
+	System->GetExposedParameters().GetUserParameters(UserParams);
+
+	const FNiagaraVariable* FoundVar = nullptr;
+	for (const FNiagaraVariable& Param : UserParams)
+	{
+		const FString ParamName = Param.GetName().ToString();
+		if (ParamName.Equals(OutNormalizedName, ESearchCase::IgnoreCase)
+			|| ParamName.Equals(SimpleName, ESearchCase::IgnoreCase))
+		{
+			FoundVar = &Param;
+			break;
+		}
+	}
+
+	if (!FoundVar)
+	{
+		OutError = FString::Printf(TEXT("Parameter '%s' not found in exposed parameters"), *OutNormalizedName);
+		return false;
+	}
+
+	System->Modify();
+	System->GetExposedParameters().RemoveParameter(*FoundVar);
+	System->MarkPackageDirty();
+	return true;
 }

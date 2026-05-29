@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 //
-// Regression spec for Claireon::DeriveDefaultMcpPort (Stage 010).
+// Regression spec for Claireon::DeriveDefaultMcpPort.
 // The C++ helper MUST agree byte-for-byte with claireon_proxy.py's
 // derive_default_mcp_port for any given canonical worktree path; this
 // spec hard-codes vectors computed independently (via .NET SHA-256)
@@ -26,8 +26,7 @@
 namespace
 {
 	// File-local prefix on every helper to avoid colliding with other anon-NS
-	// helpers under unity batching (MEMORY:
-	// feedback_anon_namespace_unity_collision.md).
+	// helpers under unity batching.
 	bool PortDerivationSpec_IsInPrivateRange(uint16 Port)
 	{
 		return Port >= 49152 && Port <= 65535;

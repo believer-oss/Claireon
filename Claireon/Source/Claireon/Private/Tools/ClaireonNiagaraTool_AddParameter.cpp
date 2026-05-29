@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonNiagaraTool_AddParameter.h"
+#include "Tools/ClaireonNiagaraHelpers.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "NiagaraSystem.h"
 #include "NiagaraTypes.h"
@@ -47,49 +48,26 @@ FToolResult ClaireonNiagaraTool_AddParameter::Execute(const TSharedPtr<FJsonObje
 		return MakeErrorResult(TEXT("Missing required parameter: type"));
 	}
 
-	FString FullName = Name;
-	if (!FullName.StartsWith(TEXT("User.")))
-	{
-		FullName = TEXT("User.") + FullName;
-	}
-
 	FNiagaraTypeDefinition TypeDef;
-	if (TypeStr.Equals(TEXT("Float"), ESearchCase::IgnoreCase))
+	FString TypeError;
+	if (!ClaireonNiagaraHelpers::ResolveUserParameterTypeDef(TypeStr, TypeDef, TypeError))
 	{
-		TypeDef = FNiagaraTypeDefinition::GetFloatDef();
-	}
-	else if (TypeStr.Equals(TEXT("Vector"), ESearchCase::IgnoreCase))
-	{
-		TypeDef = FNiagaraTypeDefinition::GetVec3Def();
-	}
-	else if (TypeStr.Equals(TEXT("Color"), ESearchCase::IgnoreCase) || TypeStr.Equals(TEXT("LinearColor"), ESearchCase::IgnoreCase))
-	{
-		TypeDef = FNiagaraTypeDefinition::GetColorDef();
-	}
-	else if (TypeStr.Equals(TEXT("Bool"), ESearchCase::IgnoreCase))
-	{
-		TypeDef = FNiagaraTypeDefinition::GetBoolDef();
-	}
-	else if (TypeStr.Equals(TEXT("Int"), ESearchCase::IgnoreCase))
-	{
-		TypeDef = FNiagaraTypeDefinition::GetIntDef();
-	}
-	else
-	{
-		return MakeErrorResult(FString::Printf(TEXT("Unsupported parameter type: '%s'. Valid types: Float, Vector, Color, LinearColor, Bool, Int"), *TypeStr));
+		return MakeErrorResult(TypeError);
 	}
 
 	UNiagaraSystem* System = Data->System.Get();
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Add Niagara Parameter")));
-	System->Modify();
 
-	FNiagaraVariable Variable(TypeDef, FName(*FullName));
-	System->GetExposedParameters().AddParameter(Variable, true);
-
-	System->MarkPackageDirty();
+	FString NormalizedName;
+	FString OpError;
+	if (!ClaireonNiagaraHelpers::AddOrUpdateUserParameter(System, Name, TypeDef, NormalizedName, OpError))
+	{
+		Transaction.Cancel();
+		return MakeErrorResult(OpError);
+	}
 
 	Data->LastOperationStatus = FString::Printf(TEXT("add_parameter -> Added '%s' (%s)"),
-		*FullName, *TypeStr);
+		*NormalizedName, *TypeStr);
 	return BuildStateResponse(SessionId, Data);
 }

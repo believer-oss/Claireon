@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "ClaireonBlueprintHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonNameResolver.h"
 #include "Dom/JsonObject.h"
 #include "ClaireonPathResolver.h"
@@ -28,6 +29,11 @@
 #include "StructUtils/InstancedStruct.h"
 #include "Tools/ClaireonBlueprintGraphEditToolBase_Internal.h"
 #include "UObject/UObjectGlobals.h"
+#include "UObject/Package.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "HAL/FileManager.h"
+#include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 
 // FScopedBlueprintEditor Implementation
 
@@ -263,14 +269,45 @@ namespace ClaireonBlueprintHelpers
 		return nullptr;
 	}
 
+	namespace ClaireonBlueprintHelpers_FindNodesByTitle_Internal
+	{
+		/** Return the first line of a node title with trailing whitespace stripped.
+		 *  CallFunction nodes auto-append a "Target is X" subtitle separated by \n on
+		 *  ENodeTitleType::ListView; callers typically only know/type the first line. */
+		FString FirstLineTrimmed(const FString& In)
+		{
+			int32 NewlineIdx = INDEX_NONE;
+			if (!In.FindChar(TEXT('\n'), NewlineIdx))
+			{
+				NewlineIdx = INDEX_NONE;
+			}
+			int32 CarriageIdx = INDEX_NONE;
+			if (In.FindChar(TEXT('\r'), CarriageIdx))
+			{
+				if (NewlineIdx == INDEX_NONE || CarriageIdx < NewlineIdx)
+				{
+					NewlineIdx = CarriageIdx;
+				}
+			}
+			FString First = (NewlineIdx == INDEX_NONE) ? In : In.Left(NewlineIdx);
+			return First.TrimStartAndEnd();
+		}
+	}
+
 	TArray<UEdGraphNode*> FindNodesByTitle(UEdGraph* Graph, const FString& NodeTitle, bool bExactMatch)
 	{
+		using namespace ClaireonBlueprintHelpers_FindNodesByTitle_Internal;
 		TArray<UEdGraphNode*> MatchingNodes;
 
 		if (!Graph || NodeTitle.IsEmpty())
 		{
 			return MatchingNodes;
 		}
+
+		// Normalize the search input (callers may pass either the first line as the editor
+		// shows it on hover, or the full multi-line title).
+		const FString SearchTitle = NodeTitle;
+		const FString SearchTitleFirst = FirstLineTrimmed(NodeTitle);
 
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
@@ -279,18 +316,23 @@ namespace ClaireonBlueprintHelpers
 				continue;
 			}
 
-			FString CurrentTitle = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();
+			const FString CurrentTitle = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();
+			const FString CurrentTitleFirst = FirstLineTrimmed(CurrentTitle);
 
 			if (bExactMatch)
 			{
-				if (CurrentTitle.Equals(NodeTitle, ESearchCase::IgnoreCase))
+				// Match either the full multi-line form (legacy callers) or the first
+				// line only (most callers know the visible name without subtitle).
+				if (CurrentTitle.Equals(SearchTitle, ESearchCase::IgnoreCase)
+					|| CurrentTitleFirst.Equals(SearchTitleFirst, ESearchCase::IgnoreCase))
 				{
 					MatchingNodes.Add(Node);
 				}
 			}
 			else
 			{
-				if (CurrentTitle.Contains(NodeTitle, ESearchCase::IgnoreCase))
+				if (CurrentTitle.Contains(SearchTitle, ESearchCase::IgnoreCase)
+					|| CurrentTitleFirst.Contains(SearchTitleFirst, ESearchCase::IgnoreCase))
 				{
 					MatchingNodes.Add(Node);
 				}
@@ -1094,6 +1136,95 @@ namespace ClaireonBlueprintHelpers
 		return Flags;
 	}
 
+	void CreateBlueprint(const FString& AssetPath, UClass* ParentClass, FCreateBlueprintResult& OutResult)
+	{
+		if (!ParentClass)
+		{
+			OutResult.Error = TEXT("ParentClass is null");
+			return;
+		}
+
+		FString PackageName = AssetPath;
+		FString AssetName;
+		if (AssetPath.Contains(TEXT(".")))
+		{
+			FString TmpAssetPath = AssetPath;
+			TmpAssetPath.Split(TEXT("."), &PackageName, &AssetName);
+		}
+		else
+		{
+			int32 LastSlash;
+			if (PackageName.FindLastChar('/', LastSlash))
+			{
+				AssetName = PackageName.Mid(LastSlash + 1);
+			}
+			else
+			{
+				AssetName = TEXT("NewBlueprint");
+			}
+		}
+
+		FString PackageFileName = FPackageName::LongPackageNameToFilename(
+			PackageName, FPackageName::GetAssetPackageExtension());
+		if (FPaths::FileExists(PackageFileName))
+		{
+			UE_LOG(LogClaireon, Warning, TEXT("[CreateBlueprint] Deleting existing file %s"), *PackageFileName);
+			IFileManager::Get().Delete(*PackageFileName, false, true);
+		}
+
+		UPackage* Package = CreatePackage(*PackageName);
+		if (!Package)
+		{
+			OutResult.Error = FString::Printf(TEXT("Failed to create package: %s"), *PackageName);
+			return;
+		}
+
+		UBlueprint* BP = FKismetEditorUtilities::CreateBlueprint(
+			ParentClass, Package, FName(*AssetName),
+			BPTYPE_Normal,
+			UBlueprint::StaticClass(),
+			UBlueprintGeneratedClass::StaticClass(),
+			NAME_None);
+
+		if (!BP)
+		{
+			OutResult.Error = FString::Printf(TEXT("Failed to create Blueprint at %s"), *AssetPath);
+			return;
+		}
+
+		Package->SetIsExternallyReferenceable(true);
+		Package->MarkPackageDirty();
+		FAssetRegistryModule::AssetCreated(BP);
+
+		// Inner-name/package-short-name invariant. Single guard point shared by
+		// ClaireonBlueprintGraphTool_Create and the apply_spec Blueprint
+		// applicator's OpenOrCreateAsset path. On mismatch, mark the partially-
+		// created Blueprint garbage so it does not linger past GC.
+		{
+			FString AssertError;
+			if (!ClaireonAssetUtils::AssertInnerNameMatchesPackage(BP, AssertError))
+			{
+				BP->ClearFlags(RF_Public | RF_Standalone);
+				BP->MarkAsGarbage();
+				OutResult.Error = AssertError;
+				OutResult.Blueprint = nullptr;
+				OutResult.EventGraph = nullptr;
+				OutResult.Package = nullptr;
+				return;
+			}
+		}
+
+		UEdGraph* EventGraph = nullptr;
+		if (BP->UbergraphPages.Num() > 0)
+		{
+			EventGraph = BP->UbergraphPages[0];
+		}
+
+		OutResult.Blueprint = BP;
+		OutResult.EventGraph = EventGraph;
+		OutResult.Package = Package;
+	}
+
 	void ApplyVariableProperties(UBlueprint* Blueprint, FName VarName, const TSharedPtr<FJsonObject>& Params, FApplyVariableResult* OutResult)
 	{
 		if (!Blueprint || !Params.IsValid())
@@ -1322,6 +1453,91 @@ namespace ClaireonBlueprintHelpers
 				VarDesc->PropertyFlags &= ~ParsePropertyFlags(RemainingClearFlags);
 			}
 		}
+	}
+
+	bool CreateVariableFromSpec(UBlueprint* Blueprint,
+	                            const TSharedPtr<FJsonObject>& Params,
+	                            FApplyVariableResult* OutResult,
+	                            FString& OutError)
+	{
+		if (!Blueprint)
+		{
+			OutError = TEXT("Blueprint is null");
+			return false;
+		}
+		if (!Params.IsValid())
+		{
+			OutError = TEXT("Params is null");
+			return false;
+		}
+
+		FString VarName;
+		if (!Params->TryGetStringField(TEXT("variable_name"), VarName) &&
+			!Params->TryGetStringField(TEXT("name"), VarName))
+		{
+			OutError = TEXT("Missing required field: variable_name (or 'name')");
+			return false;
+		}
+
+		FString VarType;
+		const TSharedPtr<FJsonObject>* TypeSpecObj = nullptr;
+		const bool bHasTypeSpec = Params->TryGetObjectField(TEXT("variable_type_spec"), TypeSpecObj)
+			&& TypeSpecObj && (*TypeSpecObj).IsValid();
+		const bool bHasTypeString = Params->TryGetStringField(TEXT("variable_type"), VarType)
+			|| Params->TryGetStringField(TEXT("type"), VarType);
+		if (!bHasTypeSpec && !bHasTypeString)
+		{
+			OutError = TEXT("Missing required field: variable_type (or variable_type_spec)");
+			return false;
+		}
+
+		FParseVariableTypeResult ParseResult = bHasTypeSpec
+			? ParseVariableTypeSpec(*TypeSpecObj)
+			: ParseVariableTypeChecked(VarType);
+		if (!ParseResult.bSucceeded)
+		{
+			OutError = FString::Printf(TEXT("Failed to parse variable type: %s"), *ParseResult.Error);
+			return false;
+		}
+
+		for (const FBPVariableDescription& Existing : Blueprint->NewVariables)
+		{
+			if (Existing.VarName == FName(*VarName))
+			{
+				OutError = FString::Printf(TEXT("Variable '%s' already exists"), *VarName);
+				return false;
+			}
+		}
+
+		FBPVariableDescription NewVar;
+		NewVar.VarName = FName(*VarName);
+		NewVar.VarType = ParseResult.PinType;
+		NewVar.FriendlyName = VarName;
+		NewVar.Category = FText::FromString(TEXT("Default"));
+		NewVar.PropertyFlags = CPF_Edit | CPF_BlueprintVisible;
+
+		const TArray<TSharedPtr<FJsonValue>>* FlagsArray = nullptr;
+		if (Params->TryGetArrayField(TEXT("flags"), FlagsArray) && FlagsArray)
+		{
+			TArray<FString> FlagNames;
+			for (const TSharedPtr<FJsonValue>& FlagVal : *FlagsArray)
+			{
+				FlagNames.Add(FlagVal->AsString());
+			}
+			NewVar.PropertyFlags |= ParsePropertyFlags(FlagNames);
+		}
+
+		FString DefaultValue;
+		if (Params->TryGetStringField(TEXT("default_value"), DefaultValue))
+		{
+			NewVar.DefaultValue = DefaultValue;
+		}
+
+		Blueprint->NewVariables.Add(NewVar);
+
+		ApplyVariableProperties(Blueprint, FName(*VarName), Params, OutResult);
+
+		return true;
 	}
 
 	UEdGraphPin* GetFirstOutputPin(UEdGraphNode* Node)

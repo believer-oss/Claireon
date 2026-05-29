@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -173,12 +173,26 @@ FToolResult ClaireonBlueprintGraphTool_Save::Execute(const TSharedPtr<FJsonObjec
 	else
 	{
 		UE_LOG(LogClaireon, Error, TEXT("[EditBlueprintGraph] Save: Failed to save Blueprint to %s"), *PackageFileName);
-		return MakeErrorResult(FString::Printf(TEXT("Failed to save Blueprint to %s"), *PackageFileName));
+
+		// Zombie editor detection hint. SavePackage on Windows can fail with
+		// ERROR_SHARING_VIOLATION when a previously-crashed editor process still holds
+		// the .uasset file. We can't reliably enumerate other-process handles without
+		// platform-specific code; emit a directive that names the file and points the
+		// caller at the recovery procedure.
+		const FString PathHint = FString::Printf(
+			TEXT(" If this is a 'sharing violation' or 'file in use' error, a previously-"
+				 "crashed UnrealEditor process may still be holding %s. Run "
+				 "`Get-Process UnrealEditor` (Windows) or `ps aux | grep UnrealEditor` "
+				 "(Linux) and stop any stale processes, then retry. As a stronger fix, "
+				 "use claireon.live_coding_rebuild_full to kill+rebuild+relaunch."),
+			*PackageFileName);
+		return MakeErrorResult(FString::Printf(
+			TEXT("Failed to save Blueprint to %s.%s"), *PackageFileName, *PathHint));
 	}
 }
 
 // ----------------------------------------------------------------------------
-// P1: hot-path metadata enrichment
+// hot-path metadata enrichment
 // ----------------------------------------------------------------------------
 
 FString ClaireonBlueprintGraphTool_Save::GetFullDescription() const

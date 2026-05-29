@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonMetaSoundTool_Status.h"
+#include "Tools/ClaireonAudioHelpers.h"
 #include "Tools/ClaireonAudioSessionRegistry.h"
 #include "Tools/ClaireonAnimEditToolBase.h" // FToolSchemaBuilder
 
@@ -44,7 +45,13 @@ IClaireonTool::FToolResult FClaireonMetaSoundTool_Status::Execute(const TSharedP
 	TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
 	Out->SetStringField(TEXT("session_id"), SessionId);
 	Out->SetStringField(TEXT("asset_path"), Data->AssetPath);
-	Out->SetStringField(TEXT("kind"), TEXT("metasound_source"));
+	// classify on session lookup so Patch sessions report metasound_patch, not metasound_source.
+	{
+		EClaireonAudioAssetKind Kind = EClaireonAudioAssetKind::Unknown;
+		FString IgnoredError;
+		ClaireonAudioHelpers::LoadAudioAsset(Data->AssetPath, Kind, IgnoredError);
+		Out->SetStringField(TEXT("kind"), AudioAssetKindToString(Kind));
+	}
 	Out->SetBoolField(TEXT("dirty"), Data->bDirty);
 	Out->SetStringField(TEXT("last_operation"), Data->LastOperationStatus);
 	return MakeSuccessResult(Out, FString::Printf(TEXT("Session %s: %s"), *SessionId, *Data->LastOperationStatus));

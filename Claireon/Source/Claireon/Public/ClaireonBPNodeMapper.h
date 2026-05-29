@@ -19,7 +19,7 @@ struct FMapNodeResult
 {
 	FString Code;                    // C++ code for this node (header only for branch nodes)
 	bool bIsBranchNode = false;      // True if multiple exec outputs requiring scoped emission
-	bool bIsLatentSplit = false;     // V8: latent call splits function at this point
+	bool bIsLatentSplit = false;     // latent call splits function at this point
 	TArray<FBranchOutput> Branches;  // Pin-to-label mapping for each branch output
 	FString MemberDeclarations;      // Member variable declarations needed in header (from macros)
 };
@@ -60,7 +60,7 @@ public:
 	void AddInclude(const FString& Path);
 	const TSet<FString>& GetAccumulatedIncludes() const;
 
-	// Connected pin expression (P3-20 prep -- improved in stage 014)
+	// Connected pin expression
 	FString GetConnectedPinExpression(const UEdGraphPin* Pin) const;
 
 	// V7-1: Return the set of pure nodes that were inlined during expression resolution.
@@ -107,7 +107,7 @@ private:
 	FString MapAsyncActionNode(const UEdGraphNode* Node, int32 IndentLevel);
 	FString MapUnknownNode(const UEdGraphNode* Node, int32 IndentLevel) const;
 
-	// V3 branch-aware Ex variants (return FMapNodeResult with branch metadata)
+	// branch-aware Ex variants (return FMapNodeResult with branch metadata)
 	FMapNodeResult MapTimelineNodeEx(const UEdGraphNode* Node, int32 IndentLevel, const UEdGraphPin* ArrivalPin);
 	FMapNodeResult MapAsyncActionNodeEx(const UEdGraphNode* Node, int32 IndentLevel);
 	FMapNodeResult MapBranchNodeEx(const UEdGraphNode* Node, int32 IndentLevel) const;
@@ -118,10 +118,10 @@ private:
 	FMapNodeResult MapSwitchNameNodeEx(const UEdGraphNode* Node, int32 IndentLevel) const;
 	FMapNodeResult MapSwitchGameplayTagNodeEx(const UEdGraphNode* Node, int32 IndentLevel) const;
 
-	// V8: Latent call function (Delay, RetriggerableDelay, etc.)
+	// Latent call function (Delay, RetriggerableDelay, etc.)
 	FMapNodeResult MapLatentCallFunctionNodeEx(const UEdGraphNode* Node, int32 IndentLevel);
 
-	// V8: Ex variants for member variable promotion
+	// Ex variants for member variable promotion
 	FMapNodeResult MapCallFunctionNodeEx(const UEdGraphNode* Node, int32 IndentLevel);
 	FMapNodeResult MapCastNodeEx(const UEdGraphNode* Node, int32 IndentLevel);
 	FMapNodeResult MapSpawnActorNodeEx(const UEdGraphNode* Node, int32 IndentLevel);

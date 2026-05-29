@@ -1,10 +1,11 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
 #include "Tools/ClaireonBlueprintGraphTool_AddNode.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "ClaireonBlueprintHelpers.h"
+#include "ClaireonBlueprintNodeFactory.h"
 #include "Dom/JsonObject.h"
 #include "Tools/ClaireonSpecApplicator_Blueprint.h"
 #include "Tools/ClaireonBlueprintGraphEditToolBase_Internal.h"
@@ -77,10 +78,6 @@
 #include "Components/SceneComponent.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "ScopedTransaction.h"
-#include "Animation/AnimBlueprint.h"
-#include "AnimationGraph.h"
-#include "AnimGraphNode_Base.h"
-#include "AnimGraphNode_Root.h"
 #include "K2Node_Tunnel.h"
 #include "ClaireonBlueprintNodeSerializer.h"
 #include "GameplayTagContainer.h"
@@ -108,7 +105,7 @@ TArray<FString> ClaireonBlueprintGraphTool_AddNode::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_AddNode::GetDescription() const
 {
-    return TEXT("Adds a node to the current session's graph (CallFunction, VariableGet/Set, control flow, macros, delegates, etc.). Pass auto_connect_from_cursor=true to route the new node's exec pin through the cursor pin when compatible. Most-common pitfall: forgetting to save every 1-3 nodes via bp_save, which loses progress on editor crash. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+    return TEXT("Adds a node to the current session's graph (CallFunction, VariableGet/Set, control flow, macros, delegates, etc.). Pass auto_connect_from_cursor=true to route the new node's exec pin through the cursor pin when compatible. Save every 1-3 nodes via bp_save to avoid losing work on editor crash. Accepts session_id or asset_path; auto-opens when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddNode::GetInputSchema() const
@@ -248,656 +245,46 @@ FToolResult ClaireonBlueprintGraphTool_AddNode::AddNode_Impl(
 		return FString(); // success
 	};
 
-	// Create node based on type
-	if (NodeType == TEXT("CallFunction"))
+	// Factory dispatch: delegate node construction to ClaireonBlueprintNodeFactory::CreateNode
+	// for all node_types it supports. The factory is the single source of truth for these
+	// branches; the inline cases that remain below cover types the factory does not yet
+	// handle (EventOverride, FunctionEntry, FunctionResult, Tunnel, Timeline, AddDelegate,
+	// RemoveDelegate, ClearDelegate, CallDelegate, CreateDelegate, AssignDelegate,
+	// ComponentBoundEvent).
+	static const TSet<FString> FactoryHandledNodeTypes = {
+		TEXT("CallFunction"), TEXT("AsyncAction"), TEXT("CallParentFunction"),
+		TEXT("VariableGet"), TEXT("VariableSet"),
+		TEXT("Branch"), TEXT("Sequence"), TEXT("ExecutionSequence"),
+		TEXT("Cast"), TEXT("SpawnActor"), TEXT("CustomEvent"),
+		TEXT("Knot"), TEXT("Comment"), TEXT("Select"),
+		TEXT("MakeArray"), TEXT("MakeSet"), TEXT("MakeMap"),
+		TEXT("GetArrayItem"), TEXT("MakeStruct"), TEXT("BreakStruct"),
+		TEXT("SwitchInteger"), TEXT("SwitchString"), TEXT("SwitchName"),
+		TEXT("SwitchEnum"), TEXT("ForEachElementInEnum"), TEXT("DoOnceMultiInput"),
+		TEXT("Macro"), TEXT("MacroInstance"),
+		TEXT("ForEachLoop"), TEXT("ForEachLoopWithBreak"),
+		TEXT("ForLoop"), TEXT("ForLoopWithBreak"), TEXT("WhileLoop"),
+		TEXT("DoOnce"), TEXT("DoN"), TEXT("FlipFlop"),
+		TEXT("Gate"), TEXT("MultiGate"), TEXT("IsValid"),
+		TEXT("Generic"),
+	};
+
+	if (FactoryHandledNodeTypes.Contains(NodeType))
 	{
-		FString FunctionName, FunctionClass;
-		if (!Params->TryGetStringField(TEXT("function_name"), FunctionName))
+		ClaireonBlueprintNodeFactory::FCreateResult R =
+			ClaireonBlueprintNodeFactory::CreateNode(Blueprint, Graph, Params, Position);
+		if (!R.IsOk())
 		{
-			return MakeErrorResult(TEXT("Missing required field 'function_name' for CallFunction node"));
+			return MakeErrorResult(R.Error);
 		}
-		Params->TryGetStringField(TEXT("function_class"), FunctionClass);
-
-		// Resolve the owning class (if supplied) first so we can look up the
-		// actual UFunction and pick the right UK2Node_* subclass, mirroring
-		// UBlueprintFunctionNodeSpawner::Create. Array functions
-		// (MD_ArrayParam), DataTable functions (MD_DataTablePin), material
-		// parameter collection functions, and commutative binary operators all
-		// have specialized subclasses whose overrides (especially
-		// NotifyPinConnectionListChanged) perform wildcard pin propagation and
-		// other behaviour the plain UK2Node_CallFunction cannot.
-		UClass* ResolvedOwnerClass = nullptr;
-		if (!FunctionClass.IsEmpty())
-		{
-			ClaireonNameResolver::FNameResolveResult FuncClassResult;
-			ResolvedOwnerClass = ClaireonNameResolver::ResolveClassName(FunctionClass, nullptr, FuncClassResult);
-			if (ResolvedOwnerClass && !FuncClassResult.ResolutionNote.IsEmpty())
-			{
-				ResolutionWarnings.Add(FuncClassResult.ResolutionNote);
-			}
-		}
-
-		UFunction* ResolvedFunction = nullptr;
-		if (ResolvedOwnerClass)
-		{
-			ResolvedFunction = ResolvedOwnerClass->FindFunctionByName(FName(*FunctionName));
-		}
-		else if (Blueprint->SkeletonGeneratedClass)
-		{
-			ResolvedFunction = Blueprint->SkeletonGeneratedClass->FindFunctionByName(FName(*FunctionName));
-		}
-
-		// Pick the specialized K2 node subclass that matches the function's
-		// metadata. Shared with ClaireonBlueprintNodeFactory::CreateNode so both
-		// the incremental (Operation_AddNode) and batch (ApplyBlueprintGraph)
-		// paths stay in lockstep. See
-		// UBlueprintFunctionNodeSpawner::Create for the canonical order.
-		UClass* NodeClass = ClaireonBlueprintHelpers::PickK2NodeClassForFunction(ResolvedFunction);
-
-		if (NodeClass && NodeClass->IsChildOf(UK2Node_BaseAsyncTask::StaticClass()))
-		{
-			// AsyncAction branch: helper guarantees ResolvedFunction is a valid
-			// UBlueprintAsyncActionBase factory (Fracture 01, conjunct 4). No
-			// FunctionReference set; InitializeProxyFromFunction populates the
-			// proxy fields directly.
-			UK2Node_AsyncAction* AsyncNode = NewObject<UK2Node_AsyncAction>(Graph);
-			AsyncNode->InitializeProxyFromFunction(ResolvedFunction);
-			NewNode = AsyncNode;
-			NodeDescription = FString::Printf(TEXT("AsyncAction: %s (%s)"),
-				*FunctionName, *NodeClass->GetName());
-		}
-		else
-		{
-			UK2Node_CallFunction* CallFuncNode = NewObject<UK2Node_CallFunction>(Graph, NodeClass);
-
-			if (ResolvedOwnerClass)
-			{
-				CallFuncNode->FunctionReference.SetExternalMember(FName(*FunctionName), ResolvedOwnerClass);
-			}
-			else
-			{
-				CallFuncNode->FunctionReference.SetSelfMember(FName(*FunctionName));
-			}
-
-			NewNode = CallFuncNode;
-			NodeDescription = FString::Printf(TEXT("CallFunction: %s (%s)"),
-				*FunctionName, *NodeClass->GetName());
-		}
+		NewNode = R.Node;
+		NodeDescription = R.Description;
+		// Factory contract: bAlreadyAdded is true for typed branches (Graph->AddNode +
+		// AllocateDefaultPins + ReconstructNode-where-needed have already run).
+		bNodeAlreadyAdded = R.bAlreadyAdded;
+		ResolutionWarnings.Append(R.Warnings);
 	}
-	else if (NodeType == TEXT("AsyncAction"))
-	{
-		// Explicit AsyncAction surface: callers state intent directly instead of
-		// relying on CallFunction helper-detection. Both paths construct the same
-		// node; this one skips the helper-detection guard for callers who already
-		// know they want an AsyncAction node. Mirrors the factory edit in
-		// ClaireonBlueprintNodeFactory.cpp::CreateNode.
-		FString FunctionName, FunctionClass;
-		if (!Params->TryGetStringField(TEXT("function_name"), FunctionName))
-		{
-			return MakeErrorResult(TEXT("AsyncAction: missing required field 'function_name'"));
-		}
-		if (!Params->TryGetStringField(TEXT("function_class"), FunctionClass))
-		{
-			return MakeErrorResult(TEXT("AsyncAction: missing required field 'function_class' (the UClass that hosts the async factory UFUNCTION, e.g. '/Script/Engine.AsyncActionLoadPrimaryAsset')"));
-		}
-
-		ClaireonNameResolver::FNameResolveResult AsyncClassResult;
-		UClass* OwnerClass = ClaireonNameResolver::ResolveClassName(FunctionClass, UBlueprintAsyncActionBase::StaticClass(), AsyncClassResult);
-		if (!OwnerClass)
-		{
-			return MakeErrorResult(FString::Printf(
-				TEXT("AsyncAction: function_class '%s' could not be resolved to a UBlueprintAsyncActionBase-derived class. (%s)"),
-				*FunctionClass, *AsyncClassResult.Error));
-		}
-		if (!AsyncClassResult.ResolutionNote.IsEmpty())
-		{
-			ResolutionWarnings.Add(AsyncClassResult.ResolutionNote);
-		}
-
-		UFunction* ResolvedFunction = OwnerClass->FindFunctionByName(FName(*FunctionName));
-		if (!ResolvedFunction)
-		{
-			return MakeErrorResult(FString::Printf(
-				TEXT("AsyncAction: factory function '%s' not found on class '%s'."),
-				*FunctionName, *OwnerClass->GetName()));
-		}
-
-		UK2Node_AsyncAction* AsyncNode = NewObject<UK2Node_AsyncAction>(Graph);
-		AsyncNode->InitializeProxyFromFunction(ResolvedFunction);
-		NewNode = AsyncNode;
-		NodeDescription = FString::Printf(TEXT("AsyncAction: %s (%s)"), *FunctionName, *OwnerClass->GetName());
-	}
-	else if (NodeType == TEXT("VariableGet"))
-	{
-		FString VariableName;
-		if (!Params->TryGetStringField(TEXT("variable_name"), VariableName))
-		{
-			return MakeErrorResult(TEXT("Missing required field 'variable_name' for VariableGet node"));
-		}
-
-		UK2Node_VariableGet* VarGetNode = NewObject<UK2Node_VariableGet>(Graph);
-		VarGetNode->VariableReference.SetSelfMember(FName(*VariableName));
-		NewNode = VarGetNode;
-		NodeDescription = FString::Printf(TEXT("Get %s"), *VariableName);
-	}
-	else if (NodeType == TEXT("VariableSet"))
-	{
-		FString VariableName;
-		if (!Params->TryGetStringField(TEXT("variable_name"), VariableName))
-		{
-			return MakeErrorResult(TEXT("Missing required field 'variable_name' for VariableSet node"));
-		}
-
-		UK2Node_VariableSet* VarSetNode = NewObject<UK2Node_VariableSet>(Graph);
-		VarSetNode->VariableReference.SetSelfMember(FName(*VariableName));
-		NewNode = VarSetNode;
-		NodeDescription = FString::Printf(TEXT("Set %s"), *VariableName);
-	}
-	else if (NodeType == TEXT("Branch"))
-	{
-		UK2Node_IfThenElse* BranchNode = NewObject<UK2Node_IfThenElse>(Graph);
-		NewNode = BranchNode;
-		NodeDescription = TEXT("Branch");
-	}
-	else if (NodeType == TEXT("Sequence"))
-	{
-		UK2Node_ExecutionSequence* SeqNode = NewObject<UK2Node_ExecutionSequence>(Graph);
-		NewNode = SeqNode;
-		NodeDescription = TEXT("Sequence");
-	}
-	else if (NodeType == TEXT("Cast"))
-	{
-		FString TargetClass;
-		if (!Params->TryGetStringField(TEXT("target_class"), TargetClass))
-		{
-			return MakeErrorResult(TEXT("Missing required field 'target_class' for Cast node"));
-		}
-
-		ClaireonNameResolver::FNameResolveResult CastClassResult;
-		UClass* CastClass = ClaireonNameResolver::ResolveClassName(TargetClass, nullptr, CastClassResult);
-		if (!CastClass)
-		{
-			return MakeErrorResult(CastClassResult.Error);
-		}
-		if (!CastClassResult.ResolutionNote.IsEmpty())
-		{
-			ResolutionWarnings.Add(CastClassResult.ResolutionNote);
-		}
-
-		UK2Node_DynamicCast* CastNode = NewObject<UK2Node_DynamicCast>(Graph);
-		CastNode->TargetType = CastClass;
-		NewNode = CastNode;
-		NodeDescription = FString::Printf(TEXT("Cast to %s"), *TargetClass);
-	}
-	else if (NodeType == TEXT("SpawnActor"))
-	{
-		FString ActorClass;
-		if (!Params->TryGetStringField(TEXT("actor_class"), ActorClass))
-		{
-			return MakeErrorResult(TEXT("Missing required field 'actor_class' for SpawnActor node"));
-		}
-
-		ClaireonNameResolver::FNameResolveResult SpawnClassResult;
-		UClass* SpawnClass = ClaireonNameResolver::ResolveClassName(ActorClass, AActor::StaticClass(), SpawnClassResult);
-		if (!SpawnClass)
-		{
-			return MakeErrorResult(SpawnClassResult.Error);
-		}
-		if (!SpawnClassResult.ResolutionNote.IsEmpty())
-		{
-			ResolutionWarnings.Add(SpawnClassResult.ResolutionNote);
-		}
-
-		UK2Node_SpawnActorFromClass* SpawnNode = NewObject<UK2Node_SpawnActorFromClass>(Graph);
-		NewNode = SpawnNode;
-		NodeDescription = FString::Printf(TEXT("Spawn %s"), *ActorClass);
-	}
-	else if (NodeType == TEXT("CustomEvent"))
-	{
-		FString EventName;
-		if (!Params->TryGetStringField(TEXT("event_name"), EventName))
-		{
-			return MakeErrorResult(TEXT("Missing required field 'event_name' for CustomEvent node"));
-		}
-
-		UK2Node_CustomEvent* EventNode = NewObject<UK2Node_CustomEvent>(Graph);
-		EventNode->CustomFunctionName = FName(*EventName);
-		NewNode = EventNode;
-		NodeDescription = FString::Printf(TEXT("Custom Event: %s"), *EventName);
-	}
-	else if (NodeType == TEXT("Knot"))
-	{
-		UK2Node_Knot* KnotNode = NewObject<UK2Node_Knot>(Graph);
-		NewNode = KnotNode;
-		NodeDescription = TEXT("Reroute Node");
-	}
-	else if (NodeType == TEXT("Comment"))
-	{
-		FString CommentText;
-		if (!Params->TryGetStringField(TEXT("comment_text"), CommentText))
-		{
-			CommentText = TEXT("Comment");
-		}
-
-		UEdGraphNode_Comment* CommentNode = NewObject<UEdGraphNode_Comment>(Graph);
-		CommentNode->NodeComment = CommentText;
-		NewNode = CommentNode;
-		NodeDescription = FString::Printf(TEXT("Comment: %s"), *CommentText);
-	}
-	else if (NodeType == TEXT("Select"))
-	{
-		UK2Node_Select* SelectNode = NewObject<UK2Node_Select>(Graph);
-		NewNode = SelectNode;
-		NodeDescription = TEXT("Select");
-	}
-	else if (NodeType == TEXT("MakeArray"))
-	{
-		UK2Node_MakeArray* MakeArrayNode = NewObject<UK2Node_MakeArray>(Graph);
-		NewNode = MakeArrayNode;
-		NodeDescription = TEXT("Make Array");
-	}
-	else if (NodeType == TEXT("MakeSet"))
-	{
-		UK2Node_MakeSet* MakeSetNode = NewObject<UK2Node_MakeSet>(Graph);
-		NewNode = MakeSetNode;
-		NodeDescription = TEXT("Make Set");
-	}
-	else if (NodeType == TEXT("MakeMap"))
-	{
-		UK2Node_MakeMap* MakeMapNode = NewObject<UK2Node_MakeMap>(Graph);
-		NewNode = MakeMapNode;
-		NodeDescription = TEXT("Make Map");
-	}
-	else if (NodeType == TEXT("GetArrayItem"))
-	{
-		UK2Node_GetArrayItem* GetArrayNode = NewObject<UK2Node_GetArrayItem>(Graph);
-		NewNode = GetArrayNode;
-		NodeDescription = TEXT("Get Array Item");
-	}
-	else if (NodeType == TEXT("MakeStruct"))
-	{
-		FString StructType;
-		if (!Params->TryGetStringField(TEXT("struct_type"), StructType))
-		{
-			return MakeErrorResult(TEXT("Missing required field 'struct_type' for MakeStruct node"));
-		}
-
-		ClaireonNameResolver::FNameResolveResult MakeStructResult;
-		UScriptStruct* Struct = ClaireonNameResolver::ResolveStructName(StructType, MakeStructResult);
-		if (!Struct)
-		{
-			return MakeErrorResult(MakeStructResult.Error);
-		}
-		if (!MakeStructResult.ResolutionNote.IsEmpty())
-		{
-			ResolutionWarnings.Add(MakeStructResult.ResolutionNote);
-		}
-
-		UK2Node_MakeStruct* MakeStructNode = NewObject<UK2Node_MakeStruct>(Graph);
-		MakeStructNode->StructType = Struct;
-		NewNode = MakeStructNode;
-		NodeDescription = FString::Printf(TEXT("Make %s"), *StructType);
-	}
-	else if (NodeType == TEXT("BreakStruct"))
-	{
-		FString StructType;
-		if (!Params->TryGetStringField(TEXT("struct_type"), StructType))
-		{
-			return MakeErrorResult(TEXT("Missing required field 'struct_type' for BreakStruct node"));
-		}
-
-		ClaireonNameResolver::FNameResolveResult BreakStructResult;
-		UScriptStruct* Struct = ClaireonNameResolver::ResolveStructName(StructType, BreakStructResult);
-		if (!Struct)
-		{
-			return MakeErrorResult(BreakStructResult.Error);
-		}
-		if (!BreakStructResult.ResolutionNote.IsEmpty())
-		{
-			ResolutionWarnings.Add(BreakStructResult.ResolutionNote);
-		}
-
-		UK2Node_BreakStruct* BreakStructNode = NewObject<UK2Node_BreakStruct>(Graph);
-		BreakStructNode->StructType = Struct;
-		NewNode = BreakStructNode;
-		NodeDescription = FString::Printf(TEXT("Break %s"), *StructType);
-	}
-	// --- Switch node types ---
-	else if (NodeType == TEXT("SwitchInteger"))
-	{
-		UK2Node_SwitchInteger* SwitchNode = NewObject<UK2Node_SwitchInteger>(Graph);
-		NewNode = SwitchNode;
-		NodeDescription = TEXT("Switch on Int");
-	}
-	else if (NodeType == TEXT("SwitchString"))
-	{
-		UK2Node_SwitchString* SwitchNode = NewObject<UK2Node_SwitchString>(Graph);
-		NewNode = SwitchNode;
-		NodeDescription = TEXT("Switch on String");
-	}
-	else if (NodeType == TEXT("SwitchName"))
-	{
-		UK2Node_SwitchName* SwitchNode = NewObject<UK2Node_SwitchName>(Graph);
-		NewNode = SwitchNode;
-		NodeDescription = TEXT("Switch on Name");
-	}
-	else if (NodeType == TEXT("SwitchEnum"))
-	{
-		FString EnumType;
-		if (!Params->TryGetStringField(TEXT("enum_type"), EnumType))
-		{
-			return MakeErrorResult(TEXT("Missing required field 'enum_type' for SwitchEnum node"));
-		}
-
-		ClaireonNameResolver::FNameResolveResult SwitchEnumResult;
-		UEnum* Enum = ClaireonNameResolver::ResolveEnumName(EnumType, SwitchEnumResult);
-		if (!Enum)
-		{
-			return MakeErrorResult(SwitchEnumResult.Error);
-		}
-		if (!SwitchEnumResult.ResolutionNote.IsEmpty())
-		{
-			ResolutionWarnings.Add(SwitchEnumResult.ResolutionNote);
-		}
-
-		UK2Node_SwitchEnum* SwitchNode = NewObject<UK2Node_SwitchEnum>(Graph);
-		// SetEnum is not exported, so replicate its logic: set Enum + populate EnumEntries/EnumFriendlyNames
-		SwitchNode->Enum = Enum;
-		SwitchNode->EnumEntries.Empty();
-		SwitchNode->EnumFriendlyNames.Empty();
-		for (int32 EnumIdx = 0; EnumIdx < Enum->NumEnums() - 1; ++EnumIdx)
-		{
-			bool bShouldBeHidden = Enum->HasMetaData(TEXT("Hidden"), EnumIdx) || Enum->HasMetaData(TEXT("Spacer"), EnumIdx);
-			if (!bShouldBeHidden)
-			{
-				SwitchNode->EnumEntries.Add(FName(*Enum->GetNameStringByIndex(EnumIdx)));
-				SwitchNode->EnumFriendlyNames.Add(Enum->GetDisplayNameTextByIndex(EnumIdx));
-			}
-		}
-		NewNode = SwitchNode;
-		NodeDescription = FString::Printf(TEXT("Switch on %s"), *EnumType);
-	}
-	// --- Enum iteration ---
-	else if (NodeType == TEXT("ForEachElementInEnum"))
-	{
-		FString EnumType;
-		if (!Params->TryGetStringField(TEXT("enum_type"), EnumType))
-		{
-			return MakeErrorResult(TEXT("Missing required field 'enum_type' for ForEachElementInEnum node"));
-		}
-
-		ClaireonNameResolver::FNameResolveResult ForEachEnumResult;
-		UEnum* Enum = ClaireonNameResolver::ResolveEnumName(EnumType, ForEachEnumResult);
-		if (!Enum)
-		{
-			return MakeErrorResult(ForEachEnumResult.Error);
-		}
-		if (!ForEachEnumResult.ResolutionNote.IsEmpty())
-		{
-			ResolutionWarnings.Add(ForEachEnumResult.ResolutionNote);
-		}
-
-		UK2Node_ForEachElementInEnum* ForEachNode = NewObject<UK2Node_ForEachElementInEnum>(Graph);
-		ForEachNode->Enum = Enum;
-		NewNode = ForEachNode;
-		NodeDescription = FString::Printf(TEXT("For Each %s"), *EnumType);
-	}
-	// --- DoOnceMultiInput ---
-	else if (NodeType == TEXT("DoOnceMultiInput"))
-	{
-		UK2Node_DoOnceMultiInput* DoOnceNode = NewObject<UK2Node_DoOnceMultiInput>(Graph);
-		NewNode = DoOnceNode;
-		NodeDescription = TEXT("Do Once (Multi Input)");
-	}
-	// --- Macro nodes (StandardMacros library aliases + generic Macro / MacroInstance types) ---
-	else if (NodeType == TEXT("Macro") || NodeType == TEXT("MacroInstance")
-		|| NodeType == TEXT("ForEachLoop") || NodeType == TEXT("ForEachLoopWithBreak")
-		|| NodeType == TEXT("ForLoop") || NodeType == TEXT("ForLoopWithBreak") || NodeType == TEXT("WhileLoop")
-		|| NodeType == TEXT("DoOnce") || NodeType == TEXT("DoN") || NodeType == TEXT("FlipFlop")
-		|| NodeType == TEXT("Gate") || NodeType == TEXT("MultiGate") || NodeType == TEXT("IsValid"))
-	{
-		// Determine macro name and library path
-		FString MacroName;
-		FString MacroLibraryPath = TEXT("/Engine/EditorBlueprintResources/StandardMacros");
-
-		if (NodeType == TEXT("Macro") || NodeType == TEXT("MacroInstance"))
-		{
-			if (!Params->TryGetStringField(TEXT("macro_name"), MacroName))
-			{
-				return MakeErrorResult(TEXT("Missing required field 'macro_name' for Macro node type"));
-			}
-			FString CustomLibPath;
-			if (Params->TryGetStringField(TEXT("macro_library"), CustomLibPath)
-				|| Params->TryGetStringField(TEXT("macro_library_path"), CustomLibPath))
-			{
-				MacroLibraryPath = CustomLibPath;
-			}
-		}
-		else
-		{
-			// Named alias -- NodeType IS the macro name
-			MacroName = NodeType;
-		}
-
-		// Load the macro library blueprint
-		UBlueprint* MacroLib = LoadObject<UBlueprint>(nullptr, *MacroLibraryPath);
-		if (!MacroLib)
-		{
-			return MakeErrorResult(FString::Printf(TEXT("Failed to load macro library: %s"), *MacroLibraryPath));
-		}
-
-		// Find the macro graph by name
-		UEdGraph* MacroGraph = nullptr;
-		for (UEdGraph* MacroGraphCandidate : MacroLib->MacroGraphs)
-		{
-			if (MacroGraphCandidate && MacroGraphCandidate->GetName() == MacroName)
-			{
-				MacroGraph = MacroGraphCandidate;
-				break;
-			}
-		}
-
-		if (!MacroGraph)
-		{
-			// List available macros for discoverability
-			TArray<FString> AvailableMacros;
-			for (UEdGraph* G : MacroLib->MacroGraphs)
-			{
-				if (G)
-				{
-					AvailableMacros.Add(G->GetName());
-				}
-			}
-			return MakeErrorResult(FString::Printf(TEXT("Macro '%s' not found in %s. Available: %s"),
-				*MacroName, *MacroLibraryPath, *FString::Join(AvailableMacros, TEXT(", "))));
-		}
-
-		UK2Node_MacroInstance* MacroNode = NewObject<UK2Node_MacroInstance>(Graph);
-		MacroNode->SetMacroGraph(MacroGraph);
-		NewNode = MacroNode;
-		NodeDescription = FString::Printf(TEXT("Macro: %s"), *MacroName);
-	}
-	else if (NodeType == TEXT("Generic"))
-	{
-		// Generic node type - accepts any K2Node class name
-		FString ClassName;
-		if (!Params->TryGetStringField(TEXT("class_name"), ClassName))
-		{
-			return MakeErrorResult(TEXT("Missing required field 'class_name' for Generic node type. Specify the K2Node class name (e.g., 'K2Node_AddPinInterface')"));
-		}
-
-		// Find the node class using fuzzy resolution (handles U prefix, K2Node_ prefix, etc.)
-		ClaireonNameResolver::FNameResolveResult NodeClassResult;
-		UClass* NodeClass = ClaireonNameResolver::ResolveClassName(ClassName, UK2Node::StaticClass(), NodeClassResult);
-		if (!NodeClass)
-		{
-			return MakeErrorResult(NodeClassResult.Error);
-		}
-		if (!NodeClassResult.ResolutionNote.IsEmpty())
-		{
-			ResolutionWarnings.Add(NodeClassResult.ResolutionNote);
-		}
-
-		if (!NodeClass->IsChildOf(UEdGraphNode::StaticClass()))
-		{
-			return MakeErrorResult(FString::Printf(TEXT("Class '%s' is not a graph node class"), *ClassName));
-		}
-
-		NewNode = NewObject<UEdGraphNode>(Graph, NodeClass);
-
-		// Set node_properties via reflection before AllocateDefaultPins
-		const TSharedPtr<FJsonObject>* NodePropsPtr = nullptr;
-		if (Params->TryGetObjectField(TEXT("node_properties"), NodePropsPtr) && NodePropsPtr)
-		{
-			for (auto& Pair : (*NodePropsPtr)->Values)
-			{
-				FProperty* Prop = NewNode->GetClass()->FindPropertyByName(FName(*Pair.Key));
-				if (!Prop)
-				{
-					UE_LOG(LogClaireon, Warning, TEXT("node_properties: Property '%s' not found on %s"), *Pair.Key, *ClassName);
-					continue;
-				}
-
-				void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(NewNode);
-
-				if (FBoolProperty* BoolProp = CastField<FBoolProperty>(Prop))
-				{
-					bool bVal = false;
-					Pair.Value->TryGetBool(bVal);
-					BoolProp->SetPropertyValue(ValuePtr, bVal);
-				}
-				else if (FIntProperty* IntProp = CastField<FIntProperty>(Prop))
-				{
-					double NumVal = 0;
-					Pair.Value->TryGetNumber(NumVal);
-					IntProp->SetPropertyValue(ValuePtr, static_cast<int32>(NumVal));
-				}
-				else if (FFloatProperty* FloatProp = CastField<FFloatProperty>(Prop))
-				{
-					double NumVal = 0;
-					Pair.Value->TryGetNumber(NumVal);
-					FloatProp->SetPropertyValue(ValuePtr, static_cast<float>(NumVal));
-				}
-				else if (FDoubleProperty* DoubleProp = CastField<FDoubleProperty>(Prop))
-				{
-					double NumVal = 0;
-					Pair.Value->TryGetNumber(NumVal);
-					DoubleProp->SetPropertyValue(ValuePtr, NumVal);
-				}
-				else if (FStrProperty* StrProp = CastField<FStrProperty>(Prop))
-				{
-					FString StrVal;
-					Pair.Value->TryGetString(StrVal);
-					StrProp->SetPropertyValue(ValuePtr, StrVal);
-				}
-				else if (FNameProperty* NameProp = CastField<FNameProperty>(Prop))
-				{
-					FString StrVal;
-					Pair.Value->TryGetString(StrVal);
-					NameProp->SetPropertyValue(ValuePtr, FName(*StrVal));
-				}
-				else if (FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(Prop))
-				{
-					FString StrVal;
-					Pair.Value->TryGetString(StrVal);
-					if (ObjProp->PropertyClass->IsChildOf(UClass::StaticClass()))
-					{
-						ClaireonNameResolver::FNameResolveResult PropClassResult;
-						UClass* FoundClass = ClaireonNameResolver::ResolveClassName(StrVal, nullptr, PropClassResult);
-						if (FoundClass)
-						{
-							ObjProp->SetObjectPropertyValue(ValuePtr, FoundClass);
-							if (!PropClassResult.ResolutionNote.IsEmpty())
-							{
-								ResolutionWarnings.Add(PropClassResult.ResolutionNote);
-							}
-						}
-					}
-					else if (ObjProp->PropertyClass->IsChildOf(UEnum::StaticClass()))
-					{
-						ClaireonNameResolver::FNameResolveResult PropEnumResult;
-						UEnum* FoundEnum = ClaireonNameResolver::ResolveEnumName(StrVal, PropEnumResult);
-						if (FoundEnum)
-						{
-							ObjProp->SetObjectPropertyValue(ValuePtr, FoundEnum);
-							if (!PropEnumResult.ResolutionNote.IsEmpty())
-							{
-								ResolutionWarnings.Add(PropEnumResult.ResolutionNote);
-							}
-						}
-					}
-					else if (ObjProp->PropertyClass->IsChildOf(UScriptStruct::StaticClass()))
-					{
-						ClaireonNameResolver::FNameResolveResult PropStructResult;
-						UScriptStruct* FoundStruct = ClaireonNameResolver::ResolveStructName(StrVal, PropStructResult);
-						if (FoundStruct)
-						{
-							ObjProp->SetObjectPropertyValue(ValuePtr, FoundStruct);
-							if (!PropStructResult.ResolutionNote.IsEmpty())
-							{
-								ResolutionWarnings.Add(PropStructResult.ResolutionNote);
-							}
-						}
-					}
-					else
-					{
-						UE_LOG(LogClaireon, Warning, TEXT("node_properties: Unsupported object property type for '%s'"), *Pair.Key);
-					}
-				}
-				else
-				{
-					UE_LOG(LogClaireon, Warning, TEXT("node_properties: Unsupported property type for '%s'"), *Pair.Key);
-				}
-			}
-		}
-
-		// Loud-failure guard for Generic + UK2Node_BaseAsyncTask subclasses (e.g.
-		// K2Node_AsyncAction, K2Node_LatentAbilityCall) constructed without the
-		// proxy bag. The engine's AllocateDefaultPins synthesizes the
-		// BlueprintAssignable delegate exec pins from ProxyFactoryClass +
-		// ProxyFactoryFunctionName + ProxyClass; if any are unset (via
-		// node_properties), the result is the inert "Async Task: Missing Function"
-		// stub. The three proxy fields are protected on UK2Node_BaseAsyncTask
-		// with no public accessors, so we read them via reflection. Mirrors the
-		// factory guard in ClaireonBlueprintNodeFactory.cpp::CreateNode.
-		if (NewNode && NewNode->IsA<UK2Node_BaseAsyncTask>())
-		{
-			auto ReadObjProp = [&](const TCHAR* PropName) -> UClass*
-			{
-				if (const FObjectPropertyBase* P = CastField<FObjectPropertyBase>(
-					NewNode->GetClass()->FindPropertyByName(PropName)))
-				{
-					return Cast<UClass>(P->GetObjectPropertyValue_InContainer(NewNode));
-				}
-				return nullptr;
-			};
-			auto ReadNameProp = [&](const TCHAR* PropName) -> FName
-			{
-				if (const FNameProperty* P = CastField<FNameProperty>(
-					NewNode->GetClass()->FindPropertyByName(PropName)))
-				{
-					return P->GetPropertyValue_InContainer(NewNode);
-				}
-				return NAME_None;
-			};
-
-			UClass* PFC      = ReadObjProp(TEXT("ProxyFactoryClass"));
-			UClass* PC       = ReadObjProp(TEXT("ProxyClass"));
-			const FName PFF  = ReadNameProp(TEXT("ProxyFactoryFunctionName"));
-
-			if (PFC == nullptr || PC == nullptr || PFF.IsNone())
-			{
-				return MakeErrorResult(FString::Printf(
-					TEXT("Generic '%s' was created without proxy fields populated -- ")
-					TEXT("the node would render as 'Async Task: Missing Function' with no delegate pins. ")
-					TEXT("Use node_type='AsyncAction' with function_name and function_class (recommended). ")
-					TEXT("As a fallback, supply node_properties containing 'ProxyFactoryFunctionName', 'ProxyFactoryClass', and 'ProxyClass'."),
-					*NewNode->GetClass()->GetName()));
-			}
-		}
-
-		NodeDescription = FString::Printf(TEXT("Generic: %s"), *ClassName);
-	}
+	// Inline branches below cover node types not yet absorbed by the factory.
 	else if (NodeType == TEXT("EventOverride"))
 	{
 		FString FunctionName;
@@ -1087,38 +474,6 @@ FToolResult ClaireonBlueprintGraphTool_AddNode::AddNode_Impl(
 		FToolResult TunnelResult = BuildStateResponse(SessionId, Data);
 		TunnelResult.Warnings.Append(ResolutionWarnings);
 		return TunnelResult;
-	}
-	else if (NodeType == TEXT("CallParentFunction"))
-	{
-		FString FunctionName;
-		if (!Params->TryGetStringField(TEXT("function_name"), FunctionName))
-		{
-			return MakeErrorResult(TEXT("Missing required field 'function_name' for CallParentFunction node"));
-		}
-
-		UClass* ParentClass = Blueprint->ParentClass;
-		ClaireonNameResolver::FNameResolveResult ParentFuncResult;
-		UFunction* TargetFunc = ParentClass
-			? ClaireonNameResolver::ResolveFunctionName(ParentClass, FunctionName, ParentFuncResult)
-			: nullptr;
-
-		if (!TargetFunc)
-		{
-			return MakeErrorResult(ParentFuncResult.Error.IsEmpty()
-					? FString::Printf(TEXT("Function '%s' not found: Blueprint has no parent class"), *FunctionName)
-					: ParentFuncResult.Error);
-		}
-		if (!ParentFuncResult.ResolutionNote.IsEmpty())
-		{
-			ResolutionWarnings.Add(ParentFuncResult.ResolutionNote);
-		}
-
-		UK2Node_CallParentFunction* ParentCallNode =
-			NewObject<UK2Node_CallParentFunction>(Graph);
-		ParentCallNode->SetFromFunction(TargetFunc);
-
-		NewNode = ParentCallNode;
-		NodeDescription = FString::Printf(TEXT("Call Parent: %s"), *TargetFunc->GetName());
 	}
 	else if (NodeType == TEXT("Timeline"))
 	{
@@ -1716,7 +1071,7 @@ FToolResult ClaireonBlueprintGraphTool_AddNode::AddNode_Impl(
 }
 
 // ----------------------------------------------------------------------------
-// P1: hot-path metadata enrichment
+// hot-path metadata enrichment
 // ----------------------------------------------------------------------------
 
 FString ClaireonBlueprintGraphTool_AddNode::GetFullDescription() const
@@ -1731,11 +1086,19 @@ FString ClaireonBlueprintGraphTool_AddNode::GetFullDescription() const
         "follow-up bp_connect_pins call.");
 }
 
+FString ClaireonBlueprintGraphTool_AddNode::GetExampleUsage() const
+{
+    return TEXT(
+        "bp_add_node session_id=\"...\" "
+        "node_class=\"K2Node_CallFunction\" function=\"PrintString\" "
+        "auto_connect_from_cursor=true");
+}
+
 FString ClaireonBlueprintGraphTool_AddNode::GetPatterns() const
 {
-    // Part C (#0000): save-discipline guidance migrates here from
-    // GetFullDescription so tool_search deep-inspect can surface it under a
-    // dedicated `patterns` field. ASCII only; no em-dashes.
+    // Save-discipline guidance lives here (not GetFullDescription) so
+    // tool_search deep-inspect can surface it under a dedicated `patterns`
+    // field. ASCII only; no em-dashes.
     return TEXT(
         "## Common pitfalls\n"
         "\n"
@@ -1748,14 +1111,6 @@ FString ClaireonBlueprintGraphTool_AddNode::GetPatterns() const
         "- claireon.bp_connect_pins -- companion when auto_connect_from_cursor "
         "doesn't fit\n"
         "- claireon.bp_save -- per-node-cycle save discipline\n");
-}
-
-FString ClaireonBlueprintGraphTool_AddNode::GetExampleUsage() const
-{
-    return TEXT(
-        "bp_add_node session_id=\"...\" "
-        "node_class=\"K2Node_CallFunction\" function=\"PrintString\" "
-        "auto_connect_from_cursor=true");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddNode::GetParameterTooltips() const

@@ -66,7 +66,7 @@ IClaireonTool::FToolResult FClaireonMetaSoundTool_Save::Execute(const TSharedPtr
 	bool bCompiled = false;
 	if (UMetaSoundSource* Source = Cast<UMetaSoundSource>(Asset))
 	{
-		// I6 / D2: builder commit auto-compiles. UpdateAndRegisterForExecution rebuilds the
+		// / D2: builder commit auto-compiles. UpdateAndRegisterForExecution rebuilds the
 		// MetaSound from the live document; no separate compile op is needed.
 		Source->UpdateAndRegisterForExecution();
 		bCompiled = true;

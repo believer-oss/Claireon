@@ -68,7 +68,7 @@ FToolResult ClaireonWidgetBPTool_GetAnimationDetails::Execute(const TSharedPtr<F
     {
         ResultObj = MakeShared<FJsonObject>();
     }
-    // Ensure the [D1] slot_widget_name readback is present with NAME_None -> null semantics.
+    // Ensure the slot_widget_name readback is present with NAME_None -> null semantics.
     ResultObj->SetStringField(TEXT("name"), Anim->GetFName().ToString());
     ResultObj->SetStringField(TEXT("display_label"), Anim->GetDisplayLabel());
     ResultObj->SetNumberField(TEXT("start_time"), Anim->GetStartTime());
@@ -92,11 +92,25 @@ FToolResult ClaireonWidgetBPTool_GetAnimationDetails::Execute(const TSharedPtr<F
     }
     ResultObj->SetArrayField(TEXT("bindings"), BindingArr);
 
+    // Each track entry carries the binding GUID it lives on, plus the
+    // widget_name resolved from FWidgetAnimationBinding::WidgetName. This disambiguates
+    // tracks with identical names (e.g. two `RenderOpacity` tracks on different widgets).
     TArray<TSharedPtr<FJsonValue>> TrackArr;
     if (UMovieScene* MS = Anim->GetMovieScene())
     {
+        // Build GUID -> widget_name lookup once so every track lookup is O(1).
+        TMap<FGuid, FName> GuidToWidgetName;
+        for (const FWidgetAnimationBinding& Binding : Anim->GetBindings())
+        {
+            GuidToWidgetName.Add(Binding.AnimationGuid, Binding.WidgetName);
+        }
+
         for (const FMovieSceneBinding& MSBinding : MS->GetBindings())
         {
+            const FGuid BindingGuid = MSBinding.GetObjectGuid();
+            const FString BindingGuidStr = BindingGuid.ToString(EGuidFormats::DigitsWithHyphens);
+            const FName* WidgetNamePtr = GuidToWidgetName.Find(BindingGuid);
+
             for (const UMovieSceneTrack* Track : MSBinding.GetTracks())
             {
                 if (!Track)
@@ -107,6 +121,15 @@ FToolResult ClaireonWidgetBPTool_GetAnimationDetails::Execute(const TSharedPtr<F
                 Obj->SetStringField(TEXT("track_class"), Track->GetClass()->GetName());
                 Obj->SetStringField(TEXT("track_name"), Track->GetTrackName().ToString());
                 Obj->SetNumberField(TEXT("section_count"), Track->GetAllSections().Num());
+                Obj->SetStringField(TEXT("binding_guid"), BindingGuidStr);
+                if (WidgetNamePtr)
+                {
+                    Obj->SetStringField(TEXT("widget_name"), WidgetNamePtr->ToString());
+                }
+                else
+                {
+                    Obj->SetField(TEXT("widget_name"), MakeShared<FJsonValueNull>());
+                }
                 TrackArr.Add(MakeShared<FJsonValueObject>(Obj));
             }
         }

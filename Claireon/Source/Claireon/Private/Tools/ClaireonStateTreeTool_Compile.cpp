@@ -63,10 +63,15 @@ FToolResult ClaireonStateTreeTool_Compile::Execute(const TSharedPtr<FJsonObject>
 
 	Data->LastOperationStatus = bSuccess ? TEXT("compile -> Succeeded") : TEXT("compile -> Failed");
 
+	// always return the compile log on response.data.compile_log so callers don't
+	// have to choose between MakeSuccessResult (success-only path) and an error wrapper
+	// that re-raises. Callers can read data.success to distinguish without an exception.
+	TSharedPtr<FJsonObject> RespData = MakeShared<FJsonObject>();
+	RespData->SetBoolField(TEXT("success"), bSuccess);
+	RespData->SetStringField(TEXT("compile_log"), Output);
+
 	if (bSuccess)
 	{
-		TSharedPtr<FJsonObject> RespData = MakeShared<FJsonObject>();
-		RespData->SetBoolField(TEXT("success"), true);
 		return MakeSuccessResult(RespData, Output);
 	}
 	return MakeErrorResult(Output);

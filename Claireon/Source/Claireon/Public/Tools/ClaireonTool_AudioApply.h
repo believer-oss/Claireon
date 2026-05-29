@@ -6,10 +6,9 @@
 #include "Tools/IClaireonTool.h"
 
 /**
- * MCP tool for level-scoped audio application operations (e.g. placing ambient sound actors,
- * audio volumes, or pushing sound mix state into the current editor world). RequiresNoPIE=true AND
- * RequiresEditorWorld=true per operator decision D3.
- * Implementation lands in stage 002.
+ * MCP tool for level-scoped audio application operations (e.g. placing
+ * ambient sound actors, audio volumes, or pushing sound mix state into the
+ * current editor world). RequiresNoPIE=true AND RequiresEditorWorld=true.
  */
 class FClaireonTool_AudioApply : public IClaireonTool
 {

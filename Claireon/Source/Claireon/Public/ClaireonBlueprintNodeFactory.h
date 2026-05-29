@@ -11,13 +11,15 @@ class UEdGraph;
 class UEdGraphNode;
 
 /**
- * Session-agnostic factory for creating K2 Blueprint nodes from a typed spec.
+ * Single source of truth for K2 Blueprint node construction from a typed JSON spec.
  *
- * Used by the batch editor (claireon.blueprint_apply_graph) to create nodes without
- * touching cursor / auto_connect / session state. The older incremental editor
- * (bp_add_node) currently keeps its own copy of
- * the dispatch for safety — unifying them is tracked as follow-up work in the
- * MCP tooling improvements plan (A1.a → follow-up).
+ * Used by all three Blueprint node-creation call sites:
+ *   - blueprint_graph_add_node (session-mode, ClaireonBlueprintGraphTool_AddNode::AddNode_Impl)
+ *   - blueprint_graph_apply_spec (batch, ClaireonSpecApplicator_Blueprint::ApplyPass1_CreateEntities)
+ *   - blueprint_apply_graph (batch direct, ClaireonTool_ApplyBlueprintGraph::Execute)
+ *
+ * Routes by node_type to typed branches that handle pin/property allocation,
+ * AllocateDefaultPins, and (for dynamic-pin nodes) ReconstructNode.
  *
  * Factory responsibilities:
  *   1. Resolve node_type to a UK2Node class (typed dispatch, same surface as Operation_AddNode).
@@ -26,6 +28,11 @@ class UEdGraphNode;
  *
  * Callers remain responsible for: transaction wrapping, cursor updates, auto_connect,
  * MarkBlueprintAsStructurallyModified, response building.
+ *
+ * Node types not yet absorbed (handled inline in AddNode_Impl):
+ *   EventOverride, FunctionEntry, FunctionResult, Tunnel, Timeline,
+ *   AddDelegate, RemoveDelegate, ClearDelegate, CallDelegate, CreateDelegate,
+ *   AssignDelegate, ComponentBoundEvent.
  */
 namespace ClaireonBlueprintNodeFactory
 {

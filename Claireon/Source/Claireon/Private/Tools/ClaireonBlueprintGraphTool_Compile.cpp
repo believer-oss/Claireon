@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -64,6 +64,9 @@
 #include "Curves/CurveVector.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Kismet2/CompilerResultsLog.h"
+#include "Logging/TokenizedMessage.h"
+#include "Misc/UObjectToken.h"
 #include "EdGraphUtilities.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -134,8 +137,16 @@ FToolResult ClaireonBlueprintGraphTool_Compile::Execute(const TSharedPtr<FJsonOb
 		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
 	}
 
-	// Compile the Blueprint
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	// Plumb FCompilerResultsLog. CompileBlueprint(Blueprint,
+	// EBlueprintCompileOptions::None, &Log) routes compile-time messages
+	// into the supplied log instead of dropping them on the floor. We
+	// serialize the log entries into data.compile_log so callers see
+	// actionable detail instead of just "Compilation failed with errors".
+	FCompilerResultsLog CompilerLog;
+	CompilerLog.SetSourcePath(Blueprint->GetPathName());
+	CompilerLog.BeginEvent(TEXT("Compile"));
+	FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::None, &CompilerLog);
+	CompilerLog.EndEvent();
 
 	// Check compilation status
 	EBlueprintStatus Status = Blueprint->Status;
@@ -166,15 +177,89 @@ FToolResult ClaireonBlueprintGraphTool_Compile::Execute(const TSharedPtr<FJsonOb
 			break;
 	}
 
-	// TODO: Extract compiler messages from Blueprint compiler log
-	// UE5 doesn't expose CompilerResults directly on UBlueprint
-
 	Data->Cursor.LastOperationStatus = StatusText;
-	return BuildStateResponse(SessionId, Data);
+	FToolResult CompileResult = BuildStateResponse(SessionId, Data);
+
+	// serialize compile log entries into the response. The top-level
+	// error message gets promoted to the first Error entry's text so callers
+	// reading the summary see the actionable detail without descending into
+	// data.compile_log. Truncate the log array at 100 entries to keep the
+	// response payload bounded; total counts always shown.
+	const int32 MaxEntries = 100;
+	if (CompileResult.Data.IsValid())
+	{
+		TArray<TSharedPtr<FJsonValue>> LogArray;
+		int32 EmittedCount = 0;
+		FString FirstErrorText;
+		for (const TSharedRef<FTokenizedMessage>& Msg : CompilerLog.Messages)
+		{
+			if (EmittedCount >= MaxEntries)
+			{
+				break;
+			}
+			const EMessageSeverity::Type Severity = Msg->GetSeverity();
+			const TCHAR* SevLabel = TEXT("info");
+			switch (Severity)
+			{
+				case EMessageSeverity::Error:           SevLabel = TEXT("error"); break;
+				case EMessageSeverity::PerformanceWarning:
+				case EMessageSeverity::Warning:         SevLabel = TEXT("warning"); break;
+				case EMessageSeverity::Info:            SevLabel = TEXT("note"); break;
+				default:                                SevLabel = TEXT("info"); break;
+			}
+			const FString MsgText = Msg->ToText().ToString();
+			if (FirstErrorText.IsEmpty() && Severity == EMessageSeverity::Error)
+			{
+				FirstErrorText = MsgText;
+			}
+			TSharedPtr<FJsonObject> EntryObj = MakeShared<FJsonObject>();
+			EntryObj->SetStringField(TEXT("severity"), SevLabel);
+			EntryObj->SetStringField(TEXT("message"), MsgText);
+			for (const TSharedRef<IMessageToken>& Token : Msg->GetMessageTokens())
+			{
+				if (Token->GetType() == EMessageToken::Object)
+				{
+					const FUObjectToken& ObjToken = static_cast<const FUObjectToken&>(*Token);
+					// Resolve the object via FindObject to dodge weak-ptr API
+					// differences across engine revisions; sufficient for the
+					// "name the failing node" use case since compile errors
+					// reference live K2 nodes in the open Blueprint.
+					if (UEdGraphNode* GraphNode = FindObject<UEdGraphNode>(
+						/*Outer=*/nullptr, *ObjToken.GetOriginalObjectPathName()))
+					{
+						EntryObj->SetStringField(TEXT("node_guid"),
+							GraphNode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+						break;
+					}
+				}
+			}
+			LogArray.Add(MakeShared<FJsonValueObject>(EntryObj));
+			++EmittedCount;
+		}
+		CompileResult.Data->SetArrayField(TEXT("compile_log"), LogArray);
+		CompileResult.Data->SetNumberField(TEXT("compile_log_total_entries"), CompilerLog.Messages.Num());
+		CompileResult.Data->SetNumberField(TEXT("compile_log_num_errors"), CompilerLog.NumErrors);
+		CompileResult.Data->SetNumberField(TEXT("compile_log_num_warnings"), CompilerLog.NumWarnings);
+		if (CompilerLog.Messages.Num() > MaxEntries)
+		{
+			CompileResult.Data->SetBoolField(TEXT("compile_log_truncated"), true);
+		}
+
+		// Promote the first Error's text to the top-level error message so
+		// the response summary carries actionable detail.
+		if (Status == BS_Error && !FirstErrorText.IsEmpty())
+		{
+			CompileResult.bIsError = true;
+			CompileResult.ErrorMessage = FString::Printf(
+				TEXT("Compilation failed: %s"), *FirstErrorText);
+		}
+	}
+
+	return CompileResult;
 }
 
 // ----------------------------------------------------------------------------
-// P1: hot-path metadata enrichment
+// hot-path metadata enrichment
 // ----------------------------------------------------------------------------
 
 FString ClaireonBlueprintGraphTool_Compile::GetFullDescription() const

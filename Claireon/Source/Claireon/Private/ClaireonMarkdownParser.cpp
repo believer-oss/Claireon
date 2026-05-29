@@ -6,14 +6,12 @@
 #include "GenericPlatform/GenericPlatformHttp.h"
 #include "Internationalization/Regex.h"
 
-// PROTOTYPE NOTE (Stage 001):
 // FWidgetDecorator creates inline-level runs in SRichTextBlock's text layout.
 // Code blocks need block-level behavior. The approach is:
 // 1. Place each code block on its own line with surrounding newlines
 // 2. Set FWidgetRunInfo::Size explicitly for full-width rendering
 // 3. If this approach fails, fallback: hybrid SVerticalBox of alternating
 //    SRichTextBlock (prose) and SBorder/SMultiLineEditableText (code blocks)
-// Prototype result: <to be filled during implementation>
 
 FString FClaireonMarkdownParser::EscapeXml(const FString& InText)
 {

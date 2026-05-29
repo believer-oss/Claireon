@@ -2291,7 +2291,7 @@ FString FClaireonBPNodeMapper::MapUnknownNode(const UEdGraphNode* Node, int32 In
 	return Output;
 }
 
-// V3 scope-tree infrastructure: MapNodeEx and branch-aware Ex variants
+// scope-tree infrastructure: MapNodeEx and branch-aware Ex variants
 
 FMapNodeResult FClaireonBPNodeMapper::MapNodeEx(const UEdGraphNode* Node, int32 IndentLevel, const UEdGraphPin* ArrivalPin)
 {
@@ -2340,7 +2340,7 @@ FMapNodeResult FClaireonBPNodeMapper::MapNodeEx(const UEdGraphNode* Node, int32 
 		return MapAsyncActionNodeEx(Node, IndentLevel);
 	}
 
-	// V8: Latent K2Node_CallFunction detection (Delay, RetriggerableDelay, etc.)
+	// Latent K2Node_CallFunction detection (Delay, RetriggerableDelay, etc.)
 	if (const UK2Node_CallFunction* CallNode = Cast<UK2Node_CallFunction>(Node))
 	{
 		if (const UFunction* TargetFunc = CallNode->GetTargetFunction())
@@ -2374,7 +2374,7 @@ FMapNodeResult FClaireonBPNodeMapper::MapNodeEx(const UEdGraphNode* Node, int32 
 		return Result;
 	}
 
-	// V8: Dispatch Ex variants for nodes that produce member declarations
+	// Dispatch Ex variants for nodes that produce member declarations
 	if (Cast<UK2Node_CallFunction>(Node))
 	{
 		return MapCallFunctionNodeEx(Node, IndentLevel);
