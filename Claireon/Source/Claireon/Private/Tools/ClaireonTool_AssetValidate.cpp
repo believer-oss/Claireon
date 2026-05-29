@@ -14,7 +14,7 @@ FString ClaireonTool_AssetValidate::GetOperation() const { return TEXT("validate
 
 FString ClaireonTool_AssetValidate::GetDescription() const
 {
-	return TEXT("Validate asset integrity and check for broken references. Scans the Asset Registry for issues without loading assets.");
+    return TEXT("Validate asset integrity and check for broken references. Scans the Asset Registry for issues without loading assets. Stateless / read-only / non-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AssetValidate::GetInputSchema() const

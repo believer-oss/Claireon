@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_Save::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_Save::GetDescription() const
 {
-    return TEXT("Compiles and saves the Blueprint package to disk for the current session. Per the per-node cycle, call save every 1-3 add_node operations to flush in-session edits. Most-common pitfall: skipping save until close, which loses progress on editor crash and forces a full re-author of the in-session graph. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Compiles and saves the Blueprint package to disk for the current session. Per the per-node cycle, call save every 1-3 add_node operations to flush in-session edits. Most-common pitfall: skipping save until close, which loses progress on editor crash and forces a full re-author of the in-session graph. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Save::GetInputSchema() const
@@ -186,20 +186,20 @@ FString ClaireonBlueprintGraphTool_Save::GetFullDescription() const
     return TEXT(
         "Compiles and saves the Blueprint package to disk for the current "
         "session. Per the per-node cycle in the per-tool authoring guidance, "
-        "call blueprint_graph_save every 1-3 add_node operations rather "
+        "call bp_save every 1-3 add_node operations rather "
         "than batching dozens of edits before a single save. This protects "
         "against editor crashes (which would otherwise drop in-session edits) "
         "and ensures git diffs stay scoped per logical authoring unit. The "
         "tool internally calls FKismetEditorUtilities::CompileBlueprint and "
         "then UEditorAssetLibrary::SaveLoadedAsset on the package; if compile "
         "errors are present, save still proceeds (the asset is saved with "
-        "compile errors recorded). Use blueprint_graph_compile to "
+        "compile errors recorded). Use bp_compile to "
         "fetch the structured error list.");
 }
 
 FString ClaireonBlueprintGraphTool_Save::GetExampleUsage() const
 {
-    return TEXT("blueprint_graph_save session_id=\"...\"");
+    return TEXT("bp_save session_id=\"...\"");
 }
 
 #undef LOCTEXT_NAMESPACE

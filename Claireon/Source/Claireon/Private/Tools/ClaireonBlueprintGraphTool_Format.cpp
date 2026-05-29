@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_Format::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_Format::GetDescription() const
 {
-    return TEXT("Auto-layouts the current session's graph nodes. This is the IN-SESSION formatter (blueprint_graph_format), distinct from the standalone blueprint_format_graph which operates on a closed asset path. Most-common pitfall: confusing the two -- use this one inside a session, the standalone one for one-off cleanup of an unopened asset. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Auto-layouts the current session's graph nodes. Accepts either session_id or asset_path; auto-opens a transient session when asset_path is supplied. Most-common pitfall: using this inside a session when you meant to pass only an asset path -- either form works now.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Format::GetInputSchema() const
@@ -213,22 +213,19 @@ FString ClaireonBlueprintGraphTool_Format::GetFullDescription() const
 {
     return TEXT(
         "Auto-layouts the current session's graph nodes using a simple "
-        "left-to-right exec-flow layout. This is the IN-SESSION formatter: "
-        "blueprint_graph_format requires an open session and operates "
-        "on the in-session graph state. The STANDALONE formatter, "
-        "blueprint_format_graph (note swapped word order), takes an "
-        "asset_path and operates on a closed asset. The two are easy to "
-        "confuse: the in-session form is what you use inside the per-node "
-        "cycle from the per-tool authoring guidance before calling "
-        "blueprint_graph_save; the standalone form is for one-off "
-        "cleanup of an unopened Blueprint outside a session. If "
+        "left-to-right exec-flow layout. bp_format requires an open "
+        "session and operates on the in-session graph state. When given "
+        "asset_path instead of session_id it auto-opens a transient "
+        "session, formats, and closes -- no prior bp_open needed. Use "
+        "session_id to format inside an existing workflow cycle (see the "
+        "per-tool authoring guidance) before calling bp_save. If "
         "BlueprintAssist plugin is present, the layout uses BA's smart "
         "routing; otherwise a deterministic fallback grid layout is used.");
 }
 
 FString ClaireonBlueprintGraphTool_Format::GetExampleUsage() const
 {
-    return TEXT("blueprint_graph_format session_id=\"...\"");
+    return TEXT("bp_format session_id=\"...\"  |  bp_format asset_path=\"/Game/BP/MyActor\"");
 }
 
 #undef LOCTEXT_NAMESPACE

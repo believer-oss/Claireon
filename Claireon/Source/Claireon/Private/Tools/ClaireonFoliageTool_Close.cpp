@@ -11,7 +11,7 @@ FString ClaireonFoliageTool_Close::GetOperation() const { return TEXT("close"); 
 
 FString ClaireonFoliageTool_Close::GetDescription() const
 {
-	return TEXT("Close a foliage editing session.");
+    return TEXT("Close a foliage editing session, releasing the foliage actor lock and clearing in-session state. Session-mode tool: open via foliage_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonFoliageTool_Close::GetInputSchema() const

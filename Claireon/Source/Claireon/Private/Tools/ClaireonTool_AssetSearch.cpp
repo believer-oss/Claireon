@@ -12,7 +12,7 @@ FString ClaireonTool_AssetSearch::GetOperation() const { return TEXT("search"); 
 
 FString ClaireonTool_AssetSearch::GetDescription() const
 {
-	return TEXT("Search for assets in the Unreal Asset Registry by name. Optionally filter by class or path. Results are ranked by match quality.");
+    return TEXT("Search for assets in the Unreal Asset Registry by name. Optionally filter by class or path. Results are ranked by match quality. Stateless / read-only / non-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AssetSearch::GetInputSchema() const

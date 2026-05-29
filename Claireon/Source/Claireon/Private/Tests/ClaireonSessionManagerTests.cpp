@@ -152,13 +152,13 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, ListSessions, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonSessionManagerTest::CleanupAllSessions();
 
-	FClaireonSessionManager::Get().OpenSession(TEXT("/Game/Test/BP_A"), TEXT("blueprint_edit_graph"));
+	FClaireonSessionManager::Get().OpenSession(TEXT("/Game/Test/BP_A"), TEXT("bp"));
 	FClaireonSessionManager::Get().OpenSession(TEXT("/Game/Test/BP_B"), TEXT("niagara_edit"));
 
 	TArray<FMCPSession> All = FClaireonSessionManager::Get().ListSessions();
 	UNTEST_EXPECT_TRUE(All.Num() == 2);
 
-	TArray<FMCPSession> BPOnly = FClaireonSessionManager::Get().ListSessions(TEXT("blueprint_edit_graph"));
+	TArray<FMCPSession> BPOnly = FClaireonSessionManager::Get().ListSessions(TEXT("bp"));
 	UNTEST_EXPECT_TRUE(BPOnly.Num() == 1);
 
 	ClaireonSessionManagerTest::CleanupAllSessions();

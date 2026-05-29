@@ -179,7 +179,7 @@ UNTEST_UNIT(Claireon, DecomposedToolsSmoke, ApplySpecToolsExposeDiscoverableSurf
 	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonPCGGraphTool_ApplySpec>(TEXT("pcg_apply_spec")));
 	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonNiagaraTool_ApplySpec>(TEXT("niagara_apply_spec")));
 	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonStateTreeTool_ApplySpec>(TEXT("statetree_apply_spec")));
-	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonBlueprintGraphTool_ApplySpec>(TEXT("blueprint_graph_apply_spec")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonBlueprintGraphTool_ApplySpec>(TEXT("bp_apply_spec")));
 	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonWidgetBPTool_ApplySpec>(TEXT("widgetbp_apply_spec")));
 	co_return;
 }
@@ -199,7 +199,7 @@ UNTEST_UNIT(Claireon, DecomposedToolsSmoke, WidgetBPCoreLifecycleToolsExposeDisc
 UNTEST_UNIT(Claireon, DecomposedToolsSmoke, BlueprintGraphCreateExposesDiscoverableSurface)
 {
 	using namespace DecomposedToolsSmokeHelpers;
-	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonBlueprintGraphTool_Create>(TEXT("blueprint_graph_create")));
+	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonBlueprintGraphTool_Create>(TEXT("bp_create")));
 	co_return;
 }
 

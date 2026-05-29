@@ -15,7 +15,7 @@ FString ClaireonLevelSequenceTool_AddSpawnable::GetOperation() const { return TE
 
 FString ClaireonLevelSequenceTool_AddSpawnable::GetDescription() const
 {
-	return TEXT("Add a spawnable binding to the Level Sequence. Provide either a template_actor_path or an object_class.");
+    return TEXT("Add a spawnable binding to the Level Sequence. Provide either a template_actor_path or an object_class. Session-mode tool: open via level_sequence_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_AddSpawnable::GetInputSchema() const

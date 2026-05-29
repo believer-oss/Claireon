@@ -15,7 +15,7 @@ FString ClaireonTool_TraceGetFrameStats::GetOperation() const { return TEXT("get
 
 FString ClaireonTool_TraceGetFrameStats::GetDescription() const
 {
-	return TEXT("Get per-frame timing data with hitch detection. Returns frame times, summary stats (avg/p50/p95/p99/max), and top scopes for hitch frames.");
+    return TEXT("Get per-frame timing data with hitch detection. Returns frame times, summary stats (avg/p50/p95/p99/max), and top scopes for hitch frames. Stateless / read-only / non-session: reads from an open trace handle.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_TraceGetFrameStats::GetInputSchema() const

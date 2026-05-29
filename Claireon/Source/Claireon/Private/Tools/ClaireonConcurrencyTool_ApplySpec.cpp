@@ -12,8 +12,10 @@ FString FClaireonConcurrencyTool_ApplySpec::GetOperation() const { return TEXT("
 
 FString FClaireonConcurrencyTool_ApplySpec::GetDescription() const
 {
-	return TEXT("Apply a Concurrency declarative spec ({kind=\"Concurrency\", asset_path, properties}). "
-				"Creates the asset if absent, applies properties via reflection.");
+	return TEXT("Apply a Concurrency declarative spec ({kind=\"Concurrency\", asset_path, properties}) "
+				"in one shot. Non-session, stateless operation; no session_id required and no editor "
+				"session is opened. Creates the target asset if absent, applies properties via "
+				"reflection, then saves.");
 }
 
 TSharedPtr<FJsonObject> FClaireonConcurrencyTool_ApplySpec::GetInputSchema() const

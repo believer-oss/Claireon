@@ -14,7 +14,7 @@ FString ClaireonInputTool_AddActionTrigger::GetOperation() const { return TEXT("
 
 FString ClaireonInputTool_AddActionTrigger::GetDescription() const
 {
-	return TEXT("Add a trigger instance to the Input Action of this session.");
+    return TEXT("Add a trigger instance to the Input Action of this session. Session-mode tool: open the input asset via input_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonInputTool_AddActionTrigger::GetInputSchema() const

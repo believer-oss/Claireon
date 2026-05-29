@@ -4,6 +4,7 @@
 #include "Tools/ClaireonInputTool_Open.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "Tools/ClaireonEnhancedInputHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
@@ -75,6 +76,8 @@ FToolResult ClaireonInputTool_Open::Execute(const TSharedPtr<FJsonObject>& Argum
 	}
 
 	ToolData.Add(SessionId, MoveTemp(NewData));
+
+	ClaireonAssetUtils::OpenAssetEditorIfHeadless(Asset);
 
 	FInputEditToolData* Data = ToolData.Find(SessionId);
 	return BuildStateResponse(SessionId, Data);

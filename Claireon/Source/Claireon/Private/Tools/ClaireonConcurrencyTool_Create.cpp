@@ -17,8 +17,10 @@ FString FClaireonConcurrencyTool_Create::GetOperation() const { return TEXT("cre
 
 FString FClaireonConcurrencyTool_Create::GetDescription() const
 {
-	return TEXT("Create a new USoundConcurrency asset at the given /Game/ path. "
-				"Errors if an asset already exists at that path.");
+	return TEXT("Create a new USoundConcurrency asset at the given /Game/ content path. Non-session, "
+				"immediate operation; no session_id is needed. Errors if an asset already exists at "
+				"that path. Follow with concurrency.set_property or concurrency.apply_spec to set "
+				"MaxCount, ResolutionRule, and related fields; new asset registers with asset registry.");
 }
 
 TSharedPtr<FJsonObject> FClaireonConcurrencyTool_Create::GetInputSchema() const

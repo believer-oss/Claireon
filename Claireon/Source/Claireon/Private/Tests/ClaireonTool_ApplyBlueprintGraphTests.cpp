@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Regression tests for blueprint_apply_graph -- in particular, that
+// Regression tests for bp_apply_delta -- in particular, that
 // CallFunction nodes created through the batch path populate their pins
 // correctly.
 
@@ -9,7 +9,7 @@
 
 #include "Untest.h"
 #include "Tools/IClaireonTool.h"
-#include "Tools/ClaireonTool_ApplyBlueprintGraph.h"
+#include "Tools/ClaireonTool_ApplyBlueprintDelta.h"
 #include "Tools/ClaireonBlueprintGraphTool_Create.h"
 #include "Tools/ClaireonBlueprintGraphTool_Open.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddVariable.h"
@@ -126,7 +126,7 @@ bool NodeHasPin(UEdGraphNode* Node, const TCHAR* PinName)
 // that pre-fix would come through with just the exec in/out pins.
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, KismetSystemLibrary_PrintString_HasAllPins, UNTEST_TIMEOUTMS(30000))
+UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, KismetSystemLibrary_PrintString_HasAllPins, UNTEST_TIMEOUTMS(30000))
 {
 	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
 	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
@@ -138,7 +138,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, KismetSystemLibrary_PrintSt
 	Node->SetStringField(TEXT("function_name"), TEXT("PrintString"));
 	Node->SetStringField(TEXT("function_class"), TEXT("KismetSystemLibrary"));
 
-	ClaireonTool_ApplyBlueprintGraph Tool;
+	ClaireonTool_ApplyBlueprintDelta Tool;
 	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 
@@ -162,7 +162,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, KismetSystemLibrary_PrintSt
 // miss the BlueprintAssignable OnComplete exec pin.
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins,
+UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins,
     FlowprintAwait_Delay_AsyncAction_HasOnComplete, UNTEST_TIMEOUTMS(30000))
 {
 	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
@@ -178,7 +178,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins,
 	Node->SetStringField(TEXT("function_class"),
 		TEXT("/Script/Engine.AsyncActionLoadPrimaryAsset"));
 
-	ClaireonTool_ApplyBlueprintGraph Tool;
+	ClaireonTool_ApplyBlueprintDelta Tool;
 	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 
@@ -212,7 +212,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins,
 // node state intent directly.
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins,
+UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins,
     AsyncActionNodeType_HasOnComplete, UNTEST_TIMEOUTMS(30000))
 {
 	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
@@ -228,7 +228,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins,
 	Node->SetStringField(TEXT("function_class"),
 		TEXT("/Script/Engine.AsyncActionLoadPrimaryAsset"));
 
-	ClaireonTool_ApplyBlueprintGraph Tool;
+	ClaireonTool_ApplyBlueprintDelta Tool;
 	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 
@@ -267,7 +267,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins,
 // surface.
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins,
+UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins,
     GenericK2NodeAsyncAction_WithoutProxyBag_FailsLoudly, UNTEST_TIMEOUTMS(30000))
 {
 	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
@@ -281,7 +281,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins,
 	Node->SetStringField(TEXT("node_type"), TEXT("Generic"));
 	Node->SetStringField(TEXT("class_name"), TEXT("K2Node_AsyncAction"));
 
-	ClaireonTool_ApplyBlueprintGraph Tool;
+	ClaireonTool_ApplyBlueprintDelta Tool;
 	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
 
 	// The factory's loud-failure guard must short-circuit before
@@ -304,7 +304,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins,
 // and never triggered ReconstructNode.
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, Actor_SetHiddenInGame_SelfBound_HasPins, UNTEST_TIMEOUTMS(30000))
+UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, Actor_SetHiddenInGame_SelfBound_HasPins, UNTEST_TIMEOUTMS(30000))
 {
 	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
 	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
@@ -316,7 +316,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, Actor_SetHiddenInGame_SelfB
 	Node->SetStringField(TEXT("node_type"), TEXT("CallFunction"));
 	Node->SetStringField(TEXT("function_name"), TEXT("SetLifeSpan"));
 
-	ClaireonTool_ApplyBlueprintGraph Tool;
+	ClaireonTool_ApplyBlueprintDelta Tool;
 	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 
@@ -338,7 +338,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, Actor_SetHiddenInGame_SelfB
 // correctly; this catches accidental regressions in the shared tail.
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, Sequence_HasThen0_Then1, UNTEST_TIMEOUTMS(30000))
+UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, Sequence_HasThen0_Then1, UNTEST_TIMEOUTMS(30000))
 {
 	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
 	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
@@ -348,7 +348,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, Sequence_HasThen0_Then1, UN
 	Node->SetStringField(TEXT("id"), TEXT("seq1"));
 	Node->SetStringField(TEXT("node_type"), TEXT("Sequence"));
 
-	ClaireonTool_ApplyBlueprintGraph Tool;
+	ClaireonTool_ApplyBlueprintDelta Tool;
 	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 
@@ -368,7 +368,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, Sequence_HasThen0_Then1, UN
 // the pin, so we just verify it comes through with the expected typed pin.
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, VariableGet_TypedOutput, UNTEST_TIMEOUTMS(30000))
+UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, VariableGet_TypedOutput, UNTEST_TIMEOUTMS(30000))
 {
 	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
 	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
@@ -390,7 +390,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, VariableGet_TypedOutput, UN
 	Node->SetStringField(TEXT("node_type"), TEXT("VariableGet"));
 	Node->SetStringField(TEXT("variable_name"), TEXT("TestHealth"));
 
-	ClaireonTool_ApplyBlueprintGraph Tool;
+	ClaireonTool_ApplyBlueprintDelta Tool;
 	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 
@@ -419,7 +419,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, VariableGet_TypedOutput, UN
 // (was silent pre-fix) and that the node is still created but empty.
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, CallFunction_BadFunctionClass_EmitsWarning, UNTEST_TIMEOUTMS(30000))
+UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, CallFunction_BadFunctionClass_EmitsWarning, UNTEST_TIMEOUTMS(30000))
 {
 	ApplyGraphTests_CleanupTestAsset(ApplyBPGraphPinsTestPath);
 	FString SessionId = OpenTestSession(ApplyBPGraphPinsTestPath);
@@ -431,7 +431,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintGraph_Pins, CallFunction_BadFunctionCla
 	Node->SetStringField(TEXT("function_name"), TEXT("Anything"));
 	Node->SetStringField(TEXT("function_class"), TEXT("NonexistentClassXYZ"));
 
-	ClaireonTool_ApplyBlueprintGraph Tool;
+	ClaireonTool_ApplyBlueprintDelta Tool;
 	auto Result = Tool.Execute(MakeApplyGraphArgsSingle(SessionId, Node));
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 

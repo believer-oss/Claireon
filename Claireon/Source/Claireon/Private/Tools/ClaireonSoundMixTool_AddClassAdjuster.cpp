@@ -17,8 +17,10 @@ FString FClaireonSoundMixTool_AddClassAdjuster::GetOperation() const { return TE
 
 FString FClaireonSoundMixTool_AddClassAdjuster::GetDescription() const
 {
-	return TEXT("Append a SoundClass adjuster (FSoundClassAdjuster) to USoundMix::SoundClassEffects. "
-				"Rejects duplicates if the same SoundClass is already adjusted.");
+	return TEXT("Add a SoundClass adjuster (FSoundClassAdjuster) to USoundMix::SoundClassEffects. "
+				"Non-session, immediate operation; no session_id is needed. Rejects duplicates if the "
+				"same SoundClass is already adjusted in this mix. Wraps the change in "
+				"FScopedTransaction and saves the asset on success.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundMixTool_AddClassAdjuster::GetInputSchema() const

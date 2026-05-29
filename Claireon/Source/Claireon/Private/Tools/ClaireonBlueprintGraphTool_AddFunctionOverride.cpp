@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_AddFunctionOverride::GetOperation() const { r
 
 FString ClaireonBlueprintGraphTool_AddFunctionOverride::GetDescription() const
 {
-    return TEXT("Create a function-override graph for a BlueprintNativeEvent or BlueprintImplementableEvent in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. The override target must be declared on the parent class or a UFUNCTION-marked interface. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Create a function-override graph for a BlueprintNativeEvent or BlueprintImplementableEvent in the open editing session. Requires open session_id from bp_open (or pass asset_path to auto-open). Transactional. The override target must be declared on the parent class or a UFUNCTION-marked interface. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddFunctionOverride::GetInputSchema() const

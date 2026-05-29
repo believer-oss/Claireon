@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonBlueprintGraphTool_ImplementInterface.h"
@@ -13,7 +13,7 @@ FString ClaireonBlueprintGraphTool_ImplementInterface::GetOperation() const { re
 
 FString ClaireonBlueprintGraphTool_ImplementInterface::GetDescription() const
 {
-    return TEXT("Alias of add_interface matching the editor's 'Implement Interface' UI label. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Adds the interface to the Blueprint's ImplementedInterfaces and compiles. Prefer blueprint_graph_add_interface as the canonical name. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Alias of add_interface matching the editor's 'Implement Interface' UI label. Requires open session_id from bp_open (or pass asset_path to auto-open). Transactional. Adds the interface to the Blueprint's ImplementedInterfaces and compiles. Prefer bp_add_interface as the canonical name. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ImplementInterface::GetInputSchema() const

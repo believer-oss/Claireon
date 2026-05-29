@@ -101,10 +101,7 @@ namespace ClaireonAnimInspectScratch
 
 FString ClaireonTool_AnimInspectMontages::GetDescription() const
 {
-	return TEXT("Snapshot the UAnimInstance montage state on a paused-PIE pawn: enumerate every ")
-	       TEXT("FAnimMontageInstance with position, weight, blend time, current section, and play/active/")
-	       TEXT("stopped state. Includes the skeletal mesh component's tick + visibility settings. ")
-	       TEXT("Targets anim-not-ticking, montage-not-advancing, and stuck-blending-out bug classes.");
+    return TEXT("Snapshot the UAnimInstance montage state on a paused-PIE pawn: enumerate every FAnimMontageInstance with position, weight, blend time, current section, and play/active/stopped state. Includes the skeletal mesh tick + visibility settings. Read-only / non-session inspector.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AnimInspectMontages::GetInputSchema() const
@@ -290,10 +287,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimInspectMontages::Execute(const TShar
 
 FString ClaireonTool_AnimInspectMotionWarping::GetDescription() const
 {
-	return TEXT("Snapshot UMotionWarpingComponent state on a paused-PIE pawn: enumerate active root ")
-	       TEXT("motion modifiers (with state, animation, time window, weight) and warp targets ")
-	       TEXT("(with location, rotation, follow component, offsets). Targets motion-warp-not-firing ")
-	       TEXT("and warp-target-stale bug classes.");
+    return TEXT("Snapshot UMotionWarpingComponent state on a paused-PIE pawn: enumerate active root motion modifiers (with state, animation, time window, weight) and warp targets (with location, rotation, follow component, offsets). Targets motion-warp-not-firing and warp-target-stale bug classes. Read-only / non-session inspector.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AnimInspectMotionWarping::GetInputSchema() const

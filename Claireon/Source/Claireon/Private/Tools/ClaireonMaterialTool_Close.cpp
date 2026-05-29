@@ -11,7 +11,7 @@ FString ClaireonMaterialTool_Close::GetOperation() const { return TEXT("close");
 
 FString ClaireonMaterialTool_Close::GetDescription() const
 {
-	return TEXT("Close an open material editing session and release the asset lock.");
+    return TEXT("Close an open material editing session and release the asset lock, clearing in-session graph state.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialTool_Close::GetInputSchema() const

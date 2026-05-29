@@ -269,6 +269,41 @@ void RefreshAssetEditorIfOpen(UObject* Asset)
 	}
 }
 
+void OpenAssetEditorIfHeadless(UObject* Asset)
+{
+	if (!Asset || !GEditor) return;
+	if (!GIsEditor || IsRunningCommandlet()) return;
+	UAssetEditorSubsystem* Subsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
+	if (!Subsystem) return;
+	Subsystem->OpenEditorForAsset(Asset);
+}
+
+void EmitSessionHintIfNeeded(
+	TSharedPtr<FJsonObject>& ResponseData,
+	int32 ConsecutiveAssetPathCalls,
+	const FString& AssetPath,
+	const FString& SessionId,
+	FString& OutSummaryTag)
+{
+	OutSummaryTag.Reset();
+	if (ConsecutiveAssetPathCalls > 5 && ConsecutiveAssetPathCalls % 5 == 1)
+	{
+		const FString HintText = FString::Printf(
+			TEXT("You've called tools on '%s' %d times in a row with asset_path (no session_id). ")
+			TEXT("Session %s is still locked on that asset and will not release until idle timeout. ")
+			TEXT("For multi-step edits on this asset, read Data.session_id from any response and pass ")
+			TEXT("it on subsequent calls. Call operation='close' when done to release the lock."),
+			*AssetPath,
+			ConsecutiveAssetPathCalls,
+			*SessionId);
+		ResponseData->SetStringField(TEXT("session_hint"), HintText);
+		OutSummaryTag = FString::Printf(
+			TEXT("\n\n[hint] session_hint: reuse session_id for '%s' (session=%s)."),
+			*AssetPath,
+			*SessionId);
+	}
+}
+
 UClass* ResolveClassName(const FString& ClassName)
 {
 	// UClass::GetName() omits the U/A prefix, so strip it for matching

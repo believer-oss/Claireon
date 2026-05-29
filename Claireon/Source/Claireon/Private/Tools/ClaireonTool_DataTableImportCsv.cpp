@@ -15,7 +15,7 @@ FString ClaireonTool_DataTableImportCsv::GetOperation() const { return TEXT("imp
 
 FString ClaireonTool_DataTableImportCsv::GetDescription() const
 {
-	return TEXT("Import CSV data into a data table");
+    return TEXT("Import CSV data into a data table, replacing or merging rows. Stateless / non-session: writes the asset directly by path without opening any session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_DataTableImportCsv::GetInputSchema() const

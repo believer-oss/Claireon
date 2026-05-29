@@ -31,7 +31,7 @@ FString ClaireonAnimGraphTool_AddVariable::GetOperation() const { return TEXT("a
 
 FString ClaireonAnimGraphTool_AddVariable::GetDescription() const
 {
-	return TEXT("Add a new variable to the Animation Blueprint.");
+    return TEXT("Add a new variable to the Animation Blueprint in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_AddVariable::GetInputSchema() const
@@ -157,7 +157,7 @@ FString ClaireonAnimGraphTool_RemoveVariable::GetOperation() const { return TEXT
 
 FString ClaireonAnimGraphTool_RemoveVariable::GetDescription() const
 {
-	return TEXT("Remove a variable from the Animation Blueprint.");
+    return TEXT("Remove a variable from the Animation Blueprint in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_RemoveVariable::GetInputSchema() const
@@ -219,7 +219,7 @@ FString ClaireonAnimGraphTool_SetVariableProperties::GetOperation() const { retu
 
 FString ClaireonAnimGraphTool_SetVariableProperties::GetDescription() const
 {
-	return TEXT("Set properties on an existing Animation Blueprint variable (category, tooltip, flags, metadata).");
+    return TEXT("Set properties on an existing Animation Blueprint variable (category, tooltip, flags, metadata). Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_SetVariableProperties::GetInputSchema() const
@@ -328,7 +328,7 @@ FString ClaireonAnimGraphTool_AddFunction::GetOperation() const { return TEXT("a
 
 FString ClaireonAnimGraphTool_AddFunction::GetDescription() const
 {
-	return TEXT("Add a new function to the Animation Blueprint.");
+    return TEXT("Add a new function to the Animation Blueprint in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_AddFunction::GetInputSchema() const
@@ -587,7 +587,7 @@ FString ClaireonAnimGraphTool_RemoveFunction::GetOperation() const { return TEXT
 
 FString ClaireonAnimGraphTool_RemoveFunction::GetDescription() const
 {
-	return TEXT("Remove a function from the Animation Blueprint.");
+    return TEXT("Remove a function from the Animation Blueprint in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_RemoveFunction::GetInputSchema() const
@@ -633,7 +633,7 @@ FString ClaireonAnimGraphTool_AddInterface::GetOperation() const { return TEXT("
 
 FString ClaireonAnimGraphTool_AddInterface::GetDescription() const
 {
-	return TEXT("Add an interface implementation to the Animation Blueprint.");
+    return TEXT("Add an interface implementation to the Animation Blueprint in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_AddInterface::GetInputSchema() const
@@ -689,7 +689,7 @@ FString ClaireonAnimGraphTool_RemoveInterface::GetOperation() const { return TEX
 
 FString ClaireonAnimGraphTool_RemoveInterface::GetDescription() const
 {
-	return TEXT("Remove an interface implementation from the Animation Blueprint.");
+    return TEXT("Remove an interface implementation from the Animation Blueprint in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_RemoveInterface::GetInputSchema() const

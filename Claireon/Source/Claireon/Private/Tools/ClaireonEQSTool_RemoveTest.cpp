@@ -13,7 +13,10 @@ FString ClaireonEQSTool_RemoveTest::GetOperation() const { return TEXT("remove_t
 
 FString ClaireonEQSTool_RemoveTest::GetDescription() const
 {
-	return TEXT("Remove a test from an EQS option by index.");
+	return TEXT("Remove a test from an EQS option by index within an open editing session. Requires "
+				"session_id from eqs.open; the edit is transactional and only persists after save. "
+				"Remaining tests on the option keep their relative order and may shift to fill the "
+				"removed slot.");
 }
 
 TSharedPtr<FJsonObject> ClaireonEQSTool_RemoveTest::GetInputSchema() const

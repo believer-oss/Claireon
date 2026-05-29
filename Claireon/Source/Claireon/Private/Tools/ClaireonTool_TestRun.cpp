@@ -21,7 +21,7 @@ FString ClaireonTool_TestRun::GetOperation() const { return TEXT("run"); }
 
 FString ClaireonTool_TestRun::GetDescription() const
 {
-	return TEXT("Run automation tests using the Unreal Automation Framework");
+    return TEXT("Run automation tests using the Unreal Automation Framework. Stateless / non-session: drives the editor-wide test runner without opening any per-asset session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_TestRun::GetInputSchema() const

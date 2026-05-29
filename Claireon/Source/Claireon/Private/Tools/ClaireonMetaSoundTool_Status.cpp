@@ -12,7 +12,9 @@ FString FClaireonMetaSoundTool_Status::GetOperation() const { return TEXT("statu
 
 FString FClaireonMetaSoundTool_Status::GetDescription() const
 {
-	return TEXT("Return current state of a MetaSound editing session (asset path, dirty flag, last operation).");
+	return TEXT("Return the current state of a MetaSound editing session: asset path, dirty flag, "
+				"input and output counts, and last operation status. Use to confirm session health or "
+				"refresh the caller's view without making changes. Requires session_id.");
 }
 
 TSharedPtr<FJsonObject> FClaireonMetaSoundTool_Status::GetInputSchema() const

@@ -17,8 +17,10 @@ FString FClaireonAttenuationTool_Create::GetOperation() const { return TEXT("cre
 
 FString FClaireonAttenuationTool_Create::GetDescription() const
 {
-	return TEXT("Create a new USoundAttenuation asset at the given /Game/ path. "
-				"Errors if an asset already exists at that path.");
+	return TEXT("Create a new USoundAttenuation asset at the given /Game/ content path. Non-session, "
+				"immediate operation; no session_id is needed. Errors if an asset already exists at "
+				"that path. Follow with attenuation.set_property or attenuation.apply_spec to populate "
+				"falloff and spatialization fields; the new asset is registered with the asset registry.");
 }
 
 TSharedPtr<FJsonObject> FClaireonAttenuationTool_Create::GetInputSchema() const

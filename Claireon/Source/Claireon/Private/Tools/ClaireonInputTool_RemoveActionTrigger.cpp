@@ -13,7 +13,7 @@ FString ClaireonInputTool_RemoveActionTrigger::GetOperation() const { return TEX
 
 FString ClaireonInputTool_RemoveActionTrigger::GetDescription() const
 {
-	return TEXT("Remove a trigger at the given index from the Input Action of this session.");
+    return TEXT("Remove a trigger at the given index from the Input Action of this session. Session-mode tool: open via input_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonInputTool_RemoveActionTrigger::GetInputSchema() const

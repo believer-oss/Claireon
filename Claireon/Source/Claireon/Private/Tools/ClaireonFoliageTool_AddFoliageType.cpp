@@ -13,7 +13,7 @@ FString ClaireonFoliageTool_AddFoliageType::GetOperation() const { return TEXT("
 
 FString ClaireonFoliageTool_AddFoliageType::GetDescription() const
 {
-	return TEXT("Register a UFoliageType asset on the session's foliage actor.");
+    return TEXT("Register a UFoliageType asset on the session's foliage actor so subsequent paint/scatter ops can target it. Session-mode tool: open via foliage_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonFoliageTool_AddFoliageType::GetInputSchema() const

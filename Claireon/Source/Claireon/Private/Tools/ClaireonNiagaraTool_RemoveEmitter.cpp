@@ -13,7 +13,7 @@ FString ClaireonNiagaraTool_RemoveEmitter::GetOperation() const { return TEXT("r
 
 FString ClaireonNiagaraTool_RemoveEmitter::GetDescription() const
 {
-	return TEXT("Remove an emitter from the Niagara System by index.");
+    return TEXT("Remove an emitter from the Niagara System by index. Session-mode tool: open via niagara_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_RemoveEmitter::GetInputSchema() const

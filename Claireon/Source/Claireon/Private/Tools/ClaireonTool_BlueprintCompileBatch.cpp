@@ -15,7 +15,7 @@
 #include "Kismet2/KismetEditorUtilities.h"
 #include "UObject/SoftObjectPath.h"
 
-FString ClaireonTool_BlueprintCompileBatch::GetCategory() const { return TEXT("blueprint"); }
+FString ClaireonTool_BlueprintCompileBatch::GetCategory() const { return TEXT("bp"); }
 FString ClaireonTool_BlueprintCompileBatch::GetOperation() const { return TEXT("compile_batch"); }
 
 TArray<FString> ClaireonTool_BlueprintCompileBatch::GetSearchKeywords() const

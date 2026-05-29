@@ -17,7 +17,10 @@ FString ClaireonBehaviorTreeTool_Close::GetOperation() const { return TEXT("clos
 
 FString ClaireonBehaviorTreeTool_Close::GetDescription() const
 {
-	return TEXT("Close a Behavior Tree editing session. Optionally update_asset and/or save before closing.");
+	return TEXT("Close a Behavior Tree editing session opened by behavior_tree.open, releasing the "
+				"'behavior_tree_edit' lock so another cohort can acquire it. Optionally runs update_asset "
+				"(recompile the runtime tree from the graph) and/or save before closing; in-flight "
+				"transactional edits are discarded when neither flag is set.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBehaviorTreeTool_Close::GetInputSchema() const

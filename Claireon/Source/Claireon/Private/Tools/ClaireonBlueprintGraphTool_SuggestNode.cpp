@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_SuggestNode::GetOperation() const { return TE
 
 FString ClaireonBlueprintGraphTool_SuggestNode::GetDescription() const
 {
-    return TEXT("Suggest Blueprint authoring patterns matching an intent string. Stateless / read-only / non-session: never mutates and requires no open session. Reads BPAuthoringPatterns.json from the Claireon plugin content directory and ranks matches by keyword overlap. Use during planning to discover the right node sequence. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Suggest Blueprint authoring patterns matching an intent string. Stateless / read-only / non-session: never mutates and requires no open session. Reads BPAuthoringPatterns.json from the Claireon plugin content directory and ranks matches by keyword overlap. Use during planning to discover the right node sequence. Session-mode tool: open via bp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SuggestNode::GetInputSchema() const

@@ -25,7 +25,9 @@ FString FClaireonMetaSoundTool_AddNode::GetOperation() const { return TEXT("add_
 
 FString FClaireonMetaSoundTool_AddNode::GetDescription() const
 {
-	return TEXT("Add a node to the MetaSound graph by class name (e.g. class_namespace='Math', class_name='Mul').");
+	return TEXT("Add a node to the MetaSound graph within the current session by class name "
+				"(e.g. class_namespace='Math', class_name='Mul'). Registered via the "
+				"FMetaSoundFrontendDocumentBuilder. Requires session_id from metasound.open.");
 }
 
 TSharedPtr<FJsonObject> FClaireonMetaSoundTool_AddNode::GetInputSchema() const

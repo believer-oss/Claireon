@@ -13,7 +13,7 @@ FString ClaireonNiagaraTool_RenameEmitter::GetOperation() const { return TEXT("r
 
 FString ClaireonNiagaraTool_RenameEmitter::GetDescription() const
 {
-	return TEXT("Rename an emitter in the Niagara System.");
+    return TEXT("Rename an emitter in the Niagara System. Session-mode tool: open via niagara_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_RenameEmitter::GetInputSchema() const

@@ -42,8 +42,9 @@ FString FClaireonAttenuationTool_SetProperty::GetOperation() const { return TEXT
 FString FClaireonAttenuationTool_SetProperty::GetDescription() const
 {
 	return TEXT("Set a property on a USoundAttenuation asset by reflection (e.g. "
-				"property_path=\"Attenuation.FalloffDistance\", value=\"1500.0\"). "
-				"Wraps in FScopedTransaction; saves on success.");
+				"property_path=\"Attenuation.FalloffDistance\", value=\"1500.0\"). Non-session, "
+				"immediate operation; no session_id is needed. The 'Attenuation.' prefix is added "
+				"automatically if missing. Wraps the write in FScopedTransaction and saves on success.");
 }
 
 TSharedPtr<FJsonObject> FClaireonAttenuationTool_SetProperty::GetInputSchema() const

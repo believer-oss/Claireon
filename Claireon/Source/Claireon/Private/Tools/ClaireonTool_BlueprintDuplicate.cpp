@@ -32,7 +32,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonTool_BlueprintDuplicate::GetCategory() const { return TEXT("blueprint"); }
+FString ClaireonTool_BlueprintDuplicate::GetCategory() const { return TEXT("bp"); }
 FString ClaireonTool_BlueprintDuplicate::GetOperation() const { return TEXT("duplicate"); }
 
 FString ClaireonTool_BlueprintDuplicate::GetDescription() const

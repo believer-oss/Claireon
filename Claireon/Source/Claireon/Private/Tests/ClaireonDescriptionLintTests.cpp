@@ -1,9 +1,11 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Lint tests for tool descriptions across the four P5 categories
-// (blueprint_graph_*, anim_*, statetree_*,
-// widgetbp_*). Validates the P5 audit acceptance criteria:
+// Lint tests for tool descriptions across ALL registered Claireon tools.
+// Post-#0000 the scope is widened from the original five P5-scoped prefixes
+// (bp_*, anim_*, blendspace_*, statetree_*, widgetbp_*) to the
+// full tool registry so future tool additions that drift from the bar are
+// caught at test time. Validates the P5 audit acceptance criteria:
 //
 //   1. Length: 80 <= len(description) <= 400 characters.
 //   2. Verb-opener: the first word is a recognized authoring verb (Add,
@@ -50,17 +52,14 @@ namespace ClaireonDescriptionLintHelpers
 	}
 
 	/**
-	 * Identify whether the tool name belongs to one of the four P5-scoped
-	 * categories. Tools outside these prefixes are intentionally not
-	 * subject to the audit (they remain free to use any phrasing).
+	 * Post-#0000: every registered Claireon tool must clear the P5 description
+	 * bar. This helper is preserved as a deliberate no-op so the diff records
+	 * the scope-widening; callers should treat its result as "no tool is
+	 * exempt". Add an exemption here only with a documented justification.
 	 */
-	bool IsP5ScopedTool(const FString& ToolName)
+	bool IsP5ExemptTool(const FString& /*ToolName*/)
 	{
-		return ToolName.StartsWith(TEXT("blueprint_graph_"))
-			|| ToolName.StartsWith(TEXT("anim_"))
-			|| ToolName.StartsWith(TEXT("blendspace_"))
-			|| ToolName.StartsWith(TEXT("statetree_"))
-			|| ToolName.StartsWith(TEXT("widgetbp_"));
+		return false;
 	}
 
 	/** Return the first whitespace-delimited token in a string. */
@@ -100,7 +99,15 @@ namespace ClaireonDescriptionLintHelpers
 			TEXT("Check"), TEXT("Adjust"), TEXT("Author"), TEXT("Compare"),
 			TEXT("Copy"), TEXT("Patch"), TEXT("Promote"), TEXT("Drag"), TEXT("Drop"),
 			TEXT("Place"), TEXT("Show"), TEXT("Hide"), TEXT("Toggle"), TEXT("Batch"),
-			TEXT("Step")
+			TEXT("Step"),
+			// Added in #0000 widened lint to cover legitimate authoring verbs
+			// surfaced when the lint scope expanded to all registered tools.
+			TEXT("Snapshot"), TEXT("Capture"), TEXT("Wait"), TEXT("Begin"),
+			TEXT("End"), TEXT("Poll"), TEXT("Cancel"), TEXT("Redo"), TEXT("Undo"),
+			TEXT("Resave"), TEXT("Recompile"), TEXT("Wire"), TEXT("Append"),
+			TEXT("Sculpt"), TEXT("Paint"), TEXT("Pop"), TEXT("Clear"),
+			TEXT("Unregister"), TEXT("Retrieve"), TEXT("Look"), TEXT("Search"),
+			TEXT("Execute"), TEXT("Request"), TEXT("Force"), TEXT("Assign")
 		};
 		return Verbs;
 	}
@@ -181,7 +188,7 @@ UNTEST_UNIT(Claireon, DescriptionLint, AllP5CategoriesConformToTemplate)
 	for (const TSharedPtr<IClaireonTool>& Tool : AllTools)
 	{
 		const FString Name = Tool->GetName();
-		if (!IsP5ScopedTool(Name)) { continue; }
+		if (IsP5ExemptTool(Name)) { continue; }
 		++ScopedCount;
 
 		const FString Description = Tool->GetDescription();
@@ -208,7 +215,7 @@ UNTEST_UNIT(Claireon, DescriptionLint, AllP5CategoriesConformToTemplate)
 
 	if (FailureMessages.Num() > 0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[DescriptionLint] %d offending tool(s) across %d P5-scoped tools:"),
+		UE_LOG(LogTemp, Error, TEXT("[DescriptionLint] %d offending tool(s) across %d audited tools:"),
 			FailureMessages.Num(), ScopedCount);
 		for (const FString& Msg : FailureMessages)
 		{
@@ -220,8 +227,6 @@ UNTEST_UNIT(Claireon, DescriptionLint, AllP5CategoriesConformToTemplate)
 	}
 
 	UNTEST_EXPECT_TRUE(FailureMessages.Num() == 0);
-	// ScopedCount may legitimately be 0 if the registered tools all live
-	// outside the four P5-scoped prefixes (this is not a test failure).
 	co_return;
 }
 

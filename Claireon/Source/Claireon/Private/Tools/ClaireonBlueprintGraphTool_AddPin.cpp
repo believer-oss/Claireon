@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_AddPin::GetOperation() const { return TEXT("a
 
 FString ClaireonBlueprintGraphTool_AddPin::GetDescription() const
 {
-    return TEXT("Add a dynamic pin to a node in the open Blueprint editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Only nodes that implement AddPin support this (Sequence, MakeArray, Switch*, DoOnceMultiInput, etc.); non-supporting nodes error. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Add a dynamic pin to a node in the open Blueprint editing session. Requires open session_id from bp_open (or pass asset_path to auto-open). Transactional. Only nodes that implement AddPin support this (Sequence, MakeArray, Switch*, DoOnceMultiInput, etc.); non-supporting nodes error. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddPin::GetInputSchema() const

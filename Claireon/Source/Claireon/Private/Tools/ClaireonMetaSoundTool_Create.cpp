@@ -19,7 +19,9 @@ FString FClaireonMetaSoundTool_Create::GetOperation() const { return TEXT("creat
 
 FString FClaireonMetaSoundTool_Create::GetDescription() const
 {
-	return TEXT("Create an empty UMetaSoundSource at the given /Game/ path. Errors if an asset already exists.");
+	return TEXT("Create an empty UMetaSoundSource asset at the given /Game/ content path. Non-session, "
+				"immediate operation; no session_id is needed. Errors if an asset already exists. "
+				"Follow with metasound.open to start a session for graph editing.");
 }
 
 TSharedPtr<FJsonObject> FClaireonMetaSoundTool_Create::GetInputSchema() const

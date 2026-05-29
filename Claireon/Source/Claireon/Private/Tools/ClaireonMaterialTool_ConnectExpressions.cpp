@@ -13,7 +13,7 @@ FString ClaireonMaterialTool_ConnectExpressions::GetOperation() const { return T
 
 FString ClaireonMaterialTool_ConnectExpressions::GetDescription() const
 {
-	return TEXT("Wire an output of one expression to an input of another expression in the material graph.");
+    return TEXT("Connect an output of one expression to an input of another expression in the material graph. Session-mode tool: open via material_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialTool_ConnectExpressions::GetInputSchema() const

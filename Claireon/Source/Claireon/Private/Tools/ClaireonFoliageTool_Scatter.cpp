@@ -15,7 +15,7 @@ FString ClaireonFoliageTool_Scatter::GetOperation() const { return TEXT("scatter
 
 FString ClaireonFoliageTool_Scatter::GetDescription() const
 {
-	return TEXT("Procedurally scatter foliage within a rectangular area using a jittered grid.");
+    return TEXT("Place foliage instances by procedurally scattering them within a rectangular area using a jittered grid. Session-mode tool: open via foliage_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonFoliageTool_Scatter::GetInputSchema() const

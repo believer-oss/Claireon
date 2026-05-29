@@ -16,7 +16,7 @@ FString ClaireonLevelSequenceTool_RemoveKeyframe::GetOperation() const { return 
 
 FString ClaireonLevelSequenceTool_RemoveKeyframe::GetDescription() const
 {
-	return TEXT("Remove all keyframes at a given frame from the focused section.");
+    return TEXT("Remove all keyframes at a given frame from the focused section. Session-mode tool: open via level_sequence_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_RemoveKeyframe::GetInputSchema() const

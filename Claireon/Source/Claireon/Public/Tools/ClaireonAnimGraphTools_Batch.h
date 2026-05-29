@@ -5,4 +5,4 @@
 
 #include "Tools/ClaireonAnimGraphEditBase.h"
 
-DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_ApplyGraph);
+DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_ApplyDelta);

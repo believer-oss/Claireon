@@ -12,8 +12,10 @@ FString FClaireonSoundMixTool_ApplySpec::GetOperation() const { return TEXT("app
 
 FString FClaireonSoundMixTool_ApplySpec::GetDescription() const
 {
-	return TEXT("Apply a SoundMix declarative spec ({kind=\"SoundMix\", asset_path, envelope, class_adjusters}). "
-				"Creates the asset if absent.");
+	return TEXT("Apply a SoundMix declarative spec ({kind=\"SoundMix\", asset_path, envelope, "
+				"class_adjusters}) in one shot. Non-session, stateless operation; no session_id "
+				"required and no editor session is opened. Creates the target asset if absent, "
+				"writes envelope and class-adjuster entries, then saves.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundMixTool_ApplySpec::GetInputSchema() const

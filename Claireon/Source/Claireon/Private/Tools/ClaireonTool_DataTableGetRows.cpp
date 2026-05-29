@@ -14,7 +14,7 @@ FString ClaireonTool_DataTableGetRows::GetOperation() const { return TEXT("get_r
 
 FString ClaireonTool_DataTableGetRows::GetDescription() const
 {
-	return TEXT("List row names with optional column value projection and pagination");
+    return TEXT("List data table row names with optional column value projection and pagination. Stateless / read-only / non-session: reads the asset by path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_DataTableGetRows::GetInputSchema() const

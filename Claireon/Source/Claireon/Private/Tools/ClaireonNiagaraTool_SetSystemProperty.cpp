@@ -13,7 +13,7 @@ FString ClaireonNiagaraTool_SetSystemProperty::GetOperation() const { return TEX
 
 FString ClaireonNiagaraTool_SetSystemProperty::GetDescription() const
 {
-	return TEXT("Set a property on the open Niagara System.");
+    return TEXT("Set a property on the open Niagara System by name, coerced via reflection. Session-mode tool: open via niagara_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_SetSystemProperty::GetInputSchema() const

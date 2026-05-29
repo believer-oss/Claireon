@@ -16,7 +16,7 @@ FString ClaireonTool_ChooserAddRow::GetOperation() const { return TEXT("add_row"
 
 FString ClaireonTool_ChooserAddRow::GetDescription() const
 {
-	return TEXT("Add a new row to a ChooserTable. Optionally set the result and insert position.");
+    return TEXT("Add a new row to a ChooserTable, optionally setting the result and an insert position. Stateless / non-session: writes the asset directly by path, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ChooserAddRow::GetInputSchema() const

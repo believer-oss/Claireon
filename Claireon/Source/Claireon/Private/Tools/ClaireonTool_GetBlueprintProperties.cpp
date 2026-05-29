@@ -18,7 +18,7 @@
 #include "GameFramework/Actor.h"
 #include "Components/ActorComponent.h"
 
-FString ClaireonTool_GetBlueprintProperties::GetCategory() const { return TEXT("blueprint"); }
+FString ClaireonTool_GetBlueprintProperties::GetCategory() const { return TEXT("bp"); }
 FString ClaireonTool_GetBlueprintProperties::GetOperation() const { return TEXT("get_properties"); }
 
 TArray<FString> ClaireonTool_GetBlueprintProperties::GetSearchKeywords() const
@@ -139,7 +139,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 		// Delegate signature function (multicast + single-cast delegate variables
 		// carry their UFunction signature in PinSubCategoryMemberReference, not in
 		// PinSubCategoryObject). Emitting signature_function closes the round-trip
-		// contract with blueprint_edit_graph[add_variable] on the target side; see
+		// contract with bp_add_variable on the target side; see
 		// ClaireonBlueprintHelpers::ResolveSignatureFunction.
 		if (Var.VarType.PinCategory == UEdGraphSchema_K2::PC_MCDelegate ||
 			Var.VarType.PinCategory == UEdGraphSchema_K2::PC_Delegate)

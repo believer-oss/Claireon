@@ -14,7 +14,7 @@ FString ClaireonLevelSequenceTool_FocusTrack::GetOperation() const { return TEXT
 
 FString ClaireonLevelSequenceTool_FocusTrack::GetDescription() const
 {
-	return TEXT("Focus a track (by index) on the currently-focused binding. Subsequent section/keyframe ops target this track.");
+    return TEXT("Focus a track (by index) on the currently-focused binding. Subsequent section/keyframe ops target this track. Session-mode tool: open via level_sequence_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_FocusTrack::GetInputSchema() const

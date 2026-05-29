@@ -11,7 +11,7 @@ FString ClaireonLandscapeTool_Close::GetOperation() const { return TEXT("close")
 
 FString ClaireonLandscapeTool_Close::GetDescription() const
 {
-	return TEXT("Close a landscape editing session.");
+    return TEXT("Close a landscape editing session, releasing the landscape actor lock and clearing in-session state.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeTool_Close::GetInputSchema() const

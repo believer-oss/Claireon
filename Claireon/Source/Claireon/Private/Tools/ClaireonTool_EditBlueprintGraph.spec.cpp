@@ -27,11 +27,10 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
-// BlueprintCompile (single-target) and BlueprintCompileBatch (multi-target/folder) tools.
+// BlueprintCompileBatch (multi-target/folder) tool.
 // CompileRemoveUnused test exercises the batch tool's remove_unused option over /Game/__MCPTests.
-#include "Tools/ClaireonTool_BlueprintCompile.h"
 #include "Tools/ClaireonTool_BlueprintCompileBatch.h"
-#include "Tools/ClaireonTool_ApplyBlueprintGraph.h"
+#include "Tools/ClaireonTool_ApplyBlueprintDelta.h"
 
 // Decomposed blueprint-graph tools (one include per operation exercised here).
 #include "Tools/IClaireonTool.h"
@@ -80,7 +79,7 @@
 #include "Tools/ClaireonBlueprintGraphTool_SplitPin.h"
 #include "Tools/ClaireonBlueprintGraphTool_SuggestNode.h"
 #include "Tools/ClaireonBlueprintGraphTool_SwitchGraph.h"
-#include "Tools/ClaireonTool_ApplyBlueprintGraph.h"
+#include "Tools/ClaireonTool_ApplyBlueprintDelta.h"
 
 namespace
 {
@@ -5910,7 +5909,7 @@ bool FEditBlueprintGraphTest_ApplyGraphRollback::RunTest(const FString& Paramete
 		ConnJson.Add(MakeShared<FJsonValueObject>(Conn));
 		ApplyArgs->SetArrayField(TEXT("connections"), ConnJson);
 
-		ClaireonTool_ApplyBlueprintGraph ApplyTool;
+		ClaireonTool_ApplyBlueprintDelta ApplyTool;
 		IClaireonTool::FToolResult Result = ApplyTool.Execute(ApplyArgs);
 
 		TestTrue(TEXT("apply_graph with bad connection must return error"), Result.bIsError);
@@ -5934,7 +5933,7 @@ bool FEditBlueprintGraphTest_ApplyGraphRollback::RunTest(const FString& Paramete
 		ConnJson.Add(MakeShared<FJsonValueObject>(Conn));
 		ApplyArgs->SetArrayField(TEXT("connections"), ConnJson);
 
-		ClaireonTool_ApplyBlueprintGraph ApplyTool;
+		ClaireonTool_ApplyBlueprintDelta ApplyTool;
 		IClaireonTool::FToolResult Result = ApplyTool.Execute(ApplyArgs);
 
 		TestFalse(TEXT("apply_graph retry with valid connection must succeed"), Result.bIsError);
@@ -6604,7 +6603,7 @@ bool FEditBlueprintGraphTest_GetStatePositions_SingleNode::RunTest(const FString
 		Nodes.Add(MakeShared<FJsonValueObject>(N));
 		ApplyArgs->SetArrayField(TEXT("nodes"), Nodes);
 
-		ClaireonTool_ApplyBlueprintGraph ApplyTool;
+		ClaireonTool_ApplyBlueprintDelta ApplyTool;
 		auto AR = ApplyTool.Execute(ApplyArgs);
 		if (AR.bIsError)
 		{
@@ -6706,7 +6705,7 @@ bool FEditBlueprintGraphTest_GetStatePositions_MultiNode::RunTest(const FString&
 	}
 	ApplyArgs->SetArrayField(TEXT("nodes"), Nodes);
 
-	ClaireonTool_ApplyBlueprintGraph ApplyTool;
+	ClaireonTool_ApplyBlueprintDelta ApplyTool;
 	auto AR = ApplyTool.Execute(ApplyArgs);
 	if (AR.bIsError)
 	{

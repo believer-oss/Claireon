@@ -17,7 +17,7 @@ FString ClaireonTool_DataTableSetRowValues::GetOperation() const { return TEXT("
 
 FString ClaireonTool_DataTableSetRowValues::GetDescription() const
 {
-	return TEXT("Set one or more property values on an existing row");
+    return TEXT("Set one or more property values on an existing data table row. Stateless / non-session: writes the asset directly by path without opening any session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_DataTableSetRowValues::GetInputSchema() const

@@ -14,7 +14,10 @@ FString ClaireonEQSTool_SetGenerator::GetOperation() const { return TEXT("set_ge
 
 FString ClaireonEQSTool_SetGenerator::GetDescription() const
 {
-	return TEXT("Replace the generator of an existing EQS option with a new generator of the specified class.");
+	return TEXT("Set the generator of an existing EQS option within an open editing session, "
+				"replacing it with a new generator of the specified class. Requires session_id from "
+				"eqs.open; the edit is transactional and only persists after save. Existing tests on "
+				"the option are preserved across the swap.");
 }
 
 TSharedPtr<FJsonObject> ClaireonEQSTool_SetGenerator::GetInputSchema() const

@@ -14,7 +14,10 @@ FString ClaireonEQSTool_AddTest::GetOperation() const { return TEXT("add_test");
 
 FString ClaireonEQSTool_AddTest::GetDescription() const
 {
-	return TEXT("Add a new test to an EQS option.");
+	return TEXT("Add a new scoring or filtering test to an EQS option within an open editing "
+				"session. Requires session_id from eqs.open; the edit is transactional and only "
+				"persists after save. Tests are evaluated in the order they appear on the option; use "
+				"reorder_tests to change their priority.");
 }
 
 TSharedPtr<FJsonObject> ClaireonEQSTool_AddTest::GetInputSchema() const

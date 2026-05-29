@@ -16,8 +16,10 @@ FString FClaireonSoundMixTool_Create::GetOperation() const { return TEXT("create
 
 FString FClaireonSoundMixTool_Create::GetDescription() const
 {
-	return TEXT("Create a new USoundMix asset at the given /Game/ path. "
-				"Errors if an asset already exists at that path.");
+	return TEXT("Create a new USoundMix asset at the given /Game/ content path. Non-session, "
+				"immediate operation; no session_id is needed. Errors if an asset already exists at "
+				"that path. Follow with soundmix.set_envelope or soundmix.add_class_adjuster to "
+				"populate it; the newly-created asset is registered with the asset registry.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundMixTool_Create::GetInputSchema() const

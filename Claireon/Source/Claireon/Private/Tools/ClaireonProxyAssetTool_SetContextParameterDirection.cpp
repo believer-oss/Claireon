@@ -15,7 +15,7 @@ FString ClaireonTool_ProxyAssetSetContextParameterDirection::GetOperation() cons
 
 FString ClaireonTool_ProxyAssetSetContextParameterDirection::GetDescription() const
 {
-	return TEXT("Set the direction (Input / Output / InputOutput) on an existing ProxyAsset context parameter.");
+    return TEXT("Set the direction (Input/Output/InputOutput) on an existing ProxyAsset context parameter. Stateless / non-session: writes the asset directly by path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ProxyAssetSetContextParameterDirection::GetInputSchema() const

@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonLandscapeEditToolBase.h"
 #include "Tools/ClaireonLandscapeHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
 #include "LandscapeProxy.h"
 #include "LandscapeInfo.h"
@@ -105,7 +106,11 @@ FToolResult ClaireonLandscapeEditToolBase::BuildStateResponse(const FString& Ses
 		ResultData->SetObjectField(TEXT("landscape"), LandscapeJson);
 	}
 
+	const FString LandscapeProxyPath = Data->LandscapeProxy.IsValid() ? Data->LandscapeProxy->GetPathName() : FString();
+	FString SessionHintSummaryTag;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResultData, Data->ConsecutiveAssetPathCalls, LandscapeProxyPath, SessionId, SessionHintSummaryTag);
+
 	const FString Summary = FString::Printf(
 		TEXT("Session %s: %s"), *SessionId, *Data->LastOperationStatus);
-	return MakeSuccessResult(ResultData, Summary);
+	return MakeSuccessResult(ResultData, Summary + SessionHintSummaryTag);
 }

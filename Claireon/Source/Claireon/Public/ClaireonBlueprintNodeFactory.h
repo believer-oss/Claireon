@@ -15,7 +15,7 @@ class UEdGraphNode;
  *
  * Used by the batch editor (claireon.blueprint_apply_graph) to create nodes without
  * touching cursor / auto_connect / session state. The older incremental editor
- * (claireon.blueprint_edit_graph Operation_AddNode) currently keeps its own copy of
+ * (bp_add_node) currently keeps its own copy of
  * the dispatch for safety — unifying them is tracked as follow-up work in the
  * MCP tooling improvements plan (A1.a → follow-up).
  *

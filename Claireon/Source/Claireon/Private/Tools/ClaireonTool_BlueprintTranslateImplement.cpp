@@ -9,9 +9,11 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
-FString ClaireonTool_BlueprintTranslateImplement::GetCategory() const { return TEXT("blueprint"); }
+FString ClaireonTool_BlueprintTranslateImplement::GetCategory() const { return TEXT("bp"); }
 FString ClaireonTool_BlueprintTranslateImplement::GetOperation() const { return TEXT("translate_implement"); }
 
+// TODO(#0000-followup): This tool dispatches on an action enum and could be
+// decomposed into per-action sub-tools.
 FString ClaireonTool_BlueprintTranslateImplement::GetDescription() const
 {
 	return TEXT("Interactive implementation of scaffolded BP-to-C++ code regions. Phase 2 tool that supports "

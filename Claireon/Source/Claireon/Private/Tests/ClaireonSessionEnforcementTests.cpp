@@ -29,7 +29,6 @@
 #include "Tools/ClaireonTool_DataTableRemoveRow.h"
 #include "Tools/ClaireonTool_DataTableRenameRow.h"
 #include "Tools/ClaireonTool_DataTableSetRowValues.h"
-#include "Tools/ClaireonTool_BlueprintCompile.h"
 #include "Tools/ClaireonTool_BlueprintDuplicate.h"
 #include "Tools/ClaireonTool_MaterialApply.h"
 #include "Tools/ClaireonTool_BlueprintTranslateImplement.h"
@@ -155,12 +154,11 @@ UNTEST_UNIT_OPTS(Claireon, SessionEnforcement, RequiresSession_AllTwelveTools, U
 	{ ClaireonTool_DataTableSetRowValues       T; Verify(TEXT("DataTableSetRowValues"),       T, bAllOk); ++ToolCount; }
 	{ ClaireonTool_DataTableImportCsv          T; Verify(TEXT("DataTableImportCsv"),          T, bAllOk); ++ToolCount; }
 	{ ClaireonTool_DataTableImportJson         T; Verify(TEXT("DataTableImportJson"),         T, bAllOk); ++ToolCount; }
-	{ ClaireonTool_BlueprintCompile            T; Verify(TEXT("BlueprintCompile"),            T, bAllOk); ++ToolCount; }
 	{ ClaireonTool_BlueprintDuplicate          T; Verify(TEXT("BlueprintDuplicate"),          T, bAllOk); ++ToolCount; }
 	{ ClaireonTool_MaterialApply               T; Verify(TEXT("MaterialApply"),               T, bAllOk); ++ToolCount; }
 	{ ClaireonTool_BlueprintTranslateImplement T; Verify(TEXT("BlueprintTranslateImplement"), T, bAllOk); ++ToolCount; }
 
-	UNTEST_EXPECT_TRUE(ToolCount == 12);
+	UNTEST_EXPECT_TRUE(ToolCount == 11);
 	UNTEST_EXPECT_TRUE(bAllOk);
 
 	CleanupAllSessions();

@@ -15,7 +15,9 @@ FString ClaireonBehaviorTreeTool_RemoveDecorator::GetOperation() const { return 
 
 FString ClaireonBehaviorTreeTool_RemoveDecorator::GetDescription() const
 {
-	return TEXT("Remove a decorator subnode from its parent node.");
+	return TEXT("Remove a decorator subnode from its parent composite or task node within an open "
+				"Behavior Tree session. Requires session_id from behavior_tree.open; the edit is "
+				"transactional and only persists after save.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBehaviorTreeTool_RemoveDecorator::GetInputSchema() const

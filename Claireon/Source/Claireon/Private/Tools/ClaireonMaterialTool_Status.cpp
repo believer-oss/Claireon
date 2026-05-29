@@ -10,7 +10,7 @@ FString ClaireonMaterialTool_Status::GetOperation() const { return TEXT("status"
 
 FString ClaireonMaterialTool_Status::GetDescription() const
 {
-	return TEXT("Get current state snapshot of an open material editing session.");
+    return TEXT("Get the current state snapshot of an open material editing session, including expressions and root connections.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialTool_Status::GetInputSchema() const

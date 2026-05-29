@@ -16,8 +16,10 @@ FString FClaireonSoundClassTool_Create::GetOperation() const { return TEXT("crea
 
 FString FClaireonSoundClassTool_Create::GetDescription() const
 {
-	return TEXT("Create a new USoundClass asset at the given /Game/ path. "
-				"Errors if an asset already exists at that path.");
+	return TEXT("Create a new USoundClass asset at the given /Game/ content path. Non-session, "
+				"immediate operation; no session_id is needed. Errors if an asset already exists at "
+				"that path. Use soundclass.set_property or soundclass.add_child to populate it; the "
+				"newly-created asset is registered with the asset registry and marked dirty.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundClassTool_Create::GetInputSchema() const

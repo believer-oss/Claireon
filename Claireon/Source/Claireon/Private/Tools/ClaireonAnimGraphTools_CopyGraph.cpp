@@ -145,7 +145,7 @@ FToolResult ClaireonAnimGraphTool_CopyGraph::Execute(const TSharedPtr<FJsonObjec
 	if (!DestGraph)
 	{
 		return MakeErrorResult(FString::Printf(
-			TEXT("Destination graph '%s' not found on %s. Create it first (e.g. via blueprint_edit_graph) — this tool does not create graphs. %s"),
+			TEXT("Destination graph '%s' not found on %s. Create it first (e.g. via bp_create) — this tool does not create graphs. %s"),
 			*DestGraphName, *DestBP->GetPathName(), *LoadError));
 	}
 

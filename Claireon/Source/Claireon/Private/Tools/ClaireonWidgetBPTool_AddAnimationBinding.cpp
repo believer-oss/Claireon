@@ -19,7 +19,7 @@ FString ClaireonWidgetBPTool_AddAnimationBinding::GetOperation() const { return 
 
 FString ClaireonWidgetBPTool_AddAnimationBinding::GetDescription() const
 {
-    return TEXT("Bind a widget to a UWidgetAnimation (UWidgetAnimationBinding).");
+    return TEXT("Add a binding from a widget to a UWidgetAnimation (UWidgetAnimationBinding). Session-mode tool: open via widgetbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_AddAnimationBinding::GetInputSchema() const

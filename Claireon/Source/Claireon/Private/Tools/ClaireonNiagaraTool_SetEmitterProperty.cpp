@@ -15,7 +15,7 @@ FString ClaireonNiagaraTool_SetEmitterProperty::GetOperation() const { return TE
 
 FString ClaireonNiagaraTool_SetEmitterProperty::GetDescription() const
 {
-	return TEXT("Set a property on an emitter instance.");
+    return TEXT("Set a property on an emitter instance via reflection. Session-mode tool: open via niagara_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_SetEmitterProperty::GetInputSchema() const

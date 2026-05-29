@@ -11,7 +11,7 @@ The catalog has exactly 8 entries (asserted by ClaireonApplySpecHelpTests):
 
 1. claireon.behaviortree_edit
 2. claireon.blackboard_edit
-3. claireon.blueprint_edit_graph
+3. claireon.bp
 4. claireon.eqs_edit
 5. claireon.niagara_edit
 6. claireon.pcg_edit

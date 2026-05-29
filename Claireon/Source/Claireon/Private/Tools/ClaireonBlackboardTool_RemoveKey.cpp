@@ -12,7 +12,10 @@ FString ClaireonBlackboardTool_RemoveKey::GetOperation() const { return TEXT("re
 
 FString ClaireonBlackboardTool_RemoveKey::GetDescription() const
 {
-	return TEXT("Remove a key from the blackboard by name.");
+	return TEXT("Remove a key from the Blackboard by name within an open editing session. Requires "
+				"session_id from blackboard.open; the edit is transactional and only persists after "
+				"save. Behavior trees referencing the removed key will fail validation until "
+				"updated.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlackboardTool_RemoveKey::GetInputSchema() const

@@ -20,7 +20,7 @@ FString ClaireonTool_PIEAITargetInfo::GetOperation() const { return TEXT("get_ai
 
 FString ClaireonTool_PIEAITargetInfo::GetDescription() const
 {
-	return TEXT("Get AI targeting information for a pawn: AI controller class, blackboard state, and current target (if any).");
+    return TEXT("Get AI targeting information for a pawn: AI controller class, blackboard state, and current target (if any). Read-only / non-session inspector: reads the paused PIE world without opening any asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PIEAITargetInfo::GetInputSchema() const

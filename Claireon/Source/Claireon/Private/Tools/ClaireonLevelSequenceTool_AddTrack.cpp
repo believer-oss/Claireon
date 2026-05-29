@@ -19,7 +19,7 @@ FString ClaireonLevelSequenceTool_AddTrack::GetOperation() const { return TEXT("
 
 FString ClaireonLevelSequenceTool_AddTrack::GetDescription() const
 {
-	return TEXT("Add a track of the given type to the focused binding (or as a root track for event tracks).");
+    return TEXT("Add a track of the given type to the focused binding (or as a root track for event tracks). Session-mode tool: open via level_sequence_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_AddTrack::GetInputSchema() const

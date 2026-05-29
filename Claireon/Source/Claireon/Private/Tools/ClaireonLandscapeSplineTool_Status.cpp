@@ -10,7 +10,7 @@ FString ClaireonLandscapeSplineTool_Status::GetOperation() const { return TEXT("
 
 FString ClaireonLandscapeSplineTool_Status::GetDescription() const
 {
-	return TEXT("Get the current spline state (control points, segments) for a session.");
+    return TEXT("Get the current spline state (control points, segments) for the open landscape spline editing session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeSplineTool_Status::GetInputSchema() const

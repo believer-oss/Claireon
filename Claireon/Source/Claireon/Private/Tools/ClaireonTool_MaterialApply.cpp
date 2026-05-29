@@ -102,9 +102,11 @@ namespace
 FString ClaireonTool_MaterialApply::GetCategory() const { return TEXT("material"); }
 FString ClaireonTool_MaterialApply::GetOperation() const { return TEXT("apply"); }
 
+// TODO(#0000-followup): This tool dispatches on an action enum and could be
+// decomposed into per-action sub-tools.
 FString ClaireonTool_MaterialApply::GetDescription() const
 {
-	return TEXT("Apply a UMaterial or UMaterialInstanceConstant to a level actor or a blueprint's UMeshComponent SCS node.");
+    return TEXT("Apply a UMaterial or UMaterialInstanceConstant to a level actor or a blueprint's UMeshComponent SCS node. Stateless / non-session: writes the target asset directly by path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_MaterialApply::GetInputSchema() const

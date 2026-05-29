@@ -75,10 +75,7 @@ namespace ClaireonComponentTickInspectScratch
 
 FString ClaireonTool_ComponentTickInspect::GetDescription() const
 {
-	return TEXT("Snapshot per-component tick state on any actor in the paused PIE world. Reports actor and ")
-	       TEXT("per-component tick-enabled flags plus the static FTickFunction settings (tick group, interval, ")
-	       TEXT("priority). Adds skeletalMeshExtras (visibility tick option, recently rendered, last render time) ")
-	       TEXT("for each USkeletalMeshComponent. Targets the budgeter-disabled-server-mesh-tick bug class.");
+    return TEXT("Snapshot per-component tick state on any actor in the paused PIE world. Reports actor and per-component tick-enabled flags plus the static FTickFunction settings (tick group, interval, priority). Adds skeletalMeshExtras for each USkeletalMeshComponent. Read-only / non-session inspector. Targets the budgeter-disabled-server-mesh-tick bug class.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ComponentTickInspect::GetInputSchema() const

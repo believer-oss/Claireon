@@ -124,7 +124,7 @@ FString ClaireonSkeletonTool_RemoveSocket::GetOperation() const { return TEXT("r
 
 FString ClaireonSkeletonTool_RemoveSocket::GetDescription() const
 {
-	return TEXT("Remove a socket from the skeleton by name.");
+    return TEXT("Remove a socket from the skeleton by name in the open session. Session-mode tool: open via skeleton_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RemoveSocket::GetInputSchema() const
@@ -172,7 +172,7 @@ FString ClaireonSkeletonTool_RenameSocket::GetOperation() const { return TEXT("r
 
 FString ClaireonSkeletonTool_RenameSocket::GetDescription() const
 {
-	return TEXT("Rename a socket on the skeleton. Fails if new_name is already used by another socket.");
+    return TEXT("Rename a socket on the skeleton. Fails if new_name is already used by another socket. Session-mode tool: open via skeleton_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RenameSocket::GetInputSchema() const

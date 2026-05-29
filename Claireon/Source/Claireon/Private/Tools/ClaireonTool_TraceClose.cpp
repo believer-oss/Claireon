@@ -10,7 +10,7 @@ FString ClaireonTool_TraceClose::GetOperation() const { return TEXT("close"); }
 
 FString ClaireonTool_TraceClose::GetDescription() const
 {
-	return TEXT("Close a trace analysis session and free memory");
+    return TEXT("Close a trace analysis session and free its in-process memory so the trace handle can be reused for another file. Stateless / non-session: closes an editor-wide trace reader handle without opening any per-asset session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_TraceClose::GetInputSchema() const

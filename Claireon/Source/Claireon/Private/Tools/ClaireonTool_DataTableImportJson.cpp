@@ -15,7 +15,7 @@ FString ClaireonTool_DataTableImportJson::GetOperation() const { return TEXT("im
 
 FString ClaireonTool_DataTableImportJson::GetDescription() const
 {
-	return TEXT("Replace entire table contents from JSON");
+    return TEXT("Replace entire table contents from a JSON payload. Stateless / non-session: writes the asset directly by path without opening any editing session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_DataTableImportJson::GetInputSchema() const

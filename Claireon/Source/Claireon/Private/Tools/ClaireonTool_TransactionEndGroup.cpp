@@ -12,7 +12,7 @@ FString ClaireonTool_TransactionEndGroup::GetOperation() const { return TEXT("en
 
 FString ClaireonTool_TransactionEndGroup::GetDescription() const
 {
-	return TEXT("End the active transaction group. The group appears as a single entry in undo history.");
+    return TEXT("End the active transaction group so it appears as a single entry in undo history. Stateless / non-session: closes a transaction scope on the editor-wide transactor.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_TransactionEndGroup::GetInputSchema() const

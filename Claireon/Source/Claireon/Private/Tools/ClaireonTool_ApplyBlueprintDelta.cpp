@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-#include "Tools/ClaireonTool_ApplyBlueprintGraph.h"
+#include "Tools/ClaireonTool_ApplyBlueprintDelta.h"
 #include "Tools/ClaireonBlueprintGraphEditToolBase.h"
 #include "Tools/ClaireonAnimEditToolBase.h" // FToolSchemaBuilder
 #include "ClaireonBlueprintNodeFactory.h"
@@ -22,7 +22,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-#define LOCTEXT_NAMESPACE "ClaireonTool_ApplyBlueprintGraph"
+#define LOCTEXT_NAMESPACE "ClaireonTool_ApplyBlueprintDelta"
 
 // ============================================================================
 // Helpers — mirror the anim batch tool's node/pin resolution helpers
@@ -97,24 +97,24 @@ namespace
 }
 
 // ============================================================================
-// ClaireonTool_ApplyBlueprintGraph
+// ClaireonTool_ApplyBlueprintDelta
 // ============================================================================
 
-FString ClaireonTool_ApplyBlueprintGraph::GetOperation() const { return TEXT("apply_graph"); }
+FString ClaireonTool_ApplyBlueprintDelta::GetOperation() const { return TEXT("apply_delta"); }
 
-FString ClaireonTool_ApplyBlueprintGraph::GetDescription() const
+FString ClaireonTool_ApplyBlueprintDelta::GetDescription() const
 {
 	return TEXT("Atomic batch K2 Blueprint graph construction and modification. Disconnects, removes, "
 		"creates nodes, and connects pins in one transactional call. New nodes are referenced by local "
 		"'id'; existing nodes by GUID or title. Execution order: disconnect → remove → create → connect. "
-		"Uses the same session opened by blueprint_edit_graph. Returns full graph state with "
-		"id_map showing local-id → GUID mappings. Counterpart to animgraph_apply_graph. Session-mode tool: open via blueprint_graph_open first.");
+		"Uses the same bp session (opened via bp_open or bp_create). Returns full graph state with "
+		"id_map showing local-id → GUID mappings. Counterpart to animgraph_apply_delta. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
-TSharedPtr<FJsonObject> ClaireonTool_ApplyBlueprintGraph::GetInputSchema() const
+TSharedPtr<FJsonObject> ClaireonTool_ApplyBlueprintDelta::GetInputSchema() const
 {
 	FToolSchemaBuilder S;
-	S.AddString(TEXT("session_id"), TEXT("Session ID from a prior blueprint_edit_graph 'open' or 'create'"), true);
+	S.AddString(TEXT("session_id"), TEXT("Session ID from a prior bp_open or bp_create call"), true);
 	S.AddObject(TEXT("disconnect"), TEXT("Array of connections to break first. Each: {node (GUID/title/local_id), pin, target_node? (for selective disconnect)}"));
 	S.AddObject(TEXT("remove_nodes"), TEXT("Array of node GUIDs or titles to remove"));
 	S.AddObject(TEXT("nodes"), TEXT("Array of nodes to create. Each: {id (local ref), node_type, position?: {x,y}, ...typed params (function_name, struct_type, ...), node_properties?: {}, num_extra_pins?: int}"));
@@ -122,9 +122,9 @@ TSharedPtr<FJsonObject> ClaireonTool_ApplyBlueprintGraph::GetInputSchema() const
 	return S.Build();
 }
 
-FToolResult ClaireonTool_ApplyBlueprintGraph::Execute(const TSharedPtr<FJsonObject>& Arguments)
+FToolResult ClaireonTool_ApplyBlueprintDelta::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	// -------- Session lookup (piggybacks on blueprint_edit_graph's session map) --------
+	// -------- Session lookup (bp session map, opened via bp_open or bp_create) --------
 	FString SessionId;
 	if (!Arguments->TryGetStringField(TEXT("session_id"), SessionId) || SessionId.IsEmpty())
 	{
@@ -135,7 +135,7 @@ FToolResult ClaireonTool_ApplyBlueprintGraph::Execute(const TSharedPtr<FJsonObje
 	if (!Data)
 	{
 		return MakeErrorResult(FString::Printf(
-			TEXT("Session '%s' not found. Open a blueprint session first via blueprint_edit_graph with operation='open' or 'create'."),
+			TEXT("Session '%s' not found. Open a blueprint session first via bp_open (or use bp_create for new assets)."),
 			*SessionId));
 	}
 
@@ -170,7 +170,7 @@ FToolResult ClaireonTool_ApplyBlueprintGraph::Execute(const TSharedPtr<FJsonObje
 		// remove them explicitly while the nodes are still attached to the graph.
 		// With the RF_Transactional fix in ClaireonBlueprintNodeFactory this is a
 		// no-op (the Contains guard fails after Transaction.Cancel detaches them),
-		// but it keeps apply_graph atomic if the factory ever regresses.
+		// but it keeps apply_delta atomic if the factory ever regresses.
 		for (UEdGraphNode* Node : CreatedNodesThisCall)
 		{
 			if (Node && IsValid(Node) && Graph->Nodes.Contains(Node))
@@ -356,7 +356,7 @@ FToolResult ClaireonTool_ApplyBlueprintGraph::Execute(const TSharedPtr<FJsonObje
 			Data->LastOperationAffectedNodes.Add(R.Node->NodeGuid);
 			CreatedNodesThisCall.Add(R.Node);
 
-			UE_LOG(LogClaireon, Log, TEXT("[BP ApplyGraph] Created '%s' (%s) → GUID %s"),
+			UE_LOG(LogClaireon, Log, TEXT("[BP ApplyDelta] Created '%s' (%s) → GUID %s"),
 				*LocalId,
 				*R.Node->GetNodeTitle(ENodeTitleType::ListView).ToString(),
 				*R.Node->NodeGuid.ToString());
@@ -444,7 +444,7 @@ FToolResult ClaireonTool_ApplyBlueprintGraph::Execute(const TSharedPtr<FJsonObje
 		TEXT("Applied BP graph: %d nodes created, %d connection(s) made"),
 		LocalIdMap.Num(), ConnectionsMade);
 
-	// Build response by reusing blueprint_edit_graph's response builder — we go through
+	// Build response by reusing the bp session response builder -- we go through
 	// our own tool's data pointer to reach the private BuildStateResponse. Since we don't
 	// subclass, we replicate the structure here minimally: put the key info in Data.
 	TSharedPtr<FJsonObject> OutData = MakeShared<FJsonObject>();

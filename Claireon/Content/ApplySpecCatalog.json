@@ -30,7 +30,7 @@
       ]
     },
     {
-      "tool": "blueprint_edit_graph",
+      "tool": "bp",
       "spec_entry_types": ["nodes[]", "connections[]", "variables[]"],
       "calling_convention": "flat: asset_path, spec passed at top-level (matches the existing schema)",
       "creates_asset_if_missing": true,

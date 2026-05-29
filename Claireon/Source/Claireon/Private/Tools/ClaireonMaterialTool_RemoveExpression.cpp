@@ -14,7 +14,7 @@ FString ClaireonMaterialTool_RemoveExpression::GetOperation() const { return TEX
 
 FString ClaireonMaterialTool_RemoveExpression::GetDescription() const
 {
-	return TEXT("Remove an expression from the material graph by identifier (name or '#index').");
+    return TEXT("Remove an expression from the material graph by identifier (name or '#index'). Session-mode tool: open via material_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialTool_RemoveExpression::GetInputSchema() const

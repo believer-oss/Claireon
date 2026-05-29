@@ -15,7 +15,7 @@ FString ClaireonTool_AssetReferences::GetOperation() const { return TEXT("refere
 
 FString ClaireonTool_AssetReferences::GetDescription() const
 {
-	return TEXT("Query asset dependencies (what it uses) and referencers (what uses it) from the Unreal Asset Registry. Supports hard and soft references with optional recursive traversal.");
+    return TEXT("Query asset dependencies (what it uses) and referencers (what uses it) from the Unreal Asset Registry. Supports hard and soft references with optional recursive traversal. Stateless / read-only / non-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AssetReferences::GetInputSchema() const

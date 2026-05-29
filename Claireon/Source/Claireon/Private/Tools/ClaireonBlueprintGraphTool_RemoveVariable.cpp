@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_RemoveVariable::GetOperation() const { return
 
 FString ClaireonBlueprintGraphTool_RemoveVariable::GetDescription() const
 {
-    return TEXT("Remove a member variable from the Blueprint in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: refuses with an error if the variable is referenced by any node; pass force=true to delete the variable and break the references. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Remove a member variable from the Blueprint in the open editing session. Requires open session_id from bp_open (or pass asset_path to auto-open). Transactional. Common pitfall: refuses with an error if the variable is referenced by any node; pass force=true to delete the variable and break the references. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_RemoveVariable::GetInputSchema() const

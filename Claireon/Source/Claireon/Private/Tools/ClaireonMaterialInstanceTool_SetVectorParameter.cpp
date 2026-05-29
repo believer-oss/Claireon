@@ -12,7 +12,7 @@ FString ClaireonMaterialInstanceTool_SetVectorParameter::GetOperation() const { 
 
 FString ClaireonMaterialInstanceTool_SetVectorParameter::GetDescription() const
 {
-	return TEXT("Set a vector (LinearColor) parameter override on a UMaterialInstanceConstant.");
+    return TEXT("Set a vector (LinearColor) parameter override on a UMaterialInstanceConstant. Session-mode tool: open via material_instance_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialInstanceTool_SetVectorParameter::GetInputSchema() const

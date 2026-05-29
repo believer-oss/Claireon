@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_SplitPin::GetOperation() const { return TEXT(
 
 FString ClaireonBlueprintGraphTool_SplitPin::GetDescription() const
 {
-    return TEXT("Split a struct pin into its component sub-pins in the open Blueprint editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: only struct-typed pins are splittable; non-struct pins error. Existing connections to the parent pin are dropped. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Split a struct pin into its component sub-pins in the open Blueprint editing session. Requires open session_id from bp_open (or pass asset_path to auto-open). Transactional. Common pitfall: only struct-typed pins are splittable; non-struct pins error. Existing connections to the parent pin are dropped. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SplitPin::GetInputSchema() const

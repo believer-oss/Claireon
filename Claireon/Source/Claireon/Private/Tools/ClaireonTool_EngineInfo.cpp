@@ -19,7 +19,7 @@ FString ClaireonTool_EngineInfo::GetOperation() const { return TEXT("info"); }
 
 FString ClaireonTool_EngineInfo::GetDescription() const
 {
-	return TEXT("Get engine path, version, and build information");
+    return TEXT("Get the engine install path, version string, and build information. Stateless / read-only / non-session: reports static engine identity without opening any asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_EngineInfo::GetInputSchema() const

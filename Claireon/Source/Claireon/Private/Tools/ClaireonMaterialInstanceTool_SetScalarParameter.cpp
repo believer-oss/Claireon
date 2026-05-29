@@ -12,7 +12,7 @@ FString ClaireonMaterialInstanceTool_SetScalarParameter::GetOperation() const { 
 
 FString ClaireonMaterialInstanceTool_SetScalarParameter::GetDescription() const
 {
-	return TEXT("Set a scalar parameter override on a UMaterialInstanceConstant.");
+    return TEXT("Set a scalar parameter override on a UMaterialInstanceConstant. Session-mode tool: open via material_instance_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialInstanceTool_SetScalarParameter::GetInputSchema() const

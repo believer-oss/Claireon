@@ -14,7 +14,7 @@ FString ClaireonTool_GameplayTagsRemove::GetOperation() const { return TEXT("tag
 
 FString ClaireonTool_GameplayTagsRemove::GetDescription() const
 {
-	return TEXT("Delete one or more gameplay tags from a configured ini source via IGameplayTagsEditorModule::DeleteTagsFromINI (engine coalesces the in-memory refresh for the whole batch). tag_source is accepted for operator clarity but does not influence the engine call - the source comes from the FGameplayTagNode itself. Returns {removed, failed}.");
+    return TEXT("Remove one or more gameplay tags from a configured ini source via IGameplayTagsEditorModule::DeleteTagsFromINI (engine coalesces the in-memory refresh). tag_source is informational; the source comes from the FGameplayTagNode itself. Stateless / non-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_GameplayTagsRemove::GetInputSchema() const

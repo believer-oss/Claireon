@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonFoliageEditToolBase.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
 #include "InstancedFoliageActor.h"
 #include "InstancedFoliage.h"
@@ -141,7 +142,11 @@ FToolResult ClaireonFoliageEditToolBase::BuildStateResponse(const FString& Sessi
 	ResultData->SetNumberField(TEXT("total_instances"), TotalInstances);
 #endif
 
+	FString SessionHintSummaryTag;
+	const FString FoliageActorPath = Data->FoliageActor.IsValid() ? Data->FoliageActor->GetPathName() : FString();
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResultData, Data->ConsecutiveAssetPathCalls, FoliageActorPath, SessionId, SessionHintSummaryTag);
+
 	const FString Summary = FString::Printf(
 		TEXT("Session %s: %s"), *SessionId, *Data->LastOperationStatus);
-	return MakeSuccessResult(ResultData, Summary);
+	return MakeSuccessResult(ResultData, Summary + SessionHintSummaryTag);
 }

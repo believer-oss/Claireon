@@ -17,7 +17,7 @@ FString ClaireonTool_MapStatus::GetOperation() const { return TEXT("status"); }
 
 FString ClaireonTool_MapStatus::GetDescription() const
 {
-	return TEXT("Get the currently loaded map name, path, and load state");
+    return TEXT("Get the currently loaded map name, path, and load state. Stateless / read-only / non-session: reads the editor's current world state.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_MapStatus::GetInputSchema() const

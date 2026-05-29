@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_SwitchGraph::GetOperation() const { return TE
 
 FString ClaireonBlueprintGraphTool_SwitchGraph::GetDescription() const
 {
-    return TEXT("Switch the open Blueprint editing session to a different graph on the same Blueprint. Requires open session_id from blueprint_graph_open. Read-only with respect to graph contents (the cursor and graph pointer are session state). Cursor history is preserved across the switch. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Switch the open Blueprint editing session to a different graph on the same Blueprint. Requires open session_id from bp_open. Read-only with respect to graph contents (the cursor and graph pointer are session state). Cursor history is preserved across the switch. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SwitchGraph::GetInputSchema() const

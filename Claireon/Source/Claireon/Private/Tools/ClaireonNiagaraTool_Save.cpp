@@ -14,7 +14,7 @@ FString ClaireonNiagaraTool_Save::GetOperation() const { return TEXT("save"); }
 
 FString ClaireonNiagaraTool_Save::GetDescription() const
 {
-	return TEXT("Save the Niagara System being edited.");
+    return TEXT("Save the Niagara System being edited in the current session to disk. Session-mode tool: open via niagara_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_Save::GetInputSchema() const

@@ -13,7 +13,7 @@ FString ClaireonNiagaraTool_SetEmitterEnabled::GetOperation() const { return TEX
 
 FString ClaireonNiagaraTool_SetEmitterEnabled::GetDescription() const
 {
-	return TEXT("Enable or disable an emitter in the Niagara System.");
+    return TEXT("Enable or disable an emitter in the Niagara System. Session-mode tool: open via niagara_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_SetEmitterEnabled::GetInputSchema() const

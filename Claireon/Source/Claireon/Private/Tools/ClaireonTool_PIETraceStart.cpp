@@ -14,7 +14,7 @@ FString ClaireonTool_PIETraceStart::GetOperation() const { return TEXT("trace_st
 
 FString ClaireonTool_PIETraceStart::GetDescription() const
 {
-	return TEXT("Start Unreal Insights .utrace recording. Returns the trace file path.");
+    return TEXT("Start Unreal Insights .utrace recording. Returns the trace file path. Stateless / non-session: starts an editor-wide trace without opening any per-asset session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PIETraceStart::GetInputSchema() const

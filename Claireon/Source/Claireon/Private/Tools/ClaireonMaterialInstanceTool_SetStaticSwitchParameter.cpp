@@ -12,7 +12,7 @@ FString ClaireonMaterialInstanceTool_SetStaticSwitchParameter::GetOperation() co
 
 FString ClaireonMaterialInstanceTool_SetStaticSwitchParameter::GetDescription() const
 {
-	return TEXT("Set a static switch parameter override on a UMaterialInstanceConstant (triggers shader-map rebuild).");
+    return TEXT("Set a static switch parameter override on a UMaterialInstanceConstant (triggers shader-map rebuild). Session-mode tool: open via material_instance_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialInstanceTool_SetStaticSwitchParameter::GetInputSchema() const

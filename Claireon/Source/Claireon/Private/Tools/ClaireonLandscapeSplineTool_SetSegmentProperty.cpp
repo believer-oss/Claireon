@@ -12,7 +12,7 @@ FString ClaireonLandscapeSplineTool_SetSegmentProperty::GetOperation() const { r
 
 FString ClaireonLandscapeSplineTool_SetSegmentProperty::GetDescription() const
 {
-	return TEXT("Modify spline segment properties (layer_name, raise_terrain, lower_terrain).");
+    return TEXT("Modify spline segment properties (layer_name, raise_terrain, lower_terrain). Session-mode tool: open via landscape_spline_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeSplineTool_SetSegmentProperty::GetInputSchema() const

@@ -12,7 +12,7 @@ FString ClaireonTool_TransactionHistory::GetOperation() const { return TEXT("his
 
 FString ClaireonTool_TransactionHistory::GetDescription() const
 {
-	return TEXT("List recent transactions from the undo buffer. Use filter='claireon' to show only [Claireon]-prefixed entries.");
+    return TEXT("List recent transactions from the undo buffer. Use filter='claireon' to show only [Claireon]-prefixed entries. Stateless / read-only / non-session: reads the editor-wide transactor history.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_TransactionHistory::GetInputSchema() const

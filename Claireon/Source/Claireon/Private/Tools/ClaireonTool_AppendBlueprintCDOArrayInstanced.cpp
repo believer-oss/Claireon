@@ -14,7 +14,7 @@
 
 FString ClaireonTool_AppendBlueprintCDOArrayInstanced::GetCategory() const
 {
-	return TEXT("blueprint");
+	return TEXT("bp");
 }
 
 FString ClaireonTool_AppendBlueprintCDOArrayInstanced::GetOperation() const

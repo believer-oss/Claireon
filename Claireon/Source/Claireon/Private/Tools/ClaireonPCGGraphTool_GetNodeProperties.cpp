@@ -13,7 +13,10 @@ FString ClaireonPCGGraphTool_GetNodeProperties::GetOperation() const { return TE
 
 FString ClaireonPCGGraphTool_GetNodeProperties::GetDescription() const
 {
-	return TEXT("Read the editable properties of a PCG node's settings.");
+	return TEXT("Read the editable properties of a PCG node's settings within an open editing "
+				"session. Read-only inspection that does not mutate the graph; requires session_id "
+				"from pcg_graph.open so the node lookup runs against the session's in-memory PCG "
+				"graph instance. Pair with set_node_property to mutate values.");
 }
 
 TSharedPtr<FJsonObject> ClaireonPCGGraphTool_GetNodeProperties::GetInputSchema() const

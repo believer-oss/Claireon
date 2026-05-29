@@ -16,7 +16,7 @@ FString ClaireonNiagaraTool_RemoveModule::GetOperation() const { return TEXT("re
 
 FString ClaireonNiagaraTool_RemoveModule::GetDescription() const
 {
-	return TEXT("Remove a module from an emitter stack by index, reconnecting the parameter map.");
+    return TEXT("Remove a module from an emitter stack by index, reconnecting the parameter map. Session-mode tool: open via niagara_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_RemoveModule::GetInputSchema() const

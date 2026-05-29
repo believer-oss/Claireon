@@ -11,7 +11,10 @@ FString ClaireonPCGGraphTool_ListNodeTypes::GetOperation() const { return TEXT("
 
 FString ClaireonPCGGraphTool_ListNodeTypes::GetDescription() const
 {
-	return TEXT("List available PCG settings classes that can be used with add_node. Supports optional substring filtering.");
+	return TEXT("List available PCG settings classes that can be used with add_node by iterating "
+				"UClass reflection. Read-only, stateless reflection query; no session_id required and "
+				"no editor session is opened. Supports optional substring filtering to narrow the "
+				"result set.");
 }
 
 TSharedPtr<FJsonObject> ClaireonPCGGraphTool_ListNodeTypes::GetInputSchema() const

@@ -22,7 +22,7 @@ FString ClaireonWidgetBPTool_RemoveAnimationKeyframe::GetOperation() const { ret
 
 FString ClaireonWidgetBPTool_RemoveAnimationKeyframe::GetDescription() const
 {
-    return TEXT("Remove a keyframe from a widget animation track.");
+    return TEXT("Remove a keyframe from a widget animation track in the open widget BP session. Session-mode tool: open via widgetbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_RemoveAnimationKeyframe::GetInputSchema() const

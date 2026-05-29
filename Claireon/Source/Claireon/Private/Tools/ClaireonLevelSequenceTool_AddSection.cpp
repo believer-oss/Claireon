@@ -17,7 +17,7 @@ FString ClaireonLevelSequenceTool_AddSection::GetOperation() const { return TEXT
 
 FString ClaireonLevelSequenceTool_AddSection::GetDescription() const
 {
-	return TEXT("Add a section (frame-range slice of animation data) to the focused track.");
+    return TEXT("Add a section (frame-range slice of animation data) to the focused track. Session-mode tool: open via level_sequence_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_AddSection::GetInputSchema() const

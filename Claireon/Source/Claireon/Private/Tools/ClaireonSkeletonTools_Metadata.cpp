@@ -74,7 +74,7 @@ FString ClaireonSkeletonTool_RemoveAnimationNotify::GetOperation() const { retur
 
 FString ClaireonSkeletonTool_RemoveAnimationNotify::GetDescription() const
 {
-	return TEXT("Remove a skeleton-level animation notify name from the cache.");
+    return TEXT("Remove a skeleton-level animation notify name from the cache in the open session. Session-mode tool: open via skeleton_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RemoveAnimationNotify::GetInputSchema() const
@@ -121,7 +121,7 @@ FString ClaireonSkeletonTool_RenameAnimationNotify::GetOperation() const { retur
 
 FString ClaireonSkeletonTool_RenameAnimationNotify::GetDescription() const
 {
-	return TEXT("Rename a skeleton-level animation notify name.");
+    return TEXT("Rename a skeleton-level animation notify name in the open session. Session-mode tool: open via skeleton_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RenameAnimationNotify::GetInputSchema() const
@@ -220,7 +220,7 @@ FString ClaireonSkeletonTool_RemoveCurveMetadata::GetOperation() const { return 
 
 FString ClaireonSkeletonTool_RemoveCurveMetadata::GetDescription() const
 {
-	return TEXT("Remove a curve metadata entry from the skeleton.");
+    return TEXT("Remove a curve metadata entry from the skeleton in the open session. Session-mode tool: open via skeleton_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RemoveCurveMetadata::GetInputSchema() const
@@ -266,7 +266,7 @@ FString ClaireonSkeletonTool_RenameCurveMetadata::GetOperation() const { return 
 
 FString ClaireonSkeletonTool_RenameCurveMetadata::GetDescription() const
 {
-	return TEXT("Rename a curve metadata entry. Preserves the entry's flags/linked bones/max LOD under the new name.");
+    return TEXT("Rename a curve metadata entry. Preserves the entry's flags/linked bones/max LOD under the new name. Session-mode tool: open via skeleton_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RenameCurveMetadata::GetInputSchema() const

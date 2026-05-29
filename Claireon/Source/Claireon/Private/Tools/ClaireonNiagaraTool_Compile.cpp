@@ -16,7 +16,7 @@ FString ClaireonNiagaraTool_Compile::GetOperation() const { return TEXT("compile
 
 FString ClaireonNiagaraTool_Compile::GetDescription() const
 {
-	return TEXT("Request a (synchronous-ish) compile of the Niagara System and report errors/warnings.");
+    return TEXT("Compile the Niagara System and report errors/warnings. Issues a synchronous-ish compile request. Session-mode tool: open via niagara_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_Compile::GetInputSchema() const

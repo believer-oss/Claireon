@@ -17,7 +17,7 @@ FString ClaireonInputTool_AddMapping::GetOperation() const { return TEXT("add_ma
 
 FString ClaireonInputTool_AddMapping::GetDescription() const
 {
-	return TEXT("Add a new key-to-action mapping to the Input Mapping Context.");
+    return TEXT("Add a new key-to-action mapping to the Input Mapping Context. Session-mode tool: open via input_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonInputTool_AddMapping::GetInputSchema() const

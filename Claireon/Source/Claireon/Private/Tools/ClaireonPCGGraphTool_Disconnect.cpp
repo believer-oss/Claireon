@@ -14,7 +14,10 @@ FString ClaireonPCGGraphTool_Disconnect::GetOperation() const { return TEXT("dis
 
 FString ClaireonPCGGraphTool_Disconnect::GetDescription() const
 {
-	return TEXT("Remove a specific edge between two PCG node pins.");
+	return TEXT("Disconnect a specific edge between two PCG node pins within an open editing "
+				"session. Requires session_id from pcg_graph.open; the edit is transactional and only "
+				"persists after save. Other edges on the same pins are unaffected; use disconnect_all "
+				"to clear every edge on a pin.");
 }
 
 TSharedPtr<FJsonObject> ClaireonPCGGraphTool_Disconnect::GetInputSchema() const

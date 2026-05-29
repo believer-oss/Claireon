@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_SelectNearestNode::GetOperation() const { ret
 
 FString ClaireonBlueprintGraphTool_SelectNearestNode::GetDescription() const
 {
-    return TEXT("Move the cursor to the node nearest a graph-space position (object with x, y) in the open Blueprint editing session. Requires open session_id from blueprint_graph_open. Read-only with respect to graph contents (cursor is session state). Useful when chaining new nodes off an existing layout cluster. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Move the cursor to the node nearest a graph-space position (object with x, y) in the open Blueprint editing session. Requires open session_id from bp_open. Read-only with respect to graph contents (cursor is session state). Useful when chaining new nodes off an existing layout cluster. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SelectNearestNode::GetInputSchema() const

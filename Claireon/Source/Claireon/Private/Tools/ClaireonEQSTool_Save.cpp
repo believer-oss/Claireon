@@ -14,7 +14,10 @@ FString ClaireonEQSTool_Save::GetOperation() const { return TEXT("save"); }
 
 FString ClaireonEQSTool_Save::GetDescription() const
 {
-	return TEXT("Save the EQS Query asset to disk.");
+	return TEXT("Save the EQS Query asset to disk within the current session and clear the dirty "
+				"flag. Requires session_id from eqs.open; the session stays open so further "
+				"transactional edits (add/remove options, tests, generators) remain available after "
+				"the save.");
 }
 
 TSharedPtr<FJsonObject> ClaireonEQSTool_Save::GetInputSchema() const

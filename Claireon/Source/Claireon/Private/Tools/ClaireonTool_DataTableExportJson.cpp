@@ -13,7 +13,7 @@ FString ClaireonTool_DataTableExportJson::GetOperation() const { return TEXT("ex
 
 FString ClaireonTool_DataTableExportJson::GetDescription() const
 {
-	return TEXT("Export table as JSON using UDataTable::GetTableAsJSON()");
+    return TEXT("Export a data table as JSON via UDataTable::GetTableAsJSON. Stateless / read-only / non-session: returns the serialized text without opening any session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_DataTableExportJson::GetInputSchema() const

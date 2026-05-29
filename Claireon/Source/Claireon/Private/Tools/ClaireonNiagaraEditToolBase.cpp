@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonNiagaraEditToolBase.h"
 #include "Tools/ClaireonNiagaraHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
 #include "NiagaraSystem.h"
 
@@ -119,5 +120,8 @@ FToolResult ClaireonNiagaraEditToolBase::BuildStateResponse(const FString& Sessi
 	RespData->SetStringField(TEXT("last_operation_status"), Data->LastOperationStatus);
 	RespData->SetNumberField(TEXT("focused_emitter_index"), Data->FocusedEmitterIndex);
 
-	return MakeSuccessResult(RespData, Output);
+	FString SessionHintSummaryTag;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(RespData, Data->ConsecutiveAssetPathCalls, System->GetPathName(), SessionId, SessionHintSummaryTag);
+
+	return MakeSuccessResult(RespData, Output + SessionHintSummaryTag);
 }

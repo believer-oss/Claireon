@@ -20,7 +20,7 @@ FString ClaireonTool_AssetResave::GetOperation() const { return TEXT("resave"); 
 
 FString ClaireonTool_AssetResave::GetDescription() const
 {
-	return TEXT("Resave specified assets to update serialization");
+    return TEXT("Resave specified assets to update serialization. Stateless / non-session: writes the assets directly by path without opening any editing session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AssetResave::GetInputSchema() const

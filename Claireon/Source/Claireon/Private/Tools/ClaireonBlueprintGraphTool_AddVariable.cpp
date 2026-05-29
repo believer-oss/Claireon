@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_AddVariable::GetSearchKeywords() cons
 
 FString ClaireonBlueprintGraphTool_AddVariable::GetDescription() const
 {
-    return TEXT("Add a member variable to the Blueprint in the open editing session. Transactional. Pass variable_type for primitives/classes/structs, or variable_type_spec (base + signature_function/subtype) for delegate/multicast/soft-class/soft-object/instanced-struct. Common pitfall: plain delegate names in variable_type silently fail. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Add a member variable to the Blueprint in the open editing session. Transactional. Pass variable_type for primitives/classes/structs, or variable_type_spec (base + signature_function/subtype) for delegate/multicast/soft-class/soft-object/instanced-struct. Common pitfall: plain delegate names in variable_type silently fail. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddVariable::GetInputSchema() const
@@ -274,7 +274,7 @@ FToolResult ClaireonBlueprintGraphTool_AddVariable::Execute(const TSharedPtr<FJs
 	AddVariableResult.Warnings.Append(ResolutionWarnings);
 
 	// Surface the RepNotify handler graph name on the tool response so callers
-	// can immediately target it with blueprint_graph_add_node.
+	// can immediately target it with bp_add_node.
 	if (!ApplyResult.RepNotifyHandlerGraph.IsNone())
 	{
 		if (!AddVariableResult.Data.IsValid())
@@ -315,14 +315,14 @@ FString ClaireonBlueprintGraphTool_AddVariable::GetFullDescription() const
 FString ClaireonBlueprintGraphTool_AddVariable::GetExampleUsage() const
 {
     return TEXT(
-        "blueprint_graph_add_variable session_id=\"...\" "
+        "bp_add_variable session_id=\"...\" "
         "name=\"MaxHealth\" variable_type=\"float\" replication=\"RepNotify\"");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddVariable::GetParameterTooltips() const
 {
     TSharedPtr<FJsonObject> T = MakeShared<FJsonObject>();
-    T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by blueprint_graph_open or _create."));
+    T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by bp_open or _create."));
     T->SetStringField(TEXT("name"), TEXT("Variable name (also member name on the generated CDO)."));
     T->SetStringField(TEXT("variable_type"), TEXT("Simple type form: primitive name, class path, or struct path. Use variable_type_spec for delegate/soft-class/soft-object/instanced-struct types."));
     T->SetStringField(TEXT("variable_type_spec"), TEXT("Structured type form: { base: 'Delegate'|'MulticastDelegate'|'SoftClass'|'SoftObject'|'InstancedStruct', signature_function: '...', subtype: '...' }. Takes precedence over variable_type when both are provided."));

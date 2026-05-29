@@ -5,6 +5,7 @@
 #include "Tools/ClaireonStateTreeEditInternal.h"
 #include "Tools/ClaireonStateTreeHelpers.h"
 #include "Tools/FToolSchemaBuilder.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSessionManager.h"
 #include "Misc/Paths.h"
@@ -98,6 +99,8 @@ FToolResult ClaireonStateTreeTool_Open::Execute(const TSharedPtr<FJsonObject>& A
 	}
 
 	ToolData.Add(SessionId, MoveTemp(NewData));
+
+	ClaireonAssetUtils::OpenAssetEditorIfHeadless(StateTree);
 
 	// Return full tree structure + session ID
 	FString StructureText = ClaireonStateTreeHelpers::FormatStateTreeStructure(EditorData);

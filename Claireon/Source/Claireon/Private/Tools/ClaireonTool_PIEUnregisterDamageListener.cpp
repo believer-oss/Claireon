@@ -14,7 +14,7 @@ FString ClaireonTool_PIEUnregisterDamageListener::GetOperation() const { return 
 
 FString ClaireonTool_PIEUnregisterDamageListener::GetDescription() const
 {
-	return TEXT("Unregister a damage event listener, unbinding the delegate and removing it from the registry.");
+    return TEXT("Unregister a damage event listener, unbinding the delegate and removing it from the registry. Stateless / non-session: mutates the registry directly without opening any session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PIEUnregisterDamageListener::GetInputSchema() const

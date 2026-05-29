@@ -10,7 +10,7 @@ FString ClaireonMaterialInstanceTool_Status::GetOperation() const { return TEXT(
 
 FString ClaireonMaterialInstanceTool_Status::GetDescription() const
 {
-	return TEXT("Return the current session state of a UMaterialInstanceConstant edit session.");
+    return TEXT("Return the current session state of a UMaterialInstanceConstant edit session, including parent and override list.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialInstanceTool_Status::GetInputSchema() const

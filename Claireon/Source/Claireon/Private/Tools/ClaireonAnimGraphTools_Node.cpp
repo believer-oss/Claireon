@@ -288,7 +288,7 @@ FString ClaireonAnimGraphTool_RemoveNode::GetOperation() const { return TEXT("re
 
 FString ClaireonAnimGraphTool_RemoveNode::GetDescription() const
 {
-	return TEXT("Remove an animation graph node by GUID. Breaks all pin connections first.");
+    return TEXT("Remove an animation graph node by GUID. Breaks all pin connections first. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_RemoveNode::GetInputSchema() const
@@ -369,7 +369,7 @@ FString ClaireonAnimGraphTool_MoveNode::GetOperation() const { return TEXT("move
 
 FString ClaireonAnimGraphTool_MoveNode::GetDescription() const
 {
-	return TEXT("Move an animation graph node to a new position.");
+    return TEXT("Move an animation graph node to a new position in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_MoveNode::GetInputSchema() const
@@ -625,7 +625,7 @@ FString ClaireonAnimGraphTool_DisconnectPin::GetOperation() const { return TEXT(
 
 FString ClaireonAnimGraphTool_DisconnectPin::GetDescription() const
 {
-	return TEXT("Disconnect a pin on an animation graph node. Optionally target a specific connection by providing target_node_guid.");
+    return TEXT("Disconnect a pin on an animation graph node in the open anim_graph session. Optionally target a specific connection by providing target_node_guid. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_DisconnectPin::GetInputSchema() const

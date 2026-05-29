@@ -13,7 +13,7 @@ FString ClaireonTool_ProxyTableRemoveInherit::GetOperation() const { return TEXT
 
 FString ClaireonTool_ProxyTableRemoveInherit::GetDescription() const
 {
-	return TEXT("Remove the entry at the given index from a ProxyTable's InheritEntriesFrom chain.");
+    return TEXT("Remove the entry at the given index from a ProxyTable's InheritEntriesFrom chain. Stateless / non-session: writes the asset directly by path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ProxyTableRemoveInherit::GetInputSchema() const

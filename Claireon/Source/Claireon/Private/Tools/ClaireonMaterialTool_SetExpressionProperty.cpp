@@ -13,7 +13,7 @@ FString ClaireonMaterialTool_SetExpressionProperty::GetOperation() const { retur
 
 FString ClaireonMaterialTool_SetExpressionProperty::GetDescription() const
 {
-	return TEXT("Set a property by name on an expression, parsed from text value via UE reflection.");
+    return TEXT("Set a property by name on an expression, parsed from text value via UE reflection. Session-mode tool: open via material_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialTool_SetExpressionProperty::GetInputSchema() const

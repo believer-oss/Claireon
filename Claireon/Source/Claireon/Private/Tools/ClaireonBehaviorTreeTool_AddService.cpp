@@ -16,7 +16,10 @@ FString ClaireonBehaviorTreeTool_AddService::GetOperation() const { return TEXT(
 
 FString ClaireonBehaviorTreeTool_AddService::GetDescription() const
 {
-	return TEXT("Add a service subnode to an existing composite or task node.");
+	return TEXT("Add a service subnode to an existing composite or task node within an open Behavior "
+				"Tree session. Requires session_id from behavior_tree.open; the edit is transactional "
+				"and only persists after save. Use list_node_types with category=service to discover "
+				"available service classes.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBehaviorTreeTool_AddService::GetInputSchema() const

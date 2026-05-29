@@ -16,7 +16,7 @@ FString ClaireonTool_GameplayTagsAdd::GetOperation() const { return TEXT("tags_a
 
 FString ClaireonTool_GameplayTagsAdd::GetDescription() const
 {
-	return TEXT("Append one or more gameplay tags to a configured ini source. Batches via UGameplayTagsManager Suspend/Resume for a single coalesced refresh. Each entry: {tag, dev_comment?}. Optional tag_source defaults to DefaultGameplayTags.ini; pass a path and the basename is extracted. Returns {added, skipped, failed, requested_source, warnings}.");
+    return TEXT("Add one or more gameplay tags to a configured ini source. Batches via UGameplayTagsManager Suspend/Resume for a single coalesced refresh. Each entry: {tag, dev_comment?}. Optional tag_source defaults to DefaultGameplayTags.ini. Stateless / non-session: writes the ini file directly.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_GameplayTagsAdd::GetInputSchema() const

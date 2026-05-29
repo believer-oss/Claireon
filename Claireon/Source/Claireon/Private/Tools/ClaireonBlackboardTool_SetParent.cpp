@@ -13,7 +13,9 @@ FString ClaireonBlackboardTool_SetParent::GetOperation() const { return TEXT("se
 
 FString ClaireonBlackboardTool_SetParent::GetDescription() const
 {
-	return TEXT("Set or clear the parent blackboard for key inheritance. Pass empty parent_path to clear.");
+	return TEXT("Set or clear the parent Blackboard for key inheritance within an open editing "
+				"session. Pass empty parent_path to clear. Requires session_id from blackboard.open; "
+				"the edit is transactional and only persists after save.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlackboardTool_SetParent::GetInputSchema() const

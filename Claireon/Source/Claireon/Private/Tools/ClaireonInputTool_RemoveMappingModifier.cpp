@@ -15,7 +15,7 @@ FString ClaireonInputTool_RemoveMappingModifier::GetOperation() const { return T
 
 FString ClaireonInputTool_RemoveMappingModifier::GetDescription() const
 {
-	return TEXT("Remove a per-mapping modifier at the given index from a mapping.");
+    return TEXT("Remove a per-mapping modifier at the given index from a mapping. Session-mode tool: open via input_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonInputTool_RemoveMappingModifier::GetInputSchema() const

@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonMaterialEditToolBase.h"
 #include "Tools/ClaireonMaterialHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
 #include "Materials/Material.h"
 
@@ -121,5 +122,8 @@ FToolResult ClaireonMaterialEditToolBase::BuildStateResponse(const FString& Sess
 	RespData->SetNumberField(TEXT("expression_count"), Material->GetExpressions().Num());
 	RespData->SetStringField(TEXT("last_operation_status"), Data->LastOperationStatus);
 
-	return MakeSuccessResult(RespData, Output);
+	FString SessionHintSummaryTag;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(RespData, Data->ConsecutiveAssetPathCalls, Material->GetPathName(), SessionId, SessionHintSummaryTag);
+
+	return MakeSuccessResult(RespData, Output + SessionHintSummaryTag);
 }

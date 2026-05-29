@@ -32,7 +32,7 @@ FString ClaireonAnimGraphTool_AddState::GetOperation() const { return TEXT("add_
 
 FString ClaireonAnimGraphTool_AddState::GetDescription() const
 {
-	return TEXT("Add a new state to the current state machine graph.");
+    return TEXT("Add a new state to the current state machine graph in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_AddState::GetInputSchema() const
@@ -111,7 +111,7 @@ FString ClaireonAnimGraphTool_RemoveState::GetOperation() const { return TEXT("r
 
 FString ClaireonAnimGraphTool_RemoveState::GetDescription() const
 {
-	return TEXT("Remove a state from the current state machine graph.");
+    return TEXT("Remove a state from the current state machine graph in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_RemoveState::GetInputSchema() const
@@ -212,7 +212,7 @@ FString ClaireonAnimGraphTool_RenameState::GetOperation() const { return TEXT("r
 
 FString ClaireonAnimGraphTool_RenameState::GetDescription() const
 {
-	return TEXT("Rename a state in the current state machine graph.");
+    return TEXT("Rename a state in the current state machine graph in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_RenameState::GetInputSchema() const
@@ -282,7 +282,7 @@ FString ClaireonAnimGraphTool_SetEntryState::GetOperation() const { return TEXT(
 
 FString ClaireonAnimGraphTool_SetEntryState::GetDescription() const
 {
-	return TEXT("Set the entry (default) state in the current state machine graph.");
+    return TEXT("Set the entry (default) state in the current state machine graph. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_SetEntryState::GetInputSchema() const
@@ -385,7 +385,7 @@ FString ClaireonAnimGraphTool_AddTransition::GetOperation() const { return TEXT(
 
 FString ClaireonAnimGraphTool_AddTransition::GetDescription() const
 {
-	return TEXT("Add a transition between two states in the current state machine graph.");
+    return TEXT("Add a transition between two states in the current state machine graph. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_AddTransition::GetInputSchema() const
@@ -514,7 +514,7 @@ FString ClaireonAnimGraphTool_RemoveTransition::GetOperation() const { return TE
 
 FString ClaireonAnimGraphTool_RemoveTransition::GetDescription() const
 {
-	return TEXT("Remove a transition from the current state machine graph.");
+    return TEXT("Remove a transition from the current state machine graph in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_RemoveTransition::GetInputSchema() const
@@ -590,7 +590,7 @@ FString ClaireonAnimGraphTool_SetTransitionProperties::GetOperation() const { re
 
 FString ClaireonAnimGraphTool_SetTransitionProperties::GetDescription() const
 {
-	return TEXT("Set properties on a state machine transition (crossfade duration, blend mode, logic type, shared rules, etc.).");
+    return TEXT("Set properties on a state machine transition (crossfade duration, blend mode, logic type, shared rules, etc.). Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_SetTransitionProperties::GetInputSchema() const

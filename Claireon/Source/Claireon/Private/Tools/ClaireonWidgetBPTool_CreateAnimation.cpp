@@ -15,7 +15,7 @@ FString ClaireonWidgetBPTool_CreateAnimation::GetOperation() const { return TEXT
 
 FString ClaireonWidgetBPTool_CreateAnimation::GetDescription() const
 {
-    return TEXT("Create a new UWidgetAnimation on the Widget Blueprint (name, duration).");
+    return TEXT("Create a new UWidgetAnimation on the Widget Blueprint (name, duration). Session-mode tool: open via widgetbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_CreateAnimation::GetInputSchema() const

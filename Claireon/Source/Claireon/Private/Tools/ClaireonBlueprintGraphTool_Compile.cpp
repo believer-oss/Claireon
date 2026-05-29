@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_Compile::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_Compile::GetDescription() const
 {
-    return TEXT("Compiles the Blueprint of the current session and reports structured errors and warnings. Most-common pitfall: assuming compile == save -- it does not write to disk; call blueprint_graph_save (or close, which auto-saves) to persist the compiled state. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Compiles the Blueprint of the current session and reports structured errors and warnings. Most-common pitfall: assuming compile == save -- it does not write to disk; call bp_save (or close, which auto-saves) to persist the compiled state. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Compile::GetInputSchema() const
@@ -183,7 +183,7 @@ FString ClaireonBlueprintGraphTool_Compile::GetFullDescription() const
         "Compiles the Blueprint of the current session and returns a "
         "structured list of errors and warnings (file/line/message). Compile "
         "is in-memory only -- it does NOT write to disk; pair with "
-        "blueprint_graph_save (or blueprint_graph_close, which "
+        "bp_save (or bp_close, which "
         "auto-saves) when you want the compiled state persisted. Use this "
         "tool to validate after a sequence of add_node/connect_pins calls or "
         "after a structural refactor (e.g. variable type change), so you "
@@ -193,7 +193,7 @@ FString ClaireonBlueprintGraphTool_Compile::GetFullDescription() const
 
 FString ClaireonBlueprintGraphTool_Compile::GetExampleUsage() const
 {
-    return TEXT("blueprint_graph_compile session_id=\"...\"");
+    return TEXT("bp_compile session_id=\"...\"  |  bp_compile asset_path=\"/Game/BP/MyActor\"");
 }
 
 #undef LOCTEXT_NAMESPACE

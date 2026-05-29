@@ -26,7 +26,7 @@ FString ClaireonNiagaraTool_SetModuleInput::GetOperation() const { return TEXT("
 
 FString ClaireonNiagaraTool_SetModuleInput::GetDescription() const
 {
-	return TEXT("Set a module input or static switch value. Supports scalar pin values, float curves (JSON array) and color curves (JSON object).");
+    return TEXT("Set a module input or static switch value. Supports scalar pin values, float curves (JSON array) and color curves (JSON object). Session-mode tool: open via niagara_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_SetModuleInput::GetInputSchema() const

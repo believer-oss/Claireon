@@ -16,7 +16,7 @@ FString ClaireonLevelSequenceTool_RemoveTrack::GetOperation() const { return TEX
 
 FString ClaireonLevelSequenceTool_RemoveTrack::GetDescription() const
 {
-	return TEXT("Remove a track (by index) from the focused binding (or root tracks when no binding is focused).");
+    return TEXT("Remove a track (by index) from the focused binding (or root tracks when no binding is focused). Session-mode tool: open via level_sequence_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_RemoveTrack::GetInputSchema() const

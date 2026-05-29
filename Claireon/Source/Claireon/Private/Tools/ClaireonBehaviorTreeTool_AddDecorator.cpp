@@ -16,7 +16,10 @@ FString ClaireonBehaviorTreeTool_AddDecorator::GetOperation() const { return TEX
 
 FString ClaireonBehaviorTreeTool_AddDecorator::GetDescription() const
 {
-	return TEXT("Add a decorator subnode to an existing composite or task node.");
+	return TEXT("Add a decorator subnode to an existing composite or task node within an open Behavior "
+				"Tree session. Requires session_id from behavior_tree.open; the edit is transactional "
+				"and only persists after save. Use list_node_types with category=decorator to discover "
+				"available decorator classes.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBehaviorTreeTool_AddDecorator::GetInputSchema() const

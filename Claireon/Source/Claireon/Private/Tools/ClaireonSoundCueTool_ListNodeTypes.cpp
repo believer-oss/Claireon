@@ -12,7 +12,9 @@ FString FClaireonSoundCueTool_ListNodeTypes::GetOperation() const { return TEXT(
 
 FString FClaireonSoundCueTool_ListNodeTypes::GetDescription() const
 {
-	return TEXT("Enumerate available USoundNode subclasses (short_name + class_path). Stateless.");
+	return TEXT("Enumerate all available USoundNode subclasses with their short_name and class_path. "
+				"Non-session, read-only query; no session_id required. Use the returned short_name "
+				"or class_path with soundcue.add_node to insert nodes into an open session.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundCueTool_ListNodeTypes::GetInputSchema() const

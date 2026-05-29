@@ -22,7 +22,7 @@ FString ClaireonTool_PIECheckInitState::GetOperation() const { return TEXT("chec
 
 FString ClaireonTool_PIECheckInitState::GetDescription() const
 {
-	return TEXT("Check the Lyra initialization state of an actor in the PIE world. Reports which init state the actor has reached (Spawned, DataAvailable, DataInitialized, GameplayReady).");
+    return TEXT("Check the Lyra initialization state of an actor in the PIE world. Reports which init state the actor has reached (Spawned, DataAvailable, DataInitialized, GameplayReady). Read-only / non-session inspector.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PIECheckInitState::GetInputSchema() const

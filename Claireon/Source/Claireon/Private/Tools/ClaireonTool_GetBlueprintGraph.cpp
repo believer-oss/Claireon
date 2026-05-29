@@ -15,7 +15,7 @@
 #include "AnimationGraphSchema.h"
 #include "WidgetBlueprint.h"
 
-FString ClaireonTool_GetBlueprintGraph::GetCategory() const { return TEXT("blueprint"); }
+FString ClaireonTool_GetBlueprintGraph::GetCategory() const { return TEXT("bp"); }
 FString ClaireonTool_GetBlueprintGraph::GetOperation() const { return TEXT("get_graph"); }
 
 TArray<FString> ClaireonTool_GetBlueprintGraph::GetSearchKeywords() const

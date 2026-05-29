@@ -10,7 +10,7 @@ FString ClaireonFoliageTool_SetDensity::GetOperation() const { return TEXT("set_
 
 FString ClaireonFoliageTool_SetDensity::GetDescription() const
 {
-	return TEXT("Adjust instance density in a region. (Not yet implemented; use paint/erase.)");
+    return TEXT("Adjust foliage instance density in a region. Not yet implemented; use paint/erase. Session-mode tool: open via foliage_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonFoliageTool_SetDensity::GetInputSchema() const

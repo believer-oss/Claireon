@@ -13,7 +13,7 @@ FString ClaireonTool_DataTableExportCsv::GetOperation() const { return TEXT("exp
 
 FString ClaireonTool_DataTableExportCsv::GetDescription() const
 {
-	return TEXT("Export table as CSV");
+    return TEXT("Export a data table as CSV text. Stateless / read-only / non-session: reads the asset by path and returns the serialized CSV without opening any editing session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_DataTableExportCsv::GetInputSchema() const

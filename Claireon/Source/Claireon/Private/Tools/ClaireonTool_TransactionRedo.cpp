@@ -12,7 +12,7 @@ FString ClaireonTool_TransactionRedo::GetOperation() const { return TEXT("redo")
 
 FString ClaireonTool_TransactionRedo::GetDescription() const
 {
-	return TEXT("Redo the last N undone transactions. Returns descriptions of redone entries.");
+    return TEXT("Redo the last N undone transactions. Returns descriptions of redone entries. Stateless / non-session: drives the editor-wide transactor without opening any session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_TransactionRedo::GetInputSchema() const

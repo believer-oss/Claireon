@@ -16,7 +16,7 @@ FString ClaireonInputTool_SetMappingAction::GetOperation() const { return TEXT("
 
 FString ClaireonInputTool_SetMappingAction::GetDescription() const
 {
-	return TEXT("Change the Action on the mapping at the given index.");
+    return TEXT("Set the Action on the mapping at the given index in the Input Mapping Context. Session-mode tool: open via input_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonInputTool_SetMappingAction::GetInputSchema() const

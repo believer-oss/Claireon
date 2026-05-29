@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonAnimGraphEditBase.h"
 #include "Tools/ClaireonAnimGraphHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
 #include "ClaireonLog.h"
 
@@ -216,7 +217,10 @@ FToolResult ClaireonAnimGraphEditToolBase::BuildStateResponse(const FString& Ses
 		Result->SetObjectField(TEXT("guid_corrections"), Corrections);
 	}
 
-	return MakeSuccessResult(Result, Data->Cursor.LastOperationStatus);
+	FString SessionHintSummaryTag;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(Result, Data->ConsecutiveAssetPathCalls, AnimBP->GetPathName(), SessionId, SessionHintSummaryTag);
+
+	return MakeSuccessResult(Result, Data->Cursor.LastOperationStatus + SessionHintSummaryTag);
 }
 
 // ============================================================================

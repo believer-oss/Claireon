@@ -10,7 +10,7 @@ FString ClaireonLandscapeTool_Status::GetOperation() const { return TEXT("status
 
 FString ClaireonLandscapeTool_Status::GetDescription() const
 {
-	return TEXT("Get the current state of a landscape editing session.");
+    return TEXT("Get the current state of a landscape editing session, including layers, materials, and bounds.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeTool_Status::GetInputSchema() const

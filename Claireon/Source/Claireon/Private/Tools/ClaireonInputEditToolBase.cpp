@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonInputEditToolBase.h"
 #include "Tools/ClaireonEnhancedInputHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
@@ -162,5 +163,10 @@ FToolResult ClaireonInputEditToolBase::BuildStateResponse(const FString& Session
 		RespData->SetStringField(TEXT("asset_path"), IMC->GetPathName());
 	}
 
-	return MakeSuccessResult(RespData, Output);
+	FString AssetPathStr;
+	RespData->TryGetStringField(TEXT("asset_path"), AssetPathStr);
+	FString SessionHintSummaryTag;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(RespData, Data->ConsecutiveAssetPathCalls, AssetPathStr, SessionId, SessionHintSummaryTag);
+
+	return MakeSuccessResult(RespData, Output + SessionHintSummaryTag);
 }

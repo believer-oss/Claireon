@@ -16,7 +16,7 @@ FString ClaireonNiagaraTool_GetModuleInputs::GetOperation() const { return TEXT(
 
 FString ClaireonNiagaraTool_GetModuleInputs::GetDescription() const
 {
-	return TEXT("List inputs (and static switches) for a specific module in a stack, including override status and current values.");
+    return TEXT("List inputs (and static switches) for a specific module in a stack, including override status and current values. Session-mode tool: open via niagara_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_GetModuleInputs::GetInputSchema() const

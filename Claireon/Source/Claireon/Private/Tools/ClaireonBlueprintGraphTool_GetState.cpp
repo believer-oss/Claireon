@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_GetState::GetOperation() const { return TEXT(
 
 FString ClaireonBlueprintGraphTool_GetState::GetDescription() const
 {
-    return TEXT("Return the current graph state (nodes, pins, cursor) for the open Blueprint editing session. Requires open session_id from blueprint_graph_open. Read-only. The most-used inspection tool during the per-node author cycle; pair with blueprint_graph_inspect_node for full single-node fidelity. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Return the current graph state (nodes, pins, cursor) for the open Blueprint editing session. Requires open session_id from bp_open. Read-only. The most-used inspection tool during the per-node author cycle; pair with bp_inspect_node for full single-node fidelity. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_GetState::GetInputSchema() const

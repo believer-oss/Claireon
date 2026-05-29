@@ -15,7 +15,7 @@ FString ClaireonLandscapeTool_Sculpt::GetOperation() const { return TEXT("sculpt
 
 FString ClaireonLandscapeTool_Sculpt::GetDescription() const
 {
-	return TEXT("Sculpt the landscape heightmap with a circular brush. Modes: raise, lower, smooth, flatten, erode.");
+    return TEXT("Sculpt the landscape heightmap with a circular brush in the open session. Modes: raise, lower, smooth, flatten, erode. Session-mode tool: open via landscape_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeTool_Sculpt::GetInputSchema() const

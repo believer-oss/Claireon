@@ -9,7 +9,7 @@ FString ClaireonTool_FlythroughStop::GetOperation() const { return TEXT("flythro
 
 FString ClaireonTool_FlythroughStop::GetDescription() const
 {
-	return TEXT("Cancel an in-progress flythrough and release the debug camera.");
+    return TEXT("Cancel an in-progress flythrough and release the debug camera. Stateless / non-session: stops the editor-wide flythrough without any per-asset session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_FlythroughStop::GetInputSchema() const

@@ -31,6 +31,9 @@ struct FAnimEditToolData
 	/** Index of the currently focused notify, or -1 if none */
 	int32 FocusedNotifyIndex = -1;
 
+	/** Counts consecutive calls resolved via asset_path (no session_id). Used by EmitSessionHintIfNeeded. */
+	int32 ConsecutiveAssetPathCalls = 0;
+
 	/** Check if the tool data is still valid (animation is still loaded) */
 	bool IsValid() const { return Animation.IsValid(); }
 };

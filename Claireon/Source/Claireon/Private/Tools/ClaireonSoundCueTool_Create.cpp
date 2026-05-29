@@ -16,7 +16,9 @@ FString FClaireonSoundCueTool_Create::GetOperation() const { return TEXT("create
 
 FString FClaireonSoundCueTool_Create::GetDescription() const
 {
-	return TEXT("Create an empty USoundCue at the given /Game/ path. Errors if an asset already exists.");
+	return TEXT("Create an empty USoundCue asset at the given /Game/ content path. Non-session, "
+				"immediate operation; no session_id is needed. Errors if an asset already exists at "
+				"that path. Follow with soundcue.open to start a session for graph editing.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundCueTool_Create::GetInputSchema() const

@@ -25,7 +25,7 @@ FString ClaireonMaterialTool_SetShadingModel::GetOperation() const { return TEXT
 
 FString ClaireonMaterialTool_SetShadingModel::GetDescription() const
 {
-	return TEXT("Set the material's shading model (e.g. MSM_DefaultLit, MSM_Unlit).");
+    return TEXT("Set the material's shading model (e.g. MSM_DefaultLit, MSM_Unlit). Session-mode tool: open via material_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialTool_SetShadingModel::GetInputSchema() const

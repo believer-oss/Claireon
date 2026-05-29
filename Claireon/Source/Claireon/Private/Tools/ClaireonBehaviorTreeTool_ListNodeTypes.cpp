@@ -15,7 +15,10 @@ FString ClaireonBehaviorTreeTool_ListNodeTypes::GetOperation() const { return TE
 
 FString ClaireonBehaviorTreeTool_ListNodeTypes::GetDescription() const
 {
-	return TEXT("List available BT node classes. Optional category filter: composite, task, decorator, service.");
+	return TEXT("List available Behavior Tree node classes (composite/task/decorator/service) by "
+				"iterating UClass reflection. Read-only, stateless reflection query; no session_id "
+				"required and no editor session is opened. Optional category filter narrows the result "
+				"to a single subclass family.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBehaviorTreeTool_ListNodeTypes::GetInputSchema() const

@@ -11,7 +11,7 @@ FString ClaireonMaterialInstanceTool_Close::GetOperation() const { return TEXT("
 
 FString ClaireonMaterialInstanceTool_Close::GetDescription() const
 {
-	return TEXT("Close a UMaterialInstanceConstant editing session.");
+    return TEXT("Close a UMaterialInstanceConstant editing session, releasing the asset lock and clearing in-session state.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialInstanceTool_Close::GetInputSchema() const

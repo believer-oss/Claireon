@@ -14,7 +14,10 @@ FString ClaireonPCGGraphTool_RemoveNode::GetOperation() const { return TEXT("rem
 
 FString ClaireonPCGGraphTool_RemoveNode::GetDescription() const
 {
-	return TEXT("Remove a node from the PCG graph by index or name. Input and Output nodes cannot be removed.");
+	return TEXT("Remove a node from the PCG graph by index or name within an open editing session, "
+				"detaching any pin edges before deletion. Requires session_id from pcg_graph.open; the "
+				"edit is transactional and only persists after save. The graph's Input and Output "
+				"nodes cannot be removed.");
 }
 
 TSharedPtr<FJsonObject> ClaireonPCGGraphTool_RemoveNode::GetInputSchema() const

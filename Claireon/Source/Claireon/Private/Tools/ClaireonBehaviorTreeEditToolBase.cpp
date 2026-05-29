@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonBehaviorTreeEditToolBase.h"
 #include "Tools/ClaireonBehaviorTreeHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
 #include "BehaviorTree/BehaviorTree.h"
 #include "BehaviorTreeGraph.h"
@@ -133,8 +134,12 @@ FToolResult ClaireonBehaviorTreeEditToolBase::BuildStateResponse(const FString& 
 	ResponseData->SetStringField(TEXT("last_operation"), Data->LastOperationStatus);
 	ResponseData->SetStringField(TEXT("tree_view"), Output);
 
+	const FString BtAssetPath = Data->BehaviorTree->GetPathName();
+	FString SessionHintSummaryTag;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResponseData, Data->ConsecutiveAssetPathCalls, BtAssetPath, SessionId, SessionHintSummaryTag);
+
 	const FString Summary = FString::Printf(TEXT("Session %s: %s"),
 		*SessionId.Left(8), *Data->LastOperationStatus);
 
-	return MakeSuccessResult(ResponseData, Summary);
+	return MakeSuccessResult(ResponseData, Summary + SessionHintSummaryTag);
 }

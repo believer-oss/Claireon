@@ -15,7 +15,10 @@ FString ClaireonBlackboardTool_Close::GetOperation() const { return TEXT("close"
 
 FString ClaireonBlackboardTool_Close::GetDescription() const
 {
-	return TEXT("Close a Blackboard editing session. Optionally save before closing.");
+	return TEXT("Close a Blackboard editing session opened by blackboard.open, releasing the "
+				"'blackboard_edit' lock so another cohort can acquire it. Optionally saves the asset "
+				"before closing; in-flight transactional key edits are discarded when save is not "
+				"requested.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlackboardTool_Close::GetInputSchema() const

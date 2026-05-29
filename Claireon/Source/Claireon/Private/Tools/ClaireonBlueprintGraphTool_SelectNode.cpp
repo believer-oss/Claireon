@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_SelectNode::GetOperation() const { return TEX
 
 FString ClaireonBlueprintGraphTool_SelectNode::GetDescription() const
 {
-    return TEXT("Move the cursor to a specific node by GUID in the open Blueprint editing session. Requires open session_id from blueprint_graph_open. Read-only with respect to graph contents (cursor is session state). The node_id must be the exact GUID returned by blueprint_graph_get_state or blueprint_graph_add_node. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Move the cursor to a specific node by GUID in the open Blueprint editing session. Requires open session_id from bp_open. Read-only with respect to graph contents (cursor is session state). The node_id must be the exact GUID returned by bp_get_state or bp_add_node. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SelectNode::GetInputSchema() const

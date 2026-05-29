@@ -37,7 +37,7 @@ FString ClaireonLandscapeTool_Create::GetOperation() const { return TEXT("create
 
 FString ClaireonLandscapeTool_Create::GetDescription() const
 {
-	return TEXT("Create a new landscape actor in the current world and open a session on it.");
+    return TEXT("Create a new landscape actor in the current world and open a session on it so subsequent edits run in-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeTool_Create::GetInputSchema() const

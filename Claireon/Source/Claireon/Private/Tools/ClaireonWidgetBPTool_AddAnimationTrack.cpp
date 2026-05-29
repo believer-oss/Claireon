@@ -18,7 +18,7 @@ FString ClaireonWidgetBPTool_AddAnimationTrack::GetOperation() const { return TE
 
 FString ClaireonWidgetBPTool_AddAnimationTrack::GetDescription() const
 {
-    return TEXT("Add a track to a UWidgetAnimation.");
+    return TEXT("Add a track to a UWidgetAnimation in the open widget BP session. Session-mode tool: open via widgetbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_AddAnimationTrack::GetInputSchema() const

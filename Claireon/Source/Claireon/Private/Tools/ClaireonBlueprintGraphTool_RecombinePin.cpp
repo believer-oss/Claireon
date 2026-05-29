@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_RecombinePin::GetOperation() const { return T
 
 FString ClaireonBlueprintGraphTool_RecombinePin::GetDescription() const
 {
-    return TEXT("Recombine a previously split struct pin in the open Blueprint editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: connections to sub-pins are dropped on recombine; cache them and reconnect to the parent pin after if needed. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Recombine a previously split struct pin in the open Blueprint editing session. Requires open session_id from bp_open (or pass asset_path to auto-open). Transactional. Common pitfall: connections to sub-pins are dropped on recombine; cache them and reconnect to the parent pin after if needed. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_RecombinePin::GetInputSchema() const

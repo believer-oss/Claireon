@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -102,7 +102,7 @@ FString ClaireonBlueprintGraphTool_AddInterface::GetOperation() const { return T
 
 FString ClaireonBlueprintGraphTool_AddInterface::GetDescription() const
 {
-    return TEXT("Add an interface to the Blueprint's ImplementedInterfaces in the open editing session and compile. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: interface_path must reference a UInterface-derived BlueprintType class. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Add an interface to the Blueprint's ImplementedInterfaces in the open editing session and compile. Requires open session_id from bp_open (or pass asset_path to auto-open). Transactional. Common pitfall: interface_path must reference a UInterface-derived BlueprintType class. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddInterface::GetInputSchema() const

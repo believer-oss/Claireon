@@ -12,7 +12,7 @@ FString ClaireonLandscapeSplineTool_SetControlPoint::GetOperation() const { retu
 
 FString ClaireonLandscapeSplineTool_SetControlPoint::GetDescription() const
 {
-	return TEXT("Modify properties of an existing spline control point (location, rotation, width, side falloff).");
+    return TEXT("Modify properties of an existing spline control point (location, rotation, width, side falloff). Session-mode tool: open via landscape_spline_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeSplineTool_SetControlPoint::GetInputSchema() const

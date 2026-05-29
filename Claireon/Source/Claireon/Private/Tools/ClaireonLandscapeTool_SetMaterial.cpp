@@ -13,7 +13,7 @@ FString ClaireonLandscapeTool_SetMaterial::GetOperation() const { return TEXT("s
 
 FString ClaireonLandscapeTool_SetMaterial::GetDescription() const
 {
-	return TEXT("Assign a UMaterialInterface to the session's landscape.");
+    return TEXT("Set the landscape material by assigning a UMaterialInterface to the session's landscape. Session-mode tool: open via landscape_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeTool_SetMaterial::GetInputSchema() const

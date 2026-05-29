@@ -809,7 +809,7 @@ FString ClaireonAnimTool_RetimeSegment::GetOperation() const { return TEXT("reti
 
 FString ClaireonAnimTool_RetimeSegment::GetDescription() const
 {
-	return TEXT("Change the timing of a montage segment in the open animation editing session. Requires open session_id from anim_open. Transactional. Pass retime_notifies=true to scale notify times that fall inside the segment by the same factor; otherwise notify times are left as-is and may end up outside the new segment range.");
+    return TEXT("Retime a montage segment in the open animation editing session. Requires open session_id from anim_open. Transactional. Pass retime_notifies=true to scale notify times that fall inside the segment by the same factor; otherwise notify times are left as-is and may end up outside the new segment range.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_RetimeSegment::GetInputSchema() const

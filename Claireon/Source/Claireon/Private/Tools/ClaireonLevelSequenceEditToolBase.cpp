@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonLevelSequenceEditToolBase.h"
 #include "Tools/ClaireonSequenceHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
 #include "LevelSequence.h"
 
@@ -112,8 +113,11 @@ FToolResult ClaireonLevelSequenceEditToolBase::BuildStateResponse(const FString&
 		Response->SetStringField(TEXT("sequence_structure"), Structure);
 	}
 
+	FString SessionHintSummaryTag;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(Response, Data->ConsecutiveAssetPathCalls, AssetPath, SessionId, SessionHintSummaryTag);
+
 	const FString Summary = Data->LastOperationStatus.IsEmpty()
 		? FString::Printf(TEXT("Session %s: %s"), *SessionId, *AssetPath)
 		: Data->LastOperationStatus;
-	return MakeSuccessResult(Response, Summary);
+	return MakeSuccessResult(Response, Summary + SessionHintSummaryTag);
 }

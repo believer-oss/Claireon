@@ -4,6 +4,7 @@
 #include "Tools/ClaireonEQSTool_Open.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "Tools/ClaireonBehaviorTreeHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSessionManager.h"
 #include "EnvironmentQuery/EnvQuery.h"
@@ -20,7 +21,10 @@ TArray<FString> ClaireonEQSTool_Open::GetSearchKeywords() const
 
 FString ClaireonEQSTool_Open::GetDescription() const
 {
-	return TEXT("Open an EQS Query asset for editing. Returns a session_id for subsequent operations.");
+	return TEXT("Open an EQS (Environment Query System) Query asset for transactional editing and lock "
+				"it under tool name 'eqs_edit' so only one cohort holds it at a time. Returns a "
+				"session_id used by all subsequent EQS session ops (add_option, add_test, "
+				"set_generator, save, close). Also surfaces the asset editor when running headed.");
 }
 
 TSharedPtr<FJsonObject> ClaireonEQSTool_Open::GetInputSchema() const
@@ -71,6 +75,8 @@ FToolResult ClaireonEQSTool_Open::Execute(const TSharedPtr<FJsonObject>& Argumen
 	NewData.Query = Query;
 	NewData.LastOperationStatus = TEXT("Session opened");
 	ToolData.Add(SessionId, MoveTemp(NewData));
+
+	ClaireonAssetUtils::OpenAssetEditorIfHeadless(Query);
 
 	FString StructureText = ClaireonBehaviorTreeHelpers::FormatEQSStructure(Query, false);
 

@@ -14,7 +14,7 @@ FString ClaireonWidgetBPTool_DeleteAnimation::GetOperation() const { return TEXT
 
 FString ClaireonWidgetBPTool_DeleteAnimation::GetDescription() const
 {
-    return TEXT("Delete a UWidgetAnimation by name.");
+    return TEXT("Delete a UWidgetAnimation by name from the Widget Blueprint. Session-mode tool: open via widgetbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_DeleteAnimation::GetInputSchema() const

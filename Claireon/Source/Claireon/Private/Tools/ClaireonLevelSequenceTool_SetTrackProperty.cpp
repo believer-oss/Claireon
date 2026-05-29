@@ -17,7 +17,7 @@ FString ClaireonLevelSequenceTool_SetTrackProperty::GetOperation() const { retur
 
 FString ClaireonLevelSequenceTool_SetTrackProperty::GetDescription() const
 {
-	return TEXT("Set a UPROPERTY on a track by name. Uses ImportText for value coercion.");
+    return TEXT("Set a UPROPERTY on a track by name. Uses ImportText for value coercion. Session-mode tool: open via level_sequence_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_SetTrackProperty::GetInputSchema() const

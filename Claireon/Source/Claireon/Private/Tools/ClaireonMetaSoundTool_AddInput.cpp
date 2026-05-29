@@ -70,7 +70,9 @@ FString FClaireonMetaSoundTool_AddInput::GetOperation() const { return TEXT("add
 
 FString FClaireonMetaSoundTool_AddInput::GetDescription() const
 {
-	return TEXT("Add a graph input to the MetaSound (e.g. name='Volume', data_type='Float', default=0.5).");
+	return TEXT("Add a graph input to the MetaSound within the current session (e.g. name='Volume', "
+				"data_type='Float', default=0.5). Registered with the FMetaSoundFrontendDocumentBuilder "
+				"and immediately visible in the graph. Requires session_id from metasound.open.");
 }
 
 TSharedPtr<FJsonObject> FClaireonMetaSoundTool_AddInput::GetInputSchema() const

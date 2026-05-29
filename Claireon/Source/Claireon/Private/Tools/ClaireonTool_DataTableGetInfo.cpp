@@ -13,7 +13,7 @@ FString ClaireonTool_DataTableGetInfo::GetOperation() const { return TEXT("get_i
 
 FString ClaireonTool_DataTableGetInfo::GetDescription() const
 {
-	return TEXT("Get structural metadata about a data table Ã¢Â€Â” row struct, column definitions, row count");
+    return TEXT("Get structural metadata about a data table -- row struct, column definitions, row count. Stateless / read-only / non-session: reads the asset by path without opening any session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_DataTableGetInfo::GetInputSchema() const

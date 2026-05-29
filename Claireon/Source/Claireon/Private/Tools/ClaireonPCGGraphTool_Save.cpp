@@ -15,7 +15,10 @@ FString ClaireonPCGGraphTool_Save::GetOperation() const { return TEXT("save"); }
 
 FString ClaireonPCGGraphTool_Save::GetDescription() const
 {
-	return TEXT("Save the PCG Graph asset to disk.");
+	return TEXT("Save the PCG Graph asset to disk within the current session and clear the dirty "
+				"flag. Requires session_id from pcg_graph.open; the session stays open so further "
+				"transactional edits (add/remove nodes, connect/disconnect pins, set node properties) "
+				"remain available after the save.");
 }
 
 TSharedPtr<FJsonObject> ClaireonPCGGraphTool_Save::GetInputSchema() const

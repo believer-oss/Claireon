@@ -68,7 +68,9 @@ FString FClaireonMetaSoundTool_SetDefault::GetOperation() const { return TEXT("s
 
 FString FClaireonMetaSoundTool_SetDefault::GetDescription() const
 {
-	return TEXT("Set the default value of a MetaSound graph input by name.");
+	return TEXT("Set the default value of a MetaSound graph input by name within the current session. "
+				"The value is applied via the FMetaSoundFrontendDocumentBuilder and takes effect on "
+				"the next save or builder commit. Requires session_id from metasound.open.");
 }
 
 TSharedPtr<FJsonObject> FClaireonMetaSoundTool_SetDefault::GetInputSchema() const

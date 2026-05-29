@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_Create::GetOperation() const { return TEXT("c
 
 FString ClaireonBlueprintGraphTool_Create::GetDescription() const
 {
-    return TEXT("Create a new Blueprint from scratch. Stateless / non-session: writes the asset to disk immediately. Accepts asset_path, parent_class, and graph scaffolding parameters. Common pitfall: parent_class must be a Blueprintable native class; the package directory portion of asset_path must already exist.");
+    return TEXT("Create a new blueprint asset at asset_path and open a session for editing. Returns session_id; pair with bp_close to release the session, or let it expire on idle timeout. Auto-opens a session as a side effect of creation. Common pitfall: parent_class must be a Blueprintable native class; the package directory portion of asset_path must already exist. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Create::GetInputSchema() const
@@ -241,7 +241,7 @@ FToolResult ClaireonBlueprintGraphTool_Create::Execute(const TSharedPtr<FJsonObj
 	// Open session via the manager (handles locking)
 	double TimeoutMinutes = 60.0;
 	Params->TryGetNumberField(TEXT("timeout_minutes"), TimeoutMinutes);
-	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(Blueprint->GetPathName(), TEXT("blueprint_edit_graph"), TimeoutMinutes);
+	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(Blueprint->GetPathName(), TEXT("bp"), TimeoutMinutes);
 
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{

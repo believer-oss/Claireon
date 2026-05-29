@@ -18,7 +18,7 @@ FString ClaireonTool_PIEGetComponent::GetOperation() const { return TEXT("get_co
 
 FString ClaireonTool_PIEGetComponent::GetDescription() const
 {
-	return TEXT("Find a component on an actor by class name. Optionally includes component property details via reflection.");
+    return TEXT("Find a component on an actor by class name. Optionally includes component property details via reflection. Read-only / non-session inspector: reads the paused PIE world without opening any asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PIEGetComponent::GetInputSchema() const

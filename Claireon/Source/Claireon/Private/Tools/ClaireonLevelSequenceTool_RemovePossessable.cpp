@@ -15,7 +15,7 @@ FString ClaireonLevelSequenceTool_RemovePossessable::GetOperation() const { retu
 
 FString ClaireonLevelSequenceTool_RemovePossessable::GetDescription() const
 {
-	return TEXT("Remove a binding (possessable or spawnable) from the Level Sequence by label or guid.");
+    return TEXT("Remove a binding (possessable or spawnable) from the Level Sequence by label or guid. Session-mode tool: open via level_sequence_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_RemovePossessable::GetInputSchema() const

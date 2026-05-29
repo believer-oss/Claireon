@@ -7,7 +7,7 @@
 #include "FindInBlueprintManager.h"
 #include "HAL/PlatformProcess.h"
 
-FString ClaireonTool_SearchInBlueprints::GetCategory() const { return TEXT("blueprint"); }
+FString ClaireonTool_SearchInBlueprints::GetCategory() const { return TEXT("bp"); }
 FString ClaireonTool_SearchInBlueprints::GetOperation() const { return TEXT("search"); }
 
 TArray<FString> ClaireonTool_SearchInBlueprints::GetSearchKeywords() const
@@ -17,7 +17,7 @@ TArray<FString> ClaireonTool_SearchInBlueprints::GetSearchKeywords() const
 
 FString ClaireonTool_SearchInBlueprints::GetDescription() const
 {
-	return TEXT("Search within Blueprint content (nodes, pins, values, comments). Equivalent to Edit > Find in Blueprints. Supports expression syntax: plain text, Nodes(\"Name\"), Pins(\"Name\"), AND/OR/NOT.");
+    return TEXT("Search within Blueprint content (nodes, pins, values, comments). Equivalent to Edit > Find in Blueprints. Supports expression syntax: plain text, Nodes(\"Name\"), Pins(\"Name\"), AND/OR/NOT. Stateless / read-only / non-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_SearchInBlueprints::GetInputSchema() const

@@ -14,7 +14,7 @@ FString ClaireonNiagaraTool_ListModules::GetOperation() const { return TEXT("lis
 
 FString ClaireonNiagaraTool_ListModules::GetDescription() const
 {
-	return TEXT("List available Niagara module scripts (session-less).");
+    return TEXT("List available Niagara module scripts. Stateless / non-session: enumerates the registered module-script library without opening any asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_ListModules::GetInputSchema() const

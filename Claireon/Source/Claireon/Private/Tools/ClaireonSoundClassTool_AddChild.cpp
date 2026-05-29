@@ -16,7 +16,9 @@ FString FClaireonSoundClassTool_AddChild::GetOperation() const { return TEXT("ad
 
 FString FClaireonSoundClassTool_AddChild::GetDescription() const
 {
-	return TEXT("Append a USoundClass to another USoundClass's ChildClasses (AddUnique).");
+	return TEXT("Add a child USoundClass to another USoundClass's ChildClasses array (AddUnique). "
+				"Non-session, immediate operation; no session_id required. Saves the parent asset "
+				"on success. Use soundclass.remove_child to undo the relationship.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundClassTool_AddChild::GetInputSchema() const

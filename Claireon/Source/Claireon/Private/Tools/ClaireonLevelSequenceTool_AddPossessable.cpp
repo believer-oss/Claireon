@@ -16,7 +16,7 @@ FString ClaireonLevelSequenceTool_AddPossessable::GetOperation() const { return 
 
 FString ClaireonLevelSequenceTool_AddPossessable::GetDescription() const
 {
-	return TEXT("Add a possessable binding (a reference to an existing world actor) to the Level Sequence. Focuses the new binding.");
+    return TEXT("Add a possessable binding (a reference to an existing world actor) to the Level Sequence and focus the new binding. Session-mode tool: open via level_sequence_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_AddPossessable::GetInputSchema() const

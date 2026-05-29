@@ -4,6 +4,7 @@
 #include "Tools/ClaireonMaterialTool_Open.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "Tools/ClaireonMaterialHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
 #include "Materials/Material.h"
 
@@ -13,7 +14,7 @@ FString ClaireonMaterialTool_Open::GetOperation() const { return TEXT("open"); }
 
 FString ClaireonMaterialTool_Open::GetDescription() const
 {
-	return TEXT("Open a UMaterial asset for session-based editing (acquires a lock).");
+    return TEXT("Open a UMaterial asset for session-based editing (acquires a lock and returns a session_id so subsequent edits run in-session).");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialTool_Open::GetInputSchema() const
@@ -63,6 +64,8 @@ FToolResult ClaireonMaterialTool_Open::Execute(const TSharedPtr<FJsonObject>& Ar
 		NewData.bSuppressOutput = Arguments->GetBoolField(TEXT("suppress_output"));
 	}
 	ToolData.Add(SessionId, MoveTemp(NewData));
+
+	ClaireonAssetUtils::OpenAssetEditorIfHeadless(Material);
 
 	FMaterialEditToolData* Data = ToolData.Find(SessionId);
 	return BuildStateResponse(SessionId, Data);

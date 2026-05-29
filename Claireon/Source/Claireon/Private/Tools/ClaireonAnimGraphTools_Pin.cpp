@@ -153,7 +153,7 @@ FString ClaireonAnimGraphTool_HidePin::GetOperation() const { return TEXT("hide_
 
 FString ClaireonAnimGraphTool_HidePin::GetDescription() const
 {
-	return TEXT("Hide a previously exposed pin on an animation graph node.");
+    return TEXT("Hide a previously exposed pin on an animation graph node in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_HidePin::GetInputSchema() const
@@ -329,7 +329,7 @@ FString ClaireonAnimGraphTool_RemoveBinding::GetOperation() const { return TEXT(
 
 FString ClaireonAnimGraphTool_RemoveBinding::GetDescription() const
 {
-	return TEXT("Remove a property binding from an animation graph node.");
+    return TEXT("Remove a property binding from an animation graph node in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_RemoveBinding::GetInputSchema() const

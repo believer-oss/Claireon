@@ -18,9 +18,11 @@
 FString ClaireonTool_LandscapeImport::GetCategory() const { return TEXT("landscape"); }
 FString ClaireonTool_LandscapeImport::GetOperation() const { return TEXT("import"); }
 
+// TODO(#0000-followup): This tool dispatches on an action enum and could be
+// decomposed into per-action sub-tools.
 FString ClaireonTool_LandscapeImport::GetDescription() const
 {
-	return TEXT("Import heightmaps and weightmaps from external files (R16, PNG, RAW).");
+    return TEXT("Import heightmaps and weightmaps from external files (R16, PNG, RAW) into a landscape actor. Stateless / non-session: writes the landscape actor directly without opening any session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_LandscapeImport::GetInputSchema() const

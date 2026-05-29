@@ -13,7 +13,7 @@ FString ClaireonLandscapeSplineTool_RemoveControlPoint::GetOperation() const { r
 
 FString ClaireonLandscapeSplineTool_RemoveControlPoint::GetDescription() const
 {
-	return TEXT("Remove a spline control point and all segments connected to it.");
+    return TEXT("Remove a spline control point and all segments connected to it. Session-mode tool: open via landscape_spline_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeSplineTool_RemoveControlPoint::GetInputSchema() const

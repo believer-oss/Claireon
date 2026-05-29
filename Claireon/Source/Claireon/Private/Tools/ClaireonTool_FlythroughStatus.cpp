@@ -9,7 +9,7 @@ FString ClaireonTool_FlythroughStatus::GetOperation() const { return TEXT("flyth
 
 FString ClaireonTool_FlythroughStatus::GetDescription() const
 {
-	return TEXT("Poll flythrough progress, current position, elapsed time, and state.");
+    return TEXT("Poll flythrough progress, current position, elapsed time, and state. Stateless / read-only / non-session: reports the editor-wide flythrough state.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_FlythroughStatus::GetInputSchema() const

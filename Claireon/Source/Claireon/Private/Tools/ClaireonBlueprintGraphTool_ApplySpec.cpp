@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_ApplySpec::GetOperation() const { return TEXT
 
 FString ClaireonBlueprintGraphTool_ApplySpec::GetDescription() const
 {
-    return TEXT("Apply a declarative JSON specification to create/modify the Blueprint atomically in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. The spec runs as one rollback unit; partial failures revert all spec operations together. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Apply a declarative JSON specification to create/modify the Blueprint atomically. Transactional. The spec runs as one rollback unit; partial failures revert all spec operations together. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ApplySpec::GetInputSchema() const

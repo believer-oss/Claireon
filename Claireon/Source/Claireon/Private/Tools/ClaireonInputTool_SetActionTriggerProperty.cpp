@@ -14,7 +14,7 @@ FString ClaireonInputTool_SetActionTriggerProperty::GetOperation() const { retur
 
 FString ClaireonInputTool_SetActionTriggerProperty::GetDescription() const
 {
-	return TEXT("Set a property on a specific trigger of the Input Action.");
+    return TEXT("Set a property on a specific trigger of the Input Action. Session-mode tool: open via input_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonInputTool_SetActionTriggerProperty::GetInputSchema() const
