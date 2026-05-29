@@ -29,6 +29,9 @@
 #include "K2Node_Select.h"
 #include "K2Node_MakeArray.h"
 #include "K2Node_SpawnActorFromClass.h"
+#include "K2Node_Event.h"
+#include "K2Node_AsyncAction.h"
+#include "K2Node_GetArrayItem.h"
 #include "EdGraphNode_Comment.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -128,6 +131,8 @@ bool FClaireonSpecApplicator_Blueprint::ValidateToolSpec(const TSharedPtr<FJsonO
 
 bool FClaireonSpecApplicator_Blueprint::OpenOrCreateAsset(const FString& AssetPath, FString& OutSessionId, FString& OutError)
 {
+	const TSharedPtr<FJsonObject>& Spec = GetActiveSpec();
+
 	// Resolve path
 	auto ResolveResult = ClaireonPathResolver::Resolve(AssetPath);
 	if (!ResolveResult.bSuccess)
@@ -182,8 +187,30 @@ bool FClaireonSpecApplicator_Blueprint::OpenOrCreateAsset(const FString& AssetPa
 			return false;
 		}
 
+		// Resolve parent_class from spec if provided; otherwise default to Actor for
+		// backward compatibility.
+		UClass* ResolvedParentClass = AActor::StaticClass();
+		if (Spec.IsValid())
+		{
+			FString ParentClassName;
+			if (Spec->TryGetStringField(TEXT("parent_class"), ParentClassName) && !ParentClassName.IsEmpty())
+			{
+				ClaireonNameResolver::FNameResolveResult PR;
+				UClass* PC = ClaireonNameResolver::ResolveClassName(ParentClassName, nullptr, PR);
+				if (PC)
+				{
+					ResolvedParentClass = PC;
+				}
+				else
+				{
+					OutError = FString::Printf(TEXT("Failed to resolve parent_class '%s': %s"), *ParentClassName, *PR.Error);
+					return false;
+				}
+			}
+		}
+
 		BP = FKismetEditorUtilities::CreateBlueprint(
-			AActor::StaticClass(),
+			ResolvedParentClass,
 			Package,
 			FName(*AssetName),
 			BPTYPE_Normal,
@@ -274,7 +301,10 @@ bool FClaireonSpecApplicator_Blueprint::ApplyPass1_CreateEntities(const FString&
 			if (NodeType == TEXT("K2Node_CallFunction"))
 			{
 				FString FunctionName;
-				NodeObj->TryGetStringField(TEXT("function"), FunctionName);
+				if (!NodeObj->TryGetStringField(TEXT("function"), FunctionName))
+				{
+					NodeObj->TryGetStringField(TEXT("function_name"), FunctionName);
+				}
 				FString FunctionClass;
 				NodeObj->TryGetStringField(TEXT("function_class"), FunctionClass);
 
@@ -389,6 +419,67 @@ bool FClaireonSpecApplicator_Blueprint::ApplyPass1_CreateEntities(const FString&
 					DelayNode->FunctionReference.SetExternalMember(FName(TEXT("Delay")), LibClass);
 				}
 				NewNode = DelayNode;
+			}
+			else if (NodeType == TEXT("K2Node_Event"))
+			{
+				FString EventName, EventClass;
+				NodeObj->TryGetStringField(TEXT("event_name"), EventName);
+				NodeObj->TryGetStringField(TEXT("event_class"), EventClass);
+				bool bOverride = false;
+				NodeObj->TryGetBoolField(TEXT("override_function"), bOverride);
+
+				UK2Node_Event* EventNode = NewObject<UK2Node_Event>(Graph);
+				EventNode->bOverrideFunction = bOverride;
+				if (!EventClass.IsEmpty())
+				{
+					UClass* OwnerClass = FindFirstObject<UClass>(*EventClass, EFindFirstObjectOptions::NativeFirst);
+					if (OwnerClass && !EventName.IsEmpty())
+					{
+						EventNode->EventReference.SetExternalMember(FName(*EventName), OwnerClass);
+					}
+				}
+				NewNode = EventNode;
+			}
+			else if (NodeType == TEXT("K2Node_AsyncAction"))
+			{
+				FString ProxyClassName, ProxyFactoryFunc;
+				NodeObj->TryGetStringField(TEXT("proxy_class"), ProxyClassName);
+				if (!NodeObj->TryGetStringField(TEXT("proxy_factory_function"), ProxyFactoryFunc))
+				{
+					NodeObj->TryGetStringField(TEXT("function_name"), ProxyFactoryFunc);
+				}
+
+				UK2Node_AsyncAction* AsyncNode = NewObject<UK2Node_AsyncAction>(Graph);
+				if (!ProxyClassName.IsEmpty())
+				{
+					UClass* ProxyClass = FindFirstObject<UClass>(*ProxyClassName, EFindFirstObjectOptions::NativeFirst);
+					if (ProxyClass)
+					{
+						// UK2Node_BaseAsyncTask's ProxyClass/ProxyFactoryClass/ProxyFactoryFunctionName are
+						// `protected` C++ fields but are reflected (UPROPERTY); write via reflection.
+						UClass* BaseClass = UK2Node_AsyncAction::StaticClass();
+						if (FObjectProperty* PC = CastField<FObjectProperty>(BaseClass->FindPropertyByName(TEXT("ProxyClass"))))
+						{
+							PC->SetObjectPropertyValue_InContainer(AsyncNode, ProxyClass);
+						}
+						if (FObjectProperty* PFC = CastField<FObjectProperty>(BaseClass->FindPropertyByName(TEXT("ProxyFactoryClass"))))
+						{
+							PFC->SetObjectPropertyValue_InContainer(AsyncNode, ProxyClass);
+						}
+						if (!ProxyFactoryFunc.IsEmpty())
+						{
+							if (FNameProperty* PFFN = CastField<FNameProperty>(BaseClass->FindPropertyByName(TEXT("ProxyFactoryFunctionName"))))
+							{
+								PFFN->SetPropertyValue_InContainer(AsyncNode, FName(*ProxyFactoryFunc));
+							}
+						}
+					}
+				}
+				NewNode = AsyncNode;
+			}
+			else if (NodeType == TEXT("K2Node_GetArrayItem"))
+			{
+				NewNode = NewObject<UK2Node_GetArrayItem>(Graph);
 			}
 			else
 			{

@@ -17,6 +17,7 @@ IClaireonTool::FToolResult FClaireonSpecApplicatorBase::ApplySpec(
 {
 	// 1. Reset accumulated state
 	Reset();
+	ActiveSpec = Spec;
 
 	UE_LOG(LogClaireon, Log, TEXT("[apply_spec:%s] Starting apply_spec for %s"), *GetToolName(), *AssetPath);
 
@@ -270,4 +271,5 @@ void FClaireonSpecApplicatorBase::Reset()
 	Warnings.Empty();
 	Errors.Empty();
 	bCriticalError = false;
+	ActiveSpec.Reset();
 }

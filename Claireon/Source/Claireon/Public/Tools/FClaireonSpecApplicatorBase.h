@@ -46,8 +46,15 @@ protected:
 	/** Validate tool-specific semantic rules (called after structural validation). */
 	virtual bool ValidateToolSpec(const TSharedPtr<FJsonObject>& Spec, TArray<FString>& OutErrors) = 0;
 
-	/** Open or create the asset, returning a session ID. */
+	/**
+	 * Open or create the asset, returning a session ID. During Apply() the active
+	 * Spec is available via GetActiveSpec(); subclasses that auto-create can read
+	 * spec hints (e.g. parent_class) from it.
+	 */
 	virtual bool OpenOrCreateAsset(const FString& AssetPath, FString& OutSessionId, FString& OutError) = 0;
+
+	/** Returns the Spec currently being applied; valid only during Apply(). May be null when called outside Apply(). */
+	const TSharedPtr<FJsonObject>& GetActiveSpec() const { return ActiveSpec; }
 
 	/** Pass 1: Create all entities (nodes, states, widgets, etc.). */
 	virtual bool ApplyPass1_CreateEntities(const FString& SessionId, const TSharedPtr<FJsonObject>& Spec) = 0;
@@ -125,6 +132,9 @@ private:
 
 	/** Whether a critical error has occurred */
 	bool bCriticalError = false;
+
+	/** Spec currently being applied. Set at the start of Apply(); cleared at the end. */
+	TSharedPtr<FJsonObject> ActiveSpec;
 
 	/** Build the FToolResult from accumulated state */
 	IClaireonTool::FToolResult BuildResult(bool bSuccess) const;
