@@ -13,7 +13,9 @@ FString FClaireonSoundCueTool_SetFocusedNode::GetOperation() const { return TEXT
 
 FString FClaireonSoundCueTool_SetFocusedNode::GetDescription() const
 {
-	return TEXT("Set the session's focused-node index. Used by add_node default placement (offset +300 from focused).");
+	return TEXT("Set the focused-node index for the current SoundCue session. The focused node is used "
+				"by add_node to compute a default EdGraph position (+300 units offset). "
+				"Requires an open session; pass session_id from a prior soundcue.open call.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundCueTool_SetFocusedNode::GetInputSchema() const

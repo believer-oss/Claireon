@@ -12,7 +12,7 @@ FString ClaireonTool_TransactionUndo::GetOperation() const { return TEXT("undo")
 
 FString ClaireonTool_TransactionUndo::GetDescription() const
 {
-	return TEXT("Undo the last N transactions. Returns descriptions of undone entries.");
+    return TEXT("Undo the last N transactions. Returns descriptions of undone entries. Stateless / non-session: drives the editor-wide transactor without opening any per-asset session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_TransactionUndo::GetInputSchema() const

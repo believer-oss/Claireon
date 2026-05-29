@@ -13,7 +13,7 @@ FString ClaireonTool_ChooserSetResultType::GetOperation() const { return TEXT("s
 
 FString ClaireonTool_ChooserSetResultType::GetDescription() const
 {
-	return TEXT("Set the result type (ObjectResult or ClassResult) on a ChooserTable.");
+    return TEXT("Set the result type (ObjectResult or ClassResult) on a ChooserTable. Stateless / non-session: writes the asset directly by path, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ChooserSetResultType::GetInputSchema() const

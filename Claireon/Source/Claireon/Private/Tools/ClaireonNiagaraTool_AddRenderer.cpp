@@ -16,7 +16,7 @@ FString ClaireonNiagaraTool_AddRenderer::GetOperation() const { return TEXT("add
 
 FString ClaireonNiagaraTool_AddRenderer::GetDescription() const
 {
-	return TEXT("Add a renderer (e.g. Sprite, Mesh) to an emitter.");
+    return TEXT("Add a renderer (e.g. Sprite, Mesh) to an emitter in the open Niagara session. Session-mode tool: open via niagara_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_AddRenderer::GetInputSchema() const

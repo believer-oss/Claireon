@@ -18,7 +18,7 @@ FString ClaireonTool_ProjectInfo::GetOperation() const { return TEXT("info"); }
 
 FString ClaireonTool_ProjectInfo::GetDescription() const
 {
-	return TEXT("Get project name, modules, plugins, and engine association");
+    return TEXT("Get the project name, modules, plugins, and engine association. Stateless / read-only / non-session: reports static project identity without opening any asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ProjectInfo::GetInputSchema() const

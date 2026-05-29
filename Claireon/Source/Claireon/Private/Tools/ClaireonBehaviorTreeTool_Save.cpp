@@ -14,7 +14,10 @@ FString ClaireonBehaviorTreeTool_Save::GetOperation() const { return TEXT("save"
 
 FString ClaireonBehaviorTreeTool_Save::GetDescription() const
 {
-	return TEXT("Save the Behavior Tree asset to disk.");
+	return TEXT("Save the Behavior Tree asset to disk within the current session and clear the dirty "
+				"flag. Requires session_id from behavior_tree.open; the session stays open so further "
+				"transactional edits (add/remove nodes, decorators, services) remain available after "
+				"the save.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBehaviorTreeTool_Save::GetInputSchema() const

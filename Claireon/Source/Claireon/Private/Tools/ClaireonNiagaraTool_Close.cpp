@@ -15,7 +15,7 @@ FString ClaireonNiagaraTool_Close::GetOperation() const { return TEXT("close"); 
 
 FString ClaireonNiagaraTool_Close::GetDescription() const
 {
-	return TEXT("Close a Niagara edit session. Optionally save first.");
+    return TEXT("Close a Niagara edit session, optionally saving the asset first before releasing the session lock.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_Close::GetInputSchema() const

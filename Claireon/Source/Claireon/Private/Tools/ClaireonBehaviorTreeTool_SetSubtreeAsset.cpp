@@ -17,7 +17,9 @@ FString ClaireonBehaviorTreeTool_SetSubtreeAsset::GetOperation() const { return 
 
 FString ClaireonBehaviorTreeTool_SetSubtreeAsset::GetDescription() const
 {
-	return TEXT("Set the BehaviorAsset property on a BTTask_RunBehavior node so it invokes a sub-behavior tree.");
+	return TEXT("Set the BehaviorAsset property on a BTTask_RunBehavior node within an open Behavior "
+				"Tree session so it invokes a sub-behavior tree at runtime. Requires session_id from "
+				"behavior_tree.open; the edit is transactional and only persists after save.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBehaviorTreeTool_SetSubtreeAsset::GetInputSchema() const

@@ -23,6 +23,10 @@ struct FAnimGraphEditToolData
 	TSet<FGuid> LastOperationAffectedNodes;
 	TMap<FGuid, TMap<FName, TArray<FString>>> PreOpPinConnections;
 	TMap<FGuid, FGuid> GuidCorrections;
+
+	/** Counts consecutive calls resolved via asset_path (no session_id). Used by EmitSessionHintIfNeeded. */
+	int32 ConsecutiveAssetPathCalls = 0;
+
 	bool IsValid() const { return AnimBlueprint.IsValid() && CurrentGraph.IsValid(); }
 };
 

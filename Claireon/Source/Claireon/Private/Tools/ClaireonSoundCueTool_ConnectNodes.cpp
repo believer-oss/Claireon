@@ -16,7 +16,9 @@ FString FClaireonSoundCueTool_ConnectNodes::GetOperation() const { return TEXT("
 
 FString FClaireonSoundCueTool_ConnectNodes::GetDescription() const
 {
-	return TEXT("Wire parent.ChildNodes[slot] = child on the SoundCue and mirror onto the EdGraph (I5).");
+	return TEXT("Connect a child sound node into a parent node slot within the current session. "
+				"Sets parent.ChildNodes[slot] on the runtime tree and mirrors the link onto the "
+				"EdGraph in one FScopedTransaction. Requires session_id from soundcue.open.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundCueTool_ConnectNodes::GetInputSchema() const

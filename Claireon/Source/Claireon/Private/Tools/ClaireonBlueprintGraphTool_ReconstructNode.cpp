@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_ReconstructNode::GetOperation() const { retur
 
 FString ClaireonBlueprintGraphTool_ReconstructNode::GetDescription() const
 {
-    return TEXT("Reconstruct a node in place to refresh its pins from the current class definition. Requires open session_id from blueprint_graph_open OR pass asset_path for stateless single-shot mode. Transactional. Use after editing the underlying UFUNCTION/struct so the node picks up the new pin layout. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Reconstruct a node in place to refresh its pins from the current class definition. Requires open session_id from bp_open OR pass asset_path for stateless single-shot mode. Transactional. Use after editing the underlying UFUNCTION/struct so the node picks up the new pin layout. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ReconstructNode::GetInputSchema() const

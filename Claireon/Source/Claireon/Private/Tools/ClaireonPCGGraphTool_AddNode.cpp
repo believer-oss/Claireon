@@ -15,7 +15,10 @@ FString ClaireonPCGGraphTool_AddNode::GetOperation() const { return TEXT("add_no
 
 FString ClaireonPCGGraphTool_AddNode::GetDescription() const
 {
-	return TEXT("Add a new node to the PCG graph using a settings class name. Focuses on the new node and returns the updated graph state.");
+	return TEXT("Add a new node to the PCG graph using a settings class name within an open editing "
+				"session. Requires session_id from pcg_graph.open; the edit is transactional and only "
+				"persists after save. Focuses the session cursor on the new node and returns the "
+				"updated graph state. Use list_node_types to discover valid settings classes.");
 }
 
 TSharedPtr<FJsonObject> ClaireonPCGGraphTool_AddNode::GetInputSchema() const

@@ -13,7 +13,7 @@ FString ClaireonTool_AssetExists::GetOperation() const { return TEXT("exists"); 
 
 FString ClaireonTool_AssetExists::GetDescription() const
 {
-	return TEXT("Thin wrapper over UEditorAssetLibrary::DoesAssetExist. Returns whether the given /Game/ path holds an asset.");
+    return TEXT("Check whether the given /Game/ path holds an asset, via UEditorAssetLibrary::DoesAssetExist. Stateless / read-only / non-session tool: no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AssetExists::GetInputSchema() const

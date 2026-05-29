@@ -4,6 +4,7 @@
 #include "Tools/ClaireonBlackboardTool_Open.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "Tools/ClaireonBehaviorTreeHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSessionManager.h"
 #include "BehaviorTree/BlackboardData.h"
@@ -20,7 +21,10 @@ TArray<FString> ClaireonBlackboardTool_Open::GetSearchKeywords() const
 
 FString ClaireonBlackboardTool_Open::GetDescription() const
 {
-	return TEXT("Open a Blackboard Data asset for editing. Returns a session_id for subsequent operations.");
+	return TEXT("Open a Blackboard Data asset for transactional editing and lock it under tool name "
+				"'blackboard_edit' so only one cohort holds it at a time. Returns a session_id used by "
+				"all subsequent blackboard session ops (add_key, rename_key, set_key_type, save, close). "
+				"Also surfaces the asset editor when running headed.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlackboardTool_Open::GetInputSchema() const
@@ -71,6 +75,8 @@ FToolResult ClaireonBlackboardTool_Open::Execute(const TSharedPtr<FJsonObject>& 
 	NewData.BlackboardData = BB;
 	NewData.LastOperationStatus = TEXT("Session opened");
 	ToolData.Add(SessionId, MoveTemp(NewData));
+
+	ClaireonAssetUtils::OpenAssetEditorIfHeadless(BB);
 
 	FString StructureText = ClaireonBehaviorTreeHelpers::FormatBlackboardData(BB, false);
 

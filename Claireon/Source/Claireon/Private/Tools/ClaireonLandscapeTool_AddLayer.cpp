@@ -13,7 +13,7 @@ FString ClaireonLandscapeTool_AddLayer::GetOperation() const { return TEXT("add_
 
 FString ClaireonLandscapeTool_AddLayer::GetDescription() const
 {
-	return TEXT("Add a new weight layer to the landscape.");
+    return TEXT("Add a new weight layer to the landscape in the current session. Session-mode tool: open via landscape_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeTool_AddLayer::GetInputSchema() const

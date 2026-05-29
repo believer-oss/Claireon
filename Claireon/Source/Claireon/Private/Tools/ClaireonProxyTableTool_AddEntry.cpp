@@ -17,7 +17,7 @@ FString ClaireonTool_ProxyTableAddEntry::GetOperation() const { return TEXT("add
 
 FString ClaireonTool_ProxyTableAddEntry::GetDescription() const
 {
-	return TEXT("Add a new entry to a ProxyTable, mapping a ProxyAsset to a value.");
+    return TEXT("Add a new entry to a ProxyTable, mapping a ProxyAsset to a resolved value. Stateless / non-session: writes the asset directly by path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ProxyTableAddEntry::GetInputSchema() const

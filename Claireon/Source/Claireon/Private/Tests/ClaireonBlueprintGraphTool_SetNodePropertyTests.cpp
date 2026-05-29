@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Tests for claireon.blueprint_graph_set_node_property.
+// Tests for claireon.bp_set_node_property.
 //
 // Creates a throwaway Blueprint under /Game/__MCPTests/, drops a node into the
 // event graph via direct NewObject + AddNode, invokes the tool through its

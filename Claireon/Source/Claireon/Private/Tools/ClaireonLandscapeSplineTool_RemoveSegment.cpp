@@ -13,7 +13,7 @@ FString ClaireonLandscapeSplineTool_RemoveSegment::GetOperation() const { return
 
 FString ClaireonLandscapeSplineTool_RemoveSegment::GetDescription() const
 {
-	return TEXT("Remove a spline segment by index, disconnecting it from both control points.");
+    return TEXT("Remove a spline segment by index, disconnecting it from both control points. Session-mode tool: open via landscape_spline_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeSplineTool_RemoveSegment::GetInputSchema() const

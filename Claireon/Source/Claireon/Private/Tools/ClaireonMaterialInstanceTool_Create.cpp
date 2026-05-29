@@ -18,7 +18,7 @@ FString ClaireonMaterialInstanceTool_Create::GetOperation() const { return TEXT(
 
 FString ClaireonMaterialInstanceTool_Create::GetDescription() const
 {
-	return TEXT("Create a new UMaterialInstanceConstant asset and open a session on it.");
+    return TEXT("Create a new UMaterialInstanceConstant asset and open a session on it so subsequent edits run in-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialInstanceTool_Create::GetInputSchema() const

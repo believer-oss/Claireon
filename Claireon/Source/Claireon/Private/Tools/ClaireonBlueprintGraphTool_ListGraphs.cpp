@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_ListGraphs::GetOperation() const { return TEX
 
 FString ClaireonBlueprintGraphTool_ListGraphs::GetDescription() const
 {
-    return TEXT("List all graphs in a Blueprint by asset_path. Stateless / read-only / non-session: never mutates and requires no open session. Returns event-graph, function-graph, and macro-graph names. Use the returned name with blueprint_graph_open's graph_name parameter to start an editing session on a specific graph.");
+    return TEXT("List all graphs in a Blueprint by asset_path. Stateless / read-only / non-session: never mutates and requires no open session. Returns event-graph, function-graph, and macro-graph names. Use the returned name with bp_open's graph_name parameter to start an editing session on a specific graph.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ListGraphs::GetInputSchema() const

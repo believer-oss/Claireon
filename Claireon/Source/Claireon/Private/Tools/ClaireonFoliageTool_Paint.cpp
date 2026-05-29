@@ -15,7 +15,7 @@ FString ClaireonFoliageTool_Paint::GetOperation() const { return TEXT("paint"); 
 
 FString ClaireonFoliageTool_Paint::GetDescription() const
 {
-	return TEXT("Add foliage instances in a circular region. Uses line traces to place instances on ground geometry.");
+    return TEXT("Add foliage instances in a circular region. Uses line traces to place instances on ground geometry. Session-mode tool: open via foliage_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonFoliageTool_Paint::GetInputSchema() const

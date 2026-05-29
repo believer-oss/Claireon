@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonAnimEditToolBase.h"
 #include "Tools/ClaireonAnimHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
 #include "ClaireonLog.h"
 #include "Animation/AnimSequence.h"
@@ -131,7 +132,10 @@ FToolResult ClaireonAnimEditToolBase::BuildStateResponse(const FString& SessionI
 	const FString Summary = FString::Printf(TEXT("Session %s: %s"),
 		*SessionId.Left(8), *Data->LastOperationStatus);
 
-	return MakeSuccessResult(ResponseData, Summary);
+	FString SessionHintSummaryTag;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResponseData, Data->ConsecutiveAssetPathCalls, Data->Animation->GetPathName(), SessionId, SessionHintSummaryTag);
+
+	return MakeSuccessResult(ResponseData, Summary + SessionHintSummaryTag);
 }
 
 // ============================================================================

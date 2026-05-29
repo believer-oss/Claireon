@@ -14,7 +14,7 @@ FString ClaireonTool_DataTableGetRow::GetOperation() const { return TEXT("get_ro
 
 FString ClaireonTool_DataTableGetRow::GetDescription() const
 {
-	return TEXT("Get all property values for a single row");
+    return TEXT("Get all property values for a single data table row. Stateless / read-only / non-session: reads the asset by path without opening any editing session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_DataTableGetRow::GetInputSchema() const

@@ -21,7 +21,7 @@ FString ClaireonTool_LogSearch::GetCategory() const
 
 FString ClaireonTool_LogSearch::GetDescription() const
 {
-	return TEXT("Search the full editor log file with a regex pattern. Returns matched lines with line numbers and optional context.");
+    return TEXT("Search the full editor log file with a regex pattern. Returns matched lines with line numbers and optional context. Stateless / read-only / non-session: reads the on-disk log file.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_LogSearch::GetInputSchema() const

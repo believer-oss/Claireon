@@ -112,7 +112,7 @@ FString ClaireonTool_MessageLogGet::GetCategory() const
 
 FString ClaireonTool_MessageLogGet::GetDescription() const
 {
-	return TEXT("Read the editor Message Log panel buffer for any category (Sequencer, AssetCheck, MapCheck, LoadErrors, Blueprint, PIE, BuildAndSubmitErrors, AnimBlueprintLog, PythonLog, MaterialLog, etc.). Returns the listing's per-page filtered container; this matches the unfiltered buffer when the user has not toggled severity checkboxes off in the panel header (the panel filters default to all-on). Pass page='all' to span every archived page (cost is unbounded -- prefer page='current' or a specific <index> when page_count is large). Category names are case-sensitive FNames -- match what the producer registered.");
+    return TEXT("Read the editor Message Log panel buffer for any category (Sequencer, AssetCheck, MapCheck, LoadErrors, Blueprint, PIE, etc.). Returns the listing's per-page filtered container; pass page='all' to span every archived page (cost is unbounded -- prefer page='current'). Category names are case-sensitive FNames. Stateless / read-only / non-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_MessageLogGet::GetInputSchema() const

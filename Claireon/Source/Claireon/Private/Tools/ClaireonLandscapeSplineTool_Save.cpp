@@ -14,7 +14,7 @@ FString ClaireonLandscapeSplineTool_Save::GetOperation() const { return TEXT("sp
 
 FString ClaireonLandscapeSplineTool_Save::GetDescription() const
 {
-	return TEXT("Save the landscape actor's package to disk.");
+    return TEXT("Save the landscape actor's package to disk for the current spline session. Session-mode tool: open via landscape_spline_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeSplineTool_Save::GetInputSchema() const

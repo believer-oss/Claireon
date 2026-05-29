@@ -13,7 +13,7 @@ FString ClaireonInputTool_SetActionProperty::GetOperation() const { return TEXT(
 
 FString ClaireonInputTool_SetActionProperty::GetDescription() const
 {
-	return TEXT("Set a property on the Input Action of this session (string-typed value).");
+    return TEXT("Set a property on the Input Action of this session (string-typed value, coerced via reflection). Session-mode tool: open via input_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonInputTool_SetActionProperty::GetInputSchema() const

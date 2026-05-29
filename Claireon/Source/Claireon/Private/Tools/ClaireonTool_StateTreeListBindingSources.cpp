@@ -15,7 +15,7 @@ FString ClaireonTool_StateTreeListBindingSources::GetOperation() const { return 
 
 FString ClaireonTool_StateTreeListBindingSources::GetDescription() const
 {
-	return TEXT("Enumerate binding sources for a State Tree asset (read-only). Always walks UStateTreeEditorData::VisitGlobalNodes for tree-wide sources (Context, TreeParameters, GlobalTask, Evaluator). When state_id is provided, also walks VisitStateNodes(state_id) which includes ancestor-chain parameters/tasks AND the StateEvent record for states with bHasRequiredEventToEnter = true (gap #6). Each record carries name, guid (consumable as add_binding's source_node_id), struct path, source_type (EStateTreeBindableStructSource enum string), and state_path. Per-call cost is linear in (globals + ancestor-chain nodes). Stateless / read-only / non-session.");
+    return TEXT("List binding sources for a State Tree asset. Walks UStateTreeEditorData::VisitGlobalNodes for tree-wide sources (Context, TreeParameters, GlobalTask, Evaluator). When state_id is provided, also walks VisitStateNodes(state_id) which includes ancestor-chain parameters/tasks plus the StateEvent record. Stateless / read-only / non-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_StateTreeListBindingSources::GetInputSchema() const

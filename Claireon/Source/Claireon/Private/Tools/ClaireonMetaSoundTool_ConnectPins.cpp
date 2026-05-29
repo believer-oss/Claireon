@@ -25,8 +25,9 @@ FString FClaireonMetaSoundTool_ConnectPins::GetOperation() const { return TEXT("
 
 FString FClaireonMetaSoundTool_ConnectPins::GetDescription() const
 {
-	return TEXT("Wire two pins on the MetaSound graph. Simple shape: connects a graph input's output pin "
-				"to a graph output's input pin (caller provides graph_input_name and graph_output_name).");
+	return TEXT("Connect two pins on the MetaSound graph within the current session. Links a graph "
+				"input output pin to a graph output input pin via graph_input_name and graph_output_name. "
+				"Requires session_id from a metasound.open call; changes are applied immediately.");
 }
 
 TSharedPtr<FJsonObject> FClaireonMetaSoundTool_ConnectPins::GetInputSchema() const

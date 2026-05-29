@@ -14,7 +14,9 @@ FString ClaireonBlackboardTool_Save::GetOperation() const { return TEXT("save");
 
 FString ClaireonBlackboardTool_Save::GetDescription() const
 {
-	return TEXT("Save the blackboard asset to disk.");
+	return TEXT("Save the Blackboard Data asset to disk within the current session and clear the dirty "
+				"flag. Requires session_id from blackboard.open; the session stays open so further "
+				"transactional key edits (add/remove/rename/retype) remain available after the save.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlackboardTool_Save::GetInputSchema() const

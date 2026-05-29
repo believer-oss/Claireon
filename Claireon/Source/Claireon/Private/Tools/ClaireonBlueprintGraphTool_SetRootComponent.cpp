@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_SetRootComponent::GetOperation() const { retu
 
 FString ClaireonBlueprintGraphTool_SetRootComponent::GetDescription() const
 {
-    return TEXT("Designate a scene component as the new root of the Blueprint's Simple Construction Script in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: only USceneComponent-derived components can be roots; non-scene components error. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Designate a scene component as the new root of the Blueprint's Simple Construction Script in the open editing session. Requires open session_id from bp_open (or pass asset_path to auto-open). Transactional. Common pitfall: only USceneComponent-derived components can be roots; non-scene components error. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetRootComponent::GetInputSchema() const

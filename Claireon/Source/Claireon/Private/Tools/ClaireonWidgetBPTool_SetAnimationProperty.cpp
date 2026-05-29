@@ -18,7 +18,7 @@ FString ClaireonWidgetBPTool_SetAnimationProperty::GetOperation() const { return
 
 FString ClaireonWidgetBPTool_SetAnimationProperty::GetDescription() const
 {
-    return TEXT("Set a property on a UWidgetAnimation (display_label, duration, display_rate).");
+    return TEXT("Set a property on a UWidgetAnimation (display_label, duration, display_rate). Session-mode tool: open via widgetbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_SetAnimationProperty::GetInputSchema() const

@@ -20,7 +20,7 @@ FString ClaireonWidgetBPTool_GetAnimationDetails::GetOperation() const { return 
 
 FString ClaireonWidgetBPTool_GetAnimationDetails::GetDescription() const
 {
-    return TEXT("Inspect tracks, bindings, and keyframes on a UWidgetAnimation.");
+    return TEXT("Inspect tracks, bindings, and keyframes on a UWidgetAnimation. Session-mode tool: open via widgetbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_GetAnimationDetails::GetInputSchema() const

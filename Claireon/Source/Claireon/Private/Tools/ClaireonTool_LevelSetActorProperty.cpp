@@ -20,7 +20,7 @@ FString ClaireonTool_LevelSetActorProperty::GetOperation() const { return TEXT("
 
 FString ClaireonTool_LevelSetActorProperty::GetDescription() const
 {
-	return TEXT("Set properties on actors in the currently loaded level by label, class, or path.");
+    return TEXT("Set properties on actors in the currently loaded level by label, class, or path. Stateless / non-session: writes actor properties directly without opening any session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_LevelSetActorProperty::GetInputSchema() const

@@ -4,6 +4,7 @@
 #include "Tools/ClaireonNiagaraTool_Open.h"
 #include "Tools/ClaireonNiagaraHelpers.h"
 #include "Tools/FToolSchemaBuilder.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSessionManager.h"
 #include "NiagaraSystem.h"
@@ -75,6 +76,8 @@ FToolResult ClaireonNiagaraTool_Open::Execute(const TSharedPtr<FJsonObject>& Arg
 		NewData.bSuppressOutput = Arguments->GetBoolField(TEXT("suppress_output"));
 	}
 	ToolData.Add(SessionId, MoveTemp(NewData));
+
+	ClaireonAssetUtils::OpenAssetEditorIfHeadless(System);
 
 	FNiagaraEditToolData* Data = ToolData.Find(SessionId);
 	return BuildStateResponse(SessionId, Data);

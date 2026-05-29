@@ -22,7 +22,7 @@ FString ClaireonTool_ChooserCreate::GetOperation() const { return TEXT("create")
 
 FString ClaireonTool_ChooserCreate::GetDescription() const
 {
-	return TEXT("Create a new empty ChooserTable asset. Optionally set the result type and output class.");
+    return TEXT("Create a new empty ChooserTable asset. Optionally set the result type and output class. Stateless / non-session: writes a new asset directly to the supplied path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ChooserCreate::GetInputSchema() const
@@ -112,7 +112,7 @@ FString ClaireonTool_ChooserDuplicate::GetOperation() const { return TEXT("dupli
 
 FString ClaireonTool_ChooserDuplicate::GetDescription() const
 {
-	return TEXT("Duplicate an existing ChooserTable asset to a new path.");
+    return TEXT("Duplicate an existing ChooserTable asset to a new path. Stateless / non-session: writes a new asset directly to the supplied path without opening a session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ChooserDuplicate::GetInputSchema() const

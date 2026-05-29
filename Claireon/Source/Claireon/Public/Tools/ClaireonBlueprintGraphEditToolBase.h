@@ -24,7 +24,7 @@ class CLAIREON_API ClaireonBlueprintGraphEditToolBase : public IClaireonTool
 {
 public:
 	virtual bool RequiresNoPIE() const override { return true; }
-	virtual FString GetCategory() const override { return TEXT("blueprint_graph"); }
+	virtual FString GetCategory() const override { return TEXT("bp"); }
 
 protected:
 	// ========================================================================

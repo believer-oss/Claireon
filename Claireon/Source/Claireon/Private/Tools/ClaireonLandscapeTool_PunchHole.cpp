@@ -14,7 +14,7 @@ FString ClaireonLandscapeTool_PunchHole::GetOperation() const { return TEXT("pun
 
 FString ClaireonLandscapeTool_PunchHole::GetDescription() const
 {
-	return TEXT("Toggle landscape visibility in a circular region to punch or fill holes.");
+    return TEXT("Toggle landscape visibility in a circular region to punch or fill holes. Session-mode tool: open via landscape_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeTool_PunchHole::GetInputSchema() const

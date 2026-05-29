@@ -10,7 +10,7 @@ class UEdGraphNode;
 
 /**
  * Shared serializer for Blueprint graph nodes. Used by both the session-based
- * claireon.blueprint_edit_graph inspect_node op and the stateless
+ * bp_inspect_node op and the stateless
  * claireon.blueprint_inspect_node tool.
  *
  * Payload shape is defined in FRACTURE/03_inspect_node.md. The serializer

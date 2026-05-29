@@ -16,7 +16,9 @@ FString FClaireonSoundMixTool_RemoveClassAdjuster::GetOperation() const { return
 
 FString FClaireonSoundMixTool_RemoveClassAdjuster::GetDescription() const
 {
-	return TEXT("Remove a class adjuster from USoundMix::SoundClassEffects by adjuster_index OR by sound_class_path.");
+	return TEXT("Remove a class adjuster from USoundMix::SoundClassEffects by adjuster_index or by "
+				"sound_class_path. Non-session, immediate operation; saves the mix asset on success. "
+				"Returns removed_count; 0 if the adjuster was not found.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundMixTool_RemoveClassAdjuster::GetInputSchema() const

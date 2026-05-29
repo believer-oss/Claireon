@@ -12,7 +12,7 @@ FString ClaireonFoliageTool_RemoveFoliageType::GetOperation() const { return TEX
 
 FString ClaireonFoliageTool_RemoveFoliageType::GetDescription() const
 {
-	return TEXT("Remove a foliage type and all its instances from the session's foliage actor.");
+    return TEXT("Remove a foliage type and all its instances from the session's foliage actor. Session-mode tool: open via foliage_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonFoliageTool_RemoveFoliageType::GetInputSchema() const

@@ -19,7 +19,10 @@ FString ClaireonBehaviorTreeTool_AddNode::GetOperation() const { return TEXT("ad
 
 FString ClaireonBehaviorTreeTool_AddNode::GetDescription() const
 {
-	return TEXT("Add a composite or task node as a child of an existing node. Use list_node_types to discover node classes.");
+	return TEXT("Add a composite or task node as a child of an existing node within an open Behavior "
+				"Tree session. Requires session_id from behavior_tree.open; the edit is transactional and "
+				"only persists after a save. Use list_node_types first to discover valid composite/task "
+				"node classes.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBehaviorTreeTool_AddNode::GetInputSchema() const

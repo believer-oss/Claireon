@@ -12,8 +12,10 @@ FString FClaireonMetaSoundTool_ApplySpec::GetOperation() const { return TEXT("ap
 
 FString FClaireonMetaSoundTool_ApplySpec::GetDescription() const
 {
-	return TEXT("Apply a MetaSoundSource declarative spec ({kind=\"MetaSoundSource\", asset_path, ...}). "
-				"Creates or locates the asset.");
+	return TEXT("Apply a MetaSoundSource declarative spec ({kind=\"MetaSoundSource\", asset_path, ...}) "
+				"in one shot. Non-session, stateless operation; no session_id required and no editor "
+				"session is opened. Creates or locates the target asset, then routes the spec body "
+				"through FClaireonSpecApplicator_Audio for in-place mutation and save.");
 }
 
 TSharedPtr<FJsonObject> FClaireonMetaSoundTool_ApplySpec::GetInputSchema() const

@@ -16,7 +16,7 @@ FString ClaireonTool_DataTableAddRow::GetOperation() const { return TEXT("add_ro
 
 FString ClaireonTool_DataTableAddRow::GetDescription() const
 {
-	return TEXT("Add a new row to a data table");
+    return TEXT("Add a new row to a data table at the given path. Stateless / non-session: writes the asset directly by path without opening any editing session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_DataTableAddRow::GetInputSchema() const

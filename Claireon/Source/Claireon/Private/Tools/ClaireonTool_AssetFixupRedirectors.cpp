@@ -15,7 +15,7 @@ FString ClaireonTool_AssetFixupRedirectors::GetOperation() const { return TEXT("
 
 FString ClaireonTool_AssetFixupRedirectors::GetDescription() const
 {
-	return TEXT("Find and optionally fix asset redirectors. Redirectors are left behind when assets are moved or renamed. Use dryRun to preview without making changes.");
+    return TEXT("Find and optionally fix asset redirectors. Redirectors are left behind when assets are moved or renamed. Use dryRun to preview without making changes. Stateless / non-session: operates directly on the asset registry.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AssetFixupRedirectors::GetInputSchema() const

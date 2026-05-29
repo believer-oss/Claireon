@@ -36,7 +36,7 @@ FString ClaireonAnimGraphTool_Create::GetOperation() const { return TEXT("create
 
 FString ClaireonAnimGraphTool_Create::GetDescription() const
 {
-	return TEXT("Create a new Animation Blueprint from scratch, optionally as a skeleton-agnostic template.");
+    return TEXT("Create a new Animation Blueprint from scratch, optionally as a skeleton-agnostic template. After creation the new AnimBP is opened as the active anim_graph editing session so subsequent edit calls can run immediately without an explicit open.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_Create::GetInputSchema() const
@@ -243,7 +243,7 @@ FString ClaireonAnimGraphTool_CreateChild::GetOperation() const { return TEXT("c
 
 FString ClaireonAnimGraphTool_CreateChild::GetDescription() const
 {
-	return TEXT("Create a child Animation Blueprint that inherits from an existing AnimBP.");
+    return TEXT("Create a child Animation Blueprint that inherits from an existing parent AnimBP, then open it as the active anim_graph session so subsequent edits run inside that session without an explicit open call.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_CreateChild::GetInputSchema() const
@@ -395,7 +395,7 @@ FString ClaireonAnimGraphTool_Duplicate::GetOperation() const { return TEXT("dup
 
 FString ClaireonAnimGraphTool_Duplicate::GetDescription() const
 {
-	return TEXT("Duplicate an existing Animation Blueprint to a new asset path.");
+    return TEXT("Duplicate an existing Animation Blueprint to a new asset path and open the duplicate as the active anim_graph editing session so subsequent edits run in-session without an explicit open call.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_Duplicate::GetInputSchema() const

@@ -13,7 +13,7 @@ FString ClaireonTool_ProxyAssetSetType::GetOperation() const { return TEXT("set_
 
 FString ClaireonTool_ProxyAssetSetType::GetDescription() const
 {
-	return TEXT("Set the Type class on a ProxyAsset.");
+    return TEXT("Set the Type class on a ProxyAsset by full class path. Stateless / non-session: writes the asset directly by path without opening a session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ProxyAssetSetType::GetInputSchema() const

@@ -16,7 +16,7 @@ FString ClaireonTool_DataTableRemoveRow::GetOperation() const { return TEXT("rem
 
 FString ClaireonTool_DataTableRemoveRow::GetDescription() const
 {
-	return TEXT("Remove a row by name");
+    return TEXT("Remove a data table row by name. Stateless / non-session: writes the asset directly by path without opening any editing session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_DataTableRemoveRow::GetInputSchema() const

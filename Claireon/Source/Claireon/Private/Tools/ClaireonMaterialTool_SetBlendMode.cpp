@@ -25,7 +25,7 @@ FString ClaireonMaterialTool_SetBlendMode::GetOperation() const { return TEXT("s
 
 FString ClaireonMaterialTool_SetBlendMode::GetDescription() const
 {
-	return TEXT("Set the material's blend mode (e.g. BLEND_Opaque, BLEND_Translucent).");
+    return TEXT("Set the material's blend mode (e.g. BLEND_Opaque, BLEND_Translucent). Session-mode tool: open via material_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialTool_SetBlendMode::GetInputSchema() const

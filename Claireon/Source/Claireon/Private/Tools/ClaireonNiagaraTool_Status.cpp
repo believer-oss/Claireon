@@ -10,7 +10,7 @@ FString ClaireonNiagaraTool_Status::GetOperation() const { return TEXT("status")
 
 FString ClaireonNiagaraTool_Status::GetDescription() const
 {
-	return TEXT("Return the current state of the Niagara edit session.");
+    return TEXT("Return the current state of the Niagara edit session, including emitters and parameter map.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_Status::GetInputSchema() const

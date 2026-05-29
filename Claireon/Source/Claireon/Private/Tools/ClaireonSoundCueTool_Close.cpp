@@ -13,7 +13,9 @@ FString FClaireonSoundCueTool_Close::GetOperation() const { return TEXT("close")
 
 FString FClaireonSoundCueTool_Close::GetDescription() const
 {
-	return TEXT("Close a USoundCue editing session and release the lock.");
+	return TEXT("Close a USoundCue editing session, releasing the asset lock and cleaning up tool data. "
+				"Call after all edits are complete to unblock other callers. "
+				"The session_id is invalidated after this call; subsequent ops must open a new session.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundCueTool_Close::GetInputSchema() const

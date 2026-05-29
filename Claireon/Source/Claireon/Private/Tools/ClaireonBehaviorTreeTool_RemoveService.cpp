@@ -15,7 +15,9 @@ FString ClaireonBehaviorTreeTool_RemoveService::GetOperation() const { return TE
 
 FString ClaireonBehaviorTreeTool_RemoveService::GetDescription() const
 {
-	return TEXT("Remove a service subnode from its parent node.");
+	return TEXT("Remove a service subnode from its parent composite or task node within an open "
+				"Behavior Tree session. Requires session_id from behavior_tree.open; the edit is "
+				"transactional and only persists after save.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBehaviorTreeTool_RemoveService::GetInputSchema() const

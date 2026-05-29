@@ -12,7 +12,7 @@ FString ClaireonMaterialInstanceTool_Save::GetOperation() const { return TEXT("i
 
 FString ClaireonMaterialInstanceTool_Save::GetDescription() const
 {
-	return TEXT("Save the UMaterialInstanceConstant's package to disk.");
+    return TEXT("Save the UMaterialInstanceConstant's package to disk for the current session. Session-mode tool: open via material_instance_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialInstanceTool_Save::GetInputSchema() const

@@ -32,6 +32,9 @@ struct FStateTreeEditToolData
 	/** When true, BuildStateResponse returns minimal output instead of full tree state */
 	bool bSuppressOutput = false;
 
+	/** Counts consecutive calls resolved via asset_path (no session_id). Used by EmitSessionHintIfNeeded. */
+	int32 ConsecutiveAssetPathCalls = 0;
+
 	/** Maximum size of cursor history */
 	static constexpr int32 MaxHistorySize = 50;
 

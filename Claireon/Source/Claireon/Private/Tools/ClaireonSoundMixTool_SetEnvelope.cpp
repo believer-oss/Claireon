@@ -16,7 +16,9 @@ FString FClaireonSoundMixTool_SetEnvelope::GetOperation() const { return TEXT("s
 FString FClaireonSoundMixTool_SetEnvelope::GetDescription() const
 {
 	return TEXT("Set the envelope (initial_delay/fade_in_time/duration/fade_out_time) on a USoundMix. "
-				"Each field is optional; only supplied fields are written.");
+				"Non-session, immediate operation; no session_id is needed. Each field is optional and "
+				"only supplied fields are written. Wraps the changes in FScopedTransaction and saves "
+				"the asset when at least one field was written.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundMixTool_SetEnvelope::GetInputSchema() const

@@ -13,7 +13,7 @@ FString ClaireonInputTool_RemoveActionModifier::GetOperation() const { return TE
 
 FString ClaireonInputTool_RemoveActionModifier::GetDescription() const
 {
-	return TEXT("Remove a modifier at the given index from the Input Action of this session.");
+    return TEXT("Remove a modifier at the given index from the Input Action of this session. Session-mode tool: open via input_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonInputTool_RemoveActionModifier::GetInputSchema() const

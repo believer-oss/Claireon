@@ -16,7 +16,7 @@ FString ClaireonTool_DataTableSearch::GetOperation() const { return TEXT("search
 
 FString ClaireonTool_DataTableSearch::GetDescription() const
 {
-	return TEXT("Search for data table assets by name, showing row struct and row count for each match");
+    return TEXT("Search for data table assets by name, showing row struct and row count for each match. Stateless / read-only / non-session: queries the Asset Registry.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_DataTableSearch::GetInputSchema() const

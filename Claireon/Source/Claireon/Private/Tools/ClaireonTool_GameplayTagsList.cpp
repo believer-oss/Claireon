@@ -12,7 +12,7 @@ FString ClaireonTool_GameplayTagsList::GetOperation() const { return TEXT("tags_
 
 FString ClaireonTool_GameplayTagsList::GetDescription() const
 {
-	return TEXT("Enumerate registered gameplay tags via UGameplayTagsManager. Optional case-sensitive prefix filter and include_source toggle for per-tag source attribution.");
+    return TEXT("Enumerate registered gameplay tags via UGameplayTagsManager. Optional case-sensitive prefix filter and include_source toggle for per-tag source attribution. Stateless / read-only / non-session: reads the in-memory tag tree.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_GameplayTagsList::GetInputSchema() const

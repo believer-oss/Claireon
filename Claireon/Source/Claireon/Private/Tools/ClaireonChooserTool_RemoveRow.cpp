@@ -15,7 +15,7 @@ FString ClaireonTool_ChooserRemoveRow::GetOperation() const { return TEXT("remov
 
 FString ClaireonTool_ChooserRemoveRow::GetDescription() const
 {
-	return TEXT("Remove a row from a ChooserTable by index.");
+    return TEXT("Remove a row from a ChooserTable by index. Stateless / non-session: writes the asset directly by path, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ChooserRemoveRow::GetInputSchema() const

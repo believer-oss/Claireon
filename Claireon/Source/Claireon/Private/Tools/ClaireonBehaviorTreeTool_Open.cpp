@@ -4,6 +4,7 @@
 #include "Tools/ClaireonBehaviorTreeTool_Open.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "Tools/ClaireonBehaviorTreeHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSessionManager.h"
 #include "BehaviorTree/BehaviorTree.h"
@@ -21,7 +22,10 @@ TArray<FString> ClaireonBehaviorTreeTool_Open::GetSearchKeywords() const
 
 FString ClaireonBehaviorTreeTool_Open::GetDescription() const
 {
-	return TEXT("Open a Behavior Tree asset for editing. Returns a session_id for subsequent operations.");
+	return TEXT("Open a Behavior Tree asset for transactional editing and lock it under tool name "
+				"'behavior_tree_edit' so only one cohort holds it at a time. Returns a session_id used by "
+				"all subsequent BT session ops (add_node, add_decorator, save, close, etc). Also surfaces "
+				"the asset editor when running headed.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBehaviorTreeTool_Open::GetInputSchema() const
@@ -84,6 +88,8 @@ FToolResult ClaireonBehaviorTreeTool_Open::Execute(const TSharedPtr<FJsonObject>
 	NewData.BTGraph = BTGraph;
 	NewData.LastOperationStatus = TEXT("Session opened");
 	ToolData.Add(SessionId, MoveTemp(NewData));
+
+	ClaireonAssetUtils::OpenAssetEditorIfHeadless(BT);
 
 	FString StructureText = ClaireonBehaviorTreeHelpers::FormatBTGraphStructure(BTGraph, false);
 

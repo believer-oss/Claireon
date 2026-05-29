@@ -16,7 +16,9 @@ FString FClaireonSoundCueTool_DisconnectNodes::GetOperation() const { return TEX
 
 FString FClaireonSoundCueTool_DisconnectNodes::GetDescription() const
 {
-	return TEXT("Clear parent.ChildNodes[slot] on the SoundCue and mirror onto the EdGraph (I5).");
+	return TEXT("Disconnect a child from a parent SoundNode slot within the current session. "
+				"Clears parent.ChildNodes[slot] on the runtime tree and mirrors the change onto the "
+				"EdGraph in one FScopedTransaction. Requires session_id from a soundcue.open call.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundCueTool_DisconnectNodes::GetInputSchema() const

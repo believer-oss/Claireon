@@ -18,7 +18,7 @@ FString ClaireonTool_LogTail::GetOperation() const { return TEXT("tail"); }
 
 FString ClaireonTool_LogTail::GetDescription() const
 {
-	return TEXT("Read recent lines from the editor log with optional filtering");
+    return TEXT("Read recent lines from the editor log with optional filtering. Stateless / read-only / non-session: tails the on-disk log file without opening any asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_LogTail::GetInputSchema() const

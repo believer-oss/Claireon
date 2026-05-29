@@ -13,7 +13,10 @@ FString ClaireonBlackboardTool_AddKey::GetOperation() const { return TEXT("add_k
 
 FString ClaireonBlackboardTool_AddKey::GetDescription() const
 {
-	return TEXT("Add a new key to the blackboard. Supported types: Bool, Int, Float, String, Name, Vector, Rotator, Object, Class, Enum.");
+	return TEXT("Add a new key to the Blackboard within an open editing session. Supported types: "
+				"Bool, Int, Float, String, Name, Vector, Rotator, Object, Class, Enum. Requires "
+				"session_id from blackboard.open; the edit is transactional and only persists after "
+				"save.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlackboardTool_AddKey::GetInputSchema() const

@@ -14,7 +14,7 @@ FString ClaireonTool_ProxyAssetSetResultType::GetOperation() const { return TEXT
 
 FString ClaireonTool_ProxyAssetSetResultType::GetDescription() const
 {
-	return TEXT("Set the result type (ObjectResult or ClassResult) on a ProxyAsset.");
+    return TEXT("Set the result type (ObjectResult or ClassResult) on a ProxyAsset. Stateless / non-session: writes the asset directly by path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ProxyAssetSetResultType::GetInputSchema() const

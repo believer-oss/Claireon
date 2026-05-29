@@ -13,7 +13,7 @@ FString ClaireonLandscapeSplineTool_AddSegment::GetOperation() const { return TE
 
 FString ClaireonLandscapeSplineTool_AddSegment::GetDescription() const
 {
-	return TEXT("Connect two existing control points with a new spline segment.");
+    return TEXT("Connect two existing control points with a new spline segment. Session-mode tool: open via landscape_spline_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeSplineTool_AddSegment::GetInputSchema() const

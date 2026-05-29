@@ -17,7 +17,7 @@ FString ClaireonPCGGraphTool_Close::GetOperation() const { return TEXT("close");
 
 FString ClaireonPCGGraphTool_Close::GetDescription() const
 {
-	return TEXT("Close a PCG Graph editing session. Optionally save the graph before closing.");
+    return TEXT("Close a PCG Graph editing session, optionally saving the graph before closing and releasing the session lock.");
 }
 
 TSharedPtr<FJsonObject> ClaireonPCGGraphTool_Close::GetInputSchema() const

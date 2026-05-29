@@ -169,7 +169,7 @@ UNTEST_UNIT(Claireon, ApplySpecHelp, SpecEntryTypesMatchMarkdownTable)
 		UNTEST_EXPECT_EQ((*Got)[0], FString(TEXT("nodes[]")));
 	}
 	{
-		const TArray<FString>* Got = ByTool.Find(TEXT("blueprint_edit_graph"));
+		const TArray<FString>* Got = ByTool.Find(TEXT("bp"));
 		UNTEST_ASSERT_TRUE(Got != nullptr);
 		UNTEST_ASSERT_EQ(Got->Num(), 3);
 		UNTEST_EXPECT_TRUE(Got->Contains(TEXT("nodes[]")));

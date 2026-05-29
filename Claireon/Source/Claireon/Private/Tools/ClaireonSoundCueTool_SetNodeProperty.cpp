@@ -17,7 +17,9 @@ FString FClaireonSoundCueTool_SetNodeProperty::GetOperation() const { return TEX
 
 FString FClaireonSoundCueTool_SetNodeProperty::GetDescription() const
 {
-	return TEXT("Set a USoundNode field by reflection (PreEditChange/PostEditChange fire, I7).");
+	return TEXT("Set a property on a USoundNode by reflection within the current session. "
+				"PreEditChange and PostEditChange fire for proper CDO propagation. "
+				"Requires an open session; pass session_id and the node_index to target the node.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundCueTool_SetNodeProperty::GetInputSchema() const

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_SetPinValue::GetSearchKeywords() cons
 
 FString ClaireonBlueprintGraphTool_SetPinValue::GetDescription() const
 {
-    return TEXT("Sets a pin's default literal value on the current session's graph (input pin only; the pin must be unconnected). Most-common pitfall: trying to set a value on a pin that is already wired to another node, which silently does nothing -- disconnect first via blueprint_graph_disconnect_pin. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Sets a pin's default literal value on the current session's graph (input pin only; the pin must be unconnected). Most-common pitfall: trying to set a value on a pin that is already wired to another node, which silently does nothing -- disconnect first via bp_disconnect_pin. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetPinValue::GetInputSchema() const
@@ -239,7 +239,7 @@ FString ClaireonBlueprintGraphTool_SetPinValue::GetFullDescription() const
         "Only applies to input pins that have NO incoming connection: a pin "
         "wired to another node ignores the literal value (the connection "
         "wins). If you need to override a wired pin, first disconnect it via "
-        "blueprint_graph_disconnect_pin. Value strings go through "
+        "bp_disconnect_pin. Value strings go through "
         "FProperty::ImportText_Direct, so primitives use plain text ('42', "
         "'1.5', 'true', 'Hello') while structs use the engine's text format "
         "(e.g. '(X=1.0,Y=2.0,Z=3.0)' for FVector). Object pins accept asset "
@@ -249,14 +249,14 @@ FString ClaireonBlueprintGraphTool_SetPinValue::GetFullDescription() const
 FString ClaireonBlueprintGraphTool_SetPinValue::GetExampleUsage() const
 {
     return TEXT(
-        "blueprint_graph_set_pin_value session_id=\"...\" "
+        "bp_set_pin_value session_id=\"...\" "
         "node=\"PrintString_0\" pin=\"InString\" value=\"Hello\"");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetPinValue::GetParameterTooltips() const
 {
     TSharedPtr<FJsonObject> T = MakeShared<FJsonObject>();
-    T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by blueprint_graph_open or _create."));
+    T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by bp_open or _create."));
     T->SetStringField(TEXT("node"), TEXT("Node identifier: GUID or human-readable title."));
     T->SetStringField(TEXT("pin"), TEXT("Pin name. Must be an INPUT pin with no incoming connection."));
     T->SetStringField(TEXT("value"), TEXT("Literal value as text. Primitives use plain text; structs use engine text format (e.g. (X=1,Y=2,Z=3))."));

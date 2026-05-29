@@ -31,6 +31,9 @@ struct FLandscapeEditToolData
 	/** When true, BuildStateResponse returns minimal output */
 	bool bSuppressOutput = false;
 
+	/** Counts consecutive calls resolved via asset_path (no session_id). Used by EmitSessionHintIfNeeded. */
+	int32 ConsecutiveAssetPathCalls = 0;
+
 	/** Check if the tool data is still valid */
 	bool IsValid() const
 	{

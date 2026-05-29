@@ -12,7 +12,7 @@ FString ClaireonMaterialTool_Save::GetOperation() const { return TEXT("save"); }
 
 FString ClaireonMaterialTool_Save::GetDescription() const
 {
-	return TEXT("Save the material asset of the current session to disk.");
+    return TEXT("Save the material asset of the current session to disk so in-session edits are persisted.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialTool_Save::GetInputSchema() const

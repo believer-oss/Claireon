@@ -13,7 +13,7 @@ FString ClaireonNiagaraTool_RemoveParameter::GetOperation() const { return TEXT(
 
 FString ClaireonNiagaraTool_RemoveParameter::GetDescription() const
 {
-	return TEXT("Remove an exposed User.* parameter from the Niagara System.");
+    return TEXT("Remove an exposed User.* parameter from the Niagara System. Session-mode tool: open via niagara_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_RemoveParameter::GetInputSchema() const

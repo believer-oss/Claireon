@@ -14,7 +14,7 @@ FString ClaireonLandscapeTool_PaintLayer::GetOperation() const { return TEXT("pa
 
 FString ClaireonLandscapeTool_PaintLayer::GetDescription() const
 {
-	return TEXT("Paint a weight layer with a Gaussian falloff brush.");
+    return TEXT("Paint a weight layer with a Gaussian falloff brush on the open landscape session. Session-mode tool: open via landscape_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeTool_PaintLayer::GetInputSchema() const

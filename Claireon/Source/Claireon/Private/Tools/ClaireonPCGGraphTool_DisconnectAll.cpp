@@ -14,7 +14,10 @@ FString ClaireonPCGGraphTool_DisconnectAll::GetOperation() const { return TEXT("
 
 FString ClaireonPCGGraphTool_DisconnectAll::GetDescription() const
 {
-	return TEXT("Remove all edges connected to a given pin on a PCG node. Direction filter (input/output) is optional.");
+	return TEXT("Disconnect every edge attached to a given pin on a PCG node within an open editing "
+				"session. Requires session_id from pcg_graph.open; the edit is transactional and only "
+				"persists after save. Optional direction filter (input/output) narrows the sweep to "
+				"one side of the pin.");
 }
 
 TSharedPtr<FJsonObject> ClaireonPCGGraphTool_DisconnectAll::GetInputSchema() const

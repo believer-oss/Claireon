@@ -16,7 +16,7 @@ FString ClaireonTool_SetBlueprintMetadata::GetOperation() const { return TEXT("s
 
 FString ClaireonTool_SetBlueprintMetadata::GetCategory() const
 {
-	return TEXT("blueprint");
+	return TEXT("bp");
 }
 
 FString ClaireonTool_SetBlueprintMetadata::GetDescription() const

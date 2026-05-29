@@ -15,7 +15,7 @@ FString ClaireonTool_TraceGetTopScopes::GetOperation() const { return TEXT("get_
 
 FString ClaireonTool_TraceGetTopScopes::GetDescription() const
 {
-	return TEXT("Get aggregated top-N CPU scopes by time. The primary hitch investigation tool - answers 'what is taking the most time?'");
+    return TEXT("Get aggregated top-N CPU scopes by time. The primary hitch investigation tool -- answers 'what is taking the most time?'. Stateless / read-only / non-session: reads from an open trace handle.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_TraceGetTopScopes::GetInputSchema() const

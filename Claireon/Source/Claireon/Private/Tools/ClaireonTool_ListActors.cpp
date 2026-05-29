@@ -16,7 +16,7 @@ FString ClaireonTool_ListActors::GetOperation() const { return TEXT("list_actors
 
 FString ClaireonTool_ListActors::GetDescription() const
 {
-	return TEXT("List actors in the currently loaded map. Optionally filter by class name or label wildcard pattern. Returns actor labels, classes, locations, rotations, and full paths.");
+    return TEXT("List actors in the currently loaded map. Optionally filter by class name or label wildcard pattern. Returns actor labels, classes, locations, rotations, and full paths. Stateless / read-only / non-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ListActors::GetInputSchema() const

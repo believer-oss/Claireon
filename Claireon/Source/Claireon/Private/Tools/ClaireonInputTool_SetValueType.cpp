@@ -14,7 +14,7 @@ FString ClaireonInputTool_SetValueType::GetOperation() const { return TEXT("set_
 
 FString ClaireonInputTool_SetValueType::GetDescription() const
 {
-	return TEXT("Set the value type on an Input Action session (bool, float, 2d, 3d).");
+    return TEXT("Set the value type on an Input Action session (bool, float, 2d, 3d). Session-mode tool: open via input_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonInputTool_SetValueType::GetInputSchema() const

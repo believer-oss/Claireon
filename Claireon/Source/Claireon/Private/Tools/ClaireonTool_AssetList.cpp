@@ -16,7 +16,7 @@ FString ClaireonTool_AssetList::GetOperation() const { return TEXT("list"); }
 
 FString ClaireonTool_AssetList::GetDescription() const
 {
-	return TEXT("List assets with filtering by path, extension, and pattern. Returns Unreal paths, Windows paths, class names, and sizes.");
+    return TEXT("List assets with filtering by path, extension, and pattern. Returns Unreal paths, Windows paths, class names, and sizes. Stateless / read-only / non-session: reads the Asset Registry directly without opening any asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AssetList::GetInputSchema() const

@@ -28,7 +28,7 @@ FString ClaireonTool_ApplySpecHelp::GetOperation() const { return TEXT("spec_hel
 
 FString ClaireonTool_ApplySpecHelp::GetDescription() const
 {
-	return TEXT("Returns per-tool spec entry shapes for the eight apply_spec-supporting tools (behaviortree, blackboard, blueprint_edit_graph, eqs, niagara, pcg, statetree, widgetbp). Stateless meta tool, no parameters. Most-common pitfall: assuming spec entries auto-create the asset; only blueprint_edit_graph does, the other seven require the asset to already exist. Immediate-mode tool: no session required.");
+	return TEXT("Returns per-tool spec entry shapes for the sixteen apply_spec-supporting tools (attenuation, behaviortree, blackboard, bp, concurrency, eqs, level_sequence, material, metasound, niagara, pcg, soundclass, soundcue, soundmix, statetree, widgetbp). Stateless meta tool, no parameters. Most-common pitfall: assuming spec entries auto-create the asset; only bp does, the others require the asset to already exist. Immediate-mode tool: no session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ApplySpecHelp::GetInputSchema() const

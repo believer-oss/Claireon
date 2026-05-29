@@ -34,8 +34,6 @@
 #include "Tools/ClaireonBlueprintGraphTool_Compile.h"
 #include "Tools/ClaireonBlueprintGraphTool_Close.h"
 
-#include "Tools/ClaireonTool_BlueprintCompile.h"
-#include "Tools/ClaireonTool_FormatBlueprintGraph.h"
 #include "Tools/ClaireonTool_SearchTools.h"
 #include "Tools/ClaireonTool_ExecutePython.h"
 #include "Tools/ClaireonTool_ProxyTableInspect.h"
@@ -111,8 +109,6 @@ UNTEST_UNIT(Claireon, SearchKeywords, TierA_SessionEntryPoints)
 	using namespace SearchKeywordsTestHelpers;
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBehaviorTreeTool_Open>(TEXT("behaviortree_open")));
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlackboardTool_Open>(TEXT("blackboard_open")));
-	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_BlueprintCompile>(TEXT("blueprint_compile")));
-	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_FormatBlueprintGraph>(TEXT("blueprint_format_graph")));
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonEQSTool_Open>(TEXT("eqs_open")));
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonLevelSequenceTool_Open>(TEXT("level_sequence_open")));
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonNiagaraTool_Open>(TEXT("niagara_open")));
@@ -125,16 +121,16 @@ UNTEST_UNIT(Claireon, SearchKeywords, TierA_SessionEntryPoints)
 UNTEST_UNIT(Claireon, SearchKeywords, TierB_BlueprintGraphSlate)
 {
 	using namespace SearchKeywordsTestHelpers;
-	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_Open>(TEXT("blueprint_graph_open")));
-	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_AddNode>(TEXT("blueprint_graph_add_node")));
-	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_ConnectPins>(TEXT("blueprint_graph_connect_pins")));
-	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_SetPinValue>(TEXT("blueprint_graph_set_pin_value")));
-	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_SelectPin>(TEXT("blueprint_graph_select_pin")));
-	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_AddVariable>(TEXT("blueprint_graph_add_variable")));
-	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_Save>(TEXT("blueprint_graph_save")));
-	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_Format>(TEXT("blueprint_graph_format")));
-	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_Compile>(TEXT("blueprint_graph_compile")));
-	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_Close>(TEXT("blueprint_graph_close")));
+	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_Open>(TEXT("bp_open")));
+	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_AddNode>(TEXT("bp_add_node")));
+	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_ConnectPins>(TEXT("bp_connect_pins")));
+	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_SetPinValue>(TEXT("bp_set_pin_value")));
+	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_SelectPin>(TEXT("bp_select_pin")));
+	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_AddVariable>(TEXT("bp_add_variable")));
+	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_Save>(TEXT("bp_save")));
+	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_Format>(TEXT("bp_format")));
+	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_Compile>(TEXT("bp_compile")));
+	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_Close>(TEXT("bp_close")));
 	co_return;
 }
 
@@ -184,7 +180,7 @@ UNTEST_UNIT(Claireon, SearchKeywords, AnimgraphSynonymMapsToAnimGraphInspect)
 UNTEST_UNIT(Claireon, SearchKeywords, BpVariableSynonymMapsToAddVariable)
 {
 	using namespace SearchKeywordsTestHelpers;
-	// 'bp variable' -> blueprint_graph_add_variable
+	// 'bp variable' -> bp_add_variable
 	UNTEST_EXPECT_TRUE(KeywordsContain<ClaireonBlueprintGraphTool_AddVariable>(TEXT("bp")));
 	UNTEST_EXPECT_TRUE(KeywordsContain<ClaireonBlueprintGraphTool_AddVariable>(TEXT("variable")));
 	co_return;

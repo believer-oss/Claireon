@@ -4,6 +4,7 @@
 #include "Tools/ClaireonLevelSequenceTool_Open.h"
 #include "Tools/ClaireonSequenceHelpers.h"
 #include "Tools/FToolSchemaBuilder.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonLevelSequenceEditInternal.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSessionManager.h"
@@ -101,6 +102,8 @@ FToolResult ClaireonLevelSequenceTool_Open::Execute(const TSharedPtr<FJsonObject
 		: TEXT("Session opened");
 	NewData.bSuppressOutput = false;
 	ToolData.Add(SessionId, MoveTemp(NewData));
+
+	ClaireonAssetUtils::OpenAssetEditorIfHeadless(Sequence);
 
 	return BuildStateResponse(SessionId, ToolData.Find(SessionId));
 }

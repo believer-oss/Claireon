@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_SetGameplayTags::GetOperation() const { retur
 
 FString ClaireonBlueprintGraphTool_SetGameplayTags::GetDescription() const
 {
-    return TEXT("Surgically add/remove gameplay tags from a FGameplayTagContainer property on a Blueprint CDO. Stateless / non-session: writes the asset directly by path, no open session required. Common pitfall: the property must be a FGameplayTagContainer (not a single FGameplayTag); the tags must already be registered in a tag table. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Surgically add/remove gameplay tags from a FGameplayTagContainer property on a Blueprint CDO. Stateless / non-session: writes the asset directly by path, no open session required. Common pitfall: the property must be a FGameplayTagContainer (not a single FGameplayTag); the tags must already be registered in a tag table. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetGameplayTags::GetInputSchema() const

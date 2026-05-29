@@ -15,7 +15,7 @@ FString ClaireonEQSTool_Close::GetOperation() const { return TEXT("close"); }
 
 FString ClaireonEQSTool_Close::GetDescription() const
 {
-	return TEXT("Close an EQS editing session. Optionally save before closing.");
+    return TEXT("Close an EQS editing session, optionally saving the asset first before releasing the session lock.");
 }
 
 TSharedPtr<FJsonObject> ClaireonEQSTool_Close::GetInputSchema() const

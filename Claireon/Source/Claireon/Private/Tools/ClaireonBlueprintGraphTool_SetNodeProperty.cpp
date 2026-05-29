@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonBlueprintGraphTool_SetNodeProperty.h"
@@ -37,7 +37,7 @@ FString ClaireonBlueprintGraphTool_SetNodeProperty::GetDescription() const
 		"K2Node_BaseAsyncTask.ProxyFactoryClass/ProxyFactoryFunctionName, and similar. property_path "
 		"supports dot/array navigation through nested structs (e.g. 'ProxyClass' or "
 		"'StructType.Struct'). Calls ReconstructNode() after the write by default so dynamic pins "
-		"materialize. Session-mode tool: open via blueprint_graph_open first.");
+		"materialize. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetNodeProperty::GetInputSchema() const
@@ -159,7 +159,7 @@ FString ClaireonBlueprintGraphTool_SetNodeProperty::GetFullDescription() const
 		"Sets a UPROPERTY on a K2 node in the current session's graph. Targets node "
 		"fields whose values drive pin layout -- protected fields the Python "
 		"set_editor_property surface refuses to touch and that "
-		"blueprint_graph_set_property does not reach because that tool writes the "
+		"bp_set_property does not reach because that tool writes the "
 		"Blueprint CDO / component templates, not graph nodes. Typical callers: "
 		"K2Node_DynamicCast.TargetType, K2Node_SwitchEnum.Enum, "
 		"K2Node_MakeStruct.StructType, K2Node_BaseAsyncTask.ProxyFactoryClass / "
@@ -175,7 +175,7 @@ FString ClaireonBlueprintGraphTool_SetNodeProperty::GetFullDescription() const
 FString ClaireonBlueprintGraphTool_SetNodeProperty::GetExampleUsage() const
 {
 	return TEXT(
-		"claireon.blueprint_graph_set_node_property session_id=\"...\" "
+		"claireon.bp_set_node_property session_id=\"...\" "
 		"node_guid=\"<GUID>\" property_name=\"ProxyFactoryClass\" "
 		"property_value=\"/Script/AbilitySystemBlueprintLibrary.AbilitySystemBlueprintLibrary\"");
 }
@@ -183,7 +183,7 @@ FString ClaireonBlueprintGraphTool_SetNodeProperty::GetExampleUsage() const
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetNodeProperty::GetParameterTooltips() const
 {
 	TSharedPtr<FJsonObject> T = MakeShared<FJsonObject>();
-	T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by claireon.blueprint_graph_open or _create."));
+	T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by claireon.bp_open or _create."));
 	T->SetStringField(TEXT("node_guid"), TEXT("Node GUID (UEdGraphNode::NodeGuid)."));
 	T->SetStringField(TEXT("property_name"), TEXT("UPROPERTY name on the node class (e.g. 'ProxyFactoryClass')."));
 	T->SetStringField(TEXT("property_value"), TEXT("ImportText-formatted value. Class refs: '/Script/Module.ClassName'. Function refs / member names: bare string."));

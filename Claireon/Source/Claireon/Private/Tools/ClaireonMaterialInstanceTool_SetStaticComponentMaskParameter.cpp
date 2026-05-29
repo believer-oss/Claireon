@@ -12,7 +12,7 @@ FString ClaireonMaterialInstanceTool_SetStaticComponentMaskParameter::GetOperati
 
 FString ClaireonMaterialInstanceTool_SetStaticComponentMaskParameter::GetDescription() const
 {
-	return TEXT("Set a static component mask parameter override on a UMaterialInstanceConstant (triggers shader-map rebuild).");
+    return TEXT("Set a static component mask parameter override on a UMaterialInstanceConstant (triggers shader-map rebuild). Session-mode tool: open via material_instance_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialInstanceTool_SetStaticComponentMaskParameter::GetInputSchema() const

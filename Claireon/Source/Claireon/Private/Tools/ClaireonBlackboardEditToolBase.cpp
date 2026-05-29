@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonBlackboardEditToolBase.h"
 #include "Tools/ClaireonBehaviorTreeHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
 #include "BehaviorTree/BlackboardData.h"
 #include "BehaviorTree/Blackboard/BlackboardKeyType.h"
@@ -145,8 +146,11 @@ FToolResult ClaireonBlackboardEditToolBase::BuildStateResponse(const FString& Se
 	ResultJson->SetStringField(TEXT("last_operation"), Data->LastOperationStatus);
 	ResultJson->SetStringField(TEXT("blackboard_view"), BBView);
 
+	FString SessionHintSummaryTag;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResultJson, Data->ConsecutiveAssetPathCalls, Data->BlackboardData->GetPathName(), SessionId, SessionHintSummaryTag);
+
 	const FString Summary = FString::Printf(TEXT("Session %s: %s"),
 		*SessionId.Left(8), *Data->LastOperationStatus);
 
-	return MakeSuccessResult(ResultJson, Summary);
+	return MakeSuccessResult(ResultJson, Summary + SessionHintSummaryTag);
 }

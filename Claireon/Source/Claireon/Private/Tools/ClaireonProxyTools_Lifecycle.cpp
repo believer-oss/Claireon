@@ -24,7 +24,7 @@ FString ClaireonTool_ProxyTableCreate::GetOperation() const { return TEXT("creat
 
 FString ClaireonTool_ProxyTableCreate::GetDescription() const
 {
-	return TEXT("Create a new empty ProxyTable asset.");
+    return TEXT("Create a new empty ProxyTable asset. Stateless / non-session: writes a new asset directly to the supplied path without opening a session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ProxyTableCreate::GetInputSchema() const
@@ -81,7 +81,7 @@ FString ClaireonTool_ProxyTableDuplicate::GetOperation() const { return TEXT("du
 
 FString ClaireonTool_ProxyTableDuplicate::GetDescription() const
 {
-	return TEXT("Duplicate an existing ProxyTable asset to a new path.");
+    return TEXT("Duplicate an existing ProxyTable asset to a new path. Stateless / non-session: writes a new asset directly to the supplied path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ProxyTableDuplicate::GetInputSchema() const
@@ -144,7 +144,7 @@ FString ClaireonTool_ProxyAssetCreate::GetOperation() const { return TEXT("creat
 
 FString ClaireonTool_ProxyAssetCreate::GetDescription() const
 {
-	return TEXT("Create a new ProxyAsset. Optionally set the type (the class of objects this proxy maps to).");
+    return TEXT("Create a new ProxyAsset. Optionally set the type (the class of objects this proxy maps to). Stateless / non-session: writes a new asset directly to the supplied path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ProxyAssetCreate::GetInputSchema() const
@@ -221,7 +221,7 @@ FString ClaireonTool_ProxyAssetDuplicate::GetOperation() const { return TEXT("du
 
 FString ClaireonTool_ProxyAssetDuplicate::GetDescription() const
 {
-	return TEXT("Duplicate an existing ProxyAsset to a new path.");
+    return TEXT("Duplicate an existing ProxyAsset to a new path. Stateless / non-session: writes a new asset directly to the supplied path without opening a session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ProxyAssetDuplicate::GetInputSchema() const

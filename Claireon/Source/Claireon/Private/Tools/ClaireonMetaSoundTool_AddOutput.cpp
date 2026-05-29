@@ -68,7 +68,9 @@ FString FClaireonMetaSoundTool_AddOutput::GetOperation() const { return TEXT("ad
 
 FString FClaireonMetaSoundTool_AddOutput::GetDescription() const
 {
-	return TEXT("Add a graph output to the MetaSound (e.g. name='Out', data_type='Audio').");
+	return TEXT("Add a graph output to the MetaSound within the current session (e.g. name='Out', "
+				"data_type='Audio'). The output is registered with the FMetaSoundFrontendDocumentBuilder "
+				"and becomes immediately visible in the graph. Requires session_id.");
 }
 
 TSharedPtr<FJsonObject> FClaireonMetaSoundTool_AddOutput::GetInputSchema() const

@@ -17,7 +17,7 @@ FString ClaireonNiagaraTool_AddEmitter::GetOperation() const { return TEXT("add_
 
 FString ClaireonNiagaraTool_AddEmitter::GetDescription() const
 {
-	return TEXT("Add a new emitter to the Niagara System using the default empty emitter template.");
+    return TEXT("Add a new emitter to the Niagara System using the default empty emitter template. Session-mode tool: open via niagara_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_AddEmitter::GetInputSchema() const

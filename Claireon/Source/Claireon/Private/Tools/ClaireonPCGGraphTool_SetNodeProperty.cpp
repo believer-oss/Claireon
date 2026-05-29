@@ -14,7 +14,10 @@ FString ClaireonPCGGraphTool_SetNodeProperty::GetOperation() const { return TEXT
 
 FString ClaireonPCGGraphTool_SetNodeProperty::GetDescription() const
 {
-	return TEXT("Set a property on a PCG node's settings. The value is parsed as a string and coerced to the target property type.");
+	return TEXT("Set a property on a PCG node's settings within an open editing session via "
+				"reflection. The value is parsed as a string and coerced to the target property type "
+				"(ImportText). Requires session_id from pcg_graph.open; the edit is transactional and "
+				"only persists after save.");
 }
 
 TSharedPtr<FJsonObject> ClaireonPCGGraphTool_SetNodeProperty::GetInputSchema() const

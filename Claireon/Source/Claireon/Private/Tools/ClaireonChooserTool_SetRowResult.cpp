@@ -14,7 +14,7 @@ FString ClaireonTool_ChooserSetRowResult::GetOperation() const { return TEXT("se
 
 FString ClaireonTool_ChooserSetRowResult::GetDescription() const
 {
-	return TEXT("Set or change the result for a specific row in a ChooserTable.");
+    return TEXT("Set or change the result asset for a specific row in a ChooserTable. Stateless / non-session: writes the asset directly by path, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ChooserSetRowResult::GetInputSchema() const

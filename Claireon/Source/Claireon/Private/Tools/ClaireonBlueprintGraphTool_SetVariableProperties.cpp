@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_SetVariableProperties::GetOperation() const {
 
 FString ClaireonBlueprintGraphTool_SetVariableProperties::GetDescription() const
 {
-    return TEXT("Set properties on an existing Blueprint variable (flags, category, tooltip, replication, metadata) in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: switching replication to RepNotify auto-creates the OnRep handler function graph if absent. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Set properties on an existing Blueprint variable (flags, category, tooltip, replication, metadata) in the open editing session. Requires open session_id from bp_open (or pass asset_path to auto-open). Transactional. Common pitfall: switching replication to RepNotify auto-creates the OnRep handler function graph if absent. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetVariableProperties::GetInputSchema() const
@@ -199,7 +199,7 @@ FToolResult ClaireonBlueprintGraphTool_SetVariableProperties::Execute(const TSha
 	FToolResult SetVarResult = BuildStateResponse(SessionId, Data);
 
 	// Surface the RepNotify handler graph name on the tool response so callers
-	// can immediately target it with blueprint_graph_add_node.
+	// can immediately target it with bp_add_node.
 	if (!ApplyResult.RepNotifyHandlerGraph.IsNone())
 	{
 		if (!SetVarResult.Data.IsValid())

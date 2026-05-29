@@ -139,6 +139,8 @@ namespace
 FString FClaireonTool_AudioApply::GetCategory() const { return TEXT("audio"); }
 FString FClaireonTool_AudioApply::GetOperation() const { return TEXT("apply"); }
 
+// TODO(#0000-followup): This tool dispatches on an action enum and could be
+// decomposed into per-action sub-tools.
 FString FClaireonTool_AudioApply::GetDescription() const
 {
 	return TEXT("Level-scoped audio operations on the current editor world: place ambient sound "

@@ -15,7 +15,7 @@ FString ClaireonTool_StateTreeGetSchema::GetOperation() const { return TEXT("get
 
 FString ClaireonTool_StateTreeGetSchema::GetDescription() const
 {
-	return TEXT("Read the State Tree asset's Schema (read-only). Returns schema_class + schema_class_path, a properties map (one entry per UPROPERTY on the Schema UClass with type + ExportText value), and a context_data_descs array (one entry per Context-source FStateTreeBindableStructDesc emitted by VisitGlobalNodes; each record has name, guid, struct, source_type, state_path). Stateless / read-only / non-session. Response size scales with the schema's reflected component count; expect 10-100 records for typical actor schemas.");
+    return TEXT("Get the State Tree asset's Schema. Returns schema_class + schema_class_path, a properties map (one entry per UPROPERTY on the Schema UClass with type + ExportText value), and a context_data_descs array. Stateless / read-only / non-session. Response size scales with the schema's reflected component count.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_StateTreeGetSchema::GetInputSchema() const

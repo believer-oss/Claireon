@@ -16,7 +16,7 @@ FString ClaireonTool_DataTableRenameRow::GetOperation() const { return TEXT("ren
 
 FString ClaireonTool_DataTableRenameRow::GetDescription() const
 {
-	return TEXT("Change a row's name");
+    return TEXT("Rename a data table row, preserving its property values under the new name. Stateless / non-session: writes the asset directly by path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_DataTableRenameRow::GetInputSchema() const

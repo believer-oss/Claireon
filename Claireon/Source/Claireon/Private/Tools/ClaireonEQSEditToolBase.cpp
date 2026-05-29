@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonEQSEditToolBase.h"
 #include "Tools/ClaireonBehaviorTreeHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonNameResolver.h"
 #include "ClaireonSessionManager.h"
 #include "EnvironmentQuery/EnvQuery.h"
@@ -176,8 +177,11 @@ FToolResult ClaireonEQSEditToolBase::BuildStateResponse(const FString& SessionId
 	ResultJson->SetStringField(TEXT("last_operation"), Data->LastOperationStatus);
 	ResultJson->SetStringField(TEXT("eqs_view"), Output);
 
+	FString SessionHintSummaryTag;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResultJson, Data->ConsecutiveAssetPathCalls, Data->Query->GetPathName(), SessionId, SessionHintSummaryTag);
+
 	const FString Summary = FString::Printf(TEXT("Session %s: %s"),
 		*SessionId.Left(8), *Data->LastOperationStatus);
 
-	return MakeSuccessResult(ResultJson, Summary);
+	return MakeSuccessResult(ResultJson, Summary + SessionHintSummaryTag);
 }

@@ -13,7 +13,7 @@ FString ClaireonTool_LandscapeInspect::GetOperation() const { return TEXT("inspe
 
 FString ClaireonTool_LandscapeInspect::GetDescription() const
 {
-	return TEXT("Inspect landscape metadata including dimensions, materials, weight layers, and splines.");
+    return TEXT("Inspect landscape metadata including dimensions, materials, weight layers, and splines. Stateless / read-only / non-session: reads the landscape actor without opening any session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_LandscapeInspect::GetInputSchema() const

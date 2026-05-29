@@ -15,7 +15,7 @@ FString ClaireonTool_TraceGetScopeDetails::GetOperation() const { return TEXT("g
 
 FString ClaireonTool_TraceGetScopeDetails::GetDescription() const
 {
-	return TEXT("Get per-occurrence timing for a specific scope name. Shows when and how long each invocation took.");
+    return TEXT("Get per-occurrence timing for a specific scope name. Shows when and how long each invocation took. Stateless / read-only / non-session: reads from an open trace handle.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_TraceGetScopeDetails::GetInputSchema() const

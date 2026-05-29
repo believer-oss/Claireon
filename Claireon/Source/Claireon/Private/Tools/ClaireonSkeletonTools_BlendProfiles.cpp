@@ -164,7 +164,7 @@ FString ClaireonSkeletonTool_RenameBlendProfile::GetOperation() const { return T
 
 FString ClaireonSkeletonTool_RenameBlendProfile::GetDescription() const
 {
-	return TEXT("Rename a blend profile (TimeFactor / WeightFactor). For blend masks use skeleton_rename_blend_mask.");
+    return TEXT("Rename a blend profile (TimeFactor/WeightFactor). For blend masks use skeleton_rename_blend_mask. Session-mode tool: open via skeleton_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RenameBlendProfile::GetInputSchema() const
@@ -459,7 +459,7 @@ FString ClaireonSkeletonTool_RenameBlendMask::GetOperation() const { return TEXT
 
 FString ClaireonSkeletonTool_RenameBlendMask::GetDescription() const
 {
-	return TEXT("Rename a blend mask. Validates that the target is actually a mask (Mode=BlendMask).");
+    return TEXT("Rename a blend mask. Validates that the target is actually a mask (Mode=BlendMask). Session-mode tool: open via skeleton_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RenameBlendMask::GetInputSchema() const
@@ -576,7 +576,7 @@ FString ClaireonSkeletonTool_ClearBlendMaskBoneWeight::GetOperation() const { re
 
 FString ClaireonSkeletonTool_ClearBlendMaskBoneWeight::GetDescription() const
 {
-	return TEXT("Remove the per-bone entry from a blend mask (reverts the bone to the mask's default weight of 0).");
+    return TEXT("Clear the per-bone entry from a blend mask (reverts the bone to the mask's default weight of 0). Session-mode tool: open via skeleton_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_ClearBlendMaskBoneWeight::GetInputSchema() const

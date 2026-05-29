@@ -14,7 +14,7 @@ FString ClaireonLandscapeTool_Save::GetOperation() const { return TEXT("save"); 
 
 FString ClaireonLandscapeTool_Save::GetDescription() const
 {
-	return TEXT("Save the landscape actor's package to disk.");
+    return TEXT("Save the landscape actor's package to disk for the current session. Session-mode tool: open via landscape_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeTool_Save::GetInputSchema() const

@@ -5,6 +5,7 @@
 #include "Tools/FToolSchemaBuilder.h"
 #include "Tools/ClaireonLandscapeHelpers.h"
 #include "ClaireonSessionManager.h"
+#include "ClaireonLog.h"
 #include "Editor.h"
 #include "LandscapeProxy.h"
 #include "LandscapeInfo.h"
@@ -108,6 +109,10 @@ FToolResult ClaireonLandscapeSplineTool_Open::Execute(const TSharedPtr<FJsonObje
 	bool bSuppressOutput = false;
 	Arguments->TryGetBoolField(TEXT("suppress_output"), bSuppressOutput);
 	Data.bSuppressOutput = bSuppressOutput;
+
+	// World-scoped tool: mode-focus (landscape edit mode) deferred per Q-AUTO-OPEN-WORLD-MODE;
+	// EM_Landscape activation requires LevelEditor module not available in Claireon plugin scope.
+	UE_LOG(LogClaireon, Verbose, TEXT("[LandscapeSplineTool_Open] Session opened; landscape edit-mode focus deferred (world-scoped)"));
 
 	return BuildStateResponse(SessionId, &Data);
 }

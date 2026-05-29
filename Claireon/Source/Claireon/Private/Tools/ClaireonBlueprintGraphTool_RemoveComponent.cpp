@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_RemoveComponent::GetOperation() const { retur
 
 FString ClaireonBlueprintGraphTool_RemoveComponent::GetDescription() const
 {
-    return TEXT("Remove a component from the Blueprint's Simple Construction Script in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Children of the removed component are promoted up one level so the SCS hierarchy stays connected. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Remove a component from the Blueprint's Simple Construction Script in the open editing session. Requires open session_id from bp_open (or pass asset_path to auto-open). Transactional. Children of the removed component are promoted up one level so the SCS hierarchy stays connected. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_RemoveComponent::GetInputSchema() const

@@ -21,6 +21,9 @@ struct FWidgetBPEditToolData
 	FDateTime LastCommandTime;
 	bool bModified = false;
 
+	/** Counts consecutive calls resolved via asset_path (no session_id). Used by EmitSessionHintIfNeeded. */
+	int32 ConsecutiveAssetPathCalls = 0;
+
 	bool IsValid() const
 	{
 		return WidgetBlueprint.IsValid();

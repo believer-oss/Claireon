@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -108,7 +108,7 @@ TArray<FString> ClaireonBlueprintGraphTool_AddNode::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_AddNode::GetDescription() const
 {
-    return TEXT("Adds a node to the current session's graph (CallFunction, VariableGet/Set, control flow, macros, delegates, etc.). Pass auto_connect_from_cursor=true to route the new node's exec pin through the cursor pin when compatible. Most-common pitfall: forgetting to save every 1-3 nodes via blueprint_graph_save, which loses progress on editor crash. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Adds a node to the current session's graph (CallFunction, VariableGet/Set, control flow, macros, delegates, etc.). Pass auto_connect_from_cursor=true to route the new node's exec pin through the cursor pin when compatible. Most-common pitfall: forgetting to save every 1-3 nodes via bp_save, which loses progress on editor crash. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddNode::GetInputSchema() const
@@ -1728,16 +1728,16 @@ FString ClaireonBlueprintGraphTool_AddNode::GetFullDescription() const
         "preferred wiring path is auto_connect_from_cursor=true: when the "
         "session cursor sits on a pin compatible with the new node's exec "
         "input, the connection is made automatically without requiring a "
-        "follow-up blueprint_graph_connect_pins call. Per the "
+        "follow-up bp_connect_pins call. Per the "
         "per-node cycle in the per-tool authoring guidance, save every "
-        "1-3 add_node calls via blueprint_graph_save to flush in-session "
+        "1-3 add_node calls via bp_save to flush in-session "
         "edits to the asset and protect against editor-crash data loss.");
 }
 
 FString ClaireonBlueprintGraphTool_AddNode::GetExampleUsage() const
 {
     return TEXT(
-        "blueprint_graph_add_node session_id=\"...\" "
+        "bp_add_node session_id=\"...\" "
         "node_class=\"K2Node_CallFunction\" function=\"PrintString\" "
         "auto_connect_from_cursor=true");
 }
@@ -1745,11 +1745,11 @@ FString ClaireonBlueprintGraphTool_AddNode::GetExampleUsage() const
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddNode::GetParameterTooltips() const
 {
     TSharedPtr<FJsonObject> T = MakeShared<FJsonObject>();
-    T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by blueprint_graph_open or _create. Optional if asset_path is supplied."));
+    T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by bp_open or _create. Optional if asset_path is supplied."));
     T->SetStringField(TEXT("asset_path"), TEXT("Blueprint asset path (alternative to session_id; auto-opens the session)."));
     T->SetStringField(TEXT("node_class"), TEXT("Fully qualified UClass name of the K2Node to add (e.g. K2Node_CallFunction, K2Node_IfThenElse). Fuzzy-resolved (drop U prefix; partial matches allowed)."));
     T->SetStringField(TEXT("function"), TEXT("For K2Node_CallFunction: the function name (or Class.Function) to call. Resolved against UFUNCTION metadata."));
-    T->SetStringField(TEXT("auto_connect_from_cursor"), TEXT("If true, route the new node's exec pin through the cursor pin when compatible. Preferred over a follow-up blueprint_graph_connect_pins call."));
+    T->SetStringField(TEXT("auto_connect_from_cursor"), TEXT("If true, route the new node's exec pin through the cursor pin when compatible. Preferred over a follow-up bp_connect_pins call."));
     return T;
 }
 

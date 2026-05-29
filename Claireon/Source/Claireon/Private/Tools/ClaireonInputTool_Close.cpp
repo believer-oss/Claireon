@@ -12,7 +12,7 @@ FString ClaireonInputTool_Close::GetOperation() const { return TEXT("close"); }
 
 FString ClaireonInputTool_Close::GetDescription() const
 {
-	return TEXT("Close the Input edit session, optionally saving first.");
+    return TEXT("Close the Input edit session, optionally saving the asset to disk first before releasing the session lock.");
 }
 
 TSharedPtr<FJsonObject> ClaireonInputTool_Close::GetInputSchema() const

@@ -12,8 +12,10 @@ FString FClaireonSoundClassTool_ApplySpec::GetOperation() const { return TEXT("a
 
 FString FClaireonSoundClassTool_ApplySpec::GetDescription() const
 {
-	return TEXT("Apply a SoundClass declarative spec ({kind=\"SoundClass\", asset_path, properties, child_classes}). "
-				"Creates the asset if absent, applies properties via reflection.");
+	return TEXT("Apply a SoundClass declarative spec ({kind=\"SoundClass\", asset_path, properties, "
+				"child_classes}) in one shot. Non-session, stateless operation; no session_id required "
+				"and no editor session is opened. Creates the target asset if absent, applies "
+				"properties via reflection, then saves.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundClassTool_ApplySpec::GetInputSchema() const

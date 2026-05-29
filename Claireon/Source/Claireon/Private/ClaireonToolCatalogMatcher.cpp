@@ -181,6 +181,21 @@ namespace ClaireonToolCatalogMatcherInternal
 		}
 		InOutTokens.Append(MoveTemp(Additions));
 	}
+
+	// Overload: expand tokens from Input into Output without modifying Input.
+	// Expansion-derived tokens are appended to Output; no length filter is applied.
+	static void ExpandQueryTokens(const TArray<FString>& Input, TArray<FString>& Output)
+	{
+		TArray<FString> Scratch = Input;
+		ExpandQueryTokens(Scratch);  // existing in-place expand
+		for (const FString& T : Scratch)
+		{
+			if (!Input.Contains(T))
+			{
+				Output.AddUnique(T);
+			}
+		}
+	}
 }
 
 void FClaireonToolCatalogMatcher::BuildCatalog(const TArray<FClaireonToolCatalogEntry>& Entries)
@@ -312,11 +327,6 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolCatalogMatcher::FindNearest(const
 	TArray<FString> TokeniseRawTokens;
 	Tokenise(Query, TokeniseRawTokens);
 
-	// Expand abbreviations / canonical terms in place (forward + reverse maps).
-	// Previously done Python-side; folded into C++ so the wire format carries
-	// raw fields only.
-	ExpandQueryTokens(TokeniseRawTokens);
-
 	// Query-side min-length cutoff: drop fuzzy-match terms of length <= 2
 	// unless every token in the query is short. The asymmetry vs the index
 	// (which keeps 2-char tokens) is intentional -- short tokens like `ing`
@@ -327,14 +337,33 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolCatalogMatcher::FindNearest(const
 	{
 		(T.Len() > 2 ? KeptTokens : DroppedTokens).Add(T);
 	}
+
+	// Expand AFTER cutoff so expansion-derived short tokens (e.g. "bp" from
+	// "blueprint") bypass the > 2 filter. Expansion runs on KeptTokens only
+	// (long user-typed tokens), not on DroppedTokens, to avoid noisy matches.
+	TArray<FString> ExpansionTokens;
+	ExpandQueryTokens(KeptTokens, ExpansionTokens);
+
+	// Scorer sees: KeptTokens (long user tokens) + ExpansionTokens (derived).
+	// DroppedTokens is the all-short fallback path only.
 	const TArray<FString>& RawQueryTokens = (KeptTokens.Num() > 0) ? KeptTokens : DroppedTokens;
 
 	// Unique-ify query tokens (preserving stable iteration order).
+	// Also merge ExpansionTokens (expansion-derived short tokens that bypassed the length filter).
 	TArray<FString> QueryTokens;
 	{
 		TSet<FString> Seen;
-		Seen.Reserve(RawQueryTokens.Num());
+		Seen.Reserve(RawQueryTokens.Num() + ExpansionTokens.Num());
 		for (const FString& Tok : RawQueryTokens)
+		{
+			bool bWasInSet = false;
+			Seen.Add(Tok, &bWasInSet);
+			if (!bWasInSet)
+			{
+				QueryTokens.Add(Tok);
+			}
+		}
+		for (const FString& Tok : ExpansionTokens)
 		{
 			bool bWasInSet = false;
 			Seen.Add(Tok, &bWasInSet);
@@ -345,7 +374,33 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolCatalogMatcher::FindNearest(const
 		}
 	}
 
-	if (QueryTokens.Num() == 0)
+	if (QueryTokens.Num() == 0 && DroppedTokens.Num() == 0)
+	{
+		return Out;
+	}
+
+	// Short-token whole-word match bucket: user-typed short tokens (length <= 2)
+	// that are NOT already covered by KeptTokens or ExpansionTokens. These tokens
+	// match ONLY tool name tokens and GetSearchKeywords tokens -- NOT description
+	// text -- using exact whole-word (case-insensitive) comparison. Substring
+	// matching against description body is explicitly forbidden for short tokens.
+	//
+	// Note: only populated when KeptTokens is non-empty. When KeptTokens is empty
+	// (all-short fallback), DroppedTokens are already in QueryTokens via RawQueryTokens
+	// and must NOT be double-scored via ShortMatchTokens.
+	TArray<FString> ShortMatchTokens;
+	if (KeptTokens.Num() > 0)
+	{
+		for (const FString& Tok : DroppedTokens)
+		{
+			if (!KeptTokens.Contains(Tok) && !ExpansionTokens.Contains(Tok))
+			{
+				ShortMatchTokens.AddUnique(Tok);
+			}
+		}
+	}
+
+	if (QueryTokens.Num() == 0 && ShortMatchTokens.Num() == 0)
 	{
 		return Out;
 	}
@@ -442,7 +497,55 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolCatalogMatcher::FindNearest(const
 		}
 	}
 
-	const float InvDenom = 1.0f / static_cast<float>(FMath::Max(1, QueryTokens.Num()));
+	// Short-token scoring: exact whole-word match against Name and Keywords ONLY.
+	// Description text is NOT scanned -- substring matching against descriptions
+	// is explicitly forbidden for short tokens to prevent "ed" matching "edit blueprint graph".
+	// Weight mirrors the existing exact name-token hit: WeightName * 2.0.
+	for (const FString& QToken : ShortMatchTokens)
+	{
+		TMap<int32, float> EntryBestContribution;
+
+		auto CreditShort = [&](int32 Idx, float Contribution)
+		{
+			float& Existing = EntryBestContribution.FindOrAdd(Idx, 0.0f);
+			if (Contribution > Existing)
+			{
+				Existing = Contribution;
+			}
+		};
+
+		// Exact match in the inverted index, but filter to Name + Keywords fields only.
+		// A posting with EFieldMask::Description (and no Name/Keywords bit) is excluded.
+		if (TArray<TPair<int32, EFieldMask>>* ExactEntries = GInvertedIndex.Find(QToken))
+		{
+			for (const TPair<int32, EFieldMask>& Posting : *ExactEntries)
+			{
+				// Only credit if the token appears in Name or Keywords (not solely in Description/Operation).
+				const EFieldMask NameKeywordMask = EFieldMask::Name | EFieldMask::Keywords;
+				if (!EnumHasAnyFlags(Posting.Value, NameKeywordMask))
+				{
+					continue;
+				}
+				// Use the field weight for only the Name/Keywords bits to exclude Description weight.
+				float Best = 0.0f;
+				if (EnumHasAnyFlags(Posting.Value, EFieldMask::Name))     { Best = FMath::Max(Best, WeightName); }
+				if (EnumHasAnyFlags(Posting.Value, EFieldMask::Keywords)) { Best = FMath::Max(Best, WeightKeywords); }
+				const float Contribution = Best * 2.0f;
+				CreditShort(Posting.Key, Contribution);
+			}
+		}
+
+		for (const TPair<int32, float>& KV : EntryBestContribution)
+		{
+			WeightedScore[KV.Key] += KV.Value;
+			DistinctTokenHits[KV.Key] += 1;
+		}
+	}
+
+	// Denominator includes both long query tokens and short match tokens so
+	// normalization accounts for the full effective query length.
+	const int32 TotalTokenCount = QueryTokens.Num() + ShortMatchTokens.Num();
+	const float InvDenom = 1.0f / static_cast<float>(FMath::Max(1, TotalTokenCount));
 
 	struct FScoredEntry
 	{

@@ -15,7 +15,10 @@ FString ClaireonPCGGraphTool_Connect::GetOperation() const { return TEXT("connec
 
 FString ClaireonPCGGraphTool_Connect::GetDescription() const
 {
-	return TEXT("Connect an output pin of one PCG node to an input pin of another.");
+	return TEXT("Connect an output pin of one PCG node to an input pin of another within an open "
+				"editing session. Requires session_id from pcg_graph.open; the edit is transactional "
+				"and only persists after save. Pin compatibility is enforced by PCG's type system at "
+				"connection time.");
 }
 
 TSharedPtr<FJsonObject> ClaireonPCGGraphTool_Connect::GetInputSchema() const

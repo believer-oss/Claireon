@@ -15,7 +15,7 @@ FString ClaireonMaterialInstanceTool_SetParent::GetOperation() const { return TE
 
 FString ClaireonMaterialInstanceTool_SetParent::GetDescription() const
 {
-	return TEXT("Reparent a UMaterialInstanceConstant to a new UMaterialInterface. Rejects cycles.");
+    return TEXT("Reparent a UMaterialInstanceConstant to a new UMaterialInterface. Rejects cycles. Session-mode tool: open via material_instance_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialInstanceTool_SetParent::GetInputSchema() const

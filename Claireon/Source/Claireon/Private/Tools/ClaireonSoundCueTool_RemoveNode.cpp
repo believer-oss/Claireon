@@ -17,8 +17,10 @@ FString FClaireonSoundCueTool_RemoveNode::GetOperation() const { return TEXT("re
 
 FString FClaireonSoundCueTool_RemoveNode::GetDescription() const
 {
-	return TEXT("Remove a node from the SoundCue. Clears any ChildNodes references that pointed to it, "
-				"breaks EdGraph pin links, removes the EdGraph node, and re-links the graph (I5).");
+	return TEXT("Remove a node from the SoundCue within the current session. Clears any ChildNodes "
+				"references that pointed to it, breaks EdGraph pin links, removes the EdGraph node, "
+				"and re-links the graph in a single FScopedTransaction (I5). Requires session_id "
+				"from soundcue.open. Clears the focused-node index if it referenced the removed node.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundCueTool_RemoveNode::GetInputSchema() const

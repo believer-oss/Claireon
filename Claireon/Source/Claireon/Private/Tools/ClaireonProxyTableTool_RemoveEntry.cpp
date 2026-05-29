@@ -13,7 +13,7 @@ FString ClaireonTool_ProxyTableRemoveEntry::GetOperation() const { return TEXT("
 
 FString ClaireonTool_ProxyTableRemoveEntry::GetDescription() const
 {
-	return TEXT("Remove an entry from a ProxyTable by index.");
+    return TEXT("Remove an entry from a ProxyTable by index. Stateless / non-session: writes the asset directly by path without opening a session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ProxyTableRemoveEntry::GetInputSchema() const

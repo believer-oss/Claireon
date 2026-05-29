@@ -5,6 +5,7 @@
 #include "Tools/ClaireonAudioHelpers.h"
 #include "Tools/ClaireonAudioSessionRegistry.h"
 #include "Tools/ClaireonAnimEditToolBase.h" // FToolSchemaBuilder
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
 
 #include "Sound/SoundCue.h"
@@ -15,8 +16,10 @@ FString FClaireonSoundCueTool_Open::GetOperation() const { return TEXT("open"); 
 
 FString FClaireonSoundCueTool_Open::GetDescription() const
 {
-	return TEXT("Open a USoundCue editing session. Locks the asset under tool name 'audio_edit' (I1) "
-				"so only one cohort holds it at a time. Returns a session_id used by subsequent SoundCue ops.");
+	return TEXT("Open a USoundCue editing session and lock the asset under tool name 'audio_edit' "
+				"(I1) so only one cohort holds it at a time. Returns a session_id used by all "
+				"subsequent SoundCue session ops (add_node, connect_nodes, save, close, etc). "
+				"Also surfaces the asset editor when running headless.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundCueTool_Open::GetInputSchema() const
@@ -89,6 +92,8 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_Open::Execute(const TSharedPtr<
 #endif
 
 	(void)ResolvedKind; // currently unused; reserved for parity with bundled validation messages.
+
+	ClaireonAssetUtils::OpenAssetEditorIfHeadless(Asset);
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("session_id"), SessionId);

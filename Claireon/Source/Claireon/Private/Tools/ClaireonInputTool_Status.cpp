@@ -10,7 +10,7 @@ FString ClaireonInputTool_Status::GetOperation() const { return TEXT("status"); 
 
 FString ClaireonInputTool_Status::GetDescription() const
 {
-	return TEXT("Return the current state of the Input edit session.");
+    return TEXT("Return the current state of the Input edit session. Session-mode tool: open via input_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonInputTool_Status::GetInputSchema() const

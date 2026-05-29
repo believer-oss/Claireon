@@ -13,7 +13,10 @@ FString ClaireonEQSTool_RemoveOption::GetOperation() const { return TEXT("remove
 
 FString ClaireonEQSTool_RemoveOption::GetDescription() const
 {
-	return TEXT("Remove an option from the EQS query by index.");
+	return TEXT("Remove an option from the EQS query by index within an open editing session. "
+				"Requires session_id from eqs.open; the edit is transactional and only persists after "
+				"save. The option's generator and all its tests are removed together as a single "
+				"unit.");
 }
 
 TSharedPtr<FJsonObject> ClaireonEQSTool_RemoveOption::GetInputSchema() const

@@ -16,7 +16,9 @@ FString FClaireonSoundCueTool_SetNodePosition::GetOperation() const { return TEX
 
 FString FClaireonSoundCueTool_SetNodePosition::GetDescription() const
 {
-	return TEXT("Override NodePosX/NodePosY on the EdGraph counterpart of a USoundNode.");
+	return TEXT("Set the canvas position (NodePosX/NodePosY) of a sound node in the EdGraph "
+				"within the current session. Does not affect runtime behavior; used to keep "
+				"the SoundCue graph readable. Requires session_id and a valid node_index.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundCueTool_SetNodePosition::GetInputSchema() const

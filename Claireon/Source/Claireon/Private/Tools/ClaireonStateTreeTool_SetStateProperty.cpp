@@ -16,7 +16,7 @@ FString ClaireonStateTreeTool_SetStateProperty::GetOperation() const { return TE
 
 FString ClaireonStateTreeTool_SetStateProperty::GetDescription() const
 {
-	return TEXT("Set a top-level field on a UStateTreeState (e.g. bHasRequiredEventToEnter, RequiredEventToEnter.Tag, RequiredEventToEnter.PayloadStruct, RequiredEventToEnter.bConsumeEventOnSelect, bEnabled, Type, SelectionBehavior, Weight). Requires open session_id from statetree_open. Transactional. property_name supports dot-paths into nested structs (e.g. RequiredEventToEnter.Tag). Color/Parameters.Parameters are not supported in v1.");
+    return TEXT("Set a top-level field on a UStateTreeState (e.g. bHasRequiredEventToEnter, RequiredEventToEnter.Tag, RequiredEventToEnter.PayloadStruct, bEnabled, Type, SelectionBehavior, Weight). Requires open session_id from statetree_open. Transactional. property_name supports dot-paths into nested structs. Color/Parameters.Parameters are not supported in v1.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_SetStateProperty::GetInputSchema() const

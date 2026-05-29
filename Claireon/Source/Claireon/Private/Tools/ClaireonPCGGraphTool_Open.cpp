@@ -4,6 +4,7 @@
 #include "Tools/ClaireonPCGGraphTool_Open.h"
 #include "Tools/ClaireonPCGGraphHelpers.h"
 #include "Tools/FToolSchemaBuilder.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSessionManager.h"
 #include "PCGGraph.h"
@@ -21,7 +22,11 @@ TArray<FString> ClaireonPCGGraphTool_Open::GetSearchKeywords() const
 
 FString ClaireonPCGGraphTool_Open::GetDescription() const
 {
-	return TEXT("Open a PCG (Procedural Content Generation) Graph asset for editing. Returns a session_id for subsequent operations.");
+	return TEXT("Open a PCG (Procedural Content Generation) Graph asset for transactional editing "
+				"and lock it under tool name 'pcg_graph_edit' so only one cohort holds it at a time. "
+				"Returns a session_id used by all subsequent PCG-graph session ops (add_node, "
+				"connect, set_node_property, save, close). Also surfaces the asset editor when "
+				"running headed.");
 }
 
 TSharedPtr<FJsonObject> ClaireonPCGGraphTool_Open::GetInputSchema() const
@@ -80,6 +85,8 @@ FToolResult ClaireonPCGGraphTool_Open::Execute(const TSharedPtr<FJsonObject>& Ar
 	NewData.LastOperationStatus = TEXT("Session opened");
 	NewData.bSuppressOutput = false; // Always show full output on open
 	ToolData.Add(SessionId, MoveTemp(NewData));
+
+	ClaireonAssetUtils::OpenAssetEditorIfHeadless(Graph);
 
 	FPCGGraphEditToolData* DataPtr = ToolData.Find(SessionId);
 	return BuildStateResponse(SessionId, DataPtr);

@@ -685,7 +685,7 @@ namespace ClaireonBlueprintNodeFactory
 		{
 			Out.Error = FString::Printf(
 				TEXT("Unsupported node_type '%s' in factory. Use 'Generic' with 'class_name' for custom types, "
-				     "or Operation_AddNode (blueprint_edit_graph) for typed support not yet in the factory "
+				     "or bp_add_node for typed support not yet in the factory "
 				     "(SpawnActor variants, Delegate nodes, Timeline, EventOverride)."), *NodeType);
 			return Out;
 		}

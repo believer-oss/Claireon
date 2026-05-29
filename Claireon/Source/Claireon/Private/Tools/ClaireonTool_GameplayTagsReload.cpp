@@ -15,7 +15,7 @@ FString ClaireonTool_GameplayTagsReload::GetOperation() const { return TEXT("tag
 
 FString ClaireonTool_GameplayTagsReload::GetDescription() const
 {
-	return TEXT("Force UGameplayTagsManager to reload DefaultGameplayTags.ini from disk (via GConfig->LoadFile) and rebuild its in-memory tag tree (via EditorRefreshGameplayTagTree). Use after an out-of-band file-system edit, or as a recovery path. Returns {refreshed, source}.");
+    return TEXT("Refresh the in-memory gameplay tag tree by reloading DefaultGameplayTags.ini from disk via GConfig->LoadFile and forcing the engine through EditorRefreshGameplayTagTree. Use after an out-of-band file-system edit. Stateless / non-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_GameplayTagsReload::GetInputSchema() const

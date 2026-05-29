@@ -15,7 +15,7 @@ FString ClaireonTool_ProxyTableSetEntryValue::GetOperation() const { return TEXT
 
 FString ClaireonTool_ProxyTableSetEntryValue::GetDescription() const
 {
-	return TEXT("Set or change the value (resolved asset) for an entry in a ProxyTable.");
+    return TEXT("Set the value (resolved asset) for an entry in a ProxyTable. Stateless / non-session: writes the asset directly by path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ProxyTableSetEntryValue::GetInputSchema() const

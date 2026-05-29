@@ -46,10 +46,8 @@
 #include "Tools/ClaireonTool_ExecutePython.h"
 #include "Tools/ClaireonTool_GetBlueprintProperties.h"
 #include "Tools/ClaireonTool_GetBlueprintGraph.h"
-#include "Tools/ClaireonTool_InspectBlueprintNode.h"
-#include "Tools/ClaireonTool_FormatBlueprintGraph.h"
 #include "Tools/ClaireonTool_SearchInBlueprints.h"
-#include "Tools/ClaireonTool_ApplyBlueprintGraph.h"
+#include "Tools/ClaireonTool_ApplyBlueprintDelta.h"
 #include "Tools/ClaireonTool_GameplayTagsList.h"
 #include "Tools/ClaireonTool_StructInspect.h"
 #include "Tools/ClaireonTool_UObjectInspect.h"
@@ -128,7 +126,6 @@
 #include "Tools/ClaireonTool_AssetList.h"
 #include "Tools/ClaireonTool_AssetValidate.h"
 #include "Tools/ClaireonTool_AssetFixupRedirectors.h"
-#include "Tools/ClaireonTool_BlueprintCompile.h"
 #include "Tools/ClaireonTool_BlueprintCompileBatch.h"
 #include "Tools/ClaireonTool_BlueprintDuplicate.h"
 #include "Tools/ClaireonTool_CommandletRun.h"
@@ -973,7 +970,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 {
 	TArray<TSharedPtr<IClaireonTool>> Tools;
 
-	Tools.Add(MakeShared<ClaireonTool_ApplyBlueprintGraph>());
+	Tools.Add(MakeShared<ClaireonTool_ApplyBlueprintDelta>());
 	Tools.Add(MakeShared<ClaireonTool_AssetReferences>());
 	Tools.Add(MakeShared<ClaireonTool_AssetSearch>());
 	Tools.Add(MakeShared<ClaireonTool_ExecutePython>());
@@ -985,8 +982,6 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	// Blueprint MCP tools
 	Tools.Add(MakeShared<ClaireonTool_GetBlueprintProperties>());
 	Tools.Add(MakeShared<ClaireonTool_GetBlueprintGraph>());
-	Tools.Add(MakeShared<ClaireonTool_InspectBlueprintNode>());
-	Tools.Add(MakeShared<ClaireonTool_FormatBlueprintGraph>());
 	Tools.Add(MakeShared<ClaireonTool_SearchInBlueprints>());
 
 	// Blueprint graph editing (decomposed -- one tool per operation, stage 016)
@@ -1167,7 +1162,6 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonSkeletonTool_SetBlendMaskBoneWeight>());
 	Tools.Add(MakeShared<ClaireonSkeletonTool_ClearBlendMaskBoneWeight>());
 	Tools.Add(MakeShared<ClaireonSkeletonTool_RemoveBlendMask>()); // Intentional stub — always errors (engine bug)
-	Tools.Add(MakeShared<ClaireonTool_BlueprintCompile>());
 	Tools.Add(MakeShared<ClaireonTool_BlueprintCompileBatch>());
 	Tools.Add(MakeShared<ClaireonTool_BlueprintDuplicate>());
 	Tools.Add(MakeShared<ClaireonTool_CommandletRun>());
@@ -1720,7 +1714,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonAnimGraphTool_SetTransitionProperties>());
 
 	// Animation Graph editing MCP tools — Batch graph construction
-	Tools.Add(MakeShared<ClaireonAnimGraphTool_ApplyGraph>());
+	Tools.Add(MakeShared<ClaireonAnimGraphTool_ApplyDelta>());
 
 	// Animation Graph editing MCP tools — Variable, Function, Interface operations
 	Tools.Add(MakeShared<ClaireonAnimGraphTool_AddVariable>());

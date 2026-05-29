@@ -14,7 +14,7 @@ FString ClaireonTool_DataTableFindRows::GetOperation() const { return TEXT("find
 
 FString ClaireonTool_DataTableFindRows::GetDescription() const
 {
-	return TEXT("Find rows where a column value matches a filter");
+    return TEXT("Find rows where a column value matches a filter. Stateless / read-only / non-session: queries the asset by path without opening any editing session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_DataTableFindRows::GetInputSchema() const

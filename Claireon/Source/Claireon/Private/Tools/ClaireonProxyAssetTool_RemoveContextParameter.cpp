@@ -15,7 +15,7 @@ FString ClaireonTool_ProxyAssetRemoveContextParameter::GetOperation() const { re
 
 FString ClaireonTool_ProxyAssetRemoveContextParameter::GetDescription() const
 {
-	return TEXT("Remove a context data parameter at the given index from a ProxyAsset.");
+    return TEXT("Remove a context data parameter at the given index from a ProxyAsset. Stateless / non-session: writes the asset directly by path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ProxyAssetRemoveContextParameter::GetInputSchema() const

@@ -42,8 +42,10 @@ FString FClaireonSoundCueTool_AddNode::GetOperation() const { return TEXT("add_n
 
 FString FClaireonSoundCueTool_AddNode::GetDescription() const
 {
-	return TEXT("Add a USoundNode subclass to the SoundCue. Syncs runtime tree + EdGraph + position "
-				"in one FScopedTransaction (I5). Default position is +300 from the focused node.");
+	return TEXT("Add a USoundNode subclass to the SoundCue within the current session. Syncs the "
+				"runtime tree, EdGraph node, and graph position in a single FScopedTransaction (I5); "
+				"default position is +300 from the focused node. Requires session_id from "
+				"soundcue.open. Updates the session's focused node to the newly created one.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundCueTool_AddNode::GetInputSchema() const

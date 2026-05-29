@@ -17,7 +17,7 @@ FString ClaireonNiagaraTool_AddModule::GetOperation() const { return TEXT("add_m
 
 FString ClaireonNiagaraTool_AddModule::GetDescription() const
 {
-	return TEXT("Add a module script to an emitter stack at the specified index.");
+    return TEXT("Add a module script to an emitter stack at the specified index. Session-mode tool: open via niagara_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_AddModule::GetInputSchema() const

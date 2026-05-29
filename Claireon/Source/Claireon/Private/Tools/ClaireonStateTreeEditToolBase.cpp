@@ -4,6 +4,7 @@
 #include "Tools/ClaireonStateTreeEditToolBase.h"
 #include "Tools/ClaireonStateTreeEditInternal.h"
 #include "Tools/ClaireonStateTreeHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
 #include "StateTree.h"
 #include "StateTreeEditorData.h"
@@ -164,5 +165,8 @@ FToolResult ClaireonStateTreeEditToolBase::BuildStateResponse(
 	const FString Summary = FString::Printf(TEXT("Session %s: %s"),
 		*SessionId.Left(8), *Data->LastOperationStatus);
 
-	return MakeSuccessResult(ResponseData, Summary);
+	FString SessionHintSummaryTag;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResponseData, Data->ConsecutiveAssetPathCalls, Data->StateTree->GetPathName(), SessionId, SessionHintSummaryTag);
+
+	return MakeSuccessResult(ResponseData, Summary + SessionHintSummaryTag);
 }

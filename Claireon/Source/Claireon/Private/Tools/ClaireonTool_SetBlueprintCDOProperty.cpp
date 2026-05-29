@@ -17,7 +17,7 @@ FString ClaireonTool_SetBlueprintCDOProperty::GetOperation() const { return TEXT
 
 FString ClaireonTool_SetBlueprintCDOProperty::GetCategory() const
 {
-	return TEXT("blueprint");
+	return TEXT("bp");
 }
 
 FString ClaireonTool_SetBlueprintCDOProperty::GetDescription() const

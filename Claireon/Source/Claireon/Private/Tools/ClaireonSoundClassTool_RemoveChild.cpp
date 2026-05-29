@@ -15,8 +15,10 @@ FString FClaireonSoundClassTool_RemoveChild::GetOperation() const { return TEXT(
 
 FString FClaireonSoundClassTool_RemoveChild::GetDescription() const
 {
-	return TEXT("Remove a child USoundClass from another USoundClass's ChildClasses by path. "
-				"Returns the removed_count (0 if not present, matches bundled tool semantics).");
+	return TEXT("Remove a child USoundClass from another USoundClass's ChildClasses array by path. "
+				"Non-session, immediate operation; no session_id is needed. Returns removed_count "
+				"(0 if not present, matching bundled tool semantics). Wraps the change in "
+				"FScopedTransaction and saves the parent asset when something was actually removed.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundClassTool_RemoveChild::GetInputSchema() const

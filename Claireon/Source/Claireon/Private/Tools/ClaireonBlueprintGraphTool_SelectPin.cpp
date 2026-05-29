@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_SelectPin::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_SelectPin::GetDescription() const
 {
-    return TEXT("Moves the session cursor to a specific pin on a node. Subsequent blueprint_graph_add_node calls with auto_connect_from_cursor=true will wire to this pin if compatible. Most-common pitfall: the cursor is per-session, so re-running select_pin between sessions is a no-op for any session you already closed. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Moves the session cursor to a specific pin on a node. Subsequent bp_add_node calls with auto_connect_from_cursor=true will wire to this pin if compatible. Most-common pitfall: the cursor is per-session, so re-running select_pin between sessions is a no-op for any session you already closed. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SelectPin::GetInputSchema() const
@@ -201,19 +201,19 @@ FString ClaireonBlueprintGraphTool_SelectPin::GetFullDescription() const
 {
     return TEXT(
         "Moves the session cursor to a specific pin on a node. The cursor is "
-        "the anchor that auto_connect_from_cursor on blueprint_graph_add_node "
+        "the anchor that auto_connect_from_cursor on bp_add_node "
         "uses to decide where to wire each new node. Use select_pin when you "
         "are about to chain a sequence of add_node calls and want them to "
         "auto-wire from a known starting point (e.g. the 'then' output of a "
         "Branch's True pin), or when the cursor has drifted onto a node where "
         "the next add_node should not auto-connect. The cursor is per-session "
-        "and resets when blueprint_graph_close is called.");
+        "and resets when bp_close is called.");
 }
 
 FString ClaireonBlueprintGraphTool_SelectPin::GetExampleUsage() const
 {
     return TEXT(
-        "blueprint_graph_select_pin session_id=\"...\" "
+        "bp_select_pin session_id=\"...\" "
         "node=\"Branch_0\" pin=\"True\"");
 }
 

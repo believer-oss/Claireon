@@ -14,7 +14,10 @@ FString ClaireonEQSTool_AddOption::GetOperation() const { return TEXT("add_optio
 
 FString ClaireonEQSTool_AddOption::GetDescription() const
 {
-	return TEXT("Add a new option to the EQS query, creating a generator of the specified class.");
+	return TEXT("Add a new option to the EQS query within an open editing session, creating a "
+				"generator of the specified class. Requires session_id from eqs.open; the edit is "
+				"transactional and only persists after save. Options are evaluated in order at "
+				"runtime and produce candidate items.");
 }
 
 TSharedPtr<FJsonObject> ClaireonEQSTool_AddOption::GetInputSchema() const

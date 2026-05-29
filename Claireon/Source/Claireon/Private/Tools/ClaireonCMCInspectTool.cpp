@@ -143,11 +143,7 @@ namespace ClaireonCMCInspectScratch
 
 FString ClaireonTool_CMCInspectState::GetDescription() const
 {
-	return TEXT("Snapshot the authoritative UCharacterMovementComponent state on a paused-PIE pawn: ")
-	       TEXT("movement mode, velocity/acceleration, gravity, walkable floor parameters, current floor ")
-	       TEXT("hit, movement base, crouched, and FS-CMC custom fields (ascendingGravityScale, ")
-	       TEXT("descendingGravityScale, previousKnownFloor). Targets stuck-mid-air, gravity-flip, and ")
-	       TEXT("floor-detection bug classes.");
+    return TEXT("Snapshot the authoritative UCharacterMovementComponent state on a paused-PIE pawn: movement mode, velocity/acceleration, gravity, walkable floor parameters, current floor hit, movement base, crouched, and FS-CMC custom fields. Read-only / non-session inspector. Targets stuck-mid-air, gravity-flip, and floor-detection bug classes.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_CMCInspectState::GetInputSchema() const
@@ -451,9 +447,7 @@ IClaireonTool::FToolResult ClaireonTool_CMCInspectState::Execute(const TSharedPt
 
 FString ClaireonTool_CMCInspectRootMotion::GetDescription() const
 {
-	return TEXT("Snapshot CMC root motion state: CurrentRootMotion / ServerCorrectionRootMotion source ")
-	       TEXT("groups, anim root motion (networked montage, current position/weight), and last applied ")
-	       TEXT("root motion delta. Targets stuck-mid-air bug class where root motion is desyncing.");
+    return TEXT("Snapshot CMC root motion state: CurrentRootMotion / ServerCorrectionRootMotion source groups, anim root motion, and last applied root motion delta. Read-only / non-session inspector. Targets stuck-mid-air bug class where root motion is desyncing.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_CMCInspectRootMotion::GetInputSchema() const
@@ -672,9 +666,7 @@ IClaireonTool::FToolResult ClaireonTool_CMCInspectRootMotion::Execute(const TSha
 
 FString ClaireonTool_CMCInspectPredictionData::GetDescription() const
 {
-	return TEXT("Snapshot CMC network prediction data: server clock, client clock, saved-move buffer, ")
-	       TEXT("pending adjustment, last client adjustment / good move ack times. Targets replication ")
-	       TEXT("desync, saved-move-limit, and client-correction bug classes.");
+    return TEXT("Snapshot CMC network prediction data: server clock, client clock, saved-move buffer, pending adjustment, last client adjustment / good move ack times. Read-only / non-session inspector. Targets replication desync, saved-move-limit, and client-correction bug classes.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_CMCInspectPredictionData::GetInputSchema() const

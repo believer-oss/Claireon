@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonMaterialInstanceEditToolBase.h"
 #include "Tools/ClaireonMaterialHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
 #include "Materials/MaterialInstanceConstant.h"
 #include "Materials/MaterialInterface.h"
@@ -131,5 +132,8 @@ FToolResult ClaireonMaterialInstanceEditToolBase::BuildStateResponse(const FStri
 	RespData->SetNumberField(TEXT("texture_override_count"), Instance->TextureParameterValues.Num());
 	RespData->SetStringField(TEXT("last_operation_status"), Data->LastOperationStatus);
 
-	return MakeSuccessResult(RespData, Output);
+	FString SessionHintSummaryTag;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(RespData, Data->ConsecutiveAssetPathCalls, Instance->GetPathName(), SessionId, SessionHintSummaryTag);
+
+	return MakeSuccessResult(RespData, Output + SessionHintSummaryTag);
 }

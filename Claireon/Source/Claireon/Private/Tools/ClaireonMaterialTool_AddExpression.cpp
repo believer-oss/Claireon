@@ -16,7 +16,7 @@ FString ClaireonMaterialTool_AddExpression::GetOperation() const { return TEXT("
 
 FString ClaireonMaterialTool_AddExpression::GetDescription() const
 {
-	return TEXT("Add a UMaterialExpression to the material graph. Optionally sets parameter name, position, and initial properties.");
+    return TEXT("Add a UMaterialExpression to the material graph. Optionally sets parameter name, position, and initial properties. Session-mode tool: open via material_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialTool_AddExpression::GetInputSchema() const

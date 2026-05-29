@@ -5,6 +5,7 @@
 #include "Tools/ClaireonAudioHelpers.h"
 #include "Tools/ClaireonAudioSessionRegistry.h"
 #include "Tools/ClaireonAnimEditToolBase.h" // FToolSchemaBuilder
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
 
 #include "Dom/JsonObject.h"
@@ -26,9 +27,10 @@ FString FClaireonMetaSoundTool_Open::GetOperation() const { return TEXT("open");
 
 FString FClaireonMetaSoundTool_Open::GetDescription() const
 {
-	return TEXT("Open a UMetaSoundSource editing session. Locks the asset under tool name 'audio_edit' (I1) "
-				"so SoundCue and MetaSound mutually exclude on the same asset path. "
-				"Initializes the FMetaSoundFrontendDocumentBuilder for subsequent mutations.");
+	return TEXT("Open a UMetaSoundSource editing session and lock the asset under tool name "
+				"'audio_edit' (I1) so SoundCue and MetaSound mutually exclude on the same asset path. "
+				"Eagerly attaches the FMetaSoundFrontendDocumentBuilder so subsequent session ops "
+				"(add_node, connect_pins, set_default, save) never have to first-touch the registry.");
 }
 
 TSharedPtr<FJsonObject> FClaireonMetaSoundTool_Open::GetInputSchema() const
@@ -110,6 +112,8 @@ IClaireonTool::FToolResult FClaireonMetaSoundTool_Open::Execute(const TSharedPtr
 	Entry->LastOperationStatus = TEXT("Session opened");
 	Entry->FocusedNodeIndex = INDEX_NONE;
 	Entry->MetaSoundBuilderHandle = static_cast<void*>(Builder);
+
+	ClaireonAssetUtils::OpenAssetEditorIfHeadless(Asset);
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("session_id"), SessionId);

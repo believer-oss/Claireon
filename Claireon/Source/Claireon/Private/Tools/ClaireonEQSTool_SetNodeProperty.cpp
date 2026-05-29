@@ -15,7 +15,10 @@ FString ClaireonEQSTool_SetNodeProperty::GetOperation() const { return TEXT("set
 
 FString ClaireonEQSTool_SetNodeProperty::GetDescription() const
 {
-	return TEXT("Set a property on an EQS generator or test node. target='generator' edits the option's generator; target='test' requires test_index.");
+	return TEXT("Set a property on an EQS generator or test node within an open editing session via "
+				"reflection (ImportText). target='generator' edits the option's generator; "
+				"target='test' requires test_index. Requires session_id from eqs.open; the edit is "
+				"transactional and only persists after save.");
 }
 
 TSharedPtr<FJsonObject> ClaireonEQSTool_SetNodeProperty::GetInputSchema() const

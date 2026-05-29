@@ -104,12 +104,12 @@ UEdGraphPin* FindPinOnNode(UEdGraphNode* Node, const FString& PinName, FString& 
 }  // namespace ClaireonAnimGraphTools_BatchInternal
 
 // ============================================================================
-// ClaireonAnimGraphTool_ApplyGraph
+// ClaireonAnimGraphTool_ApplyDelta
 // ============================================================================
 
-FString ClaireonAnimGraphTool_ApplyGraph::GetOperation() const { return TEXT("apply_graph"); }
+FString ClaireonAnimGraphTool_ApplyDelta::GetOperation() const { return TEXT("apply_delta"); }
 
-FString ClaireonAnimGraphTool_ApplyGraph::GetDescription() const
+FString ClaireonAnimGraphTool_ApplyDelta::GetDescription() const
 {
 	return TEXT("Atomic batch graph construction and modification. Disconnects, removes, creates nodes, "
 		"and connects pins in one call. New nodes are referenced by local 'id'; existing nodes by GUID or title. "
@@ -117,7 +117,7 @@ FString ClaireonAnimGraphTool_ApplyGraph::GetDescription() const
 		"Returns full graph state with id_map showing local-id → GUID mappings.");
 }
 
-TSharedPtr<FJsonObject> ClaireonAnimGraphTool_ApplyGraph::GetInputSchema() const
+TSharedPtr<FJsonObject> ClaireonAnimGraphTool_ApplyDelta::GetInputSchema() const
 {
 	FToolSchemaBuilder S;
 	S.AddString(TEXT("session_id"), TEXT("Session ID"), true);
@@ -128,7 +128,7 @@ TSharedPtr<FJsonObject> ClaireonAnimGraphTool_ApplyGraph::GetInputSchema() const
 	return S.Build();
 }
 
-FToolResult ClaireonAnimGraphTool_ApplyGraph::Execute(const TSharedPtr<FJsonObject>& Arguments)
+FToolResult ClaireonAnimGraphTool_ApplyDelta::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
 	FString SessionId;
 	FAnimGraphEditToolData* Data = nullptr;

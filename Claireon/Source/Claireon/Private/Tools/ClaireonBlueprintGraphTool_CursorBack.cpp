@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_CursorBack::GetOperation() const { return TEX
 
 FString ClaireonBlueprintGraphTool_CursorBack::GetDescription() const
 {
-    return TEXT("Navigate the editing cursor back through its history in the open Blueprint editing session. Requires open session_id from blueprint_graph_open. Read-only with respect to graph contents (the cursor is session state). Common pitfall: errors when history is empty; use blueprint_graph_get_state to inspect the current cursor position. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Navigate the editing cursor back through its history in the open Blueprint editing session. Requires open session_id from bp_open. Read-only with respect to graph contents (the cursor is session state). Common pitfall: errors when history is empty; use bp_get_state to inspect the current cursor position. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_CursorBack::GetInputSchema() const

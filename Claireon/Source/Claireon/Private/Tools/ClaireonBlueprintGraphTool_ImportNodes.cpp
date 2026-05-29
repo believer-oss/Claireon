@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_ImportNodes::GetOperation() const { return TE
 
 FString ClaireonBlueprintGraphTool_ImportNodes::GetDescription() const
 {
-    return TEXT("Import nodes from a T3D text payload into the open Blueprint editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. The T3D format is the same as the engine's clipboard copy/paste format; nodes paste at the cursor position with new GUIDs. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Import nodes from a T3D text payload into the open Blueprint editing session. Requires open session_id from bp_open (or pass asset_path to auto-open). Transactional. The T3D format is the same as the engine's clipboard copy/paste format; nodes paste at the cursor position with new GUIDs. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ImportNodes::GetInputSchema() const

@@ -10,7 +10,7 @@ FString ClaireonPCGGraphTool_CursorBack::GetOperation() const { return TEXT("cur
 
 FString ClaireonPCGGraphTool_CursorBack::GetDescription() const
 {
-	return TEXT("Pop the most recent entry from the session's navigation history and focus on that node.");
+    return TEXT("Move the session cursor back to the previous node by popping the cursor stack. Session-mode tool: open via pcg_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonPCGGraphTool_CursorBack::GetInputSchema() const

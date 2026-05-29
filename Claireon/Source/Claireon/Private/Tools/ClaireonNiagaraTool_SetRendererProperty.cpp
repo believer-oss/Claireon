@@ -16,7 +16,7 @@ FString ClaireonNiagaraTool_SetRendererProperty::GetOperation() const { return T
 
 FString ClaireonNiagaraTool_SetRendererProperty::GetDescription() const
 {
-	return TEXT("Set a property on a renderer attached to an emitter.");
+    return TEXT("Set a property on a renderer attached to an emitter. Session-mode tool: open via niagara_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_SetRendererProperty::GetInputSchema() const

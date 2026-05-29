@@ -288,20 +288,23 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, ThreeCharMinTermCutoff)
 	FClaireonToolCatalogMatcher::Clear();
 	FClaireonToolCatalogMatcher::BuildCatalog(F);
 
-	// Sub-case A: query "ai create" -- "ai" is <=2 chars and must be dropped
-	// in favour of "create"; asset_create matches (via Name "create" posting),
-	// ai_decisions_inspect must NOT (no "create" token in any of its fields).
+	// Sub-case A: query "ai create" -- "ai" is <=2 chars and goes into
+	// ShortMatchTokens; "create" is kept as a long token.
+	// asset_create matches via long-token "create" (Name hit).
+	// ai_decisions_inspect now matches via short-token exact-name "ai" (Name hit).
+	// Both tools appear in the result; only the presence of asset_create is asserted
+	// because that is the stable invariant (long-token scoring always fires).
+	// Note: ai_decisions_inspect's appearance is the correct post-feature behaviour --
+	// the old assertion EXPECT_FALSE(bSawAiDecisions) was written before the
+	// short-token whole-word match feature landed in stage 020 (#0000).
 	{
 		TArray<FClaireonToolCatalogMatch> Top = FClaireonToolCatalogMatcher::FindNearest(TEXT("ai create"), 5);
 		bool bSawAssetCreate = false;
-		bool bSawAiDecisions = false;
 		for (const FClaireonToolCatalogMatch& M : Top)
 		{
-			if (M.Name == TEXT("asset_create"))         { bSawAssetCreate = true; }
-			if (M.Name == TEXT("ai_decisions_inspect")) { bSawAiDecisions = true; }
+			if (M.Name == TEXT("asset_create")) { bSawAssetCreate = true; }
 		}
 		UNTEST_EXPECT_TRUE(bSawAssetCreate);
-		UNTEST_EXPECT_FALSE(bSawAiDecisions);
 	}
 
 	// Sub-case B: query "ai" alone -- all tokens are <=2 chars, so the kept-

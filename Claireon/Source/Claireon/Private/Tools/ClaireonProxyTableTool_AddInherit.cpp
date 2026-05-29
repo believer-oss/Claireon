@@ -13,7 +13,7 @@ FString ClaireonTool_ProxyTableAddInherit::GetOperation() const { return TEXT("a
 
 FString ClaireonTool_ProxyTableAddInherit::GetDescription() const
 {
-	return TEXT("Append a parent ProxyTable to the InheritEntriesFrom chain of a ProxyTable.");
+    return TEXT("Add a parent ProxyTable to the InheritEntriesFrom chain of a ProxyTable by appending it at the end. Stateless / non-session: writes the asset directly by path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ProxyTableAddInherit::GetInputSchema() const

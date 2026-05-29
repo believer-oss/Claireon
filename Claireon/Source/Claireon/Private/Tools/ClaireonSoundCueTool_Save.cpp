@@ -15,8 +15,10 @@ FString FClaireonSoundCueTool_Save::GetOperation() const { return TEXT("save"); 
 
 FString FClaireonSoundCueTool_Save::GetDescription() const
 {
-	return TEXT("Compile the SoundCue's EdGraph and save the package to disk. "
-				"Runs CompileSoundNodesFromGraphNodes (I4) before SavePackages.");
+	return TEXT("Save the SoundCue's package to disk within the current session. "
+				"Runs CompileSoundNodesFromGraphNodes (I4) before SavePackages, then clears the "
+				"dirty flag on the session. Requires session_id from soundcue.open; the session "
+				"stays open so further edits remain transactional after the save.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundCueTool_Save::GetInputSchema() const

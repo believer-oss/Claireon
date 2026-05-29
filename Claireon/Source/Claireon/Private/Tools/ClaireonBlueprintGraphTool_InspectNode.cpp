@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_InspectNode::GetOperation() const { return TE
 
 FString ClaireonBlueprintGraphTool_InspectNode::GetDescription() const
 {
-    return TEXT("Return a single node in full fidelity (structured JSON) from the open Blueprint editing session without dumping the whole graph. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Read-only. Pair with blueprint_graph_get_state to navigate, then drill in here for property-level detail. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Return a single node in full fidelity (structured JSON) from the open Blueprint editing session without dumping the whole graph. Requires open session_id from bp_open (or pass asset_path to auto-open). Read-only. Pair with bp_get_state to navigate, then drill in here for property-level detail. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_InspectNode::GetInputSchema() const

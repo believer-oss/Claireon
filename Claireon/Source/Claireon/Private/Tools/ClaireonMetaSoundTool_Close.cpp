@@ -13,7 +13,9 @@ FString FClaireonMetaSoundTool_Close::GetOperation() const { return TEXT("close"
 
 FString FClaireonMetaSoundTool_Close::GetDescription() const
 {
-	return TEXT("Close a UMetaSoundSource editing session and release the lock and builder handle.");
+	return TEXT("Close a UMetaSoundSource editing session, releasing the asset lock and the internal "
+				"FMetaSoundFrontendDocumentBuilder handle. Call after all edits are complete to unblock "
+				"other callers. The session_id is invalidated; reopen to start a new session.");
 }
 
 TSharedPtr<FJsonObject> FClaireonMetaSoundTool_Close::GetInputSchema() const

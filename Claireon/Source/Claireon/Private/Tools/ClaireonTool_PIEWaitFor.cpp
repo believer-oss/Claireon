@@ -26,7 +26,7 @@ FString ClaireonTool_PIEWaitFor::GetOperation() const { return TEXT("wait_for");
 
 FString ClaireonTool_PIEWaitFor::GetDescription() const
 {
-	return TEXT("Wait for a condition to be met in the PIE session, with configurable timeout and poll interval. Blocks the response until the condition is met or timeout expires.");
+    return TEXT("Wait for a PIE condition (timer, event, level streaming) and resume when it fires. Stateless / non-session: blocks the calling thread on an editor-wide condition without opening any asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PIEWaitFor::GetInputSchema() const

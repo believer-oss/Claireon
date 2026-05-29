@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_ConnectPins::GetSearchKeywords() cons
 
 FString ClaireonBlueprintGraphTool_ConnectPins::GetDescription() const
 {
-    return TEXT("Connects two pins on the current session's graph. Accepts node GUIDs or titles plus pin names; pin names are fuzzy-resolved (e.g. 'exec' matches 'execute', 'then' matches the canonical exec output). Most-common pitfall: forgetting that auto_connect_from_cursor on blueprint_graph_add_node typically obviates this call. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Connects two pins on the current session's graph. Accepts node GUIDs or titles plus pin names; pin names are fuzzy-resolved (e.g. 'exec' matches 'execute', 'then' matches the canonical exec output). Most-common pitfall: forgetting that auto_connect_from_cursor on bp_add_node typically obviates this call. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ConnectPins::GetInputSchema() const
@@ -370,7 +370,7 @@ FString ClaireonBlueprintGraphTool_ConnectPins::GetFullDescription() const
         "'then' matches the canonical exec output, and partial substring "
         "matches resolve as long as they are unambiguous. Per the per-node "
         "cycle in the per-tool authoring guidance, prefer auto_connect_from_cursor=true "
-        "on blueprint_graph_add_node to wire as you go; an explicit "
+        "on bp_add_node to wire as you go; an explicit "
         "connect_pins call is mainly needed when joining two pre-existing "
         "nodes or wiring data pins that the cursor cannot route automatically.");
 }
@@ -378,7 +378,7 @@ FString ClaireonBlueprintGraphTool_ConnectPins::GetFullDescription() const
 FString ClaireonBlueprintGraphTool_ConnectPins::GetExampleUsage() const
 {
     return TEXT(
-        "blueprint_graph_connect_pins session_id=\"...\" "
+        "bp_connect_pins session_id=\"...\" "
         "from_node=\"PrintString_0\" from_pin=\"then\" "
         "to_node=\"DelayUntilNextTick_1\" to_pin=\"exec\"");
 }
@@ -386,7 +386,7 @@ FString ClaireonBlueprintGraphTool_ConnectPins::GetExampleUsage() const
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ConnectPins::GetParameterTooltips() const
 {
     TSharedPtr<FJsonObject> T = MakeShared<FJsonObject>();
-    T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by blueprint_graph_open or _create."));
+    T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by bp_open or _create."));
     T->SetStringField(TEXT("from_node"), TEXT("Source node identifier: GUID (stable) or human-readable title."));
     T->SetStringField(TEXT("from_pin"), TEXT("Source pin name. Fuzzy-resolved ('exec', 'then', partial substrings)."));
     T->SetStringField(TEXT("to_node"), TEXT("Target node identifier: GUID or title."));

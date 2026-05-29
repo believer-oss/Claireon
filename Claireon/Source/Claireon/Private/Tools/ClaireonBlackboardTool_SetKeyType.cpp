@@ -13,7 +13,9 @@ FString ClaireonBlackboardTool_SetKeyType::GetOperation() const { return TEXT("s
 
 FString ClaireonBlackboardTool_SetKeyType::GetDescription() const
 {
-	return TEXT("Change the type of an existing blackboard key.");
+	return TEXT("Set the type of an existing Blackboard key within an open editing session. Requires "
+				"session_id from blackboard.open; the edit is transactional and only persists after "
+				"save. Existing default values for the key are reset when the type changes.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlackboardTool_SetKeyType::GetInputSchema() const

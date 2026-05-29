@@ -13,7 +13,10 @@ FString ClaireonBehaviorTreeTool_UpdateAsset::GetOperation() const { return TEXT
 
 FString ClaireonBehaviorTreeTool_UpdateAsset::GetDescription() const
 {
-	return TEXT("Rebuild the runtime Behavior Tree from the graph (BT equivalent of compile).");
+	return TEXT("Compile the Behavior Tree by rebuilding the runtime tree from the EdGraph within the "
+				"current session (BT equivalent of compile). Requires session_id from behavior_tree.open; "
+				"the session stays open so subsequent transactional edits and the eventual save observe "
+				"the rebuilt structure.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBehaviorTreeTool_UpdateAsset::GetInputSchema() const

@@ -13,7 +13,7 @@ FString ClaireonMaterialTool_DisconnectExpressionInput::GetOperation() const { r
 
 FString ClaireonMaterialTool_DisconnectExpressionInput::GetDescription() const
 {
-	return TEXT("Disconnect a named input on a target expression.");
+    return TEXT("Disconnect a named input on a target expression in the open material editing session. Session-mode tool: open via material_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialTool_DisconnectExpressionInput::GetInputSchema() const

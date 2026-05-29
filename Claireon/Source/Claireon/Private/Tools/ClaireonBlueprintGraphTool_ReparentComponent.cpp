@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_ReparentComponent::GetOperation() const { ret
 
 FString ClaireonBlueprintGraphTool_ReparentComponent::GetDescription() const
 {
-    return TEXT("Reparent a component within the Blueprint's Simple Construction Script hierarchy in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Transactional. Common pitfall: cycles are rejected; the new parent must not be the component itself or any of its descendants. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Reparent a component within the Blueprint's Simple Construction Script hierarchy in the open editing session. Requires open session_id from bp_open (or pass asset_path to auto-open). Transactional. Common pitfall: cycles are rejected; the new parent must not be the component itself or any of its descendants. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ReparentComponent::GetInputSchema() const

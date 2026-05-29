@@ -40,9 +40,10 @@ FString FClaireonConcurrencyTool_SetProperty::GetOperation() const { return TEXT
 
 FString FClaireonConcurrencyTool_SetProperty::GetDescription() const
 {
-	return TEXT("Set a property on a USoundConcurrency asset by reflection. Concurrency.ResolutionRule "
-				"accepts either an enum name (e.g. 'StopOldest') or an integer index. Wraps in "
-				"FScopedTransaction; saves on success.");
+	return TEXT("Set a property on a USoundConcurrency asset by reflection. Non-session, immediate "
+				"operation; no session_id is needed. Concurrency.ResolutionRule accepts either an "
+				"enum name (e.g. 'StopOldest') or an integer index; the 'Concurrency.' prefix is "
+				"added automatically if missing. Wraps the write in FScopedTransaction and saves.");
 }
 
 TSharedPtr<FJsonObject> FClaireonConcurrencyTool_SetProperty::GetInputSchema() const

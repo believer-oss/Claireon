@@ -14,7 +14,7 @@ FString ClaireonLevelSequenceTool_SetPlaybackRange::GetOperation() const { retur
 
 FString ClaireonLevelSequenceTool_SetPlaybackRange::GetDescription() const
 {
-	return TEXT("Set the sequence's playback range (start_frame inclusive, end_frame exclusive).");
+    return TEXT("Set the sequence's playback range (start_frame inclusive, end_frame exclusive). Session-mode tool: open via level_sequence_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_SetPlaybackRange::GetInputSchema() const

@@ -37,6 +37,9 @@ struct FLandscapeSplineEditToolData
 	/** When true, BuildStateResponse returns minimal output */
 	bool bSuppressOutput = false;
 
+	/** Counts consecutive calls resolved via asset_path (no session_id). Used by EmitSessionHintIfNeeded. */
+	int32 ConsecutiveAssetPathCalls = 0;
+
 	bool IsValid() const
 	{
 		return SplinesComponent.IsValid();

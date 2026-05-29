@@ -14,7 +14,10 @@ FString ClaireonEQSTool_ReorderTests::GetOperation() const { return TEXT("reorde
 
 FString ClaireonEQSTool_ReorderTests::GetDescription() const
 {
-	return TEXT("Move a test within an EQS option's test array to a new index.");
+	return TEXT("Reorder a test within an EQS option's test array to a new index within an open "
+				"editing session. Requires session_id from eqs.open; the edit is transactional and "
+				"only persists after save. Test order determines runtime evaluation priority on the "
+				"option.");
 }
 
 TSharedPtr<FJsonObject> ClaireonEQSTool_ReorderTests::GetInputSchema() const

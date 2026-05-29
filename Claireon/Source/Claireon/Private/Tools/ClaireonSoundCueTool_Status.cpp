@@ -13,7 +13,9 @@ FString FClaireonSoundCueTool_Status::GetOperation() const { return TEXT("status
 
 FString FClaireonSoundCueTool_Status::GetDescription() const
 {
-	return TEXT("Return current state of a SoundCue editing session (asset path, focused node, last operation).");
+	return TEXT("Return the current state of a SoundCue editing session: asset path, node count, "
+				"focused node index, and last operation status. Use to confirm session health or "
+				"refresh the caller's view of the graph without making changes. Requires session_id.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundCueTool_Status::GetInputSchema() const

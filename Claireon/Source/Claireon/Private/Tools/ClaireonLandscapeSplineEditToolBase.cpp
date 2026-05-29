@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonLandscapeSplineEditToolBase.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
 #include "LandscapeSplineControlPoint.h"
 #include "LandscapeSplineSegment.h"
@@ -154,8 +155,12 @@ FToolResult ClaireonLandscapeSplineEditToolBase::BuildStateResponse(const FStrin
 
 	ResultData->SetNumberField(TEXT("focused_control_point_index"), Data->FocusedControlPointIndex);
 
+	const FString SplineProxyPath = Data->LandscapeProxy.IsValid() ? Data->LandscapeProxy->GetPathName() : FString();
+	FString SessionHintSummaryTag;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResultData, Data->ConsecutiveAssetPathCalls, SplineProxyPath, SessionId, SessionHintSummaryTag);
+
 	const FString Summary = FString::Printf(
 		TEXT("Session %s: %d control points, %d segments -- %s"),
 		*SessionId, ControlPoints.Num(), Segments.Num(), *Data->LastOperationStatus);
-	return MakeSuccessResult(ResultData, Summary);
+	return MakeSuccessResult(ResultData, Summary + SessionHintSummaryTag);
 }

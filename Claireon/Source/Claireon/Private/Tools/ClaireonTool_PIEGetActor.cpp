@@ -17,7 +17,7 @@ FString ClaireonTool_PIEGetActor::GetOperation() const { return TEXT("get_actor"
 
 FString ClaireonTool_PIEGetActor::GetDescription() const
 {
-	return TEXT("Look up an actor by its stable ID in the PIE world. Actor IDs are assigned by tools like getPlayerPawnByPlayerIndex.");
+    return TEXT("Get an actor by its stable ID in the PIE world. Actor IDs are assigned by tools like getPlayerPawnByPlayerIndex. Read-only / non-session inspector: reads the paused PIE world.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PIEGetActor::GetInputSchema() const

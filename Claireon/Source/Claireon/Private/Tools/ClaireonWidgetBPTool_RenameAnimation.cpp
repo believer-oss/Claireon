@@ -14,7 +14,7 @@ FString ClaireonWidgetBPTool_RenameAnimation::GetOperation() const { return TEXT
 
 FString ClaireonWidgetBPTool_RenameAnimation::GetDescription() const
 {
-    return TEXT("Rename a UWidgetAnimation.");
+    return TEXT("Rename a UWidgetAnimation on the Widget Blueprint to a new name. Session-mode tool: open via widgetbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_RenameAnimation::GetInputSchema() const

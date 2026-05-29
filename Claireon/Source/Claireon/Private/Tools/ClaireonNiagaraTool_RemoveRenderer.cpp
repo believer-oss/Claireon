@@ -16,7 +16,7 @@ FString ClaireonNiagaraTool_RemoveRenderer::GetOperation() const { return TEXT("
 
 FString ClaireonNiagaraTool_RemoveRenderer::GetDescription() const
 {
-	return TEXT("Remove a renderer from an emitter by index.");
+    return TEXT("Remove a renderer from an emitter by index. Session-mode tool: open via niagara_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_RemoveRenderer::GetInputSchema() const

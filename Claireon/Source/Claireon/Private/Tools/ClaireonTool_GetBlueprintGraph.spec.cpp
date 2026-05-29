@@ -7,7 +7,7 @@
 // (ClaireonTool_GetBlueprintGraph) is untouched.
 
 #include "Tools/ClaireonTool_GetBlueprintGraph.h"
-#include "Tools/ClaireonTool_ApplyBlueprintGraph.h"
+#include "Tools/ClaireonTool_ApplyBlueprintDelta.h"
 #include "Tools/ClaireonBlueprintGraphTool_Create.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddNode.h"
 #include "Tools/ClaireonBlueprintGraphTool_MoveNode.h"
@@ -751,7 +751,7 @@ bool FGetBlueprintGraphTest_ApplyGraphIdMapFormat::RunTest(const FString& Parame
 	}
 	ApplyArgs->SetArrayField(TEXT("nodes"), Nodes);
 
-	ClaireonTool_ApplyBlueprintGraph ApplyTool;
+	ClaireonTool_ApplyBlueprintDelta ApplyTool;
 	auto AR = ApplyTool.Execute(ApplyArgs);
 	if (AR.bIsError)
 	{

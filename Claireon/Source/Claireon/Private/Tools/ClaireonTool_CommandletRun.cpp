@@ -17,7 +17,7 @@ FString ClaireonTool_CommandletRun::GetOperation() const { return TEXT("run"); }
 
 FString ClaireonTool_CommandletRun::GetDescription() const
 {
-	return TEXT("Execute an Unreal commandlet as a subprocess with timeout");
+    return TEXT("Execute an Unreal commandlet as a subprocess with timeout. Stateless / non-session: spawns an external editor process and waits for it.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_CommandletRun::GetInputSchema() const

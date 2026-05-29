@@ -39,8 +39,10 @@ FString FClaireonSoundClassTool_SetProperty::GetOperation() const { return TEXT(
 
 FString FClaireonSoundClassTool_SetProperty::GetDescription() const
 {
-	return TEXT("Set a property on a USoundClass via reflection (e.g. property_path=\"Properties.Volume\"). "
-				"Wraps in FScopedTransaction; saves on success.");
+	return TEXT("Set a property on a USoundClass by reflection (e.g. property_path=\"Properties.Volume\"). "
+				"Non-session, immediate operation; no session_id is needed. The 'Properties.' prefix is "
+				"added automatically if missing. Wraps the write in FScopedTransaction and saves the "
+				"asset on success.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundClassTool_SetProperty::GetInputSchema() const

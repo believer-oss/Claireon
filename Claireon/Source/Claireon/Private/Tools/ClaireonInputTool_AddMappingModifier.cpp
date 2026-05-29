@@ -15,7 +15,7 @@ FString ClaireonInputTool_AddMappingModifier::GetOperation() const { return TEXT
 
 FString ClaireonInputTool_AddMappingModifier::GetDescription() const
 {
-	return TEXT("Add a per-mapping modifier to the mapping at the given index.");
+    return TEXT("Add a per-mapping modifier to the mapping at the given index. Session-mode tool: open via input_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonInputTool_AddMappingModifier::GetInputSchema() const

@@ -241,7 +241,7 @@ bool FClaireonSpecApplicator_Blueprint::OpenOrCreateAsset(const FString& AssetPa
 	// Open session
 	const FString BPPathName = BP->GetPathName();
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
-		BPPathName, TEXT("blueprint_edit_graph"));
+		BPPathName, TEXT("bp"));
 
 	if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 	{

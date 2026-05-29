@@ -13,7 +13,7 @@ FString ClaireonMaterialTool_ConnectToMaterialOutput::GetOperation() const { ret
 
 FString ClaireonMaterialTool_ConnectToMaterialOutput::GetDescription() const
 {
-	return TEXT("Wire an expression output to a root material attribute (e.g. BaseColor, EmissiveColor, Opacity).");
+    return TEXT("Connect an expression output to a root material attribute (e.g. BaseColor, EmissiveColor, Opacity). Session-mode tool: open via material_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialTool_ConnectToMaterialOutput::GetInputSchema() const

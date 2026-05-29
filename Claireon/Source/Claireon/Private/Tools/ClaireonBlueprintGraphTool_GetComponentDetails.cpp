@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_GetComponentDetails::GetOperation() const { r
 
 FString ClaireonBlueprintGraphTool_GetComponentDetails::GetDescription() const
 {
-    return TEXT("Inspect a component on the Blueprint's Simple Construction Script and return its properties in the open editing session. Requires open session_id from blueprint_graph_open (or pass asset_path to auto-open). Read-only. Returns property name, type, and current value tuples for the component template. Session-mode tool: open via blueprint_graph_open first.");
+    return TEXT("Inspect a component on the Blueprint's Simple Construction Script and return its properties in the open editing session. Requires open session_id from bp_open (or pass asset_path to auto-open). Read-only. Returns property name, type, and current value tuples for the component template. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_GetComponentDetails::GetInputSchema() const

@@ -13,7 +13,7 @@ FString ClaireonFoliageTool_Erase::GetOperation() const { return TEXT("erase"); 
 
 FString ClaireonFoliageTool_Erase::GetDescription() const
 {
-	return TEXT("Remove foliage instances within a sphere. Optionally filter by foliage type.");
+    return TEXT("Remove foliage instances within a sphere. Optionally filter by foliage type. Session-mode tool: open via foliage_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonFoliageTool_Erase::GetInputSchema() const

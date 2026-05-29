@@ -1,7 +1,7 @@
 ﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Tests for blueprint_graph_* metadata overrides (P1, Stage 007). Asserts
+// Tests for bp_* metadata overrides (P1, Stage 007). Asserts
 // that each of the 10 hot-path tools returns rich GetFullDescription /
 // GetExampleUsage, that the 4 spec'd tools return GetParameterTooltips,
 // and that the workflow rules from the per-tool authoring guidance
@@ -66,16 +66,16 @@ namespace BPGraphMetadataTestHelpers
 UNTEST_UNIT(Claireon, BlueprintGraphMetadata, AllTenToolsHaveRichMetadata)
 {
 	using namespace BPGraphMetadataTestHelpers;
-	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_Open>(TEXT("blueprint_graph_open")));
-	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_AddNode>(TEXT("blueprint_graph_add_node")));
-	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_ConnectPins>(TEXT("blueprint_graph_connect_pins")));
-	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_SetPinValue>(TEXT("blueprint_graph_set_pin_value")));
-	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_SelectPin>(TEXT("blueprint_graph_select_pin")));
-	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_AddVariable>(TEXT("blueprint_graph_add_variable")));
-	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_Save>(TEXT("blueprint_graph_save")));
-	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_Format>(TEXT("blueprint_graph_format")));
-	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_Compile>(TEXT("blueprint_graph_compile")));
-	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_Close>(TEXT("blueprint_graph_close")));
+	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_Open>(TEXT("bp_open")));
+	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_AddNode>(TEXT("bp_add_node")));
+	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_ConnectPins>(TEXT("bp_connect_pins")));
+	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_SetPinValue>(TEXT("bp_set_pin_value")));
+	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_SelectPin>(TEXT("bp_select_pin")));
+	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_AddVariable>(TEXT("bp_add_variable")));
+	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_Save>(TEXT("bp_save")));
+	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_Format>(TEXT("bp_format")));
+	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_Compile>(TEXT("bp_compile")));
+	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_Close>(TEXT("bp_close")));
 	co_return;
 }
 

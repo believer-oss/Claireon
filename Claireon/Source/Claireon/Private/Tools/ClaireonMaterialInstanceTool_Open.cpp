@@ -4,6 +4,7 @@
 #include "Tools/ClaireonMaterialInstanceTool_Open.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "Tools/ClaireonMaterialHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
 #include "Materials/MaterialInstanceConstant.h"
 
@@ -64,6 +65,8 @@ FToolResult ClaireonMaterialInstanceTool_Open::Execute(const TSharedPtr<FJsonObj
 	NewData.bSuppressOutput = bSuppressOutput;
 
 	ToolData.Add(SessionId, MoveTemp(NewData));
+
+	ClaireonAssetUtils::OpenAssetEditorIfHeadless(Instance);
 
 	FMaterialInstanceEditToolData* Data = ToolData.Find(SessionId);
 	return BuildStateResponse(SessionId, Data);

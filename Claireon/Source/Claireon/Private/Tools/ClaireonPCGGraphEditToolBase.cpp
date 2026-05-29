@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonPCGGraphEditToolBase.h"
 #include "Tools/ClaireonPCGGraphHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
 #include "PCGGraph.h"
 #include "PCGNode.h"
@@ -118,9 +119,12 @@ FToolResult ClaireonPCGGraphEditToolBase::BuildStateResponse(const FString& Sess
 		}
 	}
 
+	FString SessionHintSummaryTag;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResponseData, Data->ConsecutiveAssetPathCalls, AssetPath, SessionId, SessionHintSummaryTag);
+
 	FString Summary = Data->LastOperationStatus.IsEmpty()
 		? FString::Printf(TEXT("Session %s: %s"), *SessionId, *AssetPath)
 		: Data->LastOperationStatus;
 
-	return MakeSuccessResult(ResponseData, Summary);
+	return MakeSuccessResult(ResponseData, Summary + SessionHintSummaryTag);
 }

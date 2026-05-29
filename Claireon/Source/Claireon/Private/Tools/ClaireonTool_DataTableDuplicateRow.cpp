@@ -16,7 +16,7 @@ FString ClaireonTool_DataTableDuplicateRow::GetOperation() const { return TEXT("
 
 FString ClaireonTool_DataTableDuplicateRow::GetDescription() const
 {
-	return TEXT("Copy an existing row to a new name");
+    return TEXT("Copy an existing data table row to a new row name. Stateless / non-session: writes the asset directly by path without opening any editing session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_DataTableDuplicateRow::GetInputSchema() const

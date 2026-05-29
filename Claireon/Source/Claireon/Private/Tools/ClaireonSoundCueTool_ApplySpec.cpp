@@ -12,8 +12,10 @@ FString FClaireonSoundCueTool_ApplySpec::GetOperation() const { return TEXT("app
 
 FString FClaireonSoundCueTool_ApplySpec::GetDescription() const
 {
-	return TEXT("Apply a SoundCue declarative spec ({kind=\"SoundCue\", asset_path, ...}). "
-				"Two-pass cross-reference handling preserved (load referenced attenuation/concurrency/sound_class).");
+	return TEXT("Apply a SoundCue declarative spec ({kind=\"SoundCue\", asset_path, ...}) in one shot. "
+				"Non-session, stateless operation; no session_id required and no editor session is "
+				"opened. Two-pass cross-reference handling is preserved (loads referenced "
+				"attenuation/concurrency/sound_class assets before wiring them in).");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundCueTool_ApplySpec::GetInputSchema() const

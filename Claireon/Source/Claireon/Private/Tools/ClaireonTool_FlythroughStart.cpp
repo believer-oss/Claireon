@@ -12,7 +12,7 @@ FString ClaireonTool_FlythroughStart::GetOperation() const { return TEXT("flythr
 
 FString ClaireonTool_FlythroughStart::GetDescription() const
 {
-	return TEXT("Begin a flythrough with a spline-based flight plan. Activates the debug camera and drives it along waypoints. Returns immediately; poll editor.pie.flythrough.getStatus for progress.");
+    return TEXT("Start a flythrough recording from the active camera path. Stateless / non-session: starts an editor-wide flythrough without opening any per-asset session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_FlythroughStart::GetInputSchema() const

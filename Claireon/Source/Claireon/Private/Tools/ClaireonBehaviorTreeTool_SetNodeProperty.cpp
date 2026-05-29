@@ -16,7 +16,7 @@ FString ClaireonBehaviorTreeTool_SetNodeProperty::GetOperation() const { return 
 
 FString ClaireonBehaviorTreeTool_SetNodeProperty::GetDescription() const
 {
-	return TEXT("Set a property on a BT node instance via reflection (ImportText-based). Works on composites, tasks, decorators, and services.");
+    return TEXT("Set a property on a BT node instance via reflection (ImportText-based). Works on composites, tasks, decorators, and services. Session-mode tool: open via behaviortree_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBehaviorTreeTool_SetNodeProperty::GetInputSchema() const

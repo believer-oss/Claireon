@@ -18,7 +18,7 @@ FString ClaireonWidgetBPTool_DuplicateAnimation::GetOperation() const { return T
 
 FString ClaireonWidgetBPTool_DuplicateAnimation::GetDescription() const
 {
-    return TEXT("Duplicate a UWidgetAnimation under a new name.");
+    return TEXT("Duplicate a UWidgetAnimation under a new name on the Widget Blueprint. Session-mode tool: open via widgetbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_DuplicateAnimation::GetInputSchema() const

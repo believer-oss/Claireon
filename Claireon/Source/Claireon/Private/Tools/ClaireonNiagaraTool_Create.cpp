@@ -20,7 +20,7 @@ FString ClaireonNiagaraTool_Create::GetOperation() const { return TEXT("create")
 
 FString ClaireonNiagaraTool_Create::GetDescription() const
 {
-	return TEXT("Create a new Niagara System asset and open an edit session.");
+    return TEXT("Create a new Niagara System asset and open an edit session on it so subsequent edits run in-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_Create::GetInputSchema() const

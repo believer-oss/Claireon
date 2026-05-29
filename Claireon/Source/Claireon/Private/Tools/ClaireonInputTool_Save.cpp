@@ -15,7 +15,7 @@ FString ClaireonInputTool_Save::GetOperation() const { return TEXT("save"); }
 
 FString ClaireonInputTool_Save::GetDescription() const
 {
-	return TEXT("Save the asset owned by the Input edit session to disk.");
+    return TEXT("Save the asset owned by the Input edit session to disk. Session-mode tool: open via input_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonInputTool_Save::GetInputSchema() const

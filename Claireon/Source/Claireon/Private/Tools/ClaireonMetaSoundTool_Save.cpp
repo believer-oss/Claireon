@@ -26,8 +26,10 @@ FString FClaireonMetaSoundTool_Save::GetOperation() const { return TEXT("save");
 
 FString FClaireonMetaSoundTool_Save::GetDescription() const
 {
-	return TEXT("Commit the MetaSound builder document and write the package to disk. "
-				"The builder commit auto-compiles the MetaSound (I6) - there is no separate compile op.");
+	return TEXT("Save the MetaSound builder document to disk within the current session. The builder "
+				"commit (UpdateAndRegisterForExecution) auto-compiles the MetaSound graph (I6), so "
+				"there is no separate compile op. Requires session_id from metasound.open; the session "
+				"stays open so further edits remain transactional after the save.");
 }
 
 TSharedPtr<FJsonObject> FClaireonMetaSoundTool_Save::GetInputSchema() const

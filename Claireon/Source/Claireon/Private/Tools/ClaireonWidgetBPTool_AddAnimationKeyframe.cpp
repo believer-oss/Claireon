@@ -22,7 +22,7 @@ FString ClaireonWidgetBPTool_AddAnimationKeyframe::GetOperation() const { return
 
 FString ClaireonWidgetBPTool_AddAnimationKeyframe::GetDescription() const
 {
-    return TEXT("Add a keyframe to a widget animation track.");
+    return TEXT("Add a keyframe to a widget animation track in the open widget BP session. Session-mode tool: open via widgetbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_AddAnimationKeyframe::GetInputSchema() const

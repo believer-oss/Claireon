@@ -14,7 +14,7 @@ FString ClaireonMaterialInstanceTool_SetTextureParameter::GetOperation() const {
 
 FString ClaireonMaterialInstanceTool_SetTextureParameter::GetDescription() const
 {
-	return TEXT("Set a texture parameter override on a UMaterialInstanceConstant. Pass empty texture_path or 'None' to clear.");
+    return TEXT("Set a texture parameter override on a UMaterialInstanceConstant. Pass empty texture_path or 'None' to clear. Session-mode tool: open via material_instance_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialInstanceTool_SetTextureParameter::GetInputSchema() const

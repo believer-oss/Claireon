@@ -59,6 +59,25 @@ namespace
 		return Node->NodeGuid.ToString(EGuidFormats::DigitsWithHyphensInBraces);
 	}
 
+	// V10-promotable-ghost: Detect "ghost" pins on K2Node_PromotableOperator (and any
+	// other node class that uses unresolved-typed pins) whose PinCategory is NAME_None
+	// because the pin is inactive in the realized variant (e.g. an ErrorTolerance pin
+	// that only applies when the binary operator promotes to float). Emitting these
+	// pins as arguments produces uncompileable `func(A, B, /* unconnected */)` output
+	// even though the underlying C++ function takes only two arguments.
+	//
+	// Callers should treat a true result as "skip this pin entirely" -- it is not
+	// an input, not an output, not part of the function signature.
+	bool IsGhostPin(const UEdGraphPin* Pin)
+	{
+		if (!Pin)
+		{
+			return false;
+		}
+		// Empty/None PinCategory signals an inactive ghost pin on PromotableOperator etc.
+		return Pin->PinType.PinCategory.IsNone();
+	}
+
 	// Find a pin by name and direction on a node
 	UEdGraphPin* FindPin(const UEdGraphNode* Node, const FName& PinName, EEdGraphPinDirection Direction)
 	{
@@ -392,6 +411,10 @@ FString FClaireonBPNodeMapper::GetConnectedPinExpression(const UEdGraphPin* Pin)
 				for (UEdGraphPin* SrcPin : SourceNode->Pins)
 				{
 					if (!SrcPin || SrcPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec) continue;
+					// V10-promotable-ghost: Skip K2Node_PromotableOperator ghost pins
+					// (e.g. ErrorTolerance) which have empty PinCategory when the operator
+					// is realized as an integer/object/tag comparison rather than a float op.
+					if (IsGhostPin(SrcPin)) continue;
 					if (SrcPin->PinName == UEdGraphSchema_K2::PN_Self)
 					{
 						if (SrcPin->LinkedTo.Num() > 0)
@@ -442,6 +465,8 @@ FString FClaireonBPNodeMapper::GetConnectedPinExpression(const UEdGraphPin* Pin)
 				for (UEdGraphPin* SrcPin : SourceNode->Pins)
 				{
 					if (!SrcPin || SrcPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec) continue;
+					// V10-promotable-ghost: skip ghost pins
+					if (IsGhostPin(SrcPin)) continue;
 					if (SrcPin->PinName == UEdGraphSchema_K2::PN_Self)
 					{
 						if (SrcPin->LinkedTo.Num() > 0)
@@ -555,6 +580,8 @@ FString FClaireonBPNodeMapper::GetConnectedPinExpression(const UEdGraphPin* Pin)
 			for (UEdGraphPin* SrcPin : SourceNode->Pins)
 			{
 				if (!SrcPin || SrcPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec) continue;
+				// V10-promotable-ghost: skip ghost pins
+				if (IsGhostPin(SrcPin)) continue;
 				if (SrcPin->PinName == UEdGraphSchema_K2::PN_Self)
 				{
 					if (SrcPin->LinkedTo.Num() > 0)
@@ -1331,6 +1358,9 @@ FString FClaireonBPNodeMapper::MapCallFunctionNode(const UEdGraphNode* Node, int
 		{
 			continue;
 		}
+		// V10-promotable-ghost: skip K2Node_PromotableOperator ErrorTolerance and similar
+		// inactive ghost pins (empty/None PinCategory).
+		if (IsGhostPin(Pin)) continue;
 		if (Pin->PinName == UEdGraphSchema_K2::PN_Self)
 		{
 			if (Pin->LinkedTo.Num() > 0)
@@ -1659,6 +1689,8 @@ FString FClaireonBPNodeMapper::MapCallParentFunctionNode(const UEdGraphNode* Nod
 	{
 		if (!Pin || Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec) continue;
 		if (Pin->PinName == UEdGraphSchema_K2::PN_Self) continue;
+		// V10-promotable-ghost: skip ghost pins
+		if (IsGhostPin(Pin)) continue;
 		if (Pin->Direction == EGPD_Input)
 		{
 			Params.Add(GetConnectedPinExpression(Pin));
@@ -2196,6 +2228,8 @@ FString FClaireonBPNodeMapper::MapAsyncActionNode(const UEdGraphNode* Node, int3
 	{
 		if (!Pin || Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec) continue;
 		if (Pin->PinName == UEdGraphSchema_K2::PN_Self) continue;
+		// V10-promotable-ghost: skip ghost pins
+		if (IsGhostPin(Pin)) continue;
 		if (Pin->Direction == EGPD_Input)
 		{
 			Params.Add(GetConnectedPinExpression(Pin));
@@ -2809,6 +2843,8 @@ FMapNodeResult FClaireonBPNodeMapper::MapAsyncActionNodeEx(const UEdGraphNode* N
 	{
 		if (!Pin || Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec) continue;
 		if (Pin->PinName == UEdGraphSchema_K2::PN_Self) continue;
+		// V10-promotable-ghost: skip ghost pins
+		if (IsGhostPin(Pin)) continue;
 		if (Pin->Direction == EGPD_Input)
 		{
 			Params.Add(GetConnectedPinExpression(Pin));
@@ -2951,6 +2987,8 @@ FMapNodeResult FClaireonBPNodeMapper::MapCallFunctionNodeEx(const UEdGraphNode* 
 	for (UEdGraphPin* Pin : Node->Pins)
 	{
 		if (!Pin || Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec) continue;
+		// V10-promotable-ghost: skip ghost pins
+		if (IsGhostPin(Pin)) continue;
 		if (Pin->PinName == UEdGraphSchema_K2::PN_Self)
 		{
 			if (Pin->LinkedTo.Num() > 0) TargetExpr = GetConnectedPinExpression(Pin);

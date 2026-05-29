@@ -15,7 +15,7 @@ FString ClaireonTool_PythonAuditLog::GetOperation() const { return TEXT("audit_l
 
 FString ClaireonTool_PythonAuditLog::GetDescription() const
 {
-	return TEXT("Retrieve the Python invocation audit log with optional filtering. Shows recent script executions, their success status, duration, and optionally the full script text.");
+    return TEXT("Retrieve the Python invocation audit log with optional filtering. Shows recent script executions, their success status, duration, and optionally the full script text. Stateless / read-only / non-session: reads the in-memory audit log.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PythonAuditLog::GetInputSchema() const

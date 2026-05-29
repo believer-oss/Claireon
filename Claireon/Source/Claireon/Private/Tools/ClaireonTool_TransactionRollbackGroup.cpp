@@ -12,7 +12,7 @@ FString ClaireonTool_TransactionRollbackGroup::GetOperation() const { return TEX
 
 FString ClaireonTool_TransactionRollbackGroup::GetDescription() const
 {
-	return TEXT("Cancel the active transaction group and undo all operations within it.");
+    return TEXT("Cancel the active transaction group and undo all operations within it. Stateless / non-session: aborts a transaction scope on the editor-wide transactor.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_TransactionRollbackGroup::GetInputSchema() const

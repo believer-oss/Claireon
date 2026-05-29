@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonBlueprintGraphEditToolBase.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonLog.h"
 #include "ClaireonBlueprintHelpers.h"
 #include "Engine/Blueprint.h"
@@ -29,7 +30,7 @@ bool ClaireonBlueprintGraphEditToolBase::bDelegateRegistered = false;
 
 void ClaireonBlueprintGraphEditToolBase::HandleSessionClosed(const FMCPSessionClosedInfo& Info)
 {
-	if (Info.ToolName == TEXT("blueprint_edit_graph"))
+	if (Info.ToolName == TEXT("bp"))
 	{
 		ToolData.Remove(Info.SessionId);
 	}
@@ -105,24 +106,9 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 	// every 5 past that (11, 16, ...). Counter resets whenever the caller passes
 	// session_id. See CLAIREON_BP_SESSION_ID_PROPOSAL.md.
 	// =========================================================================
+	const FString HintAssetPath = Data->Blueprint.IsValid() ? Data->Blueprint->GetPathName() : TEXT("<unknown>");
 	FString SessionHintSummaryTag;
-	if (Data->ConsecutiveAssetPathCalls > 5 && Data->ConsecutiveAssetPathCalls % 5 == 1)
-	{
-		const FString HintAssetPath = Data->Blueprint.IsValid() ? Data->Blueprint->GetPathName() : TEXT("<unknown>");
-		const FString HintText = FString::Printf(
-			TEXT("You've called tools on '%s' %d times in a row with asset_path (no session_id). ")
-			TEXT("Session %s is still locked on that asset and will not release until idle timeout. ")
-			TEXT("For multi-step edits on this asset, read Data.session_id from any response and pass ")
-			TEXT("it on subsequent calls. Call operation='close' when done to release the lock."),
-			*HintAssetPath,
-			Data->ConsecutiveAssetPathCalls,
-			*SessionId);
-		ResponseData->SetStringField(TEXT("session_hint"), HintText);
-		SessionHintSummaryTag = FString::Printf(
-			TEXT("\n\n[hint] session_hint: reuse session_id for '%s' (session=%s)."),
-			*HintAssetPath,
-			*SessionId);
-	}
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResponseData, Data->ConsecutiveAssetPathCalls, HintAssetPath, SessionId, SessionHintSummaryTag);
 
 	// =========================================================================
 	// Surface GUID corrections so the MCP client can update stale references
@@ -669,14 +655,14 @@ bool ClaireonBlueprintGraphEditToolBase::ResolveOrOpenSession(
 	FString AssetPath;
 	if (Params->TryGetStringField(TEXT("asset_path"), AssetPath) && !AssetPath.IsEmpty())
 	{
-		// Register delegate on first use (same guard as blueprint_graph_open).
+		// Register delegate on first use (same guard as bp_open).
 		if (!bDelegateRegistered)
 		{
 			FClaireonSessionManager::Get().OnSessionClosed().AddStatic(&ClaireonBlueprintGraphEditToolBase::HandleSessionClosed);
 			bDelegateRegistered = true;
 		}
 
-		// Canonicalize via the same resolver blueprint_graph_open uses.
+		// Canonicalize via the same resolver bp_open uses.
 		auto ResolveResult = ClaireonPathResolver::Resolve(AssetPath);
 		if (!ResolveResult.bSuccess)
 		{
@@ -694,7 +680,7 @@ bool ClaireonBlueprintGraphEditToolBase::ResolveOrOpenSession(
 		}
 
 		// Graph: default to EventGraph, or caller-supplied graph_name. Mirrors
-		// blueprint_graph_open's default handling.
+		// bp_open's default handling.
 		FString GraphName;
 		if (!Params->TryGetStringField(TEXT("graph_name"), GraphName))
 		{
@@ -710,7 +696,7 @@ bool ClaireonBlueprintGraphEditToolBase::ResolveOrOpenSession(
 		// Open (or reuse) a session via the manager.
 		double TimeoutMinutes = 60.0;
 		Params->TryGetNumberField(TEXT("timeout_minutes"), TimeoutMinutes);
-		FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(AssetPath, TEXT("blueprint_edit_graph"), TimeoutMinutes);
+		FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(AssetPath, TEXT("bp"), TimeoutMinutes);
 
 		if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 		{

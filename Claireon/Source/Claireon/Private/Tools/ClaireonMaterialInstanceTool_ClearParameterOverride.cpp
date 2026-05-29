@@ -43,9 +43,11 @@ namespace
 
 FString ClaireonMaterialInstanceTool_ClearParameterOverride::GetOperation() const { return TEXT("instance_clear_parameter_override"); }
 
+// TODO(#0000-followup): This tool dispatches on an action enum and could be
+// decomposed into per-action sub-tools.
 FString ClaireonMaterialInstanceTool_ClearParameterOverride::GetDescription() const
 {
-	return TEXT("Clear a parameter override on a UMaterialInstanceConstant (parameter will fall through to parent).");
+    return TEXT("Clear a parameter override on a UMaterialInstanceConstant; the parameter will fall through to the parent material. Session-mode tool: open via material_instance_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialInstanceTool_ClearParameterOverride::GetInputSchema() const

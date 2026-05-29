@@ -16,7 +16,10 @@ FString ClaireonBehaviorTreeTool_MoveNode::GetOperation() const { return TEXT("m
 
 FString ClaireonBehaviorTreeTool_MoveNode::GetDescription() const
 {
-	return TEXT("Move a node under a different parent. Disconnects from old parent and connects to new parent at child_index.");
+	return TEXT("Move a node under a different parent within an open Behavior Tree session, "
+				"disconnecting from the old parent and connecting to the new parent at child_index. "
+				"Requires session_id from behavior_tree.open; the edit is transactional and only "
+				"persists after save.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBehaviorTreeTool_MoveNode::GetInputSchema() const

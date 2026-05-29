@@ -14,7 +14,7 @@ FString ClaireonFoliageTool_Save::GetOperation() const { return TEXT("save"); }
 
 FString ClaireonFoliageTool_Save::GetDescription() const
 {
-	return TEXT("Save the foliage actor's package to disk.");
+    return TEXT("Save the foliage actor's package to disk for the current session. Session-mode tool: open via foliage_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonFoliageTool_Save::GetInputSchema() const

@@ -16,7 +16,7 @@ FString ClaireonTool_PIEScreenshot::GetOperation() const { return TEXT("screensh
 
 FString ClaireonTool_PIEScreenshot::GetDescription() const
 {
-	return TEXT("Capture a screenshot of the current PIE viewport. Returns the file path immediately; the file will be available within ~100ms.");
+    return TEXT("Capture a screenshot of the active PIE viewport and return its on-disk path. Stateless / non-session: writes a file to the editor's screenshot directory without opening any asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PIEScreenshot::GetInputSchema() const

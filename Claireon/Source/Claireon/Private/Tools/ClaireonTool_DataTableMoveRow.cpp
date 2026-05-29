@@ -16,7 +16,7 @@ FString ClaireonTool_DataTableMoveRow::GetOperation() const { return TEXT("move_
 
 FString ClaireonTool_DataTableMoveRow::GetDescription() const
 {
-	return TEXT("Reorder a row up or down");
+    return TEXT("Move a data table row up or down by adjusting its index. Stateless / non-session: writes the asset directly by path without opening any session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_DataTableMoveRow::GetInputSchema() const

@@ -12,7 +12,7 @@ FString ClaireonTool_TraceGetThreads::GetOperation() const { return TEXT("get_th
 
 FString ClaireonTool_TraceGetThreads::GetDescription() const
 {
-	return TEXT("List all threads in the trace with their names and groups");
+    return TEXT("List all threads in the trace with their names and groups. Stateless / read-only / non-session: reads from an open trace handle without opening any asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_TraceGetThreads::GetInputSchema() const

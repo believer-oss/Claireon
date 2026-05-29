@@ -927,7 +927,7 @@ namespace ScaffoldInternal
 	}
 }
 
-FString ClaireonTool_BlueprintTranslateScaffold::GetCategory() const { return TEXT("blueprint"); }
+FString ClaireonTool_BlueprintTranslateScaffold::GetCategory() const { return TEXT("bp"); }
 FString ClaireonTool_BlueprintTranslateScaffold::GetOperation() const { return TEXT("translate_scaffold"); }
 
 FString ClaireonTool_BlueprintTranslateScaffold::GetDescription() const

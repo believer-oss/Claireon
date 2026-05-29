@@ -16,7 +16,7 @@ FString ClaireonMaterialTool_SetParameterDefault::GetOperation() const { return 
 
 FString ClaireonMaterialTool_SetParameterDefault::GetDescription() const
 {
-	return TEXT("Set the default value of a parameter expression in the material (scalar|vector|texture|static_switch|static_component_mask).");
+    return TEXT("Set the default value of a parameter expression in the material (scalar/vector/texture/static_switch/static_component_mask). Session-mode tool: open via material_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialTool_SetParameterDefault::GetInputSchema() const

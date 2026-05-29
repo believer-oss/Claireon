@@ -649,7 +649,7 @@ FString ComputeSpecDiff(UBlueprint* Blueprint, const TSharedPtr<FJsonObject>& Sp
 
 // Ã¢Â”Â€Ã¢Â”Â€ Tool Interface Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€
 
-FString ClaireonTool_BlueprintDiff::GetCategory() const { return TEXT("blueprint"); }
+FString ClaireonTool_BlueprintDiff::GetCategory() const { return TEXT("bp"); }
 FString ClaireonTool_BlueprintDiff::GetOperation() const { return TEXT("diff"); }
 
 TArray<FString> ClaireonTool_BlueprintDiff::GetSearchKeywords() const

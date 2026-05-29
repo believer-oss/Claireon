@@ -40,7 +40,9 @@ FString FClaireonSoundMixTool_SetClassAdjusterProperty::GetOperation() const { r
 FString FClaireonSoundMixTool_SetClassAdjusterProperty::GetDescription() const
 {
 	return TEXT("Set a sub-property on a USoundMix's class adjuster (FSoundClassAdjuster) by index "
-				"and field name (e.g. VolumeAdjuster, PitchAdjuster, LowPassFilterAdjuster, bApplyToChildren).");
+				"and field name (e.g. VolumeAdjuster, PitchAdjuster, LowPassFilterAdjuster, "
+				"bApplyToChildren). Non-session, immediate operation; no session_id is needed. "
+				"Wraps the write in FScopedTransaction and saves the asset on success.");
 }
 
 TSharedPtr<FJsonObject> FClaireonSoundMixTool_SetClassAdjusterProperty::GetInputSchema() const

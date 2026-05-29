@@ -13,7 +13,7 @@ FString ClaireonNiagaraTool_AddParameter::GetOperation() const { return TEXT("ad
 
 FString ClaireonNiagaraTool_AddParameter::GetDescription() const
 {
-	return TEXT("Add an exposed User.* parameter to the Niagara System.");
+    return TEXT("Add an exposed User.* parameter to the Niagara System. Session-mode tool: open via niagara_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_AddParameter::GetInputSchema() const

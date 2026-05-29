@@ -12,7 +12,9 @@ FString ClaireonBlackboardTool_RenameKey::GetOperation() const { return TEXT("re
 
 FString ClaireonBlackboardTool_RenameKey::GetDescription() const
 {
-	return TEXT("Rename an existing blackboard key.");
+	return TEXT("Rename an existing Blackboard key within an open editing session. Requires session_id "
+				"from blackboard.open; the edit is transactional and only persists after save. "
+				"Downstream BT references are not automatically rewritten.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlackboardTool_RenameKey::GetInputSchema() const

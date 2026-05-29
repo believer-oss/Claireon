@@ -13,7 +13,7 @@ FString ClaireonTool_TestList::GetOperation() const { return TEXT("list"); }
 
 FString ClaireonTool_TestList::GetDescription() const
 {
-	return TEXT("List available automation tests registered in the editor");
+    return TEXT("List available automation tests registered in the editor. Stateless / read-only / non-session: enumerates the Automation Framework registry without opening any asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_TestList::GetInputSchema() const

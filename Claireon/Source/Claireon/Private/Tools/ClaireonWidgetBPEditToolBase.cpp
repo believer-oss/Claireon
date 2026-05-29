@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonWidgetBPEditToolBase.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonLog.h"
 #include "ClaireonWidgetHelpers.h"
 #include "ClaireonSessionManager.h"
@@ -118,12 +119,15 @@ FToolResult ClaireonWidgetBPEditToolBase::BuildStateResponse(const FString& Sess
 		ResponseObj->SetObjectField(TEXT("widget_tree"), TreeData);
 	}
 
+	FString SessionHintSummaryTag;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResponseObj, Data->ConsecutiveAssetPathCalls, WBP->GetPathName(), SessionId, SessionHintSummaryTag);
+
 	FString ResponseString;
 	TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> Writer =
 		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&ResponseString);
 	FJsonSerializer::Serialize(ResponseObj.ToSharedRef(), Writer);
 
-	return MakeSuccessResult(ResponseObj, ResponseString);
+	return MakeSuccessResult(ResponseObj, ResponseString + SessionHintSummaryTag);
 }
 
 #undef LOCTEXT_NAMESPACE

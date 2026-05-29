@@ -156,6 +156,8 @@ FToolResult ClaireonAnimGraphTool_Open::Execute(const TSharedPtr<FJsonObject>& A
 	ToolData.Add(SessionId, MoveTemp(NewData));
 	FAnimGraphEditToolData* Data = ToolData.Find(SessionId);
 
+	ClaireonAssetUtils::OpenAssetEditorIfHeadless(AnimBP);
+
 	UE_LOG(LogClaireon, Log, TEXT("[AnimGraphEdit] Opened session %s for %s"), *SessionId, *AnimBP->GetPathName());
 
 	Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Opened %s — graph: %s (%d nodes)"),
@@ -172,7 +174,7 @@ FString ClaireonAnimGraphTool_Close::GetOperation() const { return TEXT("close")
 
 FString ClaireonAnimGraphTool_Close::GetDescription() const
 {
-	return TEXT("Close an animation graph editing session, releasing the asset lock.");
+    return TEXT("Close an animation graph editing session, releasing the asset lock and clearing any in-session state.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_Close::GetInputSchema() const
@@ -209,7 +211,7 @@ FString ClaireonAnimGraphTool_Save::GetOperation() const { return TEXT("save"); 
 
 FString ClaireonAnimGraphTool_Save::GetDescription() const
 {
-	return TEXT("Compile and save the Animation Blueprint to disk.");
+    return TEXT("Compile and save the Animation Blueprint to disk for the active anim_graph session. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_Save::GetInputSchema() const
@@ -274,7 +276,7 @@ FString ClaireonAnimGraphTool_Compile::GetOperation() const { return TEXT("compi
 
 FString ClaireonAnimGraphTool_Compile::GetDescription() const
 {
-	return TEXT("Compile the Animation Blueprint and report any warnings or errors.");
+    return TEXT("Compile the Animation Blueprint of the current session and report any warnings or errors. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_Compile::GetInputSchema() const
@@ -322,7 +324,7 @@ FString ClaireonAnimGraphTool_SwitchGraph::GetOperation() const { return TEXT("s
 
 FString ClaireonAnimGraphTool_SwitchGraph::GetDescription() const
 {
-	return TEXT("Switch the active graph within the current Animation Blueprint session.");
+    return TEXT("Switch the active graph within the current Animation Blueprint session, then return the new active-graph state. Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_SwitchGraph::GetInputSchema() const
@@ -443,7 +445,7 @@ FString ClaireonAnimGraphTool_GetState::GetOperation() const { return TEXT("get_
 
 FString ClaireonAnimGraphTool_GetState::GetDescription() const
 {
-	return TEXT("Get the full current state of the animation graph editing session.");
+    return TEXT("Get the full current state of the animation graph editing session (active graph, node count, focus). Session-mode tool: open via anim_graph_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_GetState::GetInputSchema() const

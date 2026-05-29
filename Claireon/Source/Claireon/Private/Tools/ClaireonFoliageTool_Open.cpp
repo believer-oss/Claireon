@@ -5,6 +5,7 @@
 #include "Tools/FToolSchemaBuilder.h"
 #include "Tools/ClaireonLandscapeHelpers.h"
 #include "ClaireonSessionManager.h"
+#include "ClaireonLog.h"
 #include "Editor.h"
 #include "InstancedFoliageActor.h"
 #include "Engine/World.h"
@@ -64,6 +65,10 @@ FToolResult ClaireonFoliageTool_Open::Execute(const TSharedPtr<FJsonObject>& Arg
 	FFoliageEditToolData& Data = ToolData.FindOrAdd(SessionId);
 	Data.FoliageActor = IFA;
 	Data.LastOperationStatus = TEXT("Session opened");
+
+	// World-scoped tool: mode-focus (foliage edit mode) deferred per Q-AUTO-OPEN-WORLD-MODE;
+	// EM_Foliage activation requires LevelEditor module not available in Claireon plugin scope.
+	UE_LOG(LogClaireon, Verbose, TEXT("[FoliageTool_Open] Session opened; foliage edit-mode focus deferred (world-scoped)"));
 
 	return BuildStateResponse(SessionId, &Data);
 }

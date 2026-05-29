@@ -11,7 +11,7 @@ FString ClaireonLandscapeSplineTool_Close::GetOperation() const { return TEXT("s
 
 FString ClaireonLandscapeSplineTool_Close::GetDescription() const
 {
-	return TEXT("Close a landscape spline editing session.");
+    return TEXT("Close a landscape spline editing session, releasing the landscape actor lock and clearing in-session state.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeSplineTool_Close::GetInputSchema() const

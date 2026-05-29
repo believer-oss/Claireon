@@ -17,7 +17,10 @@ FString ClaireonBehaviorTreeTool_RemoveNode::GetOperation() const { return TEXT(
 
 FString ClaireonBehaviorTreeTool_RemoveNode::GetDescription() const
 {
-	return TEXT("Remove a node (composite or task) from the Behavior Tree. The root node cannot be removed.");
+	return TEXT("Remove a composite or task node from the Behavior Tree within an open session, "
+				"disconnecting any incoming edge from its parent. Requires session_id from "
+				"behavior_tree.open; the edit is transactional and only persists after save. The root "
+				"node cannot be removed.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBehaviorTreeTool_RemoveNode::GetInputSchema() const

@@ -12,7 +12,7 @@ FString ClaireonMaterialTool_Compile::GetOperation() const { return TEXT("compil
 
 FString ClaireonMaterialTool_Compile::GetDescription() const
 {
-	return TEXT("Recompile the material shader map. Optionally wait for compilation to finish.");
+    return TEXT("Recompile the material shader map for the current session. Optionally wait for compilation to finish. Session-mode tool: open via material_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialTool_Compile::GetInputSchema() const

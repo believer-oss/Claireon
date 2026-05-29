@@ -16,7 +16,7 @@ FString ClaireonLevelSequenceTool_RemoveSection::GetOperation() const { return T
 
 FString ClaireonLevelSequenceTool_RemoveSection::GetDescription() const
 {
-	return TEXT("Remove a section (by index) from the focused track.");
+    return TEXT("Remove a section (by index) from the focused track of the Level Sequence. Session-mode tool: open via level_sequence_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_RemoveSection::GetInputSchema() const
