@@ -467,7 +467,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_AnimGraphAddNode
 	using namespace ClaireonToolDiscoverabilityTestsNS;
 	UNTEST_ASSERT_TRUE(BuildCatalogFromLiveServer());
 	const FString Query = TEXT("animation graph add node");
-	const bool bHit = AssertSearchHitCheck(Query, TEXT("animgraph_add_node"), 2);
+	const bool bHit = AssertSearchHitCheck(Query, TEXT("animbp_add_node"), 2);
 	if (!bHit) { LogTop10(Query); }
 	UNTEST_EXPECT_TRUE(bHit);
 	co_return;

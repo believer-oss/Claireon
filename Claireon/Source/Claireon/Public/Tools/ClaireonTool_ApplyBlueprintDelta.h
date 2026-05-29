@@ -6,7 +6,7 @@
 #include "Tools/IClaireonTool.h"
 
 /**
- * Atomic batch Blueprint graph editor — K2 counterpart to animgraph_apply_delta.
+ * Atomic batch Blueprint graph editor — K2 counterpart to animbp_apply_delta.
  *
  * Shape mirrors the anim batch tool: a single call disconnects links, removes nodes,
  * creates new nodes (referenced by local IDs within the same call), and connects pins,

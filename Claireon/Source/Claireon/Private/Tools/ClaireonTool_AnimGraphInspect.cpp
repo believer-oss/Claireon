@@ -8,12 +8,12 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_AnimGraphInspect::GetCategory() const { return TEXT("animgraph"); }
+FString ClaireonTool_AnimGraphInspect::GetCategory() const { return TEXT("animbp"); }
 FString ClaireonTool_AnimGraphInspect::GetOperation() const { return TEXT("inspect"); }
 
 TArray<FString> ClaireonTool_AnimGraphInspect::GetSearchKeywords() const
 {
-	return {TEXT("anim"), TEXT("animation"), TEXT("animgraph"), TEXT("blueprint"), TEXT("inspect"), TEXT("graph")};
+	return {TEXT("anim"), TEXT("animation"), TEXT("animbp"), TEXT("animgraph"), TEXT("blueprint"), TEXT("inspect"), TEXT("graph")};
 }
 
 FString ClaireonTool_AnimGraphInspect::GetDescription() const

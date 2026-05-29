@@ -141,7 +141,7 @@ FToolResult ClaireonBlueprintGraphTool_InspectNode::Execute(const TSharedPtr<FJs
 	if (Cast<UAnimGraphNode_Base>(Node))
 	{
 		return MakeErrorResult(FString::Printf(
-			TEXT("Node %s is an AnimGraph node; use animgraph_get_node to inspect AnimGraph nodes."),
+			TEXT("Node %s is an AnimGraph node; use animbp_get_node to inspect AnimGraph nodes."),
 			*Node->NodeGuid.ToString(EGuidFormats::Digits)));
 	}
 

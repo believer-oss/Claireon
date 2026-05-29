@@ -45,7 +45,7 @@ public:
 	static void EnsureDelegateRegistered();
 
 	bool RequiresNoPIE() const override { return true; }
-	FString GetCategory() const override { return TEXT("animgraph"); }
+	FString GetCategory() const override { return TEXT("animbp"); }
 
 protected:
 	/**
@@ -74,7 +74,7 @@ protected:
 };
 
 // Macro to reduce declaration boilerplate for individual animgraph edit tool classes.
-#define DECLARE_ANIMGRAPH_EDIT_TOOL(ClassName) \
+#define DECLARE_ANIMBP_EDIT_TOOL(ClassName) \
 	class CLAIREON_API ClassName : public ClaireonAnimGraphEditToolBase \
 	{ \
 	public: \

@@ -11,21 +11,21 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_AnimGraphGetStateMachine::GetCategory() const { return TEXT("animgraph"); }
+FString ClaireonTool_AnimGraphGetStateMachine::GetCategory() const { return TEXT("animbp"); }
 FString ClaireonTool_AnimGraphGetStateMachine::GetOperation() const { return TEXT("get_state_machine"); }
 
 FString ClaireonTool_AnimGraphGetStateMachine::GetDescription() const
 {
 	return TEXT("Inspect a state machine's topology within an Animation Blueprint. Returns the entry state, "
 		"all states (with bound graph info), all transitions (with blend mode, duration, priority), "
-		"and conduits. Use animgraph_inspect to discover state machine names.");
+		"and conduits. Use animbp_inspect to discover state machine names.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AnimGraphGetStateMachine::GetInputSchema() const
 {
 	FToolSchemaBuilder S;
 	S.AddString(TEXT("asset_path"), TEXT("Path to the Animation Blueprint asset"), true);
-	S.AddString(TEXT("state_machine_name"), TEXT("Name of the state machine graph (from animgraph_inspect)"), true);
+	S.AddString(TEXT("state_machine_name"), TEXT("Name of the state machine graph (from animbp_inspect)"), true);
 	S.AddBoolean(TEXT("include_transition_details"), TEXT("Include full transition details (blend settings, condition graph). Default: false"));
 	return S.Build();
 }
@@ -65,7 +65,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphGetStateMachine::Execute(const 
 	if (!SMGraph)
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Graph '%s' is not a State Machine graph (actual type: %s). "
-			"Use animgraph_inspect to find state machine graphs."), *SMName, *Graph->GetClass()->GetName()));
+			"Use animbp_inspect to find state machine graphs."), *SMName, *Graph->GetClass()->GetName()));
 	}
 
 	// Serialize state machine topology

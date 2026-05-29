@@ -25,7 +25,7 @@ FString ClaireonBlueprintGraphTool_AddFunction::GetOperation() const { return TE
 
 FString ClaireonBlueprintGraphTool_AddFunction::GetDescription() const
 {
-	return TEXT("Create a new user-defined function graph on the Blueprint in the open editing session. Requires open session_id from bp_open (or pass asset_path to auto-open). Transactional. Parity with animgraph_add_function for regular Blueprints. The function_name must be unique on the BP. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+	return TEXT("Create a new user-defined function graph on the Blueprint in the open editing session. Requires open session_id from bp_open (or pass asset_path to auto-open). Transactional. Parity with animbp_add_function for regular Blueprints. The function_name must be unique on the BP. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddFunction::GetInputSchema() const

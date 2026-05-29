@@ -6,7 +6,7 @@
 #include "Tools/IClaireonTool.h"
 
 /**
- * MCP tool: animgraph_get_transition
+ * MCP tool: animbp_get_transition
  * Detailed inspection of a specific state machine transition.
  * Returns blend settings, crossfade mode/duration, condition graph, and custom blend graph.
  */

@@ -417,4 +417,52 @@ UNTEST_UNIT(Claireon, ToolCatalogMatcher, AbbreviationExpansionInCpp)
 	co_return;
 }
 
+// ===========================================================================
+// #0000: animation-blueprint discoverability after the animgraph -> animbp
+// rename. Mirrors the goal-shape from #0000: a colloquial query
+// ("animation blueprint") must surface the renamed wire-name (animbp_inspect)
+// in the top-3 matcher results, exercising both the abbreviation reverse-
+// expansion path (animbp -> "animation blueprint animgraph anim_graph anim
+// animbp") and the search-keyword path.
+// ===========================================================================
+
+UNTEST_UNIT(Claireon, ToolCatalogMatcher, AnimationBlueprintQueryRanksAnimbpInspect)
+{
+	using namespace ClaireonToolCatalogMatcherTestsHelpers;
+
+	// Start from the 20-entry fixture, then add a synthesised animbp_inspect
+	// entry. Category=animbp + Operation=inspect gives the matcher full
+	// credit on both the abbreviation-reverse-expansion path and the
+	// direct search-keyword path.
+	TArray<FClaireonToolCatalogEntry> F = BuildFixtureTwenty();
+	F.Add(MakeEntry(
+		TEXT("animbp_inspect"),
+		TEXT("inspect an animation blueprint graph and its nodes"),
+		TEXT("animbp"),
+		TEXT("inspect"),
+		TEXT("anim animation animbp animgraph blueprint inspect graph")));
+
+	FClaireonToolCatalogMatcher::Clear();
+	FClaireonToolCatalogMatcher::BuildCatalog(F);
+
+	TArray<FClaireonToolCatalogMatch> Top =
+		FClaireonToolCatalogMatcher::FindNearest(TEXT("animation blueprint"), 5);
+	UNTEST_ASSERT_TRUE(Top.Num() > 0);
+
+	// Find the rank of animbp_inspect using a plain for-loop. Do NOT
+	// use a lambda (Algo::FindByPredicate, std::find_if): UNTEST_ASSERT_*
+	// and UNTEST_EXPECT_* expand to co_return, and lambdas have no
+	// coroutine promise_type -- the linux-build-server-v2 non-unity
+	// build rejects this. See feedback_untest_macros_lambda_coroutine.md.
+	int32 FoundIndex = INDEX_NONE;
+	for (int32 i = 0; i < Top.Num(); ++i)
+	{
+		if (Top[i].Name == TEXT("animbp_inspect")) { FoundIndex = i; break; }
+	}
+	UNTEST_ASSERT_NE(FoundIndex, INDEX_NONE);
+	UNTEST_EXPECT_LE(FoundIndex, 2);  // rank <= 3 means index <= 2
+
+	co_return;
+}
+
 #endif // WITH_UNTESTED

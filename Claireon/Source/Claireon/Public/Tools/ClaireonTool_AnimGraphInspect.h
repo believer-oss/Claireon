@@ -6,7 +6,7 @@
 #include "Tools/IClaireonTool.h"
 
 /**
- * MCP tool: animgraph_inspect
+ * MCP tool: animbp_inspect
  * Blueprint-level overview of an animation blueprint.
  * Returns class settings, interfaces, variables, functions, graph list, and warnings.
  */

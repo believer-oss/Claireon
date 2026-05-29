@@ -105,6 +105,7 @@ namespace ClaireonToolCatalogAbbreviations
 			{ TEXT("niagara"),        TEXT("niagara vfx particles effect emitter") },
 			{ TEXT("statetree"),      TEXT("state tree statetree hierarchical") },
 			{ TEXT("material"),       TEXT("material shader expression parameter") },
+			{ TEXT("animbp"),         TEXT("animation blueprint animgraph anim_graph anim animbp") },
 			{ TEXT("widgetbp"),       TEXT("widget blueprint umg widgetbp user interface") },
 			{ TEXT("apply_spec"),     TEXT("apply spec declarative batch idempotent") },
 			{ TEXT("sequence"),       TEXT("sequence level_sequence sequencer cinematic keyframe track") },

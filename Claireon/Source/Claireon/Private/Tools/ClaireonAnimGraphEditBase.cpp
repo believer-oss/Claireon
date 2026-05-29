@@ -24,7 +24,7 @@ using FToolResult = IClaireonTool::FToolResult;
 // Static Data
 // ============================================================================
 
-const TCHAR* ClaireonAnimGraphEditToolBase::AnimGraphSessionToolName = TEXT("editor.animgraph.edit");
+const TCHAR* ClaireonAnimGraphEditToolBase::AnimGraphSessionToolName = TEXT("animbp");
 TMap<FString, FAnimGraphEditToolData> ClaireonAnimGraphEditToolBase::ToolData;
 bool ClaireonAnimGraphEditToolBase::bDelegateRegistered = false;
 
@@ -69,7 +69,7 @@ bool ClaireonAnimGraphEditToolBase::RequireSession(
 	OutData = ToolData.Find(OutSessionId);
 	if (!OutData || !OutData->IsValid())
 	{
-		OutError = MakeErrorResult(TEXT("Session tool data not found or AnimBP no longer valid. Use animgraph_open to start a new session."));
+		OutError = MakeErrorResult(TEXT("Session tool data not found or AnimBP no longer valid. Use animbp_open to start a new session."));
 		return false;
 	}
 

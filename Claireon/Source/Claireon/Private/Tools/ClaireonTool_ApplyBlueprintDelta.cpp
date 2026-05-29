@@ -108,7 +108,7 @@ FString ClaireonTool_ApplyBlueprintDelta::GetDescription() const
 		"creates nodes, and connects pins in one transactional call. New nodes are referenced by local "
 		"'id'; existing nodes by GUID or title. Execution order: disconnect → remove → create → connect. "
 		"Uses the same bp session (opened via bp_open or bp_create). Returns full graph state with "
-		"id_map showing local-id → GUID mappings. Counterpart to animgraph_apply_delta. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+		"id_map showing local-id → GUID mappings. Counterpart to animbp_apply_delta. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ApplyBlueprintDelta::GetInputSchema() const

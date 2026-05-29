@@ -38,7 +38,7 @@ FString ClaireonAnimGraphTool_CopyGraph::GetDescription() const
 		"state graphs and transition rule graphs) from one Animation Blueprint into another. "
 		"Uses T3D round-trip so native UEdGraphNode serialization handles nested graphs automatically. "
 		"Destination graph must already exist on the destination AnimBP; overwrite=true clears it first. "
-		"A freshly-created AnimBP (via animgraph_create) already has its root AnimGraph auto-created and works "
+		"A freshly-created AnimBP (via animbp_create) already has its root AnimGraph auto-created and works "
 		"as a destination — you don't need extra scaffolding to copy 'AnimGraph' into a fresh ABP. "
 		"For custom-named graphs, scaffold them first via the session-based animgraph tools. "
 		"Stateless — no session required.\n\n"

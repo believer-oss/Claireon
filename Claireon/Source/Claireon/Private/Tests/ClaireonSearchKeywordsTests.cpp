@@ -141,12 +141,12 @@ UNTEST_UNIT(Claireon, SearchKeywords, TierC_ReadInspectDiscovery)
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_ExecutePython>(TEXT("python_execute")));
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_ProxyTableInspect>(TEXT("proxytable_inspect")));
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_ChooserInspect>(TEXT("chooser_inspect")));
-	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_AnimGraphInspect>(TEXT("animgraph_inspect")));
+	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_AnimGraphInspect>(TEXT("animbp_inspect")));
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_ProxyAssetInspect>(TEXT("proxyasset_inspect")));
-	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_SearchInBlueprints>(TEXT("blueprint_search")));
-	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_GetBlueprintGraph>(TEXT("blueprint_get_graph")));
-	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_GetBlueprintProperties>(TEXT("blueprint_get_properties")));
-	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_BlueprintDiff>(TEXT("blueprint_diff")));
+	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_SearchInBlueprints>(TEXT("bp_search")));
+	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_GetBlueprintGraph>(TEXT("bp_get_graph")));
+	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_GetBlueprintProperties>(TEXT("bp_get_properties")));
+	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_BlueprintDiff>(TEXT("bp_diff")));
 	co_return;
 }
 

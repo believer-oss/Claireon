@@ -11,7 +11,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_AnimGraphAnalyze::GetCategory() const { return TEXT("animgraph"); }
+FString ClaireonTool_AnimGraphAnalyze::GetCategory() const { return TEXT("animbp"); }
 FString ClaireonTool_AnimGraphAnalyze::GetOperation() const { return TEXT("analyze"); }
 
 FString ClaireonTool_AnimGraphAnalyze::GetDescription() const

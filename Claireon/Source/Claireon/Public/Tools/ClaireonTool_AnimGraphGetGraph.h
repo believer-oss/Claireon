@@ -6,7 +6,7 @@
 #include "Tools/IClaireonTool.h"
 
 /**
- * MCP tool: animgraph_get_graph
+ * MCP tool: animbp_get_graph
  * Graph-level node inspection of a specific graph within an animation blueprint.
  * Returns all nodes with types, pins, pose connections, property bindings, and fast path status.
  */

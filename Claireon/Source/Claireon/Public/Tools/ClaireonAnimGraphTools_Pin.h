@@ -5,8 +5,8 @@
 
 #include "Tools/ClaireonAnimGraphEditBase.h"
 
-DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_ExposePin);
-DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_HidePin);
-DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_SetBinding);
-DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_RemoveBinding);
-DECLARE_ANIMGRAPH_EDIT_TOOL(ClaireonAnimGraphTool_BindFunction);
+DECLARE_ANIMBP_EDIT_TOOL(ClaireonAnimGraphTool_ExposePin);
+DECLARE_ANIMBP_EDIT_TOOL(ClaireonAnimGraphTool_HidePin);
+DECLARE_ANIMBP_EDIT_TOOL(ClaireonAnimGraphTool_SetBinding);
+DECLARE_ANIMBP_EDIT_TOOL(ClaireonAnimGraphTool_RemoveBinding);
+DECLARE_ANIMBP_EDIT_TOOL(ClaireonAnimGraphTool_BindFunction);

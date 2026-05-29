@@ -6,7 +6,7 @@
 #include "Tools/IClaireonTool.h"
 
 /**
- * MCP tool: animgraph_analyze
+ * MCP tool: animbp_analyze
  * Analysis of an animation blueprint: fast path compliance, thread safety, and warning aggregation.
  */
 class CLAIREON_API ClaireonTool_AnimGraphAnalyze : public IClaireonTool

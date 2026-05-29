@@ -6,7 +6,7 @@
 #include "Tools/IClaireonTool.h"
 
 /**
- * MCP tool: animgraph_get_state_machine
+ * MCP tool: animbp_get_state_machine
  * Inspect state machine topology: entry state, states, transitions with blend settings, conduits.
  */
 class CLAIREON_API ClaireonTool_AnimGraphGetStateMachine : public IClaireonTool

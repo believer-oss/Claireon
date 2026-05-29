@@ -31,7 +31,7 @@ class CLAIREON_API ClaireonAnimGraphTool_CopyGraph : public IClaireonTool
 public:
 	FString GetName() const override;
 	FString GetDescription() const override;
-	FString GetCategory() const override { return TEXT("animgraph"); }
+	FString GetCategory() const override { return TEXT("animbp"); }
 	bool RequiresNoPIE() const override { return true; }
 	TSharedPtr<FJsonObject> GetInputSchema() const override;
 	FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;

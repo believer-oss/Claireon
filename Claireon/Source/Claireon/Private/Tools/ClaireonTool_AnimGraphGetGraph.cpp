@@ -10,21 +10,21 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_AnimGraphGetGraph::GetCategory() const { return TEXT("animgraph"); }
+FString ClaireonTool_AnimGraphGetGraph::GetCategory() const { return TEXT("animbp"); }
 FString ClaireonTool_AnimGraphGetGraph::GetOperation() const { return TEXT("get_graph"); }
 
 FString ClaireonTool_AnimGraphGetGraph::GetDescription() const
 {
 	return TEXT("Inspect a specific graph within an Animation Blueprint. Returns all nodes with their types, "
 		"categories, pins (with pose connections), property bindings, fast path status, and sub-graph "
-		"references. Use animgraph_inspect first to discover available graph names.");
+		"references. Use animbp_inspect first to discover available graph names.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AnimGraphGetGraph::GetInputSchema() const
 {
 	FToolSchemaBuilder S;
 	S.AddString(TEXT("asset_path"), TEXT("Path to the Animation Blueprint asset"), true);
-	S.AddString(TEXT("graph_name"), TEXT("Name of the specific graph to inspect (from animgraph_inspect)"), true);
+	S.AddString(TEXT("graph_name"), TEXT("Name of the specific graph to inspect (from animbp_inspect)"), true);
 	S.AddEnum(TEXT("detail_level"), TEXT("'summary' (types/counts), 'nodes' (all pins), 'full' (pins + bindings + fast path)"),
 		{TEXT("summary"), TEXT("nodes"), TEXT("full")});
 	S.AddInteger(TEXT("max_nodes"), TEXT("Maximum nodes to include (default 100, 0 for unlimited)"));

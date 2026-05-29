@@ -6,7 +6,7 @@
 #include "Tools/IClaireonTool.h"
 
 /**
- * MCP tool: animgraph_get_node
+ * MCP tool: animbp_get_node
  * Deep inspection of a single node by GUID within an animation graph.
  * Returns ALL properties, pins, bindings, fast path analysis, bound events, and sub-graph references.
  */

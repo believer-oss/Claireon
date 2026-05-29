@@ -13,7 +13,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-FString ClaireonTool_AnimGraphGetTransition::GetCategory() const { return TEXT("animgraph"); }
+FString ClaireonTool_AnimGraphGetTransition::GetCategory() const { return TEXT("animbp"); }
 FString ClaireonTool_AnimGraphGetTransition::GetOperation() const { return TEXT("get_transition"); }
 
 FString ClaireonTool_AnimGraphGetTransition::GetDescription() const
@@ -30,7 +30,7 @@ TSharedPtr<FJsonObject> ClaireonTool_AnimGraphGetTransition::GetInputSchema() co
 	S.AddString(TEXT("state_machine_name"), TEXT("Name of the state machine graph"), true);
 	S.AddString(TEXT("from_state"), TEXT("Source state name (use with to_state)"));
 	S.AddString(TEXT("to_state"), TEXT("Target state name (use with from_state)"));
-	S.AddInteger(TEXT("transition_index"), TEXT("Alternative: index of the transition (0-based, from animgraph_get_state_machine)"));
+	S.AddInteger(TEXT("transition_index"), TEXT("Alternative: index of the transition (0-based, from animbp_get_state_machine)"));
 	return S.Build();
 }
 
