@@ -174,8 +174,8 @@ def canonicalize_worktree(worktree_root: str) -> str:
     """Canonicalize a worktree path for hashing. Windows-first, lowercase.
 
     Resolves junctions and symlinks via os.path.realpath so that a worktree
-    reached via a junction (e.g. W:\\yara) and via its underlying realpath
-    (e.g. D:\\git\\yara) hash to the SAME port. The PowerShell mirror in
+    reached via a junction (e.g. W:\\proj) and via its underlying realpath
+    (e.g. D:\\git\\proj) hash to the SAME port. The PowerShell mirror in
     Initialize-WorktreeMCP.ps1::Get-ProxyDefaultMcpPort uses
     GetFinalPathNameByHandle (P/Invoke, Resolve-WorktreeFinalPath helper)
     for the same reason. Both sides MUST resolve links; do not switch this
