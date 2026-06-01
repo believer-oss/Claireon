@@ -8,7 +8,7 @@
 class ClaireonTool_OpenAssetEditor : public IClaireonTool
 {
 public:
-	virtual FString GetName() const override;
+	virtual FString GetOperation() const override;
 	virtual FString GetDescription() const override;
 	virtual FString GetCategory() const override;
 	virtual TSharedPtr<FJsonObject> GetInputSchema() const override;

@@ -20,6 +20,7 @@ class CLAIREON_API ClaireonSkeletonToolBase : public IClaireonTool
 {
 public:
 	bool RequiresNoPIE() const override { return true; }
+	FString GetCategory() const override { return TEXT("skeleton"); }
 };
 
 // Macro to reduce declaration boilerplate for individual skeleton tool classes.
@@ -27,7 +28,7 @@ public:
 	class CLAIREON_API ClassName : public ClaireonSkeletonToolBase \
 	{ \
 	public: \
-		FString GetName() const override; \
+		FString GetOperation() const override; \
 		FString GetDescription() const override; \
 		TSharedPtr<FJsonObject> GetInputSchema() const override; \
 		FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override; \

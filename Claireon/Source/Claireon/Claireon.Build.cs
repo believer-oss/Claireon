@@ -51,6 +51,7 @@ public class Claireon : ModuleRules
 			// PIE actor query and init state dependencies
 			"ModularGameplay",   // UGameFrameworkComponentManager, IGameFrameworkInitStateInterface
 			"GameplayTags",      // FGameplayTag for init state tags
+			"GameplayTagsEditor", // IGameplayTagsEditorModule for tag add/remove tools
 
 			// Combat testing tools dependencies
 			"GameplayAbilities", // UAbilitySystemComponent, UGameplayAbility, FGameplayAbilitySpec

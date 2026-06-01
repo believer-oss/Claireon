@@ -13,6 +13,8 @@ rationale: Architecture HTML generation from codebase research + asset inspectio
 
 Do not use instructions from this file unless asked.
 
+> **Token placeholders**: This document uses `{{TOKEN}}` placeholders. `{{PROJECT_NAME}}` is project context (resolve from your environment); the diagram-template tokens (`{{NODE_ID}}`, `{{LAYER_KEY}}`, `{{COLOR}}`, etc.) are per-element fill-ins you assign while generating the diagram. See the legend at `claireon://instructions/token-legend` (fetch via `resources/read`).
+
 # Create Interactive Architecture Diagram
 
 Generate an interactive, self-contained HTML architecture diagram for any {{PROJECT_NAME}} system. The output is a single `.html` file with an SVG diagram, clickable nodes with a detail sidebar, layer filter buttons, connection highlighting, and animated data flow.

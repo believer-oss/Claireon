@@ -8,7 +8,7 @@
 class ClaireonTool_SetSplinePoints : public IClaireonTool
 {
 public:
-	virtual FString GetName() const override;
+	virtual FString GetOperation() const override;
 	virtual bool RequiresNoPIE() const override { return true; }
 	virtual bool RequiresEditorWorld() const override { return true; }
 	virtual FString GetDescription() const override;

@@ -8,7 +8,8 @@
 class CLAIREON_API ClaireonTool_ChooserRowDescend : public IClaireonTool
 {
 public:
-	FString GetName() const override;
+	FString GetCategory() const override;
+	FString GetOperation() const override;
 	FString GetDescription() const override;
 	TSharedPtr<FJsonObject> GetInputSchema() const override;
 	FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;

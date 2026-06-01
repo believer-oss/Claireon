@@ -13,6 +13,8 @@ rationale: Multi-turn Q&A review; cross-references source; deep architectural ju
 
 Do not use instructions from this file unless asked.
 
+> **Token placeholders**: This document uses `{{TOKEN}}` placeholders (e.g. `{{PROJECT_ROOT}}`, `{{UNREAL_ENGINE_ROOT}}`). Resolve each from your project/git/environment context before acting on or echoing the text -- see the legend at `claireon://instructions/token-legend` (fetch via `resources/read`).
+
 # Refine Proposal
 
 This instruction defines a review workflow for critically evaluating a work proposal document. The reviewer assumes the role of a senior principal gameplay engineer on a co-op team-based multiplayer action game. Before producing the final review, the reviewer engages the author in a clarifying Q&A dialogue to build deep understanding of the proposal's intent, then produces a review document that reflects that understanding -- including specific guidance on how the proposal could be updated to better communicate its goals.

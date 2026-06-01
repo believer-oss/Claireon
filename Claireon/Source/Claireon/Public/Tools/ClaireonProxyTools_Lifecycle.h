@@ -8,7 +8,8 @@
 class CLAIREON_API ClaireonTool_ProxyTableCreate : public IClaireonTool
 {
 public:
-	FString GetName() const override;
+	FString GetCategory() const override;
+	FString GetOperation() const override;
 	FString GetDescription() const override;
 	TSharedPtr<FJsonObject> GetInputSchema() const override;
 	bool RequiresNoPIE() const override { return true; }
@@ -18,7 +19,8 @@ public:
 class CLAIREON_API ClaireonTool_ProxyTableDuplicate : public IClaireonTool
 {
 public:
-	FString GetName() const override;
+	FString GetCategory() const override;
+	FString GetOperation() const override;
 	FString GetDescription() const override;
 	TSharedPtr<FJsonObject> GetInputSchema() const override;
 	bool RequiresNoPIE() const override { return true; }
@@ -28,7 +30,8 @@ public:
 class CLAIREON_API ClaireonTool_ProxyAssetCreate : public IClaireonTool
 {
 public:
-	FString GetName() const override;
+	FString GetCategory() const override;
+	FString GetOperation() const override;
 	FString GetDescription() const override;
 	TSharedPtr<FJsonObject> GetInputSchema() const override;
 	bool RequiresNoPIE() const override { return true; }
@@ -38,7 +41,8 @@ public:
 class CLAIREON_API ClaireonTool_ProxyAssetDuplicate : public IClaireonTool
 {
 public:
-	FString GetName() const override;
+	FString GetCategory() const override;
+	FString GetOperation() const override;
 	FString GetDescription() const override;
 	TSharedPtr<FJsonObject> GetInputSchema() const override;
 	bool RequiresNoPIE() const override { return true; }

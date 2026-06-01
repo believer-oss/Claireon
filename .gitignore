@@ -22,3 +22,6 @@ __pycache__/
 # OS
 Thumbs.db
 .DS_Store
+
+# Local-only sync scratch notes (reference private/upstream specifics; never commit)
+NEXT_STEPS.md

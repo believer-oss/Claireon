@@ -143,7 +143,7 @@ namespace ClaireonCMCInspectScratch
 
 FString ClaireonTool_CMCInspectState::GetDescription() const
 {
-    return TEXT("Snapshot the authoritative UCharacterMovementComponent state on a paused-PIE pawn: movement mode, velocity/acceleration, gravity, walkable floor parameters, current floor hit, movement base, crouched, and FS-CMC custom fields. Read-only / non-session inspector. Targets stuck-mid-air, gravity-flip, and floor-detection bug classes.");
+    return TEXT("Snapshot the authoritative UCharacterMovementComponent state on a paused-PIE pawn: movement mode, velocity/acceleration, gravity, walkable floor parameters, current floor hit, movement base, and crouched. Read-only / non-session inspector. Targets stuck-mid-air, gravity-flip, and floor-detection bug classes.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_CMCInspectState::GetInputSchema() const
@@ -166,13 +166,6 @@ TSharedPtr<FJsonObject> ClaireonTool_CMCInspectState::GetInputSchema() const
 	IncludeFloorProp->SetBoolField(TEXT("default"), true);
 	Properties->SetObjectField(TEXT("includeFloor"), IncludeFloorProp);
 
-	TSharedPtr<FJsonObject> IncludePrevFloorProp = MakeShared<FJsonObject>();
-	IncludePrevFloorProp->SetStringField(TEXT("type"), TEXT("boolean"));
-	IncludePrevFloorProp->SetStringField(TEXT("description"),
-		TEXT("If true, include FS-CMC PreviousKnownFloor. Default false."));
-	IncludePrevFloorProp->SetBoolField(TEXT("default"), false);
-	Properties->SetObjectField(TEXT("includePrevFloor"), IncludePrevFloorProp);
-
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	TArray<TSharedPtr<FJsonValue>> Required;
@@ -194,8 +187,6 @@ TSharedPtr<FJsonObject> ClaireonTool_CMCInspectState::GetParameterTooltips() con
 		TEXT("The stable actor ID assigned by PIE tools (e.g., 'actor_0')."));
 	Tooltips->SetStringField(TEXT("includeFloor"),
 		TEXT("Include CurrentFloor hit result (walkable, dist, normal, impact)."));
-	Tooltips->SetStringField(TEXT("includePrevFloor"),
-		TEXT("Include FS-CMC PreviousKnownFloor (only present on UFSCharacterMovementComponent)."));
 	return Tooltips;
 }
 
@@ -272,8 +263,6 @@ IClaireonTool::FToolResult ClaireonTool_CMCInspectState::Execute(const TSharedPt
 
 	bool bIncludeFloor = true;
 	Arguments->TryGetBoolField(TEXT("includeFloor"), bIncludeFloor);
-	bool bIncludePrevFloor = false;
-	Arguments->TryGetBoolField(TEXT("includePrevFloor"), bIncludePrevFloor);
 
 	// Movement mode
 	Data->SetStringField(TEXT("movementMode"), MovementModeToString(CMC->MovementMode.GetValue()));
@@ -325,111 +314,6 @@ IClaireonTool::FToolResult ClaireonTool_CMCInspectState::Execute(const TSharedPt
 	if (bIncludeFloor)
 	{
 		Data->SetObjectField(TEXT("currentFloor"), BuildFloorJson(CMC->CurrentFloor));
-	}
-
-	// Project-specific custom fields, nested under fsCustom to prevent collisions. Detected by
-	// walking the parent class chain by name so this tool does not need to link the
-	// project's character-movement module. Replace "FSCharacterMovementComponent" with your
-	// project's subclass name to surface its custom UPROPERTYs in the snapshot.
-	auto DerivesFromFSCMC = [](const UClass* Class) -> bool
-	{
-		for (const UClass* Cur = Class; Cur != nullptr; Cur = Cur->GetSuperClass())
-		{
-			if (Cur->GetName() == TEXT("FSCharacterMovementComponent"))
-			{
-				return true;
-			}
-		}
-		return false;
-	};
-
-	if (DerivesFromFSCMC(CMC->GetClass()))
-	{
-		TSharedPtr<FJsonObject> FsCustom = MakeShared<FJsonObject>();
-		UClass* CMCClass = CMC->GetClass();
-
-		// Read AscendingGravityScale and DescendingGravityScale via reflection. These are
-		// example project-specific UPROPERTYs; the call is a no-op if they are absent.
-		auto ReadFloatProp = [CMC](FName PropName, const TSharedPtr<FJsonObject>& Out, const FString& OutKey)
-		{
-			if (FProperty* P = CMC->GetClass()->FindPropertyByName(PropName))
-			{
-				if (FFloatProperty* FP = CastField<FFloatProperty>(P))
-				{
-					const void* ValuePtr = P->ContainerPtrToValuePtr<void>(CMC);
-					Out->SetNumberField(OutKey, FP->GetPropertyValue(ValuePtr));
-				}
-				else if (FDoubleProperty* DP = CastField<FDoubleProperty>(P))
-				{
-					const void* ValuePtr = P->ContainerPtrToValuePtr<void>(CMC);
-					Out->SetNumberField(OutKey, DP->GetPropertyValue(ValuePtr));
-				}
-			}
-		};
-		ReadFloatProp(TEXT("AscendingGravityScale"), FsCustom, TEXT("ascendingGravityScale"));
-		ReadFloatProp(TEXT("DescendingGravityScale"), FsCustom, TEXT("descendingGravityScale"));
-
-		// Discover any additional project-specific Custom_-prefixed UPROPERTYs via reflection.
-		// Walk class metadata in full so multi-level subclass chains that contribute
-		// Custom_ properties are picked up.
-		for (TFieldIterator<FProperty> PropIt(CMCClass); PropIt; ++PropIt)
-		{
-			const FProperty* Prop = *PropIt;
-			if (!Prop)
-			{
-				continue;
-			}
-			const FString PropName = Prop->GetName();
-			if (!PropName.StartsWith(TEXT("Custom_")))
-			{
-				continue;
-			}
-
-			// Best-effort: emit numeric properties directly. Other types are skipped (would
-			// require a full struct serializer; out of scope for this snapshot tool).
-			if (const FNumericProperty* NumProp = CastField<FNumericProperty>(Prop))
-			{
-				const void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(CMC);
-				if (NumProp->IsFloatingPoint())
-				{
-					FsCustom->SetNumberField(PropName, NumProp->GetFloatingPointPropertyValue(ValuePtr));
-				}
-				else if (NumProp->IsInteger())
-				{
-					FsCustom->SetNumberField(PropName,
-						static_cast<double>(NumProp->GetSignedIntPropertyValue(ValuePtr)));
-				}
-			}
-			else if (const FBoolProperty* BoolProp = CastField<FBoolProperty>(Prop))
-			{
-				const void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(CMC);
-				FsCustom->SetBoolField(PropName, BoolProp->GetPropertyValue(ValuePtr));
-			}
-		}
-
-		// Previous known floor (project-specific). Reflected via FStructProperty so this
-		// tool does not need a direct C++ dependency on the project's movement module.
-		if (bIncludePrevFloor)
-		{
-			if (FProperty* PrevFloorProp = CMCClass->FindPropertyByName(TEXT("PreviousKnownFloor")))
-			{
-				if (FStructProperty* StructProp = CastField<FStructProperty>(PrevFloorProp))
-				{
-					if (StructProp->Struct && StructProp->Struct->GetName() == TEXT("FindFloorResult"))
-					{
-						const FFindFloorResult* PrevFloor =
-							StructProp->ContainerPtrToValuePtr<FFindFloorResult>(CMC);
-						if (PrevFloor)
-						{
-							FsCustom->SetObjectField(TEXT("previousKnownFloor"),
-								BuildFloorJson(*PrevFloor));
-						}
-					}
-				}
-			}
-		}
-
-		Data->SetObjectField(TEXT("fsCustom"), FsCustom);
 	}
 
 	const FString Summary = FString::Printf(
@@ -841,8 +725,8 @@ IClaireonTool::FToolResult ClaireonTool_CMCInspectPredictionData::Execute(const 
 			ServerObj->SetBoolField(TEXT("resolvingTimeDiscrepancy"),
 				ServerData->bResolvingTimeDiscrepancy);
 
-			// reconciliation: the tracker-card "LastClientAdjustmentTime" /
-			// "LastClientGoodMoveAckTime" fields live on the CMC itself, not on
+			// The LastClientAdjustmentTime and LastClientGoodMoveAckTime
+			// fields live on the CMC itself, not on
 			// FNetworkPredictionData_Server_Character. CMC fields are protected
 			// UPROPERTY(Transient) at CharacterMovementComponent.h:662 / :666.
 			// Read via FProperty reflection (same pattern as ClaireonPropertyUtils.cpp).

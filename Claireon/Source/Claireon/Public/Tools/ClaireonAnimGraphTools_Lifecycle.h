@@ -10,7 +10,7 @@
 class CLAIREON_API ClaireonAnimGraphTool_Create : public IClaireonTool
 {
 public:
-	FString GetName() const override;
+	FString GetOperation() const override;
 	FString GetDescription() const override;
 	FString GetCategory() const override { return TEXT("animbp"); }
 	bool RequiresNoPIE() const override { return true; }
@@ -21,7 +21,7 @@ public:
 class CLAIREON_API ClaireonAnimGraphTool_CreateChild : public IClaireonTool
 {
 public:
-	FString GetName() const override;
+	FString GetOperation() const override;
 	FString GetDescription() const override;
 	FString GetCategory() const override { return TEXT("animbp"); }
 	bool RequiresNoPIE() const override { return true; }
@@ -32,7 +32,7 @@ public:
 class CLAIREON_API ClaireonAnimGraphTool_Duplicate : public IClaireonTool
 {
 public:
-	FString GetName() const override;
+	FString GetOperation() const override;
 	FString GetDescription() const override;
 	FString GetCategory() const override { return TEXT("animbp"); }
 	bool RequiresNoPIE() const override { return true; }

@@ -1746,6 +1746,23 @@ def _scripts_utilities_dir(worktree_root: str) -> str:
     return os.path.join(worktree_root, "Scripts", "Utilities")
 
 
+def _resolve_uproject(worktree_root: str) -> Optional[str]:
+    """Return the absolute path to the worktree's .uproject file, if any.
+
+    Discovers the project generically instead of assuming a fixed name, so
+    the proxy works for any Unreal project that hosts the plugin. Returns
+    None when no .uproject exists at the worktree root.
+    """
+    try:
+        entries = sorted(os.listdir(worktree_root))
+    except OSError:
+        return None
+    for name in entries:
+        if name.lower().endswith(".uproject"):
+            return os.path.join(worktree_root, name)
+    return None
+
+
 def _resolve_active_worktree_root(listener_port: Optional[int]) -> Optional[str]:
     """Stage 012: derive the meta-tool's worktree_root context.
 
@@ -1942,10 +1959,14 @@ def _handle_proxy_command(
         if not os.path.isfile(script):
             return _jsonrpc_result(request_id, _proxy_text_result(
                 f"Invoke-EditorBuildAndLaunch.ps1 not found at {script}", is_error=True))
-        # Pass -ProjectPath explicitly so Find-MyGameProject is never
-        # called with the proxy's inherited CWD (which belongs to the worktree
-        # that first spawned the singleton, not necessarily this one).
-        project_file = os.path.join(worktree_root, "MyGame.uproject")
+        # Pass -ProjectPath explicitly so the launch script's project
+        # auto-detection is never called with the proxy's inherited CWD
+        # (which belongs to the worktree that first spawned the singleton,
+        # not necessarily this one).
+        project_file = _resolve_uproject(worktree_root)
+        if not project_file:
+            return _jsonrpc_result(request_id, _proxy_text_result(
+                f"no .uproject found at worktree root {worktree_root}", is_error=True))
         cmd = [ps, "-NoProfile", "-File", script,
                "-ProjectPath", project_file, "-UseMCPProxy"]
         if bool(sub_args.get("skip_build")):
