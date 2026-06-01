@@ -25,7 +25,7 @@
 namespace ClaireonCMCInspectScratch
 {
 	// Decode EMovementMode (declared at
-	// C:/UnrealEngine/Engine/Source/Runtime/Engine/Classes/Engine/EngineTypes.h:922).
+	// Engine/Source/Runtime/Engine/Classes/Engine/EngineTypes.h).
 	FString MovementModeToString(EMovementMode InMode)
 	{
 		switch (InMode)
