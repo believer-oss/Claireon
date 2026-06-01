@@ -98,3 +98,27 @@ protected:
 		TSharedPtr<FJsonObject> GetInputSchema() const override; \
 		FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override; \
 	}
+
+/**
+ * Base class for Blend Space editing MCP tools. Shares all session management
+ * and helpers with the anim tools, but publishes under the distinct
+ * "blend_space" category so blend-space operations (inspect, set_property,
+ * add_metadata, ...) do not collide with the generic anim_* tool names.
+ */
+class CLAIREON_API ClaireonBlendSpaceToolBase : public ClaireonAnimEditToolBase
+{
+public:
+	FString GetCategory() const override { return TEXT("blend_space"); }
+};
+
+// Macro mirroring DECLARE_ANIM_TOOL, but rooted at ClaireonBlendSpaceToolBase so
+// the generated tools register under the "blend_space" category.
+#define DECLARE_BLENDSPACE_TOOL(ClassName) \
+	class CLAIREON_API ClassName : public ClaireonBlendSpaceToolBase \
+	{ \
+	public: \
+		FString GetOperation() const override; \
+		FString GetDescription() const override; \
+		TSharedPtr<FJsonObject> GetInputSchema() const override; \
+		FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override; \
+	}
