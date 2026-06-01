@@ -13,7 +13,8 @@
 class ClaireonTool_BehaviorTreeInspect : public IClaireonTool
 {
 public:
-	virtual FString GetName() const override;
+	virtual FString GetCategory() const override;
+	virtual FString GetOperation() const override;
 	virtual FString GetDescription() const override;
 	virtual TSharedPtr<FJsonObject> GetInputSchema() const override;
 	virtual FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;

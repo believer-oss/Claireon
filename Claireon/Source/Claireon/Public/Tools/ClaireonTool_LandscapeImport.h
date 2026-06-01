@@ -12,7 +12,8 @@
 class ClaireonTool_LandscapeImport : public IClaireonTool
 {
 public:
-	virtual FString GetName() const override;
+	virtual FString GetCategory() const override;
+	virtual FString GetOperation() const override;
 	virtual bool RequiresNoPIE() const override { return true; }
 	virtual FString GetDescription() const override;
 	virtual TSharedPtr<FJsonObject> GetInputSchema() const override;

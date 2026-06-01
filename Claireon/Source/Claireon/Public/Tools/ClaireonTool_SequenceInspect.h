@@ -13,7 +13,8 @@
 class ClaireonTool_SequenceInspect : public IClaireonTool
 {
 public:
-	virtual FString GetName() const override;
+	virtual FString GetCategory() const override;
+	virtual FString GetOperation() const override;
 	virtual FString GetDescription() const override;
 	virtual FString GetFullDescription() const override;
 	virtual TSharedPtr<FJsonObject> GetInputSchema() const override;

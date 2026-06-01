@@ -30,7 +30,7 @@ TSharedPtr<FJsonObject> ClaireonStateTreeTool_Create::GetInputSchema() const
 {
 	FToolSchemaBuilder Builder;
 	Builder.AddString(TEXT("asset_path"), TEXT("Destination asset path for the new State Tree (e.g. /Game/AI/ST_NewTree). Must not already exist."), true);
-	Builder.AddString(TEXT("schema_class_path"), TEXT("Object path or class name of a UStateTreeSchema subclass (e.g. /Script/StateTreeModule.StateTreeSchema or a mygame-specific schema)."), true);
+	Builder.AddString(TEXT("schema_class_path"), TEXT("Object path or class name of a UStateTreeSchema subclass (e.g. /Script/StateTreeModule.StateTreeSchema or a project-specific schema)."), true);
 	return Builder.Build();
 }
 

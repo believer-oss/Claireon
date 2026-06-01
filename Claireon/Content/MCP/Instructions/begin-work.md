@@ -7,6 +7,8 @@ uri: claireon://instructions/begin-work
 
 Do not use instructions from this file unless asked.
 
+> **Token placeholders**: This document uses `{{TOKEN}}` placeholders (e.g. `{{PROJECT_NAME}}`, `{{GIT_USER}}`). Resolve each from your project/git/environment context before acting on or echoing the text -- see the legend at `claireon://instructions/token-legend` (fetch via `resources/read`).
+
 # Begin Work on New Task
 
 This instruction creates a local task workspace and a new work branch. All workflow

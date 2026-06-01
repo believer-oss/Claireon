@@ -13,6 +13,8 @@ rationale: Creation Workflow orchestrator; stage decisions require depth reasoni
 
 Do not use instructions from this file unless asked.
 
+> **Token placeholders**: This document and the sub-instructions it invokes use `{{TOKEN}}` placeholders (e.g. `{{PROJECT_NAME}}`, `{{GIT_USER}}`, `{{REPO_URL}}`). Resolve each from your project/git/environment context before acting on or echoing the text -- see the legend at `claireon://instructions/token-legend` (fetch via `resources/read`).
+
 > **Sub-instruction protocol**: When this workflow says to invoke or follow a `claireon://instructions/*` resource, call `resources/read <uri>` on the Claireon server to retrieve the instruction document and then follow its contents.
 
 # Do Next Creation Workflow Step

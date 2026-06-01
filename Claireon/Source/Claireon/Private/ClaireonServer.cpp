@@ -2024,7 +2024,7 @@ TMap<FString, FString> FClaireonServer::BuildRuntimeVariables() const
 	FModuleManager::Get().FindModules(TEXT("*"), ModuleNames);
 	Vars.Add(TEXT("project.module_count"), FString::FromInt(ModuleNames.Num()));
 
-	// Tool category summary (used by quick-start).
+	// Tool category summary (available to file-backed prompt templates).
 	{
 		TMap<FString, int32> CategoryCounts;
 		for (const auto& Pair : Tools)

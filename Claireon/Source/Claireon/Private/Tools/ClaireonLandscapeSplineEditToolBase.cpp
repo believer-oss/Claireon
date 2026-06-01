@@ -4,6 +4,7 @@
 #include "Tools/ClaireonLandscapeSplineEditToolBase.h"
 #include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonSessionManager.h"
+#include "LandscapeProxy.h"
 #include "LandscapeSplineControlPoint.h"
 #include "LandscapeSplineSegment.h"
 #include "LandscapeSplinesComponent.h"

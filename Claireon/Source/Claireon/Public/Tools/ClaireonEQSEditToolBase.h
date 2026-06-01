@@ -105,7 +105,7 @@ protected:
 	class CLAIREON_API ClassName : public ClaireonEQSEditToolBase \
 	{ \
 	public: \
-		FString GetName() const override; \
+		FString GetOperation() const override; \
 		FString GetDescription() const override; \
 		TSharedPtr<FJsonObject> GetInputSchema() const override; \
 		FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override; \

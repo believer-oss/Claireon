@@ -15,9 +15,9 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-FString ClaireonLevelSequenceTool_RebindActor::GetName() const
+FString ClaireonLevelSequenceTool_RebindActor::GetOperation() const
 {
-	return TEXT("claireon.level_sequence_rebind_actor");
+	return TEXT("rebind_actor");
 }
 
 FString ClaireonLevelSequenceTool_RebindActor::GetDescription() const

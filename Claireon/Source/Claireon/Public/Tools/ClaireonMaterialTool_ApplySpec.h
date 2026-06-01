@@ -14,7 +14,7 @@
 class CLAIREON_API ClaireonMaterialTool_ApplySpec : public IClaireonTool
 {
 public:
-	FString GetName() const override;
+	FString GetOperation() const override;
 	FString GetDescription() const override;
 	bool RequiresNoPIE() const override { return true; }
 	FString GetCategory() const override { return TEXT("material"); }

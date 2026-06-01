@@ -13,10 +13,8 @@
 #include "Misc/Paths.h"
 #include "UObject/Package.h"
 
-FString ClaireonTool_AssetImportFile::GetName() const
-{
-	return TEXT("claireon.asset.import_file");
-}
+FString ClaireonTool_AssetImportFile::GetCategory() const { return TEXT("asset"); }
+FString ClaireonTool_AssetImportFile::GetOperation() const { return TEXT("import_file"); }
 
 FString ClaireonTool_AssetImportFile::GetDescription() const
 {

@@ -7,6 +7,8 @@ uri: claireon://instructions/push-branch
 
 Do not use instructions from this file unless asked.
 
+> **Token placeholders**: This document uses `{{TOKEN}}` placeholders (e.g. `{{GIT_USER}}`, `{{WORKTREE}}`, `{{REPO_URL}}`). Resolve each from your project/git/environment context before acting on or echoing the text -- see the legend at `claireon://instructions/token-legend` (fetch via `resources/read`).
+
 # Auto Push Changes as New Branch
 
 This script automates the process of moving local changes to a new branch with a standardized naming convention and commit message format.
