@@ -33,7 +33,7 @@ If you discover a security issue, please report it responsibly. **Do not open pu
 ### How to Report
 
 1. **Email**: Send details to **security@believer.gg** with the subject line `[Claireon Security]`
-2. **GitHub**: If private vulnerability reporting is enabled on this repository, you can use the "Report a vulnerability" button on the [Security tab](https://github.com/believer-oss/claireon/security)
+2. **GitHub**: If private vulnerability reporting is enabled on this repository, you can use the "Report a vulnerability" button on the [Security tab](https://github.com/believer-oss/Claireon/security)
 
 ### What to Include
 
