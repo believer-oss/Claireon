@@ -15,16 +15,20 @@
 
 ---
 
-Claireon is an Unreal Engine editor plugin that runs a [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server inside the editor, exposing 80+ tools for AI-assisted development workflows. It enables AI assistants like [Claude Code](https://docs.anthropic.com/en/docs/claude-code) to read, search, inspect, and edit Unreal assets directly.
+Claireon is an Unreal Engine editor plugin that runs a [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server inside the editor, exposing hundreds of editor automation tools for AI-assisted development workflows behind a deliberately small MCP surface (`tool_search` + `python_execute`). It enables AI assistants like [Claude Code](https://docs.anthropic.com/en/docs/claude-code) to read, search, inspect, and edit Unreal assets directly.
 
 ## Features
 
+- **Hybrid Tool Discovery** — `tool_search` ranks the full tool catalog with SQLite FTS5 + a vendored embedding model, so agents find the right tool without a giant tool list
 - **Blueprint Editing** — Read and modify Blueprint graphs, properties, components, and connections
+- **Animation Authoring** — Anim sequences, montages, notifies, blend spaces/aim offsets, and AnimBP graphs
 - **State Tree Editing** — Inspect and edit State Tree assets, nodes, and runtime state
 - **Behavior Tree & EQS** — Inspect and edit Behavior Trees, Blackboards, and Environment Query Systems
 - **Widget Blueprint Editing** — Read and modify UMG widget hierarchies and animations
 - **Niagara & PCG** — Inspect and edit Niagara particle systems and PCG graphs
 - **Data Tables** — Full CRUD operations on Data Table assets with CSV/JSON import/export
+- **Audio & MetaSounds** — Sound placement, attenuation, audio components, and MetaSound inspection
+- **Sequences, Cameras & More** — Level Sequences (incl. actor rebinding), camera assets, chooser/proxy tables, gameplay tags, Enhanced Input, landscape/terrain
 - **Asset Management** — Search, list, validate, resave, cook, and fix up redirectors
 - **PIE Integration** — Start/stop Play-In-Editor, query actors, spawn enemies, test abilities, take screenshots
 - **Trace Analysis** — Open and analyze Unreal Insights trace files for performance profiling
@@ -65,7 +69,7 @@ YourProject/
 The MCP server can be started in two ways:
 
 - **Command line**: Launch the editor with `-StartMCPServer` to auto-start on load
-- **Toolbar button**: Click the **AI Chat** button in the editor toolbar to open the diagnostics panel, which also starts the server
+- **Toolbar button**: Click the **Claireon** button in the editor toolbar to open the Claireon panel, which also starts the server
 
 The server listens on port `8017` by default. Override with `-MCPServerPort=<port>`.
 
@@ -76,7 +80,7 @@ Once the server is running, configure Claude Code to connect:
 ```json
 {
   "mcpServers": {
-    "unreal-editor": {
+    "claireon": {
       "type": "streamable-http",
       "url": "http://localhost:8017/mcp"
     }
@@ -84,17 +88,19 @@ Once the server is running, configure Claude Code to connect:
 }
 ```
 
-Then use `search_tools` to discover available tools:
+The MCP surface is intentionally two tools: `tool_search` to discover what is available, and
+`python_execute` to run editor Python (where every catalog tool is callable as
+`claireon.<tool_name>(...)`). Discover tools with:
 
 ```
-> search_tools blueprint
-> search_tools state tree
-> search_tools niagara
+> tool_search blueprint
+> tool_search state tree
+> tool_search(tool_name="bp_apply_delta")   # full detail for one tool
 ```
 
 #### One-click launch from the editor
 
-Once the plugin is loaded, the level editor toolbar exposes a **Claude Code** button next to **AI Chat** (also available under **Window > General > Miscellaneous > Launch Claude Code**). Clicking it:
+Once the plugin is loaded, open the **Claireon** panel (toolbar button, or **Window > General > Miscellaneous > Claireon**); its status strip exposes a **Claude Code** launch button (toggleable via the `Show Claude Code Button` setting). Clicking it:
 
 1. Resolves the live MCP server port (handles auto-incremented ports if `8017` was busy).
 2. Writes a per-launch MCP config to `Saved/Claireon/claude-code-mcp.json` so the committed `.mcp.json` stays untouched.
@@ -124,8 +130,8 @@ Claireon works standalone, but can integrate with these plugins when present:
 
 | Plugin | Purpose | Detection |
 |--------|---------|-----------|
-| [Untested](https://github.com/believer-oss/untested) | Unit test framework for Claireon's test suite (coming soon) | Auto-detected via filesystem |
-| BlueprintAssist | Enhanced Blueprint editor integration | Auto-detected via filesystem |
+| [Untested](https://github.com/believer-oss/untested) | Unit test framework for Claireon's test suite | Optional plugin dependency |
+| BlueprintAssist | Enhanced Blueprint editor integration | Optional plugin dependency |
 | LyraGame | Lyra framework init state checking in PIE tools | Auto-detected via filesystem |
 
 ## Architecture
@@ -136,30 +142,45 @@ Claireon works standalone, but can integrate with these plugins when present:
     Public/
       ClaireonModule.h          # Module entry point, server lifecycle
       ClaireonServer.h          # HTTP server, JSON-RPC dispatch
-      ClaireonSessionManager.h     # Per-asset exclusive locking
+      ClaireonSessionManager.h  # Per-asset exclusive locking
+      IClaireonToolProvider.h   # Modular-feature interface for external tool providers
       Tools/
-        IClaireonTool.h            # Tool interface — implement this to add tools
+        IClaireonTool.h         # Tool interface — implement this to add tools
     Private/
-      Tools/                     # 80+ tool implementations
-      Tests/                     # Unit tests (requires Untested)
+      Tools/                    # Tool implementations (hundreds of operations)
+      Tests/                    # Unit tests (requires Untested)
   Content/
-    Python/                      # Python bridge scripts
+    Python/                     # Python bridge scripts + multi-worktree MCP proxy
+    MCP/Instructions/           # Instruction documents served as MCP resources
+  Resources/
+    Models/                     # Vendored bge-small-en-v1.5-int8 embedding model (MIT)
 ```
 
 ### Registering External Tools
 
-Other modules can register tools with Claireon without including server internals:
+Other modules contribute tools without including server internals by implementing the
+modular-feature provider interface:
 
 ```cpp
-#include "ClaireonModule.h"
+#include "IClaireonToolProvider.h"
 #include "Tools/IClaireonTool.h"
 
-// In your module's startup:
-FClaireonModule& Claireon = FClaireonModule::Get();
-Claireon.RegisterExternalTool(MakeShared<MyCustomTool>());
+class FMyToolProvider : public IClaireonToolProvider
+{
+public:
+    TArray<TSharedPtr<IClaireonTool>> GetTools() const override;
+    FName GetProviderName() const override { return TEXT("MyPlugin"); }
+};
+
+// In your module's StartupModule():
+IModularFeatures::Get().RegisterModularFeature(IClaireonToolProvider::FeatureName, &MyProvider);
 ```
 
-Tools registered before the server starts are automatically queued and flushed on startup.
+Providers are discovered at server start and dynamically as they register/unregister at
+runtime. A provider can also extend bare-name resolution with project-specific module names
+and class-prefix conventions via the optional `GetKnownModules()` / `GetClassPrefixMap()`
+overrides. For one-off registrations, `FClaireonModule::Get().RegisterExternalTool()` also
+works; tools registered before the server starts are queued and flushed on startup.
 
 ## Development
 
@@ -178,16 +199,18 @@ UnrealBuildTool YourProjectEditor Win64 Development -project="YourProject.uproje
 ### Adding a New Tool
 
 1. Create a class implementing `IClaireonTool` (see `Tools/IClaireonTool.h`)
-2. Implement `GetName()`, `GetDescription()`, `GetInputSchema()`, `GetCategory()`, and `Execute()`
-3. Register it in `ClaireonModule.cpp`'s `StartServer()` method
+2. Implement `GetCategory()`, `GetOperation()`, `GetDescription()`, `GetInputSchema()`, and
+   `Execute()` — the tool name is always `<category>_<operation>` (`GetName()` is sealed)
+3. Register it with the built-in provider in `ClaireonModule.cpp` (or via your own
+   `IClaireonToolProvider` if it lives in another module)
 
 ```cpp
 class MyTool : public IClaireonTool
 {
 public:
-    FString GetName() const override { return TEXT("editor.my_tool"); }
-    FString GetDescription() const override { return TEXT("Does something useful"); }
     FString GetCategory() const override { return TEXT("custom"); }
+    FString GetOperation() const override { return TEXT("my_tool"); }   // name: "custom_my_tool"
+    FString GetDescription() const override { return TEXT("Does something useful"); }
 
     TSharedPtr<FJsonObject> GetInputSchema() const override
     {
@@ -235,7 +258,6 @@ Markdown documents that serve as structured prompts for AI assistants (e.g., Cla
 **Git Workflows:**
 - `AutoPushChangesAsNewBranch.md` — Move local changes to a new branch with standardized naming
 - `CleanupBranchesAfterMerge.md` — Rebase all local branches onto main after merges
-- `SynchronizeWithSharedWork.md` — Integrate work from other worktrees
 - `ResetWorktreeToMain.md` — Park current branch and reset to latest main
 
 **Unreal Engine Workflows:**
@@ -260,7 +282,7 @@ Markdown documents that serve as structured prompts for AI assistants (e.g., Cla
 Claireon runs an **unauthenticated HTTP server on localhost** (`127.0.0.1`). This is by design for seamless local AI assistant integration, but you should be aware of the implications:
 
 - **Never expose port 8017 externally.** Do not use port forwarding, reverse proxies, or tunnels to make the server accessible from other machines.
-- **Python execution is unrestricted.** The `execute_python_script` tool has full access to the filesystem, network, and editor APIs — equivalent to the editor's built-in Python console.
+- **Python execution is unrestricted.** The `python_execute` tool has full access to the filesystem, network, and editor APIs — equivalent to the editor's built-in Python console.
 - **Execution timeout is advisory only.** The `timeout_seconds` parameter is not currently enforced at the process level.
 - **No authentication.** Any process on localhost can call the MCP server.
 
@@ -270,4 +292,4 @@ For full details, see [SECURITY.md](SECURITY.md).
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
-Third-party dependencies (e.g., `sqlite-vec`) retain their own licenses. See `Claireon/Binaries/ThirdParty/` for details.
+Third-party dependencies retain their own licenses. The vendored embedding model ships with its license at `Resources/Models/bge-small-en-v1.5-int8/LICENSE.txt`.
