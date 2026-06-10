@@ -2540,7 +2540,7 @@ void FClaireonModule::RegisterMenus()
 {
 	// Register toolbar button in the same section as Heavy PIE, FS Preferences, etc.
 	static const FName ToolbarSection(TEXT("LevelEditor.LevelEditorToolBar.User"));
-	static const FName AIChatSection(TEXT("LevelEditor.LevelEditorToolBar.User.AIChat"));
+	static const FName ClaireonSection(TEXT("LevelEditor.LevelEditorToolBar.User.Claireon"));
 
 	UToolMenu* Toolbar = UToolMenus::Get()->ExtendMenu(ToolbarSection);
 	if (!Toolbar)
@@ -2548,7 +2548,7 @@ void FClaireonModule::RegisterMenus()
 		return;
 	}
 
-	FToolMenuSection& Section = Toolbar->AddSection(AIChatSection);
+	FToolMenuSection& Section = Toolbar->AddSection(ClaireonSection);
 	Section.AddSeparator(NAME_None);
 
 	// Status dot color selector: red (stopped), blinking cyan/blue (processing), green (idle running).
@@ -2580,7 +2580,7 @@ void FClaireonModule::RegisterMenus()
 		return FSlateColor(FClaireonToolbarStyle::GetRunningColor());
 	};
 
-	TSharedRef<SButton> AIChatButton = SNew(SButton)
+	TSharedRef<SButton> ClaireonButton = SNew(SButton)
 		.ButtonStyle(FAppStyle::Get(), "SimpleButton")
 		.OnClicked_Lambda([]() -> FReply
 	{
@@ -2730,7 +2730,7 @@ void FClaireonModule::RegisterMenus()
 	// Drive continuous repaint so the ColorAndOpacity_Lambda re-evaluates each frame of the
 	// blink window even when the user isn't hovering the button. Cost is one no-op invalidation
 	// per tick; the lambda itself is the only work per frame.
-	AIChatButton->RegisterActiveTimer(
+	ClaireonButton->RegisterActiveTimer(
 		0.05f, // ~20 Hz, well above the 0.15s half-period blink rate
 		FWidgetActiveTimerDelegate::CreateLambda(
 			[](double /*InCurrentTime*/, float /*InDeltaTime*/) -> EActiveTimerReturnType
@@ -2738,17 +2738,17 @@ void FClaireonModule::RegisterMenus()
 			return EActiveTimerReturnType::Continue;
 		}));
 
-	FToolMenuEntry AIChatEntry = FToolMenuEntry::InitWidget(
-		TEXT("AIChat"),
-		AIChatButton,
-		LOCTEXT("AIChatLabel", "AI Chat"));
-	AIChatEntry.StyleNameOverride = "CalloutToolbar";
-	Section.AddEntry(AIChatEntry);
+	FToolMenuEntry ClaireonEntry = FToolMenuEntry::InitWidget(
+		TEXT("Claireon"),
+		ClaireonButton,
+		LOCTEXT("ClaireonToolbarLabel", "Claireon"));
+	ClaireonEntry.StyleNameOverride = "CalloutToolbar";
+	Section.AddEntry(ClaireonEntry);
 
 	// Launch Agent button moved into the Claireon panel status strip (between proxy chip and UPTIME).
 	// See SClaireonDiagnosticsWidget::BuildStatusStrip and UClaireonSettings::bShowClaudeCodeButton.
 
-	// Window > AI Chat menu entry for discoverability
+	// Window > Claireon menu entry for discoverability
 	{
 		UToolMenu* WindowMenu = UToolMenus::Get()->ExtendMenu(
 			"LevelEditor.MainMenu.Window.General.Miscellaneous");
@@ -2756,9 +2756,9 @@ void FClaireonModule::RegisterMenus()
 		{
 			FToolMenuSection& WindowSection = WindowMenu->FindOrAddSection("WindowLayout");
 			WindowSection.AddMenuEntry(
-				TEXT("AIChat"),
-				LOCTEXT("WindowAIChatLabel", "AI Chat"),
-				LOCTEXT("WindowAIChatTooltip", "Open the AI Chat assistant (Claude REPL)"),
+				TEXT("Claireon"),
+				LOCTEXT("WindowClaireonLabel", "Claireon"),
+				LOCTEXT("WindowClaireonTooltip", "Open the Claireon panel (activity log, feedback, and agent launch)"),
 				FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Comment")),
 				FUIAction(FExecuteAction::CreateLambda([]()
 			{
