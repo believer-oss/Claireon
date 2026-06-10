@@ -1797,7 +1797,7 @@ void SClaireonREPLWidget::OnMessageContextMenu(
 
 	// Check if the selected text looks like an asset path
 	const FRegexPattern AssetPathPattern(
-		TEXT("^/(Game|Script|Engine|Plugins)/[A-Za-z0-9_/.]+$"));
+		TEXT("^/(Game|Script|Engine|FS[A-Za-z]+|Plugins)/[A-Za-z0-9_/.]+$"));
 	FRegexMatcher Matcher(AssetPathPattern, SelectedText);
 
 	if (Matcher.FindNext())

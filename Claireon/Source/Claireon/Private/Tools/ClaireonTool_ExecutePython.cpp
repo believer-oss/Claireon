@@ -16,7 +16,7 @@
 #include "ClaireonOutputGate.h"
 #include "ClaireonSafeExec.h"
 #include "ClaireonPythonAuditLog.h"
-#include "ClaireonToolCatalogMatcher.h"
+#include "ClaireonToolSearchIndex.h"
 #include "IPythonScriptPlugin.h"
 #include "PythonScriptTypes.h"
 #include "Misc/FileHelper.h"
@@ -286,9 +286,9 @@ namespace Cl622PyHintInternal
 					FString Reason = FString::Printf(
 						TEXT("unknown tool '%s'"), *MissingName);
 
-					FClaireonToolCatalogMatcher::EnsureBuilt();
+					FClaireonToolSearchIndex::EnsureBuilt();
 					TArray<FClaireonToolCatalogMatch> Matches =
-						FClaireonToolCatalogMatcher::FindNearest(MissingName, 1);
+						FClaireonToolSearchIndex::FindNearest(MissingName, 1);
 					if (Matches.Num() > 0)
 					{
 						Reason += FString::Printf(
@@ -322,9 +322,9 @@ namespace Cl622PyHintInternal
 					FString Reason = FString::Printf(
 						TEXT("unknown tool '%s'"), *MissingName);
 
-					FClaireonToolCatalogMatcher::EnsureBuilt();
+					FClaireonToolSearchIndex::EnsureBuilt();
 					TArray<FClaireonToolCatalogMatch> Matches =
-						FClaireonToolCatalogMatcher::FindNearest(MissingName, 1);
+						FClaireonToolSearchIndex::FindNearest(MissingName, 1);
 					if (Matches.Num() > 0)
 					{
 						Reason += FString::Printf(
@@ -356,168 +356,6 @@ namespace Cl622PyHintInternal
 
 		return nullptr;
 	}
-}
-
-// ---------------------------------------------------------------------------
-// Tool-catalog nearest-string bindings.
-//
-// Exposed to Python as claireon._tool_catalog_build(entries_json_str) /
-// claireon._tool_catalog_nearest(query_str, max_results_int). Registered into the
-// 'unreal' module dict alongside _mcp_call_tool (see
-// FClaireonBridge::RegisterBridgeFunctions), then aliased onto the claireon proxy
-// in the script prefix below.
-// ---------------------------------------------------------------------------
-
-namespace ClaireonToolCatalogBindings
-{
-	static PyObject* BuildCatalog(PyObject* /*Self*/, PyObject* Args)
-	{
-		const char* EntriesJsonUtf8 = nullptr;
-		if (!PyArg_ParseTuple(Args, "s", &EntriesJsonUtf8))
-		{
-			return nullptr;
-		}
-		if (!EntriesJsonUtf8)
-		{
-			PyErr_SetString(PyExc_ValueError, "claireon._tool_catalog_build: entries_json is null");
-			return nullptr;
-		}
-
-		const FString EntriesJson = UTF8_TO_TCHAR(EntriesJsonUtf8);
-
-		TArray<TSharedPtr<FJsonValue>> Root;
-		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(EntriesJson);
-		if (!FJsonSerializer::Deserialize(Reader, Root))
-		{
-			PyErr_SetString(PyExc_ValueError, "claireon._tool_catalog_build: failed to parse entries JSON array");
-			return nullptr;
-		}
-
-		TArray<FClaireonToolCatalogEntry> Entries;
-		Entries.Reserve(Root.Num());
-		for (const TSharedPtr<FJsonValue>& Val : Root)
-		{
-			if (!Val.IsValid() || Val->Type != EJson::Object)
-			{
-				continue;
-			}
-			const TSharedPtr<FJsonObject>& Obj = Val->AsObject();
-			if (!Obj.IsValid())
-			{
-				continue;
-			}
-			FClaireonToolCatalogEntry Entry;
-			Obj->TryGetStringField(TEXT("name"), Entry.Name);
-			Obj->TryGetStringField(TEXT("description"), Entry.Description);
-			Obj->TryGetStringField(TEXT("category"), Entry.Category);
-			Obj->TryGetStringField(TEXT("operation"), Entry.Operation);
-			const TArray<TSharedPtr<FJsonValue>>* KeywordsArr = nullptr;
-			if (Obj->TryGetArrayField(TEXT("keywords"), KeywordsArr) && KeywordsArr)
-			{
-				Entry.Keywords.Reserve(KeywordsArr->Num());
-				for (const TSharedPtr<FJsonValue>& KV : *KeywordsArr)
-				{
-					FString K;
-					if (KV.IsValid() && KV->TryGetString(K) && !K.IsEmpty())
-					{
-						Entry.Keywords.Add(MoveTemp(K));
-					}
-				}
-			}
-			if (Entry.Name.IsEmpty() && Entry.Category.IsEmpty() && Entry.Operation.IsEmpty()
-				&& Entry.Description.IsEmpty() && Entry.Keywords.Num() == 0)
-			{
-				UE_LOG(LogClaireon, Warning,
-					TEXT("[ToolCatalogBindings] Entry '%s' has no indexable fields; nothing will be indexed for it."),
-					*Entry.Name);
-			}
-			Entries.Add(MoveTemp(Entry));
-		}
-
-		FClaireonToolCatalogMatcher::BuildCatalog(Entries);
-
-		Py_RETURN_NONE;
-	}
-
-	static PyObject* FindNearest(PyObject* /*Self*/, PyObject* Args)
-	{
-		const char* QueryUtf8 = nullptr;
-		int MaxResults = 0;
-		if (!PyArg_ParseTuple(Args, "si", &QueryUtf8, &MaxResults))
-		{
-			return nullptr;
-		}
-		const FString Query = QueryUtf8 ? FString(UTF8_TO_TCHAR(QueryUtf8)) : FString();
-		const int32 K = FMath::Max(0, static_cast<int32>(MaxResults));
-
-		TArray<FClaireonToolCatalogMatch> Matches = FClaireonToolCatalogMatcher::FindNearest(Query, K);
-
-		// Serialise to JSON array of { name, category, score, tokens_matched }.
-		// `tokens_matched` is the count of distinct query tokens that
-		// produced any exact/prefix/fuzzy hit; consumed by ClaireonTool_SearchTools::Execute
-		// to surface `query_tokens_matched` per result and to detect pathological
-		// fuzzy responses that warrant a substring-fallback merge.
-		TArray<TSharedPtr<FJsonValue>> OutArr;
-		OutArr.Reserve(Matches.Num());
-		for (const FClaireonToolCatalogMatch& M : Matches)
-		{
-			TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-			Obj->SetStringField(TEXT("name"), M.Name);
-			Obj->SetStringField(TEXT("category"), M.Category);
-			Obj->SetNumberField(TEXT("score"), M.Score);
-			Obj->SetNumberField(TEXT("tokens_matched"), M.TokensMatched);
-			OutArr.Add(MakeShared<FJsonValueObject>(Obj));
-		}
-
-		FString OutJson;
-		TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
-			TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&OutJson);
-		FJsonSerializer::Serialize(OutArr, Writer);
-		Writer->Close();
-
-		return PyUnicode_FromString(TCHAR_TO_UTF8(*OutJson));
-	}
-
-	static PyMethodDef BuildDef = {
-		"_tool_catalog_build",
-		&BuildCatalog,
-		METH_VARARGS,
-		"Rebuild the tool catalog from JSON. Args: (entries_json: str) -> None"
-	};
-
-	static PyMethodDef NearestDef = {
-		"_tool_catalog_nearest",
-		&FindNearest,
-		METH_VARARGS,
-		"Rank catalog entries against a query. Args: (query: str, max_results: int) -> str (JSON array)"
-	};
-}
-
-void ClaireonTool_ExecutePython::RegisterToolCatalogBindings(void* UnrealModuleDict)
-{
-	PyObject* ModuleDict = static_cast<PyObject*>(UnrealModuleDict);
-	if (!ModuleDict)
-	{
-		return;
-	}
-
-	PyObject* BuildFn = PyCFunction_New(&ClaireonToolCatalogBindings::BuildDef, nullptr);
-	PyObject* NearestFn = PyCFunction_New(&ClaireonToolCatalogBindings::NearestDef, nullptr);
-	if (!BuildFn || !NearestFn)
-	{
-		Py_XDECREF(BuildFn);
-		Py_XDECREF(NearestFn);
-		UE_LOG(LogClaireon, Error, TEXT("[MCP Bridge] Failed to create tool-catalog PyCFunctions"));
-		return;
-	}
-
-	PyDict_SetItemString(ModuleDict, "_tool_catalog_build", BuildFn);
-	PyDict_SetItemString(ModuleDict, "_tool_catalog_nearest", NearestFn);
-
-	Py_DECREF(BuildFn);
-	Py_DECREF(NearestFn);
-
-	UE_LOG(LogClaireon, Display, TEXT("[MCP Bridge] Registered _tool_catalog_build / _tool_catalog_nearest in unreal module"));
 }
 
 FString ClaireonTool_ExecutePython::GetCategory() const { return TEXT("python"); }
@@ -565,7 +403,7 @@ FString ClaireonTool_ExecutePython::GetPatterns() const
 		TEXT("\n")
 		TEXT("- Editor world: claireon.world_get_active_world() (claireon-side, PIE-safe). The deprecated unreal.EditorLevelLibrary.get_editor_world() and its replacement unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world() both return null in PIE.\n")
 		TEXT("- WorldSettings: world.get_world_settings() (not world.get_editor_property('persistent_level') / 'world_settings' -- those are engine-protected and raise).\n")
-		TEXT("- Enum subscript naming: a C++ UENUM `EFooBar::CamelCase` is exposed in Python as `unreal.FooBar.UPPER_SNAKE_CASE`. Drop the leading `E`, convert each CamelCase token to UPPER_SNAKE_CASE (e.g. `EComponentMobility::Movable` -> `unreal.ComponentMobility.MOVABLE`).\n")
+		TEXT("- Enum subscript naming: a C++ UENUM `EFooBar::CamelCase` is exposed in Python as `unreal.FooBar.UPPER_SNAKE_CASE`. Drop the leading `E`, convert each CamelCase token to UPPER_SNAKE_CASE (e.g. `EMyMode::OnePerHostAtATime` -> `unreal.MyMode.ONE_PER_HOST_AT_A_TIME`).\n")
 		TEXT("- MovieSceneObjectBindingID (UE upstream issue): the no-arg constructor + `set_editor_property('Guid', binding.get_id())` is the only working pattern; the FGuid-taking ctor exposed to Python is non-functional. Default-construct, then set Guid via reflection.\n")
 		TEXT("- LevelSequence binding removal: there is no `level_sequence.remove_possessable(guid)` Python API. Use `binding.remove()` on the FMovieSceneBinding (resolve binding via `for b in level_sequence.get_bindings(): if b.get_id() == guid: ...`). Claireon's session-mode tool `claireon.level_sequence_remove_possessable` wraps this.\n");
 }

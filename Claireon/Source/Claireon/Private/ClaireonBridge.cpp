@@ -104,20 +104,35 @@ void FClaireonBridge::RegisterBridgeFunctions()
 	// Acquire the GIL — we may be called from the game thread outside of Python execution
 	PyGILState_STATE GILState = PyGILState_Ensure();
 
-	// PyImport_AddModule returns a borrowed reference (no Py_DECREF needed)
-	PyObject* UnrealModule = PyImport_AddModule("unreal");
-	if (!UnrealModule)
+	// Acquire/create the _claireon_bridge module that Claireon owns. Do NOT use the
+	// engine 'unreal' module -- that's the engine's namespace and Claireon should
+	// not pollute it.
+	PyObject* BridgeModule = PyImport_AddModule("_claireon_bridge");
+	if (!BridgeModule)
 	{
-		UE_LOG(LogClaireon, Error, TEXT("[MCP Bridge] Failed to get 'unreal' Python module"));
+		// PyImport_AddModule does not actually run the module body; if it has
+		// not been imported yet, create it ex nihilo.
+		BridgeModule = PyModule_New("_claireon_bridge");
+		if (BridgeModule)
+		{
+			PyObject* SysModules = PyImport_GetModuleDict();
+			PyDict_SetItemString(SysModules, "_claireon_bridge", BridgeModule);
+			Py_DECREF(BridgeModule);  // sys.modules holds the ref now
+			BridgeModule = PyImport_AddModule("_claireon_bridge");
+		}
+	}
+	if (!BridgeModule)
+	{
+		UE_LOG(LogClaireon, Error, TEXT("[MCP Bridge] Failed to get '_claireon_bridge' Python module"));
 		PyGILState_Release(GILState);
 		return;
 	}
 
 	// PyModule_GetDict returns a borrowed reference
-	PyObject* UnrealDict = PyModule_GetDict(UnrealModule);
-	if (!UnrealDict)
+	PyObject* BridgeDict = PyModule_GetDict(BridgeModule);
+	if (!BridgeDict)
 	{
-		UE_LOG(LogClaireon, Error, TEXT("[MCP Bridge] Failed to get 'unreal' module dict"));
+		UE_LOG(LogClaireon, Error, TEXT("[MCP Bridge] Failed to get '_claireon_bridge' module dict"));
 		PyGILState_Release(GILState);
 		return;
 	}
@@ -133,21 +148,14 @@ void FClaireonBridge::RegisterBridgeFunctions()
 		return;
 	}
 
-	// Register into the unreal module dict
-	PyDict_SetItemString(UnrealDict, "_mcp_call_tool", CallFunc);
+	// Register into the _claireon_bridge module dict
+	PyDict_SetItemString(BridgeDict, "_mcp_call_tool", CallFunc);
 
 	// PyDict_SetItemString increments refcount, so release our references
 	Py_DECREF(CallFunc);
 
-	// Register the nearest-string tool-catalog bindings (_tool_catalog_build /
-	// _tool_catalog_nearest) into the same 'unreal' module dict.  Per
-	// CLAIREON_DISK_RESULTS/tool-catalog-rewrite.md these replace the old
-	// mcp_index_engine hybrid matcher with a dependency-free C++ BM25-lite.
-	ClaireonTool_ExecutePython::RegisterToolCatalogBindings(UnrealDict);
-
-	// Add our Python modules directory to sys.path. The output gate and
-	// tool-catalog matcher live in C++; mcp_tool_catalog.py is imported lazily
-	// from ClaireonTool_SearchTools.cpp and does not need prewarming.
+	// Add our Python modules directory to sys.path. The tool search index (FTS5)
+	// lives entirely in C++ (FClaireonToolSearchIndex); no Python catalog module.
 	{
 		const FString PluginPythonDir = FPaths::ConvertRelativePathToFull(
 			FPaths::Combine(FPaths::ProjectPluginsDir(), TEXT("Claireon"), TEXT("Content"), TEXT("Python")));
@@ -174,7 +182,7 @@ void FClaireonBridge::RegisterBridgeFunctions()
 	}
 
 	bIsRegistered = true;
-	UE_LOG(LogClaireon, Display, TEXT("[MCP Bridge] Registered _mcp_call_tool in unreal module"));
+	UE_LOG(LogClaireon, Display, TEXT("[MCP Bridge] Registered _mcp_call_tool in _claireon_bridge module"));
 
 	PyGILState_Release(GILState);
 }
@@ -456,12 +464,12 @@ PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 	// its own stdout/uelog streams. HTTP `tools/call` requests reach the agent
 	// via ClaireonServer.cpp and are returned inline as well.
 	//
-	// Previously this path ran FClaireonOutputGate::RouteResult with GenericData,
-	// which spilled inner-tool results above 8 KiB and silently turned them into
+	// This path must not run FClaireonOutputGate::RouteResult with GenericData:
+	// that would spill inner-tool results above 8 KiB and silently turn them into
 	// {"__mcp_spilled__": true, "spilled_streams": [...]} -- so naive script
-	// code like `claireon.uobject_inspect(...)["data"]["properties"]` returned [].
-	// Spill here was strictly harmful: it cost a disk write to save context that
-	// was never going to be sent anywhere.
+	// code like `claireon.uobject_inspect(...)["data"]["properties"]` would return [].
+	// Spill here is strictly harmful: it costs a disk write to save context that
+	// is never going to be sent anywhere.
 
 	// Serialize the result envelope: {"data": ..., "summary": "...", "warnings": [...]}
 	// Field shape is owned by BuildResultEnvelope so tests can exercise the
@@ -548,10 +556,10 @@ void FClaireonBridge::BuildAndRunBootstrap()
 				continue;
 			}
 
-			// Resolve namespace + name from the tool itself (single source of
-			// truth). Strict-separation contract per Spec B: '.' is disallowed
-			// in both. Recursion guard targets (claireon, python_execute).
-			const FString Namespace = Tool->GetNamespace();
+			// All tools live in the "claireon" namespace. Strict-separation
+			// contract per Spec B: '.' is disallowed in name. Recursion guard
+			// targets (claireon, python_execute).
+			const FString Namespace = TEXT("claireon");
 			const FString Name = Tool->GetName();
 
 			// Validate namespace and name as Python-identifier-safe bare tokens.
@@ -721,7 +729,7 @@ void FClaireonBridge::BuildAndRunBootstrap()
 		"_modules_built = {}\n"
 		"try:\n"
 		"    import json, inspect, logging\n"
-		"    import unreal as _u\n"
+		"    import _claireon_bridge as _u\n"
 		"\n"
 		"    _log = logging.getLogger('claireon.bootstrap')\n"
 		"    _catalog = json.loads(_CATALOG_JSON)\n"

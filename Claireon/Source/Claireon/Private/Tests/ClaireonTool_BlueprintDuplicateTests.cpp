@@ -1,18 +1,18 @@
 ﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Tests for blueprint_duplicate.
+// Tests for blueprint_duplicate (fracture 04).
 //
 // The project's Untest framework exposes UNTEST_UNIT and UNTEST_WORLD (plus a few
 // client/server variants); there is no standalone UNTEST_FUNCTIONAL macro. Per the
-// the "collapse into one file" fallback, this single file contains both
+// fracture-04 "collapse into one file" fallback, this single file contains both
 // unit-style parameter/error-surface tests and functional-style end-to-end tests.
 // Functional tests use UNTEST_UNIT (like other tool-exercising tests in this folder,
 // e.g. ClaireonApplySpecTests.cpp) and encode their category in the third macro
 // argument: Unit_* vs Functional_* to allow test-name filtering.
 //
 // Test skip policy:
-//  - The acceptance-case test targets /Game/Sandbox/BP_Example
+//  - The acceptance-case test targets /Game/Trajan/Mobs/TerminusTick/BP_TerminusTick
 //    which is a product path that may drift; if the asset is absent the test logs a
 //    note and early-returns success rather than failing.
 //  - Branch-2 IsChildOf<UBlueprint> requires a concrete UBlueprint-derived class
@@ -24,7 +24,7 @@
 //    a plain UBlueprint at test time; these are covered by the generic-reference
 //    rewrite tests instead.
 //  - "DuplicateAsset returns nullptr" and "SavePackage fails" cannot be simulated
-//    without invasive fakes and are omitted per the test-structure allowance.
+//    without invasive fakes and are omitted per the fracture's allowance.
 
 #if WITH_UNTESTED
 
@@ -441,14 +441,14 @@ UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_RenameDependenciesTrue
 UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_AcceptanceCaseMatchesParentProposal, UNTEST_TIMEOUTMS(60000))
 {
 	// Parent proposal acceptance case:
-	//   blueprint_duplicate('/Game/Sandbox/BP_Example',
-	//                              '/Game/Sandbox/BP_Example_Clone')
+	//   blueprint_duplicate('/Game/Trajan/Mobs/TerminusTick/BP_TerminusTick',
+	//                              '/Game/Sandbox/BP_TerminusTick_Clone')
 	// Skip (pass) if the acceptance-case source asset has moved or is absent.
 
-	const FString SourcePackage = TEXT("/Game/Sandbox/BP_Example");
-	const FString SourceObject = SourcePackage + TEXT(".BP_Example");
-	const FString DestPackage = TEXT("/Game/Sandbox/BP_Example_Clone");
-	const FString DestObject = DestPackage + TEXT(".BP_Example_Clone");
+	const FString SourcePackage = TEXT("/Game/Trajan/Mobs/TerminusTick/BP_TerminusTick");
+	const FString SourceObject = SourcePackage + TEXT(".BP_TerminusTick");
+	const FString DestPackage = TEXT("/Game/Sandbox/BP_TerminusTick_Clone");
+	const FString DestObject = DestPackage + TEXT(".BP_TerminusTick_Clone");
 
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 	FAssetData SourceData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(SourceObject));

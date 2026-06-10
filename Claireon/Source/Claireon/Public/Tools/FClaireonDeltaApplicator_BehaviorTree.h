@@ -19,6 +19,7 @@ class UBehaviorTreeGraphNode;
  * Phase 4 (connect) entries: {parent_id, child_id, child_index?}.
  *
  * Session model: M5 fail-on-missing (the BT asset must already exist).
+ * See Docs/llm/apply-delta-all-families/02_BEHAVIORTREE.md.
  */
 class CLAIREON_API FClaireonDeltaApplicator_BehaviorTree : public FClaireonDeltaApplicatorBase
 {

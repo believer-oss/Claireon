@@ -1102,7 +1102,7 @@ FString ClaireonBlueprintGraphTool_AddNode::GetPatterns() const
     return TEXT(
         "## Common pitfalls\n"
         "\n"
-        "Per the per-node cycle in the per-tool authoring guidance, save "
+        "Per the per-node cycle in .claude/areas/blueprint-editing.md, save "
         "every 1-3 add_node calls via bp_save to flush in-session edits to "
         "the asset and protect against editor-crash data loss.\n"
         "\n"

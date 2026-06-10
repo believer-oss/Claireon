@@ -121,12 +121,22 @@ namespace
 		return Result;
 	}
 
-	FString GetNodeGroup(const FString& StructName)
+	// Group label = the struct's owning native module (e.g. "StateTreeModule",
+	// "GameplayStateTreeModule", or a game module). Generic: derived from the package
+	// path, with no hardcoded project names.
+	FString GetNodeGroup(const UScriptStruct* NodeStruct)
 	{
-		// Generic StateTree node grouping. The default returns "Engine" so all
-		// authored nodes appear under that bucket; downstream projects can
-		// patch this to surface project-specific node families.
-		return TEXT("Engine");
+		if (!NodeStruct)
+		{
+			return TEXT("Unknown");
+		}
+		const UObject* Pkg = NodeStruct->GetOutermost();
+		const FString PkgName = Pkg ? Pkg->GetName() : FString();
+		if (PkgName.StartsWith(TEXT("/Script/")))
+		{
+			return PkgName.RightChop(8); // strip "/Script/"
+		}
+		return PkgName.IsEmpty() ? TEXT("Other") : PkgName;
 	}
 } // namespace
 
@@ -246,7 +256,7 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeListNodeTypes::Execute(const TS
 				continue;
 			}
 
-			FString Group = GetNodeGroup(StructName);
+			FString Group = GetNodeGroup(NodeStruct);
 			GroupedClasses.FindOrAdd(Group).Add(ClassData);
 			TotalCount++;
 		}
@@ -254,10 +264,10 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeListNodeTypes::Execute(const TS
 		FString SchemaStr = Schema ? FString::Printf(TEXT(" (filtered by schema: %s)"), *Schema->GetClass()->GetName()) : TEXT("");
 		Output += FString::Printf(TEXT("=== Available %s%s ===\n"), *CatInfo.Name, *SchemaStr);
 
-		// Output in a consistent group order. Default groups Engine first; the
-		// GetNodeGroup helper returns "Engine" for everything by default so this
-		// is the only group surfaced unless a fork customises the grouping.
-		TArray<FString> GroupOrder = { TEXT("Engine") };
+		// Output groups in a stable, generic order: module names sorted alphabetically.
+		TArray<FString> GroupOrder;
+		GroupedClasses.GetKeys(GroupOrder);
+		GroupOrder.Sort();
 		for (const FString& GroupName : GroupOrder)
 		{
 			const TArray<TSharedPtr<FStateTreeNodeClassData>>* GroupClasses = GroupedClasses.Find(GroupName);

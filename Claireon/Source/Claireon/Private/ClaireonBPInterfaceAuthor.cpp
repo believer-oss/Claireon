@@ -78,7 +78,7 @@ namespace ClaireonBPInterfaceAuthor
 		if (!bAdded)
 		{
 			// Engine-level boolean failure -- pre-checks above should have caught the
-			// known failure modes, so surface a generic error here.
+			// known modes on UE 5.5, so surface a generic error here.
 			Out.Error = FString::Printf(TEXT("Failed to implement interface '%s'"), *Class->GetName());
 			return Out;
 		}

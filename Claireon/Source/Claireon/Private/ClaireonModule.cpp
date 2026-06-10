@@ -19,6 +19,8 @@
 #include "ClaireonBridge.h"
 #include "ClaireonDiagnosticsWidget.h"
 #include "ClaireonSettings.h"
+#include "ClaireonToolSearchIndex.h"
+#include "ClaireonToolEmbeddingIndex.h"
 #include "IClaireonToolProvider.h"
 #include "IPythonScriptPlugin.h"
 #include "Modules/ModuleManager.h"
@@ -52,7 +54,7 @@
 #include "Tools/ClaireonTool_ListBlueprintGraphNodes.h"
 #include "Tools/ClaireonTool_ApplyBlueprintDelta.h"
 
-// Per-family apply_delta tools (work item #0000)
+// Per-family apply_delta tools
 #include "Tools/ClaireonBehaviorTreeTool_ApplyDelta.h"
 #include "Tools/ClaireonEQSTool_ApplyDelta.h"
 #include "Tools/ClaireonLevelSequenceTool_ApplyDelta.h"
@@ -549,7 +551,6 @@
 #include "Tools/ClaireonCMCInspectTool.h"
 #include "Tools/ClaireonComponentTickInspectTool.h"
 
-
 // Animation MCP tools
 #include "Tools/ClaireonTool_AnimInspect.h"
 #include "Tools/ClaireonTool_AssetCheckInnerNameInvariant.h"
@@ -781,7 +782,7 @@ namespace ClaireonLaunch
 	 * Resolve a PowerShell executable using canonical Windows install paths first,
 	 * with a PATH-search fallback. Canonical paths are reliable even when the editor
 	 * process inherits a stripped or non-default PATH (which can happen when launched
-	 * by tooling like Launcher or as a child of a non-shell parent).
+	 * by external tooling or as a child of a non-shell parent).
 	 *
 	 * Order: PowerShell 7 (preferred) -> Windows PowerShell 5.1 (always in-box on Win10+).
 	 */
@@ -921,7 +922,8 @@ namespace ClaireonLaunch
 	{
 		const FString ProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 
-		// Launcher-launched editors don't pass -StartMCPServer, so the MCP
+		// Editors launched by external tooling (not the build/launch script) don't
+		// pass -StartMCPServer, so the MCP
 		// server is dormant until the user explicitly asks for Claude. Starting
 		// it here means clicking "Claude Code" is sufficient -- the user does not
 		// need to first open the diagnostics tab to bring the server up.
@@ -1043,7 +1045,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 
 	Tools.Add(MakeShared<ClaireonTool_ApplyBlueprintDelta>());
 
-	// Per-family apply_delta tools (work item #0000; alphabetical by family)
+	// Per-family apply_delta tools (alphabetical by family)
 	Tools.Add(MakeShared<FClaireonBehaviorTreeTool_ApplyDelta>());
 	Tools.Add(MakeShared<FClaireonEQSTool_ApplyDelta>());
 	Tools.Add(MakeShared<FClaireonLevelSequenceTool_ApplyDelta>());
@@ -2027,6 +2029,18 @@ void FClaireonModule::ShutdownModule()
 	// bridge until the next module load is unsafe if any callsite probes it.)
 	FClaireonBridge::SetToolRegistry(nullptr);
 
+	// Close the FTS5 tool-search DB before static destruction so FSQLiteDatabase's
+	// destructor does not assert "!Database" (it requires Close() before ~dtor).
+	// Called unconditionally: Clear() is a no-op when the DB was never opened.
+	FClaireonToolSearchIndex::Clear();
+
+	// Release the semantic embedding index (ORT session + rooted UNNEModelData +
+	// vocab) before static destruction, mirroring the lexical Clear() above. The
+	// model instance holds a TStrongObjectPtr<UNNEModelData>; dropping it here
+	// (rather than at static-dtor time) avoids touching GC/UObject during teardown.
+	// Clear() is a no-op when the model was never loaded.
+	FClaireonToolEmbeddingIndex::Clear();
+
 	// Final tear-down of the Server registry that StartupModule constructed.
 	Server.Reset();
 
@@ -2392,6 +2406,31 @@ FClaireonModule& FClaireonModule::Get()
 {
 	ClaireonLaunch::LaunchClaudeCodeFromProjectDir();
 }
+
+#if WITH_UNTESTED
+FClaireonServer* FClaireonModule::EnsureServerForTest()
+{
+	if (Server.IsValid())
+	{
+		return Server.Get();
+	}
+
+	// Mirror only the registry-construction steps of StartupModule().
+	// No HTTP listener, no editor UI, no proxy, no Python-init subscription.
+	if (!BuiltinToolProvider.IsValid())
+	{
+		BuiltinToolProvider = MakeUnique<FClaireonBuiltinToolProvider>();
+		IModularFeatures::Get().RegisterModularFeature(
+			IClaireonToolProvider::FeatureName, BuiltinToolProvider.Get());
+	}
+
+	Server = MakeShared<FClaireonServer>();
+	FClaireonBridge::SetToolRegistry(Server.Get());
+	CollectToolsFromProviders();
+
+	return Server.Get();
+}
+#endif // WITH_UNTESTED
 
 void FClaireonModule::CollectToolsFromProviders()
 {

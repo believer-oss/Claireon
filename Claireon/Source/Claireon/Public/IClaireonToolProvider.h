@@ -29,4 +29,21 @@ public:
 
 	/** Human-readable name for diagnostics (e.g. "MyPlugin", "Claireon Built-in"). */
 	virtual FName GetProviderName() const = 0;
+
+	/**
+	 * Optional: extra UE module names this provider wants considered when the name
+	 * resolver builds "/Script/<Module>.<Name>" fallback paths for class/struct/enum
+	 * resolution. Engine-generic modules are always included by core; this is for
+	 * project/plugin-specific modules. Default: none.
+	 */
+	virtual void GetKnownModules(TArray<FString>& OutModules) const {}
+
+	/**
+	 * Optional: project-specific class-prefix conventions for RequiredBaseClass-
+	 * constrained resolution. Keyed by the UE internal name of a base class
+	 * (UClass::GetName(), no C++ U/A/F prefix); value is the bare prefixes derived
+	 * classes use (e.g. {"GameplayAbility", {"GA_"}}). Core supplies engine-generic
+	 * entries; this adds project ones. Default: none.
+	 */
+	virtual void GetClassPrefixMap(TMap<FString, TArray<FString>>& OutPrefixMap) const {}
 };

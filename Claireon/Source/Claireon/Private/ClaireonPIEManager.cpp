@@ -224,10 +224,9 @@ FString FClaireonPIEManager::RegisterDamageListener(AActor* Actor)
 
 		const FString ClassName = Component->GetClass()->GetName();
 
-		// Check for common health component patterns:
-		// - ULyraHealthComponent (Lyra)
-		// - UFSHealthComponent (project-specific example)
-		// - Any component with "Health" in its name
+		// Match any health component generically by name substring (e.g. Lyra's
+		// ULyraHealthComponent or a project-specific U*HealthComponent), avoiding a
+		// hard dependency on any particular game module.
 		if (ClassName.Contains(TEXT("Health")))
 		{
 			HealthComponent = Component;

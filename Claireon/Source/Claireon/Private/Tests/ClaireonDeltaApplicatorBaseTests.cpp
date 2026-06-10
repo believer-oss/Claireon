@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Base-class scenario tests for FClaireonDeltaApplicatorBase (#0000).
+// Base-class scenario tests for FClaireonDeltaApplicatorBase.
 // Mock subclass records what the driver called and lets each scenario
 // inject failures or override SupportsPhase*() to exercise the
 // validate / transaction / rollback / id-map paths.

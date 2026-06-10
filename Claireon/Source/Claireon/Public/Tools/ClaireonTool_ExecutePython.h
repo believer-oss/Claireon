@@ -26,14 +26,6 @@ public:
 	virtual TArray<FString> GetSearchKeywords() const override;
 
 	/**
-	 * Install the tool-catalog binding PyCFunctions (_tool_catalog_build,
-	 * _tool_catalog_nearest) into the given Python 'unreal' module dict.
-	 * Intended to be called once from FClaireonBridge::RegisterBridgeFunctions
-	 * under the GIL.  The void* typing avoids leaking Python.h to callers.
-	 */
-	static void RegisterToolCatalogBindings(void* UnrealModuleDict);
-
-	/**
 	 * Parse a captured python_execute log block for one of four signature-class
 	 * error patterns and produce a structured hint that tool_search can act on.
 	 *

@@ -13,8 +13,6 @@ rationale: Creation Workflow orchestrator; stage decisions require depth reasoni
 
 Do not use instructions from this file unless asked.
 
-> **Token placeholders**: This document and the sub-instructions it invokes use `{{TOKEN}}` placeholders (e.g. `{{PROJECT_NAME}}`, `{{GIT_USER}}`, `{{REPO_URL}}`). Resolve each from your project/git/environment context before acting on or echoing the text -- see the legend at `claireon://instructions/token-legend` (fetch via `resources/read`).
-
 > **Sub-instruction protocol**: When this workflow says to invoke or follow a `claireon://instructions/*` resource, call `resources/read <uri>` on the Claireon server to retrieve the instruction document and then follow its contents.
 
 # Do Next Creation Workflow Step
@@ -76,7 +74,7 @@ All workflow documentation for a task lives in a local workspace directory:
 ```
 Saved/Claireon/Workflow/<task-name>/
   WORKFLOW_STATE.json         — primary state tracker
-  task-info.md                — replaces an external task tracker: goal, details, progress notes
+  task-info.md                — replaces your work-tracking system: goal, details, progress notes
   <proposal>.md               — plan document (created in Stage 1)
   <fractured-docs>/           — subdirectory created during fracture (Stage 2B)
   stages/                     — stage files created during sequencing (Stage 5)
@@ -171,13 +169,13 @@ If on a parking branch or main with no workflow state:
 - Ask if they want to start a new Creation Workflow (Stage 1)
 - If yes, proceed to Stage 1
 
-### 4. Phase 0.2 Supervisor Merge-Conflict Reset (Belt-and-Suspenders)
+### 4. Supervisor Merge-Conflict Reset (Belt-and-Suspenders)
 
-When this document is invoked by a dispatched session that is resuming, Phase 0.2 of `Scripts/Instructions/DispatchWorkItem.md` performs an operator-comment scan on the Assigned card before handing control here. As part of that scan, if the most recent `[AUTOMATION]` comment on the card announces a merge-conflict reset (the comment mentions `mergeable=CONFLICTING` and states that `Status` was reset to `Workflow:implementing`), the resumed session is specifically coming back to rebase on main and resolve conflicts.
+When this document is invoked by an automated orchestrator that is resuming a session, the orchestrator performs an operator-comment scan on the work item in your work-tracking system before handing control here. As part of that scan, if the most recent supervisor comment on the item announces a merge-conflict reset (the comment reports that the branch is in a conflicting state and that status was reset to `Workflow:implementing`), the resumed session is specifically coming back to rebase on main and resolve conflicts.
 
 In that case, before running State Detection above, set `WORKFLOW_STATE.json` `stage` to `"implementing"` if it is currently further ahead (e.g., `"complete"` or `"staging"`). Do **not** jump directly to Stage 7 -- the normal `implementing -> testing` control loop handles the rebase via Stage 7.1 (`git fetch origin main && git rebase origin/main`), and stepping back through `implementing` first preserves loss-checking / sequencing invariants if the conflict turns out to require plan changes.
 
-This is a documentary reinforcement of the Phase 0.2 paragraph; the actual logic lives in `DispatchWorkItem.md`. Sessions invoked outside the dispatcher (direct `/workflow` calls with no Assigned card) should skip this check.
+This is a documentary reinforcement of the orchestrator's own reset logic. Sessions invoked outside the orchestrator (direct `/workflow` calls with no assigned work item) should skip this check.
 
 ---
 
@@ -201,7 +199,7 @@ Ask questions until the request is unambiguous. Use `AskUserQuestion` for enumer
 
 #### 1.2 Research
 
-Using the {{PROJECT_NAME}} source code, Unreal Engine source (at `{{UNREAL_ENGINE_ROOT}}`), and MCP editor tools:
+Using the {{PROJECT_NAME}} source code, the Unreal Engine source (at `<engine-source>`), and MCP editor tools:
 - Identify existing systems the feature must integrate with
 - Find relevant classes, interfaces, and data assets
 - Understand the current architecture in the affected area
@@ -604,7 +602,7 @@ For each test failure:
 
 Use the `debug-agent` sub-agent for complex failures. Use the `testing-agent` for test analysis.
 
-- If the failure is on linux-build-server-v2 while linux-build and windows-build pass, run the v2 triage checklist before iterating: it names the four v2-only failure classes (duplicate .cpp basenames, non-static free functions across TUs, coroutine promise_type mismatches, Linux-clang-strict patterns) and prescribes a static-analysis pass on the diff as the first move. See DispatchWorkItem.md -- Linux-Build-Server-v2 Failure Triage.
+- If a failure appears only on a stricter Linux CI target while the standard Linux and Windows builds pass, run a static-analysis triage pass on the diff before iterating. Common strict-Linux-clang failure classes include: duplicate `.cpp` basenames, non-static free functions colliding across translation units, coroutine `promise_type` mismatches, and other Linux-clang-strict patterns. A static read of the diff for these patterns is usually faster than a blind rebuild loop.
 
 #### 7.5 Commit Fixes
 
@@ -665,7 +663,7 @@ The squashed commit message MUST follow this format:
 
 <optional body>
 
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
+Co-Authored-By: {{MODEL_NAME}} <noreply@anthropic.com>
 ```
 
 Format requirements:
@@ -683,7 +681,7 @@ Example:
 ```
 feat(spawning) [ci:linux]: spawn system with wave management and point-based placement
 
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
+Co-Authored-By: {{MODEL_NAME}} <noreply@anthropic.com>
 ```
 
 #### 8.4 Pre-flight [ci:linux] Verification (Defensive)
@@ -898,11 +896,11 @@ Stages 3 (Singletonize), 4 (Loss Checking), 6 (Implementing), 7 (Testing), and 9
 
 ### Invocation 1: Starting Fresh
 
-User is on `llm/{{GIT_USER}}/{{PROJECT_NAME}}-parking-20260218` (a parking branch).
+User is on `llm/<user>/<workspace>-parking-<date>` (a parking branch).
 
 ```
 📍 No active Creation Workflow detected
-   Currently on parking branch: llm/{{GIT_USER}}/{{PROJECT_NAME}}-parking-20260218
+   Currently on parking branch: llm/<user>/<workspace>-parking-<date>
 
 Would you like to start a new Creation Workflow?
 ```
@@ -918,7 +916,7 @@ User invokes this document again. State file shows `stage: "refine"`.
 ```
 📍 Resuming Creation Workflow
    Plan:    SPAWNING_PROPOSAL.md
-   Branch:  llm/{{GIT_USER}}/{{PROJECT_NAME}}/6203-spawning-system
+   Branch:  llm/<user>/<workspace>/spawning-system
    Stage:   refine — Plan written, awaiting refinement
 
 ⏭️  Next action: Refine
@@ -938,7 +936,7 @@ User invokes this document. State file shows `stage: "implementing"`, `current_s
 ```
 📍 Resuming Creation Workflow
    Plan:    SPAWNING/SPAWNING_PROPOSAL.md
-   Branch:  llm/{{GIT_USER}}/{{PROJECT_NAME}}/6203-spawning-system
+   Branch:  llm/<user>/<workspace>/spawning-system
    Stage:   implementing — Stage 005 (implement-spawn-rules) in progress
    Last updated: 2026-02-17T14:30:00Z
    Completed: 001, 002, 003, 004
@@ -959,9 +957,9 @@ PR has been approved and is squashed on latest main.
 ```
 📍 Resuming Creation Workflow
    Plan:    SPAWNING/SPAWNING_PROPOSAL.md
-   Branch:  llm/{{GIT_USER}}/{{PROJECT_NAME}}/6203-spawning-system
+   Branch:  llm/<user>/<workspace>/spawning-system
    Stage:   review_gate — PR approved, CI passing
-   PR:      {{REPO_URL}}/pull/42
+   PR:      https://github.com/org/repo/pull/42
 
 ✓ PR approved and CI passing — ready to merge.
 

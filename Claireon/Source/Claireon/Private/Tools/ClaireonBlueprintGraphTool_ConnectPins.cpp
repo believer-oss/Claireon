@@ -457,7 +457,7 @@ FString ClaireonBlueprintGraphTool_ConnectPins::GetFullDescription() const
         "Pin names are fuzzy-resolved: 'exec' matches the canonical exec input, "
         "'then' matches the canonical exec output, and partial substring "
         "matches resolve as long as they are unambiguous. Per the per-node "
-        "cycle in the per-tool authoring guidance, prefer auto_connect_from_cursor=true "
+        "cycle in .claude/areas/blueprint-editing.md, prefer auto_connect_from_cursor=true "
         "on bp_add_node to wire as you go; an explicit "
         "connect_pins call is mainly needed when joining two pre-existing "
         "nodes or wiring data pins that the cursor cannot route automatically.");

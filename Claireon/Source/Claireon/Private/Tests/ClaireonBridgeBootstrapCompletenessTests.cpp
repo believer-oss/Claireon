@@ -93,11 +93,11 @@ UNTEST_UNIT_OPTS(Claireon, BridgeBootstrapCompleteness, ClaireonModuleAllMatches
 	{
 		const TSharedPtr<IClaireonTool>& Tool = Pair.Value;
 		if (!Tool.IsValid()) { continue; }
-		const FString Namespace = Tool->GetNamespace();
+		const FString Namespace = TEXT("claireon");
 		const FString Name = Tool->GetName();
 		// claireon.python_execute is the recursion sink; the bootstrap drops it
 		// before adding to the module, so don't include it in the expected count.
-		if (Namespace == TEXT("claireon") && Name == TEXT("python_execute")) { continue; }
+		if (Name == TEXT("python_execute")) { continue; }
 		if (Name.IsEmpty() || Name.Contains(TEXT(".")))
 		{
 			++RejectableCount;

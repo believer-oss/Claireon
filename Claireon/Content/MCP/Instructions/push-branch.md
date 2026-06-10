@@ -7,8 +7,6 @@ uri: claireon://instructions/push-branch
 
 Do not use instructions from this file unless asked.
 
-> **Token placeholders**: This document uses `{{TOKEN}}` placeholders (e.g. `{{GIT_USER}}`, `{{WORKTREE}}`, `{{REPO_URL}}`). Resolve each from your project/git/environment context before acting on or echoing the text -- see the legend at `claireon://instructions/token-legend` (fetch via `resources/read`).
-
 # Auto Push Changes as New Branch
 
 This script automates the process of moving local changes to a new branch with a standardized naming convention and commit message format.
@@ -36,7 +34,7 @@ The script should:
    ```powershell
    Scripts\Utilities\Get-GitUsername.ps1
    ```
-   - Returns the username portion of git user.email (e.g., `{{GIT_USER}}` from `{{GIT_EMAIL}}`)
+   - Returns the username portion of git user.email (e.g., `<user>` from `you@example.com`)
 5. Get the worktree name from the current directory basename
 
 ### 2. Update Main Branch
@@ -47,7 +45,7 @@ The script should:
 ### 3. Create New Branch from Current State
 
 1. Generate branch name in format: `llm/<git_user>/<worktree>/<generated-name>`
-   - `<git_user>`: Output from `Scripts\Utilities\Get-GitUsername.ps1` (e.g., "{{GIT_USER}}")
+   - `<git_user>`: Output from `Scripts\Utilities\Get-GitUsername.ps1` (e.g., "<user>")
    - `<worktree>`: Current worktree directory name, lowercased
    - `<generated-name>`: Short descriptive name based on changed files/modules
      - If changes affect single module/component, use that name
@@ -200,18 +198,18 @@ Starting state:
 - On branch: `feature/old-work`
 - Unmerged commits: 2 commits (not in main)
 - Changed files: `src/auth/login.ts`, `src/auth/token.ts`
-- Git username: "{{GIT_USER}}"
-- Worktree: "{{WORKTREE}}"
+- Git username: "<user>"
+- Worktree: "<workspace>"
 
 Result:
 ```
 ✓ Changes moved to new branch and rebased on main
   Original branch: feature/old-work
-  New branch: llm/{{GIT_USER}}/{{WORKTREE}}/auth-fixes
+  New branch: llm/<user>/<workspace>/auth-fixes
   Commits moved: 3
   Latest commit: abc1234
   Message: fix(auth): token validation logic corrected [ci:linux]
-  Remote: {{REPO_URL}}/tree/llm/{{GIT_USER}}/{{WORKTREE}}/auth-fixes
+  Remote: https://github.com/user/repo/tree/llm/<user>/<workspace>/auth-fixes
 ```
 
 ### Example 2: Rebase Conflicts
@@ -220,15 +218,15 @@ Starting state:
 - On branch: `feature/conflicting-work`
 - Unmerged commits: 1 commit that conflicts with main
 - Changed files: `src/api/routes.ts`
-- Git username: "{{GIT_USER}}"
-- Worktree: "{{WORKTREE}}"
+- Git username: "<user>"
+- Worktree: "<workspace>"
 
 Result:
 ```
 ⚠ Rebase conflicts detected
 
 Original branch: feature/conflicting-work
-New branch: llm/{{GIT_USER}}/{{WORKTREE}}/api-routes
+New branch: llm/<user>/<workspace>/api-routes
 New commit(s): def5678 (before rebase)
 
 Your changes are safe on the new branch.
@@ -237,11 +235,11 @@ You have the following options:
 1. Resolve conflicts and continue:
    git add <resolved-files>
    git rebase --continue
-   git push -u origin llm/{{GIT_USER}}/{{WORKTREE}}/api-routes
+   git push -u origin llm/<user>/<workspace>/api-routes
 
 2. Abort the rebase and keep new branch as-is:
    git rebase --abort
-   git push -u origin llm/{{GIT_USER}}/{{WORKTREE}}/api-routes
+   git push -u origin llm/<user>/<workspace>/api-routes
 
 3. Cherry-pick specific commits from new branch to another branch:
    git checkout <target-branch>

@@ -390,7 +390,7 @@ FString FClaireonProxyClient::ComputeProxyScriptHash()
 	// SHA-1 of the script bytes; FPlatformMisc::GetSHA256Signature is an
 	// unimplemented stub on Windows (it asserts), and SHA-1 is sufficient
 	// here because the hash is only a version-tag match with the proxy-side
-	// compute_proxy_version_hash() (see Claireon/Content/Python/
+	// compute_proxy_version_hash() (see Plugins/Claireon/Content/Python/
 	// claireon_proxy.py). No security boundary, just content fingerprinting.
 	FSHAHash Hash;
 	FSHA1::HashBuffer(Contents.GetData(), Contents.Num(), Hash.Hash);

@@ -9,7 +9,7 @@
  * Stateless tool: retarget every reference to a struct type across a Blueprint.
  *
  * Primary consumer: struct-migration workflows (e.g., BP user-defined struct
- * S_ChooserOutputs → native FNativeChooserOutputs) where a variable has been
+ * S_ChooserOutputs → native FMyStruct) where a variable has been
  * retyped via set_variable_type and every downstream Make/Break node and
  * literal struct pin must be updated in bulk.
  *

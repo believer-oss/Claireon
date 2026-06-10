@@ -77,9 +77,10 @@ namespace
 
 		Binding->PropertyBindingChain = PropertyChain;
 		Binding->ContextIndex = ContextIndex;
-		// Required so root-binding (empty PropertyChain) passes the chooser
-		// Compile gate (ChooserPropertyAccess.cpp) and ResolvePropertyChain
-		// returns the whole context struct as Container.
+		// Required so root-binding (empty PropertyChain) passes Compile gate at
+		// ChooserPropertyAccess.cpp:85 and ResolvePropertyChain returns the whole
+		// context struct as Container. See FSEditor VO reference at
+		// Source/FSEditor/Private/Tools/MCP/VO/ClaireonTool_VOChooserSetRows.cpp:206-213.
 		Binding->IsBoundToRoot = (PropertyChain.Num() == 0);
 
 		// Cast guard + typed-metadata seeding.

@@ -7,7 +7,7 @@
 //   2. Representative synonyms appear in the documented target tool's
 //      keyword list, so the tool_search ranker has the vocabulary it
 //      needs to surface the target. (Direct ranker invocation is covered
-//      by ClaireonToolCatalogMatcherTests; here we assert the source data.)
+//      by ClaireonToolSearchIndexTests; here we assert the source data.)
 
 #if WITH_UNTESTED
 
@@ -153,10 +153,10 @@ UNTEST_UNIT(Claireon, SearchKeywords, TierC_ReadInspectDiscovery)
 // ---------------------------------------------------------------------------
 // 2: Synonym -> target-tool keyword presence.
 //
-// Direct ranker validation lives in ClaireonToolCatalogMatcherTests; here we
+// Direct ranker validation lives in ClaireonToolSearchIndexTests; here we
 // guarantee that the source-of-truth keyword list contains the words the
-// matcher will index. The matcher applies the C++ abbreviation table
-// (ClaireonToolCatalogAbbreviations.h) at both index and query time, so the
+// FTS5 index will store. The index applies the C++ abbreviation table
+// (ClaireonToolCatalogAbbreviations.h) at insert time, so the
 // presence of any one keyword from the synonym phrase is sufficient for
 // top-N rank.
 //

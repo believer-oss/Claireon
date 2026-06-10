@@ -1,0 +1,416 @@
+=== case 0 ===
+{
+	"data":
+	{
+		"not_found": [
+			"definitely_not_a_real_tool_xyz"
+		],
+		"select": true,
+		"tools": [
+			{
+				"category": "chooser",
+				"description": "Create a new empty ChooserTable asset. Optionally set the result type and output class. Stateless / non-session: writes a new asset directly to the supplied path.",
+				"input_schema":
+				{
+					"properties":
+					{
+						"output_class":
+						{
+							"description": "Class path for the output object type (e.g. /Script/Engine.AnimSequence)",
+							"type": "string"
+						},
+						"path":
+						{
+							"description": "Target asset path (e.g. /Game/Data/Choosers/CHT_NewChooser)",
+							"type": "string"
+						},
+						"result_type":
+						{
+							"description": "Result type: 'ObjectResult' or 'ClassResult'",
+							"enum": [
+								"ObjectResult",
+								"ClassResult"
+							],
+							"type": "string"
+						}
+					},
+					"required": [
+						"path"
+					],
+					"type": "object"
+				},
+				"name": "chooser_create",
+				"signature": "chooser_create(path: str, result_type: str = None, output_class: str = None) -> dict"
+			},
+			{
+				"category": "chooser",
+				"description": "Duplicate an existing ChooserTable asset to a new path. Stateless / non-session: writes a new asset directly to the supplied path without opening a session.",
+				"input_schema":
+				{
+					"properties":
+					{
+						"dest_path":
+						{
+							"description": "Destination asset path",
+							"type": "string"
+						},
+						"source_path":
+						{
+							"description": "Path to the source ChooserTable",
+							"type": "string"
+						}
+					},
+					"required": [
+						"source_path",
+						"dest_path"
+					],
+					"type": "object"
+				},
+				"name": "chooser_duplicate",
+				"signature": "chooser_duplicate(dest_path: str, source_path: str) -> dict"
+			}
+		]
+	},
+	"error_message": "",
+	"is_error": false,
+	"summary": "Selected 2 tool(s); 1 not found"
+}
+=== case 1 ===
+{
+	"data":
+	{
+		"deep_inspect": true,
+		"tool":
+		{
+			"brief_description": "Create a new empty ChooserTable asset.",
+			"category": "chooser",
+			"description": "Create a new empty ChooserTable asset. Optionally set the result type and output class. Stateless / non-session: writes a new asset directly to the supplied path.",
+			"full_description": "Create a new empty ChooserTable asset. Optionally set the result type and output class. Stateless / non-session: writes a new asset directly to the supplied path.",
+			"input_schema":
+			{
+				"properties":
+				{
+					"output_class":
+					{
+						"description": "Class path for the output object type (e.g. /Script/Engine.AnimSequence)",
+						"type": "string"
+					},
+					"path":
+					{
+						"description": "Target asset path (e.g. /Game/Data/Choosers/CHT_NewChooser)",
+						"type": "string"
+					},
+					"result_type":
+					{
+						"description": "Result type: 'ObjectResult' or 'ClassResult'",
+						"enum": [
+							"ObjectResult",
+							"ClassResult"
+						],
+						"type": "string"
+					}
+				},
+				"required": [
+					"path"
+				],
+				"type": "object"
+			},
+			"name": "chooser_create",
+			"signature": "chooser_create(path: str, result_type: str = None, output_class: str = None) -> dict",
+			"source": "Claireon Built-in"
+		}
+	},
+	"error_message": "",
+	"is_error": false,
+	"summary": "Deep inspect: chooser_create"
+}
+=== case 2 ===
+{
+	"data":
+	{
+		"deep_inspect": true,
+		"tool":
+		{
+			"brief_description": "Duplicate an existing ChooserTable asset to a new path.",
+			"category": "chooser",
+			"description": "Duplicate an existing ChooserTable asset to a new path. Stateless / non-session: writes a new asset directly to the supplied path without opening a session.",
+			"full_description": "Duplicate an existing ChooserTable asset to a new path. Stateless / non-session: writes a new asset directly to the supplied path without opening a session.",
+			"input_schema":
+			{
+				"properties":
+				{
+					"dest_path":
+					{
+						"description": "Destination asset path",
+						"type": "string"
+					},
+					"source_path":
+					{
+						"description": "Path to the source ChooserTable",
+						"type": "string"
+					}
+				},
+				"required": [
+					"source_path",
+					"dest_path"
+				],
+				"type": "object"
+			},
+			"name": "chooser_duplicate",
+			"signature": "chooser_duplicate(dest_path: str, source_path: str) -> dict",
+			"source": "Claireon Built-in"
+		}
+	},
+	"error_message": "",
+	"is_error": false,
+	"summary": "Deep inspect: chooser_duplicate"
+}
+=== case 3 ===
+{
+	"data":
+	{
+		"categories": [
+			{
+				"name": "anim",
+				"tool_count": 50
+			},
+			{
+				"name": "animbp",
+				"tool_count": 42
+			},
+			{
+				"name": "asset",
+				"tool_count": 15
+			},
+			{
+				"name": "attenuation",
+				"tool_count": 3
+			},
+			{
+				"name": "audio",
+				"tool_count": 6
+			},
+			{
+				"name": "behaviortree",
+				"tool_count": 19
+			},
+			{
+				"name": "blackboard",
+				"tool_count": 10
+			},
+			{
+				"name": "blend_space",
+				"tool_count": 12
+			},
+			{
+				"name": "blueprint",
+				"tool_count": 1
+			},
+			{
+				"name": "bp",
+				"tool_count": 69
+			},
+			{
+				"name": "camera_asset",
+				"tool_count": 13
+			},
+			{
+				"name": "chooser",
+				"tool_count": 19
+			},
+			{
+				"name": "cmc",
+				"tool_count": 3
+			},
+			{
+				"name": "commandlet",
+				"tool_count": 1
+			},
+			{
+				"name": "component",
+				"tool_count": 1
+			},
+			{
+				"name": "concurrency",
+				"tool_count": 3
+			},
+			{
+				"name": "console",
+				"tool_count": 1
+			},
+			{
+				"name": "data_asset",
+				"tool_count": 1
+			},
+			{
+				"name": "datatable",
+				"tool_count": 16
+			},
+			{
+				"name": "developer_settings",
+				"tool_count": 1
+			},
+			{
+				"name": "editor",
+				"tool_count": 8
+			},
+			{
+				"name": "engine",
+				"tool_count": 1
+			},
+			{
+				"name": "enum",
+				"tool_count": 1
+			},
+			{
+				"name": "eqs",
+				"tool_count": 15
+			},
+			{
+				"name": "feedback",
+				"tool_count": 1
+			},
+			{
+				"name": "foliage",
+				"tool_count": 10
+			},
+			{
+				"name": "gameplay",
+				"tool_count": 4
+			},
+			{
+				"name": "input",
+				"tool_count": 22
+			},
+			{
+				"name": "landscape",
+				"tool_count": 14
+			},
+			{
+				"name": "landscape_spline",
+				"tool_count": 11
+			},
+			{
+				"name": "level",
+				"tool_count": 8
+			},
+			{
+				"name": "level_sequence",
+				"tool_count": 22
+			},
+			{
+				"name": "log",
+				"tool_count": 1
+			},
+			{
+				"name": "map",
+				"tool_count": 2
+			},
+			{
+				"name": "material",
+				"tool_count": 24
+			},
+			{
+				"name": "material_instance",
+				"tool_count": 18
+			},
+			{
+				"name": "metasound",
+				"tool_count": 14
+			},
+			{
+				"name": "niagara",
+				"tool_count": 27
+			},
+			{
+				"name": "pcg",
+				"tool_count": 17
+			},
+			{
+				"name": "pie",
+				"tool_count": 23
+			},
+			{
+				"name": "project",
+				"tool_count": 1
+			},
+			{
+				"name": "proxyasset",
+				"tool_count": 8
+			},
+			{
+				"name": "proxytable",
+				"tool_count": 8
+			},
+			{
+				"name": "python",
+				"tool_count": 1
+			},
+			{
+				"name": "session",
+				"tool_count": 2
+			},
+			{
+				"name": "skeleton",
+				"tool_count": 26
+			},
+			{
+				"name": "soundclass",
+				"tool_count": 5
+			},
+			{
+				"name": "soundcue",
+				"tool_count": 14
+			},
+			{
+				"name": "soundmix",
+				"tool_count": 6
+			},
+			{
+				"name": "statetree",
+				"tool_count": 45
+			},
+			{
+				"name": "struct",
+				"tool_count": 1
+			},
+			{
+				"name": "test",
+				"tool_count": 2
+			},
+			{
+				"name": "trace",
+				"tool_count": 7
+			},
+			{
+				"name": "transaction",
+				"tool_count": 6
+			},
+			{
+				"name": "uclass",
+				"tool_count": 1
+			},
+			{
+				"name": "uobject",
+				"tool_count": 2
+			},
+			{
+				"name": "widgetbp",
+				"tool_count": 42
+			},
+			{
+				"name": "world",
+				"tool_count": 1
+			},
+			{
+				"name": "wp",
+				"tool_count": 2
+			}
+		],
+		"total_categories": 59,
+		"total_tools": 709
+	},
+	"error_message": "",
+	"is_error": false,
+	"summary": "Found 59 categories spanning 709 tools"
+}

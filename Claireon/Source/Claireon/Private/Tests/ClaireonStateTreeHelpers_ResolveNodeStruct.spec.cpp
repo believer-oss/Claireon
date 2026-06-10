@@ -28,7 +28,7 @@ UNTEST_UNIT_OPTS(Claireon, StateTreeHelpers, ResolveNodeStructScriptPrefixError,
 	// resolver alone says "Struct not found"; the prefix-strip wrapper appends
 	// the "Pass the bare struct name" hint we want callers to see.
 	FString Error;
-	const FString Bogus = TEXT("/Script/Engine.FDefinitelyNotAStruct_XYZ");
+	const FString Bogus = TEXT("/Script/Claireon.FDefinitelyNotAStruct_XYZ");
 	UScriptStruct* Result = ClaireonStateTreeHelpers::ResolveNodeStruct(Bogus, Error);
 	UNTEST_ASSERT_TRUE(Result == nullptr);
 	UNTEST_ASSERT_TRUE(Error.Contains(TEXT("Pass the bare struct name")));

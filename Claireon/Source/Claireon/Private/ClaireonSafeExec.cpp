@@ -21,7 +21,7 @@ static bool bLastExecutionCrashed = false;
 #endif
 
 // UE's check() raises SEH exception via RaiseException() with this code.
-// Defined in WindowsPlatformCrashContext.cpp (verified against the current engine release).
+// Defined in WindowsPlatformCrashContext.cpp (verified against UE 5.5).
 // Used for log messages only, not control flow.
 static constexpr uint32 CLAIREON_UE_ASSERT_EXCEPTION_CODE = 0x4000;
 
@@ -63,14 +63,15 @@ struct FGeneratedClassLookupContext
 	UClass** OutClass;
 };
 
-namespace ClaireonSafeExecInternal
-{
-
 // Trampoline invoked inside GuardedCallSEH: calls
 // UBlueprintEditorLibrary::GeneratedClass(bp) and writes the result
 // pointer.  The call is a single static UFUNCTION dispatch, which
 // matches what `unreal.BlueprintEditorLibrary.generated_class(bp)`
-// exposes to the Python reflection layer.
+// exposes to the Python reflection layer.  See
+// Docs/llm/archive/bp-authoring-gaps-closure/GAP6_REPRO_ARTIFACT.md.
+namespace ClaireonSafeExecInternal
+{
+
 void GeneratedClassLookupTrampoline(void* Context)
 {
 	FGeneratedClassLookupContext* Ctx =

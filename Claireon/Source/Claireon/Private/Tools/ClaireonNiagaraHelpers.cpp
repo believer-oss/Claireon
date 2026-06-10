@@ -799,7 +799,7 @@ FString ClaireonNiagaraHelpers::FormatModuleInfo(UNiagaraNodeFunctionCall* Modul
 }
 
 // ============================================================================
-// User Parameter helpers (AR7, #0000)
+// User Parameter helpers
 // ============================================================================
 
 namespace

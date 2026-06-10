@@ -22,7 +22,7 @@
 #include "IClaireonToolProvider.h"
 #include "Features/IModularFeatures.h"
 #include "Dom/JsonObject.h"
-#include "ClaireonToolCatalogMatcher.h"
+#include "ClaireonToolSearchIndex.h"
 
 namespace PyHintTests622_Helpers
 {

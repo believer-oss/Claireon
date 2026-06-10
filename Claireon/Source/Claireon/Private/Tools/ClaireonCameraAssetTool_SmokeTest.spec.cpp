@@ -199,9 +199,9 @@ bool FCameraAssetSmokeTest_SyntheticFixtureRoundTrip::RunTest(const FString& /*P
 			return false;
 		}
 	}
-	// 4. AddNode child = UCustomLookAtCameraNode.
+	// 4. AddNode child = UBVLookAtCameraNode.
 	{
-		const auto R = CASmokeSpec_AddNode(Path, 0, TEXT("Root"), TEXT("CustomLookAtCameraNode"));
+		const auto R = CASmokeSpec_AddNode(Path, 0, TEXT("Root"), TEXT("BVLookAtCameraNode"));
 		if (R.bIsError)
 		{
 			AddError(FString::Printf(TEXT("AddNode(child) failed: %s"), *R.ErrorMessage));
@@ -400,10 +400,10 @@ bool FCameraAssetSmokeTest_DuplicatePrototypeAndAddNode::RunTest(const FString& 
 		return true;
 	}
 
-	// 5. AddNode UCustomLookAtCameraNode under the array container.
+	// 5. AddNode UBVLookAtCameraNode under the array container.
 	FString NewChildId;
 	{
-		const auto R = CASmokeSpec_AddNode(DupPath, RigIndex, ArrayParentId, TEXT("CustomLookAtCameraNode"));
+		const auto R = CASmokeSpec_AddNode(DupPath, RigIndex, ArrayParentId, TEXT("BVLookAtCameraNode"));
 		if (R.bIsError)
 		{
 			AddError(FString::Printf(TEXT("AddNode failed: %s"), *R.ErrorMessage));

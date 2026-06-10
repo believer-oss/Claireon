@@ -116,7 +116,7 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddVariable::GetInputSchema()
     Builder.AddString(TEXT("asset_path"), TEXT("Blueprint asset path (alternative to session_id)."), false);
     Builder.AddString(TEXT("variable_name"), TEXT("Name of the new variable."), true);
     Builder.AddString(TEXT("variable_type"), TEXT("Variable type (primitive name like 'bool'/'int'/'float' or full object/struct/class path). Required unless variable_type_spec is provided."));
-    Builder.AddObject(TEXT("variable_type_spec"), TEXT("Structured type spec. Preferred for delegate / multicast-delegate / soft-ref / instanced-struct variables. Keys: 'base' (string; e.g. 'MulticastDelegate', 'Delegate', 'SoftClass', 'SoftObject', 'InstancedStruct'); 'signature_function' (string; required for delegate bases; UFunction object path, e.g. '/Script/FSTargeting.LockedTargetChanged__DelegateSignature'); 'subtype' (string; required for soft* bases, optional for InstancedStruct). Takes precedence over variable_type when both are provided."));
+    Builder.AddObject(TEXT("variable_type_spec"), TEXT("Structured type spec. Preferred for delegate / multicast-delegate / soft-ref / instanced-struct variables. Keys: 'base' (string; e.g. 'MulticastDelegate', 'Delegate', 'SoftClass', 'SoftObject', 'InstancedStruct'); 'signature_function' (string; required for delegate bases; UFunction object path, e.g. '/Script/MyModule.MyDelegate__DelegateSignature'); 'subtype' (string; required for soft* bases, optional for InstancedStruct). Takes precedence over variable_type when both are provided."));
     Builder.AddString(TEXT("container_type"), TEXT("Optional container: 'none' | 'array' | 'set' | 'map' (default 'none')."));
     Builder.AddString(TEXT("default_value"), TEXT("Optional default value for the variable (string form)."));
     Builder.AddString(TEXT("category"), TEXT("Optional My Blueprint category."));
@@ -293,7 +293,7 @@ FString ClaireonBlueprintGraphTool_AddVariable::GetFullDescription() const
         "instanced-struct variables). When both are provided, variable_type_spec "
         "takes precedence -- this is a deliberate ergonomics choice so you can "
         "pass a fallback type alongside the structured form during refactors. "
-        "Note: plain delegate names in "
+        "Per .claude/areas/blueprint-editing.md, plain delegate names in "
         "variable_type silently fail; always use variable_type_spec with "
         "base='Delegate' for delegate variables. Setting replication='RepNotify' "
         "auto-creates the OnRep_<Name> handler function graph; pass "

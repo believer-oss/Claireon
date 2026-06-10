@@ -50,7 +50,7 @@ namespace ClaireonNiagaraHelpers
 	// ========================================================================
 	// User Parameter helpers (shared by niagara_add_parameter,
 	// niagara_remove_parameter, niagara_set_parameter_value, and
-	// niagara_apply_delta). See work item #0000 AR7. The helpers
+	// niagara_apply_delta). The helpers
 	// operate on raw niagara types and return success/failure plus an
 	// error message; the calling MCP tool wraps the result in an
 	// FToolResult.

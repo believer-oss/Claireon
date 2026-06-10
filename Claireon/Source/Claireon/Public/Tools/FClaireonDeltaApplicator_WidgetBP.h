@@ -21,6 +21,7 @@ class UWidget;
  *   Delegates to ClaireonWidgetHelpers::MoveWidget (H4 -- shared with the discrete
  *   move_widget tool, so typed-slot handling is consistent).
  *
+ * See Docs/llm/apply-delta-all-families/09_WIDGETBP.md.
  */
 class CLAIREON_API FClaireonDeltaApplicator_WidgetBP : public FClaireonDeltaApplicatorBase
 {

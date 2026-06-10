@@ -20,7 +20,7 @@
 namespace ClaireonComponentTickInspectScratch
 {
 	// Decode TickGroup enum (ETickingGroup) to string. Mirror of engine values declared
-	// at Engine/Source/Runtime/Engine/Classes/Engine/EngineBaseTypes.h.
+	// at Engine/Source/Runtime/Engine/Classes/Engine/EngineBaseTypes.h:171.
 	static FString TickingGroupToString(ETickingGroup InGroup)
 	{
 		switch (InGroup)
@@ -54,7 +54,7 @@ namespace ClaireonComponentTickInspectScratch
 	}
 
 	// Decode EVisibilityBasedAnimTickOption to its declared name.
-	// Source: Engine/Source/Runtime/Engine/Classes/Components/SkinnedMeshComponent.h
+	// Source: Engine/Source/Runtime/Engine/Classes/Components/SkinnedMeshComponent.h:84
 	static FString VisibilityBasedAnimTickOptionToString(EVisibilityBasedAnimTickOption InOption)
 	{
 		switch (InOption)

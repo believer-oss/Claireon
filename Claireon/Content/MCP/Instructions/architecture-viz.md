@@ -13,8 +13,6 @@ rationale: Architecture HTML generation from codebase research + asset inspectio
 
 Do not use instructions from this file unless asked.
 
-> **Token placeholders**: This document uses `{{TOKEN}}` placeholders. `{{PROJECT_NAME}}` is project context (resolve from your environment); the diagram-template tokens (`{{NODE_ID}}`, `{{LAYER_KEY}}`, `{{COLOR}}`, etc.) are per-element fill-ins you assign while generating the diagram. See the legend at `claireon://instructions/token-legend` (fetch via `resources/read`).
-
 # Create Interactive Architecture Diagram
 
 Generate an interactive, self-contained HTML architecture diagram for any {{PROJECT_NAME}} system. The output is a single `.html` file with an SVG diagram, clickable nodes with a detail sidebar, layer filter buttons, connection highlighting, and animated data flow.
@@ -97,10 +95,10 @@ Look for:
 - TileView/ListView patterns (`IUserObjectListEntry`)
 - RPC calls (`Server*` patterns)
 
-#### 2d. Backend/Service Investigation
+#### 2d. Backend Service Investigation
 
 If the system involves backend services:
-- Search for Backend SDK usage: `BackendSDK`, `ServerRPC`, `Backend::` references
+- Search for backend-service SDK usage: server RPCs and service-client calls
 - Look for PlayerController RPCs: `Server_` or `ServerX` UFUNCTION patterns
 - Find service request/response types
 
@@ -114,11 +112,11 @@ Create an intermediate representation. For each node:
 |-------|-------------|
 | **id** | Unique identifier used in `data-detail` and `detail-<id>` (e.g., `lootmenu`) |
 | **name** | Display name (e.g., `WBP_LootableMenu`) |
-| **cppClass** | C++ class name (e.g., `UFSLootableMenuWidget`) |
-| **parentClass** | Parent class (e.g., `UFSMenu`) |
+| **cppClass** | C++ class name (e.g., `UMyLootMenuWidget`) |
+| **parentClass** | Parent class (e.g., `UMyMenuBase`) |
 | **assetPath** | Unreal content path if applicable |
-| **layer** | One of: `widgets`, `viewmodels`, `gamelogic`, `data`, `subsystems`, `pragma` |
-| **tags** | Array from: `cpp`, `bp`, `vm`, `struct`, `replicated`, `delegate`, `subsystem`, `pragma`, `rpc` |
+| **layer** | One of: `widgets`, `viewmodels`, `gamelogic`, `data`, `subsystems`, `backend` |
+| **tags** | Array from: `cpp`, `bp`, `vm`, `struct`, `replicated`, `delegate`, `subsystem`, `backend`, `rpc` |
 | **properties** | Array of `{name, type, note, isFieldNotify, isDerived}` |
 | **methods** | Array of `{name, note}` |
 | **connections** | Array of `{targetNode, color, label, isDashed}` |
@@ -136,13 +134,13 @@ Select 3-5 layers from this table. Layers are arranged top-to-bottom from user-f
 | Game Logic | `gamelogic` | `#58a6ff` (blue) | `#1a2233` | Gameplay components, abilities, controllers |
 | Data / Networking | `data` | `#d29922` (orange) | `#221a17` | Replicated components, structs, configs, data assets |
 | Subsystem | `subsystems` | `#39d2c0` (cyan) | `#172227` | World/game subsystems, registries, singletons |
-| Backend / Services | `pragma` | `#f85149` (red) | `#221722` | Backend service calls, Backend SDK, server RPCs |
+| Backend Services | `backend` | `#f85149` (red) | `#221722` | Backend service calls, backend-service SDK, server RPCs |
 
 **Layer combination examples:**
 - **MVVM UI system** (loot, inventory): Widget → ViewModel → Data/Networking
 - **GAS combat**: Widget → Game Logic (Abilities) → Data (Attributes/Effects)
-- **Progression with Backend**: Widget → ViewModel → Game Logic → Backend/Services
-- **Full-stack feature**: Widget → ViewModel → Game Logic → Data/Networking → Backend/Services
+- **Progression with backend**: Widget → ViewModel → Game Logic → Backend Services
+- **Full-stack feature**: Widget → ViewModel → Game Logic → Data/Networking → Backend Services
 
 ### 5. Generate HTML
 
@@ -807,7 +805,7 @@ document.getElementById('diagram').addEventListener('click', function(e) {
 
 ## Example
 
-The {{PROJECT_NAME}} Loot System diagram is an example of this style in practice. It demonstrates:
+A Loot System diagram is an example of this style in practice. It demonstrates:
 - 11 nodes across 3 layers (Widgets, ViewModels, Data/Networking)
 - 13 connections with color-coded relationship labels
 - Full sidebar with detail panels per node

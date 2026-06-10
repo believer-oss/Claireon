@@ -17,6 +17,7 @@ class UEnvQueryOption;
  *                  {kind: "test", id, option_id, class}.
  *
  * Session model: M5 fail-on-missing.
+ * See Docs/llm/apply-delta-all-families/03_EQS.md.
  */
 class CLAIREON_API FClaireonDeltaApplicator_EQS : public FClaireonDeltaApplicatorBase
 {

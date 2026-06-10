@@ -14,7 +14,7 @@
  */
 struct FClaireonSpillStream
 {
-	/** Stream identity. Generic tools: "data". claireon.python_execute: "stdout" | "uelog". */
+	/** Stream identity. Generic tools: "data". python_execute: "stdout" | "uelog". */
 	FString Name;
 
 	/** Absolute, forward-slashed path to the spill file on disk. Empty on write failure. */
@@ -65,7 +65,7 @@ enum class EClaireonSpillStreamSet : uint8
 	/** Single "data" stream.  Used by every generic Claireon tool (asset_search, map_open, ...). */
 	GenericData,
 
-	/** Two streams named "stdout" and "uelog".  claireon.python_execute only. */
+	/** Two streams named "stdout" and "uelog".  python_execute only. */
 	PythonStdoutAndUELog,
 };
 

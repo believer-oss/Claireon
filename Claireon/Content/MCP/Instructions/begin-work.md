@@ -7,8 +7,6 @@ uri: claireon://instructions/begin-work
 
 Do not use instructions from this file unless asked.
 
-> **Token placeholders**: This document uses `{{TOKEN}}` placeholders (e.g. `{{PROJECT_NAME}}`, `{{GIT_USER}}`). Resolve each from your project/git/environment context before acting on or echoing the text -- see the legend at `claireon://instructions/token-legend` (fetch via `resources/read`).
-
 # Begin Work on New Task
 
 This instruction creates a local task workspace and a new work branch. All workflow
@@ -47,7 +45,7 @@ Use `git -C <repo>` instead of `cd <repo> && git ...` for all git commands.
    ```bash
    git -C <repo> config user.email
    ```
-   Use the local-part before `@` as `<git_user>` (e.g., `{{GIT_USER}}` from `{{GIT_EMAIL}}`)
+   Use the local-part before `@` as `<git_user>` (e.g., `<user>` from `you@example.com`)
 4. Get the worktree name from the `<repo>` directory basename
 
 ### 2. Derive Task Name
@@ -126,7 +124,7 @@ If fetch fails, abort with error.
 ### 7. Create New Branch from Latest Main
 
 1. Generate branch name: `llm/<git_user>/<worktree>/<task-name>`
-   - Example: `llm/{{GIT_USER}}/{{PROJECT_NAME}}/spawning-system`
+   - Example: `llm/<user>/<workspace>/spawning-system`
 
 2. Create a parking branch to free the worktree (park the current state):
    ```bash
@@ -196,12 +194,12 @@ Display summary:
 
 User says: "I need to add a new spawning system with wave management"
 
-Starting state: on branch `llm/{{GIT_USER}}/{{PROJECT_NAME}}-parking-20260218`, no uncommitted changes.
+Starting state: on branch `llm/<user>/<workspace>-parking-<date>`, no uncommitted changes.
 
 ```
 ✓ New task started
   Task:      spawning-system
-  Branch:    llm/{{GIT_USER}}/{{PROJECT_NAME}}/spawning-system
+  Branch:    llm/<user>/<workspace>/spawning-system
   Base:      origin/main (619bf8a)
   Workspace: Saved/Claireon/Workflow/spawning-system/
   Changes:   none
@@ -210,12 +208,12 @@ Starting state: on branch `llm/{{GIT_USER}}/{{PROJECT_NAME}}-parking-20260218`, 
 
 ### Example 2: Starting with Existing Changes
 
-User says: "start a new task" (has uncommitted changes to {{GAME_MODULE}} files)
+User says: "start a new task" (has uncommitted changes to targeting component files)
 
 ```
 ✓ New task started
   Task:      targeting-component-fixes
-  Branch:    llm/{{GIT_USER}}/{{PROJECT_NAME}}/targeting-component-fixes
+  Branch:    llm/<user>/<workspace>/targeting-component-fixes
   Base:      origin/main (abc1234)
   Workspace: Saved/Claireon/Workflow/targeting-component-fixes/
   Changes:   applied (cherry-picked from previous branch)

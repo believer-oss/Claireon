@@ -74,6 +74,22 @@ public:
 	/** Launch Claude Code (or the configured agent) from the project directory. */
 	static void LaunchClaudeCode();
 
+#if WITH_UNTESTED
+	/**
+	 * Test-only seam.  Ensures the tool registry is constructed and populated in
+	 * commandlet mode (where StartupModule() short-circuits on the GIsEditor guard).
+	 * If the Server pointer is already non-null this is a no-op.  Otherwise it
+	 * mirrors ONLY the registry-construction steps of StartupModule():
+	 *   1. Construct BuiltinToolProvider and register the modular feature (if needed).
+	 *   2. Construct Server, wire FClaireonBridge::SetToolRegistry, call
+	 *      CollectToolsFromProviders().
+	 * No HTTP listener, no editor UI, no proxy client, no Python-init subscription.
+	 * The production commandlet guard in StartupModule() is NOT modified.
+	 * Returns the live Server pointer (guaranteed non-null on success).
+	 */
+	FClaireonServer* EnsureServerForTest();
+#endif // WITH_UNTESTED
+
 private:
 	/** Register toolbar button and menu entries */
 	void RegisterMenus();

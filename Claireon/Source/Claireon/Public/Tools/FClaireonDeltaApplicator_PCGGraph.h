@@ -17,6 +17,7 @@ class UPCGNode;
  * Phase 3 entries: {id, type, properties?}.
  *
  * Session model: M5 fail-on-missing.
+ * See Docs/llm/apply-delta-all-families/07_PCG.md.
  */
 class CLAIREON_API FClaireonDeltaApplicator_PCGGraph : public FClaireonDeltaApplicatorBase
 {

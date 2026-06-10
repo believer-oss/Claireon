@@ -6,16 +6,18 @@
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraphSchema_K2.h"
+#include "Features/IModularFeatures.h"
+#include "IClaireonToolProvider.h"
 
 namespace ClaireonNameResolver
 {
 
 	// -----------------------------------------------------------------
-	// Static module list for /Script/<Module>.<Name> path resolution.
-	// Downstream projects can extend this list at runtime through the
-	// resolver's registration API rather than editing this file.
+	// Engine-generic module list for /Script/<Module>.<Name> path resolution.
+	// Project-specific modules are supplied by registered IClaireonToolProvider
+	// implementations (GetKnownModules); see GetResolverModules().
 	// -----------------------------------------------------------------
-	static const TArray<FString> KnownModules = {
+	static const TArray<FString> EngineKnownModules = {
 		TEXT("Engine"),
 		TEXT("CoreUObject"),
 		TEXT("UMG"),
@@ -33,7 +35,7 @@ namespace ClaireonNameResolver
 	};
 
 	// -----------------------------------------------------------------
-	// Domain-specific class prefix map for ResolveClassName
+	// Engine-generic class prefix map for ResolveClassName.
 	//
 	// Keyed by the UE internal name of a base class (i.e., what
 	// UClass::GetName() returns -- no C++ "U"/"A"/"F" prefix). Each entry
@@ -41,26 +43,62 @@ namespace ClaireonNameResolver
 	// At resolve time, for a given RequiredBaseClass we look up its name
 	// here and try prefix + Input as well as "U" + prefix + Input.
 	//
-	// Add new entries when a domain has a stable naming convention that
-	// AI clients are likely to omit (e.g., "BTTask_", "AnimNotify_").
+	// Core ships engine-generic entries only (e.g. "BTTask_", "AnimNotify_").
+	// Project-specific prefixes are supplied by registered IClaireonToolProvider
+	// implementations (GetClassPrefixMap); see GetResolverPrefixMap().
 	// -----------------------------------------------------------------
-	static const TMap<FString, TArray<FString>>& GetBaseClassPrefixMap()
+	static const TMap<FString, TArray<FString>>& GetEngineBaseClassPrefixMap()
 	{
 		static const TMap<FString, TArray<FString>> Map = {
-			// Animation notifies. The default engine prefixes are listed;
-			// downstream projects often add their own short-code prefixes
-			// (e.g. "MyProjAN_") and can extend this map at runtime.
-			{ TEXT("AnimNotify"), { TEXT("AnimNotify_") } },
-			{ TEXT("AnimNotifyState"), { TEXT("AnimNotifyState_") } },
-
-			// Behavior tree nodes. UBTNode is the common parent so it lists
-			// every category; the specific bases narrow to their own prefix.
-			{ TEXT("BTNode"), { TEXT("BTComposite_"), TEXT("BTTask_"), TEXT("BTDecorator_"), TEXT("BTService_") } },
-			{ TEXT("BTCompositeNode"), { TEXT("BTComposite_") } },
-			{ TEXT("BTTaskNode"), { TEXT("BTTask_") } },
-			{ TEXT("BTDecorator"), { TEXT("BTDecorator_") } },
-			{ TEXT("BTService"), { TEXT("BTService_") } },
+			{ TEXT("AnimNotify"),       { TEXT("AnimNotify_") } },
+			{ TEXT("AnimNotifyState"),  { TEXT("AnimNotifyState_") } },
+			{ TEXT("BTNode"),           { TEXT("BTComposite_"), TEXT("BTTask_"), TEXT("BTDecorator_"), TEXT("BTService_") } },
+			{ TEXT("BTCompositeNode"),  { TEXT("BTComposite_") } },
+			{ TEXT("BTTaskNode"),       { TEXT("BTTask_") } },
+			{ TEXT("BTDecorator"),      { TEXT("BTDecorator_") } },
+			{ TEXT("BTService"),        { TEXT("BTService_") } },
 		};
+		return Map;
+	}
+
+	// Aggregate the module list: engine defaults + modules contributed by registered
+	// providers. (No FModuleManager auto-discovery -- the Step-8 case-insensitive class
+	// iterator already resolves any loaded class, so the list is only a fast-path aid.)
+	static TArray<FString> GetResolverModules()
+	{
+		TArray<FString> Modules = EngineKnownModules;
+		TArray<IClaireonToolProvider*> Providers =
+			IModularFeatures::Get().GetModularFeatureImplementations<IClaireonToolProvider>(
+				IClaireonToolProvider::FeatureName);
+		for (IClaireonToolProvider* Provider : Providers)
+		{
+			if (!Provider) { continue; }
+			TArray<FString> ProviderModules;
+			Provider->GetKnownModules(ProviderModules);
+			for (const FString& M : ProviderModules) { Modules.AddUnique(M); }
+		}
+		return Modules;
+	}
+
+	// Aggregate the prefix map: engine defaults overlaid with provider entries
+	// (appended per key so engine + project prefixes coexist).
+	static TMap<FString, TArray<FString>> GetResolverPrefixMap()
+	{
+		TMap<FString, TArray<FString>> Map = GetEngineBaseClassPrefixMap();
+		TArray<IClaireonToolProvider*> Providers =
+			IModularFeatures::Get().GetModularFeatureImplementations<IClaireonToolProvider>(
+				IClaireonToolProvider::FeatureName);
+		for (IClaireonToolProvider* Provider : Providers)
+		{
+			if (!Provider) { continue; }
+			TMap<FString, TArray<FString>> ProviderMap;
+			Provider->GetClassPrefixMap(ProviderMap);
+			for (const TPair<FString, TArray<FString>>& Pair : ProviderMap)
+			{
+				TArray<FString>& Dest = Map.FindOrAdd(Pair.Key);
+				for (const FString& Prefix : Pair.Value) { Dest.AddUnique(Prefix); }
+			}
+		}
 		return Map;
 	}
 
@@ -219,7 +257,7 @@ namespace ClaireonNameResolver
 		// prefix-walking (anim notify and BT helpers route through here).
 		if (FuzzyCandidates.Num() == 0 && RequiredBaseClass)
 		{
-			const TMap<FString, TArray<FString>>& PrefixMap = GetBaseClassPrefixMap();
+			const TMap<FString, TArray<FString>> PrefixMap = GetResolverPrefixMap();
 			if (const TArray<FString>* Prefixes = PrefixMap.Find(RequiredBaseClass->GetName()))
 			{
 				for (const FString& Prefix : *Prefixes)
@@ -247,7 +285,8 @@ namespace ClaireonNameResolver
 		// Step 7: Try /Script/ module paths
 		if (FuzzyCandidates.Num() == 0)
 		{
-			for (const FString& Module : KnownModules)
+			const TArray<FString> ResolverModules = GetResolverModules();
+			for (const FString& Module : ResolverModules)
 			{
 				FString ScriptPath = FString::Printf(TEXT("/Script/%s.%s"), *Module, *Input);
 				if (UClass* Found = TryFind(ScriptPath))
@@ -1100,7 +1139,8 @@ namespace ClaireonNameResolver
 		// Step 4: Try /Script/ module paths
 		if (FuzzyCandidates.Num() == 0)
 		{
-			for (const FString& Module : KnownModules)
+			const TArray<FString> ResolverModules = GetResolverModules();
+			for (const FString& Module : ResolverModules)
 			{
 				FString ScriptPath = FString::Printf(TEXT("/Script/%s.%s"), *Module, *Input);
 				if (UScriptStruct* Found = TryFind(ScriptPath))
@@ -1238,7 +1278,8 @@ namespace ClaireonNameResolver
 		// Step 4: Try /Script/ module paths
 		if (FuzzyCandidates.Num() == 0)
 		{
-			for (const FString& Module : KnownModules)
+			const TArray<FString> ResolverModules = GetResolverModules();
+			for (const FString& Module : ResolverModules)
 			{
 				FString ScriptPath = FString::Printf(TEXT("/Script/%s.%s"), *Module, *Input);
 				if (UEnum* Found = TryFind(ScriptPath))

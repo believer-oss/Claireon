@@ -10,6 +10,7 @@
 /**
  * Proxy registration lifecycle state. Driven by the heartbeat ticker after
  * StartServer hands the client to RetryRegister; transitions are documented
+ * in Docs/llm/work/multi-worktree-proxy/ARCHITECTURE.md "Editor lifecycle (D4)".
  */
 enum class EClaireonProxyState : uint8
 {
@@ -86,7 +87,7 @@ struct FHeartbeatResult
  * Editor-side client for the always-on Claireon MCP proxy.
  *
  * The proxy itself is a long-running Python process
- * (Claireon/Content/Python/claireon_proxy.py) that outlives the
+ * (Plugins/Claireon/Content/Python/claireon_proxy.py) that outlives the
  * editor. This class is responsible for:
  *   - Spawning the proxy if no live instance is registered for this worktree.
  *     Uses FPlatformProcess::CreateProc with bLaunchDetached=true so the
@@ -102,8 +103,10 @@ struct FHeartbeatResult
  * calls. Claude Code connects directly to the proxy on its MCP_PORT; the
  * proxy in turn MCP-clients back into the editor on editor_mcp_port.
  *
+ * See Docs/llm/work/always-on-mcp-proxy/ALWAYS_ON_MCP_PROXY_CPP.md for the
  * current implementation contract. The next-iteration design (singleton
  * proxy serving all worktrees, port-as-lock, editor reconnect on register
+ * failure) is in Docs/llm/work/multi-worktree-proxy/MULTI_WORKTREE_PROXY_PROPOSAL.md.
  */
 class FClaireonProxyClient
 {
@@ -346,7 +349,7 @@ private:
 	 * `<ProjectSaved>/Claireon/runtime/`. Copies the source script there if
 	 * the runtime copy is missing or its bytes differ from the source.
 	 *
-	 * Spawning python.exe with the script in `Claireon/Content/Python/`
+	 * Spawning python.exe with the script in `Plugins/Claireon/Content/Python/`
 	 * lets antivirus hold a scan handle on a git-tracked file, which then
 	 * blocks `git pull` from updating it. The runtime copy lives under Saved/
 	 * (gitignored), so AV's handle never collides with git updates.

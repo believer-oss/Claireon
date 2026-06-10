@@ -32,7 +32,7 @@ namespace ClaireonBPInterfaceAuthor
 		/** Fuzzy-resolution note, if any, from ClaireonNameResolver::ResolveClassName. */
 		FString ResolutionNote;
 
-		/** Resolved class short name (e.g. "FSAbilityTarget"). Empty on failure. */
+		/** Resolved class short name (e.g. "MyTargetClass"). Empty on failure. */
 		FString ResolvedClassName;
 
 		/** Names of Blueprint->ImplementedInterfaces after the op (short names). */

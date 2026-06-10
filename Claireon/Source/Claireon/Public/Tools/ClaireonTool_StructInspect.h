@@ -9,7 +9,7 @@
  * Stateless tool: inspect a USTRUCT's schema (native C++ or Blueprint user-defined).
  * Reports field list with names, types, flags, metadata, and optional default values.
  * Primary consumer: chooser / blueprint migration workflows that need to compare struct
- * shapes (e.g., S_ChooserOutputs vs FNativeChooserOutputs).
+ * shapes (e.g., S_ChooserOutputs vs FMyStruct).
  */
 class CLAIREON_API ClaireonTool_StructInspect : public IClaireonTool
 {

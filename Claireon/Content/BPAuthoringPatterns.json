@@ -2,9 +2,9 @@
   "_meta": {
     "source_commit_sha": "72c7fb62565ddd15080d7eb691ffa88611621bdf",
     "source_files": [
-      "Claireon/Source/Claireon/Private/ClaireonBPNodeMapper.cpp",
-      "Claireon/Source/Claireon/Private/ClaireonBPMacroHandler.cpp",
-      "Claireon/Source/Claireon/Private/Tools/ClaireonTool_BlueprintTranslateScaffold.cpp",
+      "Plugins/Claireon/Source/Claireon/Private/ClaireonBPNodeMapper.cpp",
+      "Plugins/Claireon/Source/Claireon/Private/ClaireonBPMacroHandler.cpp",
+      "Plugins/Claireon/Source/Claireon/Private/Tools/ClaireonTool_BlueprintTranslateScaffold.cpp",
       "Scripts/Testing/BP_CPP_TRANSLATOR/REFINEMENT_LOG.md"
     ],
     "generated_utc": "2026-04-17T16:39:14Z",

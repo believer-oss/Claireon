@@ -67,10 +67,10 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDataAsset_Create_HappyPath,
 
 bool FClaireonDataAsset_Create_HappyPath::RunTest(const FString& /*Parameters*/)
 {
-	const FString Path = TEXT("/Game/Tests/VOLM_ClaireonSpec_Happy");
+	const FString Path = TEXT("/Game/Tests/ClaireonSpec_DA_Happy");
 	DataAssetSpec_DeleteIfExists(Path);
 
-	const auto Result = DataAssetSpec_RunCreate(Path, TEXT("/Script/Engine.DataAsset"), nullptr);
+	const auto Result = DataAssetSpec_RunCreate(Path, TEXT("/Script/Claireon.ClaireonSpecDataAsset"), nullptr);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("Create returned error: %s"), *Result.ErrorMessage));
@@ -86,9 +86,9 @@ bool FClaireonDataAsset_Create_HappyPath::RunTest(const FString& /*Parameters*/)
 		return false;
 	}
 	const FString ActualClassPath = Asset->GetClass()->GetPathName();
-	if (ActualClassPath != TEXT("/Script/Engine.DataAsset"))
+	if (ActualClassPath != TEXT("/Script/Claireon.ClaireonSpecDataAsset"))
 	{
-		AddError(FString::Printf(TEXT("Expected class /Script/Engine.DataAsset; got %s"), *ActualClassPath));
+		AddError(FString::Printf(TEXT("Expected class /Script/Claireon.ClaireonSpecDataAsset; got %s"), *ActualClassPath));
 		DataAssetSpec_DeleteIfExists(Path);
 		return false;
 	}
@@ -106,10 +106,10 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDataAsset_Create_BareClassName,
 
 bool FClaireonDataAsset_Create_BareClassName::RunTest(const FString& /*Parameters*/)
 {
-	const FString Path = TEXT("/Game/Tests/VOLM_ClaireonSpec_BareName");
+	const FString Path = TEXT("/Game/Tests/ClaireonSpec_DA_BareName");
 	DataAssetSpec_DeleteIfExists(Path);
 
-	const auto Result = DataAssetSpec_RunCreate(Path, TEXT("DataAsset"), nullptr);
+	const auto Result = DataAssetSpec_RunCreate(Path, TEXT("ClaireonSpecDataAsset"), nullptr);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("Create returned error: %s"), *Result.ErrorMessage));
@@ -138,13 +138,13 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDataAsset_Create_WithProperties,
 
 bool FClaireonDataAsset_Create_WithProperties::RunTest(const FString& /*Parameters*/)
 {
-	const FString Path = TEXT("/Game/Tests/VOLM_ClaireonSpec_WithProps");
+	const FString Path = TEXT("/Game/Tests/ClaireonSpec_DA_WithProps");
 	DataAssetSpec_DeleteIfExists(Path);
 
 	TSharedPtr<FJsonObject> Props = MakeShared<FJsonObject>();
 	Props->SetStringField(TEXT("Description"), TEXT("Spec caption"));
 
-	const auto Result = DataAssetSpec_RunCreate(Path, TEXT("/Script/Engine.DataAsset"), Props);
+	const auto Result = DataAssetSpec_RunCreate(Path, TEXT("/Script/Claireon.ClaireonSpecDataAsset"), Props);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("Create returned error: %s"), *Result.ErrorMessage));
@@ -207,13 +207,13 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDataAsset_Create_WithSoftRef,
 
 bool FClaireonDataAsset_Create_WithSoftRef::RunTest(const FString& /*Parameters*/)
 {
-	const FString Path = TEXT("/Game/Tests/VOLM_ClaireonSpec_SoftRef");
+	const FString Path = TEXT("/Game/Tests/ClaireonSpec_DA_SoftRef");
 	DataAssetSpec_DeleteIfExists(Path);
 
 	TSharedPtr<FJsonObject> Props = MakeShared<FJsonObject>();
-	Props->SetStringField(TEXT("Speaker"), TEXT("/Game/Tests/VOSpk_NoExist.VOSpk_NoExist"));
+	Props->SetStringField(TEXT("Speaker"), TEXT("/Game/Tests/ClaireonSpec_SoftRef_NoExist.ClaireonSpec_SoftRef_NoExist"));
 
-	const auto Result = DataAssetSpec_RunCreate(Path, TEXT("/Script/Engine.DataAsset"), Props);
+	const auto Result = DataAssetSpec_RunCreate(Path, TEXT("/Script/Claireon.ClaireonSpecDataAsset"), Props);
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("Create returned error: %s"), *Result.ErrorMessage));
@@ -236,7 +236,7 @@ bool FClaireonDataAsset_Create_WithSoftRef::RunTest(const FString& /*Parameters*
 		DataAssetSpec_DeleteIfExists(Path);
 		return false;
 	}
-	if (!ReadBack.Contains(TEXT("/Game/Tests/VOSpk_NoExist")))
+	if (!ReadBack.Contains(TEXT("/Game/Tests/ClaireonSpec_SoftRef_NoExist")))
 	{
 		AddError(FString::Printf(TEXT("Speaker read-back missing expected fragment: got '%s'"), *ReadBack));
 		DataAssetSpec_DeleteIfExists(Path);
@@ -256,10 +256,10 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDataAsset_Create_DuplicatePathError,
 
 bool FClaireonDataAsset_Create_DuplicatePathError::RunTest(const FString& /*Parameters*/)
 {
-	const FString Path = TEXT("/Game/Tests/VOLM_ClaireonSpec_Dup");
+	const FString Path = TEXT("/Game/Tests/ClaireonSpec_DA_Dup");
 	DataAssetSpec_DeleteIfExists(Path);
 
-	const auto First = DataAssetSpec_RunCreate(Path, TEXT("/Script/Engine.DataAsset"), nullptr);
+	const auto First = DataAssetSpec_RunCreate(Path, TEXT("/Script/Claireon.ClaireonSpecDataAsset"), nullptr);
 	if (First.bIsError)
 	{
 		AddError(FString::Printf(TEXT("First Create returned error: %s"), *First.ErrorMessage));
@@ -267,7 +267,7 @@ bool FClaireonDataAsset_Create_DuplicatePathError::RunTest(const FString& /*Para
 		return false;
 	}
 
-	const auto Second = DataAssetSpec_RunCreate(Path, TEXT("/Script/Engine.DataAsset"), nullptr);
+	const auto Second = DataAssetSpec_RunCreate(Path, TEXT("/Script/Claireon.ClaireonSpecDataAsset"), nullptr);
 	if (!Second.bIsError)
 	{
 		AddError(TEXT("Second Create unexpectedly succeeded"));
@@ -294,7 +294,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDataAsset_Create_NonDataAssetClass,
 
 bool FClaireonDataAsset_Create_NonDataAssetClass::RunTest(const FString& /*Parameters*/)
 {
-	const FString Path = TEXT("/Game/Tests/VOLM_ClaireonSpec_NotDataAsset");
+	const FString Path = TEXT("/Game/Tests/ClaireonSpec_DA_NotDataAsset");
 	DataAssetSpec_DeleteIfExists(Path);
 
 	const auto Result = DataAssetSpec_RunCreate(Path, TEXT("/Script/Engine.Texture2D"), nullptr);
@@ -324,7 +324,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDataAsset_Create_UnresolvableClass,
 
 bool FClaireonDataAsset_Create_UnresolvableClass::RunTest(const FString& /*Parameters*/)
 {
-	const FString Path = TEXT("/Game/Tests/VOLM_ClaireonSpec_Unresolvable");
+	const FString Path = TEXT("/Game/Tests/ClaireonSpec_DA_Unresolvable");
 	DataAssetSpec_DeleteIfExists(Path);
 
 	const auto Result = DataAssetSpec_RunCreate(Path, TEXT("NotARealClass_xyz123"), nullptr);
@@ -353,13 +353,13 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDataAsset_Create_PropertyWriteFailureR
 
 bool FClaireonDataAsset_Create_PropertyWriteFailureRollback::RunTest(const FString& /*Parameters*/)
 {
-	const FString Path = TEXT("/Game/Tests/VOLM_ClaireonSpec_Rollback");
+	const FString Path = TEXT("/Game/Tests/ClaireonSpec_DA_Rollback");
 	DataAssetSpec_DeleteIfExists(Path);
 
 	TSharedPtr<FJsonObject> Props = MakeShared<FJsonObject>();
 	Props->SetStringField(TEXT("NonExistentField"), TEXT("x"));
 
-	const auto Result = DataAssetSpec_RunCreate(Path, TEXT("/Script/Engine.DataAsset"), Props);
+	const auto Result = DataAssetSpec_RunCreate(Path, TEXT("/Script/Claireon.ClaireonSpecDataAsset"), Props);
 	if (!Result.bIsError)
 	{
 		AddError(TEXT("Create unexpectedly succeeded for non-existent property"));
@@ -399,10 +399,10 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonAssetExists_Positive,
 
 bool FClaireonAssetExists_Positive::RunTest(const FString& /*Parameters*/)
 {
-	const FString Path = TEXT("/Game/Tests/VOLM_ClaireonSpec_ExistsYes");
+	const FString Path = TEXT("/Game/Tests/ClaireonSpec_DA_ExistsYes");
 	DataAssetSpec_DeleteIfExists(Path);
 
-	const auto Create = DataAssetSpec_RunCreate(Path, TEXT("/Script/Engine.DataAsset"), nullptr);
+	const auto Create = DataAssetSpec_RunCreate(Path, TEXT("/Script/Claireon.ClaireonSpecDataAsset"), nullptr);
 	if (Create.bIsError)
 	{
 		AddError(FString::Printf(TEXT("Create returned error: %s"), *Create.ErrorMessage));
@@ -444,7 +444,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonAssetExists_Negative,
 
 bool FClaireonAssetExists_Negative::RunTest(const FString& /*Parameters*/)
 {
-	const FString Path = TEXT("/Game/Tests/VOLM_NonExistent_zzz");
+	const FString Path = TEXT("/Game/Tests/ClaireonSpec_DA_NonExistent_zzz");
 	DataAssetSpec_DeleteIfExists(Path);
 
 	const auto Result = DataAssetSpec_RunExists(Path);
@@ -492,15 +492,15 @@ bool FClaireonAssetExists_InvalidPath::RunTest(const FString& /*Parameters*/)
 }
 
 // =====================================================================================
-// Test: DevSettings_Get_EditorStyleSettings
+// Test: DevSettings_Get_ClaireonSpecDeveloperSettings
 // =====================================================================================
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDevSettings_Get_EditorStyleSettings,
-	"Claireon.DataAssetTool.DevSettings_Get_EditorStyleSettings",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDevSettings_Get_ClaireonSpecDeveloperSettings,
+	"Claireon.DataAssetTool.DevSettings_Get_ClaireonSpecDeveloperSettings",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FClaireonDevSettings_Get_EditorStyleSettings::RunTest(const FString& /*Parameters*/)
+bool FClaireonDevSettings_Get_ClaireonSpecDeveloperSettings::RunTest(const FString& /*Parameters*/)
 {
-	const auto Result = DataAssetSpec_RunDevSettings(TEXT("/Script/EditorStyle.EditorStyleSettings"));
+	const auto Result = DataAssetSpec_RunDevSettings(TEXT("/Script/Claireon.ClaireonSpecDeveloperSettings"));
 	if (Result.bIsError)
 	{
 		AddError(FString::Printf(TEXT("DevSettings returned error: %s"), *Result.ErrorMessage));
@@ -513,12 +513,12 @@ bool FClaireonDevSettings_Get_EditorStyleSettings::RunTest(const FString& /*Para
 	}
 
 	FString ClassName, ClassPath, ConfigSection;
-	if (!Result.Data->TryGetStringField(TEXT("class_name"), ClassName) || ClassName != TEXT("EditorStyleSettings"))
+	if (!Result.Data->TryGetStringField(TEXT("class_name"), ClassName) || ClassName != TEXT("ClaireonSpecDeveloperSettings"))
 	{
 		AddError(FString::Printf(TEXT("class_name mismatch: got '%s'"), *ClassName));
 		return false;
 	}
-	if (!Result.Data->TryGetStringField(TEXT("class_path"), ClassPath) || ClassPath != TEXT("/Script/EditorStyle.EditorStyleSettings"))
+	if (!Result.Data->TryGetStringField(TEXT("class_path"), ClassPath) || ClassPath != TEXT("/Script/Claireon.ClaireonSpecDeveloperSettings"))
 	{
 		AddError(FString::Printf(TEXT("class_path mismatch: got '%s'"), *ClassPath));
 		return false;
@@ -535,9 +535,9 @@ bool FClaireonDevSettings_Get_EditorStyleSettings::RunTest(const FString& /*Para
 		AddError(TEXT("properties object missing"));
 		return false;
 	}
-	if (!(*PropsObj)->HasField(TEXT("ResolutionChooser")))
+	if (!(*PropsObj)->HasField(TEXT("SampleSetting")))
 	{
-		AddError(TEXT("properties missing key 'ResolutionChooser'"));
+		AddError(TEXT("properties missing key 'SampleSetting'"));
 		return false;
 	}
 

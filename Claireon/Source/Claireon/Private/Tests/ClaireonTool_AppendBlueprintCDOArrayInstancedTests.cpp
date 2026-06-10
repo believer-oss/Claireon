@@ -33,8 +33,8 @@ namespace
 	static const TCHAR* TestBPPath_Errors  = TEXT("/Game/__MCPTests/BP_AppendInstanced_Errors");
 
 	// Concrete subobject class for the array's inner type.
-	static const TCHAR* CollectorBaseClassPath  = TEXT("/Script/FSTargeting.FSTargetingInstance_Modular");
-	static const TCHAR* CollectorElementClassPath = TEXT("/Script/FSTargeting.FSTC_CollisionSphere");
+	static const TCHAR* CollectorBaseClassPath  = TEXT("/Script/Claireon.ClaireonAppendInstancedBase");
+	static const TCHAR* CollectorElementClassPath = TEXT("/Script/Claireon.ClaireonAppendInstancedElement");
 	static const TCHAR* CollectorsArrayProperty = TEXT("Collectors");
 
 	void CleanupAppendTestAsset(const FString& AssetPath)
@@ -130,7 +130,7 @@ UNTEST_UNIT_OPTS(Claireon, AppendBlueprintCDOArrayInstanced, Functional_FirstApp
 {
 	UClass* BaseClass = ResolveAppendTestClass(CollectorBaseClassPath);
 	UClass* ElementClass = ResolveAppendTestClass(CollectorElementClassPath);
-	if (!BaseClass || !ElementClass) co_return; // FSTargeting not loaded; skip.
+	if (!BaseClass || !ElementClass) co_return; // fixture classes not loaded; skip.
 
 	CleanupAppendTestAsset(TestBPPath_Happy);
 	UBlueprint* BP = CreateAppendTestBlueprint(TestBPPath_Happy, BaseClass);
@@ -226,7 +226,7 @@ UNTEST_UNIT_OPTS(Claireon, AppendBlueprintCDOArrayInstanced, Errors_NonArrayPath
 	UBlueprint* BP = CreateAppendTestBlueprint(TestBPPath_Errors, BaseClass);
 	UNTEST_ASSERT_PTR(BP);
 
-	// bIgnoreSelf is a bool on FSTargetingInstance_Modular, not an array.
+	// bIgnoreSelf is a bool on ClaireonAppendInstancedBase, not an array.
 	ClaireonTool_AppendBlueprintCDOArrayInstanced Tool;
 	IClaireonTool::FToolResult R = Tool.Execute(MakeAppendArgs(TestBPPath_Errors, TEXT("bIgnoreSelf"), CollectorElementClassPath));
 	UNTEST_EXPECT_TRUE(R.bIsError);
@@ -251,7 +251,7 @@ UNTEST_UNIT_OPTS(Claireon, AppendBlueprintCDOArrayInstanced, Errors_ElementClass
 	UObject* CDO = BP->GeneratedClass->GetDefaultObject();
 	const int32 SizeBefore = ReadAppendArraySize(CDO, FName(CollectorsArrayProperty));
 
-	// AActor is not a UFSTargetCollector subclass.
+	// AActor is not a UClaireonAppendInstancedElementBase subclass.
 	ClaireonTool_AppendBlueprintCDOArrayInstanced Tool;
 	IClaireonTool::FToolResult R = Tool.Execute(MakeAppendArgs(TestBPPath_Errors, CollectorsArrayProperty, TEXT("/Script/Engine.Actor")));
 	UNTEST_EXPECT_TRUE(R.bIsError);

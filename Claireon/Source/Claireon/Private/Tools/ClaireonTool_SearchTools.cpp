@@ -5,12 +5,10 @@
 #include "ClaireonModule.h"
 #include "ClaireonServer.h"
 #include "ClaireonBridge.h"
-#include "ClaireonToolCatalogMatcher.h"
+#include "ClaireonToolSearchIndex.h"
+#include "ClaireonToolEmbeddingIndex.h"
 #include "ClaireonXmlFormatter.h"
 #include "ClaireonLog.h"
-#include "IPythonScriptPlugin.h"
-#include "PythonScriptTypes.h"
-#include "HAL/ThreadHeartBeat.h"
 #include "Interfaces/IPluginManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -39,33 +37,6 @@ FDelegateHandle ToolCatalogChangedHandle;
 FClaireonServer* LastSubscribedServer = nullptr;
 std::atomic<bool> bToolCatalogDirty{false};
 
-TArray<FString> SplitWholeWordCaseInsensitive(const FString& In, const TCHAR* Word)
-{
-	TArray<FString> Out;
-	int32 Cursor = 0;
-	const FString InLower = In.ToLower();
-	const FString WordLower = FString(Word).ToLower();
-	const int32 WordLen = WordLower.Len();
-	while (Cursor < In.Len())
-	{
-		const int32 Hit = InLower.Find(WordLower, ESearchCase::CaseSensitive, ESearchDir::FromStart, Cursor);
-		if (Hit == INDEX_NONE) { Out.Add(In.Mid(Cursor)); break; }
-		const bool LeftBoundary = (Hit == 0) || !FChar::IsAlnum(In[Hit-1]);
-		const bool RightBoundary = (Hit + WordLen >= In.Len()) || !FChar::IsAlnum(In[Hit + WordLen]);
-		if (LeftBoundary && RightBoundary)
-		{
-			Out.Add(In.Mid(Cursor, Hit - Cursor));
-			Cursor = Hit + WordLen;
-		}
-		else
-		{
-			// Not a whole-word match; skip past this hit and keep scanning.
-			Cursor = Hit + WordLen;
-		}
-	}
-	return Out;
-}
-
 // ---------------------------------------------------------------------------
 // apply_spec catalog loader.
 //
@@ -77,6 +48,25 @@ TArray<FString> SplitWholeWordCaseInsensitive(const FString& In, const TCHAR* Wo
 //
 // File-local discriminator to avoid anon-NS collisions under unity batching.
 // ---------------------------------------------------------------------------
+// Map the retrieval rank-source enum to the stable JSON string emitted on each
+// result. Consumers read this to interpret the `score` field's polarity:
+//   exact_pin            -> Score is a reserved sentinel (pinned to rank 0).
+//   near_exact_boost     -> Score is a boosted RRF value (higher = better).
+//   hybrid_rrf           -> Score is an RRF value (positive; higher = better).
+//   lexical_only_fallback-> Score is from the lexical-only fusion (semantic down).
+// File-local discriminator (Cl628_) to avoid anon-NS collisions under unity batching.
+const TCHAR* Cl628_RankSourceToString(EClaireonRankSource Source)
+{
+	switch (Source)
+	{
+	case EClaireonRankSource::ExactPin:             return TEXT("exact_pin");
+	case EClaireonRankSource::NearExactBoost:       return TEXT("near_exact_boost");
+	case EClaireonRankSource::HybridRRF:            return TEXT("hybrid_rrf");
+	case EClaireonRankSource::LexicalOnlyFallback:  return TEXT("lexical_only_fallback");
+	default:                                      return TEXT("lexical_only_fallback");
+	}
+}
+
 TSharedPtr<FJsonObject> Cl622SearchSpec_LoadCatalog()
 {
 	static FCriticalSection CacheLock;
@@ -141,9 +131,12 @@ FString ClaireonTool_SearchTools::GetDescription() const
 {
 	return TEXT("Search and inspect tools. Always call this before invoking a non-trivial tool through python_execute -- "
 		"pass `tool_name=\"<name>\"` to get the tool's exact input schema, parameter tooltips, and example usage. "
-		"Without `tool_name`, returns a list of tools matching `query` (fuzzy, per-word union ranking; understands "
-		"abbreviations like 'bp' for blueprint, 'dt' for data table). Filter by `category` if you already know the area. "
-		"TRANSPORT: all claireon.* tools listed here are invoked via mcp__claireon__python_execute: "
+		"Without `tool_name`, returns a flat, globally rank-ordered `tools[]` list matching `query` (hybrid lexical "
+		"bm25 + semantic fused via reciprocal rank fusion, with abbreviation expansion -- understands 'bp' for "
+		"blueprint, 'dt' for data table). Results are best-first; each carries a `rank_source` "
+		"(exact_pin|near_exact_boost|hybrid_rrf|lexical_only_fallback) and a `score` whose polarity depends on it "
+		"(rrf/boost: higher = better; exact_pin: reserved sentinel). Filter by `category` if you "
+		"already know the area. TRANSPORT: all claireon.* tools listed here are invoked via mcp__claireon__python_execute: "
 		"`import claireon; result = claireon.<tool_name>(arg=value)`.");
 }
 
@@ -246,11 +239,7 @@ TSharedPtr<FJsonObject> ClaireonTool_SearchTools::GetInputSchema() const
 	return Schema;
 }
 
-// ---------------------------------------------------------------------------
-// Python catalog integration
-// ---------------------------------------------------------------------------
-
-bool ClaireonTool_SearchTools::RebuildCatalog()
+bool ClaireonTool_SearchTools::RebuildSearchIndex()
 {
 	FClaireonServer* Server = FClaireonModule::Get().GetServer();
 	if (!Server)
@@ -260,7 +249,8 @@ bool ClaireonTool_SearchTools::RebuildCatalog()
 
 	// (Re-)subscribe to OnToolsChanged on the currently running server so
 	// rename-in-place changes flip the dirty bit. Re-subscribes across server
-	// restarts when the pointer changes.
+	// restarts when the pointer changes. (Mirrors the legacy RebuildCatalog
+	// subscription; the FTS5 index is now the live ranker.)
 	if (Server != ClaireonTool_SearchToolsInternal::LastSubscribedServer)
 	{
 		if (ClaireonTool_SearchToolsInternal::ToolCatalogChangedHandle.IsValid() && ClaireonTool_SearchToolsInternal::LastSubscribedServer != nullptr)
@@ -274,170 +264,53 @@ bool ClaireonTool_SearchTools::RebuildCatalog()
 		ClaireonTool_SearchToolsInternal::LastSubscribedServer = Server;
 	}
 
-	FClaireonBridge::EnsureRegistered();
+	// Atomic in-place rebuild from the live registry (DELETE+INSERT in one
+	// transaction; no DB close/reopen). Indexes every tool's full description,
+	// flattened input schema, examples, and patterns.
+	FClaireonToolSearchIndex::RebuildFromLiveServer();
+	const bool bBuilt = FClaireonToolSearchIndex::EnsureBuilt();
 
-	const TMap<FString, TSharedPtr<IClaireonTool>>& ToolsMap = Server->GetTools();
+	// Rebuild the SEMANTIC index on the SAME trigger as the lexical index so both
+	// stay in sync with the live registry. This re-embeds ~700 tools (ONNX RunSync
+	// is several ms each), but the model + session are cached across rebuilds, so
+	// only the per-tool embed loop is re-paid. When the ORT runtime / model / vocab
+	// are unavailable the rebuild is a graceful no-op (IsReady() stays false;
+	// Execute() falls back to lexical).
+	// PERF FOLLOW-UP: if OnToolsChanged churns often, make this lazy/async (rebuild
+	// on first semantic query after a dirty bit, or off the game thread) rather than
+	// synchronously here. At current churn (tool registration is a one-time startup
+	// burst) the synchronous batched cost is acceptable and easiest to reason about.
+	FClaireonToolEmbeddingIndex::RebuildFromLiveServer();
 
-	// Serialize tool metadata to JSON array
-	TArray<TSharedPtr<FJsonValue>> ToolsArray;
-	for (const auto& Pair : ToolsMap)
+	if (bBuilt)
 	{
-		const TSharedPtr<IClaireonTool>& Tool = Pair.Value;
-		const FString ToolName = Tool->GetName();
-
-		// Skip meta tools
-		if (ToolName == TEXT("python_execute") || ToolName == TEXT("tool_search"))
-		{
-			continue;
-		}
-
-		TSharedPtr<FJsonObject> ToolObj = MakeShared<FJsonObject>();
-		ToolObj->SetStringField(TEXT("name"), ToolName);
-		ToolObj->SetStringField(TEXT("description"), Tool->GetDescription());
-		ToolObj->SetStringField(TEXT("category"), Tool->GetCategory());
-		ToolObj->SetStringField(TEXT("operation"), Tool->GetOperation());
-
-		// Include search keywords so the Python catalog can rank them alongside name/description.
-		const TArray<FString> Keywords = Tool->GetSearchKeywords();
-		if (Keywords.Num() > 0)
-		{
-			TArray<TSharedPtr<FJsonValue>> KeywordValues;
-			KeywordValues.Reserve(Keywords.Num());
-			for (const FString& Keyword : Keywords)
-			{
-				KeywordValues.Add(MakeShared<FJsonValueString>(Keyword));
-			}
-			ToolObj->SetArrayField(TEXT("keywords"), KeywordValues);
-		}
-
-		ToolsArray.Add(MakeShared<FJsonValueObject>(ToolObj));
+		LastCatalogToolCount = Server->GetTools().Num();
+		UE_LOG(LogClaireon, Verbose, TEXT("[MCP] FTS5 tool search index rebuilt"));
 	}
-
-	FString ToolsJson;
-	TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
-		TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&ToolsJson);
-	FJsonSerializer::Serialize(ToolsArray, Writer);
-	Writer->Close();
-
-	// Use raw string with triple quotes to safely embed JSON containing quotes
-	FString PythonCode = FString::Printf(
-		TEXT("import json as _json\n")
-		TEXT("from mcp_tool_catalog import rebuild as _rebuild\n")
-		TEXT("_result = _rebuild(r\"\"\"%s\"\"\")\n")
-		TEXT("print(_json.dumps(_result))\n"),
-		*ToolsJson
-	);
-
-	FPythonCommandEx PythonCommand;
-	PythonCommand.Command = PythonCode;
-	PythonCommand.ExecutionMode = EPythonCommandExecutionMode::ExecuteFile;
-	PythonCommand.FileExecutionScope = EPythonFileExecutionScope::Private;
-
-	FSlowHeartBeatScope SuspendHeartBeat;
-	FDisableHitchDetectorScope SuspendHitchDetector;
-
-	bool bSuccess = IPythonScriptPlugin::Get()->ExecPythonCommandEx(PythonCommand);
-
-	if (bSuccess)
+	else
 	{
-		// Extract the printed JSON result from log output
-		FString ResultJson;
-		for (const FPythonLogOutputEntry& Entry : PythonCommand.LogOutput)
-		{
-			if (Entry.Type == EPythonLogOutputType::Info || Entry.Type == EPythonLogOutputType::Warning)
-			{
-				ResultJson = Entry.Output;
-			}
-		}
-		if (!ResultJson.IsEmpty())
-		{
-			LastCatalogToolCount = ToolsMap.Num();
-			UE_LOG(LogClaireon, Display, TEXT("[MCP] Tool catalog rebuilt (%d tools)"), ToolsArray.Num());
-			return true;
-		}
+		UE_LOG(LogClaireon, Warning, TEXT("[MCP] Failed to rebuild FTS5 tool search index"));
 	}
-
-	UE_LOG(LogClaireon, Warning, TEXT("[MCP] Failed to rebuild tool catalog via Python"));
-	return false;
+	return bBuilt;
 }
 
-TArray<FString> ClaireonTool_SearchTools::FuzzySearch(const FString& Query, int32 MaxResults, TMap<FString, int32>& OutTokensMatchedByName)
+// ---------------------------------------------------------------------------
+// Test-only ranked seam (zero-cost and entirely absent in non-test builds).
+//
+// Tests set GSearchToolsExecuteRankedSink to a TArray<FString>* before
+// calling Execute().  Execute() fills it with the post-sort, PRE-truncation
+// tool names in rank order so the corpus harness can measure top-K accuracy
+// against the full ranked list (not just MaxResults entries).
+// ---------------------------------------------------------------------------
+#if WITH_UNTESTED
+static TArray<FString>* GSearchToolsExecuteRankedSink = nullptr;
+
+// static
+void ClaireonTool_SearchTools::SetExecuteRankedSink(TArray<FString>* Sink)
 {
-	TArray<FString> Results;
-	OutTokensMatchedByName.Reset();
-
-	FClaireonBridge::EnsureRegistered();
-
-	// Use raw string with triple quotes to safely embed query containing quotes
-	FString PythonCode = FString::Printf(
-		TEXT("import json as _json\n")
-		TEXT("from mcp_tool_catalog import search as _search\n")
-		TEXT("_hits = _search(r\"\"\"%s\"\"\", max_results=%d)\n")
-		TEXT("print(_json.dumps(_hits))\n"),
-		*Query, MaxResults
-	);
-
-	FPythonCommandEx PythonCommand;
-	PythonCommand.Command = PythonCode;
-	PythonCommand.ExecutionMode = EPythonCommandExecutionMode::ExecuteFile;
-	PythonCommand.FileExecutionScope = EPythonFileExecutionScope::Private;
-
-	FSlowHeartBeatScope SuspendHeartBeat;
-	FDisableHitchDetectorScope SuspendHitchDetector;
-
-	bool bSuccess = IPythonScriptPlugin::Get()->ExecPythonCommandEx(PythonCommand);
-	if (!bSuccess)
-	{
-		return Results;
-	}
-
-	// Extract the printed JSON result from log output
-	FString ResultJson;
-	for (const FPythonLogOutputEntry& Entry : PythonCommand.LogOutput)
-	{
-		if (Entry.Type == EPythonLogOutputType::Info || Entry.Type == EPythonLogOutputType::Warning)
-		{
-			ResultJson = Entry.Output;
-		}
-	}
-	if (ResultJson.IsEmpty())
-	{
-		return Results;
-	}
-
-	// Parse the results array
-	TArray<TSharedPtr<FJsonValue>> HitsArray;
-	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ResultJson);
-	if (!FJsonSerializer::Deserialize(Reader, HitsArray))
-	{
-		return Results;
-	}
-
-	for (const TSharedPtr<FJsonValue>& HitVal : HitsArray)
-	{
-		const TSharedPtr<FJsonObject>* HitObj = nullptr;
-		if (HitVal->TryGetObject(HitObj) && (*HitObj).IsValid())
-		{
-			FString ToolName;
-			if ((*HitObj)->TryGetStringField(TEXT("tool_name"), ToolName) && !ToolName.IsEmpty())
-			{
-				Results.Add(ToolName);
-				// Capture the per-entry distinct-query-tokens-matched count so
-				// Execute() can surface `query_tokens_matched` per result and
-				// decide whether to merge in substring-fallback hits.
-				int32 TokensMatched = 0;
-				double TokensMatchedVal = 0.0;
-				if ((*HitObj)->TryGetNumberField(TEXT("tokens_matched"), TokensMatchedVal))
-				{
-					TokensMatched = static_cast<int32>(TokensMatchedVal);
-				}
-				OutTokensMatchedByName.Add(ToolName, TokensMatched);
-			}
-		}
-	}
-
-	return Results;
+	GSearchToolsExecuteRankedSink = Sink;
 }
+#endif // WITH_UNTESTED
 
 // ---------------------------------------------------------------------------
 // Execute
@@ -507,9 +380,10 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 
 	// The documented deferred-tool selector syntax `select:nameA,nameB`
 	// short-circuits the SQL/fuzzy pipeline entirely and returns deep-inspect-shape
-	// records for each named tool. Previously the prefix leaked into the SQLite
-	// pipeline and surfaced as `no such column: select`, which broke the convention
-	// documented at the top of every Claude prompt.
+	// records for each named tool. It must be handled here so the prefix never
+	// leaks into the SQLite pipeline (where it would surface as
+	// `no such column: select`), keeping the convention documented at the top
+	// of every Claude prompt intact.
 	const TMap<FString, TSharedPtr<IClaireonTool>>& ToolsMap = Server->GetTools();
 	if (Query.StartsWith(TEXT("select:"), ESearchCase::IgnoreCase))
 	{
@@ -647,18 +521,14 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 
 	// Strip boolean operators and quote/paren punctuation so callers that write
 	// pseudo-boolean queries ("blueprint AND chooser") still benefit from per-word
-	// union ranking. The C++ matcher's tokeniser drops <2-char tokens, so any
-	// residual single chars are harmless.
-	{
-		static const TCHAR* const BoolOps[] = { TEXT("AND"), TEXT("OR"), TEXT("NOT") };
-		for (const TCHAR* Op : BoolOps)
-		{
-			Query = FString::Join(ClaireonTool_SearchToolsInternal::SplitWholeWordCaseInsensitive(Query, Op), TEXT(" "));
-		}
-		Query = Query.Replace(TEXT("("), TEXT(" "), ESearchCase::CaseSensitive);
-		Query = Query.Replace(TEXT(")"), TEXT(" "), ESearchCase::CaseSensitive);
-		Query = Query.Replace(TEXT("\""), TEXT(" "), ESearchCase::CaseSensitive);
-	}
+	// union ranking. Delegated to the SHARED canonical normalizer so the lexical AND
+	// semantic channels strip identically from one source of truth -- a
+	// boolean-decorated query must rank the same as the plain query, which requires
+	// the SEMANTIC channel (which embeds the raw string) to see the same normalized
+	// text. NormalizeQueryForRetrieval is also applied inside FindNearestSemantic,
+	// so this Execute-layer call keeps the visible `query` echo + lexical tokens
+	// consistent with what the semantic channel embeds.
+	Query = FClaireonToolSearchIndex::NormalizeQueryForRetrieval(Query);
 
 	// --- Deep-inspect bypass: when tool_name is provided, return that tool's full metadata. ---
 	if (!InspectToolName.IsEmpty())
@@ -748,296 +618,151 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 		return MakeSuccessResult(InspectData, InspectSummary);
 	}
 
-	// ---------------------------------------------------------------------
-	// Exact-name + near-exact-name precedence pass.
+	// -----------------------------------------------------------------------
+	// Hybrid ranking via FClaireonToolSearchIndex::FindNearestHybrid.
 	//
-	// Runs ALWAYS before fuzzy/category filtering. Hyphen and underscore are
-	// equivalent, comparison is case-insensitive, and whitespace is trimmed.
-	// Exact (distance 0) bypasses the category filter unconditionally;
-	// near-exact (distance 1-2) RESPECTS category.
-	// ---------------------------------------------------------------------
-	auto NormaliseForExactName = [](const FString& In) -> FString
+	// FindNearestHybrid is the sole ranker for the query path. It fuses the
+	// UNPINNED lexical bm25 list and the semantic cosine list via RRF, then
+	// applies exact / near-exact name pinning ONCE, internally. It scans the FULL
+	// live registry for the exact-name pin, so an agent that types a tool's exact
+	// name still gets it at rank 0 even when FTS/semantic recall missed it.
+	//
+	// Pinning happens exactly once, inside FindNearestHybrid. Each match carries a
+	// RankSource (ExactPin / NearExactBoost / HybridRRF / LexicalOnlyFallback) and
+	// a Score whose polarity depends on that source (see EClaireonRankSource).
+	// -----------------------------------------------------------------------
+	struct FRankedEntry
 	{
-		FString S = In.TrimStartAndEnd().ToLower();
-		S.ReplaceInline(TEXT("-"), TEXT("_"));
-		return S;
+		FString Name;
+		FString Category;
+		float   Score = 0.0f;  // polarity depends on RankSource (see EClaireonRankSource).
+		bool    bHasScore = false;
+		EClaireonRankSource RankSource = EClaireonRankSource::LexicalOnlyFallback;
 	};
-
-	const FString QueryExactKey = NormaliseForExactName(Query);
-	const bool bHasCategoryFilter = !Category.IsEmpty();
-	TSharedPtr<IClaireonTool> ExactNameTool;
-	FString                 ExactNameToolKey;     // lex-first key when collisions exist (per M9).
-	TSharedPtr<IClaireonTool> NearExactNameTool;
-	int32                   NearExactDistance = INT32_MAX;
-	FString                 NearExactToolKey;
-
-	if (!QueryExactKey.IsEmpty())
-	{
-		for (const auto& Pair : ToolsMap)
-		{
-			const TSharedPtr<IClaireonTool>& Tool = Pair.Value;
-			if (!Tool.IsValid())
-			{
-				continue;
-			}
-			const FString ToolName = Tool->GetName();
-			// Skip meta tools (consistent with the candidate-collection loop below).
-			if (ToolName == TEXT("python_execute") || ToolName == TEXT("tool_search"))
-			{
-				continue;
-			}
-
-			const FString ToolKey = NormaliseForExactName(ToolName);
-			if (ToolKey == QueryExactKey)
-			{
-				if (!ExactNameTool.IsValid())
-				{
-					ExactNameTool = Tool;
-					ExactNameToolKey = ToolName;
-				}
-				else
-				{
-					// Multiple tools normalise to the same exact-name key:
-					// keep the lexicographically-first name and warn.
-					const FString& IncumbentKey = ExactNameToolKey;
-					const FString& ChallengerKey = ToolName;
-					const FString& Winner = (ChallengerKey < IncumbentKey) ? ChallengerKey : IncumbentKey;
-					UE_LOG(LogClaireon, Warning,
-						TEXT("Tool registry name collision under hyphen-underscore normalisation: '%s' vs '%s' both normalise to '%s'; selecting '%s' for exact-name precedence."),
-						*IncumbentKey, *ChallengerKey, *ToolKey, *Winner);
-					if (&Winner == &ChallengerKey)
-					{
-						ExactNameTool = Tool;
-						ExactNameToolKey = ToolName;
-					}
-				}
-				continue;
-			}
-
-			// Near-exact: RESPECTS the category filter.
-			if (bHasCategoryFilter && !Tool->GetCategory().Equals(Category, ESearchCase::IgnoreCase))
-			{
-				continue;
-			}
-			const int32 Dist = FClaireonToolCatalogMatcher::DistanceBounded(ToolKey, QueryExactKey, 2);
-			if (Dist <= 2)
-			{
-				if (Dist < NearExactDistance
-					|| (Dist == NearExactDistance && ToolName < NearExactToolKey))
-				{
-					NearExactDistance = Dist;
-					NearExactNameTool = Tool;
-					NearExactToolKey = ToolName;
-				}
-			}
-		}
-	}
-
-	// Determine the pinned tool: exact wins over near-exact.
-	TSharedPtr<IClaireonTool> PinnedTool;
-	float PinnedScore = 0.0f;
-	if (ExactNameTool.IsValid())
-	{
-		PinnedTool = ExactNameTool;
-		PinnedScore = 1.0f;
-	}
-	else if (NearExactNameTool.IsValid() && NearExactDistance <= 2)
-	{
-		PinnedTool = NearExactNameTool;
-		PinnedScore = 1.0f - (static_cast<float>(NearExactDistance) / 3.0f);
-	}
-	const FString PinnedName = PinnedTool.IsValid() ? PinnedTool->GetName() : FString();
-
-	// Determine which tools to include via fuzzy search or full catalog
-	TArray<FString> FuzzyRankedNames;  // ordered by relevance
-	TSet<FString> FuzzyMatchedSet;
-	TMap<FString, int32> FuzzyTokensMatchedByName;
-	bool bUsedFuzzySearch = false;
+	TArray<FRankedEntry> RankedEntries;
 
 	if (!Query.IsEmpty())
 	{
-		// Ensure catalog is built (or rebuilt if tool count changed OR the
-		// OnToolsChanged dirty bit was set by a rename-in-place / unregister
-		// path that did not change the count). exchange(false) atomically
-		// drains the bit so a concurrent broadcast queues the next rebuild
-		// instead of racing the current one.
+		// Build / refresh the FTS5 index when the tool count changed OR the
+		// OnToolsChanged dirty bit was set (rename-in-place / unregister paths
+		// that leave the count constant). exchange(false) atomically drains the
+		// bit so a concurrent broadcast queues the next rebuild.
 		const bool bCountChanged = (LastCatalogToolCount != ToolsMap.Num());
 		const bool bDirtyDrained = ClaireonTool_SearchToolsInternal::bToolCatalogDirty.exchange(false);
 		if (bCountChanged || bDirtyDrained)
 		{
-			RebuildCatalog();
+			RebuildSearchIndex();
+		}
+		else
+		{
+			// No staleness signal -- make sure the index exists (cold path after
+			// a server restart where the count happens to match).
+			FClaireonToolSearchIndex::EnsureBuilt();
 		}
 
-		// Try fuzzy search via the C++ nearest-string catalog matcher (bridged through Python)
-		FuzzyRankedNames = FuzzySearch(Query, MaxResults, FuzzyTokensMatchedByName);
-		if (FuzzyRankedNames.Num() > 0)
+		// Fallback diagnostic: when the embedding index is not ready (no ORT runtime
+		// / model / vocab), FindNearestHybrid returns the lexical-only fusion tagged
+		// LexicalOnlyFallback. Emit ONE diagnostic line for ops visibility; the
+		// surface NEVER errors on a missing model.
+		if (!FClaireonToolEmbeddingIndex::IsReady())
 		{
-			bUsedFuzzySearch = true;
-			for (const FString& Name : FuzzyRankedNames)
-			{
-				FuzzyMatchedSet.Add(Name);
-			}
+			UE_LOG(LogClaireon, Display,
+				TEXT("[tool_search] Semantic embedding index unavailable; serving lexical-only results (rank_source=lexical_only_fallback)."));
 		}
-		// If fuzzy search returned nothing (Python unavailable or no matches),
-		// fall back to substring matching below
+
+		// Hybrid retrieval. FindNearestHybrid fuses lexical + semantic via RRF and
+		// applies exact/near-exact pinning ONCE, internally (scanning the full live
+		// registry for the exact pin). No additional Execute-layer pin pass runs.
+		const TArray<FClaireonToolCatalogMatch> Matches =
+			FClaireonToolSearchIndex::FindNearestHybrid(Query, MaxResults, Category);
+
+		RankedEntries.Reserve(Matches.Num());
+		for (const FClaireonToolCatalogMatch& M : Matches)
+		{
+			FRankedEntry E;
+			E.Name       = M.Name;
+			E.Category   = M.Category;
+			E.Score      = M.Score;
+			E.bHasScore  = true;
+			E.RankSource = M.RankSource;
+			RankedEntries.Add(MoveTemp(E));
+		}
+	}
+	else
+	{
+		// Empty query: flat catalog listing (browse). No bm25 rank to apply, so
+		// order by (category, name) for a stable deterministic listing. Respects
+		// the category filter. mode=categories handles the cheap grouped browse.
+		const FString CategoryLower = Category.ToLower();
+		for (const auto& Pair : ToolsMap)
+		{
+			const TSharedPtr<IClaireonTool>& Tool = Pair.Value;
+			if (!Tool.IsValid()) { continue; }
+			const FString ToolName = Tool->GetName();
+			if (ToolName == TEXT("python_execute") || ToolName == TEXT("tool_search")) { continue; }
+			const FString ToolCategory = Tool->GetCategory();
+			if (!CategoryLower.IsEmpty() && ToolCategory.ToLower() != CategoryLower) { continue; }
+
+			FRankedEntry E;
+			E.Name      = ToolName;
+			E.Category  = ToolCategory;
+			E.Score     = 0.0f;
+			E.bHasScore = false;
+			RankedEntries.Add(MoveTemp(E));
+		}
+		RankedEntries.Sort([](const FRankedEntry& A, const FRankedEntry& B)
+		{
+			if (A.Category != B.Category) { return A.Category < B.Category; }
+			return A.Name < B.Name;
+		});
 	}
 
-	// -----------------------------------------------------------------------
-	// Defensive substring-fallback merge.
-	//
-	// When the fuzzy ranker returned results but none of those names contain
-	// any query word as a substring, the ranking is "pathological" -- typically
-	// abbreviation expansion has wandered the result set into tools whose
-	// names have no visible relationship to the operator's terms. In that
-	// case, ALSO run the substring-fallback collection path below and union
-	// its hits into the candidate set (the fuzzy hits stay; substring hits
-	// are added). Merged hits respect the category filter; only the
-	// exact-name pin bypasses category.
-	// -----------------------------------------------------------------------
-	bool bFuzzyResultsLookPathological = false;
-	if (bUsedFuzzySearch && !Query.IsEmpty())
+	// Test-only seam: capture the full pre-truncation ranked names in rank order.
+#if WITH_UNTESTED
+	if (GSearchToolsExecuteRankedSink != nullptr)
 	{
-		TArray<FString> QueryWordsForCheck;
-		Query.ToLower().ParseIntoArray(QueryWordsForCheck, TEXT(" "), true);
-		bool bAnyNameMatch = false;
-		for (const FString& MatchedName : FuzzyMatchedSet)
+		GSearchToolsExecuteRankedSink->Reset();
+		GSearchToolsExecuteRankedSink->Reserve(RankedEntries.Num());
+		for (const FRankedEntry& E : RankedEntries)
 		{
-			const FString LowerName = MatchedName.ToLower();
-			for (const FString& Word : QueryWordsForCheck)
-			{
-				if (LowerName.Contains(Word)) { bAnyNameMatch = true; break; }
-			}
-			if (bAnyNameMatch) break;
+			GSearchToolsExecuteRankedSink->Add(E.Name);
 		}
-		bFuzzyResultsLookPathological = !bAnyNameMatch;
+	}
+#endif // WITH_UNTESTED
+
+	// Truncate to MaxResults after ranking. (FindNearestHybrid already caps to
+	// MaxResults and pins internally; the empty-query browse branch does not, so
+	// re-clamp here defensively.)
+	const int32 TotalMatching = RankedEntries.Num();
+	if (RankedEntries.Num() > MaxResults)
+	{
+		RankedEntries.SetNum(MaxResults);
 	}
 
-	// Collect matching tools
-	struct FMatchEntry
+	// Build structured Data: a FLAT, globally rank-ordered `tools[]` array.
+	// Query results no longer group by category (the agent's question is "what
+	// do I call next?", which a global rank answers directly). `mode=categories`
+	// keeps the grouped browse surface; deep-inspect / select: record shapes are
+	// unchanged. The dropped `query_tokens_matched` is replaced by the raw bm25
+	// `score` (negative; lower = better; not rescaled).
+	TSharedPtr<FJsonObject> DataObj = MakeShared<FJsonObject>();
+	if (!Query.IsEmpty())
 	{
-		FString Name;
-		FString Description;
-		FString Category;
-		FString TypeSignature;
-		FString Source;
-		TSharedPtr<FJsonObject> InputSchema;
-		FString ExampleUsage;
-		/** Per-tool markdown patterns block. Populated only when
-		 *  Detail == "full" AND Tool->GetPatterns() returned a non-empty
-		 *  string. Surfaced as `patterns` on the per-result JSON object;
-		 *  never emitted when empty so deep-inspect / full-detail responses
-		 *  do not pick up a `"patterns": ""` field for the 200+ tools that
-		 *  do not override GetPatterns(). */
-		FString Patterns;
-		/** Distinct query tokens that matched this entry (surfaced as `query_tokens_matched`). */
-		int32 QueryTokensMatched = 0;
-	};
-	TArray<FMatchEntry> MatchingTools;
-	TMap<FString, int32> MatchCountByName;
-
-	// Pre-compute the count of query tokens that survive the >2-char cutoff;
-	// used as the `query_tokens_matched` value for the exact-name / near-exact-name
-	// pinned entry.
-	int32 PinnedQueryTokenCount = 0;
-	{
-		TArray<FString> AllQueryWords;
-		Query.ToLower().ParseIntoArray(AllQueryWords, TEXT(" "), true);
-		int32 LongCount = 0;
-		for (const FString& W : AllQueryWords)
-		{
-			if (W.Len() > 2) { ++LongCount; }
-		}
-		PinnedQueryTokenCount = (LongCount > 0) ? LongCount : AllQueryWords.Num();
+		DataObj->SetStringField(TEXT("query"), Query);
 	}
+	DataObj->SetNumberField(TEXT("total_matching"), TotalMatching);
+	DataObj->SetNumberField(TEXT("returned"), RankedEntries.Num());
 
-	const FString QueryLower = Query.ToLower();
-	const FString CategoryLower = Category.ToLower();
-
-	for (const auto& Pair : ToolsMap)
+	const TMap<FString, FName>& SourceMap = Server->GetToolSourceMap();
+	TArray<TSharedPtr<FJsonValue>> ToolsArr;
+	ToolsArr.Reserve(RankedEntries.Num());
+	for (const FRankedEntry& Entry : RankedEntries)
 	{
-		const TSharedPtr<IClaireonTool>& Tool = Pair.Value;
-		const FString ToolName = Tool->GetName();
+		const TSharedPtr<IClaireonTool>* FoundTool = ToolsMap.Find(Entry.Name);
+		if (!FoundTool || !FoundTool->IsValid()) { continue; }
+		const TSharedPtr<IClaireonTool>& Tool = *FoundTool;
 
-		// Skip meta tools
-		if (ToolName == TEXT("python_execute") || ToolName == TEXT("tool_search"))
-		{
-			continue;
-		}
-
-		const FString ToolCategory = Tool->GetCategory();
-		const bool bIsPinned = (!PinnedName.IsEmpty() && ToolName == PinnedName);
-		const bool bIsExactPin = bIsPinned && ExactNameTool.IsValid();
-
-		// Apply category filter -- exact-name pin (distance 0) bypasses it.
-		// Near-exact pins still respect category (already checked above), so
-		// they don't need a bypass here; but for symmetry / clarity we let
-		// the already-validated near-exact pin through too.
-		if (!CategoryLower.IsEmpty() && ToolCategory.ToLower() != CategoryLower && !bIsExactPin)
-		{
-			continue;
-		}
-
-		// Apply query filter -- the pinned tool ALWAYS surfaces irrespective of
-		// the fuzzy/substring outcomes (the pin is the whole point).
-		//
-		// Substring-fallback merge: when fuzzy results look pathological, we
-		// ALSO accept tools that satisfy the substring-fallback predicate, in
-		// addition to fuzzy-set members. The merge expands the candidate set
-		// without dropping any fuzzy hits.
-		int32 SubstringMatchCount = 0;
-		bool bIncludedByQueryFilter = bIsPinned || QueryLower.IsEmpty();
-		if (!QueryLower.IsEmpty() && !bIsPinned)
-		{
-			const bool bRunFuzzyMembership = bUsedFuzzySearch;
-			const bool bRunSubstringFallback = !bUsedFuzzySearch || bFuzzyResultsLookPathological;
-
-			bool bFuzzyHit = false;
-			if (bRunFuzzyMembership && FuzzyMatchedSet.Contains(ToolName))
-			{
-				bFuzzyHit = true;
-			}
-
-			bool bSubstringHit = false;
-			if (bRunSubstringFallback)
-			{
-				// Substring fallback (UNION semantics; rank by per-tool match count).
-				// A tool is included if at least one query word substring-matches name OR description.
-				TArray<FString> QueryWords;
-				QueryLower.ParseIntoArray(QueryWords, TEXT(" "), true);
-
-				const FString NameLower = ToolName.ToLower();
-				const FString DescLower = Tool->GetDescription().ToLower();
-
-				for (const FString& Word : QueryWords)
-				{
-					if (NameLower.Contains(Word) || DescLower.Contains(Word))
-					{
-						++SubstringMatchCount;
-					}
-				}
-				if (SubstringMatchCount > 0)
-				{
-					bSubstringHit = true;
-				}
-			}
-
-			if (!bFuzzyHit && !bSubstringHit)
-			{
-				continue;
-			}
-
-			if (bSubstringHit && SubstringMatchCount > 0)
-			{
-				// Stash MatchCount on the entry so the fallback-sort branch
-				// (and the merged-branch ranking) can rank by it.
-				MatchCountByName.Add(ToolName, SubstringMatchCount);
-			}
-
-			bIncludedByQueryFilter = true;
-		}
-		(void)bIncludedByQueryFilter;
-
-		// Select description tier
+		// Select description tier.
 		FString ToolDescription;
 		if (Detail == TEXT("brief"))
 		{
@@ -1052,189 +777,68 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 			ToolDescription = Tool->GetDescription();
 		}
 
-		FMatchEntry Entry;
-		Entry.Name = ToolName;
-		Entry.Description = ToolDescription;
-		Entry.Category = ToolCategory;
 		TSharedPtr<FJsonObject> ToolSchema = Tool->GetInputSchema();
-		Entry.TypeSignature = FClaireonXmlFormatter::GenerateTypeSignature(ToolName, ToolSchema);
 
-		if (bIncludeSchema)
+		TSharedPtr<FJsonObject> ToolObj = MakeShared<FJsonObject>();
+		ToolObj->SetStringField(TEXT("name"), Entry.Name);
+		ToolObj->SetStringField(TEXT("category"), Entry.Category);
+		ToolObj->SetStringField(TEXT("description"), ToolDescription);
+		ToolObj->SetStringField(TEXT("signature"),
+			FClaireonXmlFormatter::GenerateTypeSignature(Entry.Name, ToolSchema));
+		// `score` polarity is signal-dependent -- read `rank_source` first:
+		//   hybrid_rrf / near_exact_boost -> positive RRF value (higher = better);
+		//   exact_pin                     -> reserved sentinel (pinned to rank 0);
+		//   lexical_only_fallback         -> lexical-only fusion value.
+		// See EClaireonRankSource for the per-source semantics.
+		ToolObj->SetNumberField(TEXT("score"), Entry.Score);
+		ToolObj->SetStringField(TEXT("rank_source"),
+			ClaireonTool_SearchToolsInternal::Cl628_RankSourceToString(Entry.RankSource));
+
+		if (const FName* SourceName = SourceMap.Find(Entry.Name))
 		{
-			Entry.InputSchema = ToolSchema;
+			ToolObj->SetStringField(TEXT("source"), SourceName->ToString());
+		}
+		if (bIncludeSchema && ToolSchema.IsValid())
+		{
+			ToolObj->SetObjectField(TEXT("input_schema"), ToolSchema);
 		}
 		if (bIncludeExamples)
 		{
-			Entry.ExampleUsage = Tool->GetExampleUsage();
+			const FString Example = Tool->GetExampleUsage();
+			if (!Example.IsEmpty())
+			{
+				ToolObj->SetStringField(TEXT("example_usage"), Example);
+			}
 		}
-
-		// Patterns block surfaces only on the full-detail tier; empty returns
-		// are dropped so non-overriding tools do not advertise an empty
-		// `patterns` field.
+		// Patterns surface only on the full-detail tier; empty returns are dropped.
 		if (Detail == TEXT("full"))
 		{
-			Entry.Patterns = Tool->GetPatterns();
+			const FString Patterns = Tool->GetPatterns();
+			if (!Patterns.IsEmpty())
+			{
+				ToolObj->SetStringField(TEXT("patterns"), Patterns);
+			}
 		}
 
-		// Look up tool source from the server's source map
-		const TMap<FString, FName>& SourceMap = Server->GetToolSourceMap();
-		if (const FName* SourceName = SourceMap.Find(ToolName))
-		{
-			Entry.Source = SourceName->ToString();
-		}
-
-		// query_tokens_matched: prefer the matcher-reported count when this
-		// entry came from the fuzzy ranker; fall back to the substring-fallback
-		// per-tool count when fuzzy did not contribute. Pinned entries use the
-		// count of query tokens that survived the >2-char cutoff.
-		if (bIsPinned)
-		{
-			Entry.QueryTokensMatched = PinnedQueryTokenCount;
-		}
-		else if (const int32* FuzzyTokens = FuzzyTokensMatchedByName.Find(ToolName))
-		{
-			Entry.QueryTokensMatched = *FuzzyTokens;
-		}
-		else
-		{
-			Entry.QueryTokensMatched = SubstringMatchCount;
-		}
-
-		MatchingTools.Add(MoveTemp(Entry));
+		ToolsArr.Add(MakeShared<FJsonValueObject>(ToolObj));
 	}
+	DataObj->SetArrayField(TEXT("tools"), ToolsArr);
 
-	// Sort: fuzzy-ranked results preserve relevance order; fallback sorts by category/name.
-	// In both branches, a pinned exact/near-exact name short-circuits to index 0.
-	if (bUsedFuzzySearch)
-	{
-		// Build rank map from the cached fuzzy results order
-		TMap<FString, int32> RankMap;
-		for (int32 i = 0; i < FuzzyRankedNames.Num(); ++i)
-		{
-			RankMap.Add(FuzzyRankedNames[i], i);
-		}
-		MatchingTools.Sort([&RankMap, &PinnedName](const FMatchEntry& A, const FMatchEntry& B)
-		{
-			if (!PinnedName.IsEmpty())
-			{
-				if (A.Name == PinnedName) return true;
-				if (B.Name == PinnedName) return false;
-			}
-			const int32* RankA = RankMap.Find(A.Name);
-			const int32* RankB = RankMap.Find(B.Name);
-			int32 RA = RankA ? *RankA : INT32_MAX;
-			int32 RB = RankB ? *RankB : INT32_MAX;
-			return RA < RB;
-		});
-	}
-	else
-	{
-		MatchingTools.Sort([&MatchCountByName, &PinnedName](const FMatchEntry& A, const FMatchEntry& B)
-		{
-			if (!PinnedName.IsEmpty())
-			{
-				if (A.Name == PinnedName) return true;
-				if (B.Name == PinnedName) return false;
-			}
-			const int32* CountAPtr = MatchCountByName.Find(A.Name);
-			const int32* CountBPtr = MatchCountByName.Find(B.Name);
-			const int32 CountA = CountAPtr ? *CountAPtr : 0;
-			const int32 CountB = CountBPtr ? *CountBPtr : 0;
-			if (CountA != CountB)
-			{
-				return CountA > CountB;
-			}
-			if (A.Category != B.Category)
-			{
-				return A.Category < B.Category;
-			}
-			return A.Name < B.Name;
-		});
-	}
+	const int32 ReturnedCount = ToolsArr.Num();
 
-	// Truncate after sorting
-	const int32 TotalMatching = MatchingTools.Num();
-	if (MatchingTools.Num() > MaxResults)
-	{
-		MatchingTools.SetNum(MaxResults);
-	}
-
-	// Build structured Data as JSON
-	TSharedPtr<FJsonObject> DataObj = MakeShared<FJsonObject>();
-	if (!Query.IsEmpty())
-	{
-		DataObj->SetStringField(TEXT("query"), Query);
-	}
-	DataObj->SetNumberField(TEXT("total_matching"), TotalMatching);
-	DataObj->SetNumberField(TEXT("returned"), MatchingTools.Num());
-
-	// Group by category for the JSON output
-	TMap<FString, TArray<const FMatchEntry*>> Grouped;
-	for (const FMatchEntry& Entry : MatchingTools)
-	{
-		Grouped.FindOrAdd(Entry.Category).Add(&Entry);
-	}
-
-	TArray<TSharedPtr<FJsonValue>> CategoriesArr;
-	TArray<FString> CategoryNames;
-	Grouped.GetKeys(CategoryNames);
-	CategoryNames.Sort();
-
-	for (const FString& CatName : CategoryNames)
-	{
-		TSharedPtr<FJsonObject> CatObj = MakeShared<FJsonObject>();
-		CatObj->SetStringField(TEXT("name"), CatName);
-
-		TArray<TSharedPtr<FJsonValue>> ToolsArr;
-		for (const FMatchEntry* Entry : Grouped[CatName])
-		{
-			TSharedPtr<FJsonObject> ToolObj = MakeShared<FJsonObject>();
-			ToolObj->SetStringField(TEXT("name"), Entry->Name);
-			ToolObj->SetStringField(TEXT("description"), Entry->Description);
-			ToolObj->SetStringField(TEXT("signature"), Entry->TypeSignature);
-			// Always emit `query_tokens_matched` (no debug= gate) so future
-			// zero-result regressions are diagnosable.
-			ToolObj->SetNumberField(TEXT("query_tokens_matched"), Entry->QueryTokensMatched);
-			if (!Entry->Source.IsEmpty())
-			{
-				ToolObj->SetStringField(TEXT("source"), Entry->Source);
-			}
-			if (Entry->InputSchema.IsValid())
-			{
-				ToolObj->SetObjectField(TEXT("input_schema"), Entry->InputSchema);
-			}
-			if (!Entry->ExampleUsage.IsEmpty())
-			{
-				ToolObj->SetStringField(TEXT("example_usage"), Entry->ExampleUsage);
-			}
-			if (!Entry->Patterns.IsEmpty())
-			{
-				ToolObj->SetStringField(TEXT("patterns"), Entry->Patterns);
-			}
-			ToolsArr.Add(MakeShared<FJsonValueObject>(ToolObj));
-		}
-		CatObj->SetArrayField(TEXT("tools"), ToolsArr);
-		CategoriesArr.Add(MakeShared<FJsonValueObject>(CatObj));
-	}
-	DataObj->SetArrayField(TEXT("categories"), CategoriesArr);
-
-	// Build plain text summary
+	// Build plain text summary.
 	FString SummaryText;
 	if (Query.IsEmpty())
 	{
-		SummaryText = FString::Printf(TEXT("Found %d tool(s) across %d categories"), TotalMatching, CategoryNames.Num());
+		SummaryText = FString::Printf(TEXT("Found %d tool(s)"), TotalMatching);
 	}
 	else
 	{
 		SummaryText = FString::Printf(TEXT("Found %d tool(s) matching '%s'"), TotalMatching, *Query);
-		if (bUsedFuzzySearch)
-		{
-			SummaryText += TEXT(" (fuzzy)");
-		}
 	}
-	if (TotalMatching > MatchingTools.Num())
+	if (TotalMatching > ReturnedCount)
 	{
-		SummaryText += FString::Printf(TEXT(" (showing %d of %d)"), MatchingTools.Num(), TotalMatching);
+		SummaryText += FString::Printf(TEXT(" (showing %d of %d)"), ReturnedCount, TotalMatching);
 	}
 
 	// Upgrade-path footer. Tells the agent how to escalate to full detail
@@ -1242,26 +846,42 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 	//   - already at full detail (nothing to escalate to);
 	//   - the deep-inspect bypass already short-circuited earlier (defensive --
 	//     deep-inspect returns at MakeSuccessResult above);
-	//   - no hits to recommend;
-	//   - exactly one match whose canonical name equals the trimmed query
-	//     (the agent already has the canonical name).
+	//   - no hits to recommend (genuine zero retrieval);
+	//   - the query is a GENUINE exact tool-name lookup -- i.e. the rank-0 result is
+	//     an exact_pin whose name equals the query (the agent already has the
+	//     canonical name, so there is nothing to "upgrade" to).
+	//
+	// Footer suppression for the single-exact case must key off a GENUINE exact
+	// match (rank_source == exact_pin at position 0), NOT merely "exactly one result
+	// exists". Keying off ReturnedCount==1 would either (a) FALSELY suppress the
+	// footer for a one-hit ordinary search, or (b) FALSELY show it when semantic
+	// fusion happens to leave one result. The honest signal is "the query was a
+	// tool-name lookup", which the exact_pin rank_source at position 0 encodes
+	// directly. The genuine zero-retrieval footer (ReturnedCount==0) is preserved.
+	const FString FirstResultName = (RankedEntries.Num() > 0) ? RankedEntries[0].Name : FString();
+	// rank_source == exact_pin at position 0 IS the genuine-exact-name-lookup signal:
+	// FindNearestHybrid sets ExactPin only when the name-normalized query (lowercased,
+	// '-'/'_' stripped) equals a tool's name-normalized form. So this correctly covers
+	// hyphen/underscore-equivalent lookups too, without re-deriving the normalization
+	// here.
+	const bool bGenuineExactNameLookup = (RankedEntries.Num() > 0)
+		&& RankedEntries[0].RankSource == EClaireonRankSource::ExactPin;
 	const bool bSuppressFooter =
 		Detail == TEXT("full") ||
 		!InspectToolName.IsEmpty() ||
-		MatchingTools.Num() == 0 ||
-		(MatchingTools.Num() == 1 &&
-			MatchingTools[0].Name.Equals(Query, ESearchCase::IgnoreCase));
+		ReturnedCount == 0 ||
+		bGenuineExactNameLookup;
 
 	if (!bSuppressFooter)
 	{
 		SummaryText += FString::Printf(
 			TEXT("\ntip: call tool_search(name=\"%s\", detail=\"full\") "
 				 "for schema, examples, and patterns"),
-			*MatchingTools[0].Name);
+			*FirstResultName);
 	}
 
 	// Always append the invocation reminder so callers know the transport.
-	if (MatchingTools.Num() > 0)
+	if (ReturnedCount > 0)
 	{
 		SummaryText += TEXT("\ninvoke via: mcp__claireon__python_execute with `import claireon; result = claireon.<tool_name>(...)`");
 	}

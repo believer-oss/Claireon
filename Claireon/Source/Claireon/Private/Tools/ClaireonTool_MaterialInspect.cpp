@@ -76,7 +76,7 @@ FToolResult ClaireonTool_MaterialInspect::Execute(const TSharedPtr<FJsonObject>&
 	}
 
 	// Accept either `asset_path` or `path` as alias; most other claireon.* tools accept
-	// `path`, and prior versions of this tool diverged from that convention.
+	// `path`, so this tool follows the same convention.
 	FString AssetPath;
 	if (!Arguments->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{

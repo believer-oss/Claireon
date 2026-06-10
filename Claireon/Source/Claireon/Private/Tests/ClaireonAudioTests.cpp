@@ -276,7 +276,7 @@ UNTEST_UNIT_OPTS(Claireon, Audio, EditInvalidSession, UNTEST_TIMEOUTMS(5000))
 	co_return;
 }
 
-// Row 15 (DROP+REPLACE per TESTS.md): the envelope-router "missing operation" case no longer exists.
+// Row 15: the envelope-router "missing operation" case no longer exists.
 // Replacement: soundcue_open with empty args -> error envelope (asset_path missing).
 UNTEST_UNIT_OPTS(Claireon, Audio, EditMissingOperation, UNTEST_TIMEOUTMS(5000))
 {
@@ -301,7 +301,7 @@ UNTEST_UNIT_OPTS(Claireon, Audio, EditListNodeTypes, UNTEST_TIMEOUTMS(5000))
 	co_return;
 }
 
-// Row 17 (DROP+REPLACE per TESTS.md): SoundClass is now stateless under D2=B (no _open).
+// Row 17: SoundClass is stateless (no _open).
 // Replacement: soundclass_set_property round-trip on the SoundClass fixture.
 UNTEST_UNIT_OPTS(Claireon, Audio, EditOpenCloseSoundClass, UNTEST_TIMEOUTMS(15000))
 {

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Functional tests for level_sequence_apply_delta (#0000).
+// Functional tests for level_sequence_apply_delta.
 // Verifies AR5/AR9 phase-1/4 rejection, M5 fail-on-missing, and M4 composite-id
 // deepest-first ordering (the critical M4 invariant).
 
