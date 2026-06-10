@@ -2698,14 +2698,7 @@ void FClaireonModule::RegisterMenus()
 	[
 		SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-		.Padding(FMargin(0.0f, 0.0f, 4.0f, 0.0f))
-		[
-			SNew(STextBlock)
-			.Text(INVTEXT("Claireon"))
-			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 11))
-		]
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-		.Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f))
+		.Padding(FMargin(20.0f, 0.0f, 8.0f, 0.0f))
 		[
 			SNew(SBox).WidthOverride(16.0f).HeightOverride(16.0f)
 			[
@@ -2724,6 +2717,13 @@ void FClaireonModule::RegisterMenus()
 					.DesiredSizeOverride(FVector2D(8.0f, 8.0f))
 				]
 			]
+		]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+		.Padding(FMargin(0.0f, 0.0f, 16.0f, 0.0f))
+		[
+			SNew(STextBlock)
+			.Text(INVTEXT("Claireon"))
+			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 11))
 		]
 	];
 

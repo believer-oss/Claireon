@@ -90,7 +90,7 @@ namespace ClaireonAnthropicWireTestsHelpers
 // Case 4a: large generic-tool result spills; XML carries path/size/preview
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, AnthropicWire, GenericSpillRendersPathAndPreview)
+UNTEST_UNIT_OPTS(Claireon, AnthropicWire, GenericSpillRendersPathAndPreview, UNTEST_TIMEOUTMS(5000))
 {
 	using namespace ClaireonAnthropicWireTestsHelpers;
 	FScopedTestRoot Scope(TEXT("GenericSpillRendersPathAndPreview"));
@@ -112,9 +112,11 @@ UNTEST_UNIT(Claireon, AnthropicWire, GenericSpillRendersPathAndPreview)
 	UNTEST_EXPECT_TRUE(Xml.Contains(TEXT("<preview>")));
 	UNTEST_EXPECT_TRUE(Xml.Contains(TEXT("<truncated>true</truncated>")));
 
-	// Does NOT contain the full padded payload -- the spilled envelope rewrites
-	// Data so that no "payload" JSON field appears in the rendered XML body.
-	UNTEST_EXPECT_FALSE(Xml.Contains(TEXT("\"payload\"")));
+	// Does NOT contain the full padded payload inline. The <preview> element
+	// legitimately echoes the first 1024 bytes of the spilled JSON (including
+	// the "payload" key), so assert on the full body, not the key.
+	const FString FullPayload = FString::ChrN(Threshold * 2, TEXT('g'));
+	UNTEST_EXPECT_FALSE(Xml.Contains(FullPayload));
 
 	co_return;
 }
@@ -123,7 +125,7 @@ UNTEST_UNIT(Claireon, AnthropicWire, GenericSpillRendersPathAndPreview)
 // Case 4b: python_execute with only stdout spilled
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, AnthropicWire, PythonStdoutOnlySpillXml)
+UNTEST_UNIT_OPTS(Claireon, AnthropicWire, PythonStdoutOnlySpillXml, UNTEST_TIMEOUTMS(5000))
 {
 	using namespace ClaireonAnthropicWireTestsHelpers;
 	FScopedTestRoot Scope(TEXT("PythonStdoutOnlySpillXml"));
@@ -160,7 +162,7 @@ UNTEST_UNIT(Claireon, AnthropicWire, PythonStdoutOnlySpillXml)
 // Case 4c: python_execute with both stdout and uelog spilled
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, AnthropicWire, PythonBothStreamsSpillXml)
+UNTEST_UNIT_OPTS(Claireon, AnthropicWire, PythonBothStreamsSpillXml, UNTEST_TIMEOUTMS(5000))
 {
 	using namespace ClaireonAnthropicWireTestsHelpers;
 	FScopedTestRoot Scope(TEXT("PythonBothStreamsSpillXml"));
@@ -192,7 +194,7 @@ UNTEST_UNIT(Claireon, AnthropicWire, PythonBothStreamsSpillXml)
 // Case 4d: small inline result -- no <spilled-result> envelope appears
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, AnthropicWire, SmallPayloadStaysInline)
+UNTEST_UNIT_OPTS(Claireon, AnthropicWire, SmallPayloadStaysInline, UNTEST_TIMEOUTMS(5000))
 {
 	using namespace ClaireonAnthropicWireTestsHelpers;
 	FScopedTestRoot Scope(TEXT("SmallPayloadStaysInline"));
@@ -216,7 +218,7 @@ UNTEST_UNIT(Claireon, AnthropicWire, SmallPayloadStaysInline)
 // Case 4e: truncation at 2048 chars still yields a well-formed summary + path
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, AnthropicWire, TruncatedDiagnosticsBodyContainsPath)
+UNTEST_UNIT_OPTS(Claireon, AnthropicWire, TruncatedDiagnosticsBodyContainsPath, UNTEST_TIMEOUTMS(5000))
 {
 	using namespace ClaireonAnthropicWireTestsHelpers;
 	FScopedTestRoot Scope(TEXT("TruncatedDiagnosticsBodyContainsPath"));
