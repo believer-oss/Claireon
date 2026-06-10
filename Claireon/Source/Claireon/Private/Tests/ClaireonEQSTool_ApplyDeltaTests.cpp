@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Functional tests for eqs_apply_delta (#0000).
+// Functional tests for eqs_apply_delta.
 // Verifies AR5/AR9 phase-1/4 rejection at the base-driver layer plus M5 fail-on-missing.
 
 #if WITH_UNTESTED

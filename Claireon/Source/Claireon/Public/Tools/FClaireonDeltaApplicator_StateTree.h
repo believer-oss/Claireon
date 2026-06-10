@@ -22,6 +22,7 @@ class UStateTreeEditorData;
  * in favor of top-level (transitions[]). Dedup by id first, then by from_state -> to_state pair.
  *
  * Session model: M5 fail-on-missing.
+ * See Docs/llm/apply-delta-all-families/08_STATETREE.md.
  */
 class CLAIREON_API FClaireonDeltaApplicator_StateTree : public FClaireonDeltaApplicatorBase
 {

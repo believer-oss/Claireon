@@ -10,7 +10,7 @@ FString FClaireonWidgetBPTool_ApplyDelta::GetOperation() const { return TEXT("ap
 
 FString FClaireonWidgetBPTool_ApplyDelta::GetDescription() const
 {
-	return TEXT("Atomic batch widgetbp modification. Removes, creates, and reparents widgets in one transactional call. Counterpart to widgetbp_apply_spec. Execution order: remove -> create -> reparent (phase 4 = reparent per work item #0000 D5). (No disconnect phase -- widgets always have exactly one parent.)");
+	return TEXT("Atomic batch widgetbp modification. Removes, creates, and reparents widgets in one transactional call. Counterpart to widgetbp_apply_spec. Execution order: remove -> create -> reparent. (No disconnect phase -- widgets always have exactly one parent.)");
 }
 
 TSharedPtr<FJsonObject> FClaireonWidgetBPTool_ApplyDelta::GetInputSchema() const

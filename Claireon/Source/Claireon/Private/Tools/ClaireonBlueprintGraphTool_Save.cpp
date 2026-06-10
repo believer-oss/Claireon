@@ -199,7 +199,7 @@ FString ClaireonBlueprintGraphTool_Save::GetFullDescription() const
 {
     return TEXT(
         "Compiles and saves the Blueprint package to disk for the current "
-        "session. Per the per-node cycle in the per-tool authoring guidance, "
+        "session. Per the per-node cycle in .claude/areas/blueprint-editing.md, "
         "call bp_save every 1-3 add_node operations rather "
         "than batching dozens of edits before a single save. This protects "
         "against editor crashes (which would otherwise drop in-session edits) "

@@ -244,8 +244,8 @@ FToolResult ClaireonBlueprintGraphTool_Open::Execute(const TSharedPtr<FJsonObjec
 FString ClaireonBlueprintGraphTool_Open::GetFullDescription() const
 {
     return TEXT(
-        "Opens a Blueprint for editing in a session-based per-node cycle. "
-        "Creates or reuses a session keyed "
+        "Opens a Blueprint for editing in a session-based per-node cycle (see "
+        ".claude/areas/blueprint-editing.md). Creates or reuses a session keyed "
         "by the MCP client and returns the session_id plus initial graph state. "
         "Use this as the first call in any incremental authoring loop: open -> "
         "(add_node/connect_pins/set_pin_value)* -> save (every 1-3 nodes) -> "

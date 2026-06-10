@@ -15,8 +15,8 @@
 
 #include "ClaireonAudioHelpers.generated.h"
 
-// Runtime-only audio forward declarations (editor-only types are NOT exposed here by design --
-// keeping the runtime/editor module split clean so the audio helpers stay shippable).
+// Runtime-only audio forward declarations (editor-only types are NOT exposed here by design -
+// see Docs/llm/archive/audio-tools/AUDIO_TOOLS_DEPENDENCIES.md "Editor-only / runtime module split" section).
 class UClass;
 class UObject;
 class USoundCue;

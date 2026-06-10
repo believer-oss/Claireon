@@ -29,7 +29,7 @@ TSharedPtr<FJsonObject> FClaireonCameraAssetTool_AddNode::GetInputSchema() const
 	S.AddString(TEXT("asset_path"), TEXT("/Game/ path of the camera asset"), true);
 	S.AddInteger(TEXT("rig_index"), TEXT("Index of the rig to mutate"), true);
 	S.AddString(TEXT("parent_node_id"), TEXT("Node-id path to the parent node; empty to set the rig root"));
-	S.AddString(TEXT("node_class"), TEXT("UCameraNode subclass name (e.g. 'CustomLookAtCameraNode')"), true);
+	S.AddString(TEXT("node_class"), TEXT("UCameraNode subclass name (e.g. 'BVLookAtCameraNode')"), true);
 	S.AddString(TEXT("after_child_node_id"), TEXT("Sibling node-id to insert after; empty/absent appends"));
 	return S.Build();
 }

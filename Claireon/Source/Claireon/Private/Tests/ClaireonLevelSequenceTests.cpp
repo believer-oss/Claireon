@@ -638,11 +638,9 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, ClassResolutionSanity, UNTEST_TIMEOUTM
 // end-to-end manually. These build-time blocks assert tool metadata, schema
 // shape, and error-path behaviour to catch drift.
 
-// sequence_edit was decomposed into 20 level_sequence_* tools. The
-// monolith-envelope tests below predate decomposition; they will be
-// rewritten against the decomposed tools in a follow-up (mirrors the
-// BP + WidgetBP monolith test rewrite). Disabled here to keep the build
-// green.
+// sequence_edit is decomposed into 20 level_sequence_* tools. The
+// monolith-envelope tests below target the pre-decomposition envelope and
+// are disabled (they do not exercise the decomposed tools).
 #if 0 // MONOLITH_ENVELOPE_TESTS
 UNTEST_UNIT_OPTS(Claireon, LevelSequence, MetadataAndSchema, UNTEST_TIMEOUTMS(5000))
 {

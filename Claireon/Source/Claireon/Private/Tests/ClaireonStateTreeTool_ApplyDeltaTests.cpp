@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Functional tests for statetree_apply_delta (#0000).
+// Functional tests for statetree_apply_delta.
 // Verifies AR4 dual-shape transitions, dedupe rules (M3), and base-class invariants.
 
 #if WITH_UNTESTED

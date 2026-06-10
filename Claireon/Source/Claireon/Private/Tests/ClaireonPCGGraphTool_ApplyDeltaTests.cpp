@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Functional tests for pcg_apply_delta (#0000).
+// Functional tests for pcg_apply_delta.
 
 #if WITH_UNTESTED
 

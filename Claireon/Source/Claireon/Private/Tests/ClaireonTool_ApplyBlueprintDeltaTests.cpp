@@ -163,19 +163,19 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, KismetSystemLibrary_PrintSt
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins,
-    FlowprintAwait_Delay_AsyncAction_HasOnComplete, UNTEST_TIMEOUTMS(30000))
+    AsyncAction_HasOnComplete, UNTEST_TIMEOUTMS(30000))
 {
 	ApplyGraphTests_CleanupTestAsset(ApplyBPDeltaPinsTestPath);
 	FString SessionId = OpenTestSession(ApplyBPDeltaPinsTestPath);
 	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
 
-	// Custom latent-factory referenced by string only -- no #include, no Build.cs edge.
+	// Fixture class referenced by string only -- no #include, no Build.cs edge.
 	TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
 	Node->SetStringField(TEXT("id"), TEXT("delay1"));
 	Node->SetStringField(TEXT("node_type"), TEXT("CallFunction"));
-	Node->SetStringField(TEXT("function_name"), TEXT("AwaitDelay"));
+	Node->SetStringField(TEXT("function_name"), TEXT("ClaireonTestAsyncDelay"));
 	Node->SetStringField(TEXT("function_class"),
-		TEXT("/Script/Engine.AsyncActionLoadPrimaryAsset"));
+		TEXT("/Script/Claireon.ClaireonTestAsyncAction"));
 
 	ClaireonTool_ApplyBlueprintDelta Tool;
 	auto Result = Tool.Execute(MakeApplyDeltaArgsSingle(SessionId, Node));
@@ -219,15 +219,15 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins,
 	FString SessionId = OpenTestSession(ApplyBPDeltaPinsTestPath);
 	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
 
-	// Custom latent-factory referenced by string only -- no #include, no Build.cs edge.
+	// Fixture class referenced by string only -- no #include, no Build.cs edge.
 	// Differs from the CallFunction-helper-detection sibling test ONLY in
 	// node_type: 'AsyncAction' instead of 'CallFunction'.
 	TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
 	Node->SetStringField(TEXT("id"), TEXT("delay1"));
 	Node->SetStringField(TEXT("node_type"), TEXT("AsyncAction"));
-	Node->SetStringField(TEXT("function_name"), TEXT("AwaitDelay"));
+	Node->SetStringField(TEXT("function_name"), TEXT("ClaireonTestAsyncDelay"));
 	Node->SetStringField(TEXT("function_class"),
-		TEXT("/Script/Engine.AsyncActionLoadPrimaryAsset"));
+		TEXT("/Script/Claireon.ClaireonTestAsyncAction"));
 
 	ClaireonTool_ApplyBlueprintDelta Tool;
 	auto Result = Tool.Execute(MakeApplyDeltaArgsSingle(SessionId, Node));

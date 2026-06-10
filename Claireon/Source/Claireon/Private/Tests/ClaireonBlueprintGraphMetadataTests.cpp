@@ -4,7 +4,7 @@
 // Tests for bp_* metadata overrides. Asserts
 // that each of the 10 hot-path tools returns rich GetFullDescription /
 // GetExampleUsage, that the 4 spec'd tools return GetParameterTooltips,
-// and that the workflow rules from the per-tool authoring guidance
+// and that the workflow rules from .claude/areas/blueprint-editing.md
 // surface in the literal text.
 
 #if WITH_UNTESTED

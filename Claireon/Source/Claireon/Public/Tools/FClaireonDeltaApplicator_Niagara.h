@@ -28,6 +28,7 @@ class UNiagaraSystem;
  * All parameter writes route through ClaireonNiagaraHelpers::AddOrUpdateUserParameter
  * and ClaireonNiagaraHelpers::RemoveUserParameter (AR7 / H2 shared-impl invariant).
  *
+ * See Docs/llm/apply-delta-all-families/06_NIAGARA.md.
  */
 class CLAIREON_API FClaireonDeltaApplicator_Niagara : public FClaireonDeltaApplicatorBase
 {

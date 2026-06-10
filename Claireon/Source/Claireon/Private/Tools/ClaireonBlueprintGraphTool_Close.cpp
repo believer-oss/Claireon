@@ -142,7 +142,7 @@ FString ClaireonBlueprintGraphTool_Close::GetFullDescription() const
         "Closes the current Blueprint editing session, releases the in-session "
         "lock, clears the per-session cursor used by auto_connect_from_cursor, "
         "and triggers an implicit compile + save before tearing down. Always "
-        "the last call in the per-node cycle from the per-tool authoring guidance. "
+        "the last call in the per-node cycle from .claude/areas/blueprint-editing.md. "
         "The session_id becomes invalid after close; subsequent calls to any "
         "bp_* tool with the same id will return an error. "
         "If you want to keep editing, do NOT close -- subsequent open calls "

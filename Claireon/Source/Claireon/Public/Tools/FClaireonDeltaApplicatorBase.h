@@ -17,6 +17,7 @@
  * override SupportsPhase1Disconnect()/SupportsPhase4Connect() to return false;
  * the driver enforces empty-array invariants for those phases (AR5/AR9).
  *
+ * See Docs/llm/apply-delta-all-families/00_SHARED_INFRASTRUCTURE.md.
  */
 class CLAIREON_API FClaireonDeltaApplicatorBase
 {

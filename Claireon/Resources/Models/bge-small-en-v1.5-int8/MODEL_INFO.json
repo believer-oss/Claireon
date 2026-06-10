@@ -1,0 +1,21 @@
+{
+  "model": "bge-small-en-v1.5 (int8 quantized ONNX)",
+  "source_repo": "BAAI/bge-small-en-v1.5",
+  "source_repo_url": "https://huggingface.co/BAAI/bge-small-en-v1.5",
+  "source_revision": "c5ac6c397e27c80e0229ec647987f2e553fc0ba9",
+  "upstream_filename": "onnx/model_quantized.onnx",
+  "local_filename": "model.onnx",
+  "license": "MIT",
+  "sha256": "6c9c6101a956d62dfb5e7190c538226c0c5bb9cb27b651234b6df063ee7dbfe4",
+  "size_bytes": 34014426,
+  "embedding_dim": 384,
+  "pooling": "cls",
+  "query_prefix": "Represent this sentence for searching relevant passages: ",
+  "doc_prefix": "",
+  "normalize": true,
+  "model_max_seq_length": 512,
+  "configured_seq_len": 64,
+  "vocab_file": "vocab.txt",
+  "vocab_source": "BAAI/bge-small-en-v1.5 @ baab320e3049c6c62dd63560765566dd9083985e (vocab.txt)",
+  "notes": "BGE retrieval embedding = CLS-token pooling of last_hidden_state, then L2-normalize. The query_prefix instruction is recommended for short-query-to-passage retrieval (s2p); apply it ONLY to the query side, not to indexed tool docs. VERIFY pooling (cls) and the exact prefix against the model card during Stage 003 implementation before trusting relevancy numbers. int8 quantized variant. SHA256 + size verified against the on-disk LFS pointer and the architect-pinned artifact drop (model @ commit c5ac6c39; vocab @ commit baab320e). configured_seq_len=64 for short tool-doc strings; model supports up to 512."
+}

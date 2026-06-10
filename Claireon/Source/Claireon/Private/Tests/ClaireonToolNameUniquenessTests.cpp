@@ -6,10 +6,9 @@
 // the server dedupes them into its name-keyed map) and asserts no two tools
 // resolve to the same GetName(). The live server map cannot catch this because
 // a collision silently overwrites the earlier entry -- the only runtime signal
-// is a "[MCP] Tool name collision" warning. This locks in the fix for the
-// blend-space tools, which previously inherited the "anim" category and so
-// collided with anim_inspect / anim_set_property / anim_add_metadata /
-// anim_remove_metadata before being moved to the "blend_space" category.
+// is a "[MCP] Tool name collision" warning. This guards the blend-space
+// tools, which live in the "blend_space" category and must not collide with
+// anim_inspect / anim_set_property / anim_add_metadata / anim_remove_metadata.
 
 #if WITH_UNTESTED
 

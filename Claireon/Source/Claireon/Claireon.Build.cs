@@ -51,7 +51,7 @@ public class Claireon : ModuleRules
 			// PIE actor query and init state dependencies
 			"ModularGameplay",   // UGameFrameworkComponentManager, IGameFrameworkInitStateInterface
 			"GameplayTags",      // FGameplayTag for init state tags
-			"GameplayTagsEditor", // IGameplayTagsEditorModule for tag add/remove tools
+			"GameplayTagsEditor", // IGameplayTagsEditorModule::AddNewGameplayTagToINI / DeleteTagsFromINI for gameplay-tag-authoring tools
 
 			// Combat testing tools dependencies
 			"GameplayAbilities", // UAbilitySystemComponent, UGameplayAbility, FGameplayAbilitySpec
@@ -117,6 +117,14 @@ public class Claireon : ModuleRules
 			"LandscapeEditor",  // FLandscapeImportHelper, LandscapeEditorUtils (SetHeightmapData, SetWeightmapData)
 			"Foliage",          // AInstancedFoliageActor, UFoliageType, FFoliageInfo, FFoliageInstance
 
+			// SQLite full-text search index (FTS5)
+			"SQLiteCore",           // FSQLiteDatabase, FSQLitePreparedStatement, FTS5 virtual tables
+
+			// NNE neural inference for semantic tool_search; ORT runtime discovered dynamically.
+			// The NNERuntimeORT plugin registers "NNERuntimeORTCpu" via its module startup;
+			// we link only the thin NNE header/API layer here, not the ORT shared library.
+			"NNE",
+
 			// Automation framework dependencies
 			"AutomationController", // IAutomationControllerModule, IAutomationControllerManager (test runner)
 
@@ -132,7 +140,6 @@ public class Claireon : ModuleRules
 
 			// Camera asset tools dependencies
 			"GameplayCameras",       // UCameraAsset, UCameraNode, UCameraRigAsset, UArrayCameraNode, BuildCamera, FCameraBuildLog, IObjectTreeGraphObject
-
 		});
 
 		// Untested dependencies (Claireon REPL unit tests) — optional
@@ -196,5 +203,10 @@ public class Claireon : ModuleRules
 		{
 			PublicDefinitions.Add("WITH_LYRA_GAME=0");
 		}
+
+		// Stage the ONNX model + vocab alongside the cooked game so they are
+		// accessible at runtime on all platforms (non-UFS: raw file copy, not
+		// PAK-mounted). The glob picks up any file under Resources/Models/.
+		RuntimeDependencies.Add(Path.Combine(PluginDirectory, "Resources/Models/*"), StagedFileType.NonUFS);
 	}
 }

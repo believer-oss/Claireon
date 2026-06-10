@@ -1879,7 +1879,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_AddFunctionOverride,
 bool FEditBlueprintGraphTest_AddFunctionOverride::RunTest(const FString& Parameters)
 {
 
-	// Step 1: Create a Blueprint child of MyDirectorBase
+	// Step 1: Create a Blueprint child of ClaireonFunctionOverrideFixtureActor
 	FString SessionId;
 	{
 		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
@@ -1887,7 +1887,7 @@ bool FEditBlueprintGraphTest_AddFunctionOverride::RunTest(const FString& Paramet
 
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/__MCPTests/BP_FuncOverrideTest"));
-		Params->SetStringField(TEXT("parent_class"), TEXT("MyDirectorBase"));
+		Params->SetStringField(TEXT("parent_class"), TEXT("ClaireonFunctionOverrideFixtureActor"));
 		CreateParams->SetObjectField(TEXT("params"), Params);
 
 		auto Result = DispatchBundledEnvelope(CreateParams);
@@ -3928,7 +3928,7 @@ bool FEditBlueprintGraphTest_CursorHistory_CursorBackAutoSwitches::RunTest(const
 		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
 		CreateParams->SetStringField(TEXT("operation"), TEXT("create"));
 		CreateParams->SetStringField(TEXT("asset_path"), TEXT("/Game/__MCPTests/BP_CursorBackAutoSwitches"));
-		CreateParams->SetStringField(TEXT("parent_class"), TEXT("MyDirectorBase"));
+		CreateParams->SetStringField(TEXT("parent_class"), TEXT("ClaireonFunctionOverrideFixtureActor"));
 
 		auto Result = DispatchBundledEnvelope(CreateParams);
 		if (Result.bIsError)
@@ -4078,7 +4078,7 @@ bool FEditBlueprintGraphTest_CursorHistory_FunctionOverridePushesOldGraph::RunTe
 		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
 		CreateParams->SetStringField(TEXT("operation"), TEXT("create"));
 		CreateParams->SetStringField(TEXT("asset_path"), TEXT("/Game/__MCPTests/BP_FuncOverridePushesOldGraph"));
-		CreateParams->SetStringField(TEXT("parent_class"), TEXT("MyDirectorBase"));
+		CreateParams->SetStringField(TEXT("parent_class"), TEXT("ClaireonFunctionOverrideFixtureActor"));
 
 		auto Result = DispatchBundledEnvelope(CreateParams);
 		if (Result.bIsError)
@@ -4174,7 +4174,7 @@ namespace
 		TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
 		CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
 		CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
-		CreateArgs->SetStringField(TEXT("parent_class"), TEXT("MyDirectorBase"));
+		CreateArgs->SetStringField(TEXT("parent_class"), TEXT("ClaireonFunctionOverrideFixtureActor"));
 
 		auto CreateResult = DispatchBundledEnvelope(CreateArgs);
 		if (CreateResult.bIsError)
@@ -5064,7 +5064,7 @@ bool FEditBlueprintGraphTest_InspectNode_AnimGraphRedirectSessionPath::RunTest(c
 	// Creating an Animation Blueprint requires a target skeleton asset not available
 	// in the automation fixture. The AnimGraph redirect is covered in the stateless
 	// spec (test 12b) and manually on real AnimBP assets. Documenting a skip here
-	// keeps the stage's test-count expectation aligned with the inspect-node spec and lets the
+	// keeps the stage's test-count expectation aligned with FRACTURE/03 and lets the
 	// harness surface the gap explicitly rather than silently dropping coverage.
 	AddInfo(TEXT("Skipped: AnimBP fixture creation requires a target skeleton; "
 		"AnimGraph redirect exercised by Claireon.InspectBlueprintNode.AnimGraphRedirectStatelessPath."));
@@ -5204,12 +5204,12 @@ bool FEditBlueprintGraphTest_SwitchGraph_RefinementLoopEndToEnd::RunTest(const F
 {
 	const FString AssetPath = TEXT("/Game/__MCPTests/BP_RefinementLoopEndToEnd");
 
-	// Create a Director blueprint and add two function overrides so the BP
+	// Create a Trajan Director blueprint and add two function overrides so the BP
 	// has EventGraph + Func1 + Func2 for the refinement loop.
 	TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
 	CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
 	CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
-	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("MyDirectorBase"));
+	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("ClaireonFunctionOverrideFixtureActor"));
 	auto CR = DispatchBundledEnvelope(CreateArgs);
 	if (CR.bIsError)
 	{
@@ -5350,7 +5350,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd::RunTest(c
 	TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
 	CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
 	CreateArgs->SetStringField(TEXT("asset_path"), AssetPath);
-	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("MyDirectorBase"));
+	CreateArgs->SetStringField(TEXT("parent_class"), TEXT("ClaireonFunctionOverrideFixtureActor"));
 	auto CR = DispatchBundledEnvelope(CreateArgs);
 	if (CR.bIsError)
 	{
@@ -5522,8 +5522,8 @@ bool FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd::RunTest(c
 // These tests assert the dual-contract surface:
 //  1) Every non-error BuildStateResponse result carries a structured JSON
 //     payload with session_id / asset_path / graph_name / response_mode.
-//  2) Mutation ops that used to demand session_id now accept asset_path as
-//     an alternative and will auto-open a session for that tool+asset.
+//  2) Mutation ops accept asset_path as an alternative to session_id and
+//     will auto-open a session for that tool+asset.
 //  3) Passing an explicit session_id continues to work unchanged.
 //  4) Omitting both session_id and asset_path returns an error that names
 //     both alternatives.
@@ -5531,7 +5531,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd::RunTest(c
 //     emits a Data.session_hint nudging the caller toward explicit open/close
 //     discipline. Passing session_id resets the consecutive-call counter.
 //
-// See: Claireon/Source/Claireon/Private/Tools/ClaireonTool_EditBlueprintGraph.cpp
+// See: Plugins/Claireon/Source/Claireon/Private/Tools/ClaireonTool_EditBlueprintGraph.cpp
 // functions ResolveOrOpenSession and BuildStateResponse.
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SessionIdContract,
@@ -7100,14 +7100,14 @@ bool FEditBlueprintGraphTest_OpenRefusesDifferentGraphOnReuse::RunTest(const FSt
 {
 	const FString AssetPath = TEXT("/Game/__MCPTests/BP_OpenGraphNameRefuse");
 
-	// Create a Blueprint child of Actor.
+	// Create a Blueprint child of ClaireonFunctionOverrideFixtureActor so SelectDropLocation is overridable.
 	FString SessionId;
 	{
 		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
 		CreateParams->SetStringField(TEXT("operation"), TEXT("create"));
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("asset_path"), AssetPath);
-		Params->SetStringField(TEXT("parent_class"), TEXT("Actor"));
+		Params->SetStringField(TEXT("parent_class"), TEXT("ClaireonFunctionOverrideFixtureActor"));
 		CreateParams->SetObjectField(TEXT("params"), Params);
 
 		auto Result = DispatchBundledEnvelope(CreateParams);

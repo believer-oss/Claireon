@@ -177,7 +177,7 @@ class _FakeEditor:
 
 class TestPortDerivation(unittest.TestCase):
     def test_same_root_same_port(self) -> None:
-        root = r"C:\git/your-project"
+        root = r"C:\git\myproject"
         a = claireon_proxy.derive_default_mcp_port(root)
         b = claireon_proxy.derive_default_mcp_port(root)
         self.assertEqual(a, b)
@@ -185,8 +185,8 @@ class TestPortDerivation(unittest.TestCase):
         self.assertLessEqual(a, 65535)
 
     def test_case_normalization(self) -> None:
-        a = claireon_proxy.derive_default_mcp_port(r"C:\Path\To\Project")
-        b = claireon_proxy.derive_default_mcp_port(r"c:\path/to/project")
+        a = claireon_proxy.derive_default_mcp_port(r"C:\Git\MyProject")
+        b = claireon_proxy.derive_default_mcp_port(r"c:\git\myproject")
         self.assertEqual(a, b)
 
     def test_distribution_across_samples(self) -> None:
@@ -1143,7 +1143,7 @@ class TestProxyRegPortSync(unittest.TestCase):
 #
 # Inlined copy of Resolve-WorktreeFinalPath + Get-ProxyDefaultMcpPort from
 # Initialize-WorktreeMCP.ps1. The test owns its own copy so it can run
-# without dot-sourcing the launcher (which would execute Find-ProjectRoot
+# without dot-sourcing the launcher (which would execute the launcher project-finder
 # top-level code). DRIFT HAZARD: if you change either function in
 # Scripts/Utilities/Initialize-WorktreeMCP.ps1, copy the new bodies into
 # the here-string below. The test's parity assertion validates THIS body
@@ -1456,7 +1456,7 @@ class TestAdminEndpoints(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# I4 + I9 + I10 (#0000): ready flag, mcp_ready_status, warming-up message.
+# I4 + I9 + I10: ready flag, mcp_ready_status, warming-up message.
 # ---------------------------------------------------------------------------
 
 

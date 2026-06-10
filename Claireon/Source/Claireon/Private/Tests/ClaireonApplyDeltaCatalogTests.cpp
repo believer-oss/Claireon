@@ -1,13 +1,10 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Stage 004r tests for #0000 (apply_delta all families).
+// Tests for apply_delta across all families.
 //
-// These tests assert the structural invariants of the new `apply_delta`
-// field added to every ApplySpecCatalog.json entry by stage 003r (the
-// reconciliation commit on top of main's #0000 schema overhaul). They
-// replace the dropped ClaireonApplySpecHelpTests cases that #0000 removed
-// when it retired the apply_spec_help tool.
+// These tests assert the structural invariants of the `apply_delta`
+// field present on every ApplySpecCatalog.json entry.
 //
 // Invariants asserted:
 //   (a) Every catalog entry has an `apply_delta` object with a boolean
@@ -67,9 +64,9 @@ namespace ClaireonApplyDeltaCatalogTestsNS
 	}
 
 	// (catalog_key, registered tool name) for the 8 in-scope apply_delta
-	// families landed by #0000, plus the 9th bp_apply_delta inherited
-	// from #0000. The catalog row for bp lists bp_apply_delta even
-	// though the registration lives in ClaireonTool_ApplyBlueprintDelta.
+	// families, plus the 9th bp_apply_delta from the bp family. The catalog
+	// row for bp lists bp_apply_delta even though the registration lives in
+	// ClaireonTool_ApplyBlueprintDelta.
 	static const TArray<TPair<FString, FString>>& AdCat_GetExpectedDeltaPairs()
 	{
 		static const TArray<TPair<FString, FString>> Pairs = {
@@ -155,7 +152,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyDeltaCatalog, EveryEntryHasApplyDeltaShape, UNTE
 
 		++EntriesChecked;
 	}
-	// We expect main's 17 catalog entries (#0000) to be present.
+	// We expect the 17 catalog entries to be present.
 	UNTEST_EXPECT_EQ(EntriesChecked, 17);
 
 	co_return;

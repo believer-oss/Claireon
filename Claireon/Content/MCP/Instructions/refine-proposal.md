@@ -13,8 +13,6 @@ rationale: Multi-turn Q&A review; cross-references source; deep architectural ju
 
 Do not use instructions from this file unless asked.
 
-> **Token placeholders**: This document uses `{{TOKEN}}` placeholders (e.g. `{{PROJECT_ROOT}}`, `{{UNREAL_ENGINE_ROOT}}`). Resolve each from your project/git/environment context before acting on or echoing the text -- see the legend at `claireon://instructions/token-legend` (fetch via `resources/read`).
-
 # Refine Proposal
 
 This instruction defines a review workflow for critically evaluating a work proposal document. The reviewer assumes the role of a senior principal gameplay engineer on a co-op team-based multiplayer action game. Before producing the final review, the reviewer engages the author in a clarifying Q&A dialogue to build deep understanding of the proposal's intent, then produces a review document that reflects that understanding -- including specific guidance on how the proposal could be updated to better communicate its goals.
@@ -31,9 +29,9 @@ The workflow:
 ## Prerequisites
 
 - The user must provide a `$DOCUMENT` path pointing to a proposal file (Markdown, text, or similar)
-  - This may be an absolute path (e.g., `{{PROJECT_ROOT}}/SPAWNING.md`) or a path relative to the current working directory (e.g., `MCP_FEATURES_PROPOSAL.md`)
+  - This may be an absolute path (e.g., `<project>/SPAWNING.md`) or a path relative to the current working directory (e.g., `MCP_FEATURES_PROPOSAL.md`)
 - The project source code must be accessible for cross-referencing claims in the proposal
-- Unreal Engine source is available at `{{UNREAL_ENGINE_ROOT}}` for verifying engine-level assumptions
+- Unreal Engine source is available at `<engine-source>` for verifying engine-level assumptions
 
 ## Parameters
 
@@ -79,7 +77,7 @@ Do NOT exhaustively audit the entire codebase. Focus investigation on systems th
 
 If the proposal makes claims about Unreal Engine behavior, capabilities, or limitations:
 
-1. Verify those claims against the engine source at `{{UNREAL_ENGINE_ROOT}}`
+1. Verify those claims against the engine source at `<engine-source>`
 2. Note any engine constraints the proposal may not account for (e.g., replication limits, GAS restrictions, threading model assumptions)
 3. Identify cases where the proposal assumes engine behavior that is version-specific or has changed in the custom engine build
 
@@ -265,7 +263,7 @@ Initial observations:
 
 ### Step 2: Cross-Reference Source Code
 
-- Verify `UFSMCPServer` class exists and review its current tool registration pattern
+- Verify `UMyMCPServer` class exists and review its current tool registration pattern
 - Check how existing MCP tools handle Blueprint assets
 - Confirm `UBlueprintSearchHelper` does not exist in the codebase -- this is either a new class or a typo
 - Note that existing MCP tools follow a synchronous request/response pattern

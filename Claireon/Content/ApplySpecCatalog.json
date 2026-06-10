@@ -1,11 +1,12 @@
 {
   "_meta": {
+    "source_of_truth": ".claude/areas/apply-spec.md",
     "source_lines": "apply_spec table (per-family entries derived from each tool's GetInputSchema and applicator)",
     "schema_version": 3,
     "entry_count": 17,
     "tools_must_match_registered": true,
     "keying_convention": "top-level keys equal each tool's GetCategory(); look up via tool_search(name=<family>_apply_spec, detail=\"full\")",
-    "apply_delta_field": "schema_version >= 3: every entry carries an apply_delta object describing per-family imperative-batch support. When supported==true, the entry names the registered <family>_apply_delta tool and lists supported_phases (subset of [\"disconnect\",\"remove_nodes\",\"nodes\",\"connect\"]). When supported==false, the entry carries a reason string. The 8 in-scope apply_delta families ship with #0000 (behaviortree, eqs, level_sequence, material, niagara, pcg, statetree, widgetbp); bp_apply_delta is registered independently as ClaireonTool_ApplyBlueprintDelta (#0000)."
+    "apply_delta_field": "schema_version >= 3: every entry carries an apply_delta object describing per-family imperative-batch support. When supported==true, the entry names the registered <family>_apply_delta tool and lists supported_phases (subset of [\"disconnect\",\"remove_nodes\",\"nodes\",\"connect\"]). When supported==false, the entry carries a reason string. The 8 in-scope apply_delta families ship with the per-family apply_delta work (behaviortree, eqs, level_sequence, material, niagara, pcg, statetree, widgetbp); bp_apply_delta is registered independently as ClaireonTool_ApplyBlueprintDelta."
   },
   "attenuation": {
     "tool": "attenuation_apply_spec",
@@ -73,7 +74,7 @@
       "supported": true,
       "tool": "bp_apply_delta",
       "supported_phases": ["disconnect", "remove_nodes", "nodes", "connect"],
-      "notes": "bp apply_delta is the existing ClaireonTool_ApplyBlueprintDelta (#0000); operates on UEdGraph nodes/pins; not authored by this catalog row but registered separately"
+      "notes": "bp apply_delta is the existing ClaireonTool_ApplyBlueprintDelta; operates on UEdGraph nodes/pins; not authored by this catalog row but registered separately"
     }
   },
   "concurrency": {

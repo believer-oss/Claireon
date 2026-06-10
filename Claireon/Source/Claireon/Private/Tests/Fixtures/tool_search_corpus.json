@@ -1,0 +1,996 @@
+{
+ "scoring": "intent-based ANY-match: a row is a hit@K if any top-K result is in the UNION of expected_tools + all tools in expected_category + all tools whose operation/name contains expected_operation_substring. Resolved dynamically vs the live registry.",
+ "counts": {
+  "frozen": 33,
+  "tune": 59,
+  "dev": 29,
+  "total": 121
+ },
+ "rows": [
+  {
+   "query": "widget bp inspect references",
+   "expected_tools": [
+    "widgetbp_get_tree"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "widgetbp_get_tree",
+   "expected_tools": [
+    "widgetbp_get_tree"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "datatable export json row read",
+   "expected_tools": [
+    "datatable_get_row_json"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "datatable row",
+   "expected_category": "datatable",
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "blueprint_edit_graph",
+   "expected_tools": [
+    "bp_get_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "blueprint edit graph open node",
+   "expected_tools": [
+    "bp_get_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "blueprint_edit_graph blueprint_apply_graph blueprint_compile blueprint_get_graph_state",
+   "expected_tools": [
+    "bp_get_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "blueprint_graph_open blueprint_graph_add_node blueprint_graph_save",
+   "expected_tools": [
+    "bp_open",
+    "bp_add_node",
+    "bp_save"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "chooser",
+   "expected_category": "chooser",
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "chooser column add input output struct",
+   "expected_tools": [
+    "chooser_add_column"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "chooser_create",
+   "expected_tools": [
+    "chooser_create"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "+chooser +create",
+   "expected_tools": [
+    "chooser_create"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "+blueprint +edit +graph open",
+   "expected_tools": [
+    "bp_open"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "blueprint set pin value default",
+   "expected_tools": [
+    "bp_set_pin_value"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "chooser inspect dump",
+   "expected_tools": [
+    "chooser_inspect"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "blueprint inspect graph node",
+   "expected_tools": [
+    "bp_get_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "widget tree inspect",
+   "expected_tools": [
+    "widgetbp_get_tree"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "feedback submit",
+   "expected_tools": [
+    "feedback_submit"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "play in editor PIE start stop simulate session",
+   "expected_tools": [
+    "pie_start_async",
+    "pie_stop_async"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "get read actor property value inspect level actor details",
+   "expected_tools": [
+    "uobject_inspect"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "level_set_actor_property nested property path",
+   "expected_tools": [
+    "level_set_actor_property"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "chooser table read rows columns export",
+   "expected_tools": [
+    "chooser_inspect"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "graph inspect nodes blueprint read",
+   "expected_tools": [
+    "bp_get_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "uobject inspect read properties actor",
+   "expected_tools": [
+    "uobject_inspect"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "+inspect uobject property dump reflection",
+   "expected_tools": [
+    "uobject_inspect"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "feedback submit observations tool ergonomics",
+   "expected_tools": [
+    "feedback_submit"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "find references to a gameplay tag across assets / reference viewer / what assets use this gameplay tag",
+   "expected_tools": [
+    "asset_references"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "search blueprints and data assets for a string or gameplay tag; asset registry reference lookup; find assets referencing",
+   "expected_tools": [
+    "bp_search",
+    "asset_references"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "uobject_inspect read object properties by path",
+   "expected_tools": [
+    "uobject_inspect"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "editor_live_coding_reload_async",
+   "expected_tools": [
+    "editor_live_coding_reload_async"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "blueprint_apply_graph add node K2Node_CallFunction",
+   "expected_tools": [
+    "bp_add_node"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "blueprint get graph",
+   "expected_tools": [
+    "bp_get_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "live coding reload",
+   "expected_tools": [
+    "editor_live_coding_reload_async"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "read editor log / output log",
+   "expected_tools": [
+    "editor_log_search"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "find actors in pie world by class",
+   "expected_tools": [
+    "level_list_actors"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "list actors in PIE level world",
+   "expected_tools": [
+    "level_list_actors"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "get spawner config from spawner actor in level",
+   "expected_tools": [
+    "level_list_actors"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "inspect actor properties in level",
+   "expected_tools": [
+    "uobject_inspect"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "get actor property reflection inspect",
+   "expected_tools": [
+    "uobject_inspect"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "read blueprint default object CDO",
+   "expected_tools": [
+    "bp_get_properties"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "feedback submit observations",
+   "expected_tools": [
+    "feedback_submit"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "open existing level/map by path",
+   "expected_tools": [
+    "map_open_async"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "search asset by partial name",
+   "expected_tools": [
+    "asset_search"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "load level open map",
+   "expected_tools": [
+    "map_open_async"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "play in editor PIE start session",
+   "expected_tools": [
+    "pie_start_async"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "open map level",
+   "expected_tools": [
+    "map_open_async"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "output log read warnings",
+   "expected_tools": [
+    "log_tail"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "live coding compile reload build",
+   "expected_tools": [
+    "editor_live_coding_rebuild_full"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "live coding reload",
+   "expected_tools": [
+    "editor_live_coding_reload_async"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "output log watch PIE play in editor",
+   "expected_tools": [
+    "log_tail"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "read log file output messages",
+   "expected_tools": [
+    "log_tail"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "world partition actor descriptor inspect",
+   "expected_tools": [
+    "wp_actor_desc_inspect"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "wp_actor_desc_inspect",
+   "expected_tools": [
+    "wp_actor_desc_inspect"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "uobject_inspect",
+   "expected_tools": [
+    "uobject_inspect"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "feedback_submit",
+   "expected_tools": [
+    "feedback_submit"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "metasound source patch inspect inputs",
+   "expected_tools": [
+    "metasound_dump_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "blueprint edit graph add node connect pins",
+   "expected_tools": [
+    "bp_add_node",
+    "bp_connect_pins"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "blueprint graph add node async action function",
+   "expected_tools": [
+    "bp_add_node"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "blueprint_graph_add_node",
+   "expected_tools": [
+    "bp_add_node"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "metasound",
+   "expected_category": "metasound",
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "+metasound add input",
+   "expected_tools": [
+    "metasound_add_input"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "+metasound",
+   "expected_category": "metasound",
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "+metasound_open",
+   "expected_tools": [
+    "metasound_open"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "+chooser",
+   "expected_category": "chooser",
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "metasound inspect graph asset",
+   "expected_tools": [
+    "metasound_dump_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "metasound inspect",
+   "expected_tools": [
+    "metasound_dump_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "metasound graph builder source patch",
+   "expected_tools": [
+    "metasound_dump_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "blueprint create asset new factory parent class",
+   "expected_tools": [
+    "bp_create"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "blueprint graph open apply edit add node connect",
+   "expected_tools": [
+    "bp_open",
+    "bp_add_node",
+    "bp_connect_pins"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "blueprint graph close session save",
+   "expected_tools": [
+    "bp_close"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "blueprint remove delete node disconnect",
+   "expected_tools": [
+    "bp_remove_node"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "chooser add row edit row",
+   "expected_tools": [
+    "chooser_add_row"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "chooser_inspect",
+   "expected_tools": [
+    "chooser_inspect"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "chooser create set rows add edit",
+   "expected_tools": [
+    "chooser_create",
+    "chooser_add_row"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "chooser context parameter add binding struct",
+   "expected_tools": [
+    "chooser_add_context_parameter"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "proxyasset set target chooser",
+   "expected_tools": [
+    "proxyasset_set_type"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "chooser table inspect read rows",
+   "expected_tools": [
+    "chooser_inspect"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "bp blueprint graph inspect nodes",
+   "expected_tools": [
+    "bp_get_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "chooser table edit add row nested",
+   "expected_tools": [
+    "chooser_add_row"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "chooser set cell value column row filter",
+   "expected_tools": [
+    "chooser_set_column_value"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "list actors in level, get selected actors",
+   "expected_tools": [
+    "level_list_actors"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "blueprint asset read graph nodes",
+   "expected_tools": [
+    "bp_get_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "list level actors by class, get all actors in sublevel",
+   "expected_tools": [
+    "level_list_actors"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "scan level world actors list by class filter",
+   "expected_tools": [
+    "level_list_actors"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "chooser create chooser table rows",
+   "expected_tools": [
+    "chooser_create",
+    "chooser_add_row"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "chooser set rows caption preview marker",
+   "expected_tools": [
+    "chooser_set_row_result"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "prune reroutes blueprint",
+   "expected_tools": [
+    "bp_prune_reroutes"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "chooser edit row result modify",
+   "expected_tools": [
+    "chooser_set_row_result"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "metasound inspect graph inputs outputs nodes",
+   "expected_tools": [
+    "metasound_dump_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "metasound edit create node graph patch",
+   "expected_tools": [
+    "metasound_add_node"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "metasound open status inspect inputs outputs",
+   "expected_tools": [
+    "metasound_open",
+    "metasound_status",
+    "metasound_dump_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "move node position blueprint graph",
+   "expected_tools": [
+    "bp_move_node"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "read blueprint graph nodes connections",
+   "expected_tools": [
+    "bp_get_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "list assets in directory",
+   "expected_tools": [
+    "asset_list"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "read graph nodes connections",
+   "expected_tools": [
+    "bp_get_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "blueprint add node connect pin wire",
+   "expected_tools": [
+    "bp_add_node",
+    "bp_connect_pins"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "set pin default value blueprint",
+   "expected_tools": [
+    "bp_set_pin_value"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "blueprint delete node remove",
+   "expected_tools": [
+    "bp_remove_node"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "read editor log output / engine log messages",
+   "expected_tools": [
+    "editor_log_search"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "metasound dump graph inspect connections compile errors validate",
+   "expected_tools": [
+    "metasound_dump_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "metasound_dump_graph nodes edges list",
+   "expected_tools": [
+    "metasound_dump_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "start PIE play in editor run console command exec screenshot stop",
+   "expected_tools": [
+    "pie_start_async",
+    "console_execute",
+    "pie_screenshot",
+    "pie_stop_async"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "pie_start begin play map console_command exec_command pie_status",
+   "expected_tools": [
+    "pie_start_async",
+    "console_execute",
+    "pie_status"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "pie_start launch play session; execute console command in PIE world",
+   "expected_tools": [
+    "pie_start_async",
+    "console_execute"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "pie play-in-editor lifecycle start begin map test ability console",
+   "expected_tools": [
+    "pie_start_async",
+    "pie_test_ability",
+    "console_execute"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "read data table row contents",
+   "expected_tools": [
+    "datatable_get_rows"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "blueprint inspect graph nodes function",
+   "expected_tools": [
+    "bp_get_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "blueprint inspect graph nodes get function event",
+   "expected_tools": [
+    "bp_get_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "edit or inspect MetaSound source graph nodes",
+   "expected_tools": [
+    "metasound_open",
+    "metasound_dump_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "metasound open session read graph list nodes get state inspect",
+   "expected_tools": [
+    "metasound_open",
+    "metasound_status",
+    "metasound_dump_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "metasound_open",
+   "expected_tools": [
+    "metasound_open"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "submit feedback observation about tools",
+   "expected_tools": [
+    "feedback_submit"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "metasound graph inspect nodes connections edit",
+   "expected_tools": [
+    "metasound_dump_graph"
+   ],
+   "expected_category": "metasound",
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "metasound open session get graph nodes outputs OnFinished inspect",
+   "expected_tools": [
+    "metasound_open",
+    "metasound_dump_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "metasound dump graph",
+   "expected_tools": [
+    "metasound_dump_graph"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "metasound edit add input parameter node connect graph apply spec patch source",
+   "expected_tools": [
+    "metasound_apply_spec"
+   ],
+   "expected_category": "metasound",
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "chooser read inspect rows columns",
+   "expected_tools": [
+    "chooser_inspect"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  },
+  {
+   "query": "chooser create new asset duplicate",
+   "expected_tools": [
+    "chooser_create",
+    "chooser_duplicate"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "chooser set rows write result",
+   "expected_tools": [
+    "chooser_set_row_result"
+   ],
+   "source": "claude-transcript",
+   "split": "frozen"
+  },
+  {
+   "query": "inspect asset uproperty introspection serialize text",
+   "expected_tools": [
+    "uobject_inspect"
+   ],
+   "source": "claude-transcript",
+   "split": "tune"
+  },
+  {
+   "query": "find asset references / referencers (who references this asset, dependency lookup)",
+   "expected_tools": [
+    "asset_references"
+   ],
+   "source": "claude-transcript",
+   "split": "dev"
+  }
+ ]
+}

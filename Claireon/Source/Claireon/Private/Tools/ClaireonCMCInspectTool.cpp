@@ -24,8 +24,7 @@
 
 namespace ClaireonCMCInspectScratch
 {
-	// Decode EMovementMode (declared at
-	// Engine/Source/Runtime/Engine/Classes/Engine/EngineTypes.h).
+	// Decode EMovementMode (Engine/Classes/Engine/EngineTypes.h).
 	FString MovementModeToString(EMovementMode InMode)
 	{
 		switch (InMode)
@@ -143,7 +142,7 @@ namespace ClaireonCMCInspectScratch
 
 FString ClaireonTool_CMCInspectState::GetDescription() const
 {
-    return TEXT("Snapshot the authoritative UCharacterMovementComponent state on a paused-PIE pawn: movement mode, velocity/acceleration, gravity, walkable floor parameters, current floor hit, movement base, and crouched. Read-only / non-session inspector. Targets stuck-mid-air, gravity-flip, and floor-detection bug classes.");
+    return TEXT("Snapshot the authoritative UCharacterMovementComponent state on a paused-PIE pawn: movement mode, velocity/acceleration, gravity, walkable floor parameters, current floor hit, movement base, crouched, and any subclass-added custom fields. Read-only / non-session inspector. Targets stuck-mid-air, gravity-flip, and floor-detection bug classes.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_CMCInspectState::GetInputSchema() const
@@ -166,6 +165,13 @@ TSharedPtr<FJsonObject> ClaireonTool_CMCInspectState::GetInputSchema() const
 	IncludeFloorProp->SetBoolField(TEXT("default"), true);
 	Properties->SetObjectField(TEXT("includeFloor"), IncludeFloorProp);
 
+	TSharedPtr<FJsonObject> IncludePrevFloorProp = MakeShared<FJsonObject>();
+	IncludePrevFloorProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	IncludePrevFloorProp->SetStringField(TEXT("description"),
+		TEXT("If true, include subclass-added FindFloorResult fields (e.g. a previous-known-floor snapshot). Default false."));
+	IncludePrevFloorProp->SetBoolField(TEXT("default"), false);
+	Properties->SetObjectField(TEXT("includePrevFloor"), IncludePrevFloorProp);
+
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	TArray<TSharedPtr<FJsonValue>> Required;
@@ -187,6 +193,8 @@ TSharedPtr<FJsonObject> ClaireonTool_CMCInspectState::GetParameterTooltips() con
 		TEXT("The stable actor ID assigned by PIE tools (e.g., 'actor_0')."));
 	Tooltips->SetStringField(TEXT("includeFloor"),
 		TEXT("Include CurrentFloor hit result (walkable, dist, normal, impact)."));
+	Tooltips->SetStringField(TEXT("includePrevFloor"),
+		TEXT("Include any subclass-added FindFloorResult fields (e.g. a previous-known-floor snapshot present on a CMC subclass)."));
 	return Tooltips;
 }
 
@@ -263,6 +271,8 @@ IClaireonTool::FToolResult ClaireonTool_CMCInspectState::Execute(const TSharedPt
 
 	bool bIncludeFloor = true;
 	Arguments->TryGetBoolField(TEXT("includeFloor"), bIncludeFloor);
+	bool bIncludePrevFloor = false;
+	Arguments->TryGetBoolField(TEXT("includePrevFloor"), bIncludePrevFloor);
 
 	// Movement mode
 	Data->SetStringField(TEXT("movementMode"), MovementModeToString(CMC->MovementMode.GetValue()));
@@ -314,6 +324,80 @@ IClaireonTool::FToolResult ClaireonTool_CMCInspectState::Execute(const TSharedPt
 	if (bIncludeFloor)
 	{
 		Data->SetObjectField(TEXT("currentFloor"), BuildFloorJson(CMC->CurrentFloor));
+	}
+
+	// Subclass-added custom fields, nested under "subclassFields" to avoid collisions with
+	// the engine UCharacterMovementComponent fields reported above. Reflected generically so
+	// any project-specific CMC subclass surfaces its added properties without this tool
+	// depending on a particular game module/type.
+	UClass* CMCClass = CMC->GetClass();
+	if (CMCClass != UCharacterMovementComponent::StaticClass())
+	{
+		TSharedPtr<FJsonObject> SubclassFields = MakeShared<FJsonObject>();
+
+		for (TFieldIterator<FProperty> PropIt(CMCClass); PropIt; ++PropIt)
+		{
+			const FProperty* Prop = *PropIt;
+			if (!Prop)
+			{
+				continue;
+			}
+
+			// Only properties declared by a UCharacterMovementComponent subclass --
+			// engine-base fields are already reported above.
+			const UClass* OwnerClass = Prop->GetOwnerClass();
+			if (!OwnerClass
+				|| OwnerClass == UCharacterMovementComponent::StaticClass()
+				|| !OwnerClass->IsChildOf(UCharacterMovementComponent::StaticClass()))
+			{
+				continue;
+			}
+
+			const FString PropName = Prop->GetName();
+
+			// Best-effort: emit numeric / bool properties directly.
+			if (const FNumericProperty* NumProp = CastField<FNumericProperty>(Prop))
+			{
+				const void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(CMC);
+				if (NumProp->IsFloatingPoint())
+				{
+					SubclassFields->SetNumberField(PropName, NumProp->GetFloatingPointPropertyValue(ValuePtr));
+				}
+				else if (NumProp->IsInteger())
+				{
+					SubclassFields->SetNumberField(PropName,
+						static_cast<double>(NumProp->GetSignedIntPropertyValue(ValuePtr)));
+				}
+			}
+			else if (const FBoolProperty* BoolProp = CastField<FBoolProperty>(Prop))
+			{
+				const void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(CMC);
+				SubclassFields->SetBoolField(PropName, BoolProp->GetPropertyValue(ValuePtr));
+			}
+			// Subclass-added floor snapshots (e.g. a previous-known-floor): emit any
+			// FindFloorResult-typed property when requested. Other struct types need a full
+			// serializer and are out of scope for this snapshot tool.
+			else if (bIncludePrevFloor)
+			{
+				if (const FStructProperty* StructProp = CastField<FStructProperty>(Prop))
+				{
+					if (StructProp->Struct && StructProp->Struct->GetName() == TEXT("FindFloorResult"))
+					{
+						const FFindFloorResult* Floor =
+							StructProp->ContainerPtrToValuePtr<FFindFloorResult>(CMC);
+						if (Floor)
+						{
+							SubclassFields->SetObjectField(PropName, BuildFloorJson(*Floor));
+						}
+					}
+				}
+			}
+		}
+
+		if (SubclassFields->Values.Num() > 0)
+		{
+			Data->SetObjectField(TEXT("subclassFields"), SubclassFields);
+		}
 	}
 
 	const FString Summary = FString::Printf(
@@ -725,7 +809,7 @@ IClaireonTool::FToolResult ClaireonTool_CMCInspectPredictionData::Execute(const 
 			ServerObj->SetBoolField(TEXT("resolvingTimeDiscrepancy"),
 				ServerData->bResolvingTimeDiscrepancy);
 
-			// The LastClientAdjustmentTime and LastClientGoodMoveAckTime
+			// The "LastClientAdjustmentTime" / "LastClientGoodMoveAckTime"
 			// fields live on the CMC itself, not on
 			// FNetworkPredictionData_Server_Character. CMC fields are protected
 			// UPROPERTY(Transient) at CharacterMovementComponent.h:662 / :666.

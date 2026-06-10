@@ -24,6 +24,7 @@ class UMaterialExpression;
  * D4 binding: UMaterial graph-shaped; UMaterialInstanceConstant is excluded
  * (handled separately by material_instance_* tools).
  *
+ * See Docs/llm/apply-delta-all-families/05_MATERIAL.md.
  */
 class CLAIREON_API FClaireonDeltaApplicator_Material : public FClaireonDeltaApplicatorBase
 {

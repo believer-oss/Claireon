@@ -9,12 +9,13 @@
  * Shared compile-time constants for the Claireon MCP always-on proxy.
  *
  * SOURCE-OF-TRUTH for values duplicated into the Python proxy
- * (Claireon/Content/Python/claireon_proxy.py). The Python side
+ * (Plugins/Claireon/Content/Python/claireon_proxy.py). The Python side
  * carries a sentinel comment (PROXY_REG_PORT_SOURCE_OF_TRUTH) referencing
  * this header; a pre-commit/CI check parses both files and asserts equality.
  * Any change to a value here MUST be reflected in claireon_proxy.py, and the
  * stage/commit making the change MUST mention the sync.
  *
+ * See sibling docs under Docs/llm/work/always-on-mcp-proxy/:
  *   - ALWAYS_ON_MCP_PROXY_PROTOCOL.md  (wire contract)
  *   - ALWAYS_ON_MCP_PROXY_CPP.md       (C++ plugin spec)
  *   - ALWAYS_ON_MCP_PROXY_PYTHON.md    (Python proxy spec)

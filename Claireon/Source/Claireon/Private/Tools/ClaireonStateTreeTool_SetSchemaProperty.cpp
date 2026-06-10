@@ -20,7 +20,7 @@ FString ClaireonStateTreeTool_SetSchemaProperty::GetOperation() const { return T
 
 FString ClaireonStateTreeTool_SetSchemaProperty::GetDescription() const
 {
-	return TEXT("Set a property on the State Tree's Schema (e.g. ActorClass, bReflectActorComponents, bReflectActorProperties, PrefabAsset). Requires open session_id from statetree_open. Transactional. After writing via ImportText_Direct, dispatches Schema->PostEditChangeChainProperty so subclass overrides (e.g. <custom StateTree schema>::UpdateContextDataDescs) re-run their reflection updaters and regenerate deterministic context-data GUIDs. Response includes a refreshed context_data_descs array so callers can immediately diff.");
+    return TEXT("Set a property on the State Tree's Schema (e.g. ActorClass, bReflectActorComponents, PrefabAsset). Requires open session_id from statetree_open. Transactional. After ImportText_Direct, dispatches PostEditChangeChainProperty so subclass overrides re-run their reflection updaters and regenerate context-data GUIDs. Response includes a refreshed context_data_descs array.");
 }
 
 TSharedPtr<FJsonObject> ClaireonStateTreeTool_SetSchemaProperty::GetInputSchema() const
@@ -77,7 +77,7 @@ FToolResult ClaireonStateTreeTool_SetSchemaProperty::Execute(const TSharedPtr<FJ
 		return MakeErrorResult(Error);
 	}
 
-	// Dispatch PostEditChangeChainProperty so subclass overrides (e.g. <custom StateTree schema>)
+	// Dispatch PostEditChangeChainProperty so subclass overrides (e.g. a project StateTree schema)
 	// regenerate deterministic context-data GUIDs.
 	{
 		FProperty* LeafProperty = nullptr;

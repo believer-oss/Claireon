@@ -743,8 +743,8 @@ UScriptStruct* ClaireonStateTreeHelpers::ResolveNodeStruct(const FString& Struct
 		return nullptr;
 	}
 
-	// accept both the bare struct name (e.g. "MySTT_MoveTo") and the
-	// full UE script path form (e.g. "/Script/MyGame.FMySTT_MoveTo").
+	// accept both the bare struct name (e.g. "MyTask_MoveTo") and the
+	// full UE script path form (e.g. "/Script/MyGame.FMyTask_MoveTo").
 	// ClaireonNameResolver::ResolveStructName uses FindFirstObject on bare names, so
 	// a leading "/Script/<Module>." prefix bypasses it. Strip the prefix here and
 	// preserve the original input for the error path so we can hint clearly.
@@ -770,7 +770,7 @@ UScriptStruct* ClaireonStateTreeHelpers::ResolveNodeStruct(const FString& Struct
 		FString Hint;
 		if (bHadScriptPrefix)
 		{
-			Hint = FString::Printf(TEXT(" Tried '%s' after stripping '/Script/...' prefix. Pass the bare struct name instead (e.g. 'MySTT_MoveTo')."), *CandidateName);
+			Hint = FString::Printf(TEXT(" Tried '%s' after stripping '/Script/...' prefix. Pass the bare struct name instead (e.g. 'MyTask_MoveTo')."), *CandidateName);
 		}
 		else if (bHadFPrefix)
 		{

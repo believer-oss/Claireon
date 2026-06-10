@@ -73,7 +73,7 @@ TArray<FAssetData> FindAssetsByClass(UClass* Class, const FString& NameFilter, i
 
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
-	// First try direct class search (works for native data assets like UFSHitDefinition)
+	// First try direct class search (works for native data assets)
 	TArray<FAssetData> AllAssets;
 	AssetRegistry.GetAssetsByClass(Class->GetClassPathName(), AllAssets, true);
 
@@ -352,7 +352,8 @@ bool AssertInnerNameMatchesPackage(const UObject* Asset, FString& OutError)
 	OutError = FString::Printf(
 		TEXT("AssertInnerNameMatchesPackage: inner-name/package-short-name mismatch -- ")
 		TEXT("package_path='%s' package_short_name='%s' inner_name='%s' asset_class='%s'. ")
-		TEXT("This is the bug class detected by claireon.asset_check_inner_name_invariant."),
+		TEXT("This is the bug class detected by claireon.asset_check_inner_name_invariant. ")
+		TEXT("See Docs/Proposals/6619-claireon-name-mismatch-audit/PROPOSAL.md."),
 		*PackageName, *PackageShortName, *InnerName,
 		*Asset->GetClass()->GetName());
 	return false;

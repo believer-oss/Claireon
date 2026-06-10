@@ -957,7 +957,7 @@ TSharedPtr<FJsonObject> ClaireonTool_BlueprintTranslateScaffold::GetInputSchema(
 	TSharedPtr<FJsonObject> ModuleProp = MakeShared<FJsonObject>();
 	ModuleProp->SetStringField(TEXT("type"), TEXT("string"));
 	ModuleProp->SetStringField(TEXT("description"),
-		TEXT("UE module name for generated code (e.g., \"MyGameModule\"). Used for API macro."));
+		TEXT("UE module name for generated code (e.g., your game module name). Used for API macro."));
 	Properties->SetObjectField(TEXT("target_module"), ModuleProp);
 
 	TSharedPtr<FJsonObject> DirProp = MakeShared<FJsonObject>();
@@ -1025,7 +1025,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 	//   1. Relative to project root: "Source/MyModule/Translated"
 	//   2. Absolute path INSIDE the project: "W:/sable/Source/MyModule/Translated"
 	//   3. Absolute path OUTSIDE the project: error.
-	// Previously case 2 produced "W:/sable/W:/sable/..." double-prefix paths.
+	// Case 2 must be normalized to avoid "W:/sable/W:/sable/..." double-prefix paths.
 	FString AbsTargetDir;
 	const FString ProjectDirAbs = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 	{

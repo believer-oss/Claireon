@@ -272,9 +272,9 @@ bool ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(
 		}
 	}
 
-	// Step 2b (B31): explicit native-subobject prefix. Walk the CDO's default
-	// subobjects (which includes inherited native components like
-	// StateTreeAIComponent on a custom AIController). Match by FName so that
+	// Step 2b: explicit native-subobject prefix. Walk the CDO's default
+	// subobjects (which includes inherited native components declared on a
+	// parent actor/class). Match by FName so that
 	// `MyComponent.SomeProperty` resolves to the inherited template even when
 	// the BP does not redeclare it in SCS.
 	{

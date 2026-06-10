@@ -57,7 +57,7 @@ namespace ClaireonAssetUtils
 	 * OutError with package_path, package_short_name, inner_name,
 	 * asset_class context so the caller's failure path can surface the
 	 * same fields the asset_check_inner_name_invariant audit tool
-	 * reports.
+	 * reports. See PROPOSAL.md "Creation-path assertion".
 	 * @param Asset - The freshly-created asset (must be non-null and
 	 *   have a valid outer package)
 	 * @param OutError - Populated on mismatch with a human-readable

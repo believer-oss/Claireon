@@ -76,9 +76,9 @@ UNTEST_UNIT_OPTS(Claireon, PortDerivation, PosixPathVector, UNTEST_TIMEOUTMS(200
 
 UNTEST_UNIT_OPTS(Claireon, PortDerivation, CaseInsensitive, UNTEST_TIMEOUTMS(2000))
 {
-	const uint16 PortLower = Claireon::DeriveDefaultMcpPort(TEXT("w:\\worktree"));
-	const uint16 PortUpper = Claireon::DeriveDefaultMcpPort(TEXT("W:\\WORKTREE"));
-	const uint16 PortMixed = Claireon::DeriveDefaultMcpPort(TEXT("W:\\Worktree"));
+	const uint16 PortLower = Claireon::DeriveDefaultMcpPort(TEXT("w:\\yara"));
+	const uint16 PortUpper = Claireon::DeriveDefaultMcpPort(TEXT("W:\\YARA"));
+	const uint16 PortMixed = Claireon::DeriveDefaultMcpPort(TEXT("W:\\Yara"));
 	UNTEST_ASSERT_EQ(static_cast<int32>(PortLower), static_cast<int32>(PortUpper));
 	UNTEST_ASSERT_EQ(static_cast<int32>(PortLower), static_cast<int32>(PortMixed));
 	co_return;

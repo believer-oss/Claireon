@@ -797,7 +797,9 @@ UObject* SetInstancedSubObject(
 	// linkage that FAsyncPackage2::CreateExport relies on for cooked-client demand-load.
 	// NAME_None here would auto-generate a name like "<ClassName>_0" which works in
 	// the editor but causes "Could not find template object for <PropertyName>" errors
-	// on cooked-client demand-load when the slot's class was replaced.
+	// on cooked-client join-in-progress when the slot's class was replaced. See
+	// JOIN_IN_PROGRESS_CRASH_PROPOSAL.md / EDITOR_REPRO_NOTES.md for the diagnostic
+	// evidence.
 	const FName SubObjectName = ObjectProp->GetFName();
 
 	if (PrevValue)

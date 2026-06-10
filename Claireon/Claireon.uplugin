@@ -24,7 +24,9 @@
 		{ "Name": "Chooser", "Enabled": true },
 		{ "Name": "MotionWarping", "Enabled": true },
 		{ "Name": "Metasound", "Enabled": true },
-		{ "Name": "GameplayCameras", "Enabled": true }
+		{ "Name": "GameplayCameras", "Enabled": true },
+		{ "Name": "SQLiteCore", "Enabled": true },
+		{ "Name": "NNERuntimeORT", "Enabled": true }
 	],
 	"Modules": [
 		{

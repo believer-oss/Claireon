@@ -10,7 +10,7 @@ FString FClaireonLevelSequenceTool_ApplyDelta::GetOperation() const { return TEX
 
 FString FClaireonLevelSequenceTool_ApplyDelta::GetDescription() const
 {
-	return TEXT("Atomic batch level_sequence modification. Removes and creates in one transactional call. Counterpart to level_sequence_apply_spec. Execution order: remove -> create. (No disconnect/connect phases per work item #0000 D1; remove uses composite identity binding_label+track_name+row_index+start_frame, omitted fields select parent.)");
+	return TEXT("Atomic batch level_sequence modification. Removes and creates in one transactional call. Counterpart to level_sequence_apply_spec. Execution order: remove -> create. (No disconnect/connect phases; remove uses composite identity binding_label+track_name+row_index+start_frame, omitted fields select parent.)");
 }
 
 TSharedPtr<FJsonObject> FClaireonLevelSequenceTool_ApplyDelta::GetInputSchema() const

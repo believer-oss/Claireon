@@ -4,6 +4,7 @@
 // RetryRegister state-machine spec for FClaireonProxyClient (D4).
 //
 // Drives the four scenarios called out in
+// Docs/llm/work/multi-worktree-proxy/003-editor-retry-register-tests-and-phase-a-gate.md
 // without spawning a real proxy. The client exposes
 // SetTransportOverrides_TestOnly + TickForTest seams so the spec can
 // inject deterministic outcomes for /editor/register and /editor/heartbeat

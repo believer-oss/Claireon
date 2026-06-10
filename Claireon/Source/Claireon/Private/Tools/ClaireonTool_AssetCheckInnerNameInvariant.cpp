@@ -74,7 +74,7 @@ IClaireonTool::FToolResult ClaireonTool_AssetCheckInnerNameInvariant::Execute(co
 
 	// Build the filter. bIncludeOnlyOnDiskAssets=true because the bug
 	// class only manifests on disk; in-memory-only registry entries are
-	// irrelevant to the invariant.
+	// irrelevant to the invariant (see PROPOSAL.md "Walk strategy").
 	FARFilter Filter;
 	Filter.bRecursivePaths = true;
 	Filter.bRecursiveClasses = true;

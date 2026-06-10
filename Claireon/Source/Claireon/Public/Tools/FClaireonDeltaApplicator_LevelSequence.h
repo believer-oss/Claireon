@@ -16,6 +16,7 @@ class ULevelSequence;
  * Phase 3 (create) entries: {kind: "binding", id, label, object_class}.
  *
  * Session model: M5 fail-on-missing.
+ * See Docs/llm/apply-delta-all-families/04_LEVEL_SEQUENCE.md.
  */
 class CLAIREON_API FClaireonDeltaApplicator_LevelSequence : public FClaireonDeltaApplicatorBase
 {

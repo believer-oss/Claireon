@@ -34,39 +34,28 @@ namespace ClaireonPythonBridgeBootstrapTestsHelpers
 			return Names;
 		}
 
-		const TArray<TSharedPtr<FJsonValue>>* CategoriesArr = nullptr;
-		if (!DataObj->TryGetArrayField(TEXT("categories"), CategoriesArr))
+		// Post-FTS5-swap query output is a flat, globally rank-ordered `tools[]`.
+		const TArray<TSharedPtr<FJsonValue>>* ToolsArr = nullptr;
+		if (!DataObj->TryGetArrayField(TEXT("tools"), ToolsArr))
 		{
 			return Names;
 		}
-
-		for (const TSharedPtr<FJsonValue>& CatVal : *CategoriesArr)
+		for (const TSharedPtr<FJsonValue>& ToolVal : *ToolsArr)
 		{
-			const TSharedPtr<FJsonObject>* CatObj = nullptr;
-			if (!CatVal->TryGetObject(CatObj) || !CatObj->IsValid())
+			const TSharedPtr<FJsonObject>* ToolObj = nullptr;
+			if (!ToolVal->TryGetObject(ToolObj) || !ToolObj->IsValid())
 			{
 				continue;
 			}
-			const TArray<TSharedPtr<FJsonValue>>* ToolsArr = nullptr;
-			if (!(*CatObj)->TryGetArrayField(TEXT("tools"), ToolsArr))
+			FString Name;
+			if ((*ToolObj)->TryGetStringField(TEXT("name"), Name))
 			{
-				continue;
-			}
-			for (const TSharedPtr<FJsonValue>& ToolVal : *ToolsArr)
-			{
-				const TSharedPtr<FJsonObject>* ToolObj = nullptr;
-				if (!ToolVal->TryGetObject(ToolObj) || !ToolObj->IsValid())
-				{
-					continue;
-				}
-				FString Name;
-				if ((*ToolObj)->TryGetStringField(TEXT("name"), Name))
-				{
-					Names.Add(Name);
-				}
+				Names.Add(Name);
 			}
 		}
-		// Names within a category are ordered; categories are name-sorted.
+		// Sort by name so the boolean-vs-plain comparison is order-independent
+		// (the two queries produce the same set; rank order is identical too,
+		// but sorting keeps the multiset comparison robust).
 		Names.Sort();
 		return Names;
 	}
@@ -154,25 +143,20 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchBoolean, StripsAndOrNotOperators, UNTEST_TI
 	using namespace ClaireonPythonBridgeBootstrapTestsHelpers;
 
 	FClaireonModule& Module = FClaireonModule::Get();
-	bool bWeStartedServer = false;
-	if (!Module.IsServerRunning())
-	{
-		Module.StartServer();
-		bWeStartedServer = true;
-	}
-	FClaireonServer* Server = Module.GetServer();
+	// Use EnsureServerForTest() so the registry is available headlessly in the
+	// commandlet runner (StartServer() short-circuits on the GIsEditor guard and
+	// leaves GetServer() null). EnsureServerForTest also (re-)collects built-in
+	// tools, self-healing the registry across cross-suite teardown.
+	FClaireonServer* Server = Module.EnsureServerForTest();
+	FClaireonBridge::EnsureRegistered();
 	UNTEST_ASSERT_PTR(Server);
 
-	// Commandlet-mode skip (see PythonBridgeBootstrap test above for rationale).
+	// Commandlet-mode skip if the registry could not be populated at all.
 	if (Server->GetTools().Num() == 0)
 	{
 		UE_LOG(LogTemp, Warning,
 			TEXT("[ToolSearchBoolean] SKIPPED -- live server has zero tools "
 			     "(commandlet mode short-circuits provider registration)"));
-		if (bWeStartedServer)
-		{
-			Module.StopServer();
-		}
 		co_return;
 	}
 
@@ -201,11 +185,6 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchBoolean, StripsAndOrNotOperators, UNTEST_TI
 	for (int32 i = 0; i < FMath::Min(BoolNames.Num(), PlainNames.Num()); ++i)
 	{
 		UNTEST_EXPECT_STREQ(*BoolNames[i], *PlainNames[i]);
-	}
-
-	if (bWeStartedServer)
-	{
-		Module.StopServer();
 	}
 
 	co_return;

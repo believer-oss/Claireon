@@ -11,6 +11,7 @@
 #include "ClaireonFeedbackLog.h"
 #include "ClaireonFeedbackReport.h"
 #include "ClaireonToolbarStyle.h"
+#include "Styling/SlateStyle.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SScrollBox.h"

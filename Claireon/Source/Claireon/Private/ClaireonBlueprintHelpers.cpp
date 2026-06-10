@@ -510,7 +510,7 @@ namespace ClaireonBlueprintHelpers
 		}
 
 		// Resolve a UFunction from a fully-qualified path such as
-		// "/Script/FSTargeting.FSAbilityTarget.TargetReplicatedDelegate__DelegateSignature" or
+		// "/Script/MyModule.MyClass.MyDelegate__DelegateSignature" or
 		// "/Script/X.Y__DelegateSignature".
 		UFunction* ResolveSignatureFunction(const FString& Path)
 		{

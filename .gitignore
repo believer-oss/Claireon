@@ -1,27 +1,23 @@
-# Unreal Engine build artifacts
+# Unreal Engine build artifacts -- never tracked
+Binaries/
 Intermediate/
-**/Binaries/
-!**/Binaries/ThirdParty/
-!**/Binaries/ThirdParty/**
 DerivedDataCache/
 Saved/
 
-# IDE
-.vs/
-.vscode/
-*.sln
-*.vcxproj*
-
-# Python
+# Python bytecode -- compiled artifacts embed absolute build paths; never tracked
 __pycache__/
 *.pyc
 
-# Claude Code
-.claude/
-
-# OS
-Thumbs.db
+# IDE / OS
+.vs/
+.vscode/
+*.VC.db
+*.VC.opendb
+*.opensdf
+*.sdf
+*.suo
+*.sln
+*.xcodeproj
+*.xcworkspace
 .DS_Store
-
-# Local-only sync scratch notes (reference private/upstream specifics; never commit)
-NEXT_STEPS.md
+Thumbs.db

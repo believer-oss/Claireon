@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Functional tests for niagara_apply_delta (#0000).
+// Functional tests for niagara_apply_delta.
 // Verifies AR5/AR9 phase-1/4 rejection, M5 fail-on-missing, L4 emitter-stub guard,
 // AR6 ref resolution (local-id and literal name), and the H2 byte-identical shared-impl
 // regression test (apply_delta produces the same FNiagaraVariable as niagara_add_parameter).

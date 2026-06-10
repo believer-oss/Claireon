@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Functional tests for widgetbp_apply_delta (#0000).
+// Functional tests for widgetbp_apply_delta.
 // Verifies AR5/AR9 phase-1 rejection, M5 fail-on-missing, the happy path (remove +
 // create + reparent), and the H4 reparent-delegation invariant (apply_delta phase 4
 // must use the SAME helper as ClaireonWidgetBPTool_MoveWidget).

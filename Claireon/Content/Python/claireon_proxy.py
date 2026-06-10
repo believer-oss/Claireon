@@ -10,6 +10,7 @@ Runtime: UE's vendored Python 3
 
 Dependencies: stdlib only.
 
+See sibling docs under Docs/llm/work/always-on-mcp-proxy/ for the original
 per-worktree design (current behaviour):
   - ALWAYS_ON_MCP_PROXY_PROPOSAL.md (overview)
   - ALWAYS_ON_MCP_PROXY_PROTOCOL.md (wire contract)
@@ -19,11 +20,12 @@ per-worktree design (current behaviour):
 
 The next iteration -- one singleton proxy serving all worktrees, port-as-lock,
 no idle-exit, editor-side reconnect on register failure -- is specified in
+Docs/llm/work/multi-worktree-proxy/MULTI_WORKTREE_PROXY_PROPOSAL.md. That
 document supersedes the operational decisions above when implemented.
 
 PROXY_REG_PORT_SOURCE_OF_TRUTH: ClaireonProxyConstants.h
 The PROXY_REG_PORT constant below MUST match the C++ header
-Claireon/Source/Claireon/Public/ClaireonProxyConstants.h.
+Plugins/Claireon/Source/Claireon/Public/ClaireonProxyConstants.h.
 A CI test parses both files and asserts equality.
 """
 
@@ -174,8 +176,8 @@ def canonicalize_worktree(worktree_root: str) -> str:
     """Canonicalize a worktree path for hashing. Windows-first, lowercase.
 
     Resolves junctions and symlinks via os.path.realpath so that a worktree
-    reached via a junction (e.g. W:\\proj) and via its underlying realpath
-    (e.g. D:\\git\\proj) hash to the SAME port. The PowerShell mirror in
+    reached via a junction (e.g. W:\\yara) and via its underlying realpath
+    (e.g. D:\\git\\yara) hash to the SAME port. The PowerShell mirror in
     Initialize-WorktreeMCP.ps1::Get-ProxyDefaultMcpPort uses
     GetFinalPathNameByHandle (P/Invoke, Resolve-WorktreeFinalPath helper)
     for the same reason. Both sides MUST resolve links; do not switch this
@@ -531,9 +533,10 @@ _REGISTER_REQUIRED_FIELDS = (
 
 # Registration state (guarded by SESSION_LOCK). None when no editor registered.
 # After Stage 005, RUNTIME["worktrees"][canonical].session is authoritative;
-# singleton_session is retained as a compatibility shim for the legacy /admin/...
-# read paths (status, idle-exit) that still skim the singleton view. Both views
-# are written under SESSION_LOCK so they stay coherent.
+# singleton_session is the singleton-mirror view retained as a read path for
+# process-level status (`proxy status` meta-tool, `_resolve_session_for_log`,
+# singleton-mirror eviction). Both views are written under SESSION_LOCK so
+# they stay coherent.
 SESSION_LOCK = threading.Lock()
 singleton_session: Optional[Dict[str, Any]] = None
 
@@ -543,9 +546,9 @@ singleton_session: Optional[Dict[str, Any]] = None
 #
 # Stages 005-007 wire handle_register / handle_heartbeat / handle_deregister to
 # read AND write through these maps; this stage only mirrors writes alongside
-# the legacy single-session state. Today the legacy globals (singleton_session +
-# RUNTIME["singleton_worktree_root"] / RUNTIME["canonical_worktree"]) remain authoritative;
-# nothing in the proxy reads from RUNTIME["worktrees"] yet.
+# the singleton mirror. Today the singleton mirror (singleton_session +
+# RUNTIME["singleton_worktree_root"] / RUNTIME["canonical_worktree"]) remains
+# authoritative; nothing in the proxy reads from RUNTIME["worktrees"] yet.
 #
 # All mutations to these maps MUST be performed under SESSION_LOCK, the same
 # lock that already guards singleton_session. A missed lock here will surface as
@@ -602,7 +605,7 @@ class WorktreeState:
     last_seen_ns: int = 0
     version_hash: str = ""
     _evicted_by: Optional[Tuple[int, int]] = None
-    # I4 (#0000): True once the editor POSTs /editor/ready (tool catalog
+    # I4: True once the editor POSTs /editor/ready (tool catalog
     # populated + Python bridge initialized). False on fresh register so
     # the fallback shows "editor warming up" rather than "build and launch".
     ready: bool = False
@@ -796,7 +799,7 @@ def handle_register(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
             editor_mcp_token=str(body["editor_mcp_token"]),
             build_id=str(body["build_id"]),
         )
-        # I4 (#0000): new session is not ready until /editor/ready is received.
+        # I4: new session is not ready until /editor/ready is received.
         wt.ready = False
         wt.tool_count = 0
         # Clear any pending-launch marker now that the editor has registered.
@@ -804,11 +807,9 @@ def handle_register(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
         wt.last_seen_ns = int(_mono_now() * 1_000_000_000)
         wt.version_hash = str(body["proxy_version"])
 
-        # Compatibility shim: keep singleton_session populated so the legacy
-        # /admin/status, idle-exit, and any other singleton-view readers
-        # continue to work until they are migrated in Stage 006+. The
-        # per-worktree map is authoritative; this mirror is read-only
-        # outside of register/deregister.
+        # Populate the singleton mirror used by `proxy status` and
+        # `_resolve_session_for_log`. The per-worktree map is authoritative;
+        # this mirror is read-only outside of register/deregister.
         singleton_session = {
             "pid": editor_pid,
             "worktree_root": body["worktree_root"],
@@ -881,9 +882,9 @@ def handle_heartbeat(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
 
         wt.last_seen_ns = int(_mono_now() * 1_000_000_000)
 
-        # Mirror to singleton_session for the legacy idle-exit watchdog and
-        # /admin/status. Only meaningful when this is the same session
-        # the singleton view believes is current.
+        # Mirror to singleton_session for the legacy idle-exit watchdog.
+        # Only meaningful when this is the same session the singleton view
+        # believes is current.
         global singleton_session
         if singleton_session is not None \
                 and singleton_session.get("pid") == pid \
@@ -927,8 +928,8 @@ def handle_deregister(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
             wt._evicted_by = None
 
             # Compatibility shim: clear singleton_session if it was tracking
-            # this same session. The legacy /admin/status reader expects
-            # the singleton view to agree with the per-worktree map.
+            # this same session. The singleton-mirror readers expect the
+            # singleton view to agree with the per-worktree map.
             if singleton_session is not None \
                     and singleton_session.get("pid") == pid \
                     and singleton_session.get("start_time_ns") == start_time_ns:
@@ -943,7 +944,7 @@ def handle_deregister(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
 
 
 def handle_editor_ready(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
-    """POST /editor/ready -- I4 (#0000).
+    """POST /editor/ready -- I4.
 
     Editor sends this after FClaireonBridge::EnsureRegistered() completes
     (Python bridge initialized + tool catalog populated). Required fields:
@@ -1461,7 +1462,7 @@ class RegistrationHandler(BaseHTTPRequestHandler):
         elif self.path in ("/editor/deregister", "/editor/unregister"):
             status, resp = handle_deregister(body)
         elif self.path == "/editor/ready":
-            # I4 (#0000): editor signals tool catalog populated + Python ready.
+            # I4: editor signals tool catalog populated + Python ready.
             status, resp = handle_editor_ready(body)
         elif self.path == "/admin/ensure_worktree":
             status, resp = handle_admin_ensure_worktree(body)
@@ -1595,7 +1596,7 @@ STATIC_TOOLS_LIST = [
 
 FALLBACK_TEXT = "build and launch the editor first"
 
-# I4 (#0000): separate warming-up text from "no editor at all" text.
+# I4: separate warming-up text from "no editor at all" text.
 WARMING_UP_TEXT = (
     "Editor is registered but tool catalog is not yet ready (Python bridge still "
     "initializing). Retry in a few seconds, or call: proxy(command='wait_for_editor') "
@@ -1959,10 +1960,9 @@ def _handle_proxy_command(
         if not os.path.isfile(script):
             return _jsonrpc_result(request_id, _proxy_text_result(
                 f"Invoke-EditorBuildAndLaunch.ps1 not found at {script}", is_error=True))
-        # Pass -ProjectPath explicitly so the launch script's project
-        # auto-detection is never called with the proxy's inherited CWD
-        # (which belongs to the worktree that first spawned the singleton,
-        # not necessarily this one).
+        # Pass -ProjectPath explicitly so the launcher project-finder is never
+        # called with the proxy's inherited CWD (which belongs to the worktree
+        # that first spawned the singleton, not necessarily this one).
         project_file = _resolve_uproject(worktree_root)
         if not project_file:
             return _jsonrpc_result(request_id, _proxy_text_result(
@@ -2057,7 +2057,7 @@ def _record_last_forward_status(
 
 
 def _check_warming_up(listener_port: Optional[int]) -> Optional[str]:
-    """I4/I10 (#0000): Return warming-up text if a session is registered but
+    """I4/I10: Return warming-up text if a session is registered but
     not yet ready. Caller MUST hold SESSION_LOCK. Returns None if no session
     (true fallback) so the caller can emit the standard FALLBACK_TEXT."""
     if listener_port is not None:
@@ -2186,7 +2186,7 @@ def _forward_payload_to_editor(
         evict_singleton_stale_session_locked()
         session_snapshot = _resolve_session_for_listener(listener_port)
         if session_snapshot is None:
-            # I10 (#0000): check if a session exists but ready=False (warming up)
+            # I10: check if a session exists but ready=False (warming up)
             # vs. no session at all (build and launch / port collision).
             warming_up_text = _check_warming_up(listener_port)
             if warming_up_text:
@@ -2326,7 +2326,7 @@ def _forward_payload_to_editor(
 def _handle_mcp_ready_status(
     payload: Dict[str, Any], listener_port: Optional[int] = None
 ) -> Dict[str, Any]:
-    """I9 (#0000): Proxy-local handler for the `mcp_ready_status` tool.
+    """I9: Proxy-local handler for the `mcp_ready_status` tool.
 
     Returns a structured dict so agents can self-diagnose mid-run:
       active_editor  -- editor PID as string, or null if no session
@@ -2394,7 +2394,7 @@ def forward_tool_call(
     if tool_name == "proxy":
         return _handle_proxy_command(payload, listener_port=listener_port)
     if tool_name == "mcp_ready_status":
-        # I9 (#0000): proxy-local readiness query.
+        # I9: proxy-local readiness query.
         return _handle_mcp_ready_status(payload, listener_port=listener_port)
     if tool_name not in {"tool_search", "python_execute"}:
         return _jsonrpc_error(request_id, -32601, "Method not found")
@@ -2602,22 +2602,22 @@ def evict_stale_sessions_all_locked() -> int:
     WorktreeState. Returns the count of sessions evicted. MUST be called
     with SESSION_LOCK held.
 
-    The single-tenant evict_singleton_stale_session_locked() (which still walks
-    singleton_session) is invoked first so the legacy /admin/status mirror
-    stays consistent; then we iterate every worktree and clear any
-    session whose last_seen_ns predates the staleness threshold.
+    The singleton evict_singleton_stale_session_locked() (which still walks
+    singleton_session) is invoked first so the singleton mirror stays
+    consistent; then we iterate every worktree and clear any session
+    whose last_seen_ns predates the staleness threshold.
     """
-    # Drain the legacy view first; it walks singleton_session and
+    # Drain the singleton mirror first; it walks singleton_session and
     # transitively clears the matching WorktreeState.session.
-    legacy_evicted = evict_singleton_stale_session_locked()
-    n = 1 if legacy_evicted is not None else 0
-    if legacy_evicted is not None:
+    singleton_evicted = evict_singleton_stale_session_locked()
+    n = 1 if singleton_evicted is not None else 0
+    if singleton_evicted is not None:
         log.info(
             "session evicted reason=heartbeat_timeout editor_pid=%s "
             "start_time_ns=%s build_id=%s",
-            legacy_evicted.get("pid"),
-            legacy_evicted.get("start_time_ns"),
-            legacy_evicted.get("build_id"),
+            singleton_evicted.get("pid"),
+            singleton_evicted.get("start_time_ns"),
+            singleton_evicted.get("build_id"),
         )
 
     # Now sweep every per-worktree slot. Multi-tenant routing means a
@@ -2770,8 +2770,8 @@ def run(argv: list[str]) -> int:
     version_hash = compute_proxy_version_hash()
     # Stage 009: the proxy is multi-tenant from the start. RUNTIME no
     # longer carries a singleton worktree_root / canonical_worktree;
-    # /admin/ensure_worktree adds worktrees on demand. The legacy keys
-    # are left as None so any defensive reader still finds the slot.
+    # /admin/ensure_worktree adds worktrees on demand. The singleton-mirror
+    # keys are left as None so any defensive reader still finds the slot.
     RUNTIME["singleton_worktree_root"] = None
     RUNTIME["canonical_worktree"] = None
     RUNTIME["proxy_version_hash"] = version_hash

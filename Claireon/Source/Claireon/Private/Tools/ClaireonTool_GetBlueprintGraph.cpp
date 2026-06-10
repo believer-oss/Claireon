@@ -350,9 +350,9 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 		}
 
 		TSharedPtr<FJsonObject> GraphObj = MakeShared<FJsonObject>();
-		// keep the prefixed graph_name form only. Short-form aliases like
-		// `name` previously emitted in parallel were dropped to align with the
-		// rest of the BP output surface (node_title, node_class, node_id, etc.).
+		// Emit the prefixed graph_name form only (no short-form `name` alias),
+		// to align with the rest of the BP output surface (node_title,
+		// node_class, node_id, etc.).
 		GraphObj->SetStringField(TEXT("graph_name"), Graph->GetName());
 
 		// Build nodes array
@@ -981,7 +981,7 @@ FString ClaireonTool_GetBlueprintGraph::FormatNodeSummary(const UEdGraphNode* No
 	FString NodeClass = Node->GetClass()->GetName();
 	FVector2D NodePos(Node->NodePosX, Node->NodePosY);
 
-	// Outline mode: single-line grammar per the outline-format spec.
+	// Outline mode: single-line grammar per FRACTURE/04_outline_format.md.
 	// "<class> <guid8>  <clean_title>  @ (x, y)" — no embedded newlines. The
 	// caller (BuildGraphJsonSummary) prepends the "<index>. " prefix.
 	if (DetailLevel == TEXT("outline"))

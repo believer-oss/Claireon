@@ -57,7 +57,7 @@ TSharedPtr<FJsonObject> ClaireonTool_AppendBlueprintCDOArrayInstanced::GetInputS
 	ElementClassProp->SetStringField(TEXT("type"), TEXT("string"));
 	ElementClassProp->SetStringField(TEXT("description"),
 		TEXT("Class path of the element to construct "
-		"(e.g. '/Script/FSTargeting.FSTC_CollisionSphere'). Must be a concrete subclass of "
+		"(e.g. '/Script/MyModule.MyElementClass'). Must be a concrete subclass of"
 		"the array's inner property class. Blueprint class paths resolve with implicit '_C' suffix."));
 	Properties->SetObjectField(TEXT("element_class"), ElementClassProp);
 

@@ -13,8 +13,6 @@ rationale: Senior-engineer persona; produces stage documents from proposal
 
 Do not use instructions from this file unless asked.
 
-> **Token placeholders**: This document uses `{{TOKEN}}` placeholders (e.g. `{{PROJECT_NAME}}`, `{{PROJECT_ROOT}}`). Resolve each from your project/git/environment context before acting on or echoing the text -- see the legend at `claireon://instructions/token-legend` (fetch via `resources/read`).
-
 # Break Down Work Proposal
 
 This instruction takes a work proposal document and breaks it down into sequentially implementable stages, each with its own document, following a skeleton-test-(implement-test)+ pattern. The output is a set of numbered stage files and a master prompt that an implementer can follow start to finish.
@@ -32,7 +30,7 @@ The instruction should:
 ## Prerequisites
 
 The user must provide:
-- **`$INPUT_PROPOSAL_FILE`**: Absolute path to the proposal document to break down (e.g., `{{PROJECT_ROOT}}/SPAWNING.md`)
+- **`$INPUT_PROPOSAL_FILE`**: Absolute path to the proposal document to break down (e.g., `<project>/SPAWNING.md`)
 
 The invoker will derive:
 - **`$PROPOSAL_DIR`**: Directory containing `$INPUT_PROPOSAL_FILE` (stage files are placed here)

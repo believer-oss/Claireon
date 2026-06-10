@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Functional tests for material_apply_delta (#0000).
+// Functional tests for material_apply_delta.
 // Verifies the all-four-phase happy path, phase-4 dispatch on `attribute` field,
 // M2 rollback on phase-3 failure, and M5 fail-on-missing.
 

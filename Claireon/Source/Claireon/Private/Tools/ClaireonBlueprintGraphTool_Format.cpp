@@ -217,7 +217,7 @@ FString ClaireonBlueprintGraphTool_Format::GetFullDescription() const
         "in-session graph) or asset_path (auto-opens a transient session, "
         "formats, and closes -- no prior bp_open needed). Use session_id to "
         "format inside an existing workflow cycle (see "
-        "the per-tool authoring guidance) before calling bp_save; use "
+        ".claude/areas/blueprint-editing.md) before calling bp_save; use "
         "asset_path for one-shot formatting outside of an edit session. If "
         "the BlueprintAssist plugin is present, the layout uses BA's smart "
         "routing; otherwise a deterministic fallback grid layout is used. "

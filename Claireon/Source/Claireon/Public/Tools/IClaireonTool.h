@@ -60,20 +60,6 @@ public:
 		return GetCategory() + TEXT("_") + GetOperation();
 	}
 
-	/** Returns the bare namespace this tool lives under in the Python bridge.
-	 *  Default: "claireon". Override to publish under a separate namespace
-	 *  (e.g. "fs" for project-private tools). The namespace must be a
-	 *  Python-identifier-safe bare token; '.' is disallowed. The bridge
-	 *  composes it with GetName() as sys.modules['<namespace>'].<name>.
-	 *
-	 *  Strict separation contract:
-	 *    - GetName() is composed from GetCategory() + "_" + GetOperation();
-	 *      both must be bare Python identifiers and the composed result also
-	 *      contains no '.'.
-	 *    - GetNamespace() must also be a bare identifier (no dot, non-empty).
-	 *    - There is no first-dot-split fallback in dispatch. */
-	virtual FString GetNamespace() const { return TEXT("claireon"); }
-
 	/** Returns a human-readable description of what the tool does (standard tier, ~150-300 chars) */
 	virtual FString GetDescription() const = 0;
 
