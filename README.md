@@ -77,6 +77,8 @@ The server binds a deterministic per-worktree port: SHA-256 of the canonicalized
 
 For workflows where the editor restarts often (rebuilds, crashes, live-coding reloads), an optional always-on proxy (`Content/Python/claireon_proxy.py`, run with UE's vendored Python) can front the editor: Claude Code stays connected to the worktree's deterministic port while editors come and go behind it. Opt in with `-EnableMCPProxy` on the command line, or via **Editor Preferences > Plugins > Claireon > MCP Proxy > Enable MCP Proxy** (off by default). When enabled, the proxy holds the worktree port, and the editor binds an ephemeral port and registers with the proxy; editor ingress is then gated by a per-session bearer token so the proxy is the sole entry point. A single proxy instance serves all worktrees on the machine (registration port `43017`). Even with the setting off, an editor that finds its port already held by a Claireon proxy auto-promotes into proxy-attached mode.
 
+The proxy can also run without any editor: `Scripts/Utilities/Start-MCPProxy.ps1` spawns (or attaches to) the singleton and binds the current worktree's port, no Unreal launch required. Editor-less, the proxy serves the `proxy` meta-tool and the file-backed prompts (e.g. `workflow`) directly from disk; `tool_search` and `python_execute` answer once an editor registers (start one from the client with `proxy(command='launch_editor')`).
+
 ### Connecting Claude Code
 
 Once the server is running, configure Claude Code to connect. Take the port from `Saved/Claireon/MCPServer.json` -- it is stable for a given checkout path, so the config can be committed to your project's `.mcp.json` once and forgotten:
@@ -250,6 +252,7 @@ PowerShell scripts for common Unreal Engine development tasks. All scripts auto-
 | `Invoke-ResaveAssets.ps1` | Resave specific assets via editor Python automation |
 | `Invoke-FixupRedirectors.ps1` | Fix up asset redirectors after moves/renames |
 | `Invoke-CleanProject.ps1` | Clean build artifacts (Binaries, Intermediate, etc.) |
+| `Start-MCPProxy.ps1` | Start (or attach to) the MCP proxy singleton without launching an editor |
 | `Get-GitUsername.ps1` | Extract git username from email for branch naming |
 | `Wait-UBT.ps1` | Wait for UnrealBuildTool to finish before proceeding |
 
