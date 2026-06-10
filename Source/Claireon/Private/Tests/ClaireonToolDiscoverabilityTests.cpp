@@ -200,7 +200,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_OpenBlueprintEdi
 	co_return;
 }
 
-// Row 6 -- FTS5 baseline: bp_add_node at pos 5 for "add node bp".
+// Row 6 -- bp_add_node appears in top-10 for "add node bp" (FTS5 baseline pos 5).
 UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_AddNodeBp, UNTEST_TIMEOUTMS(15000))
 {
 	using namespace ClaireonToolDiscoverabilityTestsNS;
@@ -212,7 +212,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_AddNodeBp, UNTES
 	co_return;
 }
 
-// Row 7 -- FTS5 baseline: bp_add_node at pos 5 for "add node blueprint".
+// Row 7 -- bp_add_node appears in top-10 for "add node blueprint" (FTS5 baseline pos 5).
 UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_AddNodeBlueprint, UNTEST_TIMEOUTMS(15000))
 {
 	using namespace ClaireonToolDiscoverabilityTestsNS;
@@ -224,7 +224,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_AddNodeBlueprint
 	co_return;
 }
 
-// Row 8 -- FTS5 baseline: bp_compile at pos 6 for "compile bp".
+// Row 8 -- bp_compile appears in top-10 for "compile bp" (FTS5 baseline pos 6).
 UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_CompileBp, UNTEST_TIMEOUTMS(15000))
 {
 	using namespace ClaireonToolDiscoverabilityTestsNS;
@@ -236,7 +236,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_CompileBp, UNTES
 	co_return;
 }
 
-// Row 9 -- FTS5 baseline: bp_compile at pos 3 for "compile blueprint".
+// Row 9 -- bp_compile appears in top-10 for "compile blueprint" (FTS5 baseline pos 3).
 UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_CompileBlueprint, UNTEST_TIMEOUTMS(15000))
 {
 	using namespace ClaireonToolDiscoverabilityTestsNS;
@@ -320,7 +320,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_ApplySpecBluepri
 	co_return;
 }
 
-// Row 16 -- FTS5 baseline: bp_apply_delta at pos 2 for "apply delta blueprint".
+// Row 16 -- bp_apply_delta appears in top-10 for "apply delta blueprint" (FTS5 baseline pos 2).
 UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_ApplyDeltaBlueprint, UNTEST_TIMEOUTMS(15000))
 {
 	using namespace ClaireonToolDiscoverabilityTestsNS;
@@ -385,7 +385,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_FormatBpGraph, U
 	co_return;
 }
 
-// Row 21 -- FTS5 baseline: bp_set_node_property at pos 8 for "set node property bp".
+// Row 21 -- bp_set_node_property appears in top-10 for "set node property bp" (FTS5 baseline pos 8).
 UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_SetNodePropertyBp, UNTEST_TIMEOUTMS(15000))
 {
 	using namespace ClaireonToolDiscoverabilityTestsNS;
@@ -517,7 +517,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_CdoProperty, UNT
 	co_return;
 }
 
-// Row 32 -- FTS5 baseline: bp_duplicate at pos 2 for "duplicate blueprint".
+// Row 32 -- bp_duplicate appears in top-10 for "duplicate blueprint" (FTS5 baseline pos 2).
 UNTEST_UNIT_OPTS(Claireon, ToolDiscoverability, Discoverability_DuplicateBlueprint, UNTEST_TIMEOUTMS(15000))
 {
 	using namespace ClaireonToolDiscoverabilityTestsNS;
