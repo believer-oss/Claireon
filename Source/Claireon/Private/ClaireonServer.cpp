@@ -27,6 +27,7 @@
 #include "Editor.h"
 #include "Misc/App.h"
 #include "ClaireonSettings.h"
+#include "ClaireonOutputGate.h"
 #include "ClaireonXmlFormatter.h"
 #include "Tools/ClaireonTransactionGroupState.h"
 #include "ClaireonWorldReadiness.h"
@@ -998,6 +999,21 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsCall(const FMCPRequestContex
 	if (ToolName == TEXT("feedback_submit"))
 	{
 		bFeedbackSubmittedThisSession = true;
+	}
+
+	// Route generic-tool results through the disk-spill gate at the transport
+	// boundary, mirroring the REPL path in ClaireonAnthropicClient. Tools never
+	// route internally (the in-process bridge path must see raw Data); the one
+	// exception is python_execute, which routes its own stdout/uelog streams
+	// inside Execute and is skipped here exactly like on the REPL side.
+	if (!ToolResult.bIsError && ToolName != TEXT("python_execute"))
+	{
+		ToolResult = FClaireonOutputGate::RouteResult(
+			MoveTemp(ToolResult),
+			ToolName,
+			Arguments,
+			FClaireonBridge::GetCurrentConversationId(),
+			EClaireonSpillStreamSet::GenericData);
 	}
 
 	// Build MCP tool result — all tools return structured FToolResult fields.

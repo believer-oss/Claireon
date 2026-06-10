@@ -259,7 +259,12 @@ namespace ClaireonOutputGateInternal
 		return Out;
 	}
 
-	/** Serialise a JSON object to the condensed byte sequence used by the inline envelope. */
+	/**
+	 * Serialise a JSON object to pretty-printed UTF-8 bytes for the spill decision
+	 * and the on-disk file. Pretty-printed so line-oriented tools (grep, head)
+	 * work on spill files instead of seeing one multi-kilobyte line; the same
+	 * bytes feed the threshold check so size_bytes matches the file exactly.
+	 */
 	static TArray<uint8> SerializeJsonToUtf8Bytes(const TSharedPtr<FJsonObject>& Obj)
 	{
 		TArray<uint8> Out;
@@ -268,8 +273,7 @@ namespace ClaireonOutputGateInternal
 			return Out;
 		}
 		FString Serialized;
-		TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
-			TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Serialized);
+		TSharedRef<TJsonWriter<TCHAR>> Writer = TJsonWriterFactory<TCHAR>::Create(&Serialized);
 		FJsonSerializer::Serialize(Obj.ToSharedRef(), Writer);
 		Writer->Close();
 
@@ -610,9 +614,6 @@ void FClaireonOutputGate::SweepStaleSpills(int32 RetentionDays)
 
 	for (const FString& DirPath : Visitor.Subdirs)
 	{
-		// Find the most-recent mtime: directory itself or any child file.
-		FDateTime MostRecent = IFileManager::Get().GetTimeStamp(*DirPath);
-
 		class FRecentMtimeVisitor : public IPlatformFile::FDirectoryVisitor
 		{
 		public:
@@ -632,12 +633,16 @@ void FClaireonOutputGate::SweepStaleSpills(int32 RetentionDays)
 			}
 		};
 
+		// Staleness = the newest contained file's mtime; the directory's own
+		// mtime is consulted only when the directory holds no files. The dir
+		// mtime cannot be a floor when files exist: a partially-failed sweep
+		// (locked file) refreshes it by deleting siblings, which would starve
+		// the retry that the failure path below promises.
 		FRecentMtimeVisitor FileVisitor;
 		FPlatformFileManager::Get().GetPlatformFile().IterateDirectoryRecursively(*DirPath, FileVisitor);
-		if (FileVisitor.Latest > MostRecent)
-		{
-			MostRecent = FileVisitor.Latest;
-		}
+		const FDateTime MostRecent = (FileVisitor.Latest != FDateTime::MinValue())
+			? FileVisitor.Latest
+			: IFileManager::Get().GetTimeStamp(*DirPath);
 
 		if (MostRecent >= CutoffTime)
 		{

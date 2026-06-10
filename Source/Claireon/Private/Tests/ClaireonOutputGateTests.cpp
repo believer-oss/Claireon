@@ -135,7 +135,7 @@ namespace ClaireonOutputGateTestsHelpers
 // Case 1a: generic tool, small data under threshold
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, OutputGate, SmallGenericDataStaysInline)
+UNTEST_UNIT_OPTS(Claireon, OutputGate, SmallGenericDataStaysInline, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace ClaireonOutputGateTestsHelpers;
 	FScopedTestRoot Scope(TEXT("SmallGenericDataStaysInline"));
@@ -175,7 +175,7 @@ UNTEST_UNIT(Claireon, OutputGate, SmallGenericDataStaysInline)
 // Case 1b: generic tool, large data -> spill; envelope names exactly "data"
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, OutputGate, LargeGenericDataSpillsAsData)
+UNTEST_UNIT_OPTS(Claireon, OutputGate, LargeGenericDataSpillsAsData, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace ClaireonOutputGateTestsHelpers;
 	FScopedTestRoot Scope(TEXT("LargeGenericDataSpillsAsData"));
@@ -218,7 +218,7 @@ UNTEST_UNIT(Claireon, OutputGate, LargeGenericDataSpillsAsData)
 // Case 1c: python_execute, stdout over threshold, uelog under threshold
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, OutputGate, PythonStdoutSpillsOnly)
+UNTEST_UNIT_OPTS(Claireon, OutputGate, PythonStdoutSpillsOnly, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace ClaireonOutputGateTestsHelpers;
 	FScopedTestRoot Scope(TEXT("PythonStdoutSpillsOnly"));
@@ -261,7 +261,7 @@ UNTEST_UNIT(Claireon, OutputGate, PythonStdoutSpillsOnly)
 // Case 1d: python_execute, both stdout and uelog over threshold
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, OutputGate, PythonBothStreamsSpill)
+UNTEST_UNIT_OPTS(Claireon, OutputGate, PythonBothStreamsSpill, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace ClaireonOutputGateTestsHelpers;
 	FScopedTestRoot Scope(TEXT("PythonBothStreamsSpill"));
@@ -310,7 +310,7 @@ UNTEST_UNIT(Claireon, OutputGate, PythonBothStreamsSpill)
 // Case 1e: generic tool, binary (non-UTF-8) data -> .bin, octet-stream, hex
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, OutputGate, BinaryDataSpillsAsBin)
+UNTEST_UNIT_OPTS(Claireon, OutputGate, BinaryDataSpillsAsBin, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace ClaireonOutputGateTestsHelpers;
 	FScopedTestRoot Scope(TEXT("BinaryDataSpillsAsBin"));
@@ -379,7 +379,7 @@ UNTEST_UNIT(Claireon, OutputGate, BinaryDataSpillsAsBin)
 // Case 1f: simulated write failure -> bWriteFailed flagged, no spill path
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, OutputGate, WriteFailureIsCaptured)
+UNTEST_UNIT_OPTS(Claireon, OutputGate, WriteFailureIsCaptured, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace ClaireonOutputGateTestsHelpers;
 

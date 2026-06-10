@@ -2285,7 +2285,7 @@ FString FClaireonBPNodeMapper::MapUnknownNode(const UEdGraphNode* Node, int32 In
 	FString Output;
 	Output += FString::Printf(TEXT("%s// [BP:UNKNOWN] Guid=%s Type=%s Name=\"%s\"\n"),
 		*Indent, *GuidStr, *TypeStr, *NameStr);
-	Output += FString::Printf(TEXT("%s// [BP] TODO: implement -- unknown node type, inspect via blueprint_get_graph\n"),
+	Output += FString::Printf(TEXT("%s// [BP] TODO: implement -- unknown node type, inspect via bp_get_graph\n"),
 		*Indent);
 
 	return Output;

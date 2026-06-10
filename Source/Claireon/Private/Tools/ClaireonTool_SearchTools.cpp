@@ -154,7 +154,7 @@ TSharedPtr<FJsonObject> ClaireonTool_SearchTools::GetInputSchema() const
 	TSharedPtr<FJsonObject> MaxResultsProp = MakeShared<FJsonObject>();
 	MaxResultsProp->SetStringField(TEXT("type"), TEXT("integer"));
 	MaxResultsProp->SetStringField(TEXT("description"), TEXT("Maximum number of tools to return."));
-	MaxResultsProp->SetNumberField(TEXT("default"), 100);
+	MaxResultsProp->SetNumberField(TEXT("default"), 10);
 	Properties->SetObjectField(TEXT("max_results"), MaxResultsProp);
 
 	// detail - optional
@@ -308,7 +308,7 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 	FString Category;
 	FString Detail = TEXT("standard");
 	FString InspectToolName;
-	int32 MaxResults = 100;
+	int32 MaxResults = 10;
 	bool bIncludeSchema = false;
 	bool bIncludeExamples = false;
 
@@ -339,11 +339,11 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 		Arguments->TryGetBoolField(TEXT("include_schema"), bIncludeSchema);
 		Arguments->TryGetBoolField(TEXT("include_examples"), bIncludeExamples);
 
-		double MaxResultsVal = 100;
+		double MaxResultsVal = 10;
 		if (Arguments->TryGetNumberField(TEXT("max_results"), MaxResultsVal))
 		{
 			MaxResults = static_cast<int32>(MaxResultsVal);
-			if (MaxResults <= 0) MaxResults = 100;
+			if (MaxResults <= 0) MaxResults = 10;
 		}
 	}
 

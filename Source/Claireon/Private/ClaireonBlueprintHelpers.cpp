@@ -236,7 +236,7 @@ namespace ClaireonBlueprintHelpers
 
 		// Fallback: match on the A field only. Blueprint recompilation can
 		// regenerate B/C/D while preserving A, causing GUIDs returned by
-		// get_blueprint_graph to go stale by the time edit_blueprint_graph
+		// bp_get_graph to go stale by the time a graph-editing tool
 		// tries to resolve them.  If exactly one node shares the A field we
 		// treat it as the same logical node and log a warning.
 		UEdGraphNode* AFieldMatch = nullptr;

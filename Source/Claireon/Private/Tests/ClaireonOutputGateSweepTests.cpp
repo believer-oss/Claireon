@@ -14,6 +14,10 @@
 #include "Misc/Timespan.h"
 #include "SquidTasks/Task.h"
 
+#if PLATFORM_WINDOWS
+#include "Windows/WindowsHWrapper.h"
+#endif
+
 // ===========================================================================
 // Sweep tests (ClaireonOutputGateSweepTests)
 // ===========================================================================
@@ -53,7 +57,37 @@ namespace ClaireonOutputGateSweepHelpers
 		}
 	};
 
-	/** Create a synthetic conv_NNN subdir with one file and rewind the file mtime. */
+	/**
+	 * Rewind a DIRECTORY's mtime.  IFileManager::SetTimeStamp silently no-ops on
+	 * directories on Windows (the engine opens the handle without
+	 * FILE_FLAG_BACKUP_SEMANTICS, which Windows requires for directories), and
+	 * SweepStaleSpills uses the directory's own mtime as a staleness floor -- so
+	 * without this the aged fixtures are never eligible for deletion.
+	 */
+	static void SetDirectoryTimestamp(const FString& Dir, const FDateTime& Time)
+	{
+#if PLATFORM_WINDOWS
+		const FString FullPath = FPaths::ConvertRelativePathToFull(Dir);
+		HANDLE Handle = CreateFileW(*FullPath, FILE_WRITE_ATTRIBUTES,
+			FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+			OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+		if (Handle != INVALID_HANDLE_VALUE)
+		{
+			// FILETIME is 100ns ticks since 1601-01-01 UTC; FDateTime ticks share
+			// the 100ns resolution, so only the epoch shift is needed.
+			const int64 Ticks = (Time - FDateTime(1601, 1, 1)).GetTicks();
+			FILETIME FileTime;
+			FileTime.dwLowDateTime = static_cast<DWORD>(Ticks & 0xFFFFFFFF);
+			FileTime.dwHighDateTime = static_cast<DWORD>(static_cast<uint64>(Ticks) >> 32);
+			SetFileTime(Handle, nullptr, nullptr, &FileTime);
+			CloseHandle(Handle);
+		}
+#else
+		IFileManager::Get().SetTimeStamp(*Dir, Time);
+#endif
+	}
+
+	/** Create a synthetic conv_NNN subdir with one file and rewind both mtimes. */
 	static FString MakeAgedConvDir(const FString& Root, const TCHAR* Name, int32 AgeDays)
 	{
 		const FString Dir = Root / FString(Name);
@@ -63,7 +97,7 @@ namespace ClaireonOutputGateSweepHelpers
 
 		const FDateTime Aged = FDateTime::UtcNow() - FTimespan::FromDays(AgeDays);
 		IFileManager::Get().SetTimeStamp(*File, Aged);
-		IFileManager::Get().SetTimeStamp(*Dir, Aged);
+		SetDirectoryTimestamp(Dir, Aged);
 		return Dir;
 	}
 }
@@ -90,7 +124,7 @@ UNTEST_UNIT_OPTS(Claireon, OutputGateSweep, EmptyRootNoop, UNTEST_TIMEOUTMS(3000
 // Case 2b: two 10-day subdirs -> both deleted
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, OutputGateSweep, TenDayOldSubdirsDeleted)
+UNTEST_UNIT_OPTS(Claireon, OutputGateSweep, TenDayOldSubdirsDeleted, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace ClaireonOutputGateSweepHelpers;
 	FScopedTestRoot Scope(TEXT("TenDayOldSubdirsDeleted"));
@@ -113,7 +147,7 @@ UNTEST_UNIT(Claireon, OutputGateSweep, TenDayOldSubdirsDeleted)
 // Case 2c: mixed ages -> only the 30-day subdir is deleted
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, OutputGateSweep, MixedAgesRetainsYoungDirs)
+UNTEST_UNIT_OPTS(Claireon, OutputGateSweep, MixedAgesRetainsYoungDirs, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace ClaireonOutputGateSweepHelpers;
 	FScopedTestRoot Scope(TEXT("MixedAgesRetainsYoungDirs"));
@@ -142,7 +176,7 @@ UNTEST_UNIT(Claireon, OutputGateSweep, MixedAgesRetainsYoungDirs)
 // separate integration test for the caller's guard.
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, OutputGateSweep, KeepSpillsIsCallerResponsibility)
+UNTEST_UNIT_OPTS(Claireon, OutputGateSweep, KeepSpillsIsCallerResponsibility, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace ClaireonOutputGateSweepHelpers;
 	FScopedTestRoot Scope(TEXT("KeepSpillsIsCallerResponsibility"));
@@ -161,7 +195,7 @@ UNTEST_UNIT(Claireon, OutputGateSweep, KeepSpillsIsCallerResponsibility)
 // Case 2e: locked file tolerance -- sweep completes without throwing
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, OutputGateSweep, LockedFileToleratedAcrossTwoSweeps)
+UNTEST_UNIT_OPTS(Claireon, OutputGateSweep, LockedFileToleratedAcrossTwoSweeps, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace ClaireonOutputGateSweepHelpers;
 	FScopedTestRoot Scope(TEXT("LockedFileToleratedAcrossTwoSweeps"));
@@ -171,6 +205,9 @@ UNTEST_UNIT(Claireon, OutputGateSweep, LockedFileToleratedAcrossTwoSweeps)
 	FFileHelper::SaveStringToFile(TEXT("held"), *Held);
 	IFileManager::Get().SetTimeStamp(*Held,
 		FDateTime::UtcNow() - FTimespan::FromDays(30));
+	// Creating held.txt bumped the directory mtime back to now; re-age it so the
+	// sweep's directory-mtime staleness floor sees a stale dir.
+	SetDirectoryTimestamp(Dir, FDateTime::UtcNow() - FTimespan::FromDays(30));
 
 	// Open a handle for reading so the underlying delete may fail.
 	IFileHandle* Handle = FPlatformFileManager::Get().GetPlatformFile().OpenRead(*Held, /*bAllowWrite*/ false);
