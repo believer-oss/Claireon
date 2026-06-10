@@ -8,9 +8,13 @@ Saved/
 __pycache__/
 *.pyc
 
+# Local agent configuration
+.claude/
+
 # IDE / OS
 .vs/
 .vscode/
+*.vcxproj*
 *.VC.db
 *.VC.opendb
 *.opensdf
