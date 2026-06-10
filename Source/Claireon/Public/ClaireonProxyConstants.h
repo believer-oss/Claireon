@@ -6,7 +6,7 @@
 #include "CoreMinimal.h"
 
 /**
- * Shared compile-time constants for the Claireon MCP always-on proxy.
+ * Shared compile-time constants for the Claireon always-on proxy.
  *
  * SOURCE-OF-TRUTH for values duplicated into the Python proxy
  * (Plugins/Claireon/Content/Python/claireon_proxy.py). The Python side

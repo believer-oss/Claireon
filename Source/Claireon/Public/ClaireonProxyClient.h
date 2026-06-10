@@ -84,7 +84,7 @@ struct FHeartbeatResult
 };
 
 /**
- * Editor-side client for the always-on Claireon MCP proxy.
+ * Editor-side client for the always-on Claireon proxy.
  *
  * The proxy itself is a long-running Python process
  * (Plugins/Claireon/Content/Python/claireon_proxy.py) that outlives the

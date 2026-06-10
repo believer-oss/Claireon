@@ -1,4 +1,4 @@
-# Contributing to Claireon MCP
+# Contributing to Claireon
 
 Thank you for your interest in contributing to Claireon! This document provides guidelines and information for contributors.
 

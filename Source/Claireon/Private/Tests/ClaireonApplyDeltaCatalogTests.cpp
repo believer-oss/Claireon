@@ -14,7 +14,7 @@
 //       ["disconnect","remove_nodes","nodes","connect"]. supported==false
 //       entries carry a non-empty `reason` string.
 //   (b) Catalog-apply_delta-matches-registered (bidirectional): every
-//       registered Claireon MCP tool whose GetOperation() == "apply_delta"
+//       registered Claireon tool whose GetOperation() == "apply_delta"
 //       MUST appear as apply_delta.tool on exactly one catalog entry,
 //       and the catalog key MUST equal the tool's GetCategory().
 //       Conversely, every catalog entry with apply_delta.supported==true

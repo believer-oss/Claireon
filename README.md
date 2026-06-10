@@ -1,5 +1,5 @@
 <p align="center">
-  <h1 align="center">Claireon MCP</h1>
+  <h1 align="center">Claireon</h1>
   <p align="center">
     Model Context Protocol server for Unreal Editor automation
   </p>
@@ -58,7 +58,7 @@ YourProject/
       ...
 ```
 
-3. Enable the plugin in the editor under **Edit > Plugins > Claireon MCP**
+3. Enable the plugin in the editor under **Edit > Plugins > Claireon**
 
 ### Starting the Server
 

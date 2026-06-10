@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a problem with Claireon MCP
+about: Report a problem with Claireon
 title: ''
 labels: bug
 assignees: ''

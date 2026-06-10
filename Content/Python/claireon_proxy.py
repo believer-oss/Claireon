@@ -1,4 +1,4 @@
-"""Claireon MCP Proxy.
+"""Claireon Proxy.
 
 Long-running Python proxy between Claude Code and the UE plugin's MCP server.
 Keeps Claude's MCP connection alive across editor restarts, crashes, and
@@ -2741,7 +2741,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         evicted on the per-tick loop so an editor crash is observable
         within HEARTBEAT_STALENESS_SECONDS.
     """
-    parser = argparse.ArgumentParser(description="Claireon MCP Proxy")
+    parser = argparse.ArgumentParser(description="Claireon Proxy")
     parser.add_argument(
         "--extra-python-args",
         default="",

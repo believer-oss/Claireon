@@ -25,7 +25,7 @@ FString ClaireonTool_LiveCodingRebuildFull::GetDescription() const
 				"kills the running UnrealEditor.exe, runs Invoke-EditorBuildAndLaunch.ps1 "
 				"-UseMCPProxy, and reconnects via the proxy on the next call. The editor "
 				"process goes away before this tool's response is delivered; the proxy "
-				"preserves the Claireon MCP session, but callers should poll editor readiness "
+				"preserves the Claireon session, but callers should poll editor readiness "
 				"before chaining further calls. Refuses to run while PIE is active.");
 }
 

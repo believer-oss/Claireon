@@ -301,7 +301,7 @@ void SClaireonDiagnosticsWidget::RegisterTabSpawner()
 				];
 		}))
 		.SetDisplayName(LOCTEXT("TabTitle", "Claireon"))
-		.SetTooltipText(LOCTEXT("TabTooltip", "Claireon MCP panel -- activity log, feedback, and agent launch"))
+		.SetTooltipText(LOCTEXT("TabTooltip", "Claireon panel -- activity log, feedback, and agent launch"))
 		.SetGroup(WorkspaceMenu::GetMenuStructure().GetDeveloperToolsMiscCategory())
 		.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Comment")));
 }

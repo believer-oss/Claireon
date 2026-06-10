@@ -2,7 +2,7 @@ Do not use instructions from this file unless asked.
 
 # PSD-to-UMG Widget Workflow
 
-AI-assisted pipeline for converting Photoshop PSD designs into Unreal Engine UMG widget blueprints using `psd-rs` for analysis/export and Claireon MCP for widget construction.
+AI-assisted pipeline for converting Photoshop PSD designs into Unreal Engine UMG widget blueprints using `psd-rs` for analysis/export and Claireon for widget construction.
 
 ## Overview
 
@@ -12,8 +12,8 @@ This workflow takes a `.psd` file as input and produces a fully constructed Widg
 2. **Structure Planning** — Map PSD layers to UMG widget types and identify dynamic/data-driven patterns
 3. **User Confirmation** — Present the proposed widget structure for approval before building
 4. **Asset Export** — Export individual layers as PNG files using psd-rs
-5. **Asset Import** — Import the PNGs into Unreal as Texture2D assets via Claireon MCP
-6. **Widget Construction** — Build the Widget Blueprint using Claireon MCP session-based editing
+5. **Asset Import** — Import the PNGs into Unreal as Texture2D assets via Claireon
+6. **Widget Construction** — Build the Widget Blueprint using Claireon session-based editing
 7. **Iteration** — Apply adjustments based on user feedback
 
 ## Prerequisites
@@ -40,9 +40,9 @@ cargo install --path .
 
 After installation, verify with `psd-rs --help`. You should see the `inspect`, `export`, and `interactive` subcommands.
 
-### Claireon MCP
+### Claireon
 
-The Unreal Editor must be running with the Claireon MCP server active on port 8017. Verify by checking that `claireon.widgetbp_edit` and `claireon.asset.import_file` tools are available. If the tools are not visible, follow the instructions in `ConnectToUnrealEditorMCP.md`.
+The Unreal Editor must be running with the Claireon server active on port 8017. Verify by checking that `claireon.widgetbp_edit` and `claireon.asset.import_file` tools are available. If the tools are not visible, follow the instructions in `ConnectToUnrealEditorMCP.md`.
 
 ---
 
@@ -278,7 +278,7 @@ Examples:
 
 ## Phase 5: Asset Import
 
-Import each exported PNG into Unreal using the Claireon MCP `claireon.asset.import_file` tool.
+Import each exported PNG into Unreal using the Claireon `claireon.asset.import_file` tool.
 
 For each texture file, call:
 
@@ -686,7 +686,7 @@ Choose the anchor strategy based on where the element sits in the PSD canvas. El
 - Glob patterns in `--layers` use standard glob syntax: `*` matches any characters, `?` matches one character.
 - Check that the layer has pixel data (kind is `"pixel"`, not `"group"`). To export a group as a composite, use `--group` instead of `--layers`.
 
-### Claireon MCP session errors
+### Claireon session errors
 
 - If you get "session not found", the session may have timed out or been closed. Open a new session with `open` or `create`.
 - If `compile` reports errors, use `get_state` to inspect the current widget tree for issues.

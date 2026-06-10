@@ -2,7 +2,7 @@
 	"FileVersion": 3,
 	"Version": 1,
 	"VersionName": "2.0.0",
-	"FriendlyName": "Claireon MCP",
+	"FriendlyName": "Claireon",
 	"Description": "Model Context Protocol server for Unreal Editor automation",
 	"Category": "Editor",
 	"CreatedBy": "The Believer Company",

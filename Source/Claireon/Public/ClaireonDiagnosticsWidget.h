@@ -34,7 +34,7 @@ struct FClaireonFeedbackPanelEntry
 };
 
 /**
- * Claireon MCP panel.
+ * Claireon panel.
  *
  * Layout:
  *   [Tab bar: Activity (N) | Feedback (M) | Chat*]   (* only when bEnableREPLChat)

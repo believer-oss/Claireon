@@ -9,7 +9,7 @@
  * Live-coding "header changed" recovery in one shot. Spawns a detached PowerShell
  * helper that kills the editor process, runs Invoke-EditorBuild.ps1, then relaunches
  * the editor via Invoke-EditorBuildAndLaunch.ps1 -UseMCPProxy -SkipBuild. The proxy
- * preserves the Claireon MCP connection across the restart.
+ * preserves the Claireon connection across the restart.
  *
  * NOTE: this tool returns immediately after scheduling the helper; the editor process
  * itself goes away before the response is delivered, so callers should not chain
