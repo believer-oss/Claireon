@@ -150,6 +150,33 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 		}
 	}
 
+	// Hint envelope (success AND error paths; also spilled results). The tool
+	// attached a structured nudge (e.g. python_execute's tool_search /
+	// uobject_inspect hints); without this block the MCP HTTP transport drops
+	// Result.Hint entirely (BuildResultEnvelope only serves the Python-side
+	// claireon.* call envelope). Insert before the LAST closing tag so log text
+	// that happens to contain the tag cannot misplace it.
+	if (Result.Hint.IsValid())
+	{
+		FString HintJson;
+		TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> HintWriter =
+			TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&HintJson);
+		FJsonSerializer::Serialize(Result.Hint.ToSharedRef(), HintWriter);
+		HintWriter->Close();
+
+		const FString HintXml = TEXT("<hint>\n") + HintJson + TEXT("\n</hint>\n");
+		const int32 CloseAt = Xml.Find(TEXT("</execute-result>"),
+			ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+		if (CloseAt >= 0)
+		{
+			Xml.InsertAt(CloseAt, HintXml);
+		}
+		else
+		{
+			Xml += HintXml;
+		}
+	}
+
 	return Xml;
 }
 

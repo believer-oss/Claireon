@@ -90,11 +90,17 @@ static int ClaireonPy_WatchdogRaiseTimeout(void* Arg)
 namespace Cl622PyHintInternal
 {
 	static TSharedPtr<FJsonObject> Cl622Py_BuildHintFromLogs(const FString& Logs);
+	static TSharedPtr<FJsonObject> Cl622Py_BuildHintFromScript(const FString& Code);
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ExecutePython::BuildHintFromLogs(const FString& Logs)
 {
 	return Cl622PyHintInternal::Cl622Py_BuildHintFromLogs(Logs);
+}
+
+TSharedPtr<FJsonObject> ClaireonTool_ExecutePython::BuildHintFromScript(const FString& Code)
+{
+	return Cl622PyHintInternal::Cl622Py_BuildHintFromScript(Code);
 }
 
 // ---------------------------------------------------------------------------
@@ -110,6 +116,11 @@ TSharedPtr<FJsonObject> ClaireonTool_ExecutePython::BuildHintFromLogs(const FStr
 //   - TypeError: <tool>() missing N required positional argument
 //
 // SyntaxError is intentionally not nudged (operator answer D4 + design notes).
+//
+// A second, script-content channel (Cl622Py_BuildHintFromScript) fires on the
+// raw user code regardless of execution outcome: get_editor_property usage is
+// nudged toward claireon.uobject_inspect. Error-derived hints win when both
+// channels match (Result.Hint carries a single object).
 //
 // File-local discriminator: helpers are prefixed `Cl622Py_` to avoid
 // anonymous-namespace collisions under Module.Claireon.<N>.cpp unity batching
@@ -355,6 +366,29 @@ namespace Cl622PyHintInternal
 		}
 
 		return nullptr;
+	}
+
+	/** Script-content nudge, independent of execution outcome: any use of raw
+	 *  `get_editor_property` earns a hint toward claireon.uobject_inspect,
+	 *  which reads through FProperty directly -- it bypasses the access-checked
+	 *  editor-property path (the one that raises on protected/private members
+	 *  and SEH-crashes on the known-bad properties) and supports dotted
+	 *  property_path nesting. Returns null when the pattern is absent. */
+	static TSharedPtr<FJsonObject> Cl622Py_BuildHintFromScript(const FString& Code)
+	{
+		if (!Code.Contains(TEXT("get_editor_property"), ESearchCase::CaseSensitive))
+		{
+			return nullptr;
+		}
+
+		TSharedPtr<FJsonObject> Hint = MakeShared<FJsonObject>();
+		Hint->SetStringField(TEXT("tool"), TEXT("python_execute"));
+		Hint->SetStringField(TEXT("reason"),
+			TEXT("script uses get_editor_property; try claireon.uobject_inspect(object_path=..., "
+				 "property_path=...) instead -- it bypasses the access-checked editor-property "
+				 "restrictions and can read private/protected and nested members "
+				 "(property_path supports dotted nesting)."));
+		return Hint;
 	}
 }
 
@@ -685,9 +719,17 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	// Scan the traceback (regardless of bPythonSuccess -- the user-script
 	// template's bare-except branch can absorb the exception while still
 	// printing the traceback to stdout, so the hint signal must be available
-	// on both result paths). The bridge surfaces Result.Hint on the wire
-	// envelope only when valid; null leaves the wire shape byte-identical.
+	// on both result paths). Result.Hint reaches the wire only when valid
+	// (Python envelope via BuildResultEnvelope; MCP XML via FormatExecuteResult's
+	// <hint> element); null leaves the wire shape byte-identical.
+	// Error-derived hints take precedence; otherwise scan the raw script for
+	// content-based nudges (get_editor_property -> uobject_inspect), which
+	// fire on success too.
 	FinalResult.Hint = Cl622PyHintInternal::Cl622Py_BuildHintFromLogs(Logs);
+	if (!FinalResult.Hint.IsValid())
+	{
+		FinalResult.Hint = Cl622PyHintInternal::Cl622Py_BuildHintFromScript(Code);
+	}
 
 	if (bTimedOut)
 	{

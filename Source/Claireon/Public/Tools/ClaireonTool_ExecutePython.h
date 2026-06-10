@@ -37,6 +37,16 @@ public:
 	 */
 	static TSharedPtr<FJsonObject> BuildHintFromLogs(const FString& Logs);
 
+	/**
+	 * Inspect the raw user script (pre-wrap) for patterns worth a proactive
+	 * nudge, independent of execution outcome. Currently: any use of
+	 * `get_editor_property` gets a hint toward claireon.uobject_inspect, which
+	 * bypasses the access-checked editor-property path and can read
+	 * private/protected and nested members. Returns null when nothing matches.
+	 * Exposed publicly for the test harness.
+	 */
+	static TSharedPtr<FJsonObject> BuildHintFromScript(const FString& Code);
+
 private:
 	/** Maximum allowed script size in bytes */
 	static constexpr int32 MaxScriptSizeBytes = 64 * 1024;

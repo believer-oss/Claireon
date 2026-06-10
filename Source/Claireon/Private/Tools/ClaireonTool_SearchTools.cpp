@@ -48,25 +48,6 @@ std::atomic<bool> bToolCatalogDirty{false};
 //
 // File-local discriminator to avoid anon-NS collisions under unity batching.
 // ---------------------------------------------------------------------------
-// Map the retrieval rank-source enum to the stable JSON string emitted on each
-// result. Consumers read this to interpret the `score` field's polarity:
-//   exact_pin            -> Score is a reserved sentinel (pinned to rank 0).
-//   near_exact_boost     -> Score is a boosted RRF value (higher = better).
-//   hybrid_rrf           -> Score is an RRF value (positive; higher = better).
-//   lexical_only_fallback-> Score is from the lexical-only fusion (semantic down).
-// File-local discriminator (Cl628_) to avoid anon-NS collisions under unity batching.
-const TCHAR* Cl628_RankSourceToString(EClaireonRankSource Source)
-{
-	switch (Source)
-	{
-	case EClaireonRankSource::ExactPin:             return TEXT("exact_pin");
-	case EClaireonRankSource::NearExactBoost:       return TEXT("near_exact_boost");
-	case EClaireonRankSource::HybridRRF:            return TEXT("hybrid_rrf");
-	case EClaireonRankSource::LexicalOnlyFallback:  return TEXT("lexical_only_fallback");
-	default:                                      return TEXT("lexical_only_fallback");
-	}
-}
-
 TSharedPtr<FJsonObject> Cl622SearchSpec_LoadCatalog()
 {
 	static FCriticalSection CacheLock;
@@ -133,9 +114,7 @@ FString ClaireonTool_SearchTools::GetDescription() const
 		"pass `tool_name=\"<name>\"` to get the tool's exact input schema, parameter tooltips, and example usage. "
 		"Without `tool_name`, returns a flat, globally rank-ordered `tools[]` list matching `query` (hybrid lexical "
 		"bm25 + semantic fused via reciprocal rank fusion, with abbreviation expansion -- understands 'bp' for "
-		"blueprint, 'dt' for data table). Results are best-first; each carries a `rank_source` "
-		"(exact_pin|near_exact_boost|hybrid_rrf|lexical_only_fallback) and a `score` whose polarity depends on it "
-		"(rrf/boost: higher = better; exact_pin: reserved sentinel). Filter by `category` if you "
+		"blueprint, 'dt' for data table). Results are best-first. Filter by `category` if you "
 		"already know the area. TRANSPORT: all claireon.* tools listed here are invoked via mcp__claireon__python_execute: "
 		"`import claireon; result = claireon.<tool_name>(arg=value)`.");
 }
@@ -604,12 +583,6 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 			ToolObj->SetArrayField(TEXT("keywords"), KeywordValues);
 		}
 
-		const TMap<FString, FName>& SourceMap = Server->GetToolSourceMap();
-		if (const FName* SourceName = SourceMap.Find(InspectToolName))
-		{
-			ToolObj->SetStringField(TEXT("source"), SourceName->ToString());
-		}
-
 		TSharedPtr<FJsonObject> InspectData = MakeShared<FJsonObject>();
 		InspectData->SetBoolField(TEXT("deep_inspect"), true);
 		InspectData->SetObjectField(TEXT("tool"), ToolObj);
@@ -628,15 +601,14 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 	// name still gets it at rank 0 even when FTS/semantic recall missed it.
 	//
 	// Pinning happens exactly once, inside FindNearestHybrid. Each match carries a
-	// RankSource (ExactPin / NearExactBoost / HybridRRF / LexicalOnlyFallback) and
-	// a Score whose polarity depends on that source (see EClaireonRankSource).
+	// RankSource (ExactPin / NearExactBoost / HybridRRF / LexicalOnlyFallback);
+	// it is kept INTERNAL (not emitted on the wire) and drives footer suppression
+	// for genuine exact-name lookups below.
 	// -----------------------------------------------------------------------
 	struct FRankedEntry
 	{
 		FString Name;
 		FString Category;
-		float   Score = 0.0f;  // polarity depends on RankSource (see EClaireonRankSource).
-		bool    bHasScore = false;
 		EClaireonRankSource RankSource = EClaireonRankSource::LexicalOnlyFallback;
 	};
 	TArray<FRankedEntry> RankedEntries;
@@ -667,7 +639,7 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 		if (!FClaireonToolEmbeddingIndex::IsReady())
 		{
 			UE_LOG(LogClaireon, Display,
-				TEXT("[tool_search] Semantic embedding index unavailable; serving lexical-only results (rank_source=lexical_only_fallback)."));
+				TEXT("[tool_search] Semantic embedding index unavailable; serving lexical-only results (LexicalOnlyFallback)."));
 		}
 
 		// Hybrid retrieval. FindNearestHybrid fuses lexical + semantic via RRF and
@@ -682,8 +654,6 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 			FRankedEntry E;
 			E.Name       = M.Name;
 			E.Category   = M.Category;
-			E.Score      = M.Score;
-			E.bHasScore  = true;
 			E.RankSource = M.RankSource;
 			RankedEntries.Add(MoveTemp(E));
 		}
@@ -706,8 +676,6 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 			FRankedEntry E;
 			E.Name      = ToolName;
 			E.Category  = ToolCategory;
-			E.Score     = 0.0f;
-			E.bHasScore = false;
 			RankedEntries.Add(MoveTemp(E));
 		}
 		RankedEntries.Sort([](const FRankedEntry& A, const FRankedEntry& B)
@@ -743,8 +711,8 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 	// Query results no longer group by category (the agent's question is "what
 	// do I call next?", which a global rank answers directly). `mode=categories`
 	// keeps the grouped browse surface; deep-inspect / select: record shapes are
-	// unchanged. The dropped `query_tokens_matched` is replaced by the raw bm25
-	// `score` (negative; lower = better; not rescaled).
+	// unchanged. Ranking internals (score, rank_source, provider source) are NOT
+	// emitted -- order alone carries the signal.
 	TSharedPtr<FJsonObject> DataObj = MakeShared<FJsonObject>();
 	if (!Query.IsEmpty())
 	{
@@ -753,7 +721,6 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 	DataObj->SetNumberField(TEXT("total_matching"), TotalMatching);
 	DataObj->SetNumberField(TEXT("returned"), RankedEntries.Num());
 
-	const TMap<FString, FName>& SourceMap = Server->GetToolSourceMap();
 	TArray<TSharedPtr<FJsonValue>> ToolsArr;
 	ToolsArr.Reserve(RankedEntries.Num());
 	for (const FRankedEntry& Entry : RankedEntries)
@@ -785,19 +752,6 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 		ToolObj->SetStringField(TEXT("description"), ToolDescription);
 		ToolObj->SetStringField(TEXT("signature"),
 			FClaireonXmlFormatter::GenerateTypeSignature(Entry.Name, ToolSchema));
-		// `score` polarity is signal-dependent -- read `rank_source` first:
-		//   hybrid_rrf / near_exact_boost -> positive RRF value (higher = better);
-		//   exact_pin                     -> reserved sentinel (pinned to rank 0);
-		//   lexical_only_fallback         -> lexical-only fusion value.
-		// See EClaireonRankSource for the per-source semantics.
-		ToolObj->SetNumberField(TEXT("score"), Entry.Score);
-		ToolObj->SetStringField(TEXT("rank_source"),
-			ClaireonTool_SearchToolsInternal::Cl628_RankSourceToString(Entry.RankSource));
-
-		if (const FName* SourceName = SourceMap.Find(Entry.Name))
-		{
-			ToolObj->SetStringField(TEXT("source"), SourceName->ToString());
-		}
 		if (bIncludeSchema && ToolSchema.IsValid())
 		{
 			ToolObj->SetObjectField(TEXT("input_schema"), ToolSchema);
@@ -852,14 +806,14 @@ IClaireonTool::FToolResult ClaireonTool_SearchTools::Execute(const TSharedPtr<FJ
 	//     canonical name, so there is nothing to "upgrade" to).
 	//
 	// Footer suppression for the single-exact case must key off a GENUINE exact
-	// match (rank_source == exact_pin at position 0), NOT merely "exactly one result
-	// exists". Keying off ReturnedCount==1 would either (a) FALSELY suppress the
-	// footer for a one-hit ordinary search, or (b) FALSELY show it when semantic
+	// match (internal RankSource == ExactPin at position 0), NOT merely "exactly one
+	// result exists". Keying off ReturnedCount==1 would either (a) FALSELY suppress
+	// the footer for a one-hit ordinary search, or (b) FALSELY show it when semantic
 	// fusion happens to leave one result. The honest signal is "the query was a
-	// tool-name lookup", which the exact_pin rank_source at position 0 encodes
+	// tool-name lookup", which the ExactPin RankSource at position 0 encodes
 	// directly. The genuine zero-retrieval footer (ReturnedCount==0) is preserved.
 	const FString FirstResultName = (RankedEntries.Num() > 0) ? RankedEntries[0].Name : FString();
-	// rank_source == exact_pin at position 0 IS the genuine-exact-name-lookup signal:
+	// RankSource == ExactPin at position 0 IS the genuine-exact-name-lookup signal:
 	// FindNearestHybrid sets ExactPin only when the name-normalized query (lowercased,
 	// '-'/'_' stripped) equals a tool's name-normalized form. So this correctly covers
 	// hyphen/underscore-equivalent lookups too, without re-deriving the normalization

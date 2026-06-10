@@ -379,4 +379,59 @@ UNTEST_UNIT(Claireon, AnthropicWire, HintFieldPresentOnErrorWhenPopulated)
 	co_return;
 }
 
+// ===========================================================================
+// FToolResult::Hint rendered on the MCP XML transport
+// ===========================================================================
+// FormatExecuteResult is the chokepoint for the MCP HTTP tool_result content;
+// without an explicit <hint> emit, Result.Hint is invisible to MCP clients
+// (BuildResultEnvelope only serves the Python-side claireon.* envelope).
+// ===========================================================================
+
+UNTEST_UNIT(Claireon, AnthropicWire, HintRenderedInExecuteResultXml)
+{
+	IClaireonTool::FToolResult Result;
+	Result.Summary = TEXT("ok");
+	Result.Logs = TEXT("False");
+	TSharedPtr<FJsonObject> HintObj = MakeShared<FJsonObject>();
+	HintObj->SetStringField(TEXT("tool"), TEXT("python_execute"));
+	HintObj->SetStringField(TEXT("reason"), TEXT("script uses get_editor_property; try claireon.uobject_inspect"));
+	Result.Hint = HintObj;
+
+	const FString Xml = FClaireonXmlFormatter::FormatExecuteResult(Result);
+
+	UNTEST_EXPECT_TRUE(Xml.Contains(TEXT("<hint>")));
+	UNTEST_EXPECT_TRUE(Xml.Contains(TEXT("</hint>")));
+	UNTEST_EXPECT_TRUE(Xml.Contains(TEXT("uobject_inspect")));
+	// The hint sits INSIDE the result envelope (before the final closing tag).
+	UNTEST_EXPECT_TRUE(Xml.Find(TEXT("<hint>")) < Xml.Find(TEXT("</execute-result>"),
+		ESearchCase::CaseSensitive, ESearchDir::FromEnd));
+
+	co_return;
+}
+
+UNTEST_UNIT(Claireon, AnthropicWire, HintRenderedInErrorXmlAndAbsentWhenNull)
+{
+	// Error path carries the hint too.
+	IClaireonTool::FToolResult ErrResult;
+	ErrResult.bIsError = true;
+	ErrResult.ErrorMessage = TEXT("NameError: name 'bp_opn' is not defined");
+	TSharedPtr<FJsonObject> HintObj = MakeShared<FJsonObject>();
+	HintObj->SetStringField(TEXT("tool"), TEXT("tool_search"));
+	HintObj->SetStringField(TEXT("reason"), TEXT("unknown tool 'bp_opn'"));
+	ErrResult.Hint = HintObj;
+
+	const FString ErrXml = FClaireonXmlFormatter::FormatExecuteResult(ErrResult);
+	UNTEST_EXPECT_TRUE(ErrXml.Contains(TEXT("status=\"error\"")));
+	UNTEST_EXPECT_TRUE(ErrXml.Contains(TEXT("<hint>")));
+	UNTEST_EXPECT_TRUE(ErrXml.Contains(TEXT("unknown tool 'bp_opn'")));
+
+	// Null hint produces NO <hint> element (back-compat byte shape).
+	IClaireonTool::FToolResult Plain;
+	Plain.Summary = TEXT("ok");
+	const FString PlainXml = FClaireonXmlFormatter::FormatExecuteResult(Plain);
+	UNTEST_EXPECT_FALSE(PlainXml.Contains(TEXT("<hint>")));
+
+	co_return;
+}
+
 #endif // WITH_UNTESTED
