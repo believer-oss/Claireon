@@ -989,14 +989,16 @@ class TestForwardedMcpMethods(unittest.TestCase):
 
     def test_forwarded_method_no_editor_returns_fallback(self) -> None:
         # Explicitly clear the registered session so _forward_payload_to_editor
-        # takes the "singleton_session is None" branch.
+        # takes the "singleton_session is None" branch. Uses resources/list:
+        # prompts/list and prompts/get no longer hit this path (they serve
+        # locally when no editor is registered -- see TestLocalPrompts).
         with claireon_proxy.SESSION_LOCK:
             claireon_proxy.singleton_session = None
 
         payload = {
             "jsonrpc": "2.0",
             "id": 99,
-            "method": "prompts/list",
+            "method": "resources/list",
             "params": {},
         }
         resp = claireon_proxy._handle_mcp_payload(payload)
@@ -1616,6 +1618,99 @@ class TestReadyFlag(unittest.TestCase):
         })
         self.assertIn("error", resp)
         self.assertEqual(resp["error"]["code"], -32601)
+
+
+# ---------------------------------------------------------------------------
+# Proxy-local prompt serving (editor-less prompts/list + prompts/get).
+# ---------------------------------------------------------------------------
+
+
+class TestLocalPrompts(unittest.TestCase):
+    """With no editor session, prompts are served from the worktree's files."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.mkdtemp(prefix="claireon-proxy-prompts-")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        _reset_proxy_runtime(self.tmp)
+
+    def _write_prompt_md(
+        self, mcp_dir: str, name: str = "testprompt",
+        body: str = "Hello {{PROJECT_NAME}}\n",
+    ) -> None:
+        d = os.path.join(mcp_dir, "Instructions")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, name + ".md"), "w", encoding="utf-8") as fh:
+            fh.write(
+                "---\nname: %s\ndescription: A test prompt\n"
+                "type: prompt\nrole: user\n---\n%s" % (name, body))
+
+    def _call(self, method: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {"jsonrpc": "2.0", "id": 1, "method": method}
+        if params is not None:
+            payload["params"] = params
+        return claireon_proxy._handle_mcp_payload(payload)
+
+    def test_prompts_list_no_editor_plugins_layout(self) -> None:
+        self._write_prompt_md(os.path.join(
+            self.tmp, "Plugins", "Claireon", "Content", "MCP"))
+        resp = self._call("prompts/list")
+        names = [p["name"] for p in resp["result"]["prompts"]]
+        self.assertIn("testprompt", names)
+
+    def test_prompts_list_no_editor_root_layout(self) -> None:
+        self._write_prompt_md(os.path.join(self.tmp, "Content", "MCP"))
+        resp = self._call("prompts/list")
+        names = [p["name"] for p in resp["result"]["prompts"]]
+        self.assertIn("testprompt", names)
+
+    def test_prompts_get_no_editor(self) -> None:
+        """Body and frontmatter round-trip; {{placeholders}} stay intact."""
+        self._write_prompt_md(
+            os.path.join(self.tmp, "Plugins", "Claireon", "Content", "MCP"),
+            body="Line one.\n{{PROJECT_NAME}} stays.\n")
+        resp = self._call("prompts/get", {"name": "testprompt"})
+        self.assertEqual(resp["result"]["description"], "A test prompt")
+        msg = resp["result"]["messages"][0]
+        self.assertEqual(msg["role"], "user")
+        self.assertEqual(msg["content"]["type"], "text")
+        self.assertEqual(msg["content"]["text"], "Line one.\n{{PROJECT_NAME}} stays.\n")
+
+    def test_prompts_get_unknown_name_errors(self) -> None:
+        resp = self._call("prompts/get", {"name": "no-such-prompt"})
+        self.assertIn("error", resp)
+        self.assertEqual(resp["error"]["code"], -32602)
+
+    def test_prompts_get_missing_name_errors(self) -> None:
+        resp = self._call("prompts/get", {})
+        self.assertIn("error", resp)
+        self.assertEqual(resp["error"]["code"], -32602)
+
+    def test_resource_instructions_not_listed_as_prompts(self) -> None:
+        d = os.path.join(self.tmp, "Content", "MCP", "Instructions")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "res.md"), "w", encoding="utf-8") as fh:
+            fh.write("---\nname: res\ndescription: d\ntype: resource\n"
+                     "uri: claireon://res\n---\nbody\n")
+        resp = self._call("prompts/list")
+        names = [p["name"] for p in resp["result"]["prompts"]]
+        self.assertNotIn("res", names)
+
+    def test_json_prompt_loaded(self) -> None:
+        d = os.path.join(self.tmp, "Content", "MCP", "Prompts")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "jsonprompt.json"), "w", encoding="utf-8") as fh:
+            json.dump({"description": "jd", "text": "jt"}, fh)
+        resp = self._call("prompts/get", {"name": "jsonprompt"})
+        self.assertEqual(resp["result"]["description"], "jd")
+        self.assertEqual(
+            resp["result"]["messages"][0]["content"]["text"], "jt")
+
+    def test_falls_back_to_own_plugin_copy(self) -> None:
+        """Worktree has no MCP content -> the proxy serves its own plugin
+        copy, which ships the `workflow` prompt."""
+        resp = self._call("prompts/list")
+        names = [p["name"] for p in resp["result"]["prompts"]]
+        self.assertIn("workflow", names)
 
 
 # ---------------------------------------------------------------------------

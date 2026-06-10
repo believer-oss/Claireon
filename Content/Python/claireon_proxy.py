@@ -1777,6 +1777,174 @@ def _resolve_active_worktree_root(listener_port: Optional[int]) -> Optional[str]
     return None
 
 
+# ---------------------------------------------------------------------------
+# Proxy-local prompt serving: prompts/list + prompts/get answer from the
+# worktree's on-disk prompt files when no editor is registered, so the
+# file-backed prompts (e.g. `workflow`) work editor-less. With an editor
+# session the methods forward as before -- the editor stays the source of
+# truth and performs {{placeholder}} substitution; the proxy-local path
+# leaves placeholders intact (it has no editor runtime variables, and the
+# editor likewise leaves unknown placeholders intact).
+# ---------------------------------------------------------------------------
+
+
+def _plugin_mcp_content_dir(worktree_root: Optional[str]) -> Optional[str]:
+    """Resolve the plugin's Content/MCP directory for a worktree.
+
+    Candidates, most specific first:
+      1. <worktree>/Plugins/Claireon/Content/MCP  (consumer-project layout)
+      2. <worktree>/Content/MCP                   (plugin-at-repo-root layout)
+      3. <this file's own plugin copy>/Content/MCP (last resort, so the
+         proxy can serve prompts even before any worktree is bound)
+    """
+    candidates = []
+    if worktree_root:
+        candidates.append(os.path.join(
+            worktree_root, "Plugins", "Claireon", "Content", "MCP"))
+        candidates.append(os.path.join(worktree_root, "Content", "MCP"))
+    candidates.append(os.path.normpath(os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), os.pardir, "MCP")))
+    for cand in candidates:
+        if os.path.isdir(cand):
+            return cand
+    return None
+
+
+def _parse_instruction_frontmatter(contents: str) -> Tuple[Dict[str, str], str]:
+    """Mirror of the C++ instruction parser (ClaireonServer.cpp
+    LoadInstructionsFromDirectory): flat 'key: value' pairs between two
+    '---' fence lines; body is everything after the closing fence. Returns
+    ({}, "") when there is no frontmatter fence (caller skips the file).
+    A found fence with an empty body falls back to the full contents, same
+    as the C++ side."""
+    if contents.startswith("---\n"):
+        header_len = 4
+    elif contents.startswith("---\r\n"):
+        header_len = 5
+    else:
+        return {}, ""
+    close = contents.find("\n---", header_len)
+    if close == -1:
+        return {}, ""
+    fm_block = contents[header_len:close]
+    body_start = close + 4
+    if body_start < len(contents) and contents[body_start] == "\r":
+        body_start += 1
+    if body_start < len(contents) and contents[body_start] == "\n":
+        body_start += 1
+    body = contents[body_start:]
+    fm: Dict[str, str] = {}
+    for line in fm_block.splitlines():
+        key, sep, value = line.partition(":")
+        if not sep:
+            continue
+        key = key.strip().lower()
+        value = value.strip()
+        if key and value:
+            fm[key] = value
+    if not body:
+        body = contents
+    return fm, body
+
+
+def _load_local_prompts(worktree_root: Optional[str]) -> Dict[str, Dict[str, str]]:
+    """Load file-backed prompts the way the editor's LoadMCPContent does.
+
+    Returns {name: {description, role, text}}. Reads fresh on every call --
+    prompt traffic is rare and this keeps file edits visible immediately.
+    """
+    prompts: Dict[str, Dict[str, str]] = {}
+    content_dir = _plugin_mcp_content_dir(worktree_root)
+    if not content_dir:
+        return prompts
+
+    # 1. JSON prompts under Prompts/ (key = relative path minus extension).
+    prompts_dir = os.path.join(content_dir, "Prompts")
+    for root, _dirs, files in os.walk(prompts_dir):
+        for fname in sorted(files):
+            if not fname.lower().endswith(".json"):
+                continue
+            path = os.path.join(root, fname)
+            try:
+                with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                    data = json.load(fh)
+            except (OSError, ValueError):
+                log.warning("local prompts: failed to load %s", path)
+                continue
+            if not isinstance(data, dict):
+                continue
+            rel = os.path.relpath(path, prompts_dir)
+            name = os.path.splitext(rel)[0].replace(os.sep, "/")
+            prompts[name] = {
+                "description": str(data.get("description", "")),
+                "role": str(data.get("role", "user")),
+                "text": str(data.get("text", "")),
+            }
+
+    # 2. Instruction-doc prompts under Instructions/ (*.md, type: prompt).
+    instructions_dir = os.path.join(content_dir, "Instructions")
+    for root, _dirs, files in os.walk(instructions_dir):
+        for fname in sorted(files):
+            if not fname.lower().endswith(".md"):
+                continue
+            path = os.path.join(root, fname)
+            try:
+                with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                    contents = fh.read()
+            except OSError:
+                log.warning("local prompts: failed to read %s", path)
+                continue
+            fm, body = _parse_instruction_frontmatter(contents)
+            if not fm:
+                continue
+            if fm.get("type", "prompt").lower() == "resource":
+                continue
+            name = fm.get("name")
+            if not name:
+                continue
+            prompts[name] = {
+                "description": fm.get("description", ""),
+                "role": fm.get("role", "user"),
+                "text": body,
+            }
+    return prompts
+
+
+def _handle_prompts_locally(
+    payload: Dict[str, Any], listener_port: Optional[int] = None
+) -> Dict[str, Any]:
+    """Editor-less prompts/list + prompts/get from the worktree's files.
+
+    Response shapes mirror the editor's HandlePromptsList/HandlePromptsGet.
+    """
+    request_id = payload.get("id")
+    method = payload.get("method")
+    worktree_root = _resolve_active_worktree_root(listener_port)
+    prompts = _load_local_prompts(worktree_root)
+
+    if method == "prompts/list":
+        arr = [
+            {"name": name, "description": prompts[name]["description"]}
+            for name in sorted(prompts)
+        ]
+        return _jsonrpc_result(request_id, {"prompts": arr})
+
+    params = payload.get("params") or {}
+    name = params.get("name")
+    if not name:
+        return _jsonrpc_error(request_id, -32602, "Missing required parameter: name")
+    tmpl = prompts.get(name)
+    if tmpl is None:
+        return _jsonrpc_error(request_id, -32602, "Unknown prompt: %s" % name)
+    return _jsonrpc_result(request_id, {
+        "description": tmpl["description"],
+        "messages": [{
+            "role": tmpl["role"],
+            "content": {"type": "text", "text": tmpl["text"]},
+        }],
+    })
+
+
 def _handle_proxy_command(
     payload: Dict[str, Any], listener_port: Optional[int] = None
 ) -> Dict[str, Any]:
@@ -2392,6 +2560,16 @@ def _handle_mcp_payload(
         return _jsonrpc_result(request_id, {"tools": STATIC_TOOLS_LIST})
     if method == "tools/call":
         return forward_tool_call(payload, listener_port=listener_port)
+    if method in ("prompts/list", "prompts/get"):
+        # Forward when an editor session exists (the editor is the source of
+        # truth and substitutes {{placeholders}}); with no editor, serve the
+        # file-backed prompts straight from the worktree's files so prompts
+        # like `workflow` work editor-less.
+        with SESSION_LOCK:
+            session_snapshot = _resolve_session_for_listener(listener_port)
+        if session_snapshot is None:
+            return _handle_prompts_locally(payload, listener_port=listener_port)
+        return _forward_payload_to_editor(payload, listener_port=listener_port)
     if method in FORWARDED_METHODS:
         return _forward_payload_to_editor(payload, listener_port=listener_port)
 
