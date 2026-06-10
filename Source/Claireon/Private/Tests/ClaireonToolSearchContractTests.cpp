@@ -204,27 +204,9 @@ namespace ClaireonToolSearchContractTestsNS
 		return Result.Summary.Contains(TEXT("detail=\"full\""));
 	}
 
-	// Read the rank_source of the rank-0 tool in a flat tools[] result. Returns
-	// empty when there is no first tool / no rank_source field. The ranked path
-	// emits rank_source on every tool (exact_pin|near_exact_boost|hybrid_rrf|
-	// lexical_only_fallback); the contract keys footer/discovery semantics off it.
-	static FString FirstRankSource(const IClaireonTool::FToolResult& Result)
-	{
-		if (!Result.Data.IsValid()) { return FString(); }
-		const TArray<TSharedPtr<FJsonValue>>* Tools = nullptr;
-		if (!Result.Data->TryGetArrayField(TEXT("tools"), Tools) || !Tools || Tools->Num() == 0)
-		{
-			return FString();
-		}
-		const TSharedPtr<FJsonObject>* ToolObj = nullptr;
-		if (!(*Tools)[0]->TryGetObject(ToolObj) || !ToolObj || !(*ToolObj).IsValid())
-		{
-			return FString();
-		}
-		FString RankSource;
-		(*ToolObj)->TryGetStringField(TEXT("rank_source"), RankSource);
-		return RankSource;
-	}
+	// Ranking internals (score/rank_source/source) are intentionally NOT on the
+	// wire; exact-pin semantics are observable via the rank-0 name and the
+	// footer suppression rule, which is what the ranked contract asserts.
 
 	// Name of the rank-0 tool in a flat tools[] result (empty when none).
 	static FString FirstName(const IClaireonTool::FToolResult& Result)
@@ -339,25 +321,25 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchContract, DeterministicSnapshot, UNTEST_TIM
 
 // ===========================================================================
 // (B) Ranked-query invariants: flat tools[] shape, count<=max_results, footer
-//     presence/suppression, rank_source semantics. NOT byte-compared (the ranked
-//     shape and the RRF/exact-pin scores are intentionally non-deterministic
-//     across platforms; we assert invariants instead of a golden).
+//     presence/suppression, exact-pin semantics. NOT byte-compared (the ranked
+//     shape is intentionally non-deterministic across platforms; we assert
+//     invariants instead of a golden).
 //
 // Invariants this contract pins (hybrid RRF ranker):
 //
-//   - rank_source: every ranked tool carries a rank_source string. The rank-0
-//     result of an exact tool-name lookup is "exact_pin". The score field's
-//     polarity is rank_source-dependent (rrf/boost: higher=better; exact_pin:
-//     reserved sentinel); consumers MUST read rank_source before score.
+//   - Ranking internals stay internal: ranked tools carry NO score/rank_source/
+//     source fields on the wire. Order alone carries the signal; the exact-pin
+//     contract is observable via the rank-0 name + footer suppression.
 //
 //   - EXACT-NAME PIN BYPASSES CATEGORY: if the normalized query is an exact tool
-//     name, that tool is surfaced at rank 0 with rank_source=exact_pin EVEN WHEN a
-//     category filter excludes its category and even when BM25/semantic recalled
-//     nothing. Category filters are otherwise respected (near-exact and ordinary
-//     ranking honor them); the exact-name pin is the single documented bypass.
+//     name, that tool is surfaced at rank 0 (internal RankSource=ExactPin) EVEN
+//     WHEN a category filter excludes its category and even when BM25/semantic
+//     recalled nothing. Category filters are otherwise respected (near-exact and
+//     ordinary ranking honor them); the exact-name pin is the single documented
+//     bypass.
 //
 //   - FOOTER honesty: the upgrade footer is suppressed for a GENUINE exact-name
-//     lookup (rank-0 rank_source=exact_pin) and for genuine zero retrieval
+//     lookup (internal rank-0 RankSource=ExactPin) and for genuine zero retrieval
 //     (no results), NOT merely because exactly one result happens to exist. A
 //     multi-hit ordinary search shows the footer.
 // ===========================================================================
@@ -396,10 +378,10 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchContract, RankedInvariants, UNTEST_TIMEOUTM
 		UNTEST_EXPECT_TRUE(bHasFooter);
 	}
 
-	// --- Single exact-name match: rank-0 is exact_pin, footer SUPPRESSED. ---
+	// --- Single exact-name match: rank-0 is the pinned tool, footer SUPPRESSED. ---
 	// Query == canonical tool name, max_results=1 so only the pinned exact
-	// match surfaces. The footer is suppressed because the rank-0 rank_source is
-	// exact_pin (GENUINE exact-name lookup), not merely because Count==1.
+	// match surfaces. The footer is suppressed because the rank-0 entry is the
+	// exact pin (GENUINE exact-name lookup), not merely because Count==1.
 	{
 		const IClaireonTool::FToolResult Result =
 			ExecCase(Tool, ArgsQuery(TEXT("chooser_create"), /*MaxResults=*/1, TEXT("standard")));
@@ -407,24 +389,21 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchContract, RankedInvariants, UNTEST_TIMEOUTM
 		const int32 Count = CountToolEntries(Result);
 		UNTEST_EXPECT_TRUE(Count == 1);
 		UNTEST_EXPECT_STREQ(*FirstName(Result), TEXT("chooser_create"));
-		UNTEST_EXPECT_STREQ(*FirstRankSource(Result), TEXT("exact_pin"));
 		const bool bFooterSuppressed = !SummaryHasFooter(Result);
 		UNTEST_EXPECT_TRUE(bFooterSuppressed);
 	}
 
 	// --- Exact-name pin BYPASSES a mismatched category filter (documented rule). ---
 	// chooser_create's category is "chooser"; filtering by "anim" must NOT hide it.
-	// The exact-name pin surfaces it at rank 0 with rank_source=exact_pin even
-	// though the category filter excludes its category and BM25/semantic recall is
-	// empty under that filter. (Operator rule: category respected EXCEPT the
-	// documented exact-name bypass.)
+	// The exact-name pin surfaces it at rank 0 even though the category filter
+	// excludes its category and BM25/semantic recall is empty under that filter.
+	// (Operator rule: category respected EXCEPT the documented exact-name bypass.)
 	{
 		TSharedPtr<FJsonObject> Args = ArgsQuery(TEXT("chooser_create"), /*MaxResults=*/5, TEXT("standard"));
 		Args->SetStringField(TEXT("category"), TEXT("anim"));
 		const IClaireonTool::FToolResult Result = ExecCase(Tool, Args);
 		UNTEST_EXPECT_FALSE(Result.bIsError);
 		UNTEST_EXPECT_STREQ(*FirstName(Result), TEXT("chooser_create"));
-		UNTEST_EXPECT_STREQ(*FirstRankSource(Result), TEXT("exact_pin"));
 		// Footer suppressed: genuine exact-name lookup.
 		UNTEST_EXPECT_TRUE(!SummaryHasFooter(Result));
 	}

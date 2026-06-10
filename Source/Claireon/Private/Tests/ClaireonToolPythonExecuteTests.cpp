@@ -103,7 +103,10 @@ namespace PyHintTests622_Helpers
 	}
 }
 
-UNTEST_UNIT(Claireon, PythonExecuteHint, NameErrorOnClaireonDotProducesHint)
+// The NameError/AttributeError/ColdStart cases run FClaireonToolSearchIndex::
+// EnsureBuilt() + FindNearest() for the best-match reason suffix; a cold index
+// build blows the 0.5ms Untest unit default, so they carry an explicit timeout.
+UNTEST_UNIT_OPTS(Claireon, PythonExecuteHint, NameErrorOnClaireonDotProducesHint, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace PyHintTests622_Helpers;
 
@@ -137,7 +140,7 @@ UNTEST_UNIT(Claireon, PythonExecuteHint, NameErrorOnClaireonDotProducesHint)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PythonExecuteHint, AttributeErrorOnClaireonModuleProducesHint)
+UNTEST_UNIT_OPTS(Claireon, PythonExecuteHint, AttributeErrorOnClaireonModuleProducesHint, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace PyHintTests622_Helpers;
 
@@ -254,7 +257,7 @@ UNTEST_UNIT(Claireon, PythonExecuteHint, SyntaxErrorSuppressesHint)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PythonExecuteHint, ColdStartBestMatchAppearsWhenCatalogAvailable)
+UNTEST_UNIT_OPTS(Claireon, PythonExecuteHint, ColdStartBestMatchAppearsWhenCatalogAvailable, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace PyHintTests622_Helpers;
 
@@ -296,6 +299,45 @@ UNTEST_UNIT(Claireon, PythonExecuteHint, ColdStartBestMatchAppearsWhenCatalogAva
 		// just assert presence of the prefix.
 		UNTEST_EXPECT_TRUE(ReasonField.Contains(TEXT("unknown tool '")));
 	}
+
+	co_return;
+}
+
+// Script-content channel: raw user code containing get_editor_property earns
+// a hint toward claireon.uobject_inspect, independent of execution outcome.
+UNTEST_UNIT(Claireon, PythonExecuteHint, GetEditorPropertyInScriptProducesHint)
+{
+	const FString Code = TEXT(
+		"import unreal\n"
+		"a = unreal.load_asset('/Game/Foo')\n"
+		"v = a.get_editor_property('bHidden')\n");
+
+	TSharedPtr<FJsonObject> Hint = ClaireonTool_ExecutePython::BuildHintFromScript(Code);
+	UNTEST_EXPECT_TRUE(Hint.IsValid());
+	if (Hint.IsValid())
+	{
+		FString ToolField;
+		UNTEST_EXPECT_TRUE(Hint->TryGetStringField(TEXT("tool"), ToolField));
+		UNTEST_EXPECT_STREQ(*ToolField, TEXT("python_execute"));
+
+		FString ReasonField;
+		UNTEST_EXPECT_TRUE(Hint->TryGetStringField(TEXT("reason"), ReasonField));
+		UNTEST_EXPECT_TRUE(ReasonField.Contains(TEXT("uobject_inspect")));
+	}
+
+	co_return;
+}
+
+UNTEST_UNIT(Claireon, PythonExecuteHint, ScriptWithoutGetEditorPropertyProducesNoHint)
+{
+	// set_editor_property must NOT trigger the get_editor_property nudge.
+	const FString Code = TEXT(
+		"import unreal\n"
+		"a = unreal.load_asset('/Game/Foo')\n"
+		"a.set_editor_property('bHidden', True)\n");
+
+	TSharedPtr<FJsonObject> Hint = ClaireonTool_ExecutePython::BuildHintFromScript(Code);
+	UNTEST_EXPECT_FALSE(Hint.IsValid());
 
 	co_return;
 }
