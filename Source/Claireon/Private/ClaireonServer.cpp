@@ -1459,33 +1459,9 @@ TSharedPtr<FJsonObject> FClaireonServer::HandlePromptsList(const FMCPRequestCont
 		}
 	}
 
-	// 2. Dynamic prompts generated from the live tool registry: one per tool category.
-	//    These are not file-backed because they enumerate runtime registrations.
-	{
-		TSet<FString> Categories;
-		for (const auto& Pair : Tools)
-		{
-			if (Pair.Value.IsValid())
-			{
-				FString Category = Pair.Value->GetCategory();
-				if (Category != TEXT("all"))
-				{
-					Categories.Add(Category);
-				}
-			}
-		}
-
-		TArray<FString> SortedCategories = Categories.Array();
-		SortedCategories.Sort();
-
-		for (const FString& Category : SortedCategories)
-		{
-			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
-			Entry->SetStringField(TEXT("name"), FString::Printf(TEXT("domain/%s"), *Category));
-			Entry->SetStringField(TEXT("description"), FString::Printf(TEXT("Tools and type signatures for the %s category"), *Category));
-			PromptArray.Add(MakeShared<FJsonValueObject>(Entry));
-		}
-	}
+	// Per-category "domain/<category>" prompts were retired: they flooded the
+	// client's prompt list with one entry per tool category, duplicating what
+	// tool_search already serves on demand. Prompts are file-backed only.
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetArrayField(TEXT("prompts"), PromptArray);
@@ -1505,39 +1481,14 @@ TSharedPtr<FJsonObject> FClaireonServer::HandlePromptsGet(const FMCPRequestConte
 	FString PromptText;
 	FString PromptRole = TEXT("user");
 
-	// 1. File-backed prompts (static text with {{placeholder}} substitution).
+	// File-backed prompts only (static text with {{placeholder}} substitution).
+	// The dynamic "domain/<category>" prompt family was retired; per-category
+	// tool listings are tool_search's job.
 	if (const FPromptTemplate* Tmpl = LoadedPrompts.Find(Name))
 	{
 		PromptDescription = Tmpl->Description;
 		PromptRole = Tmpl->Role;
 		PromptText = SubstitutePlaceholders(Tmpl->TextTemplate, BuildRuntimeVariables());
-	}
-	// 2. Dynamic domain/{category}: enumerate the tool registry.
-	else if (Name.StartsWith(TEXT("domain/")))
-	{
-		FString Category = Name.Mid(7);
-		PromptDescription = FString::Printf(TEXT("Tools and type signatures for the %s category"), *Category);
-
-		FString ToolListing;
-		int32 MatchCount = 0;
-		for (const auto& Pair : Tools)
-		{
-			if (Pair.Value.IsValid() && Pair.Value->GetCategory() == Category)
-			{
-				FString TypeSig = FClaireonXmlFormatter::GenerateTypeSignature(Pair.Value->GetName(), Pair.Value->GetInputSchema());
-				ToolListing += FString::Printf(TEXT("%s\n  %s\n  %s\n"),
-					*Pair.Value->GetName(), *Pair.Value->GetBriefDescription(), *TypeSig);
-				++MatchCount;
-			}
-		}
-
-		if (MatchCount == 0)
-		{
-			return FMCPJsonRpcResponse::MakeError(Context.Request.Id, FMCPJsonRpcResponse::InvalidParams,
-				FString::Printf(TEXT("Unknown prompt: domain/%s"), *Category));
-		}
-
-		PromptText = ToolListing;
 	}
 	else
 	{

@@ -952,7 +952,7 @@ def handle_editor_ready(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
       tool_count (int)                   -- number of tools registered
 
     Sets WorktreeState.ready=True and records tool_count so the proxy can
-    return a richer status for the I9 mcp_ready_status tool and produce
+    surface readiness in proxy(command='status') (I9) and produce
     "editor warming up" instead of "build and launch editor first" in the
     gap between register and ready.
     """
@@ -1504,9 +1504,10 @@ class RegistrationHandler(BaseHTTPRequestHandler):
 MCP_PROTOCOL_VERSION = "2025-03-26"
 MCP_SERVER_NAME = "claireon-proxy"
 
-# Static tool catalogue exposed to Claude. The proxy and editor unify on this
-# exact two-tool surface; the editor accepts only these two names in tools/call
-# and forwards them through. Wire names match the editor's MCPVisibleTools
+# Static tool catalogue exposed to Claude. The proxy and editor unify on the
+# two forwarded tools (tool_search, python_execute); the editor accepts only
+# those two names in tools/call. The third entry, `proxy`, is the proxy-local
+# meta-tool (never forwarded). Wire names match the editor's MCPVisibleTools
 # bare names (no claireon.* prefix on the wire); the claireon.<tool>(...) Python
 # attribute namespace lives strictly inside python_execute's runtime.
 STATIC_TOOLS_LIST = [
@@ -1554,26 +1555,12 @@ STATIC_TOOLS_LIST = [
         },
     },
     {
-        "name": "mcp_ready_status",
-        "description": (
-            "Query the Claireon proxy's readiness state for this worktree. "
-            "Returns {active_editor, ready, tool_count, last_heartbeat_ms_ago}. "
-            "Use this to self-diagnose mid-run: if ready=false, the editor is "
-            "still warming up (Python bridge not yet initialized). "
-            "Handled locally by the proxy; never forwarded to the editor."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-        },
-    },
-    {
         "name": "proxy",
         "description": (
             "Manage the always-on Claireon proxy itself. Handled locally by the "
             "proxy; never forwarded to the editor. Call with no arguments (or "
             "command='help') to list available subcommands. Subcommands: help, "
-            "restart, launch_editor, read_log, status."
+            "status, wait_for_editor, launch_editor, read_log."
         ),
         "inputSchema": {
             "type": "object",
@@ -1691,7 +1678,9 @@ PROXY_HELP_TEXT = (
     "                                args: { skip_build: bool=false }\n"
     "  read_log                      Return the last N lines of proxy.log.\n"
     "                                args: { lines: int=200 }\n"
-    "  status                        Show proxy runtime + registered editor session info.\n"
+    "  status                        Show proxy runtime + registered editor session info, including\n"
+    "                                readiness (active_editor.ready / tool_count). ready=false means\n"
+    "                                the editor is still warming up (Python bridge not initialized).\n"
     "                                args: (none)\n"
     "  wait_for_editor               Long-poll until an editor is registered for this worktree with a\n"
     "                                fresh heartbeat. Returns the same payload as `status` on success;\n"
@@ -1828,10 +1817,16 @@ def _handle_proxy_command(
                         "editor_mcp_port": _s.editor_mcp_port,
                         "editor_mcp_token": _s.editor_mcp_token,
                         "last_heartbeat_ts": _wt.last_seen_ns / 1_000_000_000,
+                        "ready": _wt.ready,
+                        "tool_count": _wt.tool_count,
                     }
                     session_source = "per_worktree"
             if session is None and singleton_session is not None:
                 session = dict(singleton_session)
+                # Legacy singleton path carries no readiness; report False
+                # conservatively (I9).
+                session.setdefault("ready", False)
+                session.setdefault("tool_count", 0)
                 session_source = "singleton_fallback"
         info = {
             # Stage 012: worktree_root is the resolved listener-mapped
@@ -1853,6 +1848,11 @@ def _handle_proxy_command(
                 "last_heartbeat_age_seconds": (
                     round(now - float(session.get("last_heartbeat_ts") or 0.0), 2)
                 ),
+                # I9 readiness (formerly the mcp_ready_status tool): ready
+                # flips true on /editor/ready; false means the editor is
+                # still warming up (Python bridge not yet initialized).
+                "ready": session.get("ready", False),
+                "tool_count": session.get("tool_count", 0),
                 # "per_worktree" means this is the session for the connected
                 # worktree; "singleton_fallback" means the editor for THIS
                 # worktree is not running and a different worktree's editor
@@ -1916,6 +1916,11 @@ def _handle_proxy_command(
         while True:
             with SESSION_LOCK:
                 session = dict(singleton_session) if singleton_session is not None else None
+                if session is not None and worktree_root:
+                    _wt = RUNTIME["worktrees"].get(canonicalize_worktree(worktree_root))
+                    if _wt is not None:
+                        session["ready"] = _wt.ready
+                        session["tool_count"] = _wt.tool_count
             if session is not None:
                 age = _mono_now() - float(session.get("last_heartbeat_ts") or 0.0)
                 if age <= max_age:
@@ -1930,6 +1935,8 @@ def _handle_proxy_command(
                             "editor_mcp_port": session.get("editor_mcp_port"),
                             "proxy_version": session.get("proxy_version"),
                             "last_heartbeat_age_seconds": round(age, 2),
+                            "ready": session.get("ready", False),
+                            "tool_count": session.get("tool_count", 0),
                         },
                     }
                     return _jsonrpc_result(
@@ -2323,57 +2330,6 @@ def _forward_payload_to_editor(
     return _jsonrpc_error(request_id, -32000, "Editor connection failed")
 
 
-def _handle_mcp_ready_status(
-    payload: Dict[str, Any], listener_port: Optional[int] = None
-) -> Dict[str, Any]:
-    """I9: Proxy-local handler for the `mcp_ready_status` tool.
-
-    Returns a structured dict so agents can self-diagnose mid-run:
-      active_editor  -- editor PID as string, or null if no session
-      ready          -- bool: True once /editor/ready was received
-      tool_count     -- int: tools registered at /editor/ready time (0 until ready)
-      last_heartbeat_ms_ago -- ms since last heartbeat (null if no session)
-    """
-    request_id = payload.get("id")
-    worktree_root = _resolve_active_worktree_root(listener_port)
-    info: Dict[str, Any] = {
-        "active_editor": None,
-        "ready": False,
-        "tool_count": 0,
-        "last_heartbeat_ms_ago": None,
-    }
-
-    with SESSION_LOCK:
-        # Prefer per-worktree state; fall back to singleton for legacy callers.
-        wt = None
-        if worktree_root:
-            wt = RUNTIME["worktrees"].get(worktree_root)
-        if wt is None and listener_port is not None:
-            canonical = RUNTIME["mcp_port_to_worktree"].get(listener_port)
-            if canonical:
-                wt = RUNTIME["worktrees"].get(canonical)
-        if wt is not None and wt.session is not None:
-            info["active_editor"] = str(wt.session.editor_pid)
-            info["ready"] = wt.ready
-            info["tool_count"] = wt.tool_count
-            now_ns = int(_mono_now() * 1_000_000_000)
-            age_ns = now_ns - wt.last_seen_ns
-            info["last_heartbeat_ms_ago"] = max(0, age_ns // 1_000_000)
-        elif singleton_session is not None:
-            info["active_editor"] = str(singleton_session.get("pid", ""))
-            # For legacy singleton path, ready is unknown; report False conservatively.
-            info["ready"] = False
-            now = _mono_now()
-            age = now - float(singleton_session.get("last_heartbeat_ts") or 0.0)
-            info["last_heartbeat_ms_ago"] = int(max(0.0, age * 1000.0))
-
-    result = {
-        "content": [{"type": "text", "text": json.dumps(info, indent=2)}],
-        "isError": False,
-    }
-    return _jsonrpc_result(request_id, result)
-
-
 def forward_tool_call(
     payload: Dict[str, Any], listener_port: Optional[int] = None
 ) -> Dict[str, Any]:
@@ -2393,9 +2349,6 @@ def forward_tool_call(
     tool_name = params.get("name")
     if tool_name == "proxy":
         return _handle_proxy_command(payload, listener_port=listener_port)
-    if tool_name == "mcp_ready_status":
-        # I9: proxy-local readiness query.
-        return _handle_mcp_ready_status(payload, listener_port=listener_port)
     if tool_name not in {"tool_search", "python_execute"}:
         return _jsonrpc_error(request_id, -32601, "Method not found")
     return _forward_payload_to_editor(payload, listener_port=listener_port)

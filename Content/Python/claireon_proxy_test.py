@@ -1456,7 +1456,7 @@ class TestAdminEndpoints(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# I4 + I9 + I10: ready flag, mcp_ready_status, warming-up message.
+# I4 + I9 + I10: ready flag, status readiness fields, warming-up message.
 # ---------------------------------------------------------------------------
 
 
@@ -1539,23 +1539,21 @@ class TestReadyFlag(unittest.TestCase):
             msg=f"Unexpected fallback text: {text!r}",
         )
 
-    def test_mcp_ready_status_no_session(self) -> None:
-        """I9: mcp_ready_status returns ready=false when no session registered."""
+    def test_status_readiness_no_session(self) -> None:
+        """I9: proxy status reports no active editor when no session registered."""
         resp = claireon_proxy.forward_tool_call({
             "jsonrpc": "2.0",
             "id": 3,
             "method": "tools/call",
-            "params": {"name": "mcp_ready_status", "arguments": {}},
+            "params": {"name": "proxy", "arguments": {"command": "status"}},
         })
         self.assertIn("result", resp)
         self.assertFalse(resp["result"].get("isError"))
         data = json.loads(resp["result"]["content"][0]["text"])
         self.assertIsNone(data["active_editor"])
-        self.assertFalse(data["ready"])
-        self.assertEqual(data["tool_count"], 0)
 
-    def test_mcp_ready_status_with_ready_session(self) -> None:
-        """I9: mcp_ready_status returns ready=true after /editor/ready."""
+    def test_status_readiness_with_ready_session(self) -> None:
+        """I9: proxy status reports ready=true + tool_count after /editor/ready."""
         body = self._register(editor_mcp_port=60001)
         # Map listener port so routing works.
         canonical = claireon_proxy.canonicalize_worktree(self.tmp)
@@ -1571,17 +1569,18 @@ class TestReadyFlag(unittest.TestCase):
             "start_time_ns": body["start_time_ns"],
             "tool_count": 99,
         })
-        # Now mcp_ready_status should show ready=true
+        # Now proxy status should show ready=true on the active editor
         resp = claireon_proxy.forward_tool_call({
             "jsonrpc": "2.0",
             "id": 4,
             "method": "tools/call",
-            "params": {"name": "mcp_ready_status", "arguments": {}},
+            "params": {"name": "proxy", "arguments": {"command": "status"}},
         }, listener_port=50003)
         self.assertIn("result", resp)
         data = json.loads(resp["result"]["content"][0]["text"])
-        self.assertTrue(data["ready"])
-        self.assertEqual(data["tool_count"], 99)
+        self.assertIsNotNone(data["active_editor"])
+        self.assertTrue(data["active_editor"]["ready"])
+        self.assertEqual(data["active_editor"]["tool_count"], 99)
 
     def test_ready_flag_resets_on_new_session(self) -> None:
         """I4: when the editor re-registers (new session), ready flag resets."""
@@ -1602,10 +1601,21 @@ class TestReadyFlag(unittest.TestCase):
             wt2 = claireon_proxy.RUNTIME["worktrees"][canonical]
             self.assertFalse(wt2.ready)
 
-    def test_mcp_ready_status_in_static_tools_list(self) -> None:
-        """I9: mcp_ready_status must appear in STATIC_TOOLS_LIST."""
+    def test_static_tools_list_is_exactly_three_tools(self) -> None:
+        """The MCP tool surface is exactly tool_search, python_execute, proxy."""
         names = [t["name"] for t in claireon_proxy.STATIC_TOOLS_LIST]
-        self.assertIn("mcp_ready_status", names)
+        self.assertEqual(names, ["tool_search", "python_execute", "proxy"])
+
+    def test_mcp_ready_status_top_level_tool_is_gone(self) -> None:
+        """The retired top-level mcp_ready_status tool is rejected as unknown."""
+        resp = claireon_proxy.forward_tool_call({
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {"name": "mcp_ready_status", "arguments": {}},
+        })
+        self.assertIn("error", resp)
+        self.assertEqual(resp["error"]["code"], -32601)
 
 
 # ---------------------------------------------------------------------------
