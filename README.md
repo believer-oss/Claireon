@@ -71,18 +71,22 @@ The MCP server can be started in two ways:
 - **Command line**: Launch the editor with `-StartMCPServer` to auto-start on load
 - **Toolbar button**: Click the **Claireon** button in the editor toolbar to open the Claireon panel, which also starts the server
 
-The server listens on port `8017` by default. Override with `-MCPServerPort=<port>`.
+The server binds a deterministic per-worktree port: SHA-256 of the canonicalized project root, folded into the ephemeral range `49152-65535`. Every checkout gets a stable, collision-free port with no configuration, and multiple worktrees on one machine never fight over a shared default. The live port and PID are written to `Saved/Claireon/MCPServer.json` on startup. `-MCPServerPort=<port>` remains as a developer escape hatch to force a specific port.
+
+#### Optional MCP proxy
+
+For workflows where the editor restarts often (rebuilds, crashes, live-coding reloads), an optional always-on proxy (`Content/Python/claireon_proxy.py`, run with UE's vendored Python) can front the editor: Claude Code stays connected to the worktree's deterministic port while editors come and go behind it. Opt in with `-EnableMCPProxy` on the command line, or via **Editor Preferences > Plugins > Claireon > MCP Proxy > Enable MCP Proxy** (off by default). When enabled, the proxy holds the worktree port, and the editor binds an ephemeral port and registers with the proxy; editor ingress is then gated by a per-session bearer token so the proxy is the sole entry point. A single proxy instance serves all worktrees on the machine (registration port `43017`). Even with the setting off, an editor that finds its port already held by a Claireon proxy auto-promotes into proxy-attached mode.
 
 ### Connecting Claude Code
 
-Once the server is running, configure Claude Code to connect:
+Once the server is running, configure Claude Code to connect. Take the port from `Saved/Claireon/MCPServer.json` -- it is stable for a given checkout path, so the config can be committed to your project's `.mcp.json` once and forgotten:
 
 ```json
 {
   "mcpServers": {
     "claireon": {
-      "type": "streamable-http",
-      "url": "http://localhost:8017/mcp"
+      "type": "http",
+      "url": "http://127.0.0.1:<port>/mcp"
     }
   }
 }
@@ -102,7 +106,7 @@ The MCP surface is intentionally two tools: `tool_search` to discover what is av
 
 Once the plugin is loaded, open the **Claireon** panel (toolbar button, or **Window > General > Miscellaneous > Claireon**); its status strip exposes a **Claude Code** launch button (toggleable via the `Show Claude Code Button` setting). Clicking it:
 
-1. Resolves the live MCP server port (handles auto-incremented ports if `8017` was busy).
+1. Resolves the live MCP server port (from the in-process server, falling back to `Saved/Claireon/MCPServer.json`).
 2. Writes a per-launch MCP config to `Saved/Claireon/claude-code-mcp.json` so the committed `.mcp.json` stays untouched.
 3. Spawns a PowerShell window at the project root and runs `claude --mcp-config <path>` against that config. On Windows 11 with Windows Terminal as the default console host, the new window automatically opens in Terminal.
 
@@ -150,7 +154,7 @@ Claireon works standalone, but can integrate with these plugins when present:
       Tools/                    # Tool implementations (hundreds of operations)
       Tests/                    # Unit tests (requires Untested)
   Content/
-    Python/                     # Python bridge scripts + multi-worktree MCP proxy
+    Python/                     # Multi-worktree MCP proxy (claireon_proxy.py)
     MCP/Instructions/           # Instruction documents served as MCP resources
   Resources/
     Models/                     # Vendored bge-small-en-v1.5-int8 embedding model (MIT)
@@ -267,6 +271,7 @@ Markdown documents that serve as structured prompts for AI assistants (e.g., Cla
 - `FixDuplicateGameplayCueTags.md` — Find duplicate GameplayCue tag registrations
 - `ResaveAssetsWithLoadErrors.md` — Resave assets with broken references
 - `UnrealPythonPatterns.md` — Quick reference for correct Unreal Python API patterns
+- `PSD-to-UMG-Workflow.md` — Convert Photoshop PSD designs into UMG widget blueprints
 
 **Development Workflows:**
 - `BreakDownWorkProposal.md` — Break a proposal into skeleton-test-implement stages
@@ -281,10 +286,10 @@ Markdown documents that serve as structured prompts for AI assistants (e.g., Cla
 
 Claireon runs an **unauthenticated HTTP server on localhost** (`127.0.0.1`). This is by design for seamless local AI assistant integration, but you should be aware of the implications:
 
-- **Never expose port 8017 externally.** Do not use port forwarding, reverse proxies, or tunnels to make the server accessible from other machines.
+- **Never expose the MCP port externally.** Do not use port forwarding, reverse proxies, or tunnels to make the server (or the Claireon proxy, ports `43017` and `49152-65535`) accessible from other machines.
 - **Python execution is unrestricted.** The `python_execute` tool has full access to the filesystem, network, and editor APIs — equivalent to the editor's built-in Python console.
-- **Execution timeout is advisory only.** The `timeout_seconds` parameter is not currently enforced at the process level.
-- **No authentication.** Any process on localhost can call the MCP server.
+- **Execution timeout is best-effort.** A watchdog injects a `TimeoutError` between Python bytecodes after `Python Execution Timeout` (default 60 s, settable in Editor Preferences); a blocking native call is not interrupted mid-call, and the error surfaces only when it returns to Python.
+- **No authentication.** Any process on localhost can call the MCP server. (In proxy mode the editor itself only accepts proxy traffic carrying a per-session bearer token, but the proxy's own MCP endpoint is equally unauthenticated on localhost.)
 
 For full details, see [SECURITY.md](SECURITY.md).
 
