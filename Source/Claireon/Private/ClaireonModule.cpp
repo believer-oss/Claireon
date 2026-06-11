@@ -2281,6 +2281,7 @@ void FClaireonModule::StartServer()
 			TEXT("Scripts/Utilities/Invoke-MultiWorktreeProxyMigration.ps1) ")
 			TEXT("and relaunch the editor."),
 			static_cast<uint32>(PreferredPort));
+		FClaireonBridge::SetToolRegistry(nullptr);
 		Server.Reset();
 		ProxyClient.Reset();
 		return;
@@ -2293,6 +2294,7 @@ void FClaireonModule::StartServer()
 	{
 		UE_LOG(LogClaireon, Error,
 			TEXT("[MCP] Failed to bind ephemeral listener for proxy mode."));
+		FClaireonBridge::SetToolRegistry(nullptr);
 		Server.Reset();
 		ProxyClient.Reset();
 		return;
