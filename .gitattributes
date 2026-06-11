@@ -1,24 +1,19 @@
-# Normalize line endings: store text as LF in the repo, check out native.
-* text=auto
-
-# Source and config -> LF in the repository
-*.cpp   text eol=lf
-*.h     text eol=lf
-*.cs    text eol=lf
-*.py    text eol=lf
-*.json  text eol=lf
-*.md    text eol=lf
-*.yml   text eol=lf
-*.yaml  text eol=lf
-
-# Windows PowerShell / batch scripts -> CRLF on checkout
-*.ps1   text eol=crlf
-*.psm1  text eol=crlf
-*.psd1  text eol=crlf
-*.bat   text eol=crlf
-*.cmd   text eol=crlf
+# Storage rules for this repository. Mirrors the consuming project's intent for this
+# plugin's subtree, with one deliberate difference: this repo uses NO git-lfs (plain blobs
+# only) so cloning needs no LFS setup; the consuming project stores the same model files
+# under LFS on its side. Do not add filter=lfs rules here.
+# Repo-local by design: the sync tooling never copies this file in either direction, and
+# no checkout-time text normalization is declared (line-ending handling lives at the sync
+# boundary, not here).
 
 # Unreal binary assets (never normalize / diff)
 *.uasset binary
-*.umap   binary
-*.uplugin text eol=lf
+*.umap binary
+*.collection binary
+
+# Media
+*.mp4 binary
+*.ico binary
+
+# Vendored embedding model (plain blobs on purpose -- see header)
+*.onnx binary
