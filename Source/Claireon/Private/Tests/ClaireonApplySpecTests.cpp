@@ -36,7 +36,9 @@
 // UE includes
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "EditorAssetLibrary.h"
 #include "Engine/Blueprint.h"
+#include "Misc/ScopeExit.h"
 #include "ObjectTools.h"
 
 // ---------------------------------------------------------------------------
@@ -49,7 +51,11 @@ static const TCHAR* ApplySpecTestBPPath        = TEXT("/Game/__MCPTests/BP_Apply
 static const TCHAR* ApplySpecTestBPParityPath_A = TEXT("/Game/__MCPTests/BP_ApplySpecTest_ParityA");
 static const TCHAR* ApplySpecTestBPParityPath_B = TEXT("/Game/__MCPTests/BP_ApplySpecTest_ParityB");
 static const TCHAR* ApplySpecTestSTPath        = TEXT("/Game/BP/AI/ST/ST_TestDummy");
-static const TCHAR* ApplySpecTestNiagaraPath   = TEXT("/Game/Art_Lib/VOL/NS_LocalVolumeFog");
+// niagara apply_spec SAVES the asset (ClaireonSpecApplicator_Niagara), so the test
+// must never run against real content -- it duplicates this source into
+// /Game/__MCPTests and deletes the duplicate when done.
+static const TCHAR* ApplySpecSourceNiagaraPath = TEXT("/Game/Art_Lib/VOL/NS_LocalVolumeFog");
+static const TCHAR* ApplySpecTestNiagaraPath   = TEXT("/Game/__MCPTests/NS_ApplySpecTest");
 static const TCHAR* ApplySpecTestWidgetPath    = TEXT("/Game/__MCPTests/WBP_ApplySpecTest");
 static const TCHAR* ApplySpecTestPCGPath       = TEXT("/Game/__MCPTests/PCG_ApplySpecTest");
 
@@ -459,6 +465,17 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_StateTree, CreateStatesFromSpec, UNTEST_TIM
 
 UNTEST_UNIT_OPTS(Claireon, ApplySpec_Niagara, CreateParametersFromSpec, UNTEST_TIMEOUTMS(30000))
 {
+	// apply_spec saves the target package; work on a throwaway duplicate.
+	if (UEditorAssetLibrary::DoesAssetExist(ApplySpecTestNiagaraPath))
+	{
+		UEditorAssetLibrary::DeleteAsset(ApplySpecTestNiagaraPath);
+	}
+	UNTEST_ASSERT_TRUE(UEditorAssetLibrary::DuplicateAsset(ApplySpecSourceNiagaraPath, ApplySpecTestNiagaraPath) != nullptr);
+	ON_SCOPE_EXIT
+	{
+		UEditorAssetLibrary::DeleteAsset(ApplySpecTestNiagaraPath);
+	};
+
 	ClaireonNiagaraTool_ApplySpec Tool;
 
 	// Spec: add 2 system-level parameters
@@ -476,7 +493,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_Niagara, CreateParametersFromSpec, UNTEST_T
 		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
 		P->SetStringField(TEXT("id"), TEXT("param_color"));
 		P->SetStringField(TEXT("name"), TEXT("TestColor"));
-		P->SetStringField(TEXT("type"), TEXT("FLinearColor"));
+		P->SetStringField(TEXT("type"), TEXT("LinearColor"));
 		P->SetStringField(TEXT("value"), TEXT("(R=1.0,G=0.5,B=0.0,A=1.0)"));
 		Parameters.Add(MakeObj(P));
 	}
@@ -495,11 +512,15 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_Niagara, CreateParametersFromSpec, UNTEST_T
 	UNTEST_EXPECT_TRUE((*Mappings)->HasField(TEXT("param_intensity")));
 	UNTEST_EXPECT_TRUE((*Mappings)->HasField(TEXT("param_color")));
 
-	// Verify via inspect
+	// Verify via inspect. The tool returns user parameters in the structured "parameters"
+	// field of Data (the content string is only a one-line summary), so assert against that.
 	ClaireonTool_NiagaraInspect InspectTool;
 	auto InspectResult = InspectTool.Execute(MakeInspectArgs(ApplySpecTestNiagaraPath));
 	UNTEST_ASSERT_FALSE(InspectResult.bIsError);
-	UNTEST_EXPECT_TRUE(InspectResult.GetContentAsString().Contains(TEXT("TestIntensity")));
+	UNTEST_ASSERT_PTR(InspectResult.Data.Get());
+	FString ParamsText;
+	InspectResult.Data->TryGetStringField(TEXT("parameters"), ParamsText);
+	UNTEST_EXPECT_TRUE(ParamsText.Contains(TEXT("TestIntensity")));
 
 	co_return;
 }
