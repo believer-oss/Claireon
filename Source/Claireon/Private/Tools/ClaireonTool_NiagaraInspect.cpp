@@ -88,6 +88,14 @@ IClaireonTool::FToolResult ClaireonTool_NiagaraInspect::Execute(const TSharedPtr
 	// Build emitters array
 	const TArray<FNiagaraEmitterHandle>& Handles = System->GetEmitterHandles();
 
+	// Validate an explicitly requested emitter index; without this an out-of-range filter
+	// silently matches nothing and returns an empty (but successful) result.
+	if (EmitterIndexFilter >= 0 && EmitterIndexFilter >= Handles.Num())
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Emitter index %d out of range (system has %d emitters)"),
+			EmitterIndexFilter, Handles.Num()));
+	}
+
 	TArray<TSharedPtr<FJsonValue>> EmittersArray;
 	int32 TotalModules = 0;
 

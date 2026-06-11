@@ -26,7 +26,7 @@ FString ClaireonNiagaraTool_SetModuleInput::GetOperation() const { return TEXT("
 
 FString ClaireonNiagaraTool_SetModuleInput::GetDescription() const
 {
-    return TEXT("Set a module input or static switch value. Supports scalar pin values, float curves (JSON array) and color curves (JSON object). Session-mode tool: open via niagara_open first.");
+    return TEXT("Set a module input or static switch value. Works on any regular runtime input (lifetime, count, color, size, etc., with or without the Module. prefix), not just inputs that are already overridden. Supports scalar pin values, float curves (JSON array) and color curves (JSON object). Session-mode tool: open via niagara_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_SetModuleInput::GetInputSchema() const
@@ -106,10 +106,21 @@ FToolResult ClaireonNiagaraTool_SetModuleInput::Execute(const TSharedPtr<FJsonOb
 	TArray<FNiagaraVariable> InputVars;
 	ClaireonNiagaraEditInternal::GetModuleInputVariables(*ModuleNode, InputVars);
 
+	// Match the requested input name with or without the "Module." namespace prefix, as the
+	// schema promises. Discovered input names carry the prefix (e.g. "Module.Lifetime"); users
+	// naturally pass the bare name ("Lifetime").
+	auto StripModulePrefix = [](const FString& Name) -> FString
+	{
+		return Name.StartsWith(TEXT("Module.")) ? Name.Mid(7) : Name;
+	};
+	const FString RequestedBare = StripModulePrefix(InputName);
+
 	const FNiagaraVariable* MatchedVar = nullptr;
 	for (const FNiagaraVariable& Var : InputVars)
 	{
-		if (Var.GetName().ToString().Equals(InputName, ESearchCase::IgnoreCase))
+		const FString VarName = Var.GetName().ToString();
+		if (VarName.Equals(InputName, ESearchCase::IgnoreCase)
+			|| StripModulePrefix(VarName).Equals(RequestedBare, ESearchCase::IgnoreCase))
 		{
 			MatchedVar = &Var;
 			break;

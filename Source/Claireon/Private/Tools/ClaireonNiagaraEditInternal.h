@@ -54,11 +54,12 @@ namespace ClaireonNiagaraEditInternal
 	}
 
 	/**
-	 * Local reimplementation of FNiagaraStackGraphUtilities::GetStackFunctionInputs
-	 * for UE 5.5 (non-exported). Enumerates module-level input variables (Module.* pins)
-	 * on a function call node using only exported graph APIs.
+	 * Walk a module function-call node's already-surfaced Module.* pins. A function-call
+	 * node only surfaces a pin once that input has been overridden, so this finds ONLY
+	 * overridden inputs. Kept as a fallback for GetModuleInputVariables; not a complete
+	 * input list on its own.
 	 */
-	inline void GetModuleInputVariables(UNiagaraNodeFunctionCall& ModuleNode, TArray<FNiagaraVariable>& OutInputVars)
+	inline void GetSurfacedModuleInputPins(UNiagaraNodeFunctionCall& ModuleNode, TArray<FNiagaraVariable>& OutInputVars)
 	{
 		FPinCollectorArray InputPins;
 		ModuleNode.GetInputPins(InputPins);
@@ -73,6 +74,64 @@ namespace ClaireonNiagaraEditInternal
 			if (!PinType.IsValid())
 				continue;
 			OutInputVars.Emplace(PinType, *PinName);
+		}
+	}
+
+	/**
+	 * Enumerate a module's TRUE input set, including inputs that have never been overridden
+	 * (which the surfaced-pin walk alone cannot find).
+	 *
+	 * The engine's authoritative path (FNiagaraStackGraphUtilities::GetStackFunctionInputs)
+	 * builds a parameter-map history over the called graph, but its builder
+	 * (TNiagaraParameterMapHistoryBuilder) is not exported to other modules, so we cannot
+	 * construct it from here without an engine change. Instead we read the called script
+	 * graph's declared parameters directly via the exported UNiagaraGraph::GetAllMetaData()
+	 * and keep the Module.* namespace, excluding static switches (handled on a separate path).
+	 *
+	 * Trade-off vs. the faithful history traversal: this lists every declared Module.*
+	 * parameter rather than only those actually read-first-with-no-prior-write. In practice a
+	 * module's Module.* parameters are its inputs, so the common knobs (lifetime, count,
+	 * color, size, radius, velocity) are all found. Edge cases this may over- or under-report:
+	 * Module.* parameters that are written-before-read internals, or inputs surfaced only
+	 * through nested dynamic-input graphs. Falls back to the overridden-pin walk if metadata
+	 * is unavailable, so behavior never regresses below the old path.
+	 */
+	inline void GetModuleInputVariables(UNiagaraNodeFunctionCall& ModuleNode, TArray<FNiagaraVariable>& OutInputVars)
+	{
+		UNiagaraGraph* CalledGraph = ModuleNode.GetCalledGraph();
+		if (CalledGraph)
+		{
+			// Static switches are surfaced separately by callers; exclude them here.
+			TSet<FName> StaticSwitchNames;
+			for (const FNiagaraVariable& SwitchVar : CalledGraph->FindStaticSwitchInputs())
+			{
+				StaticSwitchNames.Add(SwitchVar.GetName());
+			}
+
+			for (const TPair<FNiagaraVariable, TObjectPtr<UNiagaraScriptVariable>>& Pair : CalledGraph->GetAllMetaData())
+			{
+				const FNiagaraVariable& Var = Pair.Key;
+				if (!Var.GetType().IsValid())
+					continue;
+				if (!Var.GetName().ToString().StartsWith(TEXT("Module.")))
+					continue;
+				if (StaticSwitchNames.Contains(Var.GetName()))
+					continue;
+				OutInputVars.AddUnique(Var);
+			}
+
+			// Stable ordering: GetAllMetaData is an unordered map.
+			OutInputVars.Sort([](const FNiagaraVariable& A, const FNiagaraVariable& B)
+			{
+				return A.GetName().LexicalLess(B.GetName());
+			});
+		}
+
+		// Fallback: if metadata enumeration surfaced nothing (e.g. called graph unavailable),
+		// fall back to the overridden-pin walk so behavior never regresses below the old path.
+		if (OutInputVars.Num() == 0)
+		{
+			GetSurfacedModuleInputPins(ModuleNode, OutInputVars);
 		}
 	}
 

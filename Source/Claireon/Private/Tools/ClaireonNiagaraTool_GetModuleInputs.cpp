@@ -16,7 +16,7 @@ FString ClaireonNiagaraTool_GetModuleInputs::GetOperation() const { return TEXT(
 
 FString ClaireonNiagaraTool_GetModuleInputs::GetDescription() const
 {
-    return TEXT("List inputs (and static switches) for a specific module in a stack, including override status and current values. Session-mode tool: open via niagara_open first.");
+    return TEXT("List a module's inputs for a specific module in a stack: regular runtime inputs (lifetime, count, color, size, etc. - listed whether or not they are currently overridden) and static switches, with type and override status. Session-mode tool: open via niagara_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonNiagaraTool_GetModuleInputs::GetInputSchema() const
@@ -119,9 +119,12 @@ FToolResult ClaireonNiagaraTool_GetModuleInputs::Execute(const TSharedPtr<FJsonO
 			}
 		}
 
-		Output += FString::Printf(TEXT("  [%d] %s : %s = %s%s\n"),
+		// Un-overridden inputs are now listed (not omitted) with an explicit status. The
+		// literal script default value is not extracted (v1); the value column shows
+		// "(default)" as a placeholder.
+		Output += FString::Printf(TEXT("  [%d] %s : %s = %s %s\n"),
 			i, *VarName, *TypeName, *ValueStr,
-			bIsOverridden ? TEXT(" (overridden)") : TEXT(""));
+			bIsOverridden ? TEXT("(overridden)") : TEXT("(not overridden)"));
 	}
 
 	UNiagaraGraph* CalledGraph = ModuleNode->GetCalledGraph();

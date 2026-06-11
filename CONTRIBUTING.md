@@ -50,17 +50,26 @@ New tools are the most common contribution. To add one:
 1. Create a new class implementing `IClaireonTool` in `Source/Claireon/Private/Tools/`
 2. Add a corresponding header in `Source/Claireon/Public/Tools/` (if the tool needs to be referenced externally)
 3. Register the tool in `ClaireonModule.cpp`'s `StartServer()` method
-4. Follow the naming convention: `ClaireonTool_<Category><Action>.h/.cpp`
+4. Follow the file naming convention: `ClaireonTool_<CamelCaseName>.h/.cpp`, where the name
+   combines the category and action (e.g. `ClaireonTool_DataTableAddRow`,
+   `ClaireonTool_AnimGraphAnalyze`)
+
+Note: the MCP surface itself exposes only two meta-tools: `tool_search` (discovery) and
+`python_execute` (execution). Your new tool is reachable through them — discovered via
+`tool_search` and invoked as `claireon.<tool_name>(...)` inside `python_execute` — not as a
+top-level MCP tool.
 
 ### Tool Naming Convention
 
-Tool names follow the pattern `editor.<category>.<action>`:
+A tool's wire name is `<category>_<operation>`, composed automatically from `GetCategory()`
+and `GetOperation()` (`IClaireonTool::GetName()` is sealed so the two cannot disagree —
+implement the parts, never the whole):
 
 ```
-editor.blueprint.get_properties
-editor.state_tree.inspect
-editor.data_table.add_row
-editor.asset.search
+bp_get_graph
+statetree_inspect
+datatable_add_row
+asset_search
 ```
 
 ### Tool Design Guidelines
