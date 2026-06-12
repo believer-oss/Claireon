@@ -21,7 +21,7 @@ static bool bLastExecutionCrashed = false;
 #endif
 
 // UE's check() raises SEH exception via RaiseException() with this code.
-// Defined in WindowsPlatformCrashContext.cpp (verified against UE 5.5).
+// Defined in WindowsPlatformCrashContext.cpp (verified against UE 5.5 source).
 // Used for log messages only, not control flow.
 static constexpr uint32 CLAIREON_UE_ASSERT_EXCEPTION_CODE = 0x4000;
 
