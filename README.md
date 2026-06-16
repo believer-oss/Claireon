@@ -287,8 +287,9 @@ Markdown documents that serve as structured prompts for AI assistants (e.g., Cla
 
 ## Security Considerations
 
-Claireon runs an **unauthenticated HTTP server on localhost** (`127.0.0.1`). This is by design for seamless local AI assistant integration, but you should be aware of the implications:
+Claireon runs an **unauthenticated HTTP server intended for localhost-only use**. This is by design for seamless local AI assistant integration, but you should be aware of the implications:
 
+- **"Localhost-only" is enforced in software, not by the socket bind.** The editor's HTTP listener (Unreal's `FHttpServerModule`) binds all interfaces; loopback-only access is enforced by `Origin`/`Host` header validation, which is best-effort. A host firewall blocking inbound connections to the MCP ports is the real network boundary.
 - **Never expose the MCP port externally.** Do not use port forwarding, reverse proxies, or tunnels to make the server (or the Claireon proxy, ports `43017` and `49152-65535`) accessible from other machines.
 - **Python execution is unrestricted.** The `python_execute` tool has full access to the filesystem, network, and editor APIs — equivalent to the editor's built-in Python console.
 - **Execution timeout is best-effort.** A watchdog injects a `TimeoutError` between Python bytecodes after `Python Execution Timeout` (default 60 s, settable in Editor Preferences); a blocking native call is not interrupted mid-call, and the error surfaces only when it returns to Python.

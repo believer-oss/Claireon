@@ -2,13 +2,14 @@
 
 ## Architecture
 
-Claireon runs an **unauthenticated HTTP server on localhost** inside the Unreal Editor. This is by design, it enables AI assistants and local tools to interact with the editor without manual token exchange.
+Claireon runs an **unauthenticated HTTP server intended for localhost-only use** inside the Unreal Editor. This is by design, it enables AI assistants and local tools to interact with the editor without manual token exchange. Note that "localhost-only" is enforced in software, not by the socket bind. See the threat model below before deploying.
 
 ### Threat Model
 
-- **Localhost-only binding**: The server is intended to be accessible only from the local machine. Header validation rejects requests with non-localhost `Origin` or `Host` headers as a defense-in-depth measure against DNS rebinding attacks.
+- **Loopback access is enforced at the application layer, not by the socket bind**: The editor's HTTP server is built on Unreal's `FHttpServerModule`, which does not expose a bind-address option and listens on all interfaces. Loopback-only access is therefore enforced in software: requests carrying a non-localhost `Origin` or `Host` header are rejected as a best-effort defense against DNS rebinding. These header checks can be defeated by a caller that forges or omits the headers, so they are not a substitute for a host firewall. **Treat a firewall that blocks inbound connections to the MCP ports as the actual network boundary.**
+- **The optional proxy binds loopback explicitly**: When enabled, the MCP proxy (`claireon_proxy.py`) binds `127.0.0.1` for its registration port (`43017`) and the per-worktree MCP ports, and gates editor ingress with a per-session bearer token. The proxy's own MCP endpoint remains unauthenticated on localhost.
 - **Sandbox escape is by design**: The `python_execute` tool grants full access to the `unreal` Python module, the local filesystem, and the network. This is intentional, it enables the same workflows a developer would perform manually in the editor's Python console.
-- **No authentication**: Any process on the local machine can call the MCP server. This matches the trust model of the Unreal Editor itself (anyone who can run code on your machine already has full access).
+- **No authentication in the default mode**: In direct-connect mode (the default), any process that can reach the port can call the MCP server with no credentials; the header check above is the only application-layer control. (Proxy mode adds a per-session bearer token between the proxy and the editor.) This matches the trust model of the Unreal Editor itself: anyone who can run code on your machine already has full access. It is not a network access control.
 - **Audit logging**: All Python executions are recorded to disk (`Saved/MCP/PythonAuditLog/`). This provides forensic traceability but does not prevent execution.
 
 ### What This Means
@@ -84,7 +85,7 @@ We ask that you give us reasonable time to address the issue before public discl
 
 If you are deploying Claireon in an environment with heightened security requirements:
 
-1. **Firewall the MCP port** (default 8017). Block all inbound connections from non-loopback addresses.
+1. **Firewall the MCP ports.** Block all inbound (non-loopback) connections to the proxy registration port (`43017`) and the per-worktree MCP ports (the ephemeral range `49152-65535`; each worktree's live port is recorded in `Saved/Claireon/MCPServer.json`). Because the editor's HTTP listener binds all interfaces, this firewall rule is the real network boundary, not the header checks.
 2. **Do not commit editor config files** (`Saved/Config/`) to version control. They may contain your Anthropic API key.
 3. **Review the Python audit log** periodically at `Saved/MCP/PythonAuditLog/` for unexpected executions.
 4. **Use a dedicated API key** for the built-in REPL with appropriate spend limits.
