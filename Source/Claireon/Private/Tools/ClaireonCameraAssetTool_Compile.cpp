@@ -14,7 +14,7 @@
 #if WITH_GAMEPLAY_CAMERAS
 
 #include "Core/CameraAsset.h"
-#if UE_VERSION_OLDER_THAN(5, 7, 0)
+#if UE_VERSION_OLDER_THAN(5, 6, 0)
 #include "Core/CameraBuildLog.h"
 #else
 #include "Build/CameraBuildLog.h"

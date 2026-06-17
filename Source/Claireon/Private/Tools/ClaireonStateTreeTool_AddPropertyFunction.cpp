@@ -15,13 +15,14 @@
 #include "StructUtils/InstancedStruct.h"
 #include "ScopedTransaction.h"
 #include "Misc/EngineVersionComparison.h"
-#if !UE_VERSION_OLDER_THAN(5, 7, 0)
+#if !UE_VERSION_OLDER_THAN(5, 6, 0)
 #include "PropertyBindingPath.h"
 #endif
 
 using FToolResult = IClaireonTool::FToolResult;
 
-#if UE_VERSION_OLDER_THAN(5, 7, 0)
+// 5.6 renamed FStateTreePropertyPathSegment -> FPropertyBindingPathSegment.
+#if UE_VERSION_OLDER_THAN(5, 6, 0)
 using FClaireonPropertyPathSegment = FStateTreePropertyPathSegment;
 #else
 using FClaireonPropertyPathSegment = FPropertyBindingPathSegment;

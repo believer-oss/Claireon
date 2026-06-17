@@ -9,10 +9,12 @@
 #if WITH_GAMEPLAY_CAMERAS
 
 #include "Core/CameraAsset.h"
-#if UE_VERSION_OLDER_THAN(5, 7, 0)
+#if UE_VERSION_OLDER_THAN(5, 6, 0)
 #include "Core/CameraBuildLog.h"
 #else
 #include "Build/CameraBuildLog.h"
+#endif
+#if !UE_VERSION_OLDER_THAN(5, 7, 0)
 #include "Core/CameraDirector.h"
 #endif
 #include "Core/CameraNode.h"
@@ -36,14 +38,25 @@ namespace ClaireonCameraAssetHelpers
 		{
 			return Out;
 		}
-#if UE_VERSION_OLDER_THAN(5, 7, 0)
-		// <=5.6: rigs are owned directly by the asset.
+#if UE_VERSION_OLDER_THAN(5, 6, 0)
+		// <=5.5: rigs are owned directly by the asset.
 		for (const TObjectPtr<UCameraRigAsset>& Rig : Asset->GetCameraRigs())
 		{
 			Out.Add(Rig);
 		}
+#elif UE_VERSION_OLDER_THAN(5, 7, 0)
+		// 5.6: GetCameraRigs() was removed, but the rigs still live in the deprecated
+		// backing array; reach them by reflecting on CameraRigs_DEPRECATED.
+		if (const FArrayProperty* Prop = FindFProperty<FArrayProperty>(UCameraAsset::StaticClass(), TEXT("CameraRigs_DEPRECATED")))
+		{
+			FScriptArrayHelper Helper(Prop, Prop->ContainerPtrToValuePtr<void>(Asset));
+			for (int32 i = 0; i < Helper.Num(); ++i)
+			{
+				Out.Add(*reinterpret_cast<TObjectPtr<UCameraRigAsset>*>(Helper.GetRawPtr(i)));
+			}
+		}
 #else
-		// 5.7+: GetCameraRigs() was removed; rigs are owned by the camera director.
+		// 5.7+: rigs are owned by the camera director.
 		if (const UCameraDirector* Dir = Asset->GetCameraDirector())
 		{
 			FCameraDirectorRigUsageInfo Usage;

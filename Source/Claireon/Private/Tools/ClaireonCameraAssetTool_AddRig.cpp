@@ -14,6 +14,7 @@
 
 #include "Core/CameraAsset.h"
 #include "Core/CameraRigAsset.h"
+#include "UObject/UnrealType.h" // FArrayProperty / FScriptArrayHelper (5.6 reflection path)
 #if !UE_VERSION_OLDER_THAN(5, 7, 0)
 #include "Core/CameraDirector.h"
 #include "Directors/SingleCameraDirector.h"
@@ -97,8 +98,24 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_AddRig::Execute(const TShare
 		}
 	}
 
-#if UE_VERSION_OLDER_THAN(5, 7, 0)
+#if UE_VERSION_OLDER_THAN(5, 6, 0)
 	Asset->AddCameraRig(NewRig);
+	Asset->PostEditChange();
+#elif UE_VERSION_OLDER_THAN(5, 7, 0)
+	// 5.6: AddCameraRig() is gone but rigs still live in the deprecated backing
+	// array; append by reflecting on CameraRigs_DEPRECATED.
+	if (FArrayProperty* Prop = FindFProperty<FArrayProperty>(UCameraAsset::StaticClass(), TEXT("CameraRigs_DEPRECATED")))
+	{
+		Asset->Modify();
+		FScriptArrayHelper Helper(Prop, Prop->ContainerPtrToValuePtr<void>(Asset));
+		const int32 Idx = Helper.AddValue();
+		*reinterpret_cast<TObjectPtr<UCameraRigAsset>*>(Helper.GetRawPtr(Idx)) = NewRig;
+	}
+	else
+	{
+		Transaction.Cancel();
+		return MakeErrorResult(TEXT("could not locate CameraRigs_DEPRECATED on UCameraAsset for add_rig on UE 5.6"));
+	}
 	Asset->PostEditChange();
 #else
 	// 5.7: AddCameraRig() is gone; rigs live on the camera director. Attach to a

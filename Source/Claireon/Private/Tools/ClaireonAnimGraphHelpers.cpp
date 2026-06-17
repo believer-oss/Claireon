@@ -1406,13 +1406,21 @@ TSharedPtr<FJsonObject> SerializeTransition(UAnimStateTransitionNode* TransNode)
 	Result->SetStringField(TEXT("blend_mode"), BlendModeStr);
 
 	// Blend profile
-#if UE_VERSION_OLDER_THAN(5, 7, 0)
+#if UE_VERSION_OLDER_THAN(5, 6, 0)
 	if (TransNode->BlendProfile)
 	{
 		Result->SetStringField(TEXT("blend_profile"), TransNode->BlendProfile->GetName());
 	}
+#elif UE_VERSION_OLDER_THAN(5, 7, 0)
+	// 5.6: BlendProfile -> BlendProfile_DEPRECATED (deprecated but still present).
+PRAGMA_DISABLE_DEPRECATION_WARNINGS
+	if (TransNode->BlendProfile_DEPRECATED)
+	{
+		Result->SetStringField(TEXT("blend_profile"), TransNode->BlendProfile_DEPRECATED->GetName());
+	}
+PRAGMA_ENABLE_DEPRECATION_WARNINGS
 #else
-	// UE 5.7: BlendProfile -> BlendProfile_DEPRECATED, replaced by FBlendProfileInterfaceWrapper.
+	// 5.7: the deprecated member is gone; replaced by FBlendProfileInterfaceWrapper.
 	if (const UBlendProfile* BlendProfile = TransNode->BlendProfileWrapper.GetBlendProfile())
 	{
 		Result->SetStringField(TEXT("blend_profile"), BlendProfile->GetName());

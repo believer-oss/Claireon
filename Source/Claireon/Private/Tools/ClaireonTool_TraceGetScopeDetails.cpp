@@ -11,8 +11,8 @@
 #include "TraceServices/Model/Threads.h"
 #include "TraceServices/Containers/Timelines.h"
 
-// 5.7 corrected the struct's spelling (FCreateAggreationParams -> FCreateAggregationParams).
-#if UE_VERSION_OLDER_THAN(5, 7, 0)
+// 5.6 corrected the struct's spelling (FCreateAggreationParams -> FCreateAggregationParams).
+#if UE_VERSION_OLDER_THAN(5, 6, 0)
 using FClaireonAggregationParams = TraceServices::FCreateAggreationParams;
 #else
 using FClaireonAggregationParams = TraceServices::FCreateAggregationParams;
@@ -139,12 +139,13 @@ IClaireonTool::FToolResult ClaireonTool_TraceGetScopeDetails::Execute(const TSha
 			FClaireonAggregationParams Params;
 			Params.IntervalStart = IntervalStart;
 			Params.IntervalEnd = IntervalEnd;
-#if UE_VERSION_OLDER_THAN(5, 7, 0)
+#if UE_VERSION_OLDER_THAN(5, 6, 0)
 			Params.IncludeGpu = false;
-#else
+#elif !UE_VERSION_OLDER_THAN(5, 7, 0)
 			Params.bIncludeOldGpu1 = false;
 			Params.bIncludeOldGpu2 = false;
 #endif
+			// 5.6: GPU toggle removed; nothing to set (this tool never includes GPU anyway).
 			Params.CpuThreadFilter = [](uint32) -> bool { return true; };
 
 			TraceServices::ITable<TraceServices::FTimingProfilerAggregatedStats>* AggTable = TimingProvider->CreateAggregation(Params);

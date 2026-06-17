@@ -11,8 +11,8 @@
 #include "TraceServices/Model/Threads.h"
 #include "TraceServices/Containers/Tables.h"
 
-// 5.7 corrected the struct's spelling (FCreateAggreationParams -> FCreateAggregationParams).
-#if UE_VERSION_OLDER_THAN(5, 7, 0)
+// 5.6 corrected the struct's spelling (FCreateAggreationParams -> FCreateAggregationParams).
+#if UE_VERSION_OLDER_THAN(5, 6, 0)
 using FClaireonAggregationParams = TraceServices::FCreateAggreationParams;
 #else
 using FClaireonAggregationParams = TraceServices::FCreateAggregationParams;
@@ -187,12 +187,15 @@ IClaireonTool::FToolResult ClaireonTool_TraceGetTopScopes::Execute(const TShared
 			FClaireonAggregationParams Params;
 			Params.IntervalStart = IntervalStart;
 			Params.IntervalEnd = IntervalEnd;
-#if UE_VERSION_OLDER_THAN(5, 7, 0)
+#if UE_VERSION_OLDER_THAN(5, 6, 0)
 			Params.IncludeGpu = bIncludeGpu;
-#else
+#elif !UE_VERSION_OLDER_THAN(5, 7, 0)
 			Params.bIncludeOldGpu1 = bIncludeGpu;
 			Params.bIncludeOldGpu2 = bIncludeGpu;
 			// Verse Sampling is a separate non-GPU timeline; don't fold it into include_gpu.
+#else
+			// 5.6: the single IncludeGpu toggle was removed and the bIncludeOldGpu1/2
+			// replacements don't exist yet, so GPU timelines can't be opted in here.
 #endif
 
 			if (!ThreadFilter.IsEmpty())
