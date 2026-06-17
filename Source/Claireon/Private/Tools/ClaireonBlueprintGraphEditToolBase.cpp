@@ -300,7 +300,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 					}
 				}
 
-				StatusText += FString::Printf(TEXT("Position: (%.0f, %.0f)\n"), FocusedNode->NodePosX, FocusedNode->NodePosY);
+				StatusText += FString::Printf(TEXT("Position: (%d, %d)\n"), FocusedNode->NodePosX, FocusedNode->NodePosY);
 			}
 			else
 			{
@@ -346,7 +346,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 			FString NodeTitle = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();
 			bool bIsCursor = (Node->NodeGuid == Data->Cursor.FocusedNodeGuid);
 
-			StatusText += FString::Printf(TEXT("%d. [%s] @ (%.0f, %.0f)%s\n"),
+			StatusText += FString::Printf(TEXT("%d. [%s] @ (%d, %d)%s\n"),
 				NodeIndex++,
 				*NodeTitle,
 				Node->NodePosX,

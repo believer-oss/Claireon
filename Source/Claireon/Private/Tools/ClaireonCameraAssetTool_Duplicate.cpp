@@ -5,9 +5,12 @@
 #include "ClaireonSessionManager.h"
 #include "Tools/ClaireonAnimEditToolBase.h" // FToolSchemaBuilder
 
-#include "Core/CameraAsset.h"
 #include "Dom/JsonObject.h"
 #include "EditorAssetLibrary.h"
+
+#if WITH_GAMEPLAY_CAMERAS
+
+#include "Core/CameraAsset.h"
 
 FString FClaireonCameraAssetTool_Duplicate::GetOperation() const { return TEXT("duplicate"); }
 
@@ -72,3 +75,5 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_Duplicate::Execute(const TSh
 	Data->SetStringField(TEXT("dest_path"), Dup->GetPathName());
 	return MakeSuccessResult(Data, FString::Printf(TEXT("Duplicated %s to %s"), *CanonSrc, *Dup->GetPathName()));
 }
+
+#endif // WITH_GAMEPLAY_CAMERAS

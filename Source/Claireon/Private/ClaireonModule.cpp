@@ -483,6 +483,7 @@
 #include "Tools/ClaireonMetaSoundTool_ListActiveSessions.h"
 #include "Tools/ClaireonMetaSoundTool_ListAvailableInterfaces.h"
 #include "Tools/ClaireonMetaSoundTool_DumpGraph.h"
+#if WITH_GAMEPLAY_CAMERAS
 #include "Tools/ClaireonCameraAssetTool_Create.h"
 #include "Tools/ClaireonCameraAssetTool_Duplicate.h"
 #include "Tools/ClaireonCameraAssetTool_Save.h"
@@ -496,6 +497,7 @@
 #include "Tools/ClaireonCameraAssetTool_MoveNode.h"
 #include "Tools/ClaireonCameraAssetTool_GetNodeProperty.h"
 #include "Tools/ClaireonCameraAssetTool_SetNodeProperty.h"
+#endif // WITH_GAMEPLAY_CAMERAS
 #include "Tools/ClaireonSoundClassTool_SetProperty.h"
 #include "Tools/ClaireonSoundClassTool_AddChild.h"
 #include "Tools/ClaireonSoundClassTool_RemoveChild.h"
@@ -1834,6 +1836,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<FClaireonMetaSoundTool_ListActiveSessions>());
 	Tools.Add(MakeShared<FClaireonMetaSoundTool_ListAvailableInterfaces>());
 	Tools.Add(MakeShared<FClaireonMetaSoundTool_DumpGraph>());
+#if WITH_GAMEPLAY_CAMERAS
 	// Camera Asset (13)
 	Tools.Add(MakeShared<FClaireonCameraAssetTool_Create>());
 	Tools.Add(MakeShared<FClaireonCameraAssetTool_Duplicate>());
@@ -1848,6 +1851,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<FClaireonCameraAssetTool_MoveNode>());
 	Tools.Add(MakeShared<FClaireonCameraAssetTool_GetNodeProperty>());
 	Tools.Add(MakeShared<FClaireonCameraAssetTool_SetNodeProperty>());
+#endif // WITH_GAMEPLAY_CAMERAS
 	// SoundClass (5)
 	Tools.Add(MakeShared<FClaireonSoundClassTool_SetProperty>());
 	Tools.Add(MakeShared<FClaireonSoundClassTool_AddChild>());

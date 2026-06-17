@@ -4,14 +4,17 @@
 #include "Tools/ClaireonCameraAssetTool_MoveNode.h"
 
 #include "ClaireonSessionManager.h"
-#include "Core/CameraAsset.h"
-#include "Core/CameraNode.h"
-#include "Core/CameraRigAsset.h"
 #include "Dom/JsonObject.h"
-#include "Nodes/Common/ArrayCameraNode.h"
 #include "ScopedTransaction.h"
 #include "Tools/ClaireonAnimEditToolBase.h" // FToolSchemaBuilder
 #include "Tools/ClaireonCameraAssetHelpers.h"
+
+#if WITH_GAMEPLAY_CAMERAS
+
+#include "Core/CameraAsset.h"
+#include "Core/CameraNode.h"
+#include "Core/CameraRigAsset.h"
+#include "Nodes/Common/ArrayCameraNode.h"
 
 #define LOCTEXT_NAMESPACE "ClaireonCameraAssetTool_MoveNode"
 
@@ -80,7 +83,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_MoveNode::Execute(const TSha
 		return MakeErrorResult(FString::Printf(TEXT("Camera asset not found: %s"), *Canon));
 	}
 
-	TArrayView<const TObjectPtr<UCameraRigAsset>> Rigs = Asset->GetCameraRigs();
+	const TArray<UCameraRigAsset*> Rigs = ClaireonCameraAssetHelpers::GetCameraRigs(Asset);
 	if (!Rigs.IsValidIndex(RigIndex))
 	{
 		return MakeErrorResult(FString::Printf(
@@ -211,3 +214,5 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_MoveNode::Execute(const TSha
 }
 
 #undef LOCTEXT_NAMESPACE
+
+#endif // WITH_GAMEPLAY_CAMERAS

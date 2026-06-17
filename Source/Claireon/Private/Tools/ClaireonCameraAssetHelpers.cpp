@@ -3,8 +3,18 @@
 
 #include "Tools/ClaireonCameraAssetHelpers.h"
 
+#include "Misc/EngineVersionComparison.h"
+
+// Entire helper is camera-only; compiles to nothing when GameplayCameras is absent.
+#if WITH_GAMEPLAY_CAMERAS
+
 #include "Core/CameraAsset.h"
+#if UE_VERSION_OLDER_THAN(5, 7, 0)
 #include "Core/CameraBuildLog.h"
+#else
+#include "Build/CameraBuildLog.h"
+#include "Core/CameraDirector.h"
+#endif
 #include "Core/CameraNode.h"
 #include "Core/CameraRigAsset.h"
 #include "Dom/JsonObject.h"
@@ -19,6 +29,31 @@
 
 namespace ClaireonCameraAssetHelpers
 {
+	TArray<UCameraRigAsset*> GetCameraRigs(const UCameraAsset* Asset)
+	{
+		TArray<UCameraRigAsset*> Out;
+		if (!Asset)
+		{
+			return Out;
+		}
+#if UE_VERSION_OLDER_THAN(5, 7, 0)
+		// <=5.6: rigs are owned directly by the asset.
+		for (const TObjectPtr<UCameraRigAsset>& Rig : Asset->GetCameraRigs())
+		{
+			Out.Add(Rig);
+		}
+#else
+		// 5.7+: GetCameraRigs() was removed; rigs are owned by the camera director.
+		if (const UCameraDirector* Dir = Asset->GetCameraDirector())
+		{
+			FCameraDirectorRigUsageInfo Usage;
+			Dir->GatherRigUsageInfo(Usage);
+			Out = Usage.CameraRigs;
+		}
+#endif
+		return Out;
+	}
+
 	UCameraNode* ResolveNode(UCameraRigAsset* Rig, const FString& NodeId, FString& OutError)
 	{
 		if (!Rig)
@@ -205,3 +240,5 @@ namespace ClaireonCameraAssetHelpers
 		return FString::Printf(TEXT("%s.Children[%d]"), *ParentId, ChildIndex);
 	}
 } // namespace ClaireonCameraAssetHelpers
+
+#endif // WITH_GAMEPLAY_CAMERAS

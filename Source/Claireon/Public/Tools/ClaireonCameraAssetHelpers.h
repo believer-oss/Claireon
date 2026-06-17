@@ -5,6 +5,10 @@
 
 #include "CoreMinimal.h"
 
+// Declarations reference GameplayCameras types; gate them so this header is inert
+// (and callers compile out) when the plugin is absent.
+#if WITH_GAMEPLAY_CAMERAS
+
 class UCameraAsset;
 class UCameraRigAsset;
 class UCameraNode;
@@ -17,6 +21,9 @@ namespace UE::Cameras
 
 namespace ClaireonCameraAssetHelpers
 {
+	/** Returns the camera rigs for an asset (5.7: via the camera director; <=5.6: via UCameraAsset::GetCameraRigs). */
+	CLAIREON_API TArray<UCameraRigAsset*> GetCameraRigs(const UCameraAsset* Asset);
+
 	/** Resolve a node-id path ("Root", "Root.Children[2]", etc.) to a UCameraNode within a rig. */
 	CLAIREON_API UCameraNode* ResolveNode(UCameraRigAsset* Rig, const FString& NodeId, FString& OutError);
 
@@ -58,3 +65,5 @@ namespace ClaireonCameraAssetHelpers
 	/** Compose `<ParentId>.Children[<ChildIndex>]`. */
 	CLAIREON_API FString ComputeNodeIdForChildOf(const FString& ParentId, int32 ChildIndex);
 } // namespace ClaireonCameraAssetHelpers
+
+#endif // WITH_GAMEPLAY_CAMERAS

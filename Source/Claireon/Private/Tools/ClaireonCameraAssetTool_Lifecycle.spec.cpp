@@ -1,6 +1,10 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
+#include "Misc/EngineVersionComparison.h"
+
+#if WITH_GAMEPLAY_CAMERAS
+
 #include "Tools/ClaireonCameraAssetTool_AddRig.h"
 #include "Tools/ClaireonCameraAssetTool_Create.h"
 #include "Tools/ClaireonCameraAssetTool_Duplicate.h"
@@ -11,6 +15,7 @@
 #include "EditorAssetLibrary.h"
 #include "Misc/AutomationTest.h"
 #include "PackageTools.h"
+#include "Tools/ClaireonCameraAssetHelpers.h"
 #include "UObject/Package.h"
 
 #include "Dom/JsonObject.h"
@@ -84,7 +89,7 @@ bool FCameraAssetLifecycle_Create_HappyPath::RunTest(const FString& /*Parameters
 		AddError(TEXT("Asset not found after Create"));
 		return false;
 	}
-	const int32 RigCount = Asset->GetCameraRigs().Num();
+	const int32 RigCount = ClaireonCameraAssetHelpers::GetCameraRigs(Asset).Num();
 	if (RigCount != 0)
 	{
 		AddError(FString::Printf(TEXT("Expected 0 rigs after Create; got %d"), RigCount));
@@ -309,7 +314,7 @@ bool FCameraAssetLifecycle_Save_RoundTrip::RunTest(const FString& /*Parameters*/
 		CALifecycleSpec_DeleteIfExists(Path);
 		return false;
 	}
-	const int32 RigCount = Reloaded->GetCameraRigs().Num();
+	const int32 RigCount = ClaireonCameraAssetHelpers::GetCameraRigs(Reloaded).Num();
 	if (RigCount != 1)
 	{
 		AddError(FString::Printf(TEXT("Expected 1 rig after save+reload; got %d"), RigCount));
@@ -320,3 +325,5 @@ bool FCameraAssetLifecycle_Save_RoundTrip::RunTest(const FString& /*Parameters*/
 	CALifecycleSpec_DeleteIfExists(Path);
 	return true;
 }
+
+#endif // WITH_GAMEPLAY_CAMERAS

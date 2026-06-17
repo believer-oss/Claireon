@@ -6,11 +6,14 @@
 #include "Tools/ClaireonAnimEditToolBase.h" // FToolSchemaBuilder
 
 #include "AssetRegistry/AssetRegistryModule.h"
-#include "Core/CameraAsset.h"
 #include "Dom/JsonObject.h"
 #include "Misc/PackageName.h"
 #include "ScopedTransaction.h"
 #include "UObject/Package.h"
+
+#if WITH_GAMEPLAY_CAMERAS
+
+#include "Core/CameraAsset.h"
 
 #define LOCTEXT_NAMESPACE "ClaireonCameraAssetTool_Create"
 
@@ -74,3 +77,5 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_Create::Execute(const TShare
 }
 
 #undef LOCTEXT_NAMESPACE
+
+#endif // WITH_GAMEPLAY_CAMERAS

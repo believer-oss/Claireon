@@ -7,6 +7,7 @@
 #include "LandscapeInfo.h"
 #include "LandscapeEdit.h"
 #include "LandscapeLayerInfoObject.h"
+#include "Misc/EngineVersionComparison.h"
 
 using FToolResult = IClaireonTool::FToolResult;
 
@@ -157,9 +158,15 @@ FToolResult ClaireonLandscapeTool_PaintLayer::Execute(const TSharedPtr<FJsonObje
 	}
 
 	// Write weight data back
+#if UE_VERSION_OLDER_THAN(5, 7, 0)
 	EditInterface.SetAlphaData(
 		LayerInfoObj, X1, Y1, X2, Y2, WeightData.GetData(), 0,
 		ELandscapeLayerPaintingRestriction::None, true /*bWeightAdjust*/);
+#else
+	EditInterface.SetAlphaData(
+		LayerInfoObj, X1, Y1, X2, Y2, WeightData.GetData(), 0,
+		ELandscapeLayerPaintingRestriction::None);
+#endif
 
 	Data->LastOperationStatus = FString::Printf(
 		TEXT("Painted layer '%s' in %dx%d region"), *LayerName, DataWidth, DataHeight);

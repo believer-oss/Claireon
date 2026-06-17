@@ -7,6 +7,7 @@
 #include "ClaireonLog.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Misc/EngineVersionComparison.h"
 
 // Animation blueprint headers
 #include "Animation/AnimBlueprint.h"
@@ -1405,10 +1406,18 @@ TSharedPtr<FJsonObject> SerializeTransition(UAnimStateTransitionNode* TransNode)
 	Result->SetStringField(TEXT("blend_mode"), BlendModeStr);
 
 	// Blend profile
+#if UE_VERSION_OLDER_THAN(5, 7, 0)
 	if (TransNode->BlendProfile)
 	{
 		Result->SetStringField(TEXT("blend_profile"), TransNode->BlendProfile->GetName());
 	}
+#else
+	// UE 5.7: BlendProfile -> BlendProfile_DEPRECATED, replaced by FBlendProfileInterfaceWrapper.
+	if (const UBlendProfile* BlendProfile = TransNode->BlendProfileWrapper.GetBlendProfile())
+	{
+		Result->SetStringField(TEXT("blend_profile"), BlendProfile->GetName());
+	}
+#endif
 
 	// Custom blend curve
 	if (TransNode->CustomBlendCurve)

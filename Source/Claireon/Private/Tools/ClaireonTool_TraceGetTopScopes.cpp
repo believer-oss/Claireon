@@ -4,11 +4,19 @@
 #include "Tools/ClaireonTool_TraceGetTopScopes.h"
 #include "ClaireonLog.h"
 #include "ClaireonTraceSession.h"
+#include "Misc/EngineVersionComparison.h"
 #include "TraceServices/Model/AnalysisSession.h"
 #include "TraceServices/Model/TimingProfiler.h"
 #include "TraceServices/Model/Frames.h"
 #include "TraceServices/Model/Threads.h"
 #include "TraceServices/Containers/Tables.h"
+
+// 5.7 corrected the struct's spelling (FCreateAggreationParams -> FCreateAggregationParams).
+#if UE_VERSION_OLDER_THAN(5, 7, 0)
+using FClaireonAggregationParams = TraceServices::FCreateAggreationParams;
+#else
+using FClaireonAggregationParams = TraceServices::FCreateAggregationParams;
+#endif
 
 FString ClaireonTool_TraceGetTopScopes::GetCategory() const { return TEXT("trace"); }
 FString ClaireonTool_TraceGetTopScopes::GetOperation() const { return TEXT("get_top_scopes"); }
@@ -176,10 +184,16 @@ IClaireonTool::FToolResult ClaireonTool_TraceGetTopScopes::Execute(const TShared
 			}
 
 			// Run aggregation over the time range
-			TraceServices::FCreateAggreationParams Params;
+			FClaireonAggregationParams Params;
 			Params.IntervalStart = IntervalStart;
 			Params.IntervalEnd = IntervalEnd;
+#if UE_VERSION_OLDER_THAN(5, 7, 0)
 			Params.IncludeGpu = bIncludeGpu;
+#else
+			Params.bIncludeOldGpu1 = bIncludeGpu;
+			Params.bIncludeOldGpu2 = bIncludeGpu;
+			// Verse Sampling is a separate non-GPU timeline; don't fold it into include_gpu.
+#endif
 
 			if (!ThreadFilter.IsEmpty())
 			{

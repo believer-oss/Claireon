@@ -4,12 +4,20 @@
 #include "Tools/ClaireonCameraAssetTool_AddRig.h"
 
 #include "ClaireonSessionManager.h"
-#include "Core/CameraAsset.h"
-#include "Core/CameraRigAsset.h"
 #include "Dom/JsonObject.h"
+#include "Misc/EngineVersionComparison.h"
 #include "ScopedTransaction.h"
 #include "Tools/ClaireonAnimEditToolBase.h" // FToolSchemaBuilder
 #include "Tools/ClaireonCameraAssetHelpers.h"
+
+#if WITH_GAMEPLAY_CAMERAS
+
+#include "Core/CameraAsset.h"
+#include "Core/CameraRigAsset.h"
+#if !UE_VERSION_OLDER_THAN(5, 7, 0)
+#include "Core/CameraDirector.h"
+#include "Directors/SingleCameraDirector.h"
+#endif
 
 #define LOCTEXT_NAMESPACE "ClaireonCameraAssetTool_AddRig"
 
@@ -89,10 +97,34 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_AddRig::Execute(const TShare
 		}
 	}
 
+#if UE_VERSION_OLDER_THAN(5, 7, 0)
 	Asset->AddCameraRig(NewRig);
 	Asset->PostEditChange();
+#else
+	// 5.7: AddCameraRig() is gone; rigs live on the camera director. Attach to a
+	// USingleCameraDirector (the only single-rig slot).
+	USingleCameraDirector* Single = Cast<USingleCameraDirector>(Asset->GetCameraDirector());
+	if (!Single)
+	{
+		Transaction.Cancel();
+		return MakeErrorResult(TEXT(
+			"asset's camera director does not support add_rig on UE 5.7 "
+			"(expected a USingleCameraDirector)"));
+	}
+	// Refuse rather than silently overwrite/orphan an existing rig (diverges from <=5.6 append).
+	if (Single->CameraRig)
+	{
+		Transaction.Cancel();
+		return MakeErrorResult(TEXT(
+			"asset's USingleCameraDirector already references a rig; add_rig would "
+			"overwrite it on UE 5.7 (single-camera directors hold exactly one rig)"));
+	}
+	Single->Modify();
+	Single->CameraRig = NewRig;
+	Asset->PostEditChange();
+#endif
 
-	const int32 NewIndex = Asset->GetCameraRigs().Num() - 1;
+	const int32 NewIndex = ClaireonCameraAssetHelpers::GetCameraRigs(Asset).Num() - 1;
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetNumberField(TEXT("rig_index"), NewIndex);
@@ -103,3 +135,5 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_AddRig::Execute(const TShare
 }
 
 #undef LOCTEXT_NAMESPACE
+
+#endif // WITH_GAMEPLAY_CAMERAS

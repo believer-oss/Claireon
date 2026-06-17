@@ -6,6 +6,10 @@
 #include "LandscapeProxy.h"
 #include "LandscapeInfo.h"
 #include "LandscapeLayerInfoObject.h"
+#include "Misc/EngineVersionComparison.h"
+#if !UE_VERSION_OLDER_THAN(5, 7, 0)
+#include "LandscapeEditTypes.h"
+#endif
 
 using FToolResult = IClaireonTool::FToolResult;
 
@@ -45,8 +49,13 @@ FToolResult ClaireonLandscapeTool_AddLayer::Execute(const TSharedPtr<FJsonObject
 	Arguments->TryGetBoolField(TEXT("no_weight_blend"), bNoWeightBlend);
 
 	ULandscapeLayerInfoObject* LayerInfo = NewObject<ULandscapeLayerInfoObject>();
+#if UE_VERSION_OLDER_THAN(5, 7, 0)
 	LayerInfo->LayerName = FName(*LayerName);
 	LayerInfo->bNoWeightBlend = bNoWeightBlend;
+#else
+	LayerInfo->SetLayerName(FName(*LayerName), /*bInModify=*/false);
+	LayerInfo->SetBlendMethod(bNoWeightBlend ? ELandscapeTargetLayerBlendMethod::None : ELandscapeTargetLayerBlendMethod::FinalWeightBlending, /*bInModify=*/false);
+#endif
 
 	ULandscapeInfo* LandscapeInfo = Data->LandscapeInfo.Get();
 	ALandscapeProxy* Proxy = Data->LandscapeProxy.Get();

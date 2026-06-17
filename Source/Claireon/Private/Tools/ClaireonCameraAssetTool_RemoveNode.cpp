@@ -4,14 +4,17 @@
 #include "Tools/ClaireonCameraAssetTool_RemoveNode.h"
 
 #include "ClaireonSessionManager.h"
-#include "Core/CameraAsset.h"
-#include "Core/CameraNode.h"
-#include "Core/CameraRigAsset.h"
 #include "Dom/JsonObject.h"
-#include "Nodes/Common/ArrayCameraNode.h"
 #include "ScopedTransaction.h"
 #include "Tools/ClaireonAnimEditToolBase.h" // FToolSchemaBuilder
 #include "Tools/ClaireonCameraAssetHelpers.h"
+
+#if WITH_GAMEPLAY_CAMERAS
+
+#include "Core/CameraAsset.h"
+#include "Core/CameraNode.h"
+#include "Core/CameraRigAsset.h"
+#include "Nodes/Common/ArrayCameraNode.h"
 
 #define LOCTEXT_NAMESPACE "ClaireonCameraAssetTool_RemoveNode"
 
@@ -73,7 +76,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_RemoveNode::Execute(const TS
 		return MakeErrorResult(FString::Printf(TEXT("Camera asset not found: %s"), *Canon));
 	}
 
-	TArrayView<const TObjectPtr<UCameraRigAsset>> Rigs = Asset->GetCameraRigs();
+	const TArray<UCameraRigAsset*> Rigs = ClaireonCameraAssetHelpers::GetCameraRigs(Asset);
 	if (!Rigs.IsValidIndex(RigIndex))
 	{
 		return MakeErrorResult(FString::Printf(
@@ -162,3 +165,5 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_RemoveNode::Execute(const TS
 }
 
 #undef LOCTEXT_NAMESPACE
+
+#endif // WITH_GAMEPLAY_CAMERAS

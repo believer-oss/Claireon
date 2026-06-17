@@ -9,6 +9,8 @@
 #include "Tools/ClaireonCameraAssetHelpers.h"
 #include "UObject/Class.h"
 
+#if WITH_GAMEPLAY_CAMERAS
+
 FString FClaireonCameraAssetTool_ListNodeClasses::GetOperation() const { return TEXT("list_node_classes"); }
 
 FString FClaireonCameraAssetTool_ListNodeClasses::GetDescription() const
@@ -50,3 +52,5 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_ListNodeClasses::Execute(con
 	return MakeSuccessResult(Data,
 		FString::Printf(TEXT("Listed %d concrete UCameraNode subclass(es)"), ClassesJson.Num()));
 }
+
+#endif // WITH_GAMEPLAY_CAMERAS

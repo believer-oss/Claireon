@@ -4,12 +4,16 @@
 #include "Tools/ClaireonCameraAssetTool_ListRigs.h"
 
 #include "ClaireonSessionManager.h"
-#include "Core/CameraAsset.h"
-#include "Core/CameraNode.h"
-#include "Core/CameraRigAsset.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Tools/ClaireonAnimEditToolBase.h" // FToolSchemaBuilder
+#include "Tools/ClaireonCameraAssetHelpers.h"
+
+#if WITH_GAMEPLAY_CAMERAS
+
+#include "Core/CameraAsset.h"
+#include "Core/CameraNode.h"
+#include "Core/CameraRigAsset.h"
 
 FString FClaireonCameraAssetTool_ListRigs::GetOperation() const { return TEXT("list_rigs"); }
 
@@ -50,7 +54,8 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_ListRigs::Execute(const TSha
 
 	TArray<TSharedPtr<FJsonValue>> RigsJson;
 	int32 Index = 0;
-	for (const TObjectPtr<UCameraRigAsset>& Rig : Asset->GetCameraRigs())
+	const TArray<UCameraRigAsset*> Rigs = ClaireonCameraAssetHelpers::GetCameraRigs(Asset);
+	for (UCameraRigAsset* Rig : Rigs)
 	{
 		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
 		Entry->SetNumberField(TEXT("rig_index"), Index);
@@ -73,3 +78,5 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_ListRigs::Execute(const TSha
 	return MakeSuccessResult(Data,
 		FString::Printf(TEXT("Listed %d rig(s) on %s"), RigsJson.Num(), *Asset->GetPathName()));
 }
+
+#endif // WITH_GAMEPLAY_CAMERAS

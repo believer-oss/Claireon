@@ -14,8 +14,18 @@
 #include "StateTreePropertyFunctionBase.h"
 #include "StructUtils/InstancedStruct.h"
 #include "ScopedTransaction.h"
+#include "Misc/EngineVersionComparison.h"
+#if !UE_VERSION_OLDER_THAN(5, 7, 0)
+#include "PropertyBindingPath.h"
+#endif
 
 using FToolResult = IClaireonTool::FToolResult;
+
+#if UE_VERSION_OLDER_THAN(5, 7, 0)
+using FClaireonPropertyPathSegment = FStateTreePropertyPathSegment;
+#else
+using FClaireonPropertyPathSegment = FPropertyBindingPathSegment;
+#endif
 
 FString ClaireonStateTreeTool_AddPropertyFunction::GetOperation() const { return TEXT("add_property_function"); }
 
@@ -78,7 +88,7 @@ FToolResult ClaireonStateTreeTool_AddPropertyFunction::Execute(const TSharedPtr<
 	FStateTreePropertyPath TargetPath(TargetNodeId);
 	TargetPath.FromString(TargetProperty);
 
-	TArray<FStateTreePropertyPathSegment> SourceSegments;
+	TArray<FClaireonPropertyPathSegment> SourceSegments;
 	if (!SourceProperty.IsEmpty())
 	{
 		FStateTreePropertyPath TempPath;
@@ -96,7 +106,7 @@ FToolResult ClaireonStateTreeTool_AddPropertyFunction::Execute(const TSharedPtr<
 			{
 				if (It->HasMetaData(TEXT("Category")) && It->GetMetaData(TEXT("Category")) == TEXT("Output"))
 				{
-					SourceSegments.Add(FStateTreePropertyPathSegment(It->GetFName()));
+					SourceSegments.Add(FClaireonPropertyPathSegment(It->GetFName()));
 					break;
 				}
 			}

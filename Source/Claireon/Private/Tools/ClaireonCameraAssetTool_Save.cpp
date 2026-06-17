@@ -4,15 +4,23 @@
 #include "Tools/ClaireonCameraAssetTool_Save.h"
 
 #include "ClaireonSessionManager.h"
-#include "Core/CameraAsset.h"
-#include "Core/CameraBuildLog.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "FileHelpers.h"
 #include "Logging/TokenizedMessage.h"
+#include "Misc/EngineVersionComparison.h"
 #include "Tools/ClaireonAnimEditToolBase.h" // FToolSchemaBuilder
 #include "Tools/ClaireonCameraAssetHelpers.h"
 #include "UObject/Package.h"
+
+#if WITH_GAMEPLAY_CAMERAS
+
+#include "Core/CameraAsset.h"
+#if UE_VERSION_OLDER_THAN(5, 7, 0)
+#include "Core/CameraBuildLog.h"
+#else
+#include "Build/CameraBuildLog.h"
+#endif
 
 FString FClaireonCameraAssetTool_Save::GetOperation() const { return TEXT("save"); }
 
@@ -103,3 +111,5 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_Save::Execute(const TSharedP
 	}
 	return MakeSuccessResult(Data, bSaved ? TEXT("saved") : TEXT("save failed"));
 }
+
+#endif // WITH_GAMEPLAY_CAMERAS

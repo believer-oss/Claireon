@@ -138,9 +138,34 @@ public class Claireon : ModuleRules
 			"MetasoundEngine",   // UMetaSoundSource, UMetaSoundSourceBuilder, IMetaSoundDocumentInterface
 			"MetasoundFrontend", // FMetaSoundFrontendDocumentBuilder + Metasound::Frontend graph handle API
 
-			// Camera asset tools dependencies
-			"GameplayCameras",       // UCameraAsset, UCameraNode, UCameraRigAsset, UArrayCameraNode, BuildCamera, FCameraBuildLog, IObjectTreeGraphObject
 		});
+
+		// UE 5.7 moved these headers into module Internal/ dirs, which UBT doesn't expose to
+		// external plugins. Owning modules are already linked; just add the Internal/ paths.
+		string AnimGraphInternal = Path.Combine(EngineDirectory, "Source", "Editor", "AnimGraph", "Internal");
+		if (Directory.Exists(AnimGraphInternal))
+		{
+			PrivateIncludePaths.Add(AnimGraphInternal);
+		}
+		string ProxyTableInternal = Path.Combine(EngineDirectory, "Plugins", "Chooser", "Source", "ProxyTable", "Internal");
+		if (Directory.Exists(ProxyTableInternal))
+		{
+			PrivateIncludePaths.Add(ProxyTableInternal);
+		}
+
+		// Optional: GameplayCameras is Experimental and its API churns. Gate it like Untested so
+		// it dropping out only loses the camera tools, not the whole build.
+		string GameplayCamerasUplugin = Path.Combine(EngineDirectory,
+			"Plugins", "Cameras", "GameplayCameras", "GameplayCameras.uplugin");
+		if (File.Exists(GameplayCamerasUplugin))
+		{
+			PrivateDependencyModuleNames.Add("GameplayCameras");   // UCameraAsset, UCameraRigAsset, UCameraDirector, FCameraBuildLog
+			PublicDefinitions.Add("WITH_GAMEPLAY_CAMERAS=1");
+		}
+		else
+		{
+			PublicDefinitions.Add("WITH_GAMEPLAY_CAMERAS=0");
+		}
 
 		// Untested dependencies (Claireon REPL unit tests) — optional
 		if (Target.ProjectFile != null)

@@ -14,6 +14,7 @@
 #include "LandscapeLayerInfoObject.h"
 #include "Engine/World.h"
 #include "Misc/Paths.h"
+#include "Misc/EngineVersionComparison.h"
 
 FString ClaireonLandscapeTool_ImportWeightmap::GetCategory() const { return TEXT("landscape"); }
 FString ClaireonLandscapeTool_ImportWeightmap::GetOperation() const { return TEXT("import_weightmap"); }
@@ -173,12 +174,20 @@ IClaireonTool::FToolResult ClaireonLandscapeTool_ImportWeightmap::Execute(const 
 	LandscapeInfo->GetLandscapeExtent(MinX, MinY, MaxX, MaxY);
 
 	FLandscapeEditDataInterface EditInterface(LandscapeInfo);
+#if UE_VERSION_OLDER_THAN(5, 7, 0)
 	EditInterface.SetAlphaData(
 		TargetLayerInfo,
 		MinX, MinY, MaxX, MaxY,
 		WeightData.GetData(), 0 /*Stride*/,
 		ELandscapeLayerPaintingRestriction::None,
 		true /*bWeightAdjust*/);
+#else
+	EditInterface.SetAlphaData(
+		TargetLayerInfo,
+		MinX, MinY, MaxX, MaxY,
+		WeightData.GetData(), 0 /*Stride*/,
+		ELandscapeLayerPaintingRestriction::None);
+#endif
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("type"), TEXT("weightmap"));

@@ -23,6 +23,7 @@
 #include "RenderUtils.h"
 #include "ShaderCompiler.h"
 #include "StaticParameterSet.h"
+#include "Misc/EngineVersionComparison.h"
 
 #include "Engine/Texture.h"
 #include "FileHelpers.h"
@@ -1406,7 +1407,11 @@ namespace ClaireonMaterialHelpers
 
 #if WITH_EDITOR
 		// Drain compile errors from the material resource for the current feature level.
+#if UE_VERSION_OLDER_THAN(5, 7, 0)
 		if (const FMaterialResource* Resource = Material->GetMaterialResource(GMaxRHIFeatureLevel))
+#else
+		if (const FMaterialResource* Resource = Material->GetMaterialResource(GetFeatureLevelShaderPlatform(GMaxRHIFeatureLevel)))
+#endif
 		{
 			const TArray<FString>& Errors = Resource->GetCompileErrors();
 			if (Errors.Num() > 0)

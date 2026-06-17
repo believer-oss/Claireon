@@ -1,6 +1,10 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
+#include "Misc/EngineVersionComparison.h"
+
+#if WITH_GAMEPLAY_CAMERAS
+
 #include "Tools/ClaireonCameraAssetTool_AddNode.h"
 #include "Tools/ClaireonCameraAssetTool_AddRig.h"
 #include "Tools/ClaireonCameraAssetTool_Create.h"
@@ -848,3 +852,5 @@ bool FCameraAssetNodeMutation_SetNodeProperty_BadPath::RunTest(const FString& /*
 	CANodeMutationSpec_DeleteIfExists(Path);
 	return true;
 }
+
+#endif // WITH_GAMEPLAY_CAMERAS

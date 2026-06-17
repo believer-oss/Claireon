@@ -4,11 +4,19 @@
 #include "Tools/ClaireonTool_TraceGetScopeDetails.h"
 #include "ClaireonLog.h"
 #include "ClaireonTraceSession.h"
+#include "Misc/EngineVersionComparison.h"
 #include "TraceServices/Model/AnalysisSession.h"
 #include "TraceServices/Model/TimingProfiler.h"
 #include "TraceServices/Model/Frames.h"
 #include "TraceServices/Model/Threads.h"
 #include "TraceServices/Containers/Timelines.h"
+
+// 5.7 corrected the struct's spelling (FCreateAggreationParams -> FCreateAggregationParams).
+#if UE_VERSION_OLDER_THAN(5, 7, 0)
+using FClaireonAggregationParams = TraceServices::FCreateAggreationParams;
+#else
+using FClaireonAggregationParams = TraceServices::FCreateAggregationParams;
+#endif
 
 FString ClaireonTool_TraceGetScopeDetails::GetCategory() const { return TEXT("trace"); }
 FString ClaireonTool_TraceGetScopeDetails::GetOperation() const { return TEXT("get_scope_details"); }
@@ -128,10 +136,15 @@ IClaireonTool::FToolResult ClaireonTool_TraceGetScopeDetails::Execute(const TSha
 				if (Frame) IntervalEnd = Frame->EndTime;
 			}
 
-			TraceServices::FCreateAggreationParams Params;
+			FClaireonAggregationParams Params;
 			Params.IntervalStart = IntervalStart;
 			Params.IntervalEnd = IntervalEnd;
+#if UE_VERSION_OLDER_THAN(5, 7, 0)
 			Params.IncludeGpu = false;
+#else
+			Params.bIncludeOldGpu1 = false;
+			Params.bIncludeOldGpu2 = false;
+#endif
 			Params.CpuThreadFilter = [](uint32) -> bool { return true; };
 
 			TraceServices::ITable<TraceServices::FTimingProfilerAggregatedStats>* AggTable = TimingProvider->CreateAggregation(Params);
