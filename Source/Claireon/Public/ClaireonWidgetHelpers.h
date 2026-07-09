@@ -33,6 +33,14 @@ struct FWidgetSerializeOptions
  */
 namespace ClaireonWidgetHelpers
 {
+	/**
+	 * Register a GUID for every source widget/animation not already present in the widget
+	 * blueprint's WidgetVariableNameToGuidMap. UE 5.8's compiler ensures each has an entry;
+	 * programmatic adds bypass the editor's OnVariableAdded hook, so call this before compiling
+	 * a WBP that Claireon mutated to avoid a (self-healed but test-failing) ensure.
+	 */
+	void EnsureWidgetVariableGuids(UWidgetBlueprint* WidgetBP);
+
 	/** Serialize the full widget tree to a JSON object. */
 	TSharedPtr<FJsonObject> SerializeWidgetTree(UWidgetBlueprint* WidgetBP, const FWidgetSerializeOptions& Options);
 

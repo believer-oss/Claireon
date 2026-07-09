@@ -149,6 +149,8 @@ IClaireonTool::FToolResult FClaireonDataAssetTool_Create::Execute(const TSharedP
 			// asset so it does not linger in subsequent LoadObject queries.
 			Transaction.Cancel();
 			NewAsset->ClearFlags(RF_Standalone | RF_Public);
+			NewAsset->Rename(nullptr, GetTransientPackage(),
+				REN_DontCreateRedirectors | REN_NonTransactional | REN_DoNotDirty);
 			NewAsset->MarkAsGarbage();
 			return MakeErrorResult(AssertError);
 		}
@@ -170,10 +172,13 @@ IClaireonTool::FToolResult FClaireonDataAssetTool_Create::Execute(const TSharedP
 				const FString FullError = FString::Printf(
 					TEXT("Failed to set property '%s': %s"), *PropertyPath, *WriteError);
 
-				// Failure cleanup: cancel transaction, mark new asset as garbage so it is not
-				// visible in subsequent LoadObject queries.
+				// Failure cleanup: cancel transaction, then evict the half-built asset so it is
+				// not visible in subsequent LoadObject queries. On UE 5.8 MarkAsGarbage alone
+				// does not hide it from LoadObject by path — rename it out of the package first.
 				Transaction.Cancel();
 				NewAsset->ClearFlags(RF_Standalone | RF_Public);
+				NewAsset->Rename(nullptr, GetTransientPackage(),
+					REN_DontCreateRedirectors | REN_NonTransactional | REN_DoNotDirty);
 				NewAsset->MarkAsGarbage();
 
 				return MakeErrorResult(FullError);

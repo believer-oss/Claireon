@@ -169,21 +169,28 @@ public:
 };
 
 // ---- Function-override fixture (add_function_override tests) ----
-// BlueprintImplementableEvent so the fixture stays header-only (no _Implementation needed)
-// while still being overridable by add_function_override.
+// SelectDropLocation is a BlueprintNativeEvent: add_function_override creates a switchable
+// *function graph* for native events (the switch_graph tests rely on this), whereas
+// implementable events only get an event node in the EventGraph. An inline empty
+// _Implementation keeps the fixture header-only. The other two stay implementable so the
+// event-node override path is still exercised.
 UCLASS()
 class AClaireonFunctionOverrideFixtureActor : public AActor
 {
 	GENERATED_BODY()
 public:
-	UFUNCTION(BlueprintImplementableEvent, Category = "Test")
+	UFUNCTION(BlueprintNativeEvent, Category = "Test")
 	void SelectDropLocation();
+	virtual void SelectDropLocation_Implementation() {}
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Test")
 	void GetRewardData();
 
-	UFUNCTION(BlueprintImplementableEvent, Category = "Test")
+	// Native event too: the cross-graph switch_graph tests switch between SelectDropLocation
+	// and ChooseStrategyForSpawner, both of which must be switchable function graphs.
+	UFUNCTION(BlueprintNativeEvent, Category = "Test")
 	void ChooseStrategyForSpawner();
+	virtual void ChooseStrategyForSpawner_Implementation() {}
 };
 
 // ---- Async-action fixture (apply_blueprint_delta async-node tests) ----

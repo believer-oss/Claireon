@@ -226,9 +226,9 @@ namespace ClaireonStateTreeEditInternal
 			{
 				FString Error;
 				// Try on node struct first, then instance data
-				if (!ClaireonStateTreeHelpers::SetNodeProperty(Node, Pair.Key, Value, false, Error))
+				if (!ClaireonStateTreeHelpers::SetNodeProperty(Node, *Pair.Key, Value, false, Error))
 				{
-					ClaireonStateTreeHelpers::SetNodeProperty(Node, Pair.Key, Value, true, Error);
+					ClaireonStateTreeHelpers::SetNodeProperty(Node, *Pair.Key, Value, true, Error);
 				}
 			}
 		}

@@ -608,7 +608,7 @@ void FClaireonBridge::BuildAndRunBootstrap()
 			const TSharedPtr<FJsonObject>* PropertiesObj = nullptr;
 			if (Schema->TryGetObjectField(TEXT("properties"), PropertiesObj))
 			{
-				(*PropertiesObj)->Values.GetKeys(PropertyNames);
+				for (const auto& KV : (*PropertiesObj)->Values) { PropertyNames.Add(*KV.Key); }
 			}
 
 			// Build this tool's JSON entry

@@ -154,6 +154,14 @@ FToolResult ClaireonWidgetBPTool_AddWidget::Execute(const TSharedPtr<FJsonObject
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create widget of class '%s'"), *WidgetClassStr));
 	}
 
+	// Register a GUID for the new widget immediately. UE 5.8's widget compiler ensures every
+	// source widget has a WidgetVariableNameToGuidMap entry; the editor assigns this via
+	// OnVariableAdded when adding through the UMG UI, which we bypass, so do it here.
+	if (!WBP->WidgetVariableNameToGuidMap.Contains(NewWidget->GetFName()))
+	{
+		WBP->WidgetVariableNameToGuidMap.Add(NewWidget->GetFName(), FGuid::NewGuid());
+	}
+
 	// Set as root if no root exists
 	if (!Tree->RootWidget)
 	{
@@ -173,13 +181,13 @@ FToolResult ClaireonWidgetBPTool_AddWidget::Execute(const TSharedPtr<FJsonObject
 					// passing "" (what AsString() returns for object/array values).
 					FString PropStrVal;
 					FString PropConvErr;
-					if (!AddWidget_SlotPropJsonValueToString(Pair.Key, Pair.Value, PropStrVal, PropConvErr))
+					if (!AddWidget_SlotPropJsonValueToString(*Pair.Key, Pair.Value, PropStrVal, PropConvErr))
 					{
 						UE_LOG(LogClaireon, Warning, TEXT("[EditWidgetBP] add_widget: %s"), *PropConvErr);
 						continue;
 					}
 					FString SlotError;
-					ClaireonWidgetHelpers::WriteSlotProperty(Slot, Pair.Key, PropStrVal, SlotError);
+					ClaireonWidgetHelpers::WriteSlotProperty(Slot, *Pair.Key, PropStrVal, SlotError);
 				}
 			}
 		}

@@ -37,12 +37,16 @@ TSharedPtr<FJsonObject> ClaireonTool_TraceClose::GetInputSchema() const
 IClaireonTool::FToolResult ClaireonTool_TraceClose::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
 	FString SessionId;
-	if (!Arguments->TryGetStringField(TEXT("sessionId"), SessionId) || SessionId.IsEmpty())
+	if (!Arguments.IsValid() || !Arguments->TryGetStringField(TEXT("sessionId"), SessionId) || SessionId.IsEmpty())
 	{
 		return MakeErrorResult(TEXT("Missing required field: sessionId"));
 	}
 
 	const bool bClosed = FClaireonTraceSessionManager::Get().CloseSession(SessionId);
+	if (!bClosed)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Trace session not found: %s"), *SessionId));
+	}
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("session_id"), SessionId);

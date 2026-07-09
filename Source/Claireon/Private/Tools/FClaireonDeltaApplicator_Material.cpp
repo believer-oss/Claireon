@@ -260,7 +260,7 @@ bool FClaireonDeltaApplicator_Material::ApplyPhase3_Create(const FString& Sessio
 				if (!Pair.Value.IsValid()) { continue; }
 				const FString TextValue = Pair.Value->AsString();
 				FString PropErr;
-				if (!ClaireonMaterialHelpers::SetExpressionProperty(Mat, Expr, Pair.Key, TextValue, PropErr))
+				if (!ClaireonMaterialHelpers::SetExpressionProperty(Mat, Expr, *Pair.Key, TextValue, PropErr))
 				{
 					AddWarning(FString::Printf(TEXT("material_apply_delta: nodes[%d] property '%s': %s"),
 						i, *Pair.Key, *PropErr));

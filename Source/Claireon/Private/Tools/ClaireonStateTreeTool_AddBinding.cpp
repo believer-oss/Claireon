@@ -9,6 +9,7 @@
 #include "StateTreeEditorData.h"
 #include "StateTreePropertyBindings.h"
 #include "StateTreeEditorPropertyBindings.h"
+#include "PropertyBindingPath.h"
 #include "ScopedTransaction.h"
 
 using FToolResult = IClaireonTool::FToolResult;
@@ -58,17 +59,17 @@ FToolResult ClaireonStateTreeTool_AddBinding::Execute(const TSharedPtr<FJsonObje
 		return MakeErrorResult(TEXT("Missing parameter: target_property"));
 
 #if WITH_EDITORONLY_DATA
-	FStateTreePropertyPath SourcePath(SourceNodeId);
+	FPropertyBindingPath SourcePath(SourceNodeId);
 	SourcePath.FromString(SourceProperty);
 
-	FStateTreePropertyPath TargetPath(TargetNodeId);
+	FPropertyBindingPath TargetPath(TargetNodeId);
 	TargetPath.FromString(TargetProperty);
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Add Property Binding")));
 	Data->StateTree->Modify();
 
 	FStateTreePropertyPathBinding Binding(SourcePath, TargetPath);
-	EditorData->EditorBindings.AddPropertyBinding(Binding);
+	EditorData->EditorBindings.AddStateTreeBinding(MoveTemp(Binding));
 
 	Data->LastOperationStatus = FString::Printf(TEXT("add_binding -> Bound %s -> %s"), *SourceProperty, *TargetProperty);
 #else

@@ -68,8 +68,8 @@ IClaireonTool::FToolResult ClaireonTool_ChooserRemoveRow::Execute(const TSharedP
 	}
 
 	// Remove from each column's RowValues
-	TArray<uint32> RowIndices;
-	RowIndices.Add(static_cast<uint32>(RowIndex));
+	TArray<int32> RowIndices;
+	RowIndices.Add(static_cast<int32>(RowIndex));
 	for (FInstancedStruct& ColStruct : Chooser->ColumnsStructs)
 	{
 		if (ColStruct.IsValid())

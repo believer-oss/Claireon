@@ -18,6 +18,7 @@
 #include "Core/CameraBuildLog.h"
 #else
 #include "Build/CameraBuildLog.h"
+#include "Build/CameraBuildContext.h"
 #endif
 
 FString FClaireonCameraAssetTool_Compile::GetOperation() const { return TEXT("compile"); }
@@ -59,7 +60,8 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_Compile::Execute(const TShar
 	}
 
 	UE::Cameras::FCameraBuildLog Log;
-	Asset->BuildCamera(Log);
+	UE::Cameras::FCameraBuildContext BuildContext(Log);
+	Asset->BuildCamera(BuildContext);
 
 	bool bHasErrors = false;
 	for (const UE::Cameras::FCameraBuildLogMessage& M : Log.GetMessages())

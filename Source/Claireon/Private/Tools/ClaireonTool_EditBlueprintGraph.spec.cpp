@@ -455,7 +455,9 @@ bool FEditBlueprintGraphTest_NodeTypes::RunTest(const FString& Parameters)
 
 		TSharedPtr<FJsonObject> NodeParams = MakeShared<FJsonObject>();
 		NodeParams->SetStringField(TEXT("node_type"), TEXT("Generic"));
-		NodeParams->SetStringField(TEXT("class_name"), TEXT("K2Node_AddPinInterface"));
+		// K2Node_Self is a concrete, dependency-free node class; the old example
+		// (K2Node_AddPinInterface) is a UINTERFACE, not a spawnable node, in UE 5.8.
+		NodeParams->SetStringField(TEXT("class_name"), TEXT("K2Node_Self"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
 		Result = DispatchBundledEnvelope(AddNodeArgs);
@@ -782,6 +784,17 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 		return FString();
 	};
 
+	// Prefer the structured created_node_guid from add_node; fall back to summary parsing.
+	auto GuidFromResult = [&](const IClaireonTool::FToolResult& R) -> FString
+	{
+		FString G;
+		if (R.Data.IsValid() && R.Data->TryGetStringField(TEXT("created_node_guid"), G) && !G.IsEmpty())
+		{
+			return G;
+		}
+		return ExtractNodeGuid(R.GetContentAsString());
+	};
+
 	// --- Test 1: Sequence node add_pin ---
 	{
 		TSharedPtr<FJsonObject> AddNodeArgs = MakeShared<FJsonObject>();
@@ -799,7 +812,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 			return false;
 		}
 
-		FString SeqGuid = ExtractNodeGuid(Result.GetContentAsString());
+		FString SeqGuid = GuidFromResult(Result);
 
 		for (int32 i = 0; i < 2; ++i)
 		{
@@ -839,7 +852,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 			return false;
 		}
 
-		FString ArrayGuid = ExtractNodeGuid(Result.GetContentAsString());
+		FString ArrayGuid = GuidFromResult(Result);
 
 		TSharedPtr<FJsonObject> AddPinArgs = MakeShared<FJsonObject>();
 		AddPinArgs->SetStringField(TEXT("operation"), TEXT("add_pin"));
@@ -877,7 +890,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 			return false;
 		}
 
-		FString SwitchGuid = ExtractNodeGuid(Result.GetContentAsString());
+		FString SwitchGuid = GuidFromResult(Result);
 
 		TSharedPtr<FJsonObject> AddPinArgs = MakeShared<FJsonObject>();
 		AddPinArgs->SetStringField(TEXT("operation"), TEXT("add_pin"));
@@ -909,7 +922,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
 		Result = DispatchBundledEnvelope(AddNodeArgs);
-		FString BranchGuid = ExtractNodeGuid(Result.GetContentAsString());
+		FString BranchGuid = GuidFromResult(Result);
 
 		TSharedPtr<FJsonObject> AddPinArgs = MakeShared<FJsonObject>();
 		AddPinArgs->SetStringField(TEXT("operation"), TEXT("add_pin"));
@@ -941,7 +954,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
 		Result = DispatchBundledEnvelope(AddNodeArgs);
-		FString EnumSwitchGuid = ExtractNodeGuid(Result.GetContentAsString());
+		FString EnumSwitchGuid = GuidFromResult(Result);
 
 		TSharedPtr<FJsonObject> AddPinArgs = MakeShared<FJsonObject>();
 		AddPinArgs->SetStringField(TEXT("operation"), TEXT("add_pin"));
@@ -3099,7 +3112,10 @@ bool FEditBlueprintGraphTest_MacroShorthand_AllResolve::RunTest(const FString& P
 
 		UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
 		const FString LastName = FindLastMacroInstanceGraphName(Blueprint);
-		if (LastName != MacroName)
+		// The engine's StandardMacros library spells some macros with spaces ("Do N") while the
+		// shorthand omits them ("DoN"); the resolver matches space-insensitively, so compare the
+		// same way here.
+		if (LastName.Replace(TEXT(" "), TEXT("")) != FString(MacroName).Replace(TEXT(" "), TEXT("")))
 		{
 			AddError(FString::Printf(TEXT("Shorthand resolved '%s' to macro graph '%s'"), MacroName, *LastName));
 			CloseSession(SessionId);

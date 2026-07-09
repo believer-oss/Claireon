@@ -209,10 +209,13 @@ bool SaveAsset(UObject* Asset, FString& OutError)
 		FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
 
 		UPackage* Package = Blueprint->GetOutermost();
+		// Derive the destination filename from the package name. Do NOT use DoesPackageExist
+		// here: a freshly created, never-saved asset has no file on disk yet, and we are about
+		// to create it. TryConvert builds the target path whether or not the file exists.
 		FString PackageFileName;
-		if (!FPackageName::DoesPackageExist(Package->GetName(), &PackageFileName))
+		if (!FPackageName::TryConvertLongPackageNameToFilename(Package->GetName(), PackageFileName, FPackageName::GetAssetPackageExtension()))
 		{
-			OutError = FString::Printf(TEXT("Package file not found for '%s'"), *Package->GetName());
+			OutError = FString::Printf(TEXT("Could not resolve a package filename for '%s' (unmounted path?)"), *Package->GetName());
 			return false;
 		}
 
@@ -231,10 +234,11 @@ bool SaveAsset(UObject* Asset, FString& OutError)
 	UPackage* Package = Asset->GetOutermost();
 	Package->MarkPackageDirty();
 
+	// Build the destination filename from the package name (works for new, unsaved assets).
 	FString PackageFileName;
-	if (!FPackageName::DoesPackageExist(Package->GetName(), &PackageFileName))
+	if (!FPackageName::TryConvertLongPackageNameToFilename(Package->GetName(), PackageFileName, FPackageName::GetAssetPackageExtension()))
 	{
-		OutError = FString::Printf(TEXT("Package file not found for '%s'"), *Package->GetName());
+		OutError = FString::Printf(TEXT("Could not resolve a package filename for '%s' (unmounted path?)"), *Package->GetName());
 		return false;
 	}
 
@@ -319,6 +323,21 @@ UClass* ResolveClassName(const FString& ClassName)
 		if (It->GetName() == Stripped || It->GetName() == ClassName) return *It;
 	}
 	return nullptr;
+}
+
+void EvictInMemoryObject(UPackage* Package, const FString& AssetName)
+{
+	if (!Package || AssetName.IsEmpty())
+	{
+		return;
+	}
+	if (UObject* Existing = StaticFindObject(UObject::StaticClass(), Package, *AssetName))
+	{
+		Existing->ClearFlags(RF_Public | RF_Standalone);
+		Existing->Rename(nullptr, GetTransientPackage(),
+			REN_DontCreateRedirectors | REN_NonTransactional | REN_DoNotDirty);
+		Existing->MarkAsGarbage();
+	}
 }
 
 bool AssertInnerNameMatchesPackage(const UObject* Asset, FString& OutError)

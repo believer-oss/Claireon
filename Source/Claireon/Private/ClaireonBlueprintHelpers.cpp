@@ -292,6 +292,15 @@ namespace ClaireonBlueprintHelpers
 			FString First = (NewlineIdx == INDEX_NONE) ? In : In.Left(NewlineIdx);
 			return First.TrimStartAndEnd();
 		}
+
+		/** Humanize a title for matching: "PrintString" -> "Print String". Node titles render
+		 *  friendly ("Print String") in the interactive editor but raw ("PrintString") in headless
+		 *  commandlets (friendly-name humanization is an editor style setting), so callers that type
+		 *  the friendly form must still match either. Space-collapse makes the compare setting-agnostic. */
+		FString NormalizedForMatch(const FString& In)
+		{
+			return FName::NameToDisplayString(In, /*bIsBool=*/false).Replace(TEXT(" "), TEXT(""));
+		}
 	}
 
 	TArray<UEdGraphNode*> FindNodesByTitle(UEdGraph* Graph, const FString& NodeTitle, bool bExactMatch)
@@ -322,9 +331,11 @@ namespace ClaireonBlueprintHelpers
 			if (bExactMatch)
 			{
 				// Match either the full multi-line form (legacy callers) or the first
-				// line only (most callers know the visible name without subtitle).
+				// line only (most callers know the visible name without subtitle), plus a
+				// friendly-name-agnostic form so "Print String" matches a headless "PrintString".
 				if (CurrentTitle.Equals(SearchTitle, ESearchCase::IgnoreCase)
-					|| CurrentTitleFirst.Equals(SearchTitleFirst, ESearchCase::IgnoreCase))
+					|| CurrentTitleFirst.Equals(SearchTitleFirst, ESearchCase::IgnoreCase)
+					|| NormalizedForMatch(CurrentTitleFirst).Equals(NormalizedForMatch(SearchTitleFirst), ESearchCase::IgnoreCase))
 				{
 					MatchingNodes.Add(Node);
 				}
@@ -332,7 +343,8 @@ namespace ClaireonBlueprintHelpers
 			else
 			{
 				if (CurrentTitle.Contains(SearchTitle, ESearchCase::IgnoreCase)
-					|| CurrentTitleFirst.Contains(SearchTitleFirst, ESearchCase::IgnoreCase))
+					|| CurrentTitleFirst.Contains(SearchTitleFirst, ESearchCase::IgnoreCase)
+					|| NormalizedForMatch(CurrentTitleFirst).Contains(NormalizedForMatch(SearchTitleFirst), ESearchCase::IgnoreCase))
 				{
 					MatchingNodes.Add(Node);
 				}
@@ -961,9 +973,13 @@ namespace ClaireonBlueprintHelpers
 		if (!Local.bSucceeded)
 		{
 			UE_LOG(LogClaireon, Warning,
-				TEXT("[ParseVariableType] legacy-path parse failed for '%s': %s"),
+				TEXT("[ParseVariableType] legacy-path parse failed for '%s': %s -- falling back to String."),
 				*TypeString, *Local.Error);
-			return FEdGraphPinType();
+			// Lenient contract: unknown types fall back to String (a default-constructed pin
+			// type is PC_None, which callers of this non-checked path shouldn't have to handle).
+			FEdGraphPinType Fallback;
+			Fallback.PinCategory = UEdGraphSchema_K2::PC_String;
+			return Fallback;
 		}
 		return Local.PinType;
 	}
@@ -1178,6 +1194,10 @@ namespace ClaireonBlueprintHelpers
 			OutResult.Error = FString::Printf(TEXT("Failed to create package: %s"), *PackageName);
 			return;
 		}
+
+		// Deleting the .uasset on disk above does NOT evict an object of the same name still
+		// loaded in memory; UE 5.8 CreateBlueprint asserts the name is free, so clear it.
+		ClaireonAssetUtils::EvictInMemoryObject(Package, AssetName);
 
 		UBlueprint* BP = FKismetEditorUtilities::CreateBlueprint(
 			ParentClass, Package, FName(*AssetName),

@@ -289,7 +289,14 @@ namespace ClaireonBlueprintNodeFactory
 			{
 				UK2Node_CallFunction* N = NewObject<UK2Node_CallFunction>(Graph, NodeClass);
 
-				if (ResolvedOwnerClass)
+				if (ResolvedFunction)
+				{
+					// Fully initialize from the resolved UFunction so the node's title and pin
+					// metadata resolve correctly (e.g. "Print String" rather than the raw member
+					// name). SetExternalMember alone leaves the display name unresolved on 5.8.
+					N->SetFromFunction(ResolvedFunction);
+				}
+				else if (ResolvedOwnerClass)
 				{
 					N->FunctionReference.SetExternalMember(FName(*FunctionName), ResolvedOwnerClass);
 				}
@@ -610,23 +617,31 @@ namespace ClaireonBlueprintNodeFactory
 			NewNode = NewObject<UK2Node_DoOnceMultiInput>(Graph);
 			Desc = TEXT("Do Once (Multi Input)");
 		}
-		else if (NodeType == TEXT("Macro") || NodeType == TEXT("ForEachLoop") || NodeType == TEXT("ForEachLoopWithBreak")
+		else if (NodeType == TEXT("Macro") || NodeType == TEXT("MacroInstance") || NodeType == TEXT("ForEachLoop") || NodeType == TEXT("ForEachLoopWithBreak")
 			|| NodeType == TEXT("ForLoop") || NodeType == TEXT("ForLoopWithBreak") || NodeType == TEXT("WhileLoop")
 			|| NodeType == TEXT("DoOnce") || NodeType == TEXT("DoN") || NodeType == TEXT("FlipFlop")
 			|| NodeType == TEXT("Gate") || NodeType == TEXT("MultiGate") || NodeType == TEXT("IsValid"))
 		{
 			FString MacroName;
-			FString MacroLibraryPath = TEXT("/Engine/EditorBlueprintResources/StandardMacros");
+			FString MacroLibraryPath = TEXT("/Engine/EditorBlueprintResources/StandardMacros.StandardMacros");
 
-			if (NodeType == TEXT("Macro"))
+			if (NodeType == TEXT("Macro") || NodeType == TEXT("MacroInstance"))
 			{
-				if (!Params->TryGetStringField(TEXT("macro_name"), MacroName))
+				// "Macro" is the explicit form; "MacroInstance" is what the shorthand resolver
+				// (ClaireonMacroShorthand::ResolveIfShorthand) rewrites the macro shorthands
+				// (DoN, ForEachLoop, ...) into, carrying the original name in 'macro_name' and
+				// the library object path in 'macro_library'.
+				if (!Params->TryGetStringField(TEXT("macro_name"), MacroName) || MacroName.IsEmpty())
 				{
 					Out.Error = TEXT("Macro: missing required field 'macro_name'");
 					return Out;
 				}
 				FString Custom;
-				if (Params->TryGetStringField(TEXT("macro_library_path"), Custom)) MacroLibraryPath = Custom;
+				if (Params->TryGetStringField(TEXT("macro_library_path"), Custom) ||
+					Params->TryGetStringField(TEXT("macro_library"), Custom))
+				{
+					MacroLibraryPath = Custom;
+				}
 			}
 			else
 			{
@@ -644,6 +659,16 @@ namespace ClaireonBlueprintNodeFactory
 			for (UEdGraph* G : Lib->MacroGraphs)
 			{
 				if (G && G->GetName() == MacroName) { MacroGraph = G; break; }
+			}
+			if (!MacroGraph)
+			{
+				// StandardMacros graph names may contain spaces ("Do N") while the shorthand
+				// omits them ("DoN"); fall back to a space-insensitive match before failing.
+				const FString Compact = MacroName.Replace(TEXT(" "), TEXT(""));
+				for (UEdGraph* G : Lib->MacroGraphs)
+				{
+					if (G && G->GetName().Replace(TEXT(" "), TEXT("")) == Compact) { MacroGraph = G; break; }
+				}
 			}
 			if (!MacroGraph)
 			{

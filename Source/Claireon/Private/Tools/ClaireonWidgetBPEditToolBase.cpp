@@ -101,6 +101,12 @@ FToolResult ClaireonWidgetBPEditToolBase::BuildStateResponse(const FString& Sess
 
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
 
+	// After any widget-edit op, make sure every widget/animation has a WidgetVariableNameToGuidMap
+	// entry. UE 5.8's compiler ensures on missing entries (and only when the map is already
+	// partially populated), and edits can trigger an implicit compile, so keep the map complete
+	// at all times rather than relying on the explicit compile/save tools.
+	ClaireonWidgetHelpers::EnsureWidgetVariableGuids(WBP);
+
 	// Serialize widget tree with default options
 	FWidgetSerializeOptions Options;
 	Options.bIncludeProperties = false;

@@ -31,6 +31,46 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 
 // ============================================================================
+// EnsureWidgetVariableGuids
+// ============================================================================
+
+void ClaireonWidgetHelpers::EnsureWidgetVariableGuids(UWidgetBlueprint* WidgetBP)
+{
+	if (!WidgetBP)
+	{
+		return;
+	}
+	bool bAdded = false;
+	// Enumerate the live WidgetTree (not ForEachSourceWidget, which only sees widgets already
+	// promoted to blueprint variables by a prior compile — newly added widgets aren't there yet).
+	if (WidgetBP->WidgetTree)
+	{
+		TArray<UWidget*> AllWidgets;
+		WidgetBP->WidgetTree->GetAllWidgets(AllWidgets);
+		for (UWidget* Widget : AllWidgets)
+		{
+			if (Widget && !WidgetBP->WidgetVariableNameToGuidMap.Contains(Widget->GetFName()))
+			{
+				WidgetBP->WidgetVariableNameToGuidMap.Add(Widget->GetFName(), FGuid::NewGuid());
+				bAdded = true;
+			}
+		}
+	}
+	for (UWidgetAnimation* Animation : WidgetBP->Animations)
+	{
+		if (Animation && !WidgetBP->WidgetVariableNameToGuidMap.Contains(Animation->GetFName()))
+		{
+			WidgetBP->WidgetVariableNameToGuidMap.Add(Animation->GetFName(), FGuid::NewGuid());
+			bAdded = true;
+		}
+	}
+	if (bAdded)
+	{
+		WidgetBP->Modify();
+	}
+}
+
+// ============================================================================
 // SerializeWidgetTree
 // ============================================================================
 
@@ -367,7 +407,7 @@ UPanelSlot* ClaireonWidgetHelpers::AddChildToPanel(UPanelWidget* Parent, UWidget
 			}
 			FString PropStrVal = Pair.Value.IsValid() ? Pair.Value->AsString() : TEXT("");
 			FString Error;
-			WriteSlotProperty(Slot, Pair.Key, PropStrVal, Error);
+			WriteSlotProperty(Slot, *Pair.Key, PropStrVal, Error);
 		}
 	}
 

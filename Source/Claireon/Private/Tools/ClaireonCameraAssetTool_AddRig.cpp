@@ -118,15 +118,23 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_AddRig::Execute(const TShare
 	}
 	Asset->PostEditChange();
 #else
-	// 5.7: AddCameraRig() is gone; rigs live on the camera director. Attach to a
-	// USingleCameraDirector (the only single-rig slot).
+	// 5.7+: AddCameraRig() is gone; rigs live on the camera director. add_rig targets a
+	// USingleCameraDirector (the single-rig slot). A freshly created asset has no director
+	// yet (5.8 no longer installs a default one), so create + install one on demand.
 	USingleCameraDirector* Single = Cast<USingleCameraDirector>(Asset->GetCameraDirector());
 	if (!Single)
 	{
-		Transaction.Cancel();
-		return MakeErrorResult(TEXT(
-			"asset's camera director does not support add_rig on UE 5.7 "
-			"(expected a USingleCameraDirector)"));
+		if (UCameraDirector* Existing = Asset->GetCameraDirector())
+		{
+			// A different (e.g. multi-rig) director is already present — don't clobber it.
+			Transaction.Cancel();
+			return MakeErrorResult(FString::Printf(TEXT(
+				"asset's camera director is a %s, not a USingleCameraDirector; "
+				"add_rig only supports single-rig directors"),
+				*Existing->GetClass()->GetName()));
+		}
+		Single = NewObject<USingleCameraDirector>(Asset, NAME_None, RF_Transactional | RF_Public);
+		Asset->SetCameraDirector(Single);
 	}
 	// Refuse rather than silently overwrite/orphan an existing rig (diverges from <=5.6 append).
 	if (Single->CameraRig)
@@ -134,7 +142,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_AddRig::Execute(const TShare
 		Transaction.Cancel();
 		return MakeErrorResult(TEXT(
 			"asset's USingleCameraDirector already references a rig; add_rig would "
-			"overwrite it on UE 5.7 (single-camera directors hold exactly one rig)"));
+			"overwrite it on UE 5.7+ (single-camera directors hold exactly one rig)"));
 	}
 	Single->Modify();
 	Single->CameraRig = NewRig;

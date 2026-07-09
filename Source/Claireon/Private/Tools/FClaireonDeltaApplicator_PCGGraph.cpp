@@ -290,7 +290,7 @@ bool FClaireonDeltaApplicator_PCGGraph::ApplyPhase3_Create(const FString& Sessio
 				if (Prop.Value->TryGetString(PropValue))
 				{
 					FString PropError;
-					if (!ClaireonPCGGraphHelpers::SetNodeProperty(NewNode, Prop.Key, PropValue, PropError))
+					if (!ClaireonPCGGraphHelpers::SetNodeProperty(NewNode, *Prop.Key, PropValue, PropError))
 					{
 						AddWarning(FString::Printf(TEXT("pcg_apply_delta: nodes[%d].properties.%s: %s"), i, *Prop.Key, *PropError));
 					}

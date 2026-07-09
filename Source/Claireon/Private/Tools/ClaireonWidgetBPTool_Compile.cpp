@@ -4,6 +4,7 @@
 #include "Tools/ClaireonWidgetBPTool_Compile.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "Dom/JsonObject.h"
+#include "ClaireonWidgetHelpers.h"
 #include "WidgetBlueprint.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -41,6 +42,10 @@ FToolResult ClaireonWidgetBPTool_Compile::Execute(const TSharedPtr<FJsonObject>&
 	{
 		return MakeErrorResult(TEXT("Widget Blueprint is no longer valid"));
 	}
+
+	// Register GUIDs for any widgets/animations added programmatically (bypassing the editor's
+	// OnVariableAdded hook), so UE 5.8's compiler doesn't ensure on a missing map entry.
+	ClaireonWidgetHelpers::EnsureWidgetVariableGuids(WBP);
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
 	FKismetEditorUtilities::CompileBlueprint(WBP, EBlueprintCompileOptions::BatchCompile);

@@ -105,9 +105,10 @@ FToolResult ClaireonWidgetBPTool_AddMVVMViewModel::Execute(const TSharedPtr<FJso
 	// Construct and add context
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Add MVVM ViewModel")));
 
-	FMVVMBlueprintViewModelContext Context;
-	Context.ViewModelName = FName(*ViewModelName);
-	Context.NotifyFieldValueClass = VMClass;
+	// Construct via the (class, name) constructor so a valid ViewModelContextId GUID is
+	// generated. Default-constructing and setting fields by hand leaves the GUID invalid,
+	// which UE 5.8 rejects at compile time ("Viewmodel 'X': GUID is invalid").
+	FMVVMBlueprintViewModelContext Context(VMClass, FName(*ViewModelName));
 	Context.CreationType = CreationType;
 	Context.bOptional = bOptional;
 

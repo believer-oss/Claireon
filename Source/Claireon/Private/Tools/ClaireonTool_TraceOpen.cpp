@@ -40,7 +40,7 @@ TSharedPtr<FJsonObject> ClaireonTool_TraceOpen::GetInputSchema() const
 IClaireonTool::FToolResult ClaireonTool_TraceOpen::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
 	FString FilePath;
-	if (!Arguments->TryGetStringField(TEXT("filePath"), FilePath) || FilePath.IsEmpty())
+	if (!Arguments.IsValid() || !Arguments->TryGetStringField(TEXT("filePath"), FilePath) || FilePath.IsEmpty())
 	{
 		return MakeErrorResult(TEXT("Missing required field: filePath"));
 	}

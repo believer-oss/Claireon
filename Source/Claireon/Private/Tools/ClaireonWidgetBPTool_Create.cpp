@@ -124,6 +124,18 @@ FToolResult ClaireonWidgetBPTool_Create::Execute(const TSharedPtr<FJsonObject>& 
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create package: %s"), *PackageName));
 	}
 
+	// A prior create in this editor session can leave a UObject of the same name loaded
+	// in this package (deleting the .uasset on disk above does not evict it). On UE 5.8
+	// FKismetEditorUtilities::CreateBlueprint asserts FindObject(Outer, Name) == nullptr,
+	// so move any occupant aside (into the transient package, marked garbage) first.
+	if (UObject* Existing = StaticFindObject(UObject::StaticClass(), Package, *AssetName))
+	{
+		Existing->ClearFlags(RF_Public | RF_Standalone);
+		Existing->Rename(nullptr, GetTransientPackage(),
+			REN_DontCreateRedirectors | REN_NonTransactional | REN_DoNotDirty);
+		Existing->MarkAsGarbage();
+	}
+
 	// Create widget blueprint
 	UWidgetBlueprint* NewWBP = CastChecked<UWidgetBlueprint>(
 		FKismetEditorUtilities::CreateBlueprint(
