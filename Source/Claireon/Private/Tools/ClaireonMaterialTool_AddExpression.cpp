@@ -89,7 +89,7 @@ FToolResult ClaireonMaterialTool_AddExpression::Execute(const TSharedPtr<FJsonOb
 			if (!Pair.Value.IsValid()) continue;
 			const FString TextValue = Pair.Value->AsString();
 			FString PropErr;
-			ClaireonMaterialHelpers::SetExpressionProperty(Material, Expr, Pair.Key, TextValue, PropErr);
+			ClaireonMaterialHelpers::SetExpressionProperty(Material, Expr, FString(*Pair.Key), TextValue, PropErr);
 		}
 	}
 

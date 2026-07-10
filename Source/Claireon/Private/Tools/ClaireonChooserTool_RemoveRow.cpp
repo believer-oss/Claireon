@@ -9,6 +9,7 @@
 #include "ScopedTransaction.h"
 #include "Dom/JsonObject.h"
 #include "StructUtils/InstancedStruct.h"
+#include "Misc/EngineVersionComparison.h"
 
 FString ClaireonTool_ChooserRemoveRow::GetCategory() const { return TEXT("chooser"); }
 FString ClaireonTool_ChooserRemoveRow::GetOperation() const { return TEXT("remove_row"); }
@@ -68,8 +69,14 @@ IClaireonTool::FToolResult ClaireonTool_ChooserRemoveRow::Execute(const TSharedP
 	}
 
 	// Remove from each column's RowValues
+	// 5.8 changed FChooserColumnBase::DeleteRows to take TArrayView<int>.
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
 	TArray<uint32> RowIndices;
 	RowIndices.Add(static_cast<uint32>(RowIndex));
+#else
+	TArray<int32> RowIndices;
+	RowIndices.Add(RowIndex);
+#endif
 	for (FInstancedStruct& ColStruct : Chooser->ColumnsStructs)
 	{
 		if (ColStruct.IsValid())

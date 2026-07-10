@@ -117,11 +117,11 @@ namespace ClaireonAudioApplyHelpers
 			if (AActor* AsActor = Cast<AActor>(Target))
 			{
 				ClaireonPropertyResolver::FResolvedProperty Resolved;
-				bOk = ClaireonPropertyResolver::WritePropertyOnActor(AsActor, Pair.Key, ValueStr, Resolved, Err);
+				bOk = ClaireonPropertyResolver::WritePropertyOnActor(AsActor, FString(*Pair.Key), ValueStr, Resolved, Err);
 			}
 			else
 			{
-				bOk = ClaireonPropertyUtils::WritePropertyByPath(Target, Pair.Key, ValueStr, Err);
+				bOk = ClaireonPropertyUtils::WritePropertyByPath(Target, FString(*Pair.Key), ValueStr, Err);
 			}
 			if (!bOk)
 			{

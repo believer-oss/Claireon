@@ -78,6 +78,11 @@ FToolResult ClaireonWidgetBPTool_RenameWidget::Execute(const TSharedPtr<FJsonObj
 
 	FName OldFName = Widget->GetFName();
 
+	// Update the GUID bookkeeping before the object rename: Rename() broadcasts
+	// and can trigger an immediate recompile, whose validation expects the map to
+	// already know the new name.
+	ClaireonWidgetHelpers::NotifyVariableRenamed(WBP, OldFName, FName(*NewName));
+
 	// Rename the UObject
 	Widget->Rename(*NewName, Widget->GetOuter());
 

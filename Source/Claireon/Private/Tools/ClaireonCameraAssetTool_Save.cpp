@@ -21,6 +21,9 @@
 #else
 #include "Build/CameraBuildLog.h"
 #endif
+#if !UE_VERSION_OLDER_THAN(5, 8, 0)
+#include "Build/CameraBuildContext.h"
+#endif
 
 FString FClaireonCameraAssetTool_Save::GetOperation() const { return TEXT("save"); }
 
@@ -65,7 +68,12 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_Save::Execute(const TSharedP
 	// triggers the discard-overload PreSave path. The dual call is intentional —
 	// PreSave's rebuild against the same in-memory state is largely idempotent.
 	UE::Cameras::FCameraBuildLog Log;
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
 	Asset->BuildCamera(Log);
+#else
+	UE::Cameras::FCameraBuildContext BuildContext(Log);
+	Asset->BuildCamera(BuildContext);
+#endif
 
 	int32 ErrorCount = 0;
 	for (const UE::Cameras::FCameraBuildLogMessage& M : Log.GetMessages())

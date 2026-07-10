@@ -19,6 +19,9 @@
 #else
 #include "Build/CameraBuildLog.h"
 #endif
+#if !UE_VERSION_OLDER_THAN(5, 8, 0)
+#include "Build/CameraBuildContext.h"
+#endif
 
 FString FClaireonCameraAssetTool_Compile::GetOperation() const { return TEXT("compile"); }
 
@@ -59,7 +62,12 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_Compile::Execute(const TShar
 	}
 
 	UE::Cameras::FCameraBuildLog Log;
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
 	Asset->BuildCamera(Log);
+#else
+	UE::Cameras::FCameraBuildContext BuildContext(Log);
+	Asset->BuildCamera(BuildContext);
+#endif
 
 	bool bHasErrors = false;
 	for (const UE::Cameras::FCameraBuildLogMessage& M : Log.GetMessages())

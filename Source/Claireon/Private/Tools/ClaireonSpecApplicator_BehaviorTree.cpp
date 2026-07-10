@@ -412,7 +412,7 @@ bool FClaireonSpecApplicator_BehaviorTree::ApplyPass2_WireRelationships(const FS
 							if (Prop.Value->TryGetString(PropValue))
 							{
 								FString PropError;
-								if (!ClaireonBehaviorTreeHelpers::SetBTNodeProperty(BTNode, Prop.Key, PropValue, PropError))
+								if (!ClaireonBehaviorTreeHelpers::SetBTNodeProperty(BTNode, FString(*Prop.Key), PropValue, PropError))
 								{
 									AddWarning(FString::Printf(TEXT("Decorator '%s' property '%s': %s"), *DecId, *Prop.Key, *PropError));
 								}
@@ -480,7 +480,7 @@ bool FClaireonSpecApplicator_BehaviorTree::ApplyPass2_WireRelationships(const FS
 							if (Prop.Value->TryGetString(PropValue))
 							{
 								FString PropError;
-								if (!ClaireonBehaviorTreeHelpers::SetBTNodeProperty(BTNode, Prop.Key, PropValue, PropError))
+								if (!ClaireonBehaviorTreeHelpers::SetBTNodeProperty(BTNode, FString(*Prop.Key), PropValue, PropError))
 								{
 									AddWarning(FString::Printf(TEXT("Service '%s' property '%s': %s"), *SvcId, *Prop.Key, *PropError));
 								}
@@ -504,7 +504,7 @@ bool FClaireonSpecApplicator_BehaviorTree::ApplyPass2_WireRelationships(const FS
 					if (Prop.Value->TryGetString(PropValue))
 					{
 						FString PropError;
-						if (!ClaireonBehaviorTreeHelpers::SetBTNodeProperty(BTNode, Prop.Key, PropValue, PropError))
+						if (!ClaireonBehaviorTreeHelpers::SetBTNodeProperty(BTNode, FString(*Prop.Key), PropValue, PropError))
 						{
 							AddWarning(FString::Printf(TEXT("Node '%s' property '%s': %s"), *SpecId, *Prop.Key, *PropError));
 						}

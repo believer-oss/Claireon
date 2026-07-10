@@ -121,7 +121,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddNotify::Execute(const TSharedPtr<
 			if (Pair.Value.IsValid() && Pair.Value->TryGetString(PropValue))
 			{
 				FString PropError;
-				ClaireonAnimHelpers::SetNotifyProperty(Anim, NewIndex, Pair.Key, PropValue, PropError);
+				ClaireonAnimHelpers::SetNotifyProperty(Anim, NewIndex, FString(*Pair.Key), PropValue, PropError);
 				if (!PropError.IsEmpty())
 				{
 					UE_LOG(LogClaireon, Warning, TEXT("AddNotify: Failed to set property '%s': %s"), *Pair.Key, *PropError);

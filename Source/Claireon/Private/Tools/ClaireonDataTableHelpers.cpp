@@ -235,7 +235,7 @@ bool SetPropertyValues(UDataTable* DataTable, FName RowName, const TSharedPtr<FJ
 
 	for (const auto& Pair : Values->Values)
 	{
-		const FString& Key = Pair.Key;
+		const FString Key(*Pair.Key);
 		const TSharedPtr<FJsonValue>& JsonValue = Pair.Value;
 
 		FProperty* Property = RowStruct->FindPropertyByName(FName(*Key));

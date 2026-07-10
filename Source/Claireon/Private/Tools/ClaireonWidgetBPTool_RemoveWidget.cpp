@@ -62,6 +62,8 @@ FToolResult ClaireonWidgetBPTool_RemoveWidget::Execute(const TSharedPtr<FJsonObj
 	Tree->SetFlags(RF_Transactional);
 	Tree->Modify();
 
+	const FName RemovedWidgetName = Widget->GetFName();
+
 	if (Tree->RootWidget == Widget)
 	{
 		Tree->RootWidget = nullptr;
@@ -71,11 +73,13 @@ FToolResult ClaireonWidgetBPTool_RemoveWidget::Execute(const TSharedPtr<FJsonObj
 		Tree->RemoveWidget(Widget);
 	}
 
+	ClaireonWidgetHelpers::TrashRemovedWidget(WBP, Widget);
+
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
 	Data->bModified = true;
 
 	// Clear focus if the focused widget was removed
-	if (Data->FocusedWidget == Widget->GetFName())
+	if (Data->FocusedWidget == RemovedWidgetName)
 	{
 		Data->FocusedWidget = Tree->RootWidget ? Tree->RootWidget->GetFName() : NAME_None;
 	}

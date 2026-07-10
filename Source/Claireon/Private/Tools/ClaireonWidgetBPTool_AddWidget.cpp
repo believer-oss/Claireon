@@ -173,13 +173,13 @@ FToolResult ClaireonWidgetBPTool_AddWidget::Execute(const TSharedPtr<FJsonObject
 					// passing "" (what AsString() returns for object/array values).
 					FString PropStrVal;
 					FString PropConvErr;
-					if (!AddWidget_SlotPropJsonValueToString(Pair.Key, Pair.Value, PropStrVal, PropConvErr))
+					if (!AddWidget_SlotPropJsonValueToString(FString(*Pair.Key), Pair.Value, PropStrVal, PropConvErr))
 					{
 						UE_LOG(LogClaireon, Warning, TEXT("[EditWidgetBP] add_widget: %s"), *PropConvErr);
 						continue;
 					}
 					FString SlotError;
-					ClaireonWidgetHelpers::WriteSlotProperty(Slot, Pair.Key, PropStrVal, SlotError);
+					ClaireonWidgetHelpers::WriteSlotProperty(Slot, FString(*Pair.Key), PropStrVal, SlotError);
 				}
 			}
 		}

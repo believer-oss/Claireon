@@ -129,11 +129,11 @@ FClaireonBPTranslateSession FClaireonBPTranslateSession::LoadFromFile(const FStr
 					NodeStatus.Status = NodeObj->GetStringField(TEXT("status"));
 					NodeStatus.Type = NodeObj->GetStringField(TEXT("type"));
 					NodeStatus.Name = NodeObj->GetStringField(TEXT("name"));
-					BPState.Nodes.Add(NodePair.Key, NodeStatus);
+					BPState.Nodes.Add(FString(*NodePair.Key), NodeStatus);
 				}
 			}
 
-			Session.Blueprints.Add(BPPair.Key, BPState);
+			Session.Blueprints.Add(FString(*BPPair.Key), BPState);
 		}
 	}
 

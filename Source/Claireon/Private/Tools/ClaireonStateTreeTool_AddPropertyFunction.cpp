@@ -86,13 +86,13 @@ FToolResult ClaireonStateTreeTool_AddPropertyFunction::Execute(const TSharedPtr<
 		return MakeErrorResult(FString::Printf(TEXT("'%s' is not a property function (must derive from FStateTreePropertyFunctionBase)"), *StructName));
 	}
 
-	FStateTreePropertyPath TargetPath(TargetNodeId);
+	FClaireonPropertyPath TargetPath(TargetNodeId);
 	TargetPath.FromString(TargetProperty);
 
 	TArray<FClaireonPropertyPathSegment> SourceSegments;
 	if (!SourceProperty.IsEmpty())
 	{
-		FStateTreePropertyPath TempPath;
+		FClaireonPropertyPath TempPath;
 		TempPath.FromString(SourceProperty);
 		SourceSegments = TempPath.GetSegments();
 	}
@@ -121,7 +121,11 @@ FToolResult ClaireonStateTreeTool_AddPropertyFunction::Execute(const TSharedPtr<
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Add Property Function Binding")));
 	Data->StateTree->Modify();
 
-	FStateTreePropertyPath ResultSourcePath = EditorData->EditorBindings.AddFunctionPropertyBinding(NodeStruct, SourceSegments, TargetPath);
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
+	FClaireonPropertyPath ResultSourcePath = EditorData->EditorBindings.AddFunctionPropertyBinding(NodeStruct, SourceSegments, TargetPath);
+#else
+	FClaireonPropertyPath ResultSourcePath = EditorData->EditorBindings.AddFunctionBinding(NodeStruct, SourceSegments, TargetPath);
+#endif
 
 	// Locate the just-added binding by target path, capture its embedded function-node
 	// GUID, and apply any optional initial properties in the same pass.
@@ -144,7 +148,7 @@ FToolResult ClaireonStateTreeTool_AddPropertyFunction::Execute(const TSharedPtr<
 						FString PropValue;
 						if (Pair.Value->TryGetString(PropValue))
 						{
-							ClaireonStateTreeHelpers::SetNodeProperty(EditorNode, Pair.Key, PropValue, true, Error);
+							ClaireonStateTreeHelpers::SetNodeProperty(EditorNode, FString(*Pair.Key), PropValue, true, Error);
 							if (!Error.IsEmpty())
 							{
 								UE_LOG(LogClaireon, Warning, TEXT("AddPropertyFunction: Failed to set property '%s': %s"), *Pair.Key, *Error);
