@@ -113,4 +113,17 @@ namespace ClaireonAssetUtils
 	// Resolve a UClass by name, accepting either the "U"/"A"-prefixed or unprefixed
 	// form (UClass::GetName() omits the prefix). Returns nullptr if no match.
 	CLAIREON_API UClass* ResolveClassName(const FString& ClassName);
+
+	/**
+	 * Evict any in-memory UObject occupying AssetName within Package, moving it into the
+	 * transient package (renamed, cleared of public/standalone flags, marked garbage).
+	 *
+	 * The "recreate asset in place" idiom deletes the .uasset on disk before calling a
+	 * create/duplicate API, but that does NOT remove an object already loaded in memory
+	 * (e.g. from an earlier create this editor session). On UE 5.8
+	 * FKismetEditorUtilities::CreateBlueprint and StaticDuplicateObject assert
+	 * FindObject(Outer, Name) == nullptr, so callers must clear the slot first.
+	 * No-op if Package is null or the name is free.
+	 */
+	CLAIREON_API void EvictInMemoryObject(UPackage* Package, const FString& AssetName);
 }

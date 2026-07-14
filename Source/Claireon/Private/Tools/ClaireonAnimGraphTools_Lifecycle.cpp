@@ -146,6 +146,10 @@ FToolResult ClaireonAnimGraphTool_Create::Execute(const TSharedPtr<FJsonObject>&
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create package: %s"), *PackageName));
 	}
 
+	// Deleting the .uasset on disk above does not evict a same-named object still loaded
+	// in memory; UE 5.8 CreateBlueprint asserts the name is free, so clear it first.
+	ClaireonAssetUtils::EvictInMemoryObject(Package, AssetName);
+
 	// Create AnimBP (mirrors UAnimBlueprintFactory::FactoryCreateNew)
 	UAnimBlueprint* AnimBP = CastChecked<UAnimBlueprint>(
 		FKismetEditorUtilities::CreateBlueprint(
@@ -328,6 +332,8 @@ FToolResult ClaireonAnimGraphTool_CreateChild::Execute(const TSharedPtr<FJsonObj
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create package: %s"), *PackageName));
 	}
 
+	ClaireonAssetUtils::EvictInMemoryObject(Package, AssetName);
+
 	// Create child AnimBP using parent's generated class
 	UAnimBlueprint* ChildBP = CastChecked<UAnimBlueprint>(
 		FKismetEditorUtilities::CreateBlueprint(
@@ -475,6 +481,7 @@ FToolResult ClaireonAnimGraphTool_Duplicate::Execute(const TSharedPtr<FJsonObjec
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create destination package: %s"), *DestPackage));
 	}
 
+	ClaireonAssetUtils::EvictInMemoryObject(DestPkg, DestName);
 	UObject* DuplicatedObj = StaticDuplicateObject(SourceBP, DestPkg, FName(*DestName));
 	UAnimBlueprint* DuplicatedBP = Cast<UAnimBlueprint>(DuplicatedObj);
 	if (!DuplicatedBP)

@@ -30,7 +30,6 @@ public class Claireon : ModuleRules
 			"JsonUtilities",
 			"AssetRegistry",
 			"InputCore",
-			"PythonScriptPlugin",
 			"WorkspaceMenuStructure",
 
 			// Blueprint editing tools dependencies
@@ -139,6 +138,22 @@ public class Claireon : ModuleRules
 			"MetasoundFrontend", // FMetaSoundFrontendDocumentBuilder + Metasound::Frontend graph handle API
 
 		});
+
+		// PythonScriptPlugin: UE 5.8 ships it as a runtime module with NO import .lib in installed
+		// builds, so it cannot be statically linked there. Claireon only touches it via the inline
+		// IPythonScriptPlugin::Get() accessor + virtual calls + header-only FPythonCommandEx, so on
+		// 5.8+ take its public include paths and load it dynamically instead of linking. Earlier
+		// engines keep the static dependency (unchanged behavior). (Python3 C-API stays a normal
+		// dependency for the bridge, above.)
+		if (Target.Version.MajorVersion > 5 || (Target.Version.MajorVersion == 5 && Target.Version.MinorVersion >= 8))
+		{
+			PrivateIncludePathModuleNames.Add("PythonScriptPlugin");
+			DynamicallyLoadedModuleNames.Add("PythonScriptPlugin");
+		}
+		else
+		{
+			PrivateDependencyModuleNames.Add("PythonScriptPlugin");
+		}
 
 		// UE 5.7 moved these headers into module Internal/ dirs, which UBT doesn't expose to
 		// external plugins. Owning modules are already linked; just add the Internal/ paths.

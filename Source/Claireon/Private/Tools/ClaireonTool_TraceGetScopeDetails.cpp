@@ -77,7 +77,7 @@ TSharedPtr<FJsonObject> ClaireonTool_TraceGetScopeDetails::GetInputSchema() cons
 IClaireonTool::FToolResult ClaireonTool_TraceGetScopeDetails::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
 	FString SessionId;
-	if (!Arguments->TryGetStringField(TEXT("sessionId"), SessionId) || SessionId.IsEmpty())
+	if (!Arguments.IsValid() || !Arguments->TryGetStringField(TEXT("sessionId"), SessionId) || SessionId.IsEmpty())
 	{
 		return MakeErrorResult(TEXT("Missing required field: sessionId"));
 	}

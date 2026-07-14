@@ -31,7 +31,7 @@ TSharedPtr<FJsonObject> FClaireonCameraAssetTool_SetNodeProperty::GetInputSchema
 	S.AddString(TEXT("asset_path"), TEXT("/Game/ path of the camera asset"), true);
 	S.AddInteger(TEXT("rig_index"), TEXT("Index of the rig containing the node"), true);
 	S.AddString(TEXT("node_id"), TEXT("Node-id path of the target node"), true);
-	S.AddString(TEXT("property_path"), TEXT("Dotted property path (e.g. 'InterpSpeed' or 'BlendSettings.Easing')"), true);
+	S.AddString(TEXT("property_path"), TEXT("Dotted property path (e.g. 'FieldOfView.Value' or 'BlendSettings.Easing')"), true);
 	S.AddString(TEXT("value"), TEXT("New value as exported text (parsed via ImportText_Direct)"), true);
 	return S.Build();
 }

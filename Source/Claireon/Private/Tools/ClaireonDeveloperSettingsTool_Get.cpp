@@ -4,6 +4,7 @@
 #include "Tools/ClaireonDeveloperSettingsTool_Get.h"
 #include "Tools/ClaireonAnimEditToolBase.h" // FToolSchemaBuilder
 #include "Tools/ClaireonPropertyUtils.h"
+#include "Tools/ClaireonAssetUtils.h"
 
 #include "Dom/JsonObject.h"
 #include "Engine/DeveloperSettings.h"
@@ -114,6 +115,16 @@ IClaireonTool::FToolResult FClaireonDeveloperSettingsTool_Get::Execute(const TSh
 	UClass* ResolvedClass = DevSettingsGet_ResolveClass(ClassPath);
 	if (!ResolvedClass)
 	{
+		// Disambiguate: if the identifier names a real, loaded class that simply isn't a
+		// UDeveloperSettings subclass, say so explicitly rather than "no match found".
+		UClass* AnyClass = ClassPath.StartsWith(TEXT("/Script/"))
+			? LoadObject<UClass>(nullptr, *ClassPath)
+			: ClaireonAssetUtils::ResolveClassName(ClassPath);
+		if (AnyClass && !AnyClass->IsChildOf(UDeveloperSettings::StaticClass()))
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("Class '%s' is not a UDeveloperSettings subclass."), *AnyClass->GetName()));
+		}
 		return MakeErrorResult(FString::Printf(
 			TEXT("No loaded UDeveloperSettings subclass matched '%s'. "
 			     "Confirm the module containing the class is loaded and the name is spelled correctly."),

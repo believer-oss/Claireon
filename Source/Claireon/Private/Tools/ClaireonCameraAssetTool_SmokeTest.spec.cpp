@@ -170,7 +170,7 @@ bool FCameraAssetSmokeTest_SyntheticFixtureRoundTrip::RunTest(const FString& /*P
 {
 	const FString Path = TEXT("/Game/Tests/CA_Synth_Fixture");
 	const FString ChildId = TEXT("Root.Children[0]");
-	const FString PropName = TEXT("InterpSpeed");
+	const FString PropName = TEXT("FieldOfView.Value");
 	const FString TargetValue = TEXT("7.5");
 	CASmokeSpec_DeleteIfExists(Path);
 
@@ -203,9 +203,9 @@ bool FCameraAssetSmokeTest_SyntheticFixtureRoundTrip::RunTest(const FString& /*P
 			return false;
 		}
 	}
-	// 4. AddNode child = UBVLookAtCameraNode.
+	// 4. AddNode child = UFieldOfViewCameraNode.
 	{
-		const auto R = CASmokeSpec_AddNode(Path, 0, TEXT("Root"), TEXT("BVLookAtCameraNode"));
+		const auto R = CASmokeSpec_AddNode(Path, 0, TEXT("Root"), TEXT("FieldOfViewCameraNode"));
 		if (R.bIsError)
 		{
 			AddError(FString::Printf(TEXT("AddNode(child) failed: %s"), *R.ErrorMessage));
@@ -213,7 +213,7 @@ bool FCameraAssetSmokeTest_SyntheticFixtureRoundTrip::RunTest(const FString& /*P
 			return false;
 		}
 	}
-	// 5. SetNodeProperty InterpSpeed = "7.5".
+	// 5. SetNodeProperty FieldOfView.Value = "7.5".
 	{
 		const auto R = CASmokeSpec_SetNodeProperty(Path, 0, ChildId, PropName, TargetValue);
 		if (R.bIsError)
@@ -311,9 +311,9 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetSmokeTest_DuplicatePrototypeAndAddN
 
 bool FCameraAssetSmokeTest_DuplicatePrototypeAndAddNode::RunTest(const FString& /*Parameters*/)
 {
-	const FString SourcePath = TEXT("/Game/BP/Camera/Fellowdivers/CA_FD_Player_Prototype_Ranged");
+	const FString SourcePath = TEXT("/Game/Tests/CA_Smoke_SourcePrototype");
 	const FString DupPath = TEXT("/Game/Tests/CA_Smoke_Prototype");
-	const FString PropName = TEXT("InterpSpeed");
+	const FString PropName = TEXT("FieldOfView.Value");
 	const FString TargetValue = TEXT("7.5");
 
 	// 1. Verify prototype exists; if not, soft-pass with warning.
@@ -404,10 +404,10 @@ bool FCameraAssetSmokeTest_DuplicatePrototypeAndAddNode::RunTest(const FString& 
 		return true;
 	}
 
-	// 5. AddNode UBVLookAtCameraNode under the array container.
+	// 5. AddNode UFieldOfViewCameraNode under the array container.
 	FString NewChildId;
 	{
-		const auto R = CASmokeSpec_AddNode(DupPath, RigIndex, ArrayParentId, TEXT("BVLookAtCameraNode"));
+		const auto R = CASmokeSpec_AddNode(DupPath, RigIndex, ArrayParentId, TEXT("FieldOfViewCameraNode"));
 		if (R.bIsError)
 		{
 			AddError(FString::Printf(TEXT("AddNode failed: %s"), *R.ErrorMessage));
@@ -422,7 +422,7 @@ bool FCameraAssetSmokeTest_DuplicatePrototypeAndAddNode::RunTest(const FString& 
 		}
 	}
 
-	// 6. SetNodeProperty InterpSpeed = "7.5".
+	// 6. SetNodeProperty FieldOfView.Value = "7.5".
 	{
 		const auto R = CASmokeSpec_SetNodeProperty(DupPath, RigIndex, NewChildId, PropName, TargetValue);
 		if (R.bIsError)
@@ -458,7 +458,7 @@ bool FCameraAssetSmokeTest_DuplicatePrototypeAndAddNode::RunTest(const FString& 
 		return false;
 	}
 
-	// 9. Reload + verify the new node persisted with InterpSpeed ~7.5.
+	// 9. Reload + verify the new node persisted with FieldOfView.Value ~7.5.
 	{
 		const auto R = CASmokeSpec_GetNodeProperty(DupPath, RigIndex, NewChildId, PropName);
 		if (R.bIsError)
