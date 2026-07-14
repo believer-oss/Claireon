@@ -291,7 +291,7 @@ bool FClaireonSpecApplicator_EQS::ApplyPass2_WireRelationships(const FString& Se
 					if (Prop.Value->TryGetString(PropValue))
 					{
 						FString PropError;
-						if (!SpecApplicatorEQS_SetEQSProperty(Option->Generator, Prop.Key, PropValue, PropError))
+						if (!SpecApplicatorEQS_SetEQSProperty(Option->Generator, FString(*Prop.Key), PropValue, PropError))
 						{
 							AddWarning(FString::Printf(TEXT("Option '%s' generator property '%s': %s"), *SpecId, *Prop.Key, *PropError));
 						}
@@ -338,7 +338,7 @@ bool FClaireonSpecApplicator_EQS::ApplyPass2_WireRelationships(const FString& Se
 						if (Prop.Value->TryGetString(PropValue))
 						{
 							FString PropError;
-							if (!SpecApplicatorEQS_SetEQSProperty(NewTest, Prop.Key, PropValue, PropError))
+							if (!SpecApplicatorEQS_SetEQSProperty(NewTest, FString(*Prop.Key), PropValue, PropError))
 							{
 								AddWarning(FString::Printf(TEXT("Test '%s' property '%s': %s"), *TestId, *Prop.Key, *PropError));
 							}

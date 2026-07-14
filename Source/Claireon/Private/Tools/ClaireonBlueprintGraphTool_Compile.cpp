@@ -145,7 +145,14 @@ FToolResult ClaireonBlueprintGraphTool_Compile::Execute(const TSharedPtr<FJsonOb
 	FCompilerResultsLog CompilerLog;
 	CompilerLog.SetSourcePath(Blueprint->GetPathName());
 	CompilerLog.BeginEvent(TEXT("Compile"));
-	FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::None, &CompilerLog);
+	// SkipSave: compile is documented as in-memory only (bp_save persists), and
+	// matches UBlueprintEditorLibrary::CompileBlueprint. SkipGarbageCollection:
+	// the synchronous CollectGarbage at the end of a compile livelocks on UE 5.8
+	// when invoked from inside the MCP request handler (the editor saturates all
+	// cores and the call never returns); the editor GCs on its own cadence soon
+	// after instead.
+	FKismetEditorUtilities::CompileBlueprint(Blueprint,
+		EBlueprintCompileOptions::SkipSave | EBlueprintCompileOptions::SkipGarbageCollection, &CompilerLog);
 	CompilerLog.EndEvent();
 
 	// Check compilation status

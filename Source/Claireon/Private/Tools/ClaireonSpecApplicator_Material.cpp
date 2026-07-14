@@ -364,7 +364,7 @@ bool FClaireonSpecApplicator_Material::ApplyPass1_CreateEntities(const FString& 
 					TextValue = Pair.Value->AsString(); // best-effort coercion
 				}
 				FString PropErr;
-				if (!ClaireonMaterialHelpers::SetExpressionProperty(Mat, Expr, Pair.Key, TextValue, PropErr))
+				if (!ClaireonMaterialHelpers::SetExpressionProperty(Mat, Expr, FString(*Pair.Key), TextValue, PropErr))
 				{
 					AddWarning(FString::Printf(TEXT("expression '%s': failed to set property '%s' = '%s' (%s)"),
 						*SpecId, *Pair.Key, *TextValue, *PropErr));

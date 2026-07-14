@@ -327,7 +327,7 @@ FToolResult ClaireonAnimGraphTool_ApplyDelta::Execute(const TSharedPtr<FJsonObje
 					if (Pair.Value.IsValid() && Pair.Value->TryGetString(Value))
 					{
 						FString PropError;
-						if (!ClaireonPropertyUtils::WritePropertyByPath(NewNode, Pair.Key, Value, PropError))
+						if (!ClaireonPropertyUtils::WritePropertyByPath(NewNode, FString(*Pair.Key), Value, PropError))
 						{
 							Warnings.Add(FString::Printf(TEXT("Node '%s': property '%s': %s"), *LocalId, *Pair.Key, *PropError));
 						}

@@ -17,6 +17,7 @@
 #include "WidgetBlueprint.h"
 
 #include "Tools/ClaireonSequenceHelpers.h"
+#include "ClaireonWidgetHelpers.h"
 
 // ============================================================================
 // Widget-animation Apply handlers -- free functions used by the per-op
@@ -92,6 +93,7 @@ bool ApplyCreateAnimation(UWidgetBlueprint* WBP, const FString& AnimationName, f
 
 	WBP->Modify();
 	WBP->Animations.Add(NewAnim);
+	ClaireonWidgetHelpers::NotifyVariableAdded(WBP, NewAnim->GetFName());
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
 
 	OutAnim = NewAnim;
@@ -113,11 +115,13 @@ bool ApplyDeleteAnimation(UWidgetBlueprint* WBP, const FString& AnimationName, F
 		return false;
 	}
 	WBP->Modify();
+	const FName RemovedAnimName = Anim->GetFName();
 	// Engine pattern from AnimationTabSummoner::OnDeleteAnimation: reparent to
 	// transient package so the WBP no longer owns the asset. Avoids future name
 	// collisions; GC sweep reclaims it.
 	Anim->Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors);
 	WBP->Animations.Remove(Anim);
+	ClaireonWidgetHelpers::NotifyVariableRemoved(WBP, RemovedAnimName);
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
 	return true;
 }
@@ -151,6 +155,12 @@ bool ApplyRenameAnimation(UWidgetBlueprint* WBP, const FString& OldName, const F
 
 	WBP->Modify();
 	Anim->Modify();
+
+	// Update the GUID bookkeeping before the object renames: Rename() broadcasts
+	// and can trigger an immediate recompile, whose validation expects the map to
+	// already know the new name.
+	ClaireonWidgetHelpers::NotifyVariableRenamed(WBP, OldFName, NewFName);
+
 	if (UMovieScene* MS = Anim->GetMovieScene())
 	{
 		MS->Modify();

@@ -387,7 +387,7 @@ FToolResult ClaireonTool_PlaceActor::Execute(const TSharedPtr<FJsonObject>& Argu
 
 				ClaireonPropertyResolver::FResolvedProperty Resolved;
 				FString WriteError;
-				bool bOk = ClaireonPropertyResolver::WritePropertyOnActor(SpawnedActor, Pair.Key, ValueStr, Resolved, WriteError);
+				bool bOk = ClaireonPropertyResolver::WritePropertyOnActor(SpawnedActor, FString(*Pair.Key), ValueStr, Resolved, WriteError);
 				if (!bOk)
 				{
 					UE_LOG(LogClaireon, Warning, TEXT("[place_actor] %s"), *WriteError);

@@ -159,7 +159,7 @@ bool FClaireonSpecApplicator_PCGGraph::ApplyPass1_CreateEntities(const FString& 
 				if (Prop.Value->TryGetString(PropValue))
 				{
 					FString PropError;
-					if (!ClaireonPCGGraphHelpers::SetNodeProperty(NewNode, Prop.Key, PropValue, PropError))
+					if (!ClaireonPCGGraphHelpers::SetNodeProperty(NewNode, FString(*Prop.Key), PropValue, PropError))
 					{
 						AddWarning(FString::Printf(TEXT("Node '%s' property '%s': %s"), *SpecId, *Prop.Key, *PropError));
 					}

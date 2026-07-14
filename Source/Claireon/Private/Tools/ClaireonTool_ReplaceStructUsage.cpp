@@ -308,7 +308,7 @@ FToolResult ClaireonTool_ReplaceStructUsage::Execute(const TSharedPtr<FJsonObjec
 			FString V;
 			if (Pair.Value.IsValid() && Pair.Value->TryGetString(V))
 			{
-				FieldMap.Add(Pair.Key, V);
+				FieldMap.Add(FString(*Pair.Key), V);
 			}
 		}
 	}

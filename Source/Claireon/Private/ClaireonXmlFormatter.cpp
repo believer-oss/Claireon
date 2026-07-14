@@ -308,7 +308,7 @@ FString FClaireonXmlFormatter::GenerateTypeSignature(const FString& ToolName, co
 	TArray<FString> ParamStrings;
 	for (const auto& Pair : (*PropertiesPtr)->Values)
 	{
-		const FString& ParamName = Pair.Key;
+		const FString ParamName(*Pair.Key);
 		const TSharedPtr<FJsonObject>* PropObj = nullptr;
 
 		FString TypeStr = TEXT("any");

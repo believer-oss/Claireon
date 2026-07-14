@@ -390,7 +390,7 @@ bool FClaireonDeltaApplicator_BehaviorTree::ApplyPhase3_Create(const FString& Se
 					if (Prop.Value->TryGetString(PropValue))
 					{
 						FString PropError;
-						if (!ClaireonBehaviorTreeHelpers::SetBTNodeProperty(InstNode, Prop.Key, PropValue, PropError))
+						if (!ClaireonBehaviorTreeHelpers::SetBTNodeProperty(InstNode, FString(*Prop.Key), PropValue, PropError))
 						{
 							AddWarning(FString::Printf(TEXT("behaviortree_apply_delta: nodes[%d].properties.%s: %s"),
 								i, *Prop.Key, *PropError));

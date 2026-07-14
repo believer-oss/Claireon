@@ -137,11 +137,14 @@ FToolResult ClaireonWidgetBPTool_ReplaceWidget::Execute(const TSharedPtr<FJsonOb
 		UE_LOG(LogClaireon, Warning, TEXT("[EditWidgetBP] Replacement widget '%s' is not a panel -- %d children were lost"), *NewWidgetClassStr, OldChildren.Num());
 	}
 
+	const FName OldWidgetFName = OldWidget->GetFName();
+	ClaireonWidgetHelpers::TrashRemovedWidget(WBP, OldWidget);
+
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
 	Data->bModified = true;
 
 	// Update focus if needed
-	if (Data->FocusedWidget == OldWidget->GetFName())
+	if (Data->FocusedWidget == OldWidgetFName)
 	{
 		Data->FocusedWidget = NewWidget->GetFName();
 	}

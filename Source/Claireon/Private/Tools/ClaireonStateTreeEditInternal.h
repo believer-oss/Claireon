@@ -13,6 +13,21 @@
 #include "StateTreeEditorData.h"
 #include "StateTreeEditorNode.h"
 #include "StateTreeTypes.h"
+#include "Misc/EngineVersionComparison.h"
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
+#include "StateTreePropertyBindings.h"
+#else
+#include "PropertyBindingPath.h"
+#endif
+
+// 5.8 removed FStateTreePropertyPath (and the FStateTreeEditorPropertyBindings
+// AddPropertyBinding/RemovePropertyBindings/AddFunctionPropertyBinding entry
+// points) in favor of FPropertyBindingPath and the FPropertyBindingBindingCollection API.
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
+using FClaireonPropertyPath = FStateTreePropertyPath;
+#else
+using FClaireonPropertyPath = FPropertyBindingPath;
+#endif
 
 namespace ClaireonStateTreeEditInternal
 {
@@ -226,9 +241,9 @@ namespace ClaireonStateTreeEditInternal
 			{
 				FString Error;
 				// Try on node struct first, then instance data
-				if (!ClaireonStateTreeHelpers::SetNodeProperty(Node, Pair.Key, Value, false, Error))
+				if (!ClaireonStateTreeHelpers::SetNodeProperty(Node, FString(*Pair.Key), Value, false, Error))
 				{
-					ClaireonStateTreeHelpers::SetNodeProperty(Node, Pair.Key, Value, true, Error);
+					ClaireonStateTreeHelpers::SetNodeProperty(Node, FString(*Pair.Key), Value, true, Error);
 				}
 			}
 		}

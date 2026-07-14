@@ -472,7 +472,7 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass2_WireRelationships(const FStri
 						if (Prop.Value->TryGetString(PropValue))
 						{
 							FString PropError;
-							ClaireonStateTreeHelpers::SetNodeProperty(NewNode, Prop.Key, PropValue, false, PropError);
+							ClaireonStateTreeHelpers::SetNodeProperty(NewNode, FString(*Prop.Key), PropValue, false, PropError);
 						}
 					}
 				}
@@ -611,7 +611,7 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass2_WireRelationships(const FStri
 						if (Prop.Value->TryGetString(PropValue))
 						{
 							FString PropError;
-							ClaireonStateTreeHelpers::SetNodeProperty(Node, Prop.Key, PropValue, false, PropError);
+							ClaireonStateTreeHelpers::SetNodeProperty(Node, FString(*Prop.Key), PropValue, false, PropError);
 						}
 					}
 					break;

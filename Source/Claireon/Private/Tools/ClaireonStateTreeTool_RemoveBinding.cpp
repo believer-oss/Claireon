@@ -52,12 +52,16 @@ FToolResult ClaireonStateTreeTool_RemoveBinding::Execute(const TSharedPtr<FJsonO
 		return MakeErrorResult(TEXT("Missing parameter: target_property"));
 
 #if WITH_EDITORONLY_DATA
-	FStateTreePropertyPath TargetPath(TargetNodeId);
+	FClaireonPropertyPath TargetPath(TargetNodeId);
 	TargetPath.FromString(TargetProperty);
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Remove Property Binding")));
 	Data->StateTree->Modify();
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
 	EditorData->EditorBindings.RemovePropertyBindings(TargetPath);
+#else
+	EditorData->EditorBindings.RemoveBindings(TargetPath);
+#endif
 
 	Data->LastOperationStatus = FString::Printf(TEXT("remove_binding -> Removed binding to %s"), *TargetProperty);
 #else
