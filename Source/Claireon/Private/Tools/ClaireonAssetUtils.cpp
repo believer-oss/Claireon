@@ -321,6 +321,21 @@ UClass* ResolveClassName(const FString& ClassName)
 	return nullptr;
 }
 
+void EvictInMemoryObject(UPackage* Package, const FString& AssetName)
+{
+	if (!Package || AssetName.IsEmpty())
+	{
+		return;
+	}
+	if (UObject* Existing = StaticFindObject(UObject::StaticClass(), Package, *AssetName))
+	{
+		Existing->ClearFlags(RF_Public | RF_Standalone);
+		Existing->Rename(nullptr, GetTransientPackage(),
+			REN_DontCreateRedirectors | REN_NonTransactional | REN_DoNotDirty);
+		Existing->MarkAsGarbage();
+	}
+}
+
 bool AssertInnerNameMatchesPackage(const UObject* Asset, FString& OutError)
 {
 	OutError.Reset();

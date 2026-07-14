@@ -1067,6 +1067,12 @@ FToolResult ClaireonBlueprintGraphTool_AddNode::AddNode_Impl(
 
 	FToolResult AddNodeResult = BuildStateResponse(SessionId, Data);
 	AddNodeResult.Warnings.Append(ResolutionWarnings);
+	// Surface the new node's GUID directly so callers can chain follow-up ops (connect_pins,
+	// set_node_property, ...) without regexing it out of the cursor/summary block.
+	if (AddNodeResult.Data.IsValid())
+	{
+		AddNodeResult.Data->SetStringField(TEXT("created_node_guid"), NewNode->NodeGuid.ToString());
+	}
 	return AddNodeResult;
 }
 

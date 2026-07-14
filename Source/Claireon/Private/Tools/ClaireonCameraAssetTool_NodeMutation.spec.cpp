@@ -381,7 +381,7 @@ bool FCameraAssetNodeMutation_AddNode_AsRoot::RunTest(const FString& /*Parameter
 
 // =====================================================================================
 // Test: AddNode_AsChildOfArray
-// Array root + AddNode parent_node_id="Root" class UBVLookAtCameraNode -> ListNodes
+// Array root + AddNode parent_node_id="Root" class UFieldOfViewCameraNode -> ListNodes
 // returns 2 entries; child is at "Root.Children[0]".
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetNodeMutation_AddNode_AsChildOfArray,
@@ -408,7 +408,7 @@ bool FCameraAssetNodeMutation_AddNode_AsChildOfArray::RunTest(const FString& /*P
 			return false;
 		}
 	}
-	const auto ChildResult = CANodeMutationSpec_AddNode(Path, TEXT("Root"), TEXT("BVLookAtCameraNode"));
+	const auto ChildResult = CANodeMutationSpec_AddNode(Path, TEXT("Root"), TEXT("FieldOfViewCameraNode"));
 	if (ChildResult.bIsError)
 	{
 		AddError(FString::Printf(TEXT("AddNode(child) failed: %s"), *ChildResult.ErrorMessage));
@@ -444,7 +444,7 @@ bool FCameraAssetNodeMutation_AddNode_AsChildOfArray::RunTest(const FString& /*P
 
 // =====================================================================================
 // Test: AddNode_NonArrayParentRejects
-// Add UBVPostProcessCameraNode as root -> try AddNode under it -> error containing
+// Add UPostProcessCameraNode as root -> try AddNode under it -> error containing
 // "no array child slot".
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetNodeMutation_AddNode_NonArrayParentRejects,
@@ -463,7 +463,7 @@ bool FCameraAssetNodeMutation_AddNode_NonArrayParentRejects::RunTest(const FStri
 	}
 
 	{
-		const auto R = CANodeMutationSpec_AddNode(Path, FString(), TEXT("BVPostProcessCameraNode"));
+		const auto R = CANodeMutationSpec_AddNode(Path, FString(), TEXT("PostProcessCameraNode"));
 		if (R.bIsError)
 		{
 			AddError(FString::Printf(TEXT("AddNode(root) failed: %s"), *R.ErrorMessage));
@@ -472,7 +472,7 @@ bool FCameraAssetNodeMutation_AddNode_NonArrayParentRejects::RunTest(const FStri
 		}
 	}
 
-	const auto Result = CANodeMutationSpec_AddNode(Path, TEXT("Root"), TEXT("BVLookAtCameraNode"));
+	const auto Result = CANodeMutationSpec_AddNode(Path, TEXT("Root"), TEXT("FieldOfViewCameraNode"));
 	if (!Result.bIsError)
 	{
 		AddError(TEXT("AddNode under non-array parent did not error"));
@@ -512,7 +512,7 @@ bool FCameraAssetNodeMutation_RemoveNode_ChildOfArray::RunTest(const FString& /*
 		return false;
 	}
 
-	if (CANodeMutationSpec_AddNode(Path, FString(), TEXT("ArrayCameraNode")).bIsError || CANodeMutationSpec_AddNode(Path, TEXT("Root"), TEXT("BVLookAtCameraNode")).bIsError || CANodeMutationSpec_AddNode(Path, TEXT("Root"), TEXT("BVPostProcessCameraNode")).bIsError)
+	if (CANodeMutationSpec_AddNode(Path, FString(), TEXT("ArrayCameraNode")).bIsError || CANodeMutationSpec_AddNode(Path, TEXT("Root"), TEXT("FieldOfViewCameraNode")).bIsError || CANodeMutationSpec_AddNode(Path, TEXT("Root"), TEXT("PostProcessCameraNode")).bIsError)
 	{
 		AddError(TEXT("Setup AddNode call(s) failed"));
 		CANodeMutationSpec_DeleteIfExists(Path);
@@ -542,7 +542,7 @@ bool FCameraAssetNodeMutation_RemoveNode_ChildOfArray::RunTest(const FString& /*
 	}
 
 	// Find the child entry; it should now be at Root.Children[0] and class
-	// BVPostProcessCameraNode (the surviving sibling).
+	// PostProcessCameraNode (the surviving sibling).
 	bool bFoundChild = false;
 	for (const TSharedPtr<FJsonValue>& V : *Nodes)
 	{
@@ -553,10 +553,10 @@ bool FCameraAssetNodeMutation_RemoveNode_ChildOfArray::RunTest(const FString& /*
 		{
 			FString Cls;
 			Entry->TryGetStringField(TEXT("class"), Cls);
-			if (Cls != TEXT("BVPostProcessCameraNode"))
+			if (Cls != TEXT("PostProcessCameraNode"))
 			{
 				AddError(FString::Printf(
-					TEXT("Surviving child class='%s', expected 'BVPostProcessCameraNode'"),
+					TEXT("Surviving child class='%s', expected 'PostProcessCameraNode'"),
 					*Cls));
 				CANodeMutationSpec_DeleteIfExists(Path);
 				return false;
@@ -597,9 +597,9 @@ bool FCameraAssetNodeMutation_MoveNode_ReorderWithinParent::RunTest(const FStrin
 	}
 
 	// Add root + three distinct-class children so we can identify them post-move.
-	if (CANodeMutationSpec_AddNode(Path, FString(), TEXT("ArrayCameraNode")).bIsError || CANodeMutationSpec_AddNode(Path, TEXT("Root"), TEXT("BVLookAtCameraNode")).bIsError || // orig0
-		CANodeMutationSpec_AddNode(Path, TEXT("Root"), TEXT("BVPostProcessCameraNode")).bIsError ||																				// orig1
-		CANodeMutationSpec_AddNode(Path, TEXT("Root"), TEXT("BVPlayCameraAnimationCameraNode")).bIsError)																		// orig2
+	if (CANodeMutationSpec_AddNode(Path, FString(), TEXT("ArrayCameraNode")).bIsError || CANodeMutationSpec_AddNode(Path, TEXT("Root"), TEXT("FieldOfViewCameraNode")).bIsError || // orig0
+		CANodeMutationSpec_AddNode(Path, TEXT("Root"), TEXT("PostProcessCameraNode")).bIsError ||																				// orig1
+		CANodeMutationSpec_AddNode(Path, TEXT("Root"), TEXT("BoomArmCameraNode")).bIsError)																		// orig2
 	{
 		AddError(TEXT("Setup AddNode call(s) failed"));
 		CANodeMutationSpec_DeleteIfExists(Path);
@@ -630,9 +630,9 @@ bool FCameraAssetNodeMutation_MoveNode_ReorderWithinParent::RunTest(const FStrin
 	}
 
 	// Expected final order:
-	//   Root.Children[0] = BVLookAtCameraNode             (orig0, untouched)
-	//   Root.Children[1] = BVPlayCameraAnimationCameraNode (orig2, moved)
-	//   Root.Children[2] = BVPostProcessCameraNode         (orig1, shifted)
+	//   Root.Children[0] = FieldOfViewCameraNode             (orig0, untouched)
+	//   Root.Children[1] = BoomArmCameraNode (orig2, moved)
+	//   Root.Children[2] = PostProcessCameraNode         (orig1, shifted)
 	auto FindClassAt = [&](const FString& Id) -> FString
 	{
 		for (const TSharedPtr<FJsonValue>& V : *Nodes)
@@ -654,10 +654,10 @@ bool FCameraAssetNodeMutation_MoveNode_ReorderWithinParent::RunTest(const FStrin
 	const FString At1 = FindClassAt(TEXT("Root.Children[1]"));
 	const FString At2 = FindClassAt(TEXT("Root.Children[2]"));
 
-	if (At0 != TEXT("BVLookAtCameraNode") || At1 != TEXT("BVPlayCameraAnimationCameraNode") || At2 != TEXT("BVPostProcessCameraNode"))
+	if (At0 != TEXT("FieldOfViewCameraNode") || At1 != TEXT("BoomArmCameraNode") || At2 != TEXT("PostProcessCameraNode"))
 	{
 		AddError(FString::Printf(
-			TEXT("Post-move order mismatch: [0]='%s' [1]='%s' [2]='%s' (expected LookAt, PlayCameraAnimation, PostProcess)"),
+			TEXT("Post-move order mismatch: [0]='%s' [1]='%s' [2]='%s' (expected FieldOfView, BoomArm, PostProcess)"),
 			*At0, *At1, *At2));
 		CANodeMutationSpec_DeleteIfExists(Path);
 		return false;
@@ -669,7 +669,7 @@ bool FCameraAssetNodeMutation_MoveNode_ReorderWithinParent::RunTest(const FStrin
 
 // =====================================================================================
 // Test: SetGetNodeProperty_RoundTrip
-// Array root + UBVLookAtCameraNode child -> SetNodeProperty(InterpSpeed=7.5) ->
+// Array root + UFieldOfViewCameraNode child -> SetNodeProperty(FieldOfView.Value=7.5) ->
 // GetNodeProperty returns "7.5". Save + unload + reload -> GetNodeProperty STILL
 // returns "7.5". Verifies the PostEditChange cascade dirties the package and the
 // value persists across serialization.
@@ -689,7 +689,7 @@ bool FCameraAssetNodeMutation_SetGetNodeProperty_RoundTrip::RunTest(const FStrin
 		return false;
 	}
 
-	if (CANodeMutationSpec_AddNode(Path, FString(), TEXT("ArrayCameraNode")).bIsError || CANodeMutationSpec_AddNode(Path, TEXT("Root"), TEXT("BVLookAtCameraNode")).bIsError)
+	if (CANodeMutationSpec_AddNode(Path, FString(), TEXT("ArrayCameraNode")).bIsError || CANodeMutationSpec_AddNode(Path, TEXT("Root"), TEXT("FieldOfViewCameraNode")).bIsError)
 	{
 		AddError(TEXT("Setup AddNode call(s) failed"));
 		CANodeMutationSpec_DeleteIfExists(Path);
@@ -697,7 +697,7 @@ bool FCameraAssetNodeMutation_SetGetNodeProperty_RoundTrip::RunTest(const FStrin
 	}
 
 	const FString ChildId = TEXT("Root.Children[0]");
-	const FString PropName = TEXT("InterpSpeed");
+	const FString PropName = TEXT("FieldOfView.Value");
 	const FString TargetValue = TEXT("7.5");
 
 	{
@@ -725,7 +725,8 @@ bool FCameraAssetNodeMutation_SetGetNodeProperty_RoundTrip::RunTest(const FStrin
 			CANodeMutationSpec_DeleteIfExists(Path);
 			return false;
 		}
-		if (GotValue != TargetValue)
+		// ExportText for floats may render "7.5", "7.500000", etc. Compare numerically.
+		if (!FMath::IsNearlyEqual(FCString::Atof(*GotValue), FCString::Atof(*TargetValue)))
 		{
 			AddError(FString::Printf(
 				TEXT("Pre-save value mismatch: got '%s', expected '%s'"),
@@ -771,7 +772,7 @@ bool FCameraAssetNodeMutation_SetGetNodeProperty_RoundTrip::RunTest(const FStrin
 			CANodeMutationSpec_DeleteIfExists(Path);
 			return false;
 		}
-		if (GotValue != TargetValue)
+		if (!FMath::IsNearlyEqual(FCString::Atof(*GotValue), FCString::Atof(*TargetValue)))
 		{
 			AddError(FString::Printf(
 				TEXT("Persistence failed: post-reload value '%s', expected '%s'"),
@@ -787,9 +788,9 @@ bool FCameraAssetNodeMutation_SetGetNodeProperty_RoundTrip::RunTest(const FStrin
 
 // =====================================================================================
 // Test: SetNodeProperty_BadPath
-// Array root + UBVLookAtCameraNode child -> SetNodeProperty(BogusProperty=1) ->
+// Array root + UFieldOfViewCameraNode child -> SetNodeProperty(BogusProperty=1) ->
 // expect bIsError=true. Then verify the node is unchanged by reading another
-// known property (InterpSpeed, default 5.0) and confirming the default value.
+// known property (FieldOfView.Value, default 90.0) and confirming the default value.
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetNodeMutation_SetNodeProperty_BadPath,
 	"Claireon.CameraAsset.NodeMutation.SetNodeProperty_BadPath",
@@ -806,7 +807,7 @@ bool FCameraAssetNodeMutation_SetNodeProperty_BadPath::RunTest(const FString& /*
 		return false;
 	}
 
-	if (CANodeMutationSpec_AddNode(Path, FString(), TEXT("ArrayCameraNode")).bIsError || CANodeMutationSpec_AddNode(Path, TEXT("Root"), TEXT("BVLookAtCameraNode")).bIsError)
+	if (CANodeMutationSpec_AddNode(Path, FString(), TEXT("ArrayCameraNode")).bIsError || CANodeMutationSpec_AddNode(Path, TEXT("Root"), TEXT("FieldOfViewCameraNode")).bIsError)
 	{
 		AddError(TEXT("Setup AddNode call(s) failed"));
 		CANodeMutationSpec_DeleteIfExists(Path);
@@ -823,27 +824,27 @@ bool FCameraAssetNodeMutation_SetNodeProperty_BadPath::RunTest(const FString& /*
 		return false;
 	}
 
-	// Verify a real property is untouched (UBVLookAtCameraNode::InterpSpeed default = 5.0f).
-	const auto GetResult = CANodeMutationSpec_GetNodeProperty(Path, ChildId, TEXT("InterpSpeed"));
+	// Verify a real property is untouched (UFieldOfViewCameraNode::FieldOfView.Value default = 90.0f).
+	const auto GetResult = CANodeMutationSpec_GetNodeProperty(Path, ChildId, TEXT("FieldOfView.Value"));
 	if (GetResult.bIsError)
 	{
-		AddError(FString::Printf(TEXT("GetNodeProperty(InterpSpeed) failed: %s"), *GetResult.ErrorMessage));
+		AddError(FString::Printf(TEXT("GetNodeProperty(FieldOfView.Value) failed: %s"), *GetResult.ErrorMessage));
 		CANodeMutationSpec_DeleteIfExists(Path);
 		return false;
 	}
 	FString GotValue;
 	if (!GetResult.Data.IsValid() || !GetResult.Data->TryGetStringField(TEXT("value"), GotValue))
 	{
-		AddError(TEXT("GetNodeProperty(InterpSpeed) result missing 'value'"));
+		AddError(TEXT("GetNodeProperty(FieldOfView.Value) result missing 'value'"));
 		CANodeMutationSpec_DeleteIfExists(Path);
 		return false;
 	}
-	// ExportText for floats may render "5.0", "5.000000", etc. Convert + compare numerically.
+	// ExportText for floats may render "90.0", "90.000000", etc. Convert + compare numerically.
 	const float Numeric = FCString::Atof(*GotValue);
-	if (!FMath::IsNearlyEqual(Numeric, 5.0f))
+	if (!FMath::IsNearlyEqual(Numeric, 90.0f))
 	{
 		AddError(FString::Printf(
-			TEXT("InterpSpeed unexpectedly changed after bad-path write: '%s' (-> %f, expected 5.0)"),
+			TEXT("FieldOfView.Value unexpectedly changed after bad-path write: '%s' (-> %f, expected 90.0)"),
 			*GotValue, Numeric));
 		CANodeMutationSpec_DeleteIfExists(Path);
 		return false;

@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonWidgetBPTool_Create.h"
 #include "Tools/FToolSchemaBuilder.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "Dom/JsonObject.h"
 #include "ClaireonLog.h"
 #include "ClaireonNameResolver.h"
@@ -123,6 +124,10 @@ FToolResult ClaireonWidgetBPTool_Create::Execute(const TSharedPtr<FJsonObject>& 
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create package: %s"), *PackageName));
 	}
+
+	// Deleting the .uasset on disk above does not evict a same-named object still loaded in
+	// memory; UE 5.8 CreateBlueprint asserts the name is free, so clear it first.
+	ClaireonAssetUtils::EvictInMemoryObject(Package, AssetName);
 
 	// Create widget blueprint
 	UWidgetBlueprint* NewWBP = CastChecked<UWidgetBlueprint>(

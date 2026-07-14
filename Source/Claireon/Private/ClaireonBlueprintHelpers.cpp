@@ -1179,6 +1179,10 @@ namespace ClaireonBlueprintHelpers
 			return;
 		}
 
+		// Deleting the .uasset on disk above does not evict a same-named object still loaded in
+		// memory; UE 5.8 CreateBlueprint asserts the name is free, so clear it first.
+		ClaireonAssetUtils::EvictInMemoryObject(Package, AssetName);
+
 		UBlueprint* BP = FKismetEditorUtilities::CreateBlueprint(
 			ParentClass, Package, FName(*AssetName),
 			BPTYPE_Normal,

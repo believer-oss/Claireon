@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonSpecApplicator_WidgetBP.h"
 #include "ClaireonWidgetHelpers.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "ClaireonNameResolver.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSessionManager.h"
@@ -200,6 +201,10 @@ bool FClaireonSpecApplicator_WidgetBP::OpenOrCreateAsset(const FString& AssetPat
 			OutError = FString::Printf(TEXT("widgetbp_apply_spec auto-create: failed to create package '%s'"), *PackageName);
 			return false;
 		}
+
+		// Deleting the .uasset on disk above does not evict a same-named object still loaded in
+		// memory; UE 5.8 CreateBlueprint asserts the name is free, so clear it first.
+		ClaireonAssetUtils::EvictInMemoryObject(Package, AssetName);
 
 		UBlueprint* CreatedBP = FKismetEditorUtilities::CreateBlueprint(
 			ParentClass,
