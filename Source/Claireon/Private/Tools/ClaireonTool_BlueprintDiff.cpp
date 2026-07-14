@@ -232,7 +232,7 @@ void BuildSpecNodeEntry(const TSharedPtr<FJsonObject>& NodeObj, FSpecNodeEntry& 
 			FString PinValue;
 			if (Pair.Value.IsValid() && Pair.Value->TryGetString(PinValue))
 			{
-				Out.PinDefaults.Add(Pair.Key, PinValue);
+				Out.PinDefaults.Add(FString(*Pair.Key), PinValue);
 			}
 		}
 	}

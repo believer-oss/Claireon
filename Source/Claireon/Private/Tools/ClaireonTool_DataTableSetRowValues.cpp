@@ -112,7 +112,7 @@ IClaireonTool::FToolResult ClaireonTool_DataTableSetRowValues::Execute(const TSh
 
 	for (const auto& Pair : Values->Values)
 	{
-		const FString& Key = Pair.Key;
+		const FString Key(*Pair.Key);
 
 		const FProperty* Prop = RowStruct ? RowStruct->FindPropertyByName(FName(*Key)) : nullptr;
 		if (!Prop)

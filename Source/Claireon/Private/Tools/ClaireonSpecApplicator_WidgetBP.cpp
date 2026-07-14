@@ -454,7 +454,7 @@ bool FClaireonSpecApplicator_WidgetBP::ApplyPass2_WireRelationships(const FStrin
 					if (Prop.Value->TryGetString(PropValue))
 					{
 						FString PropError;
-						ClaireonWidgetHelpers::WriteSlotProperty(Slot, Prop.Key, PropValue, PropError);
+						ClaireonWidgetHelpers::WriteSlotProperty(Slot, FString(*Prop.Key), PropValue, PropError);
 					}
 				}
 			}
@@ -482,7 +482,7 @@ bool FClaireonSpecApplicator_WidgetBP::ApplyPass2_WireRelationships(const FStrin
 					if (Prop.Value->TryGetString(PropValue))
 					{
 						FString PropError;
-						if (!ClaireonWidgetHelpers::WriteWidgetProperty(Widget, Prop.Key, PropValue, PropError))
+						if (!ClaireonWidgetHelpers::WriteWidgetProperty(Widget, FString(*Prop.Key), PropValue, PropError))
 						{
 							AddWarning(FString::Printf(TEXT("Widget '%s' property '%s': %s"), *SpecId, *Prop.Key, *PropError));
 						}

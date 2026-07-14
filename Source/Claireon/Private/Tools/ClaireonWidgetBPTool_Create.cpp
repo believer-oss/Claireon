@@ -152,7 +152,7 @@ FToolResult ClaireonWidgetBPTool_Create::Execute(const TSharedPtr<FJsonObject>& 
 		}
 		else if (NewWBP->WidgetTree)
 		{
-			UWidget* Root = NewWBP->WidgetTree->ConstructWidget<UWidget>(RootClass, FName(*RootClass->GetName()));
+			UWidget* Root = ClaireonWidgetHelpers::CreateWidget(NewWBP->WidgetTree, RootClass, FName(*RootClass->GetName()));
 			if (Root)
 			{
 				NewWBP->WidgetTree->RootWidget = Root;

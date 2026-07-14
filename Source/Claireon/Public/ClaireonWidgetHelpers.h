@@ -48,6 +48,27 @@ namespace ClaireonWidgetHelpers
 	/** Create a widget in a widget tree with RF_Transactional. */
 	UWidget* CreateWidget(UWidgetTree* Tree, TSubclassOf<UWidget> WidgetClass, FName WidgetName = NAME_None);
 
+	/**
+	 * Keep UWidgetBlueprint::WidgetVariableNameToGuidMap in sync with widget and
+	 * animation variable lifecycle. UE 5.8's widget compiler ensures every widget
+	 * and animation has a GUID entry; earlier engines have no such map, so these
+	 * are no-ops there. CreateWidget already notifies for the tree's owning
+	 * blueprint; call these directly for renames, removals, and objects created
+	 * outside CreateWidget (e.g. animations).
+	 */
+	void NotifyVariableAdded(UWidgetBlueprint* WidgetBP, FName VariableName);
+	void NotifyVariableRemoved(UWidgetBlueprint* WidgetBP, FName VariableName);
+	void NotifyVariableRenamed(UWidgetBlueprint* WidgetBP, FName OldName, FName NewName);
+
+	/**
+	 * Reparent a removed widget and its remaining children to the transient package
+	 * (the designer's delete pattern, see FWidgetBlueprintEditorUtils::DeleteWidgets)
+	 * so their names don't collide with future widgets and they stop counting as
+	 * source widgets, then drop their variable GUID entries. Call after the widget
+	 * has been detached from the tree.
+	 */
+	void TrashRemovedWidget(UWidgetBlueprint* WidgetBP, UWidget* Widget);
+
 	/** Add a child widget to a panel widget and configure slot properties. */
 	UPanelSlot* AddChildToPanel(UPanelWidget* Parent, UWidget* Child, const TSharedPtr<FJsonObject>& SlotProperties = nullptr);
 

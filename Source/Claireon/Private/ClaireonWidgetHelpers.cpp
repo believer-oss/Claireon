@@ -29,6 +29,8 @@
 #include "WidgetBlueprintExtension.h"
 #include "Types/MVVMBindingMode.h"
 #include "Kismet2/BlueprintEditorUtils.h"
+#include "Misc/EngineVersionComparison.h"
+#include "UObject/Package.h"
 
 // ============================================================================
 // SerializeWidgetTree
@@ -333,7 +335,80 @@ UWidget* ClaireonWidgetHelpers::CreateWidget(UWidgetTree* Tree, TSubclassOf<UWid
 		return nullptr;
 	}
 
-	return Tree->ConstructWidget<UWidget>(WidgetClass, WidgetName);
+	UWidget* Widget = Tree->ConstructWidget<UWidget>(WidgetClass, WidgetName);
+	if (Widget)
+	{
+		NotifyVariableAdded(Cast<UWidgetBlueprint>(Tree->GetOuter()), Widget->GetFName());
+	}
+	return Widget;
+}
+
+// ============================================================================
+// Widget variable GUID bookkeeping (UE 5.8+)
+// ============================================================================
+
+void ClaireonWidgetHelpers::NotifyVariableAdded(UWidgetBlueprint* WidgetBP, FName VariableName)
+{
+#if !UE_VERSION_OLDER_THAN(5, 8, 0)
+	if (WidgetBP && !VariableName.IsNone() && !WidgetBP->WidgetVariableNameToGuidMap.Contains(VariableName))
+	{
+		WidgetBP->OnVariableAdded(VariableName);
+	}
+#endif
+}
+
+void ClaireonWidgetHelpers::NotifyVariableRemoved(UWidgetBlueprint* WidgetBP, FName VariableName)
+{
+#if !UE_VERSION_OLDER_THAN(5, 8, 0)
+	if (WidgetBP && !VariableName.IsNone())
+	{
+		WidgetBP->OnVariableRemoved(VariableName);
+	}
+#endif
+}
+
+void ClaireonWidgetHelpers::NotifyVariableRenamed(UWidgetBlueprint* WidgetBP, FName OldName, FName NewName)
+{
+#if !UE_VERSION_OLDER_THAN(5, 8, 0)
+	if (!WidgetBP || NewName.IsNone() || OldName == NewName)
+	{
+		return;
+	}
+	// OnVariableRenamed ensures on a missing old entry and an existing new entry;
+	// pre-check so assets created before this bookkeeping existed stay quiet.
+	if (WidgetBP->WidgetVariableNameToGuidMap.Contains(OldName) &&
+		!WidgetBP->WidgetVariableNameToGuidMap.Contains(NewName))
+	{
+		WidgetBP->OnVariableRenamed(OldName, NewName);
+	}
+	else
+	{
+		NotifyVariableAdded(WidgetBP, NewName);
+	}
+#endif
+}
+
+void ClaireonWidgetHelpers::TrashRemovedWidget(UWidgetBlueprint* WidgetBP, UWidget* Widget)
+{
+	if (!Widget)
+	{
+		return;
+	}
+	// Engine designer pattern (FWidgetBlueprintEditorUtils::DeleteWidgets): removed
+	// widgets stay outered to the widget tree, so until they are reparented to the
+	// transient package they still count as source widgets (5.8's GUID validation
+	// resurrects their map entries) and their names collide with future widgets.
+	TArray<UWidget*> Subtree;
+	Subtree.Add(Widget);
+	UWidgetTree::GetChildWidgets(Widget, Subtree);
+	for (UWidget* Removed : Subtree)
+	{
+		const FName RemovedName = Removed->GetFName();
+		Removed->SetFlags(RF_Transactional);
+		Removed->Modify();
+		Removed->Rename(nullptr, GetTransientPackage());
+		NotifyVariableRemoved(WidgetBP, RemovedName);
+	}
 }
 
 // ============================================================================
@@ -367,7 +442,7 @@ UPanelSlot* ClaireonWidgetHelpers::AddChildToPanel(UPanelWidget* Parent, UWidget
 			}
 			FString PropStrVal = Pair.Value.IsValid() ? Pair.Value->AsString() : TEXT("");
 			FString Error;
-			WriteSlotProperty(Slot, Pair.Key, PropStrVal, Error);
+			WriteSlotProperty(Slot, FString(*Pair.Key), PropStrVal, Error);
 		}
 	}
 

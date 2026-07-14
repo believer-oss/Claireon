@@ -169,6 +169,7 @@ bool FClaireonDeltaApplicator_WidgetBP::ApplyPhase2_Remove(const FString& Sessio
 		{
 			Tree->RemoveWidget(Widget);
 		}
+		ClaireonWidgetHelpers::TrashRemovedWidget(WBP, Widget);
 		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
 		MarkRemoved();
 		RecordAffected(Ref);
@@ -373,6 +374,7 @@ void FClaireonDeltaApplicator_WidgetBP::Phase3CleanupOnFailure(const FString& Se
 		{
 			if (Tree->RootWidget == W) { Tree->RootWidget = nullptr; }
 			else { Tree->RemoveWidget(W); }
+			ClaireonWidgetHelpers::TrashRemovedWidget(WBP, W);
 		}
 	}
 	CreatedWidgetsThisCall.Reset();

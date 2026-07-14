@@ -15,7 +15,7 @@
 #include "StateTreeNodeBase.h"
 #include "StateTreePropertyBindings.h"
 #include "StateTreeEditorPropertyBindings.h"
-#include "InstancedStruct.h"
+#include "StructUtils/InstancedStruct.h"
 #include "GameplayTagContainer.h"
 
 // ============================================================================

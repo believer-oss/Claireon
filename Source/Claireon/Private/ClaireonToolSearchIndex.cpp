@@ -277,7 +277,7 @@ namespace Cl628IdxInternal
 		for (const auto& PropPair : (*PropertiesObj)->Values)
 		{
 			// Parameter name
-			Parts.Add(PropPair.Key);
+			Parts.Add(FString(*PropPair.Key));
 
 			const TSharedPtr<FJsonObject>* PropSchema = nullptr;
 			if (!PropPair.Value.IsValid() || !PropPair.Value->TryGetObject(PropSchema) || !PropSchema)

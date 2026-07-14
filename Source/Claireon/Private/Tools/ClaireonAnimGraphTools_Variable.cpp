@@ -292,7 +292,7 @@ FToolResult ClaireonAnimGraphTool_SetVariableProperties::Execute(const TSharedPt
 			if (Pair.Value.IsValid() && Pair.Value->TryGetString(Value))
 			{
 				FBlueprintEditorUtils::SetBlueprintVariableMetaData(AnimBP, VarFName, LocalScope, FName(*Pair.Key), Value);
-				ChangedProps.Add(Pair.Key);
+				ChangedProps.Add(FString(*Pair.Key));
 			}
 		}
 	}

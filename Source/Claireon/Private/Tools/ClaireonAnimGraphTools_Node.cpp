@@ -191,7 +191,7 @@ FToolResult ClaireonAnimGraphTool_AddNode::Execute(const TSharedPtr<FJsonObject>
 			if (Pair.Value.IsValid() && Pair.Value->TryGetString(Value))
 			{
 				FString PropError;
-				if (!ClaireonPropertyUtils::WritePropertyByPath(NewNode, Pair.Key, Value, PropError))
+				if (!ClaireonPropertyUtils::WritePropertyByPath(NewNode, FString(*Pair.Key), Value, PropError))
 				{
 					Warnings.Add(FString::Printf(TEXT("Failed to set property '%s': %s"), *Pair.Key, *PropError));
 				}
