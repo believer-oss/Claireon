@@ -10,6 +10,7 @@
 #include "Tools/ClaireonBlueprintGraphEditToolBase_Internal.h"
 #include "ClaireonLog.h"
 #include "ClaireonSafeExec.h"
+#include "Misc/EngineVersionComparison.h"
 #include "Engine/Blueprint.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
@@ -145,14 +146,20 @@ FToolResult ClaireonBlueprintGraphTool_Compile::Execute(const TSharedPtr<FJsonOb
 	FCompilerResultsLog CompilerLog;
 	CompilerLog.SetSourcePath(Blueprint->GetPathName());
 	CompilerLog.BeginEvent(TEXT("Compile"));
-	// SkipSave: compile is documented as in-memory only (bp_save persists), and
-	// matches UBlueprintEditorLibrary::CompileBlueprint. SkipGarbageCollection:
-	// the synchronous CollectGarbage at the end of a compile livelocks on UE 5.8
-	// when invoked from inside the MCP request handler (the editor saturates all
-	// cores and the call never returns); the editor GCs on its own cadence soon
-	// after instead.
+	// SkipSave on every engine: without it, a user with Save-on-Compile enabled gets
+	// disk writes from a tool documented as in-memory only (bp_save persists); this
+	// also matches UBlueprintEditorLibrary::CompileBlueprint. SkipGarbageCollection
+	// on 5.8 only: there the synchronous CollectGarbage at the end of a compile
+	// livelocks when invoked from inside the MCP request handler (the editor
+	// saturates all cores and the call never returns); the editor GCs on its own
+	// cadence soon after. Earlier engines run the same GC without issue, so they
+	// keep it.
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
+	FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::SkipSave, &CompilerLog);
+#else
 	FKismetEditorUtilities::CompileBlueprint(Blueprint,
 		EBlueprintCompileOptions::SkipSave | EBlueprintCompileOptions::SkipGarbageCollection, &CompilerLog);
+#endif
 	CompilerLog.EndEvent();
 
 	// Check compilation status
