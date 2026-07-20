@@ -147,6 +147,14 @@
 #include "Tools/ClaireonTool_PIEUnregisterDamageListener.h"
 #include "Tools/ClaireonTool_PIEAITargetInfo.h"
 #include "Tools/ClaireonTool_PIETestAbility.h"
+// Runtime GAS tools (engine GAS API only -- no FSGame dependency).
+#include "Tools/ClaireonTool_GasInspect.h"
+#include "Tools/ClaireonTool_GasApplyEffect.h"
+#include "Tools/ClaireonTool_GasRemoveEffect.h"
+#include "Tools/ClaireonTool_GasGrantAbility.h"
+#include "Tools/ClaireonTool_GasActivateAbility.h"
+#include "Tools/ClaireonTool_GasSetTags.h"
+#include "Tools/ClaireonTool_GasSetAttribute.h"
 #include "Tools/ClaireonTool_ConsoleExecute.h"
 #include "Tools/ClaireonTool_AssetList.h"
 #include "Tools/ClaireonTool_AssetValidate.h"
@@ -1401,6 +1409,14 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_PIEUnregisterDamageListener>());
 	Tools.Add(MakeShared<ClaireonTool_PIEAITargetInfo>());
 	Tools.Add(MakeShared<ClaireonTool_PIETestAbility>());
+	// Runtime GAS inspection + mutation (grant/apply on the authoritative ASC).
+	Tools.Add(MakeShared<ClaireonTool_GasInspect>());
+	Tools.Add(MakeShared<ClaireonTool_GasApplyEffect>());
+	Tools.Add(MakeShared<ClaireonTool_GasRemoveEffect>());
+	Tools.Add(MakeShared<ClaireonTool_GasGrantAbility>());
+	Tools.Add(MakeShared<ClaireonTool_GasActivateAbility>());
+	Tools.Add(MakeShared<ClaireonTool_GasSetTags>());
+	Tools.Add(MakeShared<ClaireonTool_GasSetAttribute>());
 	// Flythrough camera tools
 	Tools.Add(MakeShared<ClaireonTool_FlythroughStart>());
 	Tools.Add(MakeShared<ClaireonTool_FlythroughStop>());
