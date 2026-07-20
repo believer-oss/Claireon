@@ -999,11 +999,22 @@ bool FClaireonBridge::EnsureNoLeakedWorlds(TArray<FClaireonLeakedWorld>& OutRema
 	UPackage* EditorWorldPackage = EditorWorld ? EditorWorld->GetOutermost() : nullptr;
 
 	// Walk every loaded World and decide skip vs. candidate-for-unload.
+	// Exclude Unreachable/Garbage objects: this runs immediately after a GC
+	// pass, and the default iterator would otherwise hand back worlds that GC
+	// has marked for teardown but not yet purged -- dereferencing their (now
+	// dangling) FName in GetName() faults in FName::ToString().
+	//
+	// Names are captured separately: the raw pointers feed UnloadPackages
+	// below, but CollectGarbage may free the packages, so nothing after
+	// the GC call may dereference NonDirtyCandidates entries.
 	TArray<UPackage*> NonDirtyCandidates;
-	for (TObjectIterator<UWorld> It; It; ++It)
+	TArray<FString> NonDirtyCandidateNames;
+	for (TObjectIterator<UWorld> It(RF_ClassDefaultObject, /*bIncludeDerivedClasses=*/true,
+		EInternalObjectFlags::Unreachable | EInternalObjectFlags::Garbage); It; ++It)
 	{
 		UWorld* W = *It;
-		if (!W) { continue; }
+		if (!ensureMsgf(IsValid(W),
+			TEXT("[MCP Guard] Object iterator yielded an invalid UWorld post-GC; skipping"))) { continue; }
 
 		// Skip editor world.
 		if (W == EditorWorld) { continue; }
@@ -1025,6 +1036,12 @@ bool FClaireonBridge::EnsureNoLeakedWorlds(TArray<FClaireonLeakedWorld>& OutRema
 		// Skip transient Worlds (parity with EditorServer.cpp Map_Load).
 		if (WP == GetTransientPackage() || !WP) { continue; }
 
+		// Guard the outer package too: a world can survive the IsValid(W)
+		// check while its outermost is mid-teardown, and GetName() below
+		// would then fault in FName::ToString().
+		if (!ensureMsgf(IsValid(WP),
+			TEXT("[MCP Guard] UWorld has an invalid outer package post-GC; skipping"))) { continue; }
+
 		// Candidate.
 		FClaireonLeakedWorld Entry;
 		Entry.PackageName = WP->GetName();
@@ -1040,6 +1057,7 @@ bool FClaireonBridge::EnsureNoLeakedWorlds(TArray<FClaireonLeakedWorld>& OutRema
 
 		Entry.bUnloadAttempted = true;
 		NonDirtyCandidates.Add(WP);
+		NonDirtyCandidateNames.Add(Entry.PackageName);
 		UE_LOG(LogClaireon, Warning,
 			TEXT("[MCP Guard] Leaked World detected, attempting unload: %s"),
 			*Entry.PackageName);
@@ -1074,10 +1092,12 @@ bool FClaireonBridge::EnsureNoLeakedWorlds(TArray<FClaireonLeakedWorld>& OutRema
 	// by another reference).
 	{
 		TSet<FString> StillLoadedNames;
-		for (TObjectIterator<UWorld> It; It; ++It)
+		for (TObjectIterator<UWorld> It(RF_ClassDefaultObject, /*bIncludeDerivedClasses=*/true,
+			EInternalObjectFlags::Unreachable | EInternalObjectFlags::Garbage); It; ++It)
 		{
 			UWorld* W = *It;
-			if (!W) { continue; }
+			if (!ensureMsgf(IsValid(W),
+				TEXT("[MCP Guard] Object iterator yielded an invalid UWorld post-GC; skipping"))) { continue; }
 			if (W == EditorWorld) { continue; }
 			const EWorldType::Type Type = W->WorldType;
 			if (Type == EWorldType::PIE
@@ -1085,13 +1105,13 @@ bool FClaireonBridge::EnsureNoLeakedWorlds(TArray<FClaireonLeakedWorld>& OutRema
 				|| Type == EWorldType::EditorPreview) { continue; }
 			UPackage* WP = W->GetOutermost();
 			if (!WP || WP == EditorWorldPackage || WP == GetTransientPackage()) { continue; }
+			if (!ensureMsgf(IsValid(WP),
+				TEXT("[MCP Guard] UWorld has an invalid outer package post-GC; skipping"))) { continue; }
 			StillLoadedNames.Add(WP->GetName());
 		}
 
-		for (UPackage* WP : NonDirtyCandidates)
+		for (const FString& PackageName : NonDirtyCandidateNames)
 		{
-			if (!WP) { continue; }
-			const FString PackageName = WP->GetName();
 			if (StillLoadedNames.Contains(PackageName))
 			{
 				FClaireonLeakedWorld Entry;
