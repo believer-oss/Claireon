@@ -106,8 +106,16 @@ FString ClaireonSafeExec::ValidateArgumentsAgainstSchema(
 
 	Unknown.Sort();
 
+	// An explicit loop, not TMap::GetKeys(TArray<FString>&): FJsonObject's key type is
+	// UE::FSharedString on 5.8 (unless UE_JSONOBJECT_LEGACY_STRING_KEYS=1), so the
+	// out-parameter has nowhere to convert and the call does not resolve (C2672).
+	// `*Key` is `const TCHAR*` for both key types, so this builds on 5.5 through 5.8.
 	TArray<FString> Declared;
-	Properties->Values.GetKeys(Declared);
+	Declared.Reserve(Properties->Values.Num());
+	for (const auto& Declaration : Properties->Values)
+	{
+		Declared.Add(FString(*Declaration.Key));
+	}
 	Declared.Sort();
 
 	// Suggest the closest declared name for each unknown one.
