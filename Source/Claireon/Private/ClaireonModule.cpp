@@ -173,7 +173,6 @@
 #include "Tools/ClaireonTool_MaterialListExpressions.h"
 #include "Tools/ClaireonTool_MaterialRenameParameter.h"
 // Live-coding helper
-#include "Tools/ClaireonTool_LiveCodingRebuildFull.h"
 // Enum fixup + raw property read
 #include "Tools/ClaireonTool_FixupStaleEnumValues.h"
 #include "Tools/ClaireonTool_GetEditorPropertyRaw.h"
@@ -305,7 +304,6 @@
 #include "Tools/ClaireonTool_WaitSeconds.h"
 #include "Tools/ClaireonTool_WorldGetActive.h"
 #include "Tools/ClaireonTool_IsAssetEditorOpen.h"
-#include "Tools/ClaireonTool_PIETick.h"
 #include "Tools/ClaireonWidgetBPTool_SetAnimationProperty.h"
 
 // Behavior Tree + EQS MCP tools
@@ -1400,8 +1398,6 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_WaitSeconds>());
 	Tools.Add(MakeShared<ClaireonTool_WorldGetActive>());
 	Tools.Add(MakeShared<ClaireonTool_IsAssetEditorOpen>());
-	Tools.Add(MakeShared<ClaireonTool_PIETick>());
-	Tools.Add(MakeShared<ClaireonTool_PIESleep>());
 	Tools.Add(MakeShared<ClaireonTool_PIESpawnEnemy>());
 	Tools.Add(MakeShared<ClaireonTool_PIEGetComponent>());
 	Tools.Add(MakeShared<ClaireonTool_PIERegisterDamageListener>());
@@ -1541,7 +1537,6 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_MaterialListExpressions>());
 	Tools.Add(MakeShared<ClaireonTool_MaterialRenameParameter>());
 	// Live-coding helper
-	Tools.Add(MakeShared<ClaireonTool_LiveCodingRebuildFull>());
 	// Enum fixup + raw property read
 	Tools.Add(MakeShared<ClaireonTool_FixupStaleEnumValues>());
 	Tools.Add(MakeShared<ClaireonTool_GetEditorPropertyRaw>());
