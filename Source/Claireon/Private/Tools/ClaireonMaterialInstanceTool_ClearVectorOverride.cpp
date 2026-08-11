@@ -12,7 +12,7 @@ FString ClaireonMaterialInstanceTool_ClearVectorOverride::GetOperation() const {
 
 FString ClaireonMaterialInstanceTool_ClearVectorOverride::GetDescription() const
 {
-    return TEXT("Clear a vector parameter override on a UMaterialInstanceConstant; the parameter falls through to the parent material. Session-mode tool: open via material_instance_open first.");
+    return TEXT("Clear a vector parameter override on a UMaterialInstanceConstant; the parameter falls through to the parent material. Session-mode tool: open via material_instance_instance_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialInstanceTool_ClearVectorOverride::GetInputSchema() const

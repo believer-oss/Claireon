@@ -41,7 +41,7 @@ FToolResult ClaireonStateTreeTool_SetNodeProperty::Execute(const TSharedPtr<FJso
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	FGuid NodeId;

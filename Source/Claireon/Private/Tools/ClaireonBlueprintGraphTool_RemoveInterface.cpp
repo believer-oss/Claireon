@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -131,7 +131,7 @@ FToolResult ClaireonBlueprintGraphTool_RemoveInterface::Execute(const TSharedPtr
 	}
 
 	UBlueprint* Blueprint = Data->Blueprint.Get();
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
 	}

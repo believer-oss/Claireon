@@ -544,7 +544,11 @@ class TestForwardRoundTrip(unittest.TestCase):
         })
         self.assertIn("result", resp)
         self.assertTrue(resp["result"]["isError"])
-        self.assertEqual(
+        # T6: this used to assert FALLBACK_TEXT ("build and launch the editor
+        # first"), which is false here -- an editor WAS running and its listener
+        # went away. That is a crash to investigate, not an editor to start.
+        self.assertEqual(resp["result"]["editorState"], "evicted")
+        self.assertNotEqual(
             resp["result"]["content"][0]["text"], claireon_proxy.FALLBACK_TEXT
         )
         # Active session has been cleared so the next call hits the no-editor
@@ -582,10 +586,74 @@ class TestForwardRoundTrip(unittest.TestCase):
             })
         self.assertIn("result", resp)
         self.assertTrue(resp["result"]["isError"])
-        self.assertEqual(
+        # T6: see test_connection_refused_evicts_session_and_returns_fallback --
+        # a reset listener means the editor died, not that none was started.
+        self.assertEqual(resp["result"]["editorState"], "evicted")
+        self.assertNotEqual(
             resp["result"]["content"][0]["text"], claireon_proxy.FALLBACK_TEXT
         )
         self.assertIsNone(claireon_proxy.singleton_session)
+
+    def test_never_ready_session_reports_loading_not_evicted(self) -> None:
+        """T6: a never-ready session whose port refuses is an editor still coming
+        up, not one that crashed -- its MCP listener is simply not accepting YET.
+        Calling that 'evicted' sends the caller hunting a callstack nobody wrote.
+
+        Only asserted on the per-worktree path: wt.ready is maintained there by the
+        real registration handshake. The legacy singleton path tracks no ready flag,
+        so it reports 'evicted' rather than guessing (see the two tests above).
+        """
+        canonical = claireon_proxy.canonicalize_worktree(self.tmp)
+        with claireon_proxy.SESSION_LOCK:
+            wt = claireon_proxy.RUNTIME["worktrees"].get(canonical)
+            self.assertIsNotNone(wt)
+            wt.ready = False
+            wt.mcp_port = 50011
+            claireon_proxy.RUNTIME["mcp_port_to_worktree"][50011] = canonical
+        with mock.patch.object(claireon_proxy, "_forward_once",
+                               side_effect=ConnectionRefusedError("not up yet")):
+            resp = claireon_proxy.forward_tool_call({
+                "jsonrpc": "2.0",
+                "id": 102,
+                "method": "tools/call",
+                "params": {"name": "python_execute", "arguments": {"code": "1"}},
+            }, listener_port=50011)
+        self.assertIn("result", resp)
+        self.assertTrue(resp["result"]["isError"])
+        self.assertEqual(resp["result"]["editorState"], "loading")
+        self.assertIn("warming up", resp["result"]["content"][0]["text"].lower())
+
+
+class TestEditorStateText(unittest.TestCase):
+    """T6: the state table itself -- every state says something different, and
+    none of them claims there is no editor when there is one."""
+
+    def test_every_state_has_distinct_text(self) -> None:
+        texts = list(claireon_proxy.STATE_TEXT.values())
+        self.assertEqual(len(texts), len(set(texts)))
+
+    def test_only_no_editor_says_build_and_launch(self) -> None:
+        # The whole T6 bug was other states borrowing this sentence.
+        for state, text in claireon_proxy.STATE_TEXT.items():
+            if state == "no_editor":
+                self.assertEqual(text, claireon_proxy.FALLBACK_TEXT)
+            else:
+                self.assertNotEqual(text, claireon_proxy.FALLBACK_TEXT)
+
+    def test_running_states_tell_the_caller_not_to_relaunch(self) -> None:
+        # starting/loading/unresponsive all describe a LIVE editor. Each has to
+        # say so, or the reader reaches for a relaunch and loses editor state.
+        for state in ("starting", "loading", "unresponsive"):
+            text = claireon_proxy.STATE_TEXT[state].lower()
+            self.assertTrue(
+                "not relaunch" in text or "relaunching" in text or "not absent" in text,
+                f"{state} text does not warn against relaunching: {text}",
+            )
+
+    def test_unknown_state_degrades_instead_of_raising(self) -> None:
+        result = claireon_proxy._state_tool_result("no_such_state")
+        self.assertTrue(result["isError"])
+        self.assertEqual(result["content"][0]["text"], claireon_proxy.FALLBACK_TEXT)
 
 
 # ---------------------------------------------------------------------------
@@ -824,6 +892,103 @@ class TestProxyMetaTool(unittest.TestCase):
         finally:
             with claireon_proxy.SESSION_LOCK:
                 claireon_proxy.singleton_session = None
+
+
+# ---------------------------------------------------------------------------
+# launch_editor config resolution -- the proxy ships no editor build/launch
+# script; the hosting project declares one in .claireon/launch_editor.json.
+# ---------------------------------------------------------------------------
+
+
+class TestLaunchEditorConfig(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.mkdtemp(prefix="claireon-launch-cfg-")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self._prev_runtime = dict(claireon_proxy.RUNTIME)
+        claireon_proxy.RUNTIME["singleton_worktree_root"] = self.tmp
+        with claireon_proxy.SESSION_LOCK:
+            claireon_proxy.singleton_session = None
+
+    def tearDown(self) -> None:
+        claireon_proxy.RUNTIME.clear()
+        claireon_proxy.RUNTIME.update(self._prev_runtime)
+
+    def _write_config(self, payload: Any) -> str:
+        cfg_dir = os.path.join(self.tmp, ".claireon")
+        os.makedirs(cfg_dir, exist_ok=True)
+        path = os.path.join(cfg_dir, "launch_editor.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh)
+        return path
+
+    def test_missing_config_is_actionable_error(self) -> None:
+        cmd, err = claireon_proxy._resolve_launch_editor_command(self.tmp, False)
+        self.assertIsNone(cmd)
+        self.assertIn("launch_editor.json", err)
+        self.assertIn("CLAIREON_LAUNCH_EDITOR_CONFIG", err)
+
+    def test_placeholders_and_skip_build(self) -> None:
+        with open(os.path.join(self.tmp, "Fake.uproject"), "w", encoding="utf-8") as fh:
+            fh.write("{}")
+        self._write_config({
+            "command": ["runner", "{worktree_root}", "-Project", "{project_path}"],
+            "skip_build_args": ["-SkipBuild"],
+        })
+        cmd, err = claireon_proxy._resolve_launch_editor_command(self.tmp, False)
+        self.assertIsNone(err)
+        self.assertEqual(cmd, [
+            "runner", self.tmp, "-Project",
+            os.path.join(self.tmp, "Fake.uproject"),
+        ])
+        cmd, err = claireon_proxy._resolve_launch_editor_command(self.tmp, True)
+        self.assertIsNone(err)
+        self.assertEqual(cmd[-1], "-SkipBuild")
+
+    def test_project_path_placeholder_requires_uproject(self) -> None:
+        self._write_config({"command": ["runner", "{project_path}"]})
+        cmd, err = claireon_proxy._resolve_launch_editor_command(self.tmp, False)
+        self.assertIsNone(cmd)
+        self.assertIn(".uproject", err)
+
+    def test_malformed_command_rejected(self) -> None:
+        for bad in ({"command": "not-a-list"}, {"command": []},
+                    {"command": ["ok", 42]}, ["not-an-object"]):
+            path = self._write_config(bad)
+            cmd, err = claireon_proxy._resolve_launch_editor_command(self.tmp, False)
+            self.assertIsNone(cmd)
+            self.assertIn(path, err)
+
+    def test_env_var_overrides_config_location(self) -> None:
+        alt = os.path.join(self.tmp, "elsewhere.json")
+        with open(alt, "w", encoding="utf-8") as fh:
+            json.dump({"command": ["alt-runner"]}, fh)
+        with mock.patch.dict(os.environ, {"CLAIREON_LAUNCH_EDITOR_CONFIG": alt}):
+            cmd, err = claireon_proxy._resolve_launch_editor_command(self.tmp, False)
+        self.assertIsNone(err)
+        self.assertEqual(cmd, ["alt-runner"])
+
+    def _call_launch_editor(self) -> Dict[str, Any]:
+        return claireon_proxy.forward_tool_call({
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": {"name": "proxy",
+                       "arguments": {"command": "launch_editor"}},
+        })
+
+    def test_launch_editor_no_config_errors(self) -> None:
+        resp = self._call_launch_editor()
+        self.assertTrue(resp["result"]["isError"])
+        self.assertIn("launch_editor.json", resp["result"]["content"][0]["text"])
+
+    def test_launch_editor_spawns_resolved_command(self) -> None:
+        self._write_config({"command": ["runner", "{worktree_root}"]})
+        with mock.patch.object(claireon_proxy, "_spawn_detached",
+                               return_value=4242) as spawn:
+            resp = self._call_launch_editor()
+        self.assertFalse(resp["result"]["isError"])
+        self.assertIn("pid=4242", resp["result"]["content"][0]["text"])
+        spawn.assert_called_once_with(["runner", self.tmp])
 
 
 # ---------------------------------------------------------------------------
@@ -1143,11 +1308,12 @@ class TestProxyRegPortSync(unittest.TestCase):
 
 # ---- Cross-runtime parity helpers ----
 #
-# Inlined copy of Resolve-WorktreeFinalPath + Get-ProxyDefaultMcpPort from
-# Initialize-WorktreeMCP.ps1. The test owns its own copy so it can run
-# without dot-sourcing the launcher (which would execute the launcher project-finder
-# top-level code). DRIFT HAZARD: if you change either function in
-# Scripts/Utilities/Initialize-WorktreeMCP.ps1, copy the new bodies into
+# Inlined PowerShell copy of the deterministic-port helpers
+# (Resolve-WorktreeFinalPath + Get-ProxyDefaultMcpPort) that PowerShell
+# launchers implement. The test owns its own copy so it can run without
+# dot-sourcing a launcher (which would execute the launcher project-finder
+# top-level code). DRIFT HAZARD: if a launcher changes either function,
+# copy the new bodies into
 # the here-string below. The test's parity assertion validates THIS body
 # against Python; drift between launcher and test is caught by the live
 # launch path, not by this unit test.

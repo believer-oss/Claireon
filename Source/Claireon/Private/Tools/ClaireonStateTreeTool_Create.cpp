@@ -5,6 +5,8 @@
 #include "Tools/FToolSchemaBuilder.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonNameResolver.h"
+#include "Tools/ClaireonAssetUtils.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "StateTree.h"
 #include "StateTreeEditorData.h"
 #include "StateTreeSchema.h"
@@ -59,7 +61,7 @@ FToolResult ClaireonStateTreeTool_Create::Execute(const TSharedPtr<FJsonObject>&
 
 	// Refuse if an asset already exists at the resolved path.
 	FSoftObjectPath SoftPath(ResolvedAssetPath);
-	if (SoftPath.TryLoad())
+	if (IsValid(SoftPath.TryLoad()))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset already exists at path: %s. Use 'open' instead."), *ResolvedAssetPath));
 	}
@@ -67,7 +69,7 @@ FToolResult ClaireonStateTreeTool_Create::Execute(const TSharedPtr<FJsonObject>&
 	// Resolve schema_class_path -- must be a non-abstract subclass of UStateTreeSchema.
 	ClaireonNameResolver::FNameResolveResult ClassResolve;
 	UClass* SchemaClass = ClaireonNameResolver::ResolveClassName(SchemaClassPath, UStateTreeSchema::StaticClass(), ClassResolve);
-	if (!SchemaClass)
+	if (!IsValid(SchemaClass))
 	{
 		FString ErrText = FString::Printf(TEXT("Schema class '%s' not found or is not a subclass of UStateTreeSchema."), *SchemaClassPath);
 		if (!ClassResolve.Error.IsEmpty())
@@ -82,24 +84,36 @@ FToolResult ClaireonStateTreeTool_Create::Execute(const TSharedPtr<FJsonObject>&
 		return MakeErrorResult(FString::Printf(TEXT("Schema class '%s' is abstract / deprecated and cannot be instantiated."), *SchemaClass->GetPathName()));
 	}
 
-	// Asset name = leaf of PackagePath.
+	// Split the resolved package path into (containing directory, asset name).
+	//
+	// IAssetTools::CreateAsset takes the CONTAINING DIRECTORY as its PackagePath
+	// argument, not the full package path. This used to pass the full path, so
+	// asset_path=/Game/__MCPTests/ST_Foo produced the package
+	// /Game/__MCPTests/ST_Foo/ST_Foo -- a directory named after the asset with the
+	// asset nested inside it. The .uasset really was written, which is why the
+	// failure never looked like a save failure, but DoesAssetExist and every
+	// statetree_open / statetree_apply_spec lookup against the REQUESTED path
+	// missed it ("Failed to load asset at path"). Matches the convention in
+	// ClaireonSpecApplicator_Audio, which passes GetLongPackagePath(Canon).
+	// Pinned by Claireon.StateTreeCreate.HappyPathAssetIsLoadableAtRequestedPath.
 	const FString AssetName = FPackageName::GetShortName(PackagePath);
+	const FString ContainingDir = FPackageName::GetLongPackagePath(PackagePath);
 
 	// Configure factory before invoking AssetTools.CreateAsset -- this bypasses the
 	// missing EditAnywhere restriction on StateTreeSchemaClass (the restriction only
 	// affects the reflection / set_editor_property path; direct C++ writes via the
 	// public setter work fine).
 	UStateTreeFactory* Factory = NewObject<UStateTreeFactory>();
-	if (!Factory)
+	if (!IsValid(Factory))
 	{
 		return MakeErrorResult(TEXT("Failed to construct UStateTreeFactory."));
 	}
 	Factory->SetSchemaClass(SchemaClass);
 
 	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
-	UObject* NewAsset = AssetTools.CreateAsset(AssetName, PackagePath, UStateTree::StaticClass(), Factory);
+	UObject* NewAsset = AssetTools.CreateAsset(AssetName, ContainingDir, UStateTree::StaticClass(), Factory);
 	UStateTree* NewStateTree = Cast<UStateTree>(NewAsset);
-	if (!NewStateTree)
+	if (!IsValid(NewStateTree))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("AssetTools.CreateAsset returned null for State Tree '%s' (schema '%s'). Verify the schema class is valid and the package path is writable."), *ResolvedAssetPath, *SchemaClass->GetPathName()));
 	}
@@ -108,11 +122,37 @@ FToolResult ClaireonStateTreeTool_Create::Execute(const TSharedPtr<FJsonObject>&
 	// the factory silently fell back. UStateTreeFactory::FactoryCreateNew is the only
 	// path to populate EditorData->Schema, so if SchemaClass mismatches we report it.
 	UStateTreeEditorData* EditorData = Cast<UStateTreeEditorData>(NewStateTree->EditorData);
-	UClass* ActualSchemaClass = (EditorData && EditorData->Schema) ? EditorData->Schema->GetClass() : nullptr;
-	if (!ActualSchemaClass || !ActualSchemaClass->IsChildOf(SchemaClass))
+	UClass* ActualSchemaClass = (IsValid(EditorData) && EditorData->Schema) ? EditorData->Schema->GetClass() : nullptr;
+	if (!IsValid(ActualSchemaClass) || !ActualSchemaClass->IsChildOf(SchemaClass))
 	{
-		const FString ActualName = ActualSchemaClass ? ActualSchemaClass->GetPathName() : TEXT("<null>");
+		const FString ActualName = IsValid(ActualSchemaClass) ? ActualSchemaClass->GetPathName() : TEXT("<null>");
 		return MakeErrorResult(FString::Printf(TEXT("Created State Tree '%s' but EditorData->Schema is '%s', not the requested '%s'."), *NewStateTree->GetPathName(), *ActualName, *SchemaClass->GetPathName()));
+	}
+
+	// Persist the package. AssetTools.CreateAsset only builds the object in memory, so
+	// the tool must write the .uasset its description promises.
+	//
+	// This previously called UEditorLoadingAndSavingUtils::SavePackages(..., bOnlyDirty
+	// =true) and IGNORED the result, so a save that failed outright still reported
+	// success. Mirror ClaireonDataAssetTool_Create, whose
+	// DataAssetCreate.FreshPathCreatesAndSavesToDisk is green: register with the asset
+	// registry, mark dirty, then save through ClaireonAssetUtils::SaveAsset and REPORT
+	// failure. SaveAsset checks ClaireonSafeExec::DidLastExecutionCrash() internally
+	// and calls UPackage::Save directly, so the explicit crash guard here is redundant.
+	FAssetRegistryModule::AssetCreated(NewStateTree);
+	NewStateTree->GetOutermost()->MarkPackageDirty();
+	{
+		FString SaveError;
+		if (!ClaireonAssetUtils::SaveAsset(NewStateTree, SaveError))
+		{
+			// Do not leave a half-created in-memory asset behind to satisfy later
+			// LoadObject queries for a path that has no .uasset on disk.
+			NewStateTree->ClearFlags(RF_Standalone | RF_Public);
+			NewStateTree->MarkAsGarbage();
+			return MakeErrorResult(FString::Printf(
+				TEXT("Created State Tree '%s' in memory but failed to save it: %s"),
+				*ResolvedAssetPath, *SaveError));
+		}
 	}
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();

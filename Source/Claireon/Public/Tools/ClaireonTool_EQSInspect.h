@@ -8,7 +8,7 @@
 /**
  * MCP tool for reading an Environment Query System (EQS) asset.
  * Displays options (generator + tests), context references, scoring functions,
- * and filter settings. Critical for identifying blackboard-based vs Trajan-based contexts.
+ * and filter settings. Critical for identifying blackboard-based vs game-specific contexts.
  */
 class ClaireonTool_EQSInspect : public IClaireonTool
 {

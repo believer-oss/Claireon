@@ -46,7 +46,7 @@ FToolResult ClaireonWidgetBPTool_DuplicateAnimation::Execute(const TSharedPtr<FJ
         return BeginError;
     }
     UWidgetBlueprint* WBP = Data ? Data->WidgetBlueprint.Get() : nullptr;
-    if (!WBP)
+    if (!IsValid(WBP))
     {
         return MakeErrorResult(TEXT("widget blueprint unavailable on session"));
     }
@@ -62,7 +62,7 @@ FToolResult ClaireonWidgetBPTool_DuplicateAnimation::Execute(const TSharedPtr<FJ
     }
 
     UWidgetAnimation* Source = Claireon::WidgetAnimation::FindWidgetAnimationByName(WBP, SourceName);
-    if (!Source)
+    if (!IsValid(Source))
     {
         return MakeErrorResult(FString::Printf(TEXT("source animation '%s' not found on %s"), *SourceName, *WBP->GetName()));
     }
@@ -71,7 +71,7 @@ FToolResult ClaireonWidgetBPTool_DuplicateAnimation::Execute(const TSharedPtr<FJ
 
     const FName UniqueFName = MakeUniqueObjectName(WBP, UWidgetAnimation::StaticClass(), FName(*NewName));
     UWidgetAnimation* Dup = DuplicateObject<UWidgetAnimation>(Source, WBP, UniqueFName);
-    if (!Dup)
+    if (!IsValid(Dup))
     {
         Transaction.Cancel();
         return MakeErrorResult(TEXT("DuplicateObject returned null"));

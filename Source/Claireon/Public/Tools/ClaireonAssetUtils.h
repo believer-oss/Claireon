@@ -89,26 +89,35 @@ namespace ClaireonAssetUtils
 	CLAIREON_API void OpenAssetEditorIfHeadless(UObject* Asset);
 
 	/**
-	 * Emit a session-use hint into ResponseData and OutSummaryTag when the caller has made
-	 * too many consecutive asset_path calls without reusing a session_id.
+	 * Emit a session-use hint when the caller has made too many consecutive asset_path calls
+	 * without reusing a session_id.
 	 *
 	 * Fires when ConsecutiveAssetPathCalls > 5 AND ConsecutiveAssetPathCalls % 5 == 1
 	 * (first hint at call 6, then 11, 16, ...). On fire: populates ResponseData["session_hint"]
-	 * with a prose nudge and sets OutSummaryTag to a short summary suffix. On no-fire:
-	 * OutSummaryTag is set to empty string and ResponseData is not modified.
+	 * with a prose nudge and builds OutHint. On no-fire: OutHint is reset and ResponseData is
+	 * not modified.
+	 *
+	 * The hint travels on FToolResult::Hint, NOT appended to Summary. Every caller of this
+	 * helper is a BuildStateResponse whose Summary *is* serialized JSON, so concatenating a
+	 * "\n\n[hint] ..." suffix made the content channel unparseable. That failed the worst
+	 * possible way: the hint only fires from the sixth consecutive call, so the corruption
+	 * never showed up in testing.
 	 *
 	 * @param ResponseData              - JSON response object; receives "session_hint" field on fire
 	 * @param ConsecutiveAssetPathCalls - Counter tracking how many times asset_path was used without session_id
 	 * @param AssetPath                 - Human-readable asset path shown in the hint text
 	 * @param SessionId                 - Session ID shown in the hint text
-	 * @param OutSummaryTag             - Receives the "\n\n[hint] ..." suffix on fire, empty string otherwise
+	 * @param ToolName                  - Emitting tool's registered name; becomes the hint's required 'tool' field
+	 * @param OutHint                   - Receives a hint object on fire, reset to null otherwise.
+	 *                                    Assign straight to FToolResult::Hint; the bridge skips a null hint.
 	 */
 	CLAIREON_API void EmitSessionHintIfNeeded(
 		TSharedPtr<FJsonObject>& ResponseData,
 		int32 ConsecutiveAssetPathCalls,
 		const FString& AssetPath,
 		const FString& SessionId,
-		FString& OutSummaryTag);
+		const FString& ToolName,
+		TSharedPtr<FJsonObject>& OutHint);
 
 	// Resolve a UClass by name, accepting either the "U"/"A"-prefixed or unprefixed
 	// form (UClass::GetName() omits the prefix). Returns nullptr if no match.
@@ -116,13 +125,21 @@ namespace ClaireonAssetUtils
 
 	/**
 	 * Evict any in-memory UObject occupying AssetName within Package, moving it into the
-	 * transient package (renamed, cleared of public/standalone flags, marked garbage).
+	 * transient package under a FRESH unique name, cleared of public/standalone flags and
+	 * marked garbage.
 	 *
 	 * The "recreate asset in place" idiom deletes the .uasset on disk before calling a
 	 * create/duplicate API, but that does NOT remove an object already loaded in memory
 	 * (e.g. from an earlier create this editor session). On UE 5.8
 	 * FKismetEditorUtilities::CreateBlueprint and StaticDuplicateObject assert
 	 * FindObject(Outer, Name) == nullptr, so callers must clear the slot first.
+	 *
+	 * The evicted object is deliberately NOT left under its original name: two evictions
+	 * of the same name in one process would then collide in the transient package, and
+	 * UObject::Rename treats that as a fatal error. For a Blueprint the collision lands on
+	 * the derived generated-class name ("<Name>_C"), so the chosen name is checked for that
+	 * too. Callers must therefore not assume the evicted object's name is preserved.
+	 *
 	 * No-op if Package is null or the name is free.
 	 */
 	CLAIREON_API void EvictInMemoryObject(UPackage* Package, const FString& AssetName);

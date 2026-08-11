@@ -165,8 +165,8 @@ FToolResult ClaireonInputEditToolBase::BuildStateResponse(const FString& Session
 
 	FString AssetPathStr;
 	RespData->TryGetStringField(TEXT("asset_path"), AssetPathStr);
-	FString SessionHintSummaryTag;
-	ClaireonAssetUtils::EmitSessionHintIfNeeded(RespData, Data->ConsecutiveAssetPathCalls, AssetPathStr, SessionId, SessionHintSummaryTag);
+	TSharedPtr<FJsonObject> SessionHint;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(RespData, Data->ConsecutiveAssetPathCalls, AssetPathStr, SessionId, GetName(), SessionHint);
 
-	return MakeSuccessResult(RespData, Output + SessionHintSummaryTag);
+	return MakeSuccessResultWithHint(RespData, Output, SessionHint);
 }

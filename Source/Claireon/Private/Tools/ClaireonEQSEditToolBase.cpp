@@ -59,14 +59,14 @@ UClass* ClaireonEQSEditToolBase::ResolveEQSClass(const FString& ClassName, UClas
 	// Try the core resolver first
 	ClaireonNameResolver::FNameResolveResult NameResult;
 	UClass* FoundClass = ClaireonNameResolver::ResolveClassName(ClassName, BaseClass, NameResult);
-	if (FoundClass)
+	if (IsValid(FoundClass))
 	{
 		return FoundClass;
 	}
 
 	// Try with domain-specific prefix (e.g., "EnvQueryGenerator_" + "SimpleGrid")
 	FoundClass = ClaireonNameResolver::ResolveClassName(BasePrefix + ClassName, BaseClass, NameResult);
-	if (FoundClass)
+	if (IsValid(FoundClass))
 	{
 		return FoundClass;
 	}
@@ -77,7 +77,7 @@ UClass* ClaireonEQSEditToolBase::ResolveEQSClass(const FString& ClassName, UClas
 
 bool ClaireonEQSEditToolBase::SetEQSNodeProperty(UObject* Node, const FString& PropertyName, const FString& PropertyValue, FString& OutError)
 {
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		OutError = TEXT("Node is null");
 		return false;
@@ -177,11 +177,11 @@ FToolResult ClaireonEQSEditToolBase::BuildStateResponse(const FString& SessionId
 	ResultJson->SetStringField(TEXT("last_operation"), Data->LastOperationStatus);
 	ResultJson->SetStringField(TEXT("eqs_view"), Output);
 
-	FString SessionHintSummaryTag;
-	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResultJson, Data->ConsecutiveAssetPathCalls, Data->Query->GetPathName(), SessionId, SessionHintSummaryTag);
+	TSharedPtr<FJsonObject> SessionHint;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResultJson, Data->ConsecutiveAssetPathCalls, Data->Query->GetPathName(), SessionId, GetName(), SessionHint);
 
 	const FString Summary = FString::Printf(TEXT("Session %s: %s"),
 		*SessionId.Left(8), *Data->LastOperationStatus);
 
-	return MakeSuccessResult(ResultJson, Summary + SessionHintSummaryTag);
+	return MakeSuccessResultWithHint(ResultJson, Summary, SessionHint);
 }

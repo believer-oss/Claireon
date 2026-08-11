@@ -119,12 +119,12 @@ FToolResult ClaireonPCGGraphEditToolBase::BuildStateResponse(const FString& Sess
 		}
 	}
 
-	FString SessionHintSummaryTag;
-	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResponseData, Data->ConsecutiveAssetPathCalls, AssetPath, SessionId, SessionHintSummaryTag);
+	TSharedPtr<FJsonObject> SessionHint;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResponseData, Data->ConsecutiveAssetPathCalls, AssetPath, SessionId, GetName(), SessionHint);
 
 	FString Summary = Data->LastOperationStatus.IsEmpty()
 		? FString::Printf(TEXT("Session %s: %s"), *SessionId, *AssetPath)
 		: Data->LastOperationStatus;
 
-	return MakeSuccessResult(ResponseData, Summary + SessionHintSummaryTag);
+	return MakeSuccessResultWithHint(ResponseData, Summary, SessionHint);
 }

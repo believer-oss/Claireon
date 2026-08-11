@@ -10,7 +10,11 @@ FString FClaireonStateTreeTool_ApplyDelta::GetOperation() const { return TEXT("a
 
 FString FClaireonStateTreeTool_ApplyDelta::GetDescription() const
 {
-	return TEXT("Atomic batch statetree modification. Disconnects, removes, creates, and connects in one transactional call. Counterpart to statetree_apply_spec. Execution order: disconnect -> remove -> create -> connect. (Accepts top-level transitions[] OR phase-4 connections[]; both are unioned and deduped.)");
+	return TEXT("Apply an atomic batch of StateTree edits in one transactional call. Execution order: "
+				"disconnect -> remove -> create -> connect; any phase failure cancels the transaction so "
+				"nothing lands. Accepts top-level transitions[] OR phase-4 connections[]; both are unioned "
+				"and deduped. Pass session_id for an already open statetree session (statetree_open), or "
+				"asset_path for a temporary one.");
 }
 
 TSharedPtr<FJsonObject> FClaireonStateTreeTool_ApplyDelta::GetInputSchema() const

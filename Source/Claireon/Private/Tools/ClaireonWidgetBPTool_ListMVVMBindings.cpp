@@ -13,7 +13,7 @@ FString ClaireonWidgetBPTool_ListMVVMBindings::GetOperation() const { return TEX
 
 FString ClaireonWidgetBPTool_ListMVVMBindings::GetDescription() const
 {
-    return TEXT("List MVVM bindings on the Widget Blueprint in the open editing session: source/destination paths, mode, conversion function, and binding id. Requires open session_id from widgetbp_open. Read-only. Returns one entry per binding; the id is the handle for widgetbp_edit_mvvm_binding and remove.");
+    return TEXT("List MVVM bindings on the Widget Blueprint in the open editing session: source/destination paths, mode, conversion function, and binding_id. Requires open session_id from widgetbp_open. Read-only. Returns one entry per binding; binding_id is the handle for widgetbp_edit_mvvm_binding and remove.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_ListMVVMBindings::GetInputSchema() const
@@ -34,7 +34,7 @@ FToolResult ClaireonWidgetBPTool_ListMVVMBindings::Execute(const TSharedPtr<FJso
         return Error;
     }
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
-	if (!WBP)
+	if (!IsValid(WBP))
 	{
 		return MakeErrorResult(TEXT("Widget Blueprint is no longer valid"));
 	}

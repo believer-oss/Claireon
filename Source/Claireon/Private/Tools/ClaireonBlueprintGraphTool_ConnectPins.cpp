@@ -107,7 +107,7 @@ TArray<FString> ClaireonBlueprintGraphTool_ConnectPins::GetSearchKeywords() cons
 
 FString ClaireonBlueprintGraphTool_ConnectPins::GetDescription() const
 {
-    return TEXT("Connects two pins on the current session's graph. Accepts node GUIDs or titles plus pin names; pin names are fuzzy-resolved (e.g. 'exec' matches 'execute', 'then' matches the canonical exec output). Most-common pitfall: forgetting that auto_connect_from_cursor on bp_add_node typically obviates this call. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+    return TEXT("Connect two pins on the current session's graph. Accepts node GUIDs or titles plus pin names; pin names are fuzzy-resolved (e.g. 'exec' matches 'execute', 'then' matches the canonical exec output). Most-common pitfall: forgetting that auto_connect_from_cursor on bp_add_node typically obviates this call. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ConnectPins::GetInputSchema() const
@@ -121,6 +121,17 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ConnectPins::GetInputSchema()
     Builder.AddString(TEXT("target_node_title"), TEXT("Title of the target node."));
     Builder.AddString(TEXT("target_node_guid"), TEXT("GUID of the target node (alternative to target_node_title)."));
     Builder.AddString(TEXT("target_pin_name"), TEXT("Target pin name."), true);
+    // from_*/to_* aliases. bp_apply_delta connections and bp_get_graph output both
+    // speak from/to, so callers reach for that spelling here too. Purely additive:
+    // the canonical source_*/target_* names win when both are supplied.
+    Builder.AddString(TEXT("from_node"), TEXT("Alias for source_node_guid / source_node_title (accepts either a GUID or a title). Ignored when a source_node_* field is present."));
+    Builder.AddString(TEXT("from_pin"), TEXT("Alias for source_pin_name. Ignored when source_pin_name is present."));
+    Builder.AddString(TEXT("to_node"), TEXT("Alias for target_node_guid / target_node_title (accepts either a GUID or a title). Ignored when a target_node_* field is present."));
+    Builder.AddString(TEXT("to_pin"), TEXT("Alias for target_pin_name. Ignored when target_pin_name is present."));
+    // Read at Execute and never declared until now: an input/output pair sharing
+    // a pin name needed the hint, and supplying it was a silent no-op.
+    Builder.AddString(TEXT("source_pin_direction"), TEXT("Disambiguates the source pin when input and output share a name: 'input' | 'output'."));
+    Builder.AddString(TEXT("target_pin_direction"), TEXT("Disambiguates the target pin when input and output share a name: 'input' | 'output'."));
     Builder.AddString(TEXT("response_mode"), TEXT("Response verbosity: 'full' | 'changed' | 'status' (default 'changed')."));
     return Builder.Build();
 }
@@ -146,23 +157,78 @@ FToolResult ClaireonBlueprintGraphTool_ConnectPins::ConnectPins_Impl(
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
 
-	if (!Blueprint || !Graph)
+	if (!IsValid(Blueprint) || !IsValid(Graph))
 	{
 		return MakeErrorResult(TEXT("Blueprint or Graph is no longer valid"));
+	}
+
+	// Normalize the from_*/to_* alias spelling into the canonical source_*/target_*
+	// fields before anything reads them, so the rest of this function stays
+	// single-spelling. Canonical wins on conflict: the aliases are a compatibility
+	// layer, and silently preferring the real name avoids inventing a new error for
+	// callers who pass both.
+	{
+		// One alias key has to accept both a GUID and a title, and the two canonical
+		// fields take different lookup paths -- the title path does NOT fall back to a
+		// GUID parse. Route by shape: hyphen-stripped all-hex and long enough to be a
+		// GUID prefix means GUID, anything else is a title.
+		auto LooksLikeNodeGuid = [](const FString& Value) -> bool
+		{
+			const FString Hex = Value.Replace(TEXT("-"), TEXT(""));
+			if (Hex.Len() < 8 || Hex.Len() > 32) { return false; }
+			for (int32 I = 0; I < Hex.Len(); ++I)
+			{
+				if (!FChar::IsHexDigit(Hex[I])) { return false; }
+			}
+			return true;
+		};
+
+		auto ApplyNodeAlias = [&Params, &LooksLikeNodeGuid](
+			const TCHAR* AliasKey, const TCHAR* GuidKey, const TCHAR* TitleKey)
+		{
+			if (Params->HasField(GuidKey) || Params->HasField(TitleKey))
+			{
+				return;
+			}
+			FString AliasValue;
+			if (!Params->TryGetStringField(AliasKey, AliasValue) || AliasValue.IsEmpty())
+			{
+				return;
+			}
+			Params->SetStringField(LooksLikeNodeGuid(AliasValue) ? GuidKey : TitleKey, AliasValue);
+		};
+
+		auto ApplyPinAlias = [&Params](const TCHAR* AliasKey, const TCHAR* CanonicalKey)
+		{
+			if (Params->HasField(CanonicalKey))
+			{
+				return;
+			}
+			FString AliasValue;
+			if (Params->TryGetStringField(AliasKey, AliasValue))
+			{
+				Params->SetStringField(CanonicalKey, AliasValue);
+			}
+		};
+
+		ApplyNodeAlias(TEXT("from_node"), TEXT("source_node_guid"), TEXT("source_node_title"));
+		ApplyPinAlias(TEXT("from_pin"), TEXT("source_pin_name"));
+		ApplyNodeAlias(TEXT("to_node"), TEXT("target_node_guid"), TEXT("target_node_title"));
+		ApplyPinAlias(TEXT("to_pin"), TEXT("target_pin_name"));
 	}
 
 	// Get source pin name (required)
 	FString SourcePinName;
 	if (!Params->TryGetStringField(TEXT("source_pin_name"), SourcePinName))
 	{
-		return MakeErrorResult(TEXT("Missing required field: source_pin_name"));
+		return MakeErrorResult(TEXT("Missing required field: source_pin_name (or its alias from_pin)"));
 	}
 
 	// Get target pin name (required)
 	FString TargetPinName;
 	if (!Params->TryGetStringField(TEXT("target_pin_name"), TargetPinName))
 	{
-		return MakeErrorResult(TEXT("Missing required field: target_pin_name"));
+		return MakeErrorResult(TEXT("Missing required field: target_pin_name (or its alias to_pin)"));
 	}
 
 	// Find source node (by GUID or title)
@@ -171,31 +237,22 @@ FToolResult ClaireonBlueprintGraphTool_ConnectPins::ConnectPins_Impl(
 
 	if (Params->TryGetStringField(TEXT("source_node_guid"), SourceNodeGuidStr))
 	{
-		// Find by GUID
-		FGuid SourceNodeGuid;
-		if (!FGuid::Parse(SourceNodeGuidStr, SourceNodeGuid))
+		// Find by GUID (full GUID or >=8-hex prefix)
+		FString ResolveError;
+		SourceNode = ClaireonBPGraphInternal::FindNodeForOperationStr(Graph, SourceNodeGuidStr, Data, ResolveError, TEXT("source_node_guid"));
+		if (!IsValid(SourceNode))
 		{
-			return MakeErrorResult(FString::Printf(TEXT("Invalid source_node_guid format: %s"), *SourceNodeGuidStr));
-		}
-		SourceNode = ClaireonBPGraphInternal::FindNodeForOperation(Graph, SourceNodeGuid, Data);
-		if (!SourceNode)
-		{
-			FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
-			return MakeErrorResult(FString::Printf(TEXT("Source node not found with GUID: %s in graph '%s'.\n%s"),
-				*SourceNodeGuidStr, *Graph->GetName(), *AvailableNodes));
+			return MakeErrorResult(ResolveError);
 		}
 	}
 	else if (Params->TryGetStringField(TEXT("source_node_title"), SourceNodeTitle))
 	{
 		// Find by title
 		TArray<UEdGraphNode*> MatchingNodes = ClaireonBlueprintHelpers::FindNodesByTitle(Graph, SourceNodeTitle, true);
-		if (MatchingNodes.Num() == 0)
+		if (MatchingNodes.Num() != 1)
 		{
-			return MakeErrorResult(FString::Printf(TEXT("Source node not found with title: %s"), *SourceNodeTitle));
-		}
-		else if (MatchingNodes.Num() > 1)
-		{
-			return MakeErrorResult(FString::Printf(TEXT("Ambiguous source node title '%s' - %d nodes match. Use source_node_guid instead."), *SourceNodeTitle, MatchingNodes.Num()));
+			return MakeErrorResult(ClaireonBlueprintHelpers::FormatTitleMatchFailure(
+				Graph, SourceNodeTitle, MatchingNodes, TEXT("source_node_guid")));
 		}
 		SourceNode = MatchingNodes[0];
 	}
@@ -210,31 +267,22 @@ FToolResult ClaireonBlueprintGraphTool_ConnectPins::ConnectPins_Impl(
 
 	if (Params->TryGetStringField(TEXT("target_node_guid"), TargetNodeGuidStr))
 	{
-		// Find by GUID
-		FGuid TargetNodeGuid;
-		if (!FGuid::Parse(TargetNodeGuidStr, TargetNodeGuid))
+		// Find by GUID (full GUID or >=8-hex prefix)
+		FString ResolveError;
+		TargetNode = ClaireonBPGraphInternal::FindNodeForOperationStr(Graph, TargetNodeGuidStr, Data, ResolveError, TEXT("target_node_guid"));
+		if (!IsValid(TargetNode))
 		{
-			return MakeErrorResult(FString::Printf(TEXT("Invalid target_node_guid format: %s"), *TargetNodeGuidStr));
-		}
-		TargetNode = ClaireonBPGraphInternal::FindNodeForOperation(Graph, TargetNodeGuid, Data);
-		if (!TargetNode)
-		{
-			FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
-			return MakeErrorResult(FString::Printf(TEXT("Target node not found with GUID: %s in graph '%s'.\n%s"),
-				*TargetNodeGuidStr, *Graph->GetName(), *AvailableNodes));
+			return MakeErrorResult(ResolveError);
 		}
 	}
 	else if (Params->TryGetStringField(TEXT("target_node_title"), TargetNodeTitle))
 	{
 		// Find by title
 		TArray<UEdGraphNode*> MatchingNodes = ClaireonBlueprintHelpers::FindNodesByTitle(Graph, TargetNodeTitle, true);
-		if (MatchingNodes.Num() == 0)
+		if (MatchingNodes.Num() != 1)
 		{
-			return MakeErrorResult(FString::Printf(TEXT("Target node not found with title: %s"), *TargetNodeTitle));
-		}
-		else if (MatchingNodes.Num() > 1)
-		{
-			return MakeErrorResult(FString::Printf(TEXT("Ambiguous target node title '%s' - %d nodes match. Use target_node_guid instead."), *TargetNodeTitle, MatchingNodes.Num()));
+			return MakeErrorResult(ClaireonBlueprintHelpers::FormatTitleMatchFailure(
+				Graph, TargetNodeTitle, MatchingNodes, TEXT("target_node_guid")));
 		}
 		TargetNode = MatchingNodes[0];
 	}
@@ -319,84 +367,16 @@ FToolResult ClaireonBlueprintGraphTool_ConnectPins::ConnectPins_Impl(
 	// the neighbor's type onto the pin. NotifyPinConnectionListChanged on both nodes lets the
 	// owning K2 node re-coerce sibling pins. 16-iter cap guards against pathological cycles
 	// in macro graphs.
-	{
-		const FName WildcardCat = UEdGraphSchema_K2::PC_Wildcard;
-		auto IsWildcard = [&](const UEdGraphPin* Pin) -> bool
-		{
-			return Pin && Pin->PinType.PinCategory == WildcardCat;
-		};
+	ClaireonBlueprintHelpers::PropagateWildcardTypesViaLinks({SourceNode, TargetNode});
 
-		for (int32 Iter = 0; Iter < 16; ++Iter)
-		{
-			bool bChangedAny = false;
-
-			TArray<UEdGraphNode*> NodesToScan = { SourceNode, TargetNode };
-			// Expand to include any node touched by our endpoints' current links.
-			for (UEdGraphPin* Pin : SourceNode->Pins)
-			{
-				if (!Pin) { continue; }
-				for (UEdGraphPin* Linked : Pin->LinkedTo)
-				{
-					if (Linked) { NodesToScan.AddUnique(Linked->GetOwningNodeUnchecked()); }
-				}
-			}
-			for (UEdGraphPin* Pin : TargetNode->Pins)
-			{
-				if (!Pin) { continue; }
-				for (UEdGraphPin* Linked : Pin->LinkedTo)
-				{
-					if (Linked) { NodesToScan.AddUnique(Linked->GetOwningNodeUnchecked()); }
-				}
-			}
-
-			for (UEdGraphNode* N : NodesToScan)
-			{
-				if (!N) { continue; }
-				for (UEdGraphPin* WildPin : N->Pins)
-				{
-					if (!IsWildcard(WildPin) || WildPin->LinkedTo.Num() == 0) { continue; }
-					// Find a linked neighbor whose category is resolved.
-					const UEdGraphPin* ResolvedNeighbor = nullptr;
-					for (UEdGraphPin* Linked : WildPin->LinkedTo)
-					{
-						if (Linked && Linked->PinType.PinCategory != WildcardCat)
-						{
-							ResolvedNeighbor = Linked;
-							break;
-						}
-					}
-					if (!ResolvedNeighbor) { continue; }
-
-					// Copy the neighbor's pin type (preserves container kind: Array / Set / Map
-					// / Single). This is the same propagation pattern UK2Node_CallArrayFunction
-					// uses internally.
-					WildPin->PinType = ResolvedNeighbor->PinType;
-					if (UEdGraphNode* Owner = WildPin->GetOwningNodeUnchecked())
-					{
-						// NotifyPinConnectionListChanged is K2-specific; UEdGraphNode base class
-						// doesn't expose it. Cast first; if not a K2Node, fall back to graph-level
-						// notification which UK2Node's override also routes through.
-						// Local renamed from Graph -> OwnerGraph to avoid shadowing the outer
-						// `Graph` declared earlier in this function (C4456 promoted to error).
-						if (UK2Node* K2Owner = Cast<UK2Node>(Owner))
-						{
-							K2Owner->NotifyPinConnectionListChanged(WildPin);
-						}
-						else if (UEdGraph* OwnerGraph = Owner->GetGraph())
-						{
-							OwnerGraph->NotifyGraphChanged();
-						}
-					}
-					bChangedAny = true;
-				}
-			}
-
-			if (!bChangedAny)
-			{
-				break;
-			}
-		}
-	}
+	// TryCreateConnection only fires the per-pin PinConnectionListChanged hooks;
+	// nodes that defer their rebuild to the NODE-level hook (UK2Node_Select sets
+	// bReconstructNode in OnPinTypeChanged and consumes it in
+	// NodeConnectionListChanged -- that is where enum-index Selects grow their
+	// per-entry option pins) never rebuild without this. The graph editor UI
+	// calls it after every drag-connect; mirror that.
+	SourceNode->NodeConnectionListChanged();
+	TargetNode->NodeConnectionListChanged();
 
 	// Capture node titles AFTER TryCreateConnection has run (wildcard
 	// propagation can rebuild pin arrays, but the node objects survive).
@@ -421,7 +401,7 @@ FToolResult ClaireonBlueprintGraphTool_ConnectPins::ConnectPins_Impl(
 	// response reflects the full extent of the change.
 	auto AddLinkedNeighborGuids = [Data](UEdGraphNode* EndpointNode)
 	{
-		if (!EndpointNode) { return; }
+		if (!IsValid(EndpointNode)) { return; }
 		for (UEdGraphPin* Pin : EndpointNode->Pins)
 		{
 			if (!Pin) { continue; }
@@ -429,7 +409,7 @@ FToolResult ClaireonBlueprintGraphTool_ConnectPins::ConnectPins_Impl(
 			{
 				if (Linked)
 				{
-					if (UEdGraphNode* Neighbor = Linked->GetOwningNodeUnchecked())
+					if (UEdGraphNode* Neighbor = Linked->GetOwningNodeUnchecked(); IsValid(Neighbor))
 					{
 						Data->LastOperationAffectedNodes.Add(Neighbor->NodeGuid);
 					}
@@ -467,18 +447,24 @@ FString ClaireonBlueprintGraphTool_ConnectPins::GetExampleUsage() const
 {
     return TEXT(
         "bp_connect_pins session_id=\"...\" "
-        "from_node=\"PrintString_0\" from_pin=\"then\" "
-        "to_node=\"DelayUntilNextTick_1\" to_pin=\"exec\"");
+        "source_node_title=\"PrintString_0\" source_pin_name=\"then\" "
+        "target_node_title=\"DelayUntilNextTick_1\" target_pin_name=\"exec\"");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ConnectPins::GetParameterTooltips() const
 {
     TSharedPtr<FJsonObject> T = MakeShared<FJsonObject>();
     T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by bp_open or _create."));
-    T->SetStringField(TEXT("from_node"), TEXT("Source node identifier: GUID (stable) or human-readable title."));
-    T->SetStringField(TEXT("from_pin"), TEXT("Source pin name. Fuzzy-resolved ('exec', 'then', partial substrings)."));
-    T->SetStringField(TEXT("to_node"), TEXT("Target node identifier: GUID or title."));
-    T->SetStringField(TEXT("to_pin"), TEXT("Target pin name. Fuzzy-resolved."));
+    T->SetStringField(TEXT("source_node_title"), TEXT("Source node title (also accepted as 'from_node', which takes a GUID or a title)."));
+    T->SetStringField(TEXT("source_node_guid"), TEXT("Source node GUID, full or >=8-hex prefix (alternative to source_node_title)."));
+    T->SetStringField(TEXT("source_pin_name"), TEXT("Source pin name (also accepted as 'from_pin'). Fuzzy-resolved ('exec', 'then', partial substrings)."));
+    T->SetStringField(TEXT("target_node_title"), TEXT("Target node title (also accepted as 'to_node', which takes a GUID or a title)."));
+    T->SetStringField(TEXT("target_node_guid"), TEXT("Target node GUID, full or >=8-hex prefix (alternative to target_node_title)."));
+    T->SetStringField(TEXT("target_pin_name"), TEXT("Target pin name (also accepted as 'to_pin'). Fuzzy-resolved."));
+    T->SetStringField(TEXT("from_node"), TEXT("Alias for source_node_guid / source_node_title. Ignored when either canonical field is present."));
+    T->SetStringField(TEXT("from_pin"), TEXT("Alias for source_pin_name. Ignored when source_pin_name is present."));
+    T->SetStringField(TEXT("to_node"), TEXT("Alias for target_node_guid / target_node_title. Ignored when either canonical field is present."));
+    T->SetStringField(TEXT("to_pin"), TEXT("Alias for target_pin_name. Ignored when target_pin_name is present."));
     return T;
 }
 

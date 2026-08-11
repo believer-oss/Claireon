@@ -126,6 +126,16 @@ public:
 	static void RunWorldTransitionBarrier();
 
 	/**
+	 * The Python purge script RunWorldTransitionBarrier dispatches.
+	 *
+	 * Multi-statement, so it REQUIRES EPythonCommandExecutionMode::ExecuteFile. Under
+	 * ExecuteStatement it is a compile-time SyntaxError on the leading import, which is how
+	 * the purge silently never ran across four call sites. Exposed so the regression test can
+	 * assert the script still compiles under the chosen mode without a real map transition.
+	 */
+	static FString GetWorldTransitionPurgeScript();
+
+	/**
 	 * Find any UWorld objects loaded in memory that are NOT the editor
 	 * world, an active PIE/preview world, or a streaming sublevel of the
 	 * editor world. Attempt to unload their packages (skipping dirty
@@ -203,6 +213,15 @@ public:
 
 	/** Rebuild the claireon Python module from the current tool registry. Called when bClaireonModuleStale is set. */
 	static void RebuildClaireonModule();
+
+	/**
+	 * Names of every registered tool whose GetSessionMode() equals Mode.
+	 *
+	 * Exists so callers can disclose a session-mode roster (e.g. bp_open's
+	 * blocking_scope) from the live registry instead of a hand-maintained list.
+	 * Returns empty when the server is not running.
+	 */
+	static TArray<FString> GetToolNamesBySessionMode(EClaireonToolSessionMode Mode);
 
 	/** True when the tool registry has changed and the claireon Python module needs rebuilding. */
 	static std::atomic<bool> bClaireonModuleStale;

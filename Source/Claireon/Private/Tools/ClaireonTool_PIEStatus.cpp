@@ -55,19 +55,19 @@ IClaireonTool::FToolResult ClaireonTool_PIEStatus::Execute(const TSharedPtr<FJso
 	int32 PlayerCount = 0;
 	float FrameRate = 0.0f;
 
-	if (GEditor)
+	if (IsValid(GEditor))
 	{
 		UWorld* PIEWorld = nullptr;
 		for (const FWorldContext& Context : GEngine->GetWorldContexts())
 		{
-			if (Context.WorldType == EWorldType::PIE && Context.World())
+			if (Context.WorldType == EWorldType::PIE && IsValid(Context.World()))
 			{
 				PIEWorld = Context.World();
 				break;
 			}
 		}
 
-		if (PIEWorld)
+		if (IsValid(PIEWorld))
 		{
 			PlayerCount = PIEWorld->GetNumPlayerControllers();
 

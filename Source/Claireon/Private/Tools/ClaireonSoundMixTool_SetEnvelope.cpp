@@ -47,12 +47,12 @@ IClaireonTool::FToolResult FClaireonSoundMixTool_SetEnvelope::Execute(const TSha
 	FString Error;
 	EClaireonAudioAssetKind Kind = EClaireonAudioAssetKind::Unknown;
 	UObject* Loaded = ClaireonAudioHelpers::LoadAudioAsset(AssetPath, Kind, Error);
-	if (!Loaded)
+	if (!IsValid(Loaded))
 	{
 		return MakeErrorResult(Error);
 	}
 	USoundMix* Mix = Cast<USoundMix>(Loaded);
-	if (!Mix || Kind != EClaireonAudioAssetKind::SoundMix)
+	if (!IsValid(Mix) || Kind != EClaireonAudioAssetKind::SoundMix)
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset is not a SoundMix: %s"), *AssetPath));
 	}

@@ -51,7 +51,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEAITargetInfo::Execute(const TSharedPt
 {
 	UE_LOG(LogClaireon, Display, TEXT("[MCP] editor.pie.getAITargetInfo"));
 
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("Editor is not available"));
 	}
@@ -73,14 +73,14 @@ IClaireonTool::FToolResult ClaireonTool_PIEAITargetInfo::Execute(const TSharedPt
 	UWorld* PIEWorld = nullptr;
 	for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
 	{
-		if (WorldContext.WorldType == EWorldType::PIE && WorldContext.World())
+		if (WorldContext.WorldType == EWorldType::PIE && IsValid(WorldContext.World()))
 		{
 			PIEWorld = WorldContext.World();
 			break;
 		}
 	}
 
-	if (!PIEWorld)
+	if (!IsValid(PIEWorld))
 	{
 		return MakeErrorResult(TEXT("PIE world not found. PIE may still be initializing."));
 	}
@@ -89,7 +89,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEAITargetInfo::Execute(const TSharedPt
 	FClaireonPIEManager& PIEManager = FClaireonPIEManager::Get();
 	AActor* Actor = PIEManager.ResolveActorId(ActorId, PIEWorld);
 
-	if (!Actor)
+	if (!IsValid(Actor))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Could not resolve actor '%s'. The actor may have been destroyed or the ID is stale."),
@@ -98,7 +98,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEAITargetInfo::Execute(const TSharedPt
 
 	// Try to cast to APawn to get the AI controller
 	APawn* Pawn = Cast<APawn>(Actor);
-	if (!Pawn)
+	if (!IsValid(Pawn))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Actor '%s' (%s) is not a Pawn. AI targeting info is only available for Pawns."),
@@ -114,17 +114,17 @@ IClaireonTool::FToolResult ClaireonTool_PIEAITargetInfo::Execute(const TSharedPt
 	AController* Controller = Pawn->GetController();
 	AAIController* AIController = Cast<AAIController>(Controller);
 
-	Output += FString::Printf(TEXT("hasController: %s\n"), Controller ? TEXT("true") : TEXT("false"));
+	Output += FString::Printf(TEXT("hasController: %s\n"), IsValid(Controller) ? TEXT("true") : TEXT("false"));
 
-	if (Controller)
+	if (IsValid(Controller))
 	{
 		Output += FString::Printf(TEXT("controllerClass: %s\n"), *Controller->GetClass()->GetName());
-		Output += FString::Printf(TEXT("isAIController: %s\n"), AIController ? TEXT("true") : TEXT("false"));
+		Output += FString::Printf(TEXT("isAIController: %s\n"), IsValid(AIController) ? TEXT("true") : TEXT("false"));
 	}
 
-	if (!AIController)
+	if (!IsValid(AIController))
 	{
-		if (Controller)
+		if (IsValid(Controller))
 		{
 			Output += TEXT("Note: This pawn has a controller but it is not an AAIController. ");
 			Output += TEXT("It may be a player controller or a custom controller type.\n");
@@ -138,9 +138,9 @@ IClaireonTool::FToolResult ClaireonTool_PIEAITargetInfo::Execute(const TSharedPt
 
 	// Check for blackboard
 	UBlackboardComponent* BlackboardComp = AIController->GetBlackboardComponent();
-	Output += FString::Printf(TEXT("hasBlackboard: %s\n"), BlackboardComp ? TEXT("true") : TEXT("false"));
+	Output += FString::Printf(TEXT("hasBlackboard: %s\n"), IsValid(BlackboardComp) ? TEXT("true") : TEXT("false"));
 
-	if (BlackboardComp)
+	if (IsValid(BlackboardComp))
 	{
 		// Iterate blackboard keys to find target-related information
 		bool bFoundTarget = false;
@@ -148,7 +148,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEAITargetInfo::Execute(const TSharedPt
 		FString TargetActorClass;
 
 		const UBlackboardData* BBAsset = BlackboardComp->GetBlackboardAsset();
-		if (BBAsset)
+		if (IsValid(BBAsset))
 		{
 			Output += TEXT("blackboardKeys:\n");
 
@@ -168,7 +168,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEAITargetInfo::Execute(const TSharedPt
 					UObject* KeyValue = BlackboardComp->GetValueAsObject(KeyEntry.EntryName);
 					AActor* TargetActor = Cast<AActor>(KeyValue);
 
-					if (TargetActor)
+					if (IsValid(TargetActor))
 					{
 						const FString TargetId = PIEManager.GetActorId(TargetActor);
 						Output += FString::Printf(TEXT("  %s (%s): %s (%s) [actorId: %s]\n"),
@@ -214,7 +214,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEAITargetInfo::Execute(const TSharedPt
 
 	// Check for focus actor
 	AActor* FocusActor = AIController->GetFocusActor();
-	if (FocusActor)
+	if (IsValid(FocusActor))
 	{
 		const FString FocusId = PIEManager.GetActorId(FocusActor);
 		Output += FString::Printf(TEXT("focusActor: %s (%s) [actorId: %s]\n"),

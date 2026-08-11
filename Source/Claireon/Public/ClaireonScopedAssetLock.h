@@ -33,7 +33,14 @@
 class CLAIREON_API FClaireonScopedAssetLock
 {
 public:
-	FClaireonScopedAssetLock(const FString& AssetPath, const FString& ToolName, double TimeoutMinutes = 60.0);
+	/**
+	 * @param bAllowUnsavedWorldPackage Forwarded to FClaireonSessionManager::OpenSession -- pass
+	 *        true ONLY when AssetPath is the CURRENT EDITOR WORLD's own package/level, so an
+	 *        unsaved /Temp/Untitled_N level can still be locked. Default false.
+	 */
+	FClaireonScopedAssetLock(const FString& AssetPath, const FString& ToolName,
+		double TimeoutMinutes = ClaireonDefaultSessionTimeoutMinutes,
+		bool bAllowUnsavedWorldPackage = false);
 	~FClaireonScopedAssetLock();
 
 	// Non-copyable, non-movable.

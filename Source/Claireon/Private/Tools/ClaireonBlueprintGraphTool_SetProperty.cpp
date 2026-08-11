@@ -1,10 +1,11 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
 #include "Tools/ClaireonBlueprintGraphTool_SetProperty.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "ClaireonBlueprintHelpers.h"
+#include "Tools/ClaireonPropertyUtils.h"
 #include "Dom/JsonObject.h"
 #include "Tools/ClaireonSpecApplicator_Blueprint.h"
 #include "Tools/ClaireonBlueprintGraphEditToolBase_Internal.h"
@@ -85,6 +86,7 @@
 #include "GameplayTagsManager.h"
 #include "ClaireonNameResolver.h"
 #include "ClaireonPathResolver.h"
+#include "ClaireonStructReflection.h"
 #include "ClaireonSessionManager.h"
 #include "ClaireonBPInterfaceAuthor.h"
 #include "Interfaces/IPluginManager.h"
@@ -101,7 +103,10 @@ FString ClaireonBlueprintGraphTool_SetProperty::GetOperation() const { return TE
 
 FString ClaireonBlueprintGraphTool_SetProperty::GetDescription() const
 {
-    return TEXT("Set a property on a component template or the Blueprint CDO in the open editing session. Requires open session_id from bp_open (or pass asset_path to auto-open). Transactional. Common pitfall: property_name must match the UPROPERTY name on the target class; nested property paths use dot notation. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+    return TEXT("Set a property on a component template or the Blueprint CDO in the open editing session. property_name "
+                "takes a plain UPROPERTY name or a dotted path into nested structs, array elements, and instanced "
+                "sub-objects (e.g. 'Operations[0].Weight') -- the same resolver bp_set_cdo_property uses. Session-mode "
+                "tool: transactional; pass session_id from bp_open, or asset_path to auto-open.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetProperty::GetInputSchema() const
@@ -112,6 +117,7 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetProperty::GetInputSchema()
     Builder.AddString(TEXT("property_name"), TEXT("Name of the property to set."), true);
     Builder.AddString(TEXT("property_value"), TEXT("New value as a string (ImportText_Direct format; for FGameplayTagContainer pass a JSON array of tag names)."), true);
     Builder.AddString(TEXT("component_name"), TEXT("Optional component name; defaults to the Blueprint CDO."));
+    Builder.AddBoolean(TEXT("allow_non_editable"), TEXT("Write a property the details panel would refuse (EditConst, or no EditAnywhere/EditDefaultsOnly specifier). Same flag and same rule as uobject_set_property."));
     Builder.AddString(TEXT("response_mode"), TEXT("Response verbosity: 'full' | 'changed' | 'status' (default 'changed')."));
     return Builder.Build();
 }
@@ -128,7 +134,7 @@ FToolResult ClaireonBlueprintGraphTool_SetProperty::Execute(const TSharedPtr<FJs
     }
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
 	}
@@ -153,14 +159,14 @@ FToolResult ClaireonBlueprintGraphTool_SetProperty::Execute(const TSharedPtr<FJs
 	{
 		// Find component in SCS
 		USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
-		if (!SCS)
+		if (!IsValid(SCS))
 		{
 			return MakeErrorResult(TEXT("Blueprint does not have a SimpleConstructionScript"));
 		}
 
 		USCS_Node* ComponentNode = SCS->FindSCSNode(FName(*ComponentName));
 
-		if (!ComponentNode)
+		if (!IsValid(ComponentNode))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Component not found: %s"), *ComponentName));
 		}
@@ -171,29 +177,61 @@ FToolResult ClaireonBlueprintGraphTool_SetProperty::Execute(const TSharedPtr<FJs
 	else
 	{
 		// Set property on CDO
-		if (Blueprint->GeneratedClass)
+		if (IsValid(Blueprint->GeneratedClass))
 		{
 			TargetObject = Blueprint->GeneratedClass->GetDefaultObject();
 			TargetDescription = TEXT("Blueprint CDO");
 		}
 
-		if (!TargetObject)
+		if (!IsValid(TargetObject))
 		{
 			return MakeErrorResult(TEXT("Failed to get Blueprint CDO"));
 		}
 	}
 
-	// Find property on target object
-	FProperty* Property = TargetObject->GetClass()->FindPropertyByName(FName(*PropertyName));
-	if (!Property)
+	// Resolve the property through the SHARED path resolver rather than a flat
+	// FindPropertyByName. The old flat lookup meant a dotted path such as
+	// "PrimaryComponentTick.bStartWithTickEnabled" could never resolve -- it was looked up
+	// verbatim as a single property name -- even though this tool's own description already
+	// promised dot notation, and the sibling bp_set_cdo_property supported it. Both tools now
+	// go through ClaireonPropertyUtils so nested structs, array elements, and instanced
+	// sub-objects behave identically on either one.
+	void* PropertyContainer = nullptr;
+	FString ResolvePathError;
+	FProperty* Property = ClaireonPropertyUtils::ResolvePropertyByPath(
+		TargetObject, PropertyName, PropertyContainer, ResolvePathError);
+	if (!Property || !PropertyContainer)
 	{
-		return MakeErrorResult(FString::Printf(TEXT("Property '%s' not found on %s"), *PropertyName, *TargetDescription));
+		return MakeErrorResult(FString::Printf(
+			TEXT("Property '%s' not found on %s: %s"),
+			*PropertyName, *TargetDescription,
+			ResolvePathError.IsEmpty() ? TEXT("no such property") : *ResolvePathError));
 	}
 
-	// Check if property is editable
-	if (Property->HasAnyPropertyFlags(CPF_DisableEditOnInstance))
+	// Editability gate, shared with uobject_inspect / uobject_set_property.
+	//
+	// The old gate rejected CPF_DisableEditOnInstance, which is the flag set by
+	// EditDefaultsOnly -- i.e. it refused exactly the properties this tool exists
+	// to write. This tool writes CDOs and SCS templates, which IS the defaults
+	// context, so EditDefaultsOnly is editable here. UActorComponent::bReplicates
+	// and AFSCharacter::MassConfig were both rejected on that basis.
+	//
+	// The rule now is DescribeEditorAccess, so bp_set_property and
+	// uobject_inspect's reported editor_access can never disagree.
+	bool bAllowNonEditable = false;
+	Params->TryGetBoolField(TEXT("allow_non_editable"), bAllowNonEditable);
+
+	const FString EditorAccess = ClaireonStructReflection::DescribeEditorAccess(Property->GetPropertyFlags());
+	if (EditorAccess != TEXT("edit") && !bAllowNonEditable)
 	{
-		return MakeErrorResult(FString::Printf(TEXT("Property '%s' is not editable"), *PropertyName));
+		const FString Why = (EditorAccess == TEXT("edit_const"))
+			? TEXT("is marked EditConst")
+			: TEXT("has no EditAnywhere/EditDefaultsOnly specifier");
+		return MakeErrorResult(FString::Printf(
+			TEXT("Property '%s' on %s %s, so the details panel would refuse this edit. "
+				 "Pass allow_non_editable=true to write it anyway -- such fields often carry "
+				 "invariants the owning class maintains."),
+			*PropertyName, *TargetDescription, *Why));
 	}
 
 	// Set property using transaction
@@ -230,7 +268,7 @@ FToolResult ClaireonBlueprintGraphTool_SetProperty::Execute(const TSharedPtr<FJs
 		}
 
 		FGameplayTagContainer* Target =
-			MaybeTagContainerProp->ContainerPtrToValuePtr<FGameplayTagContainer>(TargetObject);
+			MaybeTagContainerProp->ContainerPtrToValuePtr<FGameplayTagContainer>(PropertyContainer);
 		*Target = NewContainer;
 
 		FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
@@ -248,9 +286,19 @@ FToolResult ClaireonBlueprintGraphTool_SetProperty::Execute(const TSharedPtr<FJs
 		return StateResult;
 	}
 
-	// Import property value from string
-	const TCHAR* ValuePtr = *PropertyValue;
-	Property->ImportText_Direct(ValuePtr, Property->ContainerPtrToValuePtr<void>(TargetObject), TargetObject, PPF_None);
+	// Delegate the write to the shared helper. The bare ImportText_Direct that
+	// used to live here discarded its return value, so a malformed value was
+	// reported as a successful set; it also skipped the
+	// PreEditChange/PostEditChangeProperty bracket and the object-path
+	// canonicalization that a details-panel edit performs.
+	FString WriteError;
+	if (!ClaireonPropertyUtils::WritePropertyByPath(TargetObject, PropertyName, PropertyValue, WriteError))
+	{
+		return MakeErrorResult(FString::Printf(
+			TEXT("Failed to set '%s' on %s to '%s': %s"),
+			*PropertyName, *TargetDescription, *PropertyValue,
+			WriteError.IsEmpty() ? TEXT("the value was rejected") : *WriteError));
+	}
 
 	// Mark Blueprint as modified
 	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);

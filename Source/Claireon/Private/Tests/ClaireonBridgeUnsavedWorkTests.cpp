@@ -42,7 +42,7 @@ namespace ClaireonBridgeUnsavedWorkTestsLocal
 		for (const TCHAR* Candidate : Candidates)
 		{
 			UPackage* Loaded = LoadPackage(nullptr, Candidate, LOAD_None);
-			if (Loaded)
+			if (IsValid(Loaded))
 			{
 				return Loaded;
 			}
@@ -60,7 +60,7 @@ namespace ClaireonBridgeUnsavedWorkTestsLocal
 		for (const TCHAR* Candidate : Candidates)
 		{
 			UPackage* Loaded = LoadPackage(nullptr, Candidate, LOAD_None);
-			if (Loaded)
+			if (IsValid(Loaded))
 			{
 				return Loaded;
 			}
@@ -107,7 +107,7 @@ UNTEST_UNIT_OPTS(Claireon, BridgeUnsavedWork, DirtyContentPackageReported, UNTES
 	}
 
 	UPackage* Loaded = ClaireonBridgeUnsavedWorkTestsLocal::TryLoadTestContentPackage();
-	if (!Loaded)
+	if (!IsValid(Loaded))
 	{
 		UE_LOG(LogClaireon, Display,
 			TEXT("[Test] BridgeUnsavedWork.DirtyContentPackageReported: no test content package; skipping."));
@@ -148,7 +148,7 @@ UNTEST_UNIT_OPTS(Claireon, BridgeUnsavedWork, DirtyMapPackageReported, UNTEST_TI
 	}
 
 	UPackage* Loaded = ClaireonBridgeUnsavedWorkTestsLocal::TryLoadTestMapPackage();
-	if (!Loaded)
+	if (!IsValid(Loaded))
 	{
 		UE_LOG(LogClaireon, Display,
 			TEXT("[Test] BridgeUnsavedWork.DirtyMapPackageReported: no test map package; skipping."));
@@ -246,7 +246,7 @@ UNTEST_UNIT_OPTS(Claireon, BridgeUnsavedWork, ShouldAbortDeferredLoadMapReturnsT
 	}
 
 	UPackage* Loaded = ClaireonBridgeUnsavedWorkTestsLocal::TryLoadTestContentPackage();
-	if (!Loaded)
+	if (!IsValid(Loaded))
 	{
 		UE_LOG(LogClaireon, Display,
 			TEXT("[Test] BridgeUnsavedWork.ShouldAbortDeferredLoadMapReturnsTrueOnDirty: no test content package; skipping."));

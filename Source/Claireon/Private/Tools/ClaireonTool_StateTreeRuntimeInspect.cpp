@@ -4,6 +4,8 @@
 #include "Tools/ClaireonTool_StateTreeRuntimeInspect.h"
 #include "ClaireonLog.h"
 #include "ClaireonPIEManager.h"
+#include "ClaireonPIEWorldResolver.h"
+#include "ClaireonStateTreeComponentResolver.h"
 #include "StateTree.h"
 #include "StateTreeTypes.h"
 #include "Engine/World.h"
@@ -33,7 +35,7 @@ TSharedPtr<FJsonObject> ClaireonTool_StateTreeRuntimeInspect::GetInputSchema() c
 
 	TSharedPtr<FJsonObject> ComponentClassProp = MakeShared<FJsonObject>();
 	ComponentClassProp->SetStringField(TEXT("type"), TEXT("string"));
-	ComponentClassProp->SetStringField(TEXT("description"), TEXT("Optional component class name to find (default: finds first StateTreeComponent)"));
+	ComponentClassProp->SetStringField(TEXT("description"), TEXT("Optional component class-name substring, case-insensitive. Default: the first component of any UStateTreeComponent subclass, StateTreeAIComponent included. Use this only to disambiguate between several."));
 	Properties->SetObjectField(TEXT("component_class"), ComponentClassProp);
 
 	TSharedPtr<FJsonObject> DetailProp = MakeShared<FJsonObject>();
@@ -47,6 +49,9 @@ TSharedPtr<FJsonObject> ClaireonTool_StateTreeRuntimeInspect::GetInputSchema() c
 	}
 	Properties->SetObjectField(TEXT("detail_level"), DetailProp);
 
+	// pie_instance / net_mode - optional PIE world selectors (shared contract).
+	ClaireonPIEWorldResolver::AddSchemaParams(Properties);
+
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	TArray<TSharedPtr<FJsonValue>> Required;
@@ -55,54 +60,6 @@ TSharedPtr<FJsonObject> ClaireonTool_StateTreeRuntimeInspect::GetInputSchema() c
 
 	return Schema;
 }
-
-namespace
-{
-	UActorComponent* FindStateTreeComponentOnActor(AActor* Actor, const FString& OptionalComponentClass)
-	{
-		if (!Actor)
-			return nullptr;
-
-		TArray<UActorComponent*> Components;
-		Actor->GetComponents(Components);
-
-		for (UActorComponent* Component : Components)
-		{
-			if (!Component)
-				continue;
-
-			FString ClassName = Component->GetClass()->GetName();
-
-			if (!OptionalComponentClass.IsEmpty())
-			{
-				if (ClassName.Contains(OptionalComponentClass, ESearchCase::IgnoreCase))
-				{
-					return Component;
-				}
-			}
-			else
-			{
-				if (ClassName.Contains(TEXT("StateTreeComponent"), ESearchCase::IgnoreCase))
-				{
-					return Component;
-				}
-			}
-		}
-		return nullptr;
-	}
-
-	UWorld* GetPIEWorld()
-	{
-		for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
-		{
-			if (WorldContext.WorldType == EWorldType::PIE && WorldContext.World())
-			{
-				return WorldContext.World();
-			}
-		}
-		return nullptr;
-	}
-} // namespace
 
 IClaireonTool::FToolResult ClaireonTool_StateTreeRuntimeInspect::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
@@ -121,36 +78,28 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeRuntimeInspect::Execute(const T
 	UE_LOG(LogClaireon, Display, TEXT("[MCP] editor.statetree.runtime.inspect: actor=%s, component=%s, detail=%s"),
 		*ActorId, *ComponentClass, *DetailLevel);
 
-	// Get PIE world
-	UWorld* PIEWorld = GetPIEWorld();
-	if (!PIEWorld)
+	// Get PIE world (honors optional pie_instance / net_mode selectors).
+	FString PIEResolveError;
+	UWorld* PIEWorld = ClaireonPIEWorldResolver::ResolvePIEWorld(Arguments, PIEResolveError);
+	if (!IsValid(PIEWorld))
 	{
-		return MakeErrorResult(TEXT("No active PIE session. Start Play-in-Editor first."));
+		return MakeErrorResult(PIEResolveError);
 	}
 
 	// Resolve actor
 	FClaireonPIEManager& PIEManager = FClaireonPIEManager::Get();
 	AActor* Actor = PIEManager.ResolveActorId(ActorId, PIEWorld);
-	if (!Actor)
+	if (!IsValid(Actor))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Actor not found or destroyed: %s"), *ActorId));
 	}
 
 	// Find State Tree component
-	UActorComponent* Component = FindStateTreeComponentOnActor(Actor, ComponentClass);
-	if (!Component)
+	UActorComponent* Component = ClaireonStateTreeComponentResolver::FindStateTreeComponent(Actor, ComponentClass);
+	if (!IsValid(Component))
 	{
 		// List available components for debugging
-		FString ComponentList;
-		TArray<UActorComponent*> AllComponents;
-		Actor->GetComponents(AllComponents);
-		for (UActorComponent* Comp : AllComponents)
-		{
-			if (Comp)
-			{
-				ComponentList += FString::Printf(TEXT("\n  - %s (%s)"), *Comp->GetName(), *Comp->GetClass()->GetName());
-			}
-		}
+		const FString ComponentList = ClaireonStateTreeComponentResolver::DescribeComponents(Actor);
 		return MakeErrorResult(FString::Printf(TEXT("No State Tree component found on actor %s (%s). Components:%s"),
 			*ActorId, *Actor->GetClass()->GetName(), *ComponentList));
 	}
@@ -162,14 +111,14 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeRuntimeInspect::Execute(const T
 
 	// Try to get the State Tree asset via UFunction reflection
 	UFunction* GetStateTreeFunc = Component->FindFunction(FName("GetStateTree"));
-	if (GetStateTreeFunc)
+	if (IsValid(GetStateTreeFunc))
 	{
 		struct
 		{
 			UStateTree* ReturnValue = nullptr;
 		} Parms;
 		Component->ProcessEvent(GetStateTreeFunc, &Parms);
-		if (Parms.ReturnValue)
+		if (IsValid(Parms.ReturnValue))
 		{
 			Output += FString::Printf(TEXT("State Tree: %s\n"), *Parms.ReturnValue->GetName());
 		}
@@ -178,7 +127,7 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeRuntimeInspect::Execute(const T
 	// Try to get active states via reflection
 	// Look for IsRunning property or function
 	UFunction* IsRunningFunc = Component->FindFunction(FName("IsRunning"));
-	if (IsRunningFunc)
+	if (IsValid(IsRunningFunc))
 	{
 		struct
 		{
@@ -190,7 +139,7 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeRuntimeInspect::Execute(const T
 
 	// Try GetActiveStateNames or similar debug info
 	UFunction* GetDebugInfoFunc = Component->FindFunction(FName("GetDebugInfoString"));
-	if (GetDebugInfoFunc)
+	if (IsValid(GetDebugInfoFunc))
 	{
 		struct
 		{

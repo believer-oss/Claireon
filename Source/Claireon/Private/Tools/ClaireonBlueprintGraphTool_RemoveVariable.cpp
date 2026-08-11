@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -110,7 +110,7 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_RemoveVariable::GetInputSchem
     Builder.AddString(TEXT("session_id"), TEXT("Session id from a prior open/create (or use asset_path to auto-open)."), false);
     Builder.AddString(TEXT("asset_path"), TEXT("Blueprint asset path (alternative to session_id)."), false);
     Builder.AddString(TEXT("variable_name"), TEXT("Name of the variable to remove."), true);
-    Builder.AddBoolean(TEXT("force"), TEXT("If true, skip referrer scan and remove unconditionally."));
+    Builder.AddBoolean(TEXT("force"), TEXT("If true, remove unconditionally instead of refusing. The referrer scan still runs; the nodes left broken are listed in data.broken_referrers."));
     Builder.AddString(TEXT("response_mode"), TEXT("Response verbosity: 'full' | 'changed' | 'status' (default 'changed')."));
     return Builder.Build();
 }
@@ -128,7 +128,7 @@ FToolResult ClaireonBlueprintGraphTool_RemoveVariable::Execute(const TSharedPtr<
     // remove_variable mutates Blueprint->NewVariables (class-level state), not graph nodes,
     // so skip CheckMutationAffectedNodes (matches the old Execute_Internal arm's comment).
 	UBlueprint* Blueprint = Data->Blueprint.Get();
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
 	}
@@ -161,7 +161,10 @@ FToolResult ClaireonBlueprintGraphTool_RemoveVariable::Execute(const TSharedPtr<
 
 	TArray<FString> AccumulatedWarnings;
 
-	// Step 2-3: referrer scan (skipped when force=true).
+	// Step 2-3: referrer scan. This runs even when force=true: force means "remove
+	// it anyway", not "do not tell me what broke". Skipping the scan left the
+	// caller with "referrer scan skipped" and no way to find the nodes that were
+	// about to fail to compile -- the scan is the only place that list exists.
 	struct FReferrer
 	{
 		FString Graph;
@@ -171,11 +174,6 @@ FToolResult ClaireonBlueprintGraphTool_RemoveVariable::Execute(const TSharedPtr<
 	};
 	TArray<FReferrer> Referrers;
 
-	if (bForce)
-	{
-		AccumulatedWarnings.Add(TEXT("force=true specified -- referrer scan skipped"));
-	}
-	else
 	{
 		TArray<UEdGraph*> AllGraphs;
 		Blueprint->GetAllGraphs(AllGraphs);
@@ -183,13 +181,13 @@ FToolResult ClaireonBlueprintGraphTool_RemoveVariable::Execute(const TSharedPtr<
 		TSet<FName> OpaqueClassesWarned;
 		for (UEdGraph* Graph : AllGraphs)
 		{
-			if (!Graph)
+			if (!IsValid(Graph))
 			{
 				continue;
 			}
 			for (UEdGraphNode* Node : Graph->Nodes)
 			{
-				if (!Node)
+				if (!IsValid(Node))
 				{
 					continue;
 				}
@@ -239,7 +237,7 @@ FToolResult ClaireonBlueprintGraphTool_RemoveVariable::Execute(const TSharedPtr<
 		}
 
 		// Step 4: referenced -> structured error, no mutation, no compile.
-		if (Referrers.Num() > 0)
+		if (Referrers.Num() > 0 && !bForce)
 		{
 			FToolResult ErrResult = MakeErrorResult(FString::Printf(
 				TEXT("variable '%s' is referenced; cannot remove"), *VariableName));
@@ -276,6 +274,31 @@ FToolResult ClaireonBlueprintGraphTool_RemoveVariable::Execute(const TSharedPtr<
 
 	// Step 8: build success response and append accumulated warnings.
 	FToolResult Result = BuildStateResponse(SessionId, Data);
+
+	// Disclose what the forced removal broke. Success here means "the variable is
+	// gone", not "nothing referenced it".
+	if (bForce && Referrers.Num() > 0)
+	{
+		if (!Result.Data.IsValid())
+		{
+			Result.Data = MakeShared<FJsonObject>();
+		}
+		TArray<TSharedPtr<FJsonValue>> BrokenJson;
+		for (const FReferrer& R : Referrers)
+		{
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("graph"), R.Graph);
+			Entry->SetStringField(TEXT("node_title"), R.NodeTitle);
+			Entry->SetStringField(TEXT("node_guid"), R.NodeGuid);
+			Entry->SetStringField(TEXT("pin"), R.Pin);
+			BrokenJson.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		Result.Data->SetArrayField(TEXT("broken_referrers"), BrokenJson);
+		AccumulatedWarnings.Add(FString::Printf(
+			TEXT("force=true removed '%s' while %d node(s) still referenced it; see data.broken_referrers"),
+			*VariableName, Referrers.Num()));
+	}
+
 	Result.Warnings.Append(AccumulatedWarnings);
 	return Result;
 }

@@ -25,11 +25,10 @@ FString ClaireonTool_AppendBlueprintCDOArrayInstanced::GetOperation() const
 
 FString ClaireonTool_AppendBlueprintCDOArrayInstanced::GetDescription() const
 {
-	return TEXT("Append a new inline (UPROPERTY(Instanced)) sub-object to a TArray<UObject*> "
-		"property on a Blueprint's Class Default Object. Constructs an instance of element_class "
-		"and adds it to the array reached by array_property_path. Pairs with blueprint_set_cdo_property "
-		"for then writing into the new element via `<array_property_path>[N].<sub_property>`. "
-		"Returns the new index and array size. Immediate-mode tool: no session required.");
+	return TEXT("Append an inline (UPROPERTY(Instanced)) sub-object to a TArray<UObject*> property on a Blueprint CDO: "
+		"constructs an element_class instance and appends it at array_property_path. Returns the new index and "
+		"array size; write into the element with bp_set_cdo_property via `<array_property_path>[N].<sub_property>`. "
+		"Immediate-mode tool: writes by path, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AppendBlueprintCDOArrayInstanced::GetInputSchema() const
@@ -102,18 +101,18 @@ IClaireonTool::FToolResult ClaireonTool_AppendBlueprintCDOArrayInstanced::Execut
 
 	// Step 2: Load Blueprint
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load Blueprint: %s"), *AssetPath));
 	}
 
-	if (!Blueprint->GeneratedClass)
+	if (!IsValid(Blueprint->GeneratedClass))
 	{
 		return MakeErrorResult(TEXT("Blueprint has no GeneratedClass -- compile it first"));
 	}
 
 	UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
-	if (!CDO)
+	if (!IsValid(CDO))
 	{
 		return MakeErrorResult(TEXT("Failed to get Blueprint CDO"));
 	}
@@ -121,11 +120,11 @@ IClaireonTool::FToolResult ClaireonTool_AppendBlueprintCDOArrayInstanced::Execut
 	// Step 3: Resolve element_class. Try as-is first, then with the '_C' suffix
 	// to support Blueprint-generated classes the caller may have spelled without it.
 	UClass* ElementClass = LoadClass<UObject>(nullptr, *ElementClassPath);
-	if (!ElementClass)
+	if (!IsValid(ElementClass))
 	{
 		ElementClass = LoadClass<UObject>(nullptr, *(ElementClassPath + TEXT("_C")));
 	}
-	if (!ElementClass)
+	if (!IsValid(ElementClass))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Failed to load element class from '%s'"), *ElementClassPath));
@@ -164,7 +163,7 @@ IClaireonTool::FToolResult ClaireonTool_AppendBlueprintCDOArrayInstanced::Execut
 	FString WriteError;
 	UObject* NewElement = ClaireonPropertyUtils::CreateInstancedArrayElement(
 		CDO, ElementClass, ArrayPropertyPath, WriteError);
-	if (!NewElement)
+	if (!IsValid(NewElement))
 	{
 		return MakeErrorResult(WriteError);
 	}

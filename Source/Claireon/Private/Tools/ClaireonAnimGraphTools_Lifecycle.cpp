@@ -84,7 +84,7 @@ FToolResult ClaireonAnimGraphTool_Create::Execute(const TSharedPtr<FJsonObject>&
 	{
 		return MakeErrorResult(TEXT("Missing required field: skeleton_path (required unless is_template=true)"));
 	}
-	if (!Skeleton && !bIsTemplate)
+	if (!IsValid(Skeleton) && !bIsTemplate)
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load skeleton at: %s"), *SkeletonPath));
 	}
@@ -97,7 +97,7 @@ FToolResult ClaireonAnimGraphTool_Create::Execute(const TSharedPtr<FJsonObject>&
 	{
 		ClaireonNameResolver::FNameResolveResult ResolveResult;
 		UClass* ResolvedClass = ClaireonNameResolver::ResolveClassName(ParentClassName, nullptr, ResolveResult);
-		if (!ResolvedClass)
+		if (!IsValid(ResolvedClass))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Failed to resolve parent class '%s': %s"), *ParentClassName, *ResolveResult.Error));
 		}
@@ -141,7 +141,7 @@ FToolResult ClaireonAnimGraphTool_Create::Execute(const TSharedPtr<FJsonObject>&
 
 	// Create package
 	UPackage* Package = CreatePackage(*PackageName);
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create package: %s"), *PackageName));
 	}
@@ -161,7 +161,7 @@ FToolResult ClaireonAnimGraphTool_Create::Execute(const TSharedPtr<FJsonObject>&
 			UBlueprintGeneratedClass::StaticClass(),
 			NAME_None));
 
-	if (!AnimBP)
+	if (!IsValid(AnimBP))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create Animation Blueprint at %s"), *PackageName));
 	}
@@ -176,19 +176,19 @@ FToolResult ClaireonAnimGraphTool_Create::Execute(const TSharedPtr<FJsonObject>&
 	{
 		AnimBP->bIsTemplate = false;
 		AnimBP->TargetSkeleton = Skeleton;
-		if (UAnimBlueprintGeneratedClass* GenClass = Cast<UAnimBlueprintGeneratedClass>(AnimBP->GeneratedClass))
+		if (UAnimBlueprintGeneratedClass* GenClass = Cast<UAnimBlueprintGeneratedClass>(AnimBP->GeneratedClass); IsValid(GenClass))
 		{
 			GenClass->TargetSkeleton = Skeleton;
 		}
-		if (UAnimBlueprintGeneratedClass* SkelClass = Cast<UAnimBlueprintGeneratedClass>(AnimBP->SkeletonGeneratedClass))
+		if (UAnimBlueprintGeneratedClass* SkelClass = Cast<UAnimBlueprintGeneratedClass>(AnimBP->SkeletonGeneratedClass); IsValid(SkelClass))
 		{
 			SkelClass->TargetSkeleton = Skeleton;
 		}
 
 		// Set preview mesh from skeleton
-		if (Skeleton)
+		if (IsValid(Skeleton))
 		{
-			if (USkeletalMesh* PreviewMesh = Skeleton->GetPreviewMesh())
+			if (USkeletalMesh* PreviewMesh = Skeleton->GetPreviewMesh(); IsValid(PreviewMesh))
 			{
 				AnimBP->SetPreviewMesh(PreviewMesh);
 			}
@@ -218,7 +218,7 @@ FToolResult ClaireonAnimGraphTool_Create::Execute(const TSharedPtr<FJsonObject>&
 	Result->SetStringField(TEXT("asset_name"), AnimBP->GetName());
 	Result->SetStringField(TEXT("parent_class"), ParentClass->GetName());
 	Result->SetBoolField(TEXT("is_template"), AnimBP->bIsTemplate);
-	Result->SetStringField(TEXT("skeleton"), Skeleton ? Skeleton->GetPathName() : TEXT("None (template)"));
+	Result->SetStringField(TEXT("skeleton"), IsValid(Skeleton) ? Skeleton->GetPathName() : TEXT("None (template)"));
 
 	// List graphs
 	TArray<ClaireonAnimGraphHelpers::FAnimGraphInfo> Graphs = ClaireonAnimGraphHelpers::CollectAllGraphs(AnimBP);
@@ -281,20 +281,20 @@ FToolResult ClaireonAnimGraphTool_CreateChild::Execute(const TSharedPtr<FJsonObj
 	// Load parent AnimBP
 	FString LoadError;
 	UAnimBlueprint* ParentBP = ClaireonAnimGraphHelpers::LoadAnimBlueprint(ParentPath, LoadError);
-	if (!ParentBP)
+	if (!IsValid(ParentBP))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load parent AnimBP: %s"), *LoadError));
 	}
 
 	// Get parent's generated class for inheritance
 	UClass* ParentClass = ParentBP->GeneratedClass;
-	if (!ParentClass)
+	if (!IsValid(ParentClass))
 	{
 		// Compile parent if needed
 		FKismetEditorUtilities::CompileBlueprint(ParentBP);
 		ParentClass = ParentBP->GeneratedClass;
 	}
-	if (!ParentClass)
+	if (!IsValid(ParentClass))
 	{
 		return MakeErrorResult(TEXT("Parent AnimBP has no generated class. Ensure it compiles successfully."));
 	}
@@ -327,7 +327,7 @@ FToolResult ClaireonAnimGraphTool_CreateChild::Execute(const TSharedPtr<FJsonObj
 	}
 
 	UPackage* Package = CreatePackage(*PackageName);
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create package: %s"), *PackageName));
 	}
@@ -345,18 +345,18 @@ FToolResult ClaireonAnimGraphTool_CreateChild::Execute(const TSharedPtr<FJsonObj
 			UBlueprintGeneratedClass::StaticClass(),
 			NAME_None));
 
-	if (!ChildBP)
+	if (!IsValid(ChildBP))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create child Animation Blueprint at %s"), *PackageName));
 	}
 
 	// Inherit skeleton from parent
 	ChildBP->TargetSkeleton = ParentBP->TargetSkeleton;
-	if (UAnimBlueprintGeneratedClass* GenClass = Cast<UAnimBlueprintGeneratedClass>(ChildBP->GeneratedClass))
+	if (UAnimBlueprintGeneratedClass* GenClass = Cast<UAnimBlueprintGeneratedClass>(ChildBP->GeneratedClass); IsValid(GenClass))
 	{
 		GenClass->TargetSkeleton = ParentBP->TargetSkeleton;
 	}
-	if (UAnimBlueprintGeneratedClass* SkelClass = Cast<UAnimBlueprintGeneratedClass>(ChildBP->SkeletonGeneratedClass))
+	if (UAnimBlueprintGeneratedClass* SkelClass = Cast<UAnimBlueprintGeneratedClass>(ChildBP->SkeletonGeneratedClass); IsValid(SkelClass))
 	{
 		SkelClass->TargetSkeleton = ParentBP->TargetSkeleton;
 	}
@@ -442,7 +442,7 @@ FToolResult ClaireonAnimGraphTool_Duplicate::Execute(const TSharedPtr<FJsonObjec
 	// Load source to verify it's an AnimBP
 	FString LoadError;
 	UAnimBlueprint* SourceBP = ClaireonAnimGraphHelpers::LoadAnimBlueprint(SourceResolve.ResolvedPath.Path, LoadError);
-	if (!SourceBP)
+	if (!IsValid(SourceBP))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load source AnimBP: %s"), *LoadError));
 	}
@@ -476,7 +476,7 @@ FToolResult ClaireonAnimGraphTool_Duplicate::Execute(const TSharedPtr<FJsonObjec
 
 	// Duplicate the asset
 	UPackage* DestPkg = CreatePackage(*DestPackage);
-	if (!DestPkg)
+	if (!IsValid(DestPkg))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create destination package: %s"), *DestPackage));
 	}
@@ -484,7 +484,7 @@ FToolResult ClaireonAnimGraphTool_Duplicate::Execute(const TSharedPtr<FJsonObjec
 	ClaireonAssetUtils::EvictInMemoryObject(DestPkg, DestName);
 	UObject* DuplicatedObj = StaticDuplicateObject(SourceBP, DestPkg, FName(*DestName));
 	UAnimBlueprint* DuplicatedBP = Cast<UAnimBlueprint>(DuplicatedObj);
-	if (!DuplicatedBP)
+	if (!IsValid(DuplicatedBP))
 	{
 		return MakeErrorResult(TEXT("Failed to duplicate Animation Blueprint"));
 	}

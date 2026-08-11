@@ -4,11 +4,13 @@
 #include "ClaireonScopedAssetLock.h"
 #include "ClaireonLog.h"
 
-FClaireonScopedAssetLock::FClaireonScopedAssetLock(const FString& AssetPath, const FString& ToolName, double TimeoutMinutes)
+FClaireonScopedAssetLock::FClaireonScopedAssetLock(const FString& AssetPath, const FString& ToolName, double TimeoutMinutes,
+	bool bAllowUnsavedWorldPackage)
 {
 	HeldAssetPath = AssetPath;
 
-	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(AssetPath, ToolName, TimeoutMinutes);
+	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
+		AssetPath, ToolName, TimeoutMinutes, bAllowUnsavedWorldPackage);
 
 	switch (OpenResult.Result)
 	{

@@ -97,32 +97,35 @@ FToolResult ClaireonMaterialTool_ApplyToActor::Execute(const TSharedPtr<FJsonObj
 
 	FString LoadError;
 	UMaterialInterface* Material = ClaireonMaterialApplyHelpers::LoadMaterialByPath(MaterialPath, LoadError);
-	if (!Material) return MakeErrorResult(LoadError);
+	if (!IsValid(Material)) return MakeErrorResult(LoadError);
 
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("GEditor is unavailable"));
 	}
 	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
+	if (!IsValid(World))
 	{
 		return MakeErrorResult(TEXT("No editor world available"));
 	}
 
 	const FString LockPath = World->GetOutermost()->GetName();
-	FClaireonScopedAssetLock Lock(LockPath, GetName());
+	// bAllowUnsavedWorldPackage=true: LockPath IS the current editor world's own package (not a
+	// /Game/ asset), so an unsaved level (/Temp/Untitled_N, e.g. right after File > New Level)
+	// must still be lockable here -- see FClaireonSessionManager::CanonicalizePath (C5 hardening).
+	FClaireonScopedAssetLock Lock(LockPath, GetName(), /*TimeoutMinutes=*/60.0, /*bAllowUnsavedWorldPackage=*/true);
 	if (!Lock.IsAcquired())
 	{
 		return Lock.GetError();
 	}
 
 	AActor* Actor = ClaireonMaterialApplyHelpers::FindActorInEditorWorld(World, ActorName);
-	if (!Actor)
+	if (!IsValid(Actor))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Actor not found in editor world: '%s'"), *ActorName));
 	}
 	UMeshComponent* MeshComponent = ClaireonMaterialApplyHelpers::FindMeshComponentOnActor(Actor, ComponentName);
-	if (!MeshComponent)
+	if (!IsValid(MeshComponent))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("UMeshComponent '%s' not found on actor '%s'"),
 			*ComponentName, *Actor->GetActorLabel()));

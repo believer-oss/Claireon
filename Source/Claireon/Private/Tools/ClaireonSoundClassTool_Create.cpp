@@ -47,7 +47,7 @@ IClaireonTool::FToolResult FClaireonSoundClassTool_Create::Execute(const TShared
 	}
 	const FString ObjectName = FPackageName::GetShortName(Canon);
 
-	if (UObject* Existing = LoadObject<UObject>(nullptr, *Canon))
+	if (UObject* Existing = LoadObject<UObject>(nullptr, *Canon); IsValid(Existing))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset already exists at path: %s"), *Canon));
 	}
@@ -55,7 +55,7 @@ IClaireonTool::FToolResult FClaireonSoundClassTool_Create::Execute(const TShared
 	UPackage* Package = CreatePackage(*Canon);
 	UObject* NewAsset = NewObject<UObject>(Package, USoundClass::StaticClass(), *ObjectName,
 		RF_Public | RF_Standalone | RF_Transactional | RF_LoadCompleted);
-	if (!NewAsset)
+	if (!IsValid(NewAsset))
 	{
 		return MakeErrorResult(TEXT("NewObject failed"));
 	}

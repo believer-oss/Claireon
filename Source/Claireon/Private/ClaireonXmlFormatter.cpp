@@ -7,6 +7,108 @@
 #include "Serialization/JsonWriter.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 
+// File-local helpers.  Prefixed `ClXmlFmt_` (not bare names in an anonymous
+// namespace) so unity batching cannot collide them with helpers from sibling
+// translation units.
+namespace ClaireonXmlFormatterInternal
+{
+	/**
+	 * Parse an Output-Gate spill manifest (Result.Data with __mcp_spilled__ ==
+	 * true) into FClaireonSpillStream entries.  Returns true when the manifest
+	 * marker is present (even if the streams array is empty/malformed), false
+	 * for a null Data object or a non-spilled payload.
+	 */
+	static bool ClXmlFmt_ParseSpilledStreams(
+		const TSharedPtr<FJsonObject>& ManifestData,
+		TArray<FClaireonSpillStream>& OutStreams)
+	{
+		OutStreams.Reset();
+		if (!ManifestData.IsValid())
+		{
+			return false;
+		}
+
+		bool bMCPSpilled = false;
+		if (!ManifestData->TryGetBoolField(TEXT("__mcp_spilled__"), bMCPSpilled) || !bMCPSpilled)
+		{
+			return false;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* StreamsArray = nullptr;
+		if (ManifestData->TryGetArrayField(TEXT("spilled_streams"), StreamsArray) && StreamsArray)
+		{
+			for (const TSharedPtr<FJsonValue>& StreamVal : *StreamsArray)
+			{
+				const TSharedPtr<FJsonObject>* StreamObj = nullptr;
+				if (!StreamVal.IsValid() || !StreamVal->TryGetObject(StreamObj) || !StreamObj || !(*StreamObj).IsValid())
+				{
+					continue;
+				}
+				FClaireonSpillStream Entry;
+				(*StreamObj)->TryGetStringField(TEXT("name"), Entry.Name);
+				(*StreamObj)->TryGetStringField(TEXT("absolute_path"), Entry.AbsolutePath);
+				double SizeDouble = 0.0;
+				if ((*StreamObj)->TryGetNumberField(TEXT("size_bytes"), SizeDouble))
+				{
+					Entry.SizeBytes = static_cast<int64>(SizeDouble);
+				}
+				(*StreamObj)->TryGetStringField(TEXT("content_type"), Entry.ContentType);
+				(*StreamObj)->TryGetStringField(TEXT("preview"), Entry.Preview);
+				(*StreamObj)->TryGetBoolField(TEXT("over_ceiling"), Entry.bOverCeiling);
+				(*StreamObj)->TryGetBoolField(TEXT("write_failed"), Entry.bWriteFailed);
+				(*StreamObj)->TryGetStringField(TEXT("error_text"), Entry.ErrorText);
+				OutStreams.Add(MoveTemp(Entry));
+			}
+		}
+
+		return true;
+	}
+
+	/** Render the <spilled-result> block (one <stream> child per entry). */
+	static FString ClXmlFmt_BuildSpilledStreamsBlock(const TArray<FClaireonSpillStream>& Streams)
+	{
+		FString Block = TEXT("<spilled-result>\n");
+		for (const FClaireonSpillStream& Stream : Streams)
+		{
+			Block += FString::Printf(TEXT("<stream name=\"%s\">\n"), *Stream.Name);
+
+			if (Stream.bWriteFailed)
+			{
+				Block += TEXT("<error>\n") + Stream.ErrorText + TEXT("\n</error>\n");
+			}
+			else
+			{
+				Block += TEXT("<path>\n") + Stream.AbsolutePath + TEXT("\n</path>\n");
+			}
+
+			Block += FString::Printf(TEXT("<size-bytes>\n%lld\n</size-bytes>\n"), Stream.SizeBytes);
+			Block += TEXT("<content-type>\n") + Stream.ContentType + TEXT("\n</content-type>\n");
+
+			// The preview is always a prefix of the on-disk file; whenever the preview is
+			// shorter than the raw size the envelope surfaces <truncated>true</truncated>.
+			const int64 PreviewBytes = static_cast<int64>(Stream.Preview.Len());
+			if (PreviewBytes < Stream.SizeBytes)
+			{
+				Block += TEXT("<truncated>true</truncated>\n");
+			}
+
+			if (Stream.bOverCeiling)
+			{
+				Block += TEXT("<over-ceiling>true</over-ceiling>\n");
+			}
+
+			if (!Stream.bWriteFailed)
+			{
+				Block += TEXT("<preview>\n") + Stream.Preview + TEXT("\n</preview>\n");
+			}
+
+			Block += TEXT("</stream>\n");
+		}
+		Block += TEXT("</spilled-result>\n");
+		return Block;
+	}
+}
+
 FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolResult& Result)
 {
 	FString Xml;
@@ -50,46 +152,40 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 		}
 
 		Xml = FormatErrorResult(Result.ErrorMessage, ErrorCode, Suggestion, Result.Logs, Result.UELog);
+
+		// Surface the Output-Gate spill manifest on the error branch too
+		// (WI-14): when the gate spilled any stream of a FAILING result (the
+		// python_execute error path routes ErrorMessage/stdout through the
+		// gate), the error envelope must tell the caller where the full text
+		// lives on disk.  Previously the __mcp_spilled__ check existed only on
+		// the success branch, so error responses never mentioned the spill file.
+		TArray<FClaireonSpillStream> ErrorSpillStreams;
+		if (ClaireonXmlFormatterInternal::ClXmlFmt_ParseSpilledStreams(Result.Data, ErrorSpillStreams)
+			&& ErrorSpillStreams.Num() > 0)
+		{
+			const FString SpillBlock =
+				ClaireonXmlFormatterInternal::ClXmlFmt_BuildSpilledStreamsBlock(ErrorSpillStreams);
+			const int32 SpillInsertAt = Xml.Find(TEXT("</execute-result>"),
+				ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+			if (SpillInsertAt >= 0)
+			{
+				Xml.InsertAt(SpillInsertAt, SpillBlock);
+			}
+			else
+			{
+				Xml += SpillBlock;
+			}
+		}
 	}
 	else
 	{
 		// Check if this is a disk-spilled result (Output Gate envelope)
 		bool bIsSpilled = false;
-		if (Result.Data.IsValid())
 		{
-			bool bMCPSpilled = false;
-			if (Result.Data->TryGetBoolField(TEXT("__mcp_spilled__"), bMCPSpilled) && bMCPSpilled)
+			TArray<FClaireonSpillStream> Streams;
+			if (ClaireonXmlFormatterInternal::ClXmlFmt_ParseSpilledStreams(Result.Data, Streams))
 			{
 				bIsSpilled = true;
-
-				// Parse spilled_streams array into FClaireonSpillStream entries.
-				TArray<FClaireonSpillStream> Streams;
-				const TArray<TSharedPtr<FJsonValue>>* StreamsArray = nullptr;
-				if (Result.Data->TryGetArrayField(TEXT("spilled_streams"), StreamsArray) && StreamsArray)
-				{
-					for (const TSharedPtr<FJsonValue>& StreamVal : *StreamsArray)
-					{
-						const TSharedPtr<FJsonObject>* StreamObj = nullptr;
-						if (!StreamVal.IsValid() || !StreamVal->TryGetObject(StreamObj) || !StreamObj || !(*StreamObj).IsValid())
-						{
-							continue;
-						}
-						FClaireonSpillStream Entry;
-						(*StreamObj)->TryGetStringField(TEXT("name"), Entry.Name);
-						(*StreamObj)->TryGetStringField(TEXT("absolute_path"), Entry.AbsolutePath);
-						double SizeDouble = 0.0;
-						if ((*StreamObj)->TryGetNumberField(TEXT("size_bytes"), SizeDouble))
-						{
-							Entry.SizeBytes = static_cast<int64>(SizeDouble);
-						}
-						(*StreamObj)->TryGetStringField(TEXT("content_type"), Entry.ContentType);
-						(*StreamObj)->TryGetStringField(TEXT("preview"), Entry.Preview);
-						(*StreamObj)->TryGetBoolField(TEXT("over_ceiling"), Entry.bOverCeiling);
-						(*StreamObj)->TryGetBoolField(TEXT("write_failed"), Entry.bWriteFailed);
-						(*StreamObj)->TryGetStringField(TEXT("error_text"), Entry.ErrorText);
-						Streams.Add(MoveTemp(Entry));
-					}
-				}
 
 				FString SpillSummary = Result.Summary;
 				if (SpillSummary.IsEmpty())
@@ -219,44 +315,7 @@ FString FClaireonXmlFormatter::FormatSpilledResult(
 
 	Xml += TEXT("<summary>\n") + Summary + TEXT("\n</summary>\n");
 
-	Xml += TEXT("<spilled-result>\n");
-	for (const FClaireonSpillStream& Stream : Streams)
-	{
-		Xml += FString::Printf(TEXT("<stream name=\"%s\">\n"), *Stream.Name);
-
-		if (Stream.bWriteFailed)
-		{
-			Xml += TEXT("<error>\n") + Stream.ErrorText + TEXT("\n</error>\n");
-		}
-		else
-		{
-			Xml += TEXT("<path>\n") + Stream.AbsolutePath + TEXT("\n</path>\n");
-		}
-
-		Xml += FString::Printf(TEXT("<size-bytes>\n%lld\n</size-bytes>\n"), Stream.SizeBytes);
-		Xml += TEXT("<content-type>\n") + Stream.ContentType + TEXT("\n</content-type>\n");
-
-		// The preview is always a prefix of the on-disk file; whenever the preview is
-		// shorter than the raw size the envelope surfaces <truncated>true</truncated>.
-		const int64 PreviewBytes = static_cast<int64>(Stream.Preview.Len());
-		if (PreviewBytes < Stream.SizeBytes)
-		{
-			Xml += TEXT("<truncated>true</truncated>\n");
-		}
-
-		if (Stream.bOverCeiling)
-		{
-			Xml += TEXT("<over-ceiling>true</over-ceiling>\n");
-		}
-
-		if (!Stream.bWriteFailed)
-		{
-			Xml += TEXT("<preview>\n") + Stream.Preview + TEXT("\n</preview>\n");
-		}
-
-		Xml += TEXT("</stream>\n");
-	}
-	Xml += TEXT("</spilled-result>\n");
+	Xml += ClaireonXmlFormatterInternal::ClXmlFmt_BuildSpilledStreamsBlock(Streams);
 
 	// Inline logs / UE log (only those that stayed inline -- spilled streams cleared these).
 	if (!InlineLogs.IsEmpty())

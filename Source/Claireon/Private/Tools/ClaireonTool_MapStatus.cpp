@@ -48,13 +48,13 @@ IClaireonTool::FToolResult ClaireonTool_MapStatus::Execute(const TSharedPtr<FJso
 	}
 
 	// Dirty flag
-	const bool bDirty = World->GetPackage() ? World->GetPackage()->IsDirty() : false;
+	const bool bDirty = IsValid(World->GetPackage()) ? World->GetPackage()->IsDirty() : false;
 
 	// Sub-levels
 	TArray<TSharedPtr<FJsonValue>> SubLevelsArray;
 	for (ULevelStreaming* StreamingLevel : World->GetStreamingLevels())
 	{
-		if (StreamingLevel)
+		if (IsValid(StreamingLevel))
 		{
 			SubLevelsArray.Add(MakeShared<FJsonValueString>(StreamingLevel->GetWorldAssetPackageName()));
 		}

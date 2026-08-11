@@ -62,7 +62,7 @@ FToolResult ClaireonWidgetBPTool_Open::Execute(const TSharedPtr<FJsonObject>& Ar
 
 	// Load the widget blueprint
 	UWidgetBlueprint* WBP = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
-	if (!WBP)
+	if (!IsValid(WBP))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load Widget Blueprint: %s"), *AssetPath));
 	}

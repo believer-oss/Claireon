@@ -50,7 +50,7 @@ FToolResult ClaireonMaterialTool_ConnectToMaterialOutput::Execute(const TSharedP
 	UMaterial* Material = Data->Material.Get();
 	int32 FromIdx = INDEX_NONE;
 	UMaterialExpression* FromExpr = ClaireonMaterialHelpers::FindExpressionByIdentifier(Material, FromIdent, FromIdx);
-	if (!FromExpr)
+	if (!IsValid(FromExpr))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("from_identifier not found: '%s'"), *FromIdent));
 	}

@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_Save::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_Save::GetDescription() const
 {
-    return TEXT("Compiles and saves the Blueprint package to disk for the current session. Per the per-node cycle, call save every 1-3 add_node operations to flush in-session edits. Most-common pitfall: skipping save until close, which loses progress on editor crash and forces a full re-author of the in-session graph. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+    return TEXT("Compile and save the Blueprint package to disk for the current session. Per the per-node cycle, call save every 1-3 add_node operations to flush in-session edits. Most-common pitfall: skipping save until close, which loses progress on editor crash and forces a full re-author of the in-session graph. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Save::GetInputSchema() const
@@ -128,67 +128,19 @@ FToolResult ClaireonBlueprintGraphTool_Save::Execute(const TSharedPtr<FJsonObjec
     {
         return Error;
     }
-	UBlueprint* Blueprint = Data->Blueprint.Get();
-	if (!Blueprint)
+	// Scrub + compile + save lives on the shared base so bp_save and bp_close_all
+	// cannot drift.
+	FString SavedPathOrError;
+	TArray<FString> SaveWarnings;
+	if (!CompileAndSaveSession(Data, SavedPathOrError, SaveWarnings))
 	{
-		UE_LOG(LogClaireon, Warning, TEXT("[EditBlueprintGraph] Save: Blueprint is no longer valid"));
-		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
+		return MakeErrorResult(SavedPathOrError);
 	}
 
-	UPackage* Package = Blueprint->GetOutermost();
-	if (!Package)
-	{
-		UE_LOG(LogClaireon, Warning, TEXT("[EditBlueprintGraph] Save: Failed to get package for Blueprint"));
-		return MakeErrorResult(TEXT("Failed to get package for Blueprint"));
-	}
-
-	// Compile the Blueprint to ensure it's in a valid state before saving
-	// This initializes the generated class and ensures the Blueprint is complete
-	UE_LOG(LogClaireon, Log, TEXT("[EditBlueprintGraph] Save: Compiling Blueprint before save"));
-	FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::SkipGarbageCollection);
-
-	// Ensure package is properly configured for saving
-	Package->SetIsExternallyReferenceable(true);
-	Package->MarkPackageDirty();
-
-	// Save package
-	FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-
-	UE_LOG(LogClaireon, Log, TEXT("[EditBlueprintGraph] Save: Attempting to save to %s"), *PackageFileName);
-
-	if (ClaireonSafeExec::DidLastExecutionCrash())
-	{
-		return MakeErrorResult(TEXT("Save blocked: editor state may be corrupted after a previous crash. Restart the editor."));
-	}
-	FSavePackageArgs SaveArgs;
-	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
-	SaveArgs.SaveFlags = SAVE_None; // Report errors - we expect save to succeed now
-
-	if (UPackage::SavePackage(Package, Blueprint, *PackageFileName, SaveArgs))
-	{
-		UE_LOG(LogClaireon, Log, TEXT("[EditBlueprintGraph] Save: Successfully saved Blueprint to %s"), *PackageFileName);
-		Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Saved Blueprint to %s"), *PackageFileName);
-		return BuildStateResponse(SessionId, Data);
-	}
-	else
-	{
-		UE_LOG(LogClaireon, Error, TEXT("[EditBlueprintGraph] Save: Failed to save Blueprint to %s"), *PackageFileName);
-
-		// Zombie editor detection hint. SavePackage on Windows can fail with
-		// ERROR_SHARING_VIOLATION when a previously-crashed editor process still holds
-		// the .uasset file. We can't reliably enumerate other-process handles without
-		// platform-specific code; emit a directive that names the file and points the
-		// caller at the recovery procedure.
-		const FString PathHint = FString::Printf(
-			TEXT(" If this is a 'sharing violation' or 'file in use' error, a previously-"
-				 "crashed UnrealEditor process may still be holding %s. Run "
-				 "`Get-Process UnrealEditor` (Windows) or `ps aux | grep UnrealEditor` "
-				 "(Linux) and stop any stale processes, then retry. As a stronger fix, "
-				 "use claireon.live_coding_rebuild_full to kill+rebuild+relaunch."),
-			*PackageFileName);
-		return MakeErrorResult(FString::Printf(
-			TEXT("Failed to save Blueprint to %s.%s"), *PackageFileName, *PathHint));
-	}
+	Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Saved Blueprint to %s"), *SavedPathOrError);
+	FToolResult SaveResult = BuildStateResponse(SessionId, Data);
+	SaveResult.Warnings.Append(SaveWarnings);
+	return SaveResult;
 }
 
 // ----------------------------------------------------------------------------

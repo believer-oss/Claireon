@@ -44,7 +44,7 @@ FToolResult ClaireonStateTreeTool_AddTransitionCondition::Execute(const TSharedP
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	FGuid StateId, TransitionId;
@@ -58,7 +58,7 @@ FToolResult ClaireonStateTreeTool_AddTransitionCondition::Execute(const TSharedP
 		return MakeErrorResult(TEXT("Missing parameter: node_type"));
 
 	UStateTreeState* State = ClaireonStateTreeHelpers::FindStateById(EditorData, StateId);
-	if (!State)
+	if (!IsValid(State))
 		return MakeErrorResult(TEXT("State not found"));
 
 	FStateTreeTransition* Trans = ClaireonStateTreeHelpers::FindTransitionById(State, TransitionId);
@@ -66,7 +66,7 @@ FToolResult ClaireonStateTreeTool_AddTransitionCondition::Execute(const TSharedP
 		return MakeErrorResult(TEXT("Transition not found"));
 
 	UScriptStruct* NodeStruct = ClaireonStateTreeHelpers::ResolveNodeStruct(NodeType, Error);
-	if (!NodeStruct)
+	if (!IsValid(NodeStruct))
 		return MakeErrorResult(Error);
 
 	FStateTreeEditorNode NewNode;

@@ -18,7 +18,7 @@
 #include "Dom/JsonValue.h"
 #include "UObject/SoftObjectPath.h"
 
-namespace
+namespace ClaireonSpecApplicator_MaterialInstance_Private
 {
 	/** Accepted parameter type strings. */
 	static bool SpecApplicatorMaterialInstance_IsAcceptedMICParameterType(const FString& Type)
@@ -60,7 +60,8 @@ namespace
 		}
 		return false;
 	}
-} // anonymous namespace
+} // namespace ClaireonSpecApplicator_MaterialInstance_Private
+using namespace ClaireonSpecApplicator_MaterialInstance_Private;
 
 bool FClaireonSpecApplicator_MaterialInstance::ValidateToolSpec(const TSharedPtr<FJsonObject>& Spec, TArray<FString>& OutErrors)
 {
@@ -181,7 +182,7 @@ bool FClaireonSpecApplicator_MaterialInstance::OpenOrCreateAsset(const FString& 
 	const FString ResolvedPath = ResolveResult.ResolvedPath.Path;
 
 	UMaterialInstanceConstant* LoadedInstance = ClaireonMaterialHelpers::LoadMaterialInstanceAsset(ResolvedPath, OutError);
-	if (!LoadedInstance)
+	if (!IsValid(LoadedInstance))
 	{
 		return false;
 	}
@@ -211,7 +212,7 @@ bool FClaireonSpecApplicator_MaterialInstance::OpenOrCreateAsset(const FString& 
 bool FClaireonSpecApplicator_MaterialInstance::ApplyPass1_CreateEntities(const FString& /*SessionId*/, const TSharedPtr<FJsonObject>& Spec)
 {
 	UMaterialInstanceConstant* MIC = Instance.Get();
-	if (!MIC)
+	if (!IsValid(MIC))
 	{
 		AddError(TEXT("MaterialInstance is no longer valid"));
 		return false;
@@ -227,7 +228,7 @@ bool FClaireonSpecApplicator_MaterialInstance::ApplyPass1_CreateEntities(const F
 	{
 		FSoftObjectPath SoftPath(ParentPath);
 		UMaterialInterface* NewParent = Cast<UMaterialInterface>(SoftPath.TryLoad());
-		if (!NewParent)
+		if (!IsValid(NewParent))
 		{
 			AddError(FString::Printf(TEXT("parent: failed to load '%s' as UMaterialInterface"), *ParentPath));
 			return false;
@@ -238,14 +239,14 @@ bool FClaireonSpecApplicator_MaterialInstance::ApplyPass1_CreateEntities(const F
 		{
 			UMaterialInterface* Cursor = NewParent;
 			int32 Safety = 0;
-			while (Cursor && Safety++ < 64)
+			while (IsValid(Cursor) && Safety++ < 64)
 			{
 				if (Cursor == MIC)
 				{
 					AddError(TEXT("parent: setting parent would create a cycle"));
 					return false;
 				}
-				if (UMaterialInstance* AsInstance = Cast<UMaterialInstance>(Cursor))
+				if (UMaterialInstance* AsInstance = Cast<UMaterialInstance>(Cursor); IsValid(AsInstance))
 				{
 					Cursor = AsInstance->Parent;
 				}
@@ -272,7 +273,7 @@ bool FClaireonSpecApplicator_MaterialInstance::ApplyPass1_CreateEntities(const F
 bool FClaireonSpecApplicator_MaterialInstance::ApplyPass2_WireRelationships(const FString& /*SessionId*/, const TSharedPtr<FJsonObject>& Spec)
 {
 	UMaterialInstanceConstant* MIC = Instance.Get();
-	if (!MIC)
+	if (!IsValid(MIC))
 	{
 		AddError(TEXT("MaterialInstance is no longer valid"));
 		return false;
@@ -361,7 +362,7 @@ bool FClaireonSpecApplicator_MaterialInstance::ApplyPass2_WireRelationships(cons
 				{
 					FSoftObjectPath SoftPath(TexPath);
 					Tex = Cast<UTexture>(SoftPath.TryLoad());
-					if (!Tex)
+					if (!IsValid(Tex))
 					{
 						SetErr = FString::Printf(TEXT("failed to load texture '%s'"), *TexPath);
 					}
@@ -453,7 +454,7 @@ bool FClaireonSpecApplicator_MaterialInstance::ApplyPass2_WireRelationships(cons
 bool FClaireonSpecApplicator_MaterialInstance::CompileAsset(const FString& /*SessionId*/, FString& OutError)
 {
 	UMaterialInstanceConstant* MIC = Instance.Get();
-	if (!MIC)
+	if (!IsValid(MIC))
 	{
 		OutError = TEXT("MaterialInstance is no longer valid");
 		return false;
@@ -465,7 +466,7 @@ bool FClaireonSpecApplicator_MaterialInstance::CompileAsset(const FString& /*Ses
 bool FClaireonSpecApplicator_MaterialInstance::SaveAsset(const FString& /*SessionId*/, FString& OutError)
 {
 	UMaterialInstanceConstant* MIC = Instance.Get();
-	if (!MIC)
+	if (!IsValid(MIC))
 	{
 		OutError = TEXT("MaterialInstance is no longer valid");
 		return false;

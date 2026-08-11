@@ -18,10 +18,10 @@ FString ClaireonTool_GasActivateAbility::GetOperation() const { return TEXT("act
 
 FString ClaireonTool_GasActivateAbility::GetDescription() const
 {
-	return TEXT("Activate an already-granted ability on a live PIE actor's ASC (grant it first with "
+	return TEXT("Trigger an already-granted ability on a live PIE actor's ASC (grant it first with "
 		"gas_grant_ability). Address it by spec_handle_id (from gas_runtime_inspect / gas_grant_ability) or "
 		"ability_name (substring of a granted spec's class). Reports why activation was blocked when it "
-		"fails. Defaults to the server world. Requires PIE.");
+		"fails. Requires a live PIE session; net_mode defaults to the server world. Non-session.");
 }
 
 EClaireonToolSessionMode ClaireonTool_GasActivateAbility::GetSessionMode() const
@@ -109,7 +109,7 @@ IClaireonTool::FToolResult ClaireonTool_GasActivateAbility::Execute(const TShare
 	const bool bActivated = ASC->TryActivateAbility(MatchedHandle);
 
 	FString Reason;
-	if (!bActivated && MatchedAbilityCDO)
+	if (!bActivated && IsValid(MatchedAbilityCDO))
 	{
 		// Best-effort explanation: re-run the can-activate check to collect the
 		// blocking tags. This mirrors pie_test_ability's dry-run diagnostic.

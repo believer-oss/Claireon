@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -126,13 +126,13 @@ FToolResult ClaireonBlueprintGraphTool_RenameComponent::Execute(const TSharedPtr
         return Error;
     }
 	UBlueprint* Blueprint = Data->Blueprint.Get();
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
 	}
 
 	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
-	if (!SCS)
+	if (!IsValid(SCS))
 	{
 		return MakeErrorResult(TEXT("Blueprint does not have a SimpleConstructionScript (not an Actor Blueprint?)"));
 	}
@@ -152,7 +152,7 @@ FToolResult ClaireonBlueprintGraphTool_RenameComponent::Execute(const TSharedPtr
 
 	// Find node
 	USCS_Node* Node = SCS->FindSCSNode(FName(*ComponentName));
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Component not found: %s"), *ComponentName));
 	}
@@ -186,7 +186,7 @@ FToolResult ClaireonBlueprintGraphTool_RenameComponent::Execute(const TSharedPtr
 	// Scope 1: SCS component variables
 	for (USCS_Node* ExistingNode : SCS->GetAllNodes())
 	{
-		if (ExistingNode && ExistingNode != Node && ExistingNode->GetVariableName() == NewFName)
+		if (IsValid(ExistingNode) && ExistingNode != Node && ExistingNode->GetVariableName() == NewFName)
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Name '%s' conflicts with existing SCS component variable"), *NewName));
 		}
@@ -204,7 +204,7 @@ FToolResult ClaireonBlueprintGraphTool_RenameComponent::Execute(const TSharedPtr
 	// Scope 3: Function graph names
 	for (UEdGraph* Graph : Blueprint->FunctionGraphs)
 	{
-		if (Graph && Graph->GetFName() == NewFName)
+		if (IsValid(Graph) && Graph->GetFName() == NewFName)
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Name '%s' conflicts with existing function name"), *NewName));
 		}

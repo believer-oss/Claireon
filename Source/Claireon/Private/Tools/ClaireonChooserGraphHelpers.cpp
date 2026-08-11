@@ -10,7 +10,7 @@ namespace ClaireonChooserGraphHelpers
 
 UChooserTable* GetRowSubChooser(UChooserTable* Chooser, int32 RowIndex)
 {
-	if (!Chooser) { return nullptr; }
+	if (!IsValid(Chooser)) { return nullptr; }
 #if WITH_EDITORONLY_DATA
 	if (!Chooser->ResultsStructs.IsValidIndex(RowIndex)) { return nullptr; }
 	const FInstancedStruct& Result = Chooser->ResultsStructs[RowIndex];
@@ -29,7 +29,7 @@ UChooserTable* GetRowSubChooser(UChooserTable* Chooser, int32 RowIndex)
 
 void EnumerateChoosersBFS(UChooserTable* Root, FNodeVisitor Visitor, int32 MaxDepth)
 {
-	if (!Root || !Visitor) { return; }
+	if (!IsValid(Root) || !Visitor) { return; }
 
 	struct FQueueEntry
 	{
@@ -47,7 +47,7 @@ void EnumerateChoosersBFS(UChooserTable* Root, FNodeVisitor Visitor, int32 MaxDe
 	while (Head < Queue.Num())
 	{
 		FQueueEntry Entry = Queue[Head++];
-		if (!Entry.Chooser) { continue; }
+		if (!IsValid(Entry.Chooser)) { continue; }
 
 		const FString ThisPath = Entry.Chooser->GetPathName();
 		if (Visited.Contains(ThisPath)) { continue; }
@@ -65,7 +65,7 @@ void EnumerateChoosersBFS(UChooserTable* Root, FNodeVisitor Visitor, int32 MaxDe
 		for (int32 i = 0; i < RowCount; ++i)
 		{
 			UChooserTable* Child = GetRowSubChooser(Entry.Chooser, i);
-			if (Child && !Visited.Contains(Child->GetPathName()))
+			if (IsValid(Child) && !Visited.Contains(Child->GetPathName()))
 			{
 				Queue.Add({ Child, Entry.Depth + 1, ThisPath, i });
 			}
@@ -76,7 +76,7 @@ void EnumerateChoosersBFS(UChooserTable* Root, FNodeVisitor Visitor, int32 MaxDe
 
 void TraverseRowsDFS(UChooserTable* Root, FRowVisitor Visitor, int32 MaxDepth)
 {
-	if (!Root || !Visitor) { return; }
+	if (!IsValid(Root) || !Visitor) { return; }
 
 	// DFS via explicit stack so the per-row recursion stays bounded by asset
 	// shape, not C++ stack depth. Path-based visited set guards against the
@@ -96,7 +96,7 @@ void TraverseRowsDFS(UChooserTable* Root, FRowVisitor Visitor, int32 MaxDepth)
 	while (Stack.Num() > 0)
 	{
 		FFrame Frame = Stack.Pop(EAllowShrinking::No);
-		if (!Frame.Chooser) { continue; }
+		if (!IsValid(Frame.Chooser)) { continue; }
 
 		const FString ThisPath = Frame.Chooser->GetPathName();
 		if (VisitedChoosers.Contains(ThisPath)) { continue; }
@@ -123,7 +123,7 @@ void TraverseRowsDFS(UChooserTable* Root, FRowVisitor Visitor, int32 MaxDepth)
 		for (int32 i = RowCount - 1; i >= 0; --i)
 		{
 			UChooserTable* Child = GetRowSubChooser(Frame.Chooser, i);
-			if (Child && !VisitedChoosers.Contains(Child->GetPathName()))
+			if (IsValid(Child) && !VisitedChoosers.Contains(Child->GetPathName()))
 			{
 				Stack.Add({ Child, Frame.Depth + 1, ThisPath, i });
 			}
@@ -135,7 +135,7 @@ void TraverseRowsDFS(UChooserTable* Root, FRowVisitor Visitor, int32 MaxDepth)
 TArray<UChooserTable*> CollectOrphans(UChooserTable* Root, const TSet<FString>& ReachablePaths)
 {
 	TArray<UChooserTable*> Orphans;
-	if (!Root) { return Orphans; }
+	if (!IsValid(Root)) { return Orphans; }
 
 #if WITH_EDITORONLY_DATA
 	// NestedChoosers is the asset's flat editor-only registry of all

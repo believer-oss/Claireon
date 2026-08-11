@@ -2,11 +2,27 @@
   "_meta": {
     "source_of_truth": ".claude/areas/apply-spec.md",
     "source_lines": "apply_spec table (per-family entries derived from each tool's GetInputSchema and applicator)",
-    "schema_version": 3,
-    "entry_count": 17,
+    "schema_version": 4,
+    "entry_count": 18,
     "tools_must_match_registered": true,
-    "keying_convention": "top-level keys equal each tool's GetCategory(); look up via tool_search(name=<family>_apply_spec, detail=\"full\")",
-    "apply_delta_field": "schema_version >= 3: every entry carries an apply_delta object describing per-family imperative-batch support. When supported==true, the entry names the registered <family>_apply_delta tool and lists supported_phases (subset of [\"disconnect\",\"remove_nodes\",\"nodes\",\"connect\"]). When supported==false, the entry carries a reason string. The 8 in-scope apply_delta families ship with the per-family apply_delta work (behaviortree, eqs, level_sequence, material, niagara, pcg, statetree, widgetbp); bp_apply_delta is registered independently as ClaireonTool_ApplyBlueprintDelta."
+    "keying_convention": "top-level keys equal each tool's GetCategory(); look up via tool_search(name=<family>_apply_spec, detail=\"full\") for entries with a top-level `tool`, or tool_search(name=<family>_apply_delta, detail=\"full\") for apply_delta_only entries that have no top-level `tool` (see apply_delta_field)",
+    "apply_delta_field": "schema_version >= 3: every entry carries an apply_delta object describing per-family imperative-batch support. When supported==true, the entry names the registered <family>_apply_delta tool and lists supported_phases (subset of [\"disconnect\",\"remove_nodes\",\"nodes\",\"connect\"]). When supported==false, the entry carries a reason string. The 8 in-scope apply_delta families ship with the per-family apply_delta work (behaviortree, eqs, level_sequence, material, niagara, pcg, statetree, widgetbp); bp_apply_delta is registered independently as ClaireonTool_ApplyBlueprintDelta. schema_version >= 4: an entry MAY be apply_delta_only (apply_delta_only==true, no top-level `tool` field) for a family that ships an apply_delta tool with no corresponding apply_spec tool at all. Today `animbp` (ClaireonAnimGraphTool_ApplyDelta) is the only one; its apply_delta object is still fully populated with supported==true."
+  },
+  "animbp": {
+    "apply_delta_only": true,
+    "note": "No animbp_apply_spec tool exists -- this family ships apply_delta only, so this entry has no top-level `tool` field. Look up via tool_search(name=\"animbp_apply_delta\", detail=\"full\") rather than the apply_spec convention used by the other entries below.",
+    "calling_convention": "session-mode only: animbp_open first to obtain session_id, then animbp_apply_delta with that session_id; there is no one-shot/asset_path form",
+    "gotchas": [
+      "New nodes are referenced by local 'id' within the same call; existing nodes by GUID or title",
+      "Execution order is fixed: disconnect -> remove_nodes -> nodes (create) -> connections",
+      "Returns full graph state with id_map of local-id -> GUID"
+    ],
+    "apply_delta": {
+      "supported": true,
+      "tool": "animbp_apply_delta",
+      "supported_phases": ["disconnect", "remove_nodes", "nodes", "connect"],
+      "notes": "Operates on the AnimGraph's UEdGraph nodes/pins (UAnimGraphNode_Base and UK2Node subclasses); same four-phase shape as the bp family's apply_delta"
+    }
   },
   "attenuation": {
     "tool": "attenuation_apply_spec",

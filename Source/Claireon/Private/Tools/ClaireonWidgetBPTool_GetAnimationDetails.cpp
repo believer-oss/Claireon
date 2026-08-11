@@ -47,7 +47,7 @@ FToolResult ClaireonWidgetBPTool_GetAnimationDetails::Execute(const TSharedPtr<F
         return BeginError;
     }
     UWidgetBlueprint* WBP = Data ? Data->WidgetBlueprint.Get() : nullptr;
-    if (!WBP)
+    if (!IsValid(WBP))
     {
         return MakeErrorResult(TEXT("widget blueprint unavailable on session"));
     }
@@ -57,7 +57,7 @@ FToolResult ClaireonWidgetBPTool_GetAnimationDetails::Execute(const TSharedPtr<F
         return MakeErrorResult(TEXT("animation_name is required"));
     }
     UWidgetAnimation* Anim = Claireon::WidgetAnimation::FindWidgetAnimationByName(WBP, AnimationName);
-    if (!Anim)
+    if (!IsValid(Anim))
     {
         return MakeErrorResult(FString::Printf(TEXT("animation '%s' not found on %s"), *AnimationName, *WBP->GetName()));
     }
@@ -96,7 +96,7 @@ FToolResult ClaireonWidgetBPTool_GetAnimationDetails::Execute(const TSharedPtr<F
     // widget_name resolved from FWidgetAnimationBinding::WidgetName. This disambiguates
     // tracks with identical names (e.g. two `RenderOpacity` tracks on different widgets).
     TArray<TSharedPtr<FJsonValue>> TrackArr;
-    if (UMovieScene* MS = Anim->GetMovieScene())
+    if (UMovieScene* MS = Anim->GetMovieScene(); IsValid(MS))
     {
         // Build GUID -> widget_name lookup once so every track lookup is O(1).
         TMap<FGuid, FName> GuidToWidgetName;
@@ -113,7 +113,7 @@ FToolResult ClaireonWidgetBPTool_GetAnimationDetails::Execute(const TSharedPtr<F
 
             for (const UMovieSceneTrack* Track : MSBinding.GetTracks())
             {
-                if (!Track)
+                if (!IsValid(Track))
                 {
                     continue;
                 }

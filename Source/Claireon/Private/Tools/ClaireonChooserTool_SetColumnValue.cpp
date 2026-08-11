@@ -15,15 +15,11 @@ FString ClaireonTool_ChooserSetColumnValue::GetOperation() const { return TEXT("
 
 FString ClaireonTool_ChooserSetColumnValue::GetDescription() const
 {
-	return TEXT("Set a column cell value for a specific row in a ChooserTable. "
-		"The value format depends on the column type: "
-		"GameplayTag: comma-separated tags or array; "
-		"Bool: 'true'/'false'/'any'; "
-		"Enum: {\"value\": \"Name\", \"comparison\": \"MatchEqual\"} or just the value name; "
-		"FloatRange: {\"min\": N, \"max\": N, \"no_min\": bool, \"no_max\": bool}; "
-		"Object: asset path string (defaults Comparison=MatchEqual) or {\"value\": \"/Game/...\", \"comparison\": \"MatchEqual|MatchNotEqual|MatchAny\"}; "
-		"OutputStruct: {field_name: value, ...}; "
-		"OutputObject: asset path string.");
+	return TEXT("Set one column cell value for a row of a ChooserTable. Value format follows the column type -- "
+		"GameplayTag: comma-separated tags or array; Bool: true/false/any; Enum: value name or {value, "
+		"comparison}; FloatRange: {min, max, no_min, no_max}; Object and OutputObject: asset path; "
+		"OutputStruct: {field: value}. Stateless / non-session: writes the asset directly by path, no open "
+		"session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ChooserSetColumnValue::GetInputSchema() const
@@ -59,7 +55,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserSetColumnValue::Execute(const TSh
 
 	FString Error;
 	UChooserTable* Chooser = ClaireonChooserHelpers::LoadChooserTableAsset(AssetPath, Error);
-	if (!Chooser)
+	if (!IsValid(Chooser))
 	{
 		return MakeErrorResult(Error);
 	}

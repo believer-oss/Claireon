@@ -19,7 +19,7 @@ struct FGameplayAttribute;
  * gas_remove_effect / gas_grant_ability / gas_activate_ability / gas_set_tags /
  * gas_set_attribute).
  *
- * Engine GAS API only -- no dependency on FSGame or any Fellowship module, so
+ * Engine GAS API only -- no dependency on any host-game module, so
  * the whole gas_* changeset stays a Claireon-only PR (see
  * CLAIREON-GAS-TOOLS-SPEC.md section 1). Target resolution goes through
  * ClaireonPIEWorldResolver so client-side actors are reachable; GAS is

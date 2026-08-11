@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -126,13 +126,13 @@ FToolResult ClaireonBlueprintGraphTool_ReparentComponent::Execute(const TSharedP
         return Error;
     }
 	UBlueprint* Blueprint = Data->Blueprint.Get();
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
 	}
 
 	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
-	if (!SCS)
+	if (!IsValid(SCS))
 	{
 		return MakeErrorResult(TEXT("Blueprint does not have a SimpleConstructionScript (not an Actor Blueprint?)"));
 	}
@@ -146,7 +146,7 @@ FToolResult ClaireonBlueprintGraphTool_ReparentComponent::Execute(const TSharedP
 
 	// Find source node
 	USCS_Node* SourceNode = SCS->FindSCSNode(FName(*ComponentName));
-	if (!SourceNode)
+	if (!IsValid(SourceNode))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Component not found: %s"), *ComponentName));
 	}
@@ -165,7 +165,7 @@ FToolResult ClaireonBlueprintGraphTool_ReparentComponent::Execute(const TSharedP
 	if (!bMoveToRoot)
 	{
 		TargetNode = SCS->FindSCSNode(FName(*ParentComponentName));
-		if (!TargetNode)
+		if (!IsValid(TargetNode))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Target parent component not found: %s"), *ParentComponentName));
 		}
@@ -196,7 +196,7 @@ FToolResult ClaireonBlueprintGraphTool_ReparentComponent::Execute(const TSharedP
 
 	// Detach from current position
 	USCS_Node* CurrentParent = SCS->FindParentNode(SourceNode);
-	if (CurrentParent)
+	if (IsValid(CurrentParent))
 	{
 		CurrentParent->RemoveChildNode(SourceNode);
 	}

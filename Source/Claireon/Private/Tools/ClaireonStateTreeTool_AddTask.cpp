@@ -42,7 +42,7 @@ FToolResult ClaireonStateTreeTool_AddTask::Execute(const TSharedPtr<FJsonObject>
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	FGuid StateId;
@@ -54,11 +54,11 @@ FToolResult ClaireonStateTreeTool_AddTask::Execute(const TSharedPtr<FJsonObject>
 		return MakeErrorResult(TEXT("Missing parameter: node_type"));
 
 	UStateTreeState* State = ClaireonStateTreeHelpers::FindStateById(EditorData, StateId);
-	if (!State)
+	if (!IsValid(State))
 		return MakeErrorResult(TEXT("State not found"));
 
 	UScriptStruct* NodeStruct = ClaireonStateTreeHelpers::ResolveNodeStruct(NodeType, Error);
-	if (!NodeStruct)
+	if (!IsValid(NodeStruct))
 		return MakeErrorResult(Error);
 
 	FStateTreeEditorNode NewNode;
@@ -82,7 +82,7 @@ FToolResult ClaireonStateTreeTool_AddTask::Execute(const TSharedPtr<FJsonObject>
 
 	// Check schema for single vs multiple tasks
 	const UStateTreeSchema* Schema = Data->StateTree->GetSchema();
-	if (Schema && !Schema->AllowMultipleTasks())
+	if (IsValid(Schema) && !Schema->AllowMultipleTasks())
 	{
 		State->SingleTask = MoveTemp(NewNode);
 	}

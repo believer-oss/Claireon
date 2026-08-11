@@ -62,7 +62,7 @@ namespace ClaireonCMCInspectScratch
 	// Resolve PIE world or return null. Sets OutErrorMessage if no PIE.
 	UWorld* ResolvePIEWorld(FString& OutErrorMessage)
 	{
-		if (!GEditor)
+		if (!IsValid(GEditor))
 		{
 			OutErrorMessage = TEXT("GEditor is not available");
 			return nullptr;
@@ -70,7 +70,7 @@ namespace ClaireonCMCInspectScratch
 
 		for (const FWorldContext& Context : GEngine->GetWorldContexts())
 		{
-			if (Context.WorldType == EWorldType::PIE && Context.World())
+			if (Context.WorldType == EWorldType::PIE && IsValid(Context.World()))
 			{
 				return Context.World();
 			}
@@ -104,14 +104,14 @@ namespace ClaireonCMCInspectScratch
 
 		FString Err;
 		UWorld* PIEWorld = ResolvePIEWorld(Err);
-		if (!PIEWorld)
+		if (!IsValid(PIEWorld))
 		{
 			OutResult = IClaireonTool::MakeErrorResult(Err);
 			return false;
 		}
 
 		AActor* Actor = FClaireonPIEManager::Get().ResolveActorId(OutActorId, PIEWorld);
-		if (!Actor)
+		if (!IsValid(Actor))
 		{
 			OutResult = IClaireonTool::MakeErrorResult(
 				FString::Printf(TEXT("Actor not found for ID: %s"), *OutActorId));
@@ -120,7 +120,7 @@ namespace ClaireonCMCInspectScratch
 
 		OutData = MakeShared<FJsonObject>();
 		ACharacter* Character = Cast<ACharacter>(Actor);
-		if (!Character)
+		if (!IsValid(Character))
 		{
 			OutData->SetBoolField(HasFlagKey, false);
 			OutData->SetStringField(TEXT("reason"),
@@ -234,7 +234,7 @@ namespace ClaireonCMCInspectScratch
 		Obj->SetNumberField(TEXT("hitTime"), Hit.Time);
 
 		AActor* HitActor = Hit.GetActor();
-		if (HitActor)
+		if (IsValid(HitActor))
 		{
 			Obj->SetStringField(TEXT("hitActor"), HitActor->GetName());
 		}
@@ -261,7 +261,7 @@ IClaireonTool::FToolResult ClaireonTool_CMCInspectState::Execute(const TSharedPt
 	}
 
 	UCharacterMovementComponent* CMC = Character->GetCharacterMovement();
-	if (!CMC)
+	if (!IsValid(CMC))
 	{
 		Data->SetBoolField(TEXT("hasCMC"), false);
 		Data->SetStringField(TEXT("reason"),
@@ -307,7 +307,7 @@ IClaireonTool::FToolResult ClaireonTool_CMCInspectState::Execute(const TSharedPt
 		TSharedPtr<FJsonObject> BaseObj = MakeShared<FJsonObject>();
 		const FBasedMovementInfo& BasedMove = Character->GetBasedMovement();
 		AActor* BaseOwner = BasedMove.MovementBase ? BasedMove.MovementBase->GetOwner() : nullptr;
-		if (BaseOwner)
+		if (IsValid(BaseOwner))
 		{
 			BaseObj->SetStringField(TEXT("actor"), BaseOwner->GetName());
 		}
@@ -346,7 +346,7 @@ IClaireonTool::FToolResult ClaireonTool_CMCInspectState::Execute(const TSharedPt
 			// Only properties declared by a UCharacterMovementComponent subclass --
 			// engine-base fields are already reported above.
 			const UClass* OwnerClass = Prop->GetOwnerClass();
-			if (!OwnerClass
+			if (!IsValid(OwnerClass)
 				|| OwnerClass == UCharacterMovementComponent::StaticClass()
 				|| !OwnerClass->IsChildOf(UCharacterMovementComponent::StaticClass()))
 			{
@@ -568,7 +568,7 @@ IClaireonTool::FToolResult ClaireonTool_CMCInspectRootMotion::Execute(const TSha
 	}
 
 	UCharacterMovementComponent* CMC = Character->GetCharacterMovement();
-	if (!CMC)
+	if (!IsValid(CMC))
 	{
 		Data->SetBoolField(TEXT("hasCMC"), false);
 		Data->SetStringField(TEXT("reason"),
@@ -715,11 +715,11 @@ namespace ClaireonCMCInspectScratch
 		SetRotatorField(Obj, TEXT("newRot"), Adj.NewRot);
 		SetVectorField(Obj, TEXT("gravityDirection"), Adj.GravityDirection);
 
-		if (Adj.NewBase)
+		if (IsValid(Adj.NewBase))
 		{
 			AActor* BaseOwner = Adj.NewBase->GetOwner();
 			Obj->SetStringField(TEXT("newBase"),
-				BaseOwner ? BaseOwner->GetName() : Adj.NewBase->GetName());
+				IsValid(BaseOwner) ? BaseOwner->GetName() : Adj.NewBase->GetName());
 		}
 		else
 		{
@@ -736,7 +736,7 @@ namespace ClaireonCMCInspectScratch
 		TEnumAsByte<EMovementMode> OutMode = MOVE_None;
 		uint8 OutCustomMode = 0;
 		TEnumAsByte<EMovementMode> OutGroundMode = MOVE_None;
-		if (CMC)
+		if (IsValid(CMC))
 		{
 			CMC->UnpackNetworkMovementMode(Adj.MovementMode, OutMode, OutCustomMode, OutGroundMode);
 		}
@@ -761,7 +761,7 @@ IClaireonTool::FToolResult ClaireonTool_CMCInspectPredictionData::Execute(const 
 	}
 
 	UCharacterMovementComponent* CMC = Character->GetCharacterMovement();
-	if (!CMC)
+	if (!IsValid(CMC))
 	{
 		Data->SetBoolField(TEXT("hasCMC"), false);
 		Data->SetStringField(TEXT("reason"),

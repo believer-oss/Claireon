@@ -128,6 +128,20 @@ TSharedPtr<FJsonObject> ClaireonTool_ExecutePython::BuildHintFromScript(const FS
 // ---------------------------------------------------------------------------
 namespace Cl622PyHintInternal
 {
+	/**
+	 * WI-14: session-scoped fire-once latch for the script-content hint
+	 * channel (get_editor_property -> uobject_inspect).  Three feedback
+	 * reports flagged that nudge as noise on legitimate bulk loops: it fired
+	 * on every invocation, success included.  The latch limits the channel to
+	 * at most one hint per editor session.  Error-DERIVED hints (traceback
+	 * pattern matches) are not latched -- they only appear when the pattern is
+	 * actually present in this invocation's output.
+	 *
+	 * Game-thread only (tool Execute is game-thread bound), so a plain bool
+	 * suffices.  Reset seam for tests: ClaireonPyExec_ResetHintSessionStateForTests.
+	 */
+	static bool GCl622Py_ScriptHintFiredThisSession = false;
+
 	static bool Cl622Py_LineMatchesPrefix(const FString& Line, const FString& Prefix)
 	{
 		return Line.StartsWith(Prefix, ESearchCase::CaseSensitive);
@@ -392,6 +406,54 @@ namespace Cl622PyHintInternal
 	}
 }
 
+// ---------------------------------------------------------------------------
+// WI-14 hint policy seam.
+//
+// External-linkage free functions (NOT class members) so the Untest harness
+// can forward-declare and drive them without touching the public header:
+// this work item owns only the .cpp files.  Same-module linkage, no export
+// macro needed.
+//
+// Policy:
+//   - bQuiet suppresses ALL hint channels for this invocation.
+//   - Error-derived hints (traceback pattern matches) fire per-occurrence.
+//   - The script-content channel (get_editor_property nudge) fires at most
+//     once per editor session via GCl622Py_ScriptHintFiredThisSession; a
+//     quiet invocation does NOT consume the latch.
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonObject> ClaireonPyExec_ComputeSessionHint(
+	const FString& Logs,
+	const FString& Code,
+	bool bQuiet)
+{
+	if (bQuiet)
+	{
+		return nullptr;
+	}
+
+	TSharedPtr<FJsonObject> Hint = Cl622PyHintInternal::Cl622Py_BuildHintFromLogs(Logs);
+	if (Hint.IsValid())
+	{
+		return Hint;
+	}
+
+	if (Cl622PyHintInternal::GCl622Py_ScriptHintFiredThisSession)
+	{
+		return nullptr;
+	}
+	Hint = Cl622PyHintInternal::Cl622Py_BuildHintFromScript(Code);
+	if (Hint.IsValid())
+	{
+		Cl622PyHintInternal::GCl622Py_ScriptHintFiredThisSession = true;
+	}
+	return Hint;
+}
+
+void ClaireonPyExec_ResetHintSessionStateForTests()
+{
+	Cl622PyHintInternal::GCl622Py_ScriptHintFiredThisSession = false;
+}
+
 FString ClaireonTool_ExecutePython::GetCategory() const { return TEXT("python"); }
 FString ClaireonTool_ExecutePython::GetOperation() const { return TEXT("execute"); }
 
@@ -402,16 +464,11 @@ TArray<FString> ClaireonTool_ExecutePython::GetSearchKeywords() const
 
 FString ClaireonTool_ExecutePython::GetDescription() const
 {
-	return TEXT("Run Python code in the Unreal Editor. The `claireon.*` Python module exposes hundreds of tools "
-				"across many categories -- write Python like `import claireon; claireon.<tool_name>(arg=...)`. "
-				"Before calling a non-trivial tool, use `tool_search(tool_name=\"<name>\")` to fetch its exact "
-				"input schema and example usage so you don't pass the wrong arguments. "
-				"Run `dir(claireon)` to list available tools or `help(claireon.<tool_name>)` for usage details. "
-				"SPILL: large results (>8 KB) are written to disk instead of returned inline; the response will "
-				"contain `__mcp_spilled__: true` and a `spilled_streams` array -- each entry has a `path` field "
-				"(absolute path under Saved/Claireon/Results/) that you should read with the Read tool. "
-				"Bypass-mode tool: the bridge will refuse this call if any other Claireon session "
-				"(per-asset or editor-wide) is currently held. Call session_release first if needed.");
+	return TEXT("Run Python in the Unreal Editor. `import claireon; claireon.<tool_name>(arg=...)` exposes every "
+				"Claireon tool; call tool_search(tool_name=\"<name>\") first for a tool's exact schema, and "
+				"`dir(claireon)` to list them. Results over 8 KB and long tracebacks spill "
+				"to disk -- read the `path` under `spilled_streams`. Bypass-mode: refused while any other Claireon "
+				"session is held; call session_release.");
 }
 
 FString ClaireonTool_ExecutePython::GetFullDescription() const
@@ -454,6 +511,16 @@ TSharedPtr<FJsonObject> ClaireonTool_ExecutePython::GetInputSchema() const
 	CodeProp->SetStringField(TEXT("type"), TEXT("string"));
 	CodeProp->SetStringField(TEXT("description"), TEXT("Python code to execute. Has access to 'unreal' module and claireon.* bridge functions."));
 	Properties->SetObjectField(TEXT("code"), CodeProp);
+
+	// quiet - optional
+	TSharedPtr<FJsonObject> QuietProp = MakeShared<FJsonObject>();
+	QuietProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	QuietProp->SetBoolField(TEXT("default"), false);
+	QuietProp->SetStringField(TEXT("description"),
+		TEXT("Suppress all advisory hints on this invocation (the <hint> envelope element stays absent). "
+			 "Useful for bulk loops where nudges like 'use uobject_inspect instead of get_editor_property' "
+			 "are noise. Even without quiet, the get_editor_property nudge fires at most once per editor session."));
+	Properties->SetObjectField(TEXT("quiet"), QuietProp);
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
@@ -499,6 +566,11 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 			FString::Printf(TEXT("Script size %d bytes exceeds maximum of %d bytes. Break the code into smaller scripts."),
 				Code.Len(), MaxScriptSizeBytes));
 	}
+
+	// Optional hint suppression (WI-14, schema-documented): quiet=true drops
+	// every advisory hint channel for this invocation.
+	bool bQuietHints = false;
+	Arguments->TryGetBoolField(TEXT("quiet"), bQuietHints);
 
 	// Step 2: Ensure bridge is registered
 	FClaireonBridge::EnsureRegistered();
@@ -648,10 +720,16 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	// Step 7b: Dispatch any deferred world-transition actions.
 	// The barrier runs inside each deferred action's lambda (right before the
 	// world transition), not here -- no reason to purge Python state early.
+	TArray<FString> AutoSavedPackages;
 	if (FClaireonBridge::HasDeferredActions())
 	{
 		// Auto-save before world-transition actions (map load, PIE, etc.)
-		FClaireonAutoSave::SaveIfNeeded(/*bIsPythonExecution=*/false);
+		//
+		// P0-7: writes every dirty world AND content package with no prompt and
+		// no path filter. Captured here and attached to the result below; the
+		// return value used to be discarded, so a write into a tracked asset left
+		// no trace in the envelope at all.
+		FClaireonAutoSave::SaveIfNeeded(/*bIsPythonExecution=*/false, &AutoSavedPackages);
 
 		TArray<FClaireonDeferredAction> Actions = FClaireonBridge::DrainDeferredActions();
 		for (const FClaireonDeferredAction& Action : Actions)
@@ -716,6 +794,18 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	FinalResult.Logs = Logs;
 	FinalResult.UELog = EngineOutput;
 
+	// P0-7: disclose any package the pre-deferred-action auto-save wrote. This
+	// runs before the data-population branches below so it cannot be skipped by
+	// an early return on the error path -- a write happened either way, and the
+	// error path is exactly where an unreported write is hardest to notice.
+	if (AutoSavedPackages.Num() > 0)
+	{
+		FinalResult.Warnings.Add(FString::Printf(
+			TEXT("Auto-save wrote %d package(s) to disk before the deferred action: %s. ")
+			TEXT("Disable with ClaireonSettings.bAutoSaveBeforeDeferredActions if this is unwanted."),
+			AutoSavedPackages.Num(), *FString::Join(AutoSavedPackages, TEXT(", "))));
+	}
+
 	// Scan the traceback (regardless of bPythonSuccess -- the user-script
 	// template's bare-except branch can absorb the exception while still
 	// printing the traceback to stdout, so the hint signal must be available
@@ -724,12 +814,10 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	// <hint> element); null leaves the wire shape byte-identical.
 	// Error-derived hints take precedence; otherwise scan the raw script for
 	// content-based nudges (get_editor_property -> uobject_inspect), which
-	// fire on success too.
-	FinalResult.Hint = Cl622PyHintInternal::Cl622Py_BuildHintFromLogs(Logs);
-	if (!FinalResult.Hint.IsValid())
-	{
-		FinalResult.Hint = Cl622PyHintInternal::Cl622Py_BuildHintFromScript(Code);
-	}
+	// fire on success too -- but at most once per editor session, and never
+	// when the caller passed quiet=true (WI-14 hint policy; see
+	// ClaireonPyExec_ComputeSessionHint above).
+	FinalResult.Hint = ClaireonPyExec_ComputeSessionHint(Logs, Code, bQuietHints);
 
 	if (bTimedOut)
 	{

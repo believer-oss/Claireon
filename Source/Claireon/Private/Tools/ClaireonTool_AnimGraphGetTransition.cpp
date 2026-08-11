@@ -18,9 +18,10 @@ FString ClaireonTool_AnimGraphGetTransition::GetOperation() const { return TEXT(
 
 FString ClaireonTool_AnimGraphGetTransition::GetDescription() const
 {
-	return TEXT("Deep inspection of a specific transition in a state machine. Returns crossfade mode, "
-		"duration, blend profile, priority, bidirectional flag, logic type, condition graph (with all "
-		"nodes), and custom blend graph if present. Identify by from_state+to_state or transition_index.");
+	return TEXT("Get the full detail of one state machine transition, identified by from_state plus to_state or by "
+		"transition_index within state_machine_name. Stateless / read-only / non-session: reads the asset by "
+		"asset_path, no open session required. Returns crossfade mode, duration, blend profile, priority, "
+		"bidirectional flag, logic type, the condition graph with all its nodes, and any custom blend graph.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AnimGraphGetTransition::GetInputSchema() const
@@ -66,19 +67,19 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphGetTransition::Execute(const TS
 
 	FString Error;
 	UAnimBlueprint* AnimBP = ClaireonAnimGraphHelpers::LoadAnimBlueprint(AssetPath, Error);
-	if (!AnimBP)
+	if (!IsValid(AnimBP))
 	{
 		return MakeErrorResult(Error);
 	}
 
 	UEdGraph* Graph = ClaireonAnimGraphHelpers::FindAnimGraphByName(AnimBP, SMName, Error);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(Error);
 	}
 
 	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(Graph);
-	if (!SMGraph)
+	if (!IsValid(SMGraph))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("'%s' is not a State Machine graph"), *SMName));
 	}
@@ -89,7 +90,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphGetTransition::Execute(const TS
 
 	for (UEdGraphNode* Node : SMGraph->Nodes)
 	{
-		if (UAnimStateTransitionNode* TransNode = Cast<UAnimStateTransitionNode>(Node))
+		if (UAnimStateTransitionNode* TransNode = Cast<UAnimStateTransitionNode>(Node); IsValid(TransNode))
 		{
 			AllTransitions.Add(TransNode);
 		}
@@ -113,8 +114,8 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphGetTransition::Execute(const TS
 			UAnimStateNodeBase* PrevState = TransNode->GetPreviousState();
 			UAnimStateNodeBase* NextState = TransNode->GetNextState();
 
-			FString PrevName = PrevState ? PrevState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("");
-			FString NextName = NextState ? NextState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("");
+			FString PrevName = IsValid(PrevState) ? PrevState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("");
+			FString NextName = IsValid(NextState) ? NextState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("");
 
 			if (PrevName.Equals(FromState, ESearchCase::IgnoreCase) &&
 				NextName.Equals(ToState, ESearchCase::IgnoreCase))
@@ -124,7 +125,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphGetTransition::Execute(const TS
 			}
 		}
 
-		if (!FoundTransition)
+		if (!IsValid(FoundTransition))
 		{
 			// Build error with available transitions
 			FString Available;
@@ -132,8 +133,8 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphGetTransition::Execute(const TS
 			{
 				UAnimStateNodeBase* PrevState = TransNode->GetPreviousState();
 				UAnimStateNodeBase* NextState = TransNode->GetNextState();
-				FString PrevName = PrevState ? PrevState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("?");
-				FString NextName = NextState ? NextState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("?");
+				FString PrevName = IsValid(PrevState) ? PrevState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("?");
+				FString NextName = IsValid(NextState) ? NextState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("?");
 				if (!Available.IsEmpty())
 				{
 					Available += TEXT(", ");
@@ -149,8 +150,8 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphGetTransition::Execute(const TS
 
 	UAnimStateNodeBase* PrevState = FoundTransition->GetPreviousState();
 	UAnimStateNodeBase* NextState = FoundTransition->GetNextState();
-	FString PrevName = PrevState ? PrevState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("?");
-	FString NextName = NextState ? NextState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("?");
+	FString PrevName = IsValid(PrevState) ? PrevState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("?");
+	FString NextName = IsValid(NextState) ? NextState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("?");
 
 	FString Summary = FString::Printf(TEXT("Transition '%s' -> '%s': duration=%.2f"),
 		*PrevName, *NextName, FoundTransition->CrossfadeDuration);

@@ -97,7 +97,7 @@ IClaireonTool::FToolResult ClaireonTool_AssetResave::Execute(const TSharedPtr<FJ
 
 		// Load the package
 		UPackage* Package = LoadPackage(nullptr, *PackagePathStr, LOAD_None);
-		if (!Package)
+		if (!IsValid(Package))
 		{
 			FailedArray.Add(MakeShared<FJsonValueString>(AssetPath));
 			UE_LOG(LogTemp, Warning, TEXT("ClaireonTool_AssetResave: Failed to load package: %s"), *PackagePathStr);

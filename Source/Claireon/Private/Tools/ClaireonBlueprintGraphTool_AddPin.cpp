@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -15,6 +15,7 @@
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraphSchema_K2.h"
+#include "K2Node_EditablePinBase.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_CallArrayFunction.h"
 #include "K2Node_CallDataTableFunction.h"
@@ -112,6 +113,11 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddPin::GetInputSchema() cons
     Builder.AddString(TEXT("node_title"), TEXT("Title of the target node."));
     Builder.AddString(TEXT("node_guid"), TEXT("GUID of the target node (alternative to node_title)."));
     Builder.AddString(TEXT("pin_case"), TEXT("Optional case value for SwitchInteger/SwitchString/SwitchName."));
+    Builder.AddString(TEXT("pin_name"), TEXT("With pin_type: create a USER-DEFINED pin of this name on a Tunnel/FunctionEntry/FunctionResult/CustomEvent node (this is how collapsed-graph tunnel pins are authored)."));
+    Builder.AddString(TEXT("pin_type"), TEXT("Type for the user-defined pin: 'exec' or any variable_type string (e.g. 'Boolean', 'Actor', 'Transform')."));
+    Builder.AddString(TEXT("pin_direction"), TEXT("'input' | 'output' for the user-defined pin. Defaults to whichever direction the node supports (entry tunnels emit outputs, result tunnels take inputs)."));
+    // Read at Execute and never declared until now.
+    Builder.AddString(TEXT("pin_value"), TEXT("Optional default value for the new pin, in the pin type's ImportText form."));
     Builder.AddString(TEXT("response_mode"), TEXT("Response verbosity: 'full' | 'changed' | 'status' (default 'changed')."));
     return Builder.Build();
 }
@@ -136,7 +142,7 @@ FToolResult ClaireonBlueprintGraphTool_AddPin::AddPin_Impl(
 {
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
-	if (!Blueprint || !Graph)
+	if (!IsValid(Blueprint) || !IsValid(Graph))
 		return MakeErrorResult(TEXT("Blueprint or Graph is no longer valid"));
 
 	UEdGraphNode* Node = nullptr;
@@ -159,6 +165,78 @@ FToolResult ClaireonBlueprintGraphTool_AddPin::AddPin_Impl(
 	FString NodeTitle = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();
 	int32 PinsAdded = 0;
 
+	// User-defined pin path: pin_name + pin_type on a UK2Node_EditablePinBase
+	// (Tunnel, FunctionEntry, FunctionResult, CustomEvent). This is how collapsed
+	// graphs' tunnel pins are authored -- composite instance pins derive from them.
+	FString UserPinName, UserPinType;
+	if (Params->TryGetStringField(TEXT("pin_name"), UserPinName)
+		&& Params->TryGetStringField(TEXT("pin_type"), UserPinType)
+		&& !UserPinName.IsEmpty())
+	{
+		UK2Node_EditablePinBase* EditableNode = Cast<UK2Node_EditablePinBase>(Node);
+		if (!IsValid(EditableNode))
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("Node '%s' (%s) does not support user-defined pins (expected a Tunnel/FunctionEntry/FunctionResult/CustomEvent-style node)"),
+				*NodeTitle, *Node->GetClass()->GetName()));
+		}
+
+		FEdGraphPinType NewPinType;
+		if (UserPinType.Equals(TEXT("exec"), ESearchCase::IgnoreCase))
+		{
+			NewPinType.PinCategory = UEdGraphSchema_K2::PC_Exec;
+		}
+		else
+		{
+			ClaireonBlueprintHelpers::FParseVariableTypeResult ParseResult =
+				ClaireonBlueprintHelpers::ParseVariableTypeChecked(UserPinType);
+			if (!ParseResult.bSucceeded)
+			{
+				return MakeErrorResult(FString::Printf(
+					TEXT("add_pin: failed to parse pin_type '%s': %s"), *UserPinType, *ParseResult.Error));
+			}
+			NewPinType = ParseResult.PinType;
+		}
+
+		// Direction: explicit pin_direction wins; otherwise derive from what the
+		// node can carry (entry tunnels emit outputs, result tunnels take inputs).
+		EEdGraphPinDirection Direction = EGPD_Output;
+		FString DirectionStr;
+		if (Params->TryGetStringField(TEXT("pin_direction"), DirectionStr))
+		{
+			Direction = DirectionStr.Equals(TEXT("input"), ESearchCase::IgnoreCase) ? EGPD_Input : EGPD_Output;
+		}
+		else
+		{
+			FText DirProbeError;
+			if (!EditableNode->CanCreateUserDefinedPin(NewPinType, EGPD_Output, DirProbeError))
+			{
+				Direction = EGPD_Input;
+			}
+		}
+
+		UEdGraphPin* NewPin = EditableNode->CreateUserDefinedPin(FName(*UserPinName), NewPinType, Direction);
+		if (!NewPin)
+		{
+			// Direction may be unsupported on this node; try the opposite before failing.
+			Direction = (Direction == EGPD_Output) ? EGPD_Input : EGPD_Output;
+			NewPin = EditableNode->CreateUserDefinedPin(FName(*UserPinName), NewPinType, Direction);
+		}
+		if (!NewPin)
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("CreateUserDefinedPin failed for '%s' (%s) on node '%s'"),
+				*UserPinName, *UserPinType, *NodeTitle));
+		}
+
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+		Data->Cursor.LastOperationStatus = FString::Printf(
+			TEXT("Added user-defined pin '%s' (%s, %s) to node: %s"),
+			*UserPinName, *UserPinType, Direction == EGPD_Input ? TEXT("input") : TEXT("output"), *NodeTitle);
+		Data->LastOperationAffectedNodes.Add(Node->NodeGuid);
+		return BuildStateResponse(SessionId, Data);
+	}
+
 	// Try IK2Node_AddPinInterface first
 	IK2Node_AddPinInterface* AddPinIface = Cast<IK2Node_AddPinInterface>(Node);
 	if (AddPinIface)
@@ -174,7 +252,7 @@ FToolResult ClaireonBlueprintGraphTool_AddPin::AddPin_Impl(
 		}
 	}
 	// Try Switch nodes
-	else if (UK2Node_Switch* SwitchNode = Cast<UK2Node_Switch>(Node))
+	else if (UK2Node_Switch* SwitchNode = Cast<UK2Node_Switch>(Node); IsValid(SwitchNode))
 	{
 		if (SwitchNode->IsA<UK2Node_SwitchEnum>())
 		{
@@ -186,7 +264,7 @@ FToolResult ClaireonBlueprintGraphTool_AddPin::AddPin_Impl(
 			if (!PinValue.IsEmpty())
 			{
 				// For String/Name switches, directly add to PinNames for a specific case value
-				if (UK2Node_SwitchString* StringSwitch = Cast<UK2Node_SwitchString>(SwitchNode))
+				if (UK2Node_SwitchString* StringSwitch = Cast<UK2Node_SwitchString>(SwitchNode); IsValid(StringSwitch))
 				{
 					StringSwitch->PinNames.Add(FName(*PinValue));
 					// Append index suffix for subsequent pins in batch
@@ -195,7 +273,7 @@ FToolResult ClaireonBlueprintGraphTool_AddPin::AddPin_Impl(
 						StringSwitch->PinNames.Last() = FName(*FString::Printf(TEXT("%s_%d"), *PinValue, i));
 					}
 				}
-				else if (UK2Node_SwitchName* NameSwitch = Cast<UK2Node_SwitchName>(SwitchNode))
+				else if (UK2Node_SwitchName* NameSwitch = Cast<UK2Node_SwitchName>(SwitchNode); IsValid(NameSwitch))
 				{
 					NameSwitch->PinNames.Add(FName(*PinValue));
 					if (i > 0)

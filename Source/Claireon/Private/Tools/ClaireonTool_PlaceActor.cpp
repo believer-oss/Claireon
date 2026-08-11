@@ -29,10 +29,11 @@ FString ClaireonTool_PlaceActor::GetCategory() const
 
 FString ClaireonTool_PlaceActor::GetDescription() const
 {
-	return TEXT("Place one or more actors in the editor world by class path. "
-				"Supports Blueprint and native class paths, batch placement via an actors array, "
-				"optional location/rotation/scale/label/properties per actor, and automatic ISM mode "
-				"when the class_path points to a static mesh asset.");
+	return TEXT("Place one or more actors in the editor world by class path. Accepts Blueprint and native class "
+				"paths, batch placement via an actors array, per-actor "
+				"location/rotation/scale/label/properties, and automatic ISM mode when class_path points at a "
+				"static mesh asset. Non-session and immediate: spawns into the current editor world inside one "
+				"undoable transaction, requiring no open session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PlaceActor::GetInputSchema() const
@@ -96,7 +97,7 @@ TSharedPtr<FJsonObject> ClaireonTool_PlaceActor::GetInputSchema() const
 	return Schema;
 }
 
-namespace
+namespace ClaireonTool_PlaceActor_Private
 {
 	FVector PlaceActor_ParseVector(const TSharedPtr<FJsonObject>& Obj, double DefaultX = 0.0, double DefaultY = 0.0, double DefaultZ = 0.0)
 	{
@@ -122,6 +123,7 @@ namespace
 		return FRotator(Pitch, Yaw, Roll);
 	}
 } // namespace
+using namespace ClaireonTool_PlaceActor_Private;
 
 FToolResult ClaireonTool_PlaceActor::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
@@ -211,7 +213,7 @@ FToolResult ClaireonTool_PlaceActor::Execute(const TSharedPtr<FJsonObject>& Argu
 
 		// Load the object
 		UObject* LoadedObject = StaticLoadObject(UObject::StaticClass(), nullptr, *ClassPath);
-		if (!LoadedObject)
+		if (!IsValid(LoadedObject))
 		{
 			TSharedPtr<FJsonObject> ErrObj = MakeShared<FJsonObject>();
 			ErrObj->SetStringField(TEXT("status"), TEXT("failed"));
@@ -223,7 +225,7 @@ FToolResult ClaireonTool_PlaceActor::Execute(const TSharedPtr<FJsonObject>& Argu
 
 		// Check if this is a static mesh -> ISM path
 		UStaticMesh* LoadedMesh = Cast<UStaticMesh>(LoadedObject);
-		if (LoadedMesh)
+		if (IsValid(LoadedMesh))
 		{
 			// ISM path: find or create ISM actor for this mesh
 			FString MeshName = LoadedMesh->GetName();
@@ -250,13 +252,13 @@ FToolResult ClaireonTool_PlaceActor::Execute(const TSharedPtr<FJsonObject>& Argu
 					}
 				}
 
-				if (!ISMActor)
+				if (!IsValid(ISMActor))
 				{
 					// Create a new actor with an ISM component
 					FActorSpawnParameters SpawnParams;
 					SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 					ISMActor = World->SpawnActor<AActor>(AActor::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
-					if (ISMActor)
+					if (IsValid(ISMActor))
 					{
 						ISMActor->SetActorLabel(ISMLabel, /*bMarkDirty=*/true);
 
@@ -267,14 +269,14 @@ FToolResult ClaireonTool_PlaceActor::Execute(const TSharedPtr<FJsonObject>& Argu
 					}
 				}
 
-				if (ISMActor && ISMComponent)
+				if (IsValid(ISMActor) && IsValid(ISMComponent))
 				{
 					ISMActorMap.Add(ClassPath, ISMActor);
 					ISMComponentMap.Add(ClassPath, ISMComponent);
 				}
 			}
 
-			if (!ISMActor || !ISMComponent)
+			if (!IsValid(ISMActor) || !IsValid(ISMComponent))
 			{
 				TSharedPtr<FJsonObject> ErrObj = MakeShared<FJsonObject>();
 				ErrObj->SetStringField(TEXT("status"), TEXT("failed"));
@@ -310,16 +312,16 @@ FToolResult ClaireonTool_PlaceActor::Execute(const TSharedPtr<FJsonObject>& Argu
 
 		// Normal actor path: resolve class
 		UClass* SpawnClass = nullptr;
-		if (UBlueprint* BP = Cast<UBlueprint>(LoadedObject))
+		if (UBlueprint* BP = Cast<UBlueprint>(LoadedObject); IsValid(BP))
 		{
 			SpawnClass = BP->GeneratedClass;
 		}
-		else if (UClass* DirectClass = Cast<UClass>(LoadedObject))
+		else if (UClass* DirectClass = Cast<UClass>(LoadedObject); IsValid(DirectClass))
 		{
 			SpawnClass = DirectClass;
 		}
 
-		if (!SpawnClass)
+		if (!IsValid(SpawnClass))
 		{
 			TSharedPtr<FJsonObject> ErrObj = MakeShared<FJsonObject>();
 			ErrObj->SetStringField(TEXT("status"), TEXT("failed"));
@@ -344,7 +346,7 @@ FToolResult ClaireonTool_PlaceActor::Execute(const TSharedPtr<FJsonObject>& Argu
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
 		AActor* SpawnedActor = World->SpawnActor<AActor>(SpawnClass, Location, Rotation, SpawnParams);
-		if (!SpawnedActor)
+		if (!IsValid(SpawnedActor))
 		{
 			TSharedPtr<FJsonObject> ErrObj = MakeShared<FJsonObject>();
 			ErrObj->SetStringField(TEXT("status"), TEXT("failed"));

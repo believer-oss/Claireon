@@ -100,7 +100,7 @@ FToolResult ClaireonNiagaraTool_RemoveModule::Execute(const TSharedPtr<FJsonObje
 		UEdGraphPin* LinkedPin = ModuleInputPin->LinkedTo[0];
 		UEdGraphNode* LinkedNode = LinkedPin->GetOwningNode();
 		UNiagaraNode* LinkedNiagaraNode = Cast<UNiagaraNode>(LinkedNode);
-		if (LinkedNiagaraNode)
+		if (IsValid(LinkedNiagaraNode))
 		{
 			UEdGraphPin* OverrideInputPin = ClaireonNiagaraEditInternal::FindParameterMapInputPin(*LinkedNiagaraNode);
 			if (OverrideInputPin && OverrideInputPin->LinkedTo.Num() == 1)
@@ -123,7 +123,7 @@ FToolResult ClaireonNiagaraTool_RemoveModule::Execute(const TSharedPtr<FJsonObje
 
 	ModuleToRemove->BreakAllNodeLinks();
 
-	if (OverrideNode)
+	if (IsValid(OverrideNode))
 	{
 		OverrideNode->BreakAllNodeLinks();
 	}
@@ -133,7 +133,7 @@ FToolResult ClaireonNiagaraTool_RemoveModule::Execute(const TSharedPtr<FJsonObje
 		UpstreamOutputPin->MakeLinkTo(DownstreamInputPin);
 	}
 
-	if (OverrideNode)
+	if (IsValid(OverrideNode))
 	{
 		OverrideNode->DestroyNode();
 	}

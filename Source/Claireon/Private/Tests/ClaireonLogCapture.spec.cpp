@@ -47,20 +47,18 @@ namespace ClaireonLogCaptureSpec
 }
 
 // ---------------------------------------------------------------------------
-// Construct.SnapshotsDenylist
+// Construct.CapturesImmediately
 // ---------------------------------------------------------------------------
 
-UNTEST_UNIT_OPTS(Claireon, LogCapture, Construct_SnapshotsDenylist, UNTEST_TIMEOUTMS(10000))
+UNTEST_UNIT_OPTS(Claireon, LogCapture, Construct_CapturesImmediately, UNTEST_TIMEOUTMS(10000))
 {
 	FClaireonLogCapture Capture(ELogVerbosity::Warning);
 
-	// Emit a marker through a denied category (LogStreaming is in the default
-	// denylist) and through an allowed one (LogClaireon).
-	UE_LOG(LogStreaming, Warning, TEXT("ClaireonDeniedMarker_DoNotCapture"));
+	// The capture is an unbuffered GLog device (CanBeUsedOnMultipleThreads), so
+	// a marker emitted after construction is visible to an immediate read.
 	UE_LOG(LogClaireon, Warning, TEXT("ClaireonAllowedMarker_ShouldCapture"));
 
 	const FString Output = Capture.GetCapturedOutput();
-	UNTEST_ASSERT_FALSE(Output.Contains(TEXT("ClaireonDeniedMarker_DoNotCapture")));
 	UNTEST_ASSERT_TRUE(Output.Contains(TEXT("ClaireonAllowedMarker_ShouldCapture")));
 	co_return;
 }
@@ -87,19 +85,67 @@ UNTEST_UNIT_OPTS(Claireon, LogCapture, FiltersByVerbosity, UNTEST_TIMEOUTMS(1000
 }
 
 // ---------------------------------------------------------------------------
-// LogCapture.FiltersByCategory
+// LogCapture.LogFloorCapturesDisplayAndLog
+//
+// The floor console_execute uses (P1-6). Console command handlers report at
+// Display/Log, so the default Warning floor drops everything they emit.
 // ---------------------------------------------------------------------------
 
-UNTEST_UNIT_OPTS(Claireon, LogCapture, FiltersByCategory, UNTEST_TIMEOUTMS(10000))
+UNTEST_UNIT_OPTS(Claireon, LogCapture, LogFloorCapturesDisplayAndLog, UNTEST_TIMEOUTMS(10000))
+{
+	FClaireonLogCapture Capture(ELogVerbosity::Log);
+
+	UE_LOG(LogClaireon, Display, TEXT("ClaireonLogFloor_Display_Keep"));
+	UE_LOG(LogClaireon, Log,     TEXT("ClaireonLogFloor_Log_Keep"));
+	UE_LOG(LogClaireon, Warning, TEXT("ClaireonLogFloor_Warning_Keep"));
+
+	const FString Output = Capture.GetCapturedOutput();
+	UNTEST_ASSERT_TRUE(Output.Contains(TEXT("ClaireonLogFloor_Display_Keep")));
+	UNTEST_ASSERT_TRUE(Output.Contains(TEXT("ClaireonLogFloor_Log_Keep")));
+	UNTEST_ASSERT_TRUE(Output.Contains(TEXT("ClaireonLogFloor_Warning_Keep")));
+	co_return;
+}
+
+// ---------------------------------------------------------------------------
+// LogCapture.LabelsEachLineWithItsOwnVerbosity
+//
+// The label used to be a two-way Error/Warning split, which was only correct
+// while the floor was Warning. At a Log floor it stamped "[Warning]" on Display
+// and Log lines -- a wrong answer about severity, in the tool output a caller
+// reads to decide whether a command failed.
+// ---------------------------------------------------------------------------
+
+UNTEST_UNIT_OPTS(Claireon, LogCapture, LabelsEachLineWithItsOwnVerbosity, UNTEST_TIMEOUTMS(10000))
+{
+	FClaireonLogCapture Capture(ELogVerbosity::Log);
+
+	UE_LOG(LogClaireon, Display, TEXT("ClaireonLabel_Display"));
+	UE_LOG(LogClaireon, Warning, TEXT("ClaireonLabel_Warning"));
+	UE_LOG(LogClaireon, Error,   TEXT("ClaireonLabel_Error"));
+
+	const FString Output = Capture.GetCapturedOutput();
+	UNTEST_ASSERT_TRUE(Output.Contains(TEXT("[Display] LogClaireon: ClaireonLabel_Display")));
+	// The pre-existing labels are unchanged, so existing readers keep working.
+	UNTEST_ASSERT_TRUE(Output.Contains(TEXT("[Warning] LogClaireon: ClaireonLabel_Warning")));
+	UNTEST_ASSERT_TRUE(Output.Contains(TEXT("[Error] LogClaireon: ClaireonLabel_Error")));
+	co_return;
+}
+
+// ---------------------------------------------------------------------------
+// LogCapture.CapturesAllCategories
+// ---------------------------------------------------------------------------
+
+UNTEST_UNIT_OPTS(Claireon, LogCapture, CapturesAllCategories, UNTEST_TIMEOUTMS(10000))
 {
 	FClaireonLogCapture Capture(ELogVerbosity::Warning);
 
-	// LogStreaming is in the default denylist; LogClaireon is not.
-	UE_LOG(LogStreaming, Warning, TEXT("ClaireonCategory_Streaming_Drop"));
+	// The category denylist was removed: capture always captures. LogStreaming
+	// was in the old default denylist and must now be captured like any other.
+	UE_LOG(LogStreaming, Warning, TEXT("ClaireonCategory_Streaming_Keep"));
 	UE_LOG(LogClaireon, Warning, TEXT("ClaireonCategory_Claireon_Keep"));
 
 	const FString Output = Capture.GetCapturedOutput();
-	UNTEST_ASSERT_FALSE(Output.Contains(TEXT("ClaireonCategory_Streaming_Drop")));
+	UNTEST_ASSERT_TRUE(Output.Contains(TEXT("ClaireonCategory_Streaming_Keep")));
 	UNTEST_ASSERT_TRUE(Output.Contains(TEXT("ClaireonCategory_Claireon_Keep")));
 	co_return;
 }
@@ -180,27 +226,10 @@ UNTEST_UNIT_OPTS(Claireon, LogCapture, MultiThreadStress, UNTEST_TIMEOUTMS(30000
 
 	int32 CapturedClaireonWarnings = 0;
 	bool bAllPayloadsValid = true;
-	bool bAnyDeniedCategoryLine = false;
 
-	// Default-denylist categories. Any line whose category prefix matches one
-	// of these implies the snapshot was bypassed -- a regression.
-	const TCHAR* const DeniedCategoryPrefixes[] = {
-		TEXT("[Warning] LogBlueprint: "),
-		TEXT("[Warning] LogAnimation: "),
-		TEXT("[Warning] LogAnimationCompressionInternal: "),
-		TEXT("[Warning] LogLinker: "),
-		TEXT("[Warning] LogStreaming: "),
-		TEXT("[Warning] LogSlate: "),
-		TEXT("[Warning] LogChooser: "),
-		TEXT("[Error] LogBlueprint: "),
-		TEXT("[Error] LogAnimation: "),
-		TEXT("[Error] LogAnimationCompressionInternal: "),
-		TEXT("[Error] LogLinker: "),
-		TEXT("[Error] LogStreaming: "),
-		TEXT("[Error] LogSlate: "),
-		TEXT("[Error] LogChooser: "),
-	};
-
+	// NOTE: the category denylist was removed -- capture always captures, so
+	// engine chatter from any category may legitimately appear between the
+	// stress lines. Only [Warning] LogClaireon: lines are validated.
 	for (const FString& Line : Lines)
 	{
 		if (Line.IsEmpty())
@@ -211,15 +240,6 @@ UNTEST_UNIT_OPTS(Claireon, LogCapture, MultiThreadStress, UNTEST_TIMEOUTMS(30000
 		if (Line.StartsWith(TEXT("[...truncated:")))
 		{
 			continue;
-		}
-
-		for (const TCHAR* DeniedPrefix : DeniedCategoryPrefixes)
-		{
-			if (Line.StartsWith(DeniedPrefix))
-			{
-				bAnyDeniedCategoryLine = true;
-				break;
-			}
 		}
 
 		if (!Line.StartsWith(WarningPrefix))
@@ -256,7 +276,6 @@ UNTEST_UNIT_OPTS(Claireon, LogCapture, MultiThreadStress, UNTEST_TIMEOUTMS(30000
 		}
 	}
 
-	UNTEST_ASSERT_FALSE(bAnyDeniedCategoryLine);
 	UNTEST_ASSERT_TRUE(bAllPayloadsValid);
 
 	// Cap invariant: if truncation marker is present OR captured count is at

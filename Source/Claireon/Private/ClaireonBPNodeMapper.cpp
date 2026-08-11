@@ -37,7 +37,7 @@
 #include "K2Node_BaseAsyncTask.h"
 #include "Engine/LatentActionManager.h"
 
-namespace
+namespace ClaireonBPNodeMapper_Private
 {
 	FString MakeIndent(int32 IndentLevel)
 	{
@@ -52,7 +52,7 @@ namespace
 	// Get the short GUID string for a node
 	FString GetNodeGuidStr(const UEdGraphNode* Node)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			return TEXT("null");
 		}
@@ -81,7 +81,7 @@ namespace
 	// Find a pin by name and direction on a node
 	UEdGraphPin* FindPin(const UEdGraphNode* Node, const FName& PinName, EEdGraphPinDirection Direction)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			return nullptr;
 		}
@@ -230,6 +230,7 @@ namespace
 	}
 
 }
+using namespace ClaireonBPNodeMapper_Private;
 
 namespace ClaireonBPNodeMapperInternal
 {
@@ -362,7 +363,7 @@ FString FClaireonBPNodeMapper::GetConnectedPinExpression(const UEdGraphPin* Pin)
 	}
 
 	UEdGraphPin* LinkedPin = Pin->LinkedTo[0];
-	if (!LinkedPin || !LinkedPin->GetOwningNode())
+	if (!LinkedPin || !IsValid(LinkedPin->GetOwningNode()))
 	{
 		return TEXT("/* unconnected */");
 	}
@@ -373,7 +374,7 @@ FString FClaireonBPNodeMapper::GetConnectedPinExpression(const UEdGraphPin* Pin)
 	InlinedPureNodes.Add(SourceNode);
 
 	// Variable get -> return variable name
-	if (UK2Node_VariableGet* VarGet = Cast<UK2Node_VariableGet>(SourceNode))
+	if (UK2Node_VariableGet* VarGet = Cast<UK2Node_VariableGet>(SourceNode); IsValid(VarGet))
 	{
 		// V7-space: Sanitize variable names to valid C++ identifiers
 		return SanitizeCppIdentifier(VarGet->GetVarName().ToString());
@@ -386,7 +387,7 @@ FString FClaireonBPNodeMapper::GetConnectedPinExpression(const UEdGraphPin* Pin)
 	}
 
 	// Call function -> return FunctionName(...)  or temp variable reference
-	if (UK2Node_CallFunction* CallNode = Cast<UK2Node_CallFunction>(SourceNode))
+	if (UK2Node_CallFunction* CallNode = Cast<UK2Node_CallFunction>(SourceNode); IsValid(CallNode))
 	{
 		FString FuncName = CallNode->FunctionReference.GetMemberName().ToString();
 		FuncName = SanitizeCppIdentifier(FuncName);
@@ -505,16 +506,16 @@ FString FClaireonBPNodeMapper::GetConnectedPinExpression(const UEdGraphPin* Pin)
 	}
 
 	// Dynamic cast -> return cast result variable (matches MapCastNode output)
-	if (UK2Node_DynamicCast* CastNode = Cast<UK2Node_DynamicCast>(SourceNode))
+	if (UK2Node_DynamicCast* CastNode = Cast<UK2Node_DynamicCast>(SourceNode); IsValid(CastNode))
 	{
 		return TEXT("CastResult");
 	}
 
 	// V5-1: Handle macro instances with pure output pins
-	if (UK2Node_MacroInstance* MacroNode = Cast<UK2Node_MacroInstance>(SourceNode))
+	if (UK2Node_MacroInstance* MacroNode = Cast<UK2Node_MacroInstance>(SourceNode); IsValid(MacroNode))
 	{
 		FString MacroName = TEXT("Macro");
-		if (MacroNode->GetMacroGraph())
+		if (IsValid(MacroNode->GetMacroGraph()))
 		{
 			MacroName = SanitizeCppIdentifier(MacroNode->GetMacroGraph()->GetName());
 		}
@@ -532,14 +533,14 @@ FString FClaireonBPNodeMapper::GetConnectedPinExpression(const UEdGraphPin* Pin)
 	}
 
 	// V6-1: Reroute/knot node -- transparent pass-through, recurse on input
-	if (UK2Node_Knot* KnotNode = Cast<UK2Node_Knot>(SourceNode))
+	if (UK2Node_Knot* KnotNode = Cast<UK2Node_Knot>(SourceNode); IsValid(KnotNode))
 	{
 		UEdGraphPin* InputPin = KnotNode->GetInputPin();
 		return InputPin ? GetConnectedPinExpression(InputPin) : TEXT("/* unconnected knot */");
 	}
 
 	// V6-2: Timeline curve output -> member reference to timeline interpolated value
-	if (UK2Node_Timeline* TimelineNode = Cast<UK2Node_Timeline>(SourceNode))
+	if (UK2Node_Timeline* TimelineNode = Cast<UK2Node_Timeline>(SourceNode); IsValid(TimelineNode))
 	{
 		FString TimelineName = TimelineNode->TimelineName.ToString();
 		FString TrackName = LinkedPin->PinName.ToString();
@@ -551,7 +552,7 @@ FString FClaireonBPNodeMapper::GetConnectedPinExpression(const UEdGraphPin* Pin)
 	}
 
 	// V7-asyncproxy: Async action proxy output -> member variable reference
-	if (UK2Node_BaseAsyncTask* AsyncTaskNode = Cast<UK2Node_BaseAsyncTask>(SourceNode))
+	if (UK2Node_BaseAsyncTask* AsyncTaskNode = Cast<UK2Node_BaseAsyncTask>(SourceNode); IsValid(AsyncTaskNode))
 	{
 		// Reconstruct the proxy variable name using the same logic as MapAsyncActionNodeEx
 		UClass* ProxyClassPtr = nullptr;
@@ -560,7 +561,7 @@ FString FClaireonBPNodeMapper::GetConnectedPinExpression(const UEdGraphPin* Pin)
 		{
 			ProxyClassPtr = Cast<UClass>(ProxyClassProp->GetObjectPropertyValue_InContainer(AsyncTaskNode));
 		}
-		FString ActionTypeName = ProxyClassPtr ? ProxyClassPtr->GetName() : TEXT("AsyncTask");
+		FString ActionTypeName = IsValid(ProxyClassPtr) ? ProxyClassPtr->GetName() : TEXT("AsyncTask");
 		ActionTypeName.RemoveFromStart(TEXT("AbilityAsync_"));
 		ActionTypeName.RemoveFromStart(TEXT("AbilityTask_"));
 		FString ShortGuid = SourceNode->NodeGuid.ToString(EGuidFormats::Digits).Left(8);
@@ -572,7 +573,7 @@ FString FClaireonBPNodeMapper::GetConnectedPinExpression(const UEdGraphPin* Pin)
 	if (PinName == TEXT("ReturnValue") || PinName == TEXT("OutputPin") || PinName == TEXT("Output"))
 	{
 		// V5-1: For CallFunction nodes with generic pins, inline the call
-		if (UK2Node_CallFunction* FallbackCallNode = Cast<UK2Node_CallFunction>(SourceNode))
+		if (UK2Node_CallFunction* FallbackCallNode = Cast<UK2Node_CallFunction>(SourceNode); IsValid(FallbackCallNode))
 		{
 			FString FBFuncName = SanitizeCppIdentifier(FallbackCallNode->FunctionReference.GetMemberName().ToString());
 			TArray<FString> Params;
@@ -651,7 +652,7 @@ const TSet<FString>& FClaireonBPNodeMapper::GetAccumulatedIncludes() const
 
 FString FClaireonBPNodeMapper::MapNode(const UEdGraphNode* Node, int32 IndentLevel)
 {
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return FString();
 	}
@@ -665,7 +666,7 @@ FString FClaireonBPNodeMapper::MapNode(const UEdGraphNode* Node, int32 IndentLev
 	}
 
 	// 1. Macro instances
-	if (const UK2Node_MacroInstance* MacroNode = Cast<UK2Node_MacroInstance>(Node))
+	if (const UK2Node_MacroInstance* MacroNode = Cast<UK2Node_MacroInstance>(Node); IsValid(MacroNode))
 	{
 		FClaireonBPMacroHandler MacroHandler;
 		if (MacroHandler.IsKnownMacro(Node))
@@ -676,7 +677,7 @@ FString FClaireonBPNodeMapper::MapNode(const UEdGraphNode* Node, int32 IndentLev
 		// Unknown macro -- emit expanded tag with TODO
 		FString Indent = MakeIndent(IndentLevel);
 		FString GuidStr = GetNodeGuidStr(Node);
-		FString MacroName = MacroNode->GetMacroGraph() ? MacroNode->GetMacroGraph()->GetName() : TEXT("Unknown");
+		FString MacroName = IsValid(MacroNode->GetMacroGraph()) ? MacroNode->GetMacroGraph()->GetName() : TEXT("Unknown");
 		FString Output;
 		Output += FString::Printf(TEXT("%s// [BP:MACRO_EXPANDED] Guid=%s Type=%s\n"), *Indent, *GuidStr, *MacroName);
 		Output += FString::Printf(TEXT("%s// WARNING: This macro was expanded because no idiomatic C++ mapping exists.\n"), *Indent);
@@ -734,10 +735,10 @@ FString FClaireonBPNodeMapper::MapNode(const UEdGraphNode* Node, int32 IndentLev
 	}
 
 	// 3. Call function
-	if (const UK2Node_CallFunction* CallNode = Cast<UK2Node_CallFunction>(Node))
+	if (const UK2Node_CallFunction* CallNode = Cast<UK2Node_CallFunction>(Node); IsValid(CallNode))
 	{
 		// Check for array operations (priority 14 in dispatch, but must check here since CallFunction is the base)
-		if (const UFunction* TargetFunc = CallNode->GetTargetFunction())
+		if (const UFunction* TargetFunc = CallNode->GetTargetFunction(); IsValid(TargetFunc))
 		{
 			FString FuncName = TargetFunc->GetName();
 			if (FuncName.Contains(TEXT("Array_")))
@@ -882,7 +883,7 @@ FString FClaireonBPNodeMapper::PinTypeToCppType(const FEdGraphPinType& PinType) 
 		if (PinType.PinSubCategoryObject.IsValid())
 		{
 			UClass* ObjClass = Cast<UClass>(PinType.PinSubCategoryObject.Get());
-			if (ObjClass)
+			if (IsValid(ObjClass))
 			{
 				BaseType = FString::Printf(TEXT("%s%s*"),
 					ObjClass->GetPrefixCPP(), *ObjClass->GetName());
@@ -902,7 +903,7 @@ FString FClaireonBPNodeMapper::PinTypeToCppType(const FEdGraphPinType& PinType) 
 		if (PinType.PinSubCategoryObject.IsValid())
 		{
 			UClass* ObjClass = Cast<UClass>(PinType.PinSubCategoryObject.Get());
-			if (ObjClass)
+			if (IsValid(ObjClass))
 			{
 				BaseType = FString::Printf(TEXT("TSubclassOf<%s%s>"),
 					ObjClass->GetPrefixCPP(), *ObjClass->GetName());
@@ -922,7 +923,7 @@ FString FClaireonBPNodeMapper::PinTypeToCppType(const FEdGraphPinType& PinType) 
 		if (PinType.PinSubCategoryObject.IsValid())
 		{
 			UClass* ObjClass = Cast<UClass>(PinType.PinSubCategoryObject.Get());
-			if (ObjClass)
+			if (IsValid(ObjClass))
 			{
 				BaseType = FString::Printf(TEXT("TSoftObjectPtr<%s%s>"),
 					ObjClass->GetPrefixCPP(), *ObjClass->GetName());
@@ -942,7 +943,7 @@ FString FClaireonBPNodeMapper::PinTypeToCppType(const FEdGraphPinType& PinType) 
 		if (PinType.PinSubCategoryObject.IsValid())
 		{
 			UClass* ObjClass = Cast<UClass>(PinType.PinSubCategoryObject.Get());
-			if (ObjClass)
+			if (IsValid(ObjClass))
 			{
 				BaseType = FString::Printf(TEXT("TSoftClassPtr<%s%s>"),
 					ObjClass->GetPrefixCPP(), *ObjClass->GetName());
@@ -974,7 +975,7 @@ FString FClaireonBPNodeMapper::PinTypeToCppType(const FEdGraphPinType& PinType) 
 		if (PinType.PinSubCategoryObject.IsValid())
 		{
 			UScriptStruct* Struct = Cast<UScriptStruct>(PinType.PinSubCategoryObject.Get());
-			if (Struct)
+			if (IsValid(Struct))
 			{
 				BaseType = Struct->GetStructCPPName();
 			}
@@ -1274,7 +1275,7 @@ FString FClaireonBPNodeMapper::InferIncludePath(const FEdGraphPinType& PinType) 
 	}
 
 	// Try to resolve include from the class's package
-	if (UClass* TypeClass = Cast<UClass>(TypeObj))
+	if (UClass* TypeClass = Cast<UClass>(TypeObj); IsValid(TypeClass))
 	{
 		// Try authoritative metadata first
 		FString ModuleRelPath = TypeClass->GetMetaData(TEXT("ModuleRelativePath"));
@@ -1288,7 +1289,7 @@ FString FClaireonBPNodeMapper::InferIncludePath(const FEdGraphPinType& PinType) 
 		return FString::Printf(TEXT("%s/%s%s.h"), *ModuleName, TypeClass->GetPrefixCPP(), *TypeClass->GetName());
 	}
 
-	if (UScriptStruct* TypeStruct = Cast<UScriptStruct>(TypeObj))
+	if (UScriptStruct* TypeStruct = Cast<UScriptStruct>(TypeObj); IsValid(TypeStruct))
 	{
 		// Try authoritative metadata first
 		FString ModuleRelPath = TypeStruct->GetMetaData(TEXT("ModuleRelativePath"));
@@ -1302,7 +1303,7 @@ FString FClaireonBPNodeMapper::InferIncludePath(const FEdGraphPinType& PinType) 
 		return FString::Printf(TEXT("%s/%s.h"), *ModuleName, *TypeStruct->GetStructCPPName());
 	}
 
-	if (UEnum* TypeEnum = Cast<UEnum>(TypeObj))
+	if (UEnum* TypeEnum = Cast<UEnum>(TypeObj); IsValid(TypeEnum))
 	{
 		// Try authoritative metadata first
 		FString ModuleRelPath = TypeEnum->GetMetaData(TEXT("ModuleRelativePath"));
@@ -1322,7 +1323,7 @@ FString FClaireonBPNodeMapper::InferIncludePath(const FEdGraphPinType& PinType) 
 
 FString FClaireonBPNodeMapper::FormatBPTag(const UEdGraphNode* Node) const
 {
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return TEXT("// [BP:NODE] Guid={null} Type=Unknown Name=\"\"");
 	}
@@ -1485,14 +1486,14 @@ FString FClaireonBPNodeMapper::MapBranchNode(const UEdGraphNode* Node, int32 Ind
 		}
 		if (Pin->PinName == UEdGraphSchema_K2::PN_Then || Pin->PinName == TEXT("True"))
 		{
-			if (Pin->LinkedTo.Num() > 0 && Pin->LinkedTo[0]->GetOwningNode())
+			if (Pin->LinkedTo.Num() > 0 && IsValid(Pin->LinkedTo[0]->GetOwningNode()))
 			{
 				TrueGuid = GetNodeGuidStr(Pin->LinkedTo[0]->GetOwningNode());
 			}
 		}
 		else if (Pin->PinName == UEdGraphSchema_K2::PN_Else || Pin->PinName == TEXT("False"))
 		{
-			if (Pin->LinkedTo.Num() > 0 && Pin->LinkedTo[0]->GetOwningNode())
+			if (Pin->LinkedTo.Num() > 0 && IsValid(Pin->LinkedTo[0]->GetOwningNode()))
 			{
 				FalseGuid = GetNodeGuidStr(Pin->LinkedTo[0]->GetOwningNode());
 			}
@@ -1555,7 +1556,7 @@ FString FClaireonBPNodeMapper::MapCastNode(const UEdGraphNode* Node, int32 Inden
 
 	Output += FString::Printf(TEXT("%s%s\n"), *Indent, *FormatBPTag(Node));
 
-	FString TargetClassName = CastNode->TargetType ? FString::Printf(TEXT("%s%s"),
+	FString TargetClassName = IsValid(CastNode->TargetType) ? FString::Printf(TEXT("%s%s"),
 		CastNode->TargetType->GetPrefixCPP(), *CastNode->TargetType->GetName()) : TEXT("UObject");
 
 	// Find source object pin
@@ -1602,7 +1603,7 @@ FString FClaireonBPNodeMapper::MapSpawnActorNode(const UEdGraphNode* Node, int32
 				if (Pin->PinType.PinSubCategoryObject.IsValid())
 				{
 					UClass* ObjClass = Cast<UClass>(Pin->PinType.PinSubCategoryObject.Get());
-					if (ObjClass)
+					if (IsValid(ObjClass))
 					{
 						SpawnClassName = FString::Printf(TEXT("%s%s"),
 							ObjClass->GetPrefixCPP(), *ObjClass->GetName());
@@ -1763,7 +1764,7 @@ FString FClaireonBPNodeMapper::MapAddDelegateNode(const UEdGraphNode* Node, int3
 	if (DelegatePin && DelegatePin->LinkedTo.Num() > 0)
 	{
 		UEdGraphNode* LinkedNode = DelegatePin->LinkedTo[0]->GetOwningNode();
-		if (UK2Node_CreateDelegate* CreateDel = Cast<UK2Node_CreateDelegate>(LinkedNode))
+		if (UK2Node_CreateDelegate* CreateDel = Cast<UK2Node_CreateDelegate>(LinkedNode); IsValid(CreateDel))
 		{
 			HandlerFunc = CreateDel->GetFunctionName().ToString();
 		}
@@ -2216,10 +2217,10 @@ FString FClaireonBPNodeMapper::MapAsyncActionNode(const UEdGraphNode* Node, int3
 		FactoryClassPtr = Cast<UClass>(FactoryClassProp->GetObjectPropertyValue_InContainer(AsyncNode));
 	}
 
-	FString ProxyClassName = ProxyClassPtr ? FString::Printf(TEXT("%s%s"),
+	FString ProxyClassName = IsValid(ProxyClassPtr) ? FString::Printf(TEXT("%s%s"),
 		ProxyClassPtr->GetPrefixCPP(), *ProxyClassPtr->GetName()) : TEXT("UObject");
 	FString FactoryFunc = ProxyFactoryFuncName.IsNone() ? TEXT("Create") : ProxyFactoryFuncName.ToString();
-	FString FactoryClassName = FactoryClassPtr ? FString::Printf(TEXT("%s%s"),
+	FString FactoryClassName = IsValid(FactoryClassPtr) ? FString::Printf(TEXT("%s%s"),
 		FactoryClassPtr->GetPrefixCPP(), *FactoryClassPtr->GetName()) : ProxyClassName;
 
 	// Collect input parameters
@@ -2263,7 +2264,7 @@ FString FClaireonBPNodeMapper::MapAsyncActionNode(const UEdGraphNode* Node, int3
 	}
 
 	// Add include for the proxy class
-	if (ProxyClassPtr)
+	if (IsValid(ProxyClassPtr))
 	{
 		FString ProxyInclude = ProxyClassPtr->GetMetaData(TEXT("ModuleRelativePath"));
 		if (!ProxyInclude.IsEmpty())
@@ -2279,8 +2280,8 @@ FString FClaireonBPNodeMapper::MapUnknownNode(const UEdGraphNode* Node, int32 In
 {
 	FString Indent = MakeIndent(IndentLevel);
 	FString GuidStr = GetNodeGuidStr(Node);
-	FString TypeStr = Node ? Node->GetClass()->GetName() : TEXT("null");
-	FString NameStr = Node ? Node->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("");
+	FString TypeStr = IsValid(Node) ? Node->GetClass()->GetName() : TEXT("null");
+	FString NameStr = IsValid(Node) ? Node->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("");
 
 	FString Output;
 	Output += FString::Printf(TEXT("%s// [BP:UNKNOWN] Guid=%s Type=%s Name=\"%s\"\n"),
@@ -2323,7 +2324,7 @@ FMapNodeResult FClaireonBPNodeMapper::MapNodeEx(const UEdGraphNode* Node, int32 
 	if (Cast<UK2Node_SwitchName>(Node))    return MapSwitchNameNodeEx(Node, IndentLevel);
 
 	// SwitchGameplayTag (new in V3-3)
-	if (Node && Node->GetClass()->GetName().Contains(TEXT("SwitchGameplayTag")))
+	if (IsValid(Node) && Node->GetClass()->GetName().Contains(TEXT("SwitchGameplayTag")))
 	{
 		return MapSwitchGameplayTagNodeEx(Node, IndentLevel);
 	}
@@ -2341,9 +2342,9 @@ FMapNodeResult FClaireonBPNodeMapper::MapNodeEx(const UEdGraphNode* Node, int32 
 	}
 
 	// Latent K2Node_CallFunction detection (Delay, RetriggerableDelay, etc.)
-	if (const UK2Node_CallFunction* CallNode = Cast<UK2Node_CallFunction>(Node))
+	if (const UK2Node_CallFunction* CallNode = Cast<UK2Node_CallFunction>(Node); IsValid(CallNode))
 	{
-		if (const UFunction* TargetFunc = CallNode->GetTargetFunction())
+		if (const UFunction* TargetFunc = CallNode->GetTargetFunction(); IsValid(TargetFunc))
 		{
 			for (TFieldIterator<FProperty> It(TargetFunc); It; ++It)
 			{
@@ -2360,7 +2361,7 @@ FMapNodeResult FClaireonBPNodeMapper::MapNodeEx(const UEdGraphNode* Node, int32 
 
 	// V4-3: Custom events during scope-tree traversal emit comment tag only (not nested function defs)
 	// Must be checked before UK2Node_Event since UK2Node_CustomEvent derives from it
-	if (const UK2Node_CustomEvent* CustomEventNode = Cast<UK2Node_CustomEvent>(Node))
+	if (const UK2Node_CustomEvent* CustomEventNode = Cast<UK2Node_CustomEvent>(Node); IsValid(CustomEventNode))
 	{
 		FString EventName = CustomEventNode->CustomFunctionName.ToString();
 		if (EventName.IsEmpty() || EventName == TEXT("None"))
@@ -2822,14 +2823,14 @@ FMapNodeResult FClaireonBPNodeMapper::MapAsyncActionNodeEx(const UEdGraphNode* N
 		FactoryClassPtr = Cast<UClass>(FactoryClassProp->GetObjectPropertyValue_InContainer(AsyncNode));
 	}
 
-	FString ProxyClassName = ProxyClassPtr ? FString::Printf(TEXT("%s%s"),
+	FString ProxyClassName = IsValid(ProxyClassPtr) ? FString::Printf(TEXT("%s%s"),
 		ProxyClassPtr->GetPrefixCPP(), *ProxyClassPtr->GetName()) : TEXT("UObject");
 	FString FactoryFunc = ProxyFactoryFuncName.IsNone() ? TEXT("Create") : ProxyFactoryFuncName.ToString();
-	FString FactoryClassName = FactoryClassPtr ? FString::Printf(TEXT("%s%s"),
+	FString FactoryClassName = IsValid(FactoryClassPtr) ? FString::Printf(TEXT("%s%s"),
 		FactoryClassPtr->GetPrefixCPP(), *FactoryClassPtr->GetName()) : ProxyClassName;
 
 	// Generate valid member variable name from the async action type
-	FString ActionTypeName = ProxyClassPtr ? ProxyClassPtr->GetName() : TEXT("AsyncTask");
+	FString ActionTypeName = IsValid(ProxyClassPtr) ? ProxyClassPtr->GetName() : TEXT("AsyncTask");
 	ActionTypeName.RemoveFromStart(TEXT("AbilityAsync_"));
 	ActionTypeName.RemoveFromStart(TEXT("AbilityTask_"));
 	// V5-2: Include short GUID to disambiguate multiple async actions of the same type
@@ -2889,7 +2890,7 @@ FMapNodeResult FClaireonBPNodeMapper::MapAsyncActionNodeEx(const UEdGraphNode* N
 	Result.bIsBranchNode = false;
 
 	// Add include for proxy class
-	if (ProxyClassPtr)
+	if (IsValid(ProxyClassPtr))
 	{
 		FString IncludePath = ProxyClassPtr->GetMetaData(TEXT("ModuleRelativePath"));
 		if (!IncludePath.IsEmpty())
@@ -2929,7 +2930,7 @@ FMapNodeResult FClaireonBPNodeMapper::MapLatentCallFunctionNodeEx(const UEdGraph
 			// Suppress FLatentActionInfo parameter
 			if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Struct)
 			{
-				if (UScriptStruct* Struct = Cast<UScriptStruct>(Pin->PinType.PinSubCategoryObject.Get()))
+				if (UScriptStruct* Struct = Cast<UScriptStruct>(Pin->PinType.PinSubCategoryObject.Get()); IsValid(Struct))
 				{
 					if (Struct == FLatentActionInfo::StaticStruct())
 					{
@@ -3052,7 +3053,7 @@ FMapNodeResult FClaireonBPNodeMapper::MapCastNodeEx(const UEdGraphNode* Node, in
 
 	Result.Code += FString::Printf(TEXT("%s%s\n"), *Indent, *FormatBPTag(Node));
 
-	FString TargetClassName = CastNode->TargetType ? FString::Printf(TEXT("%s%s"),
+	FString TargetClassName = IsValid(CastNode->TargetType) ? FString::Printf(TEXT("%s%s"),
 		CastNode->TargetType->GetPrefixCPP(), *CastNode->TargetType->GetName()) : TEXT("UObject");
 
 	FString SourceExpr = TEXT("/* source */");
@@ -3100,7 +3101,7 @@ FMapNodeResult FClaireonBPNodeMapper::MapSpawnActorNodeEx(const UEdGraphNode* No
 				if (Pin->PinType.PinSubCategoryObject.IsValid())
 				{
 					UClass* ObjClass = Cast<UClass>(Pin->PinType.PinSubCategoryObject.Get());
-					if (ObjClass)
+					if (IsValid(ObjClass))
 					{
 						SpawnClassName = FString::Printf(TEXT("%s%s"),
 							ObjClass->GetPrefixCPP(), *ObjClass->GetName());

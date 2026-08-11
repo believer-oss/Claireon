@@ -38,7 +38,7 @@ FToolResult ClaireonInputTool_SetActionTriggerProperty::Execute(const TSharedPtr
 	}
 
 	UInputAction* IA = RequireInputAction(Data, Error);
-	if (!IA)
+	if (!IsValid(IA))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -67,7 +67,7 @@ FToolResult ClaireonInputTool_SetActionTriggerProperty::Execute(const TSharedPtr
 	}
 
 	UInputTrigger* Trigger = IA->Triggers[Index];
-	if (!Trigger)
+	if (!IsValid(Trigger))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Trigger at index %d is null"), Index));
 	}

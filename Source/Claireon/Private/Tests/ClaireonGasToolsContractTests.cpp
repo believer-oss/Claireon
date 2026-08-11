@@ -80,7 +80,10 @@ namespace ClaireonGasToolsContractHelpers
 
 using namespace ClaireonGasToolsContractHelpers;
 
-UNTEST_UNIT(Claireon, GasToolsContract, ToolNamesAreExact)
+// Budget: the bare UNTEST_UNIT default is 0.50ms (FUntestUnitFixture::DefaultTimeoutMs),
+// which is not a deliberate perf assertion. Too tight now that the tool registry is
+// populated process-wide and this test does real work -- do not restore the default.
+UNTEST_UNIT_OPTS(Claireon, GasToolsContract, ToolNamesAreExact, UNTEST_TIMEOUTMS(10000))
 {
 	for (const FNamedTool& Entry : MakeGasTools())
 	{
@@ -90,7 +93,7 @@ UNTEST_UNIT(Claireon, GasToolsContract, ToolNamesAreExact)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, GasToolsContract, AllToolsAreReadOnlySession)
+UNTEST_UNIT_OPTS(Claireon, GasToolsContract, AllToolsAreReadOnlySession, UNTEST_TIMEOUTMS(10000))
 {
 	// These mutate PIE runtime, not on-disk assets -- no asset-session handling.
 	for (const FNamedTool& Entry : MakeGasTools())
@@ -101,7 +104,7 @@ UNTEST_UNIT(Claireon, GasToolsContract, AllToolsAreReadOnlySession)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, GasToolsContract, SchemasExposeActorIdAndPieParams)
+UNTEST_UNIT_OPTS(Claireon, GasToolsContract, SchemasExposeActorIdAndPieParams, UNTEST_TIMEOUTMS(10000))
 {
 	for (const FNamedTool& Entry : MakeGasTools())
 	{
@@ -117,7 +120,7 @@ UNTEST_UNIT(Claireon, GasToolsContract, SchemasExposeActorIdAndPieParams)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, GasToolsContract, MissingActorIdIsAnError)
+UNTEST_UNIT_OPTS(Claireon, GasToolsContract, MissingActorIdIsAnError, UNTEST_TIMEOUTMS(10000))
 {
 	// Environment-independent: actorId is validated before the PIE guard, so an
 	// empty arg object errors on actorId regardless of whether PIE is running.

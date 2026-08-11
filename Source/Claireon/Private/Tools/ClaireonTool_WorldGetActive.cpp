@@ -14,16 +14,10 @@ FString ClaireonTool_WorldGetActive::GetOperation() const { return TEXT("get_act
 
 FString ClaireonTool_WorldGetActive::GetDescription() const
 {
-	return TEXT("Return the world that's actually live right now. "
-		"During PIE returns the PIE world; otherwise returns the editor world. "
-		"Errors when neither is available (editor still initializing). "
-		"Prefer this over the two python-side paths to the editor world: "
-		"unreal.EditorLevelLibrary.get_editor_world() is deprecated and returns null in PIE, and "
-		"unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world() (the modern "
-		"replacement) still returns null in PIE. claireon.world_get_active_world covers both cases. "
-		"To inspect AWorldSettings, call world.get_world_settings() in Python -- "
-		"world.get_editor_property('persistent_level') / .get_editor_property('world_settings') fail "
-		"because those properties are engine-protected.");
+	return TEXT("Return the world that is actually live right now: the PIE world during play, otherwise the editor "
+		"world; errors when neither exists. Prefer it over the Python paths, which both return null in PIE "
+		"-- unreal.EditorLevelLibrary.get_editor_world() (deprecated) and "
+		"UnrealEditorSubsystem.get_editor_world(). Stateless / read-only, opens no session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_WorldGetActive::GetInputSchema() const
@@ -36,7 +30,7 @@ TSharedPtr<FJsonObject> ClaireonTool_WorldGetActive::GetInputSchema() const
 
 IClaireonTool::FToolResult ClaireonTool_WorldGetActive::Execute(const TSharedPtr<FJsonObject>& /*Arguments*/)
 {
-	if (!GEngine)
+	if (!IsValid(GEngine))
 	{
 		return MakeErrorResult(TEXT("GEngine not available (editor not yet initialized)"));
 	}
@@ -46,18 +40,18 @@ IClaireonTool::FToolResult ClaireonTool_WorldGetActive::Execute(const TSharedPtr
 	EWorldType::Type SelectedType = EWorldType::None;
 	for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
 	{
-		if (WorldContext.WorldType == EWorldType::PIE && WorldContext.World())
+		if (WorldContext.WorldType == EWorldType::PIE && IsValid(WorldContext.World()))
 		{
 			SelectedWorld = WorldContext.World();
 			SelectedType = EWorldType::PIE;
 			break;
 		}
 	}
-	if (!SelectedWorld)
+	if (!IsValid(SelectedWorld))
 	{
 		for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
 		{
-			if (WorldContext.WorldType == EWorldType::Editor && WorldContext.World())
+			if (WorldContext.WorldType == EWorldType::Editor && IsValid(WorldContext.World()))
 			{
 				SelectedWorld = WorldContext.World();
 				SelectedType = EWorldType::Editor;
@@ -66,7 +60,7 @@ IClaireonTool::FToolResult ClaireonTool_WorldGetActive::Execute(const TSharedPtr
 		}
 	}
 
-	if (!SelectedWorld)
+	if (!IsValid(SelectedWorld))
 	{
 		return MakeErrorResult(TEXT("No live world: neither a PIE world nor an editor world is currently loaded. "
 			"Open a map with map.open_async first."));

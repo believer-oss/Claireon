@@ -21,9 +21,15 @@
 #if WITH_UNTESTED
 
 #include "Untest.h"
+#include "ClaireonModule.h"
+#include "ClaireonServer.h"
+#include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
+#include "Internationalization/Regex.h"
 #include "Tools/IClaireonTool.h"
 #include "IClaireonToolProvider.h"
 #include "Features/IModularFeatures.h"
+#include "SquidTasks/Task.h"
 
 namespace ClaireonDescriptionLintHelpers
 {
@@ -31,10 +37,22 @@ namespace ClaireonDescriptionLintHelpers
 	 * Walk the modular-feature provider list and collect all registered
 	 * IClaireonTool instances. Mirrors the discovery pattern used by
 	 * ClaireonApplySpecHelpTests.
+	 *
+	 * FClaireonModule::StartupModule() early-returns under IsRunningCommandlet(),
+	 * and Invoke-UntestTests.ps1 uses -run=UntestRunTests in BOTH of its modes,
+	 * so the IClaireonToolProvider modular feature is NEVER registered by normal
+	 * startup in any supported test run. Without the EnsureServerForTest() seam
+	 * the provider list is empty unless some earlier test in the same process
+	 * happened to call the seam first -- i.e. this lint was order-dependent and
+	 * audited nothing on its own. The seam registers
+	 * FClaireonBuiltinToolProvider unconditionally, so call it before reading
+	 * the modular-feature list. StartServer() is NOT a substitute: it refuses to
+	 * construct the registry when StartupModule() was skipped.
 	 */
 	void CollectAllRegisteredTools(TArray<TSharedPtr<IClaireonTool>>& OutTools)
 	{
 		OutTools.Reset();
+		FClaireonModule::Get().EnsureServerForTest();
 		TArray<IClaireonToolProvider*> Providers = IModularFeatures::Get()
 			.GetModularFeatureImplementations<IClaireonToolProvider>(IClaireonToolProvider::FeatureName);
 		for (IClaireonToolProvider* Provider : Providers)
@@ -159,24 +177,26 @@ namespace ClaireonDescriptionLintHelpers
 // guarantees that adding/regressing many descriptions surfaces as a single
 // readable batch report instead of one-at-a-time test failures.
 // ---------------------------------------------------------------------------
-UNTEST_UNIT(Claireon, DescriptionLint, AllP5CategoriesConformToTemplate)
+// Budget: the bare UNTEST_UNIT default is 0.50ms (FUntestUnitFixture::DefaultTimeoutMs),
+// which is not a deliberate perf assertion. This test sweeps the fully-populated
+// ~717-tool registry, so give it real headroom instead of restoring the default.
+UNTEST_UNIT_OPTS(Claireon, DescriptionLint, AllP5CategoriesConformToTemplate, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace ClaireonDescriptionLintHelpers;
 
 	TArray<TSharedPtr<IClaireonTool>> AllTools;
 	CollectAllRegisteredTools(AllTools);
 
-	// Commandlet test runners may execute before any IClaireonToolProvider has
-	// registered, in which case the modular-feature list is empty. Treat this
-	// as a skip-with-pass: the lint cannot run, but the absence of tool
-	// registration is an environment property, not a description regression.
-	if (AllTools.Num() == 0)
-	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("[DescriptionLint] No IClaireonToolProvider tools registered in this run; skipping lint."));
-		UNTEST_EXPECT_TRUE(true);
-		co_return;
-	}
+	// HARD FAILURE, not a skip. CollectAllRegisteredTools() calls
+	// EnsureServerForTest(), which registers FClaireonBuiltinToolProvider
+	// unconditionally, so an empty list now means the seam itself broke --
+	// which would silently retire the ONLY automated check on every tool
+	// description. The old form logged a warning and then did
+	// UNTEST_EXPECT_TRUE(true) + co_return: Untest has no skip primitive, so the
+	// runner scored that as a PASS. That assertion could not fail by
+	// construction, and the "skip" branch was the normal path in commandlet
+	// runs, meaning this lint reported green while auditing zero tools.
+	UNTEST_ASSERT_TRUE(AllTools.Num() > 0);
 
 	int32 ScopedCount = 0;
 	int32 LengthFailures = 0;
@@ -237,20 +257,21 @@ UNTEST_UNIT(Claireon, DescriptionLint, AllP5CategoriesConformToTemplate)
 //   - omit the project shibboleths "delightful", "thoughtful", "elegant".
 // Empty returns (the default) are skipped.
 // ---------------------------------------------------------------------------
-UNTEST_UNIT(Claireon, DescriptionLint, AllGetPatternsAreAsciiAndShibbolethFree)
+// Budget: the bare UNTEST_UNIT default is 0.50ms (FUntestUnitFixture::DefaultTimeoutMs),
+// which is not a deliberate perf assertion. This test sweeps the fully-populated
+// registry (~727 tools) and calls GetPatterns() on each, so give it real headroom.
+UNTEST_UNIT_OPTS(Claireon, DescriptionLint, AllGetPatternsAreAsciiAndShibbolethFree, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace ClaireonDescriptionLintHelpers;
 
 	TArray<TSharedPtr<IClaireonTool>> AllTools;
 	CollectAllRegisteredTools(AllTools);
 
-	if (AllTools.Num() == 0)
-	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("[DescriptionLint] No IClaireonToolProvider tools registered; skipping GetPatterns lint."));
-		UNTEST_EXPECT_TRUE(true);
-		co_return;
-	}
+	// HARD FAILURE, not a skip -- see the note on the sibling test above. The
+	// old UNTEST_EXPECT_TRUE(true) + co_return was scored as a PASS by the
+	// runner (Untest has no skip primitive) and was the normal path in
+	// commandlet runs, so this sweep reported green over zero tools.
+	UNTEST_ASSERT_TRUE(AllTools.Num() > 0);
 
 	TArray<FString> Failures;
 	int32 EvaluatedCount = 0;
@@ -294,6 +315,107 @@ UNTEST_UNIT(Claireon, DescriptionLint, AllGetPatternsAreAsciiAndShibbolethFree)
 		UE_LOG(LogTemp, Error,
 			TEXT("[DescriptionLint] %d GetPatterns() lint failure(s) across %d evaluated tool(s):"),
 			Failures.Num(), EvaluatedCount);
+		for (const FString& F : Failures)
+		{
+			UE_LOG(LogTemp, Error, TEXT("[DescriptionLint]   %s"), *F);
+		}
+	}
+
+	UNTEST_EXPECT_TRUE(Failures.Num() == 0);
+	co_return;
+}
+
+// ---------------------------------------------------------------------------
+// Retired dotted tool names must not appear in any description.
+//
+// Wire names are sealed as GetCategory() + "_" + GetOperation()
+// (IClaireonTool.h), so `trace_open` is the real name and `editor.trace.open`
+// is a name from a retired scheme. Ten trace-family schemas still told callers
+// "The session ID returned by editor.trace.open" -- a name that resolves to
+// nothing. An agent reading a description copies the name verbatim, so this is
+// not cosmetic drift: it produces a call that cannot succeed.
+//
+// Scans tool descriptions AND input-schema property descriptions, because the
+// worst offenders were per-parameter descriptions rather than tool ones.
+//
+// Deliberately NOT scanned: error strings and UE_LOG text. Several still carry
+// retired names (ClaireonTool_Flythrough*, PIEAITargetInfo, PIECheckInitState,
+// ClaireonServer.cpp) and cleaning those up is P2-19 scope, tracked separately.
+// Widening this lint to them without doing that work would just make it fail.
+// ---------------------------------------------------------------------------
+UNTEST_UNIT_OPTS(Claireon, DescriptionLint, NoRetiredDottedToolNamesInDescriptions, UNTEST_TIMEOUTMS(30000))
+{
+	using namespace ClaireonDescriptionLintHelpers;
+
+	TArray<TSharedPtr<IClaireonTool>> AllTools;
+	CollectAllRegisteredTools(AllTools);
+
+	UNTEST_ASSERT_TRUE(AllTools.Num() > 0);
+
+	// Matches the retired `editor.<category>.<operation>` shape specifically,
+	// not any dotted string -- prose legitimately contains "e.g." and file
+	// names, and a lint that fires on those would be turned off rather than
+	// obeyed.
+	const FRegexPattern RetiredNamePattern(TEXT("editor\\.[a-zA-Z]+\\.[a-zA-Z]+"));
+
+	TArray<FString> Failures;
+
+	for (const TSharedPtr<IClaireonTool>& Tool : AllTools)
+	{
+		if (!Tool.IsValid()) { continue; }
+
+		const FString Name = Tool->GetName();
+
+		TArray<TPair<FString, FString>> TextsToScan;
+		TextsToScan.Emplace(TEXT("GetDescription()"), Tool->GetDescription());
+
+		const FString FullDescription = Tool->GetFullDescription();
+		if (FullDescription != Tool->GetDescription())
+		{
+			TextsToScan.Emplace(TEXT("GetFullDescription()"), FullDescription);
+		}
+
+		// Per-parameter descriptions: where the trace family's drift actually lived.
+		const TSharedPtr<FJsonObject> Schema = Tool->GetInputSchema();
+		if (Schema.IsValid())
+		{
+			const TSharedPtr<FJsonObject>* Properties = nullptr;
+			if (Schema->TryGetObjectField(TEXT("properties"), Properties) && Properties && Properties->IsValid())
+			{
+				for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*Properties)->Values)
+				{
+					const TSharedPtr<FJsonObject>* PropObj = nullptr;
+					FString PropDescription;
+					if (Pair.Value.IsValid() && Pair.Value->TryGetObject(PropObj) && PropObj
+						&& (*PropObj)->TryGetStringField(TEXT("description"), PropDescription))
+					{
+						TextsToScan.Emplace(
+							FString::Printf(TEXT("schema.properties.%s.description"), *Pair.Key),
+							PropDescription);
+					}
+				}
+			}
+		}
+
+		for (const TPair<FString, FString>& Entry : TextsToScan)
+		{
+			if (Entry.Value.IsEmpty()) { continue; }
+
+			FRegexMatcher Matcher(RetiredNamePattern, Entry.Value);
+			while (Matcher.FindNext())
+			{
+				Failures.Add(FString::Printf(
+					TEXT("[%s] %s names retired tool '%s'; wire names are category_operation "
+					     "(e.g. trace_open), so this name resolves to nothing"),
+					*Name, *Entry.Key, *Matcher.GetCaptureGroup(0)));
+			}
+		}
+	}
+
+	if (Failures.Num() > 0)
+	{
+		UE_LOG(LogTemp, Error,
+			TEXT("[DescriptionLint] %d retired dotted tool name(s) in descriptions:"), Failures.Num());
 		for (const FString& F : Failures)
 		{
 			UE_LOG(LogTemp, Error, TEXT("[DescriptionLint]   %s"), *F);

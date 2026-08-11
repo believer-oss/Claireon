@@ -35,6 +35,12 @@ TSharedPtr<FJsonObject> ClaireonTool_DataTableImportJson::GetInputSchema() const
 	JsonProp->SetStringField(TEXT("description"), TEXT("JSON string to import (same format as export_json output)"));
 	Properties->SetObjectField(TEXT("json"), JsonProp);
 
+	// refresh_composites - optional
+	TSharedPtr<FJsonObject> RefreshCompositesProp = MakeShared<FJsonObject>();
+	RefreshCompositesProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	RefreshCompositesProp->SetStringField(TEXT("description"), TEXT("After saving, refresh any composite data tables that aggregate this table (default: true). Set false for batch edits; follow with an explicit datatable_composite_refresh."));
+	Properties->SetObjectField(TEXT("refresh_composites"), RefreshCompositesProp);
+
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	TArray<TSharedPtr<FJsonValue>> Required;
@@ -65,11 +71,17 @@ IClaireonTool::FToolResult ClaireonTool_DataTableImportJson::Execute(const TShar
 		return MakeErrorResult(TEXT("Missing required parameter: json"));
 	}
 
+	bool bRefreshComposites = true;
+	if (Arguments->HasField(TEXT("refresh_composites")))
+	{
+		bRefreshComposites = Arguments->GetBoolField(TEXT("refresh_composites"));
+	}
+
 	UE_LOG(LogClaireon, Display, TEXT("[MCP] editor.datatable.import_json: asset_path=%s"), *AssetPath);
 
 	FString Error;
 	UDataTable* Table = ClaireonDataTableHelpers::LoadDataTableAsset(AssetPath, Error);
-	if (!Table)
+	if (!IsValid(Table))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -88,6 +100,7 @@ IClaireonTool::FToolResult ClaireonTool_DataTableImportJson::Execute(const TShar
 	FString SaveError;
 	bool bSaved = ClaireonDataTableHelpers::SaveDataTable(Table, SaveError);
 
+	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	FString Output = FString::Printf(TEXT("Imported %d rows."), RowCount);
 
 	if (Problems.Num() > 0)
@@ -102,11 +115,13 @@ IClaireonTool::FToolResult ClaireonTool_DataTableImportJson::Execute(const TShar
 	if (bSaved)
 	{
 		Output += TEXT("\nAsset saved successfully.");
+		// One refresh for the whole import, not per row.
+		Output += ClaireonDataTableHelpers::RefreshDependentCompositesResult(Table, bRefreshComposites, Data);
 	}
 	else
 	{
 		Output += FString::Printf(TEXT("\nWarning: %s"), *SaveError);
 	}
 
-	return MakeSuccessResult(nullptr, Output);
+	return MakeSuccessResult(Data, Output);
 }

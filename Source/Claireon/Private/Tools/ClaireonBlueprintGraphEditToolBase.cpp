@@ -16,6 +16,12 @@
 #include "ClaireonNameResolver.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSessionManager.h"
+#include "ClaireonSafeExec.h"
+#include "Tools/ClaireonBlueprintGraphEditToolBase_Internal.h"
+#include "Kismet2/KismetEditorUtilities.h"
+#include "Misc/PackageName.h"
+#include "UObject/Package.h"
+#include "UObject/SavePackage.h"
 
 #define LOCTEXT_NAMESPACE "ClaireonBlueprintGraphEditToolBase"
 
@@ -43,12 +49,12 @@ void ClaireonBlueprintGraphEditToolBase::HandleSessionClosed(const FMCPSessionCl
 FString ClaireonBlueprintGraphEditToolBase::BuildAvailableGraphsList(const UBlueprint* Blueprint) const
 {
 	TArray<FString> Names;
-	if (Blueprint)
+	if (IsValid(Blueprint))
 	{
-		for (UEdGraph* Graph : Blueprint->UbergraphPages)       { if (Graph) Names.Add(Graph->GetName()); }
-		for (UEdGraph* Graph : Blueprint->FunctionGraphs)       { if (Graph) Names.Add(Graph->GetName()); }
-		for (UEdGraph* Graph : Blueprint->MacroGraphs)          { if (Graph) Names.Add(Graph->GetName()); }
-		for (UEdGraph* Graph : Blueprint->DelegateSignatureGraphs) { if (Graph) Names.Add(Graph->GetName()); }
+		for (UEdGraph* Graph : Blueprint->UbergraphPages)       { if (IsValid(Graph)) Names.Add(Graph->GetName()); }
+		for (UEdGraph* Graph : Blueprint->FunctionGraphs)       { if (IsValid(Graph)) Names.Add(Graph->GetName()); }
+		for (UEdGraph* Graph : Blueprint->MacroGraphs)          { if (IsValid(Graph)) Names.Add(Graph->GetName()); }
+		for (UEdGraph* Graph : Blueprint->DelegateSignatureGraphs) { if (IsValid(Graph)) Names.Add(Graph->GetName()); }
 	}
 	if (Names.Num() == 0)
 	{
@@ -57,9 +63,100 @@ FString ClaireonBlueprintGraphEditToolBase::BuildAvailableGraphsList(const UBlue
 	return FString::Join(Names, TEXT(", "));
 }
 
+bool ClaireonBlueprintGraphEditToolBase::CompileAndSaveSession(
+	FBlueprintEditToolData* Data,
+	FString& OutSavedPathOrError,
+	TArray<FString>& OutWarnings)
+{
+	UBlueprint* Blueprint = Data ? Data->Blueprint.Get() : nullptr;
+	if (!IsValid(Blueprint))
+	{
+		UE_LOG(LogClaireon, Warning, TEXT("[EditBlueprintGraph] Save: Blueprint is no longer valid"));
+		OutSavedPathOrError = TEXT("Blueprint is no longer valid");
+		return false;
+	}
+
+	UPackage* Package = Blueprint->GetOutermost();
+	if (!IsValid(Package))
+	{
+		UE_LOG(LogClaireon, Warning, TEXT("[EditBlueprintGraph] Save: Failed to get package for Blueprint"));
+		OutSavedPathOrError = TEXT("Failed to get package for Blueprint");
+		return false;
+	}
+
+	// A trashed pin lingering in any live pin's LinkedTo asserts inside SavePackage
+	// (EdGraphPin.cpp "serialized while trashed") and bakes load-crash corruption into
+	// the asset. Scrub stale references before compiling/saving.
+	TArray<FString> ScrubDetails;
+	const int32 ScrubbedRefs = ClaireonBPGraphInternal::ScrubTrashedPinLinks(Blueprint, ScrubDetails);
+	if (ScrubbedRefs > 0)
+	{
+		for (const FString& Detail : ScrubDetails)
+		{
+			UE_LOG(LogClaireon, Warning, TEXT("[EditBlueprintGraph] Save: %s"), *Detail);
+		}
+		OutWarnings.Add(FString::Printf(
+			TEXT("Scrubbed %d stale reference(s) to trashed pins before save (see log for details); the graph had dangling links from a prior split/recombine or reconstruct."),
+			ScrubbedRefs));
+	}
+
+	// Compile the Blueprint to ensure it's in a valid state before saving
+	// This initializes the generated class and ensures the Blueprint is complete
+	UE_LOG(LogClaireon, Log, TEXT("[EditBlueprintGraph] Save: Compiling Blueprint before save"));
+	FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::SkipGarbageCollection);
+
+	// Ensure package is properly configured for saving
+	Package->SetIsExternallyReferenceable(true);
+	Package->MarkPackageDirty();
+
+	const FString PackageFileName = FPackageName::LongPackageNameToFilename(
+		Package->GetName(), FPackageName::GetAssetPackageExtension());
+
+	UE_LOG(LogClaireon, Log, TEXT("[EditBlueprintGraph] Save: Attempting to save to %s"), *PackageFileName);
+
+	if (ClaireonSafeExec::DidLastExecutionCrash())
+	{
+		OutSavedPathOrError = TEXT("Save blocked: editor state may be corrupted after a previous crash. Restart the editor.");
+		return false;
+	}
+
+	FSavePackageArgs SaveArgs;
+	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+	SaveArgs.SaveFlags = SAVE_None; // Report errors - we expect save to succeed now
+
+	if (UPackage::SavePackage(Package, Blueprint, *PackageFileName, SaveArgs))
+	{
+		UE_LOG(LogClaireon, Log, TEXT("[EditBlueprintGraph] Save: Successfully saved Blueprint to %s"), *PackageFileName);
+		OutSavedPathOrError = PackageFileName;
+		return true;
+	}
+
+	UE_LOG(LogClaireon, Error, TEXT("[EditBlueprintGraph] Save: Failed to save Blueprint to %s"), *PackageFileName);
+
+	// Zombie editor detection hint. SavePackage on Windows can fail with
+	// ERROR_SHARING_VIOLATION when a previously-crashed editor process still holds
+	// the .uasset file. We can't reliably enumerate other-process handles without
+	// platform-specific code; emit a directive that names the file and points the
+	// caller at the recovery procedure.
+	const FString PathHint = FString::Printf(
+		TEXT(" If this is a 'sharing violation' or 'file in use' error, a previously-"
+			 "crashed UnrealEditor process may still be holding %s. Run "
+			 "`Get-Process UnrealEditor` (Windows) or `ps aux | grep UnrealEditor` "
+			 "(Linux) and stop any stale processes, then retry. As a stronger fix, "
+			 "call claireon.proxy with command='launch_editor' to rebuild+relaunch."),
+		*PackageFileName);
+	OutSavedPathOrError = FString::Printf(
+		TEXT("Failed to save Blueprint to %s.%s"), *PackageFileName, *PathHint);
+	return false;
+}
+
 FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString& SessionId, FBlueprintEditToolData* Data)
 {
-	if (!Data || !Data->IsValid())
+	// Deliberately NOT Data->IsValid(): that requires a live Graph as well, and a
+	// session on a MacroLibrary/Interface Blueprint legitimately has none until
+	// bp_add_macro or bp_add_function creates one. Reporting state is exactly what
+	// such a session needs to be able to do; the graph-less branch below handles it.
+	if (!Data || !Data->Blueprint.IsValid())
 	{
 		return MakeErrorResult(TEXT("Invalid session"));
 	}
@@ -92,6 +189,10 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 	// instead of grepping the Summary's "Session ID:" line).
 	// See CLAIREON_BP_SESSION_ID_PROPOSAL.md.
 	// =========================================================================
+	// An EMPTY SessionId is the read-only contract from BeginReadOnlySessionOp: the asset
+	// was resolved but no session was registered, so nothing here may imply one exists.
+	const bool bReadOnlyNoSession = SessionId.IsEmpty();
+
 	TSharedPtr<FJsonObject> ResponseData = MakeShared<FJsonObject>();
 	ResponseData->SetStringField(TEXT("session_id"), SessionId);
 	ResponseData->SetStringField(TEXT("asset_path"),
@@ -99,16 +200,29 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 	ResponseData->SetStringField(TEXT("graph_name"),
 		Data->Graph.IsValid() ? Data->Graph->GetName() : FString());
 	ResponseData->SetStringField(TEXT("response_mode"), EffectiveMode);
+	if (bReadOnlyNoSession)
+	{
+		// Stated positively rather than left to be inferred from an empty session_id:
+		// a caller holding "" and passing it back would get "Invalid or expired session_id".
+		ResponseData->SetBoolField(TEXT("read_only"), true);
+	}
 
 	// =========================================================================
 	// Nudge toward explicit open/close discipline after sustained asset_path use.
 	// Threshold: > 5 consecutive auto-opens. Cadence: first hint at call 6, then
 	// every 5 past that (11, 16, ...). Counter resets whenever the caller passes
 	// session_id. See CLAIREON_BP_SESSION_ID_PROPOSAL.md.
+	//
+	// Skipped entirely on the read-only path: the nudge exists to push callers toward
+	// open/close discipline around sessions they are accumulating, and this path opens
+	// none. Advising a caller to close what was never opened is noise.
 	// =========================================================================
-	const FString HintAssetPath = Data->Blueprint.IsValid() ? Data->Blueprint->GetPathName() : TEXT("<unknown>");
-	FString SessionHintSummaryTag;
-	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResponseData, Data->ConsecutiveAssetPathCalls, HintAssetPath, SessionId, SessionHintSummaryTag);
+	TSharedPtr<FJsonObject> SessionHint;
+	if (!bReadOnlyNoSession)
+	{
+		const FString HintAssetPath = Data->Blueprint.IsValid() ? Data->Blueprint->GetPathName() : TEXT("<unknown>");
+		ClaireonAssetUtils::EmitSessionHintIfNeeded(ResponseData, Data->ConsecutiveAssetPathCalls, HintAssetPath, SessionId, GetName(), SessionHint);
+	}
 
 	// =========================================================================
 	// Surface GUID corrections so the MCP client can update stale references
@@ -131,7 +245,28 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 	if (EffectiveMode == TEXT("status"))
 	{
 		FString StatusMsg = Data->Cursor.LastOperationStatus.IsEmpty() ? TEXT("ok") : FString::Printf(TEXT("ok: %s"), *Data->Cursor.LastOperationStatus);
-		return MakeSuccessResult(ResponseData, StatusMsg + GuidCorrectionNote + SessionHintSummaryTag);
+		return MakeSuccessResultWithHint(ResponseData, StatusMsg + GuidCorrectionNote, SessionHint);
+	}
+
+	// =========================================================================
+	// No active graph. MacroLibrary and Interface Blueprints have no ubergraph
+	// (FBlueprintEditorUtils::DoesSupportEventGraphs is false for both), so a
+	// session on one legitimately has Data->Graph == null until bp_add_macro or
+	// bp_add_function creates a graph. Both the "changed" and "full" blocks below
+	// dereference Graph unconditionally, so answer here instead.
+	// =========================================================================
+	if (!IsValid(Graph))
+	{
+		FString NoGraphText;
+		if (!Data->Cursor.LastOperationStatus.IsEmpty())
+		{
+			NoGraphText += FString::Printf(TEXT("## Status\n%s\n\n"), *Data->Cursor.LastOperationStatus);
+		}
+		NoGraphText += FString::Printf(TEXT("## Session\nSession ID: %s\nBlueprint: %s\n\n"),
+			bReadOnlyNoSession ? TEXT("(none -- read-only, no session opened)") : *SessionId,
+			IsValid(Blueprint) ? *Blueprint->GetPathName() : TEXT("<invalid>"));
+		NoGraphText += TEXT("Graph: (none -- no active graph; call bp_add_macro to create one, then bp_add_node targets it)\n");
+		return MakeSuccessResultWithHint(ResponseData, NoGraphText + GuidCorrectionNote, SessionHint);
 	}
 
 	// =========================================================================
@@ -156,7 +291,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 		{
 			// Find the node in the current graph
 			UEdGraphNode* AffNode = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, AffGuid);
-			if (!AffNode)
+			if (!IsValid(AffNode))
 			{
 				// Node was removed — we can't show its current state; skip
 				continue;
@@ -183,7 +318,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 				TArray<FString> CurrentConnected;
 				for (UEdGraphPin* LinkedDiff : DiffPin->LinkedTo)
 				{
-					if (LinkedDiff && LinkedDiff->GetOwningNode())
+					if (LinkedDiff && IsValid(LinkedDiff->GetOwningNode()))
 					{
 						CurrentConnected.Add(LinkedDiff->GetOwningNode()->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
 					}
@@ -251,10 +386,10 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 		}
 
 		DiffText += FString::Printf(
-			TEXT("(Full graph: %d nodes. Use editor.blueprint.getGraph to see all.)"),
+			TEXT("(Full graph: %d nodes. Use bp_get_graph to see all.)"),
 			TotalNodes);
 
-		return MakeSuccessResult(ResponseData, DiffText + GuidCorrectionNote + SessionHintSummaryTag);
+		return MakeSuccessResultWithHint(ResponseData, DiffText + GuidCorrectionNote, SessionHint);
 	}
 
 	// =========================================================================
@@ -281,7 +416,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 		if (Data->Cursor.FocusedNodeGuid.IsValid())
 		{
 			UEdGraphNode* FocusedNode = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, Data->Cursor.FocusedNodeGuid);
-			if (FocusedNode)
+			if (IsValid(FocusedNode))
 			{
 				StatusText += FString::Printf(TEXT("Focused Node: %s [GUID: %s]\n"),
 					*FocusedNode->GetNodeTitle(ENodeTitleType::ListView).ToString(),
@@ -319,7 +454,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 		int32 InterfaceCount = 0;
 		for (const FBPInterfaceDescription& Interface : Blueprint->ImplementedInterfaces)
 		{
-			if (Interface.Interface)
+			if (IsValid(Interface.Interface))
 			{
 				StatusText += FString::Printf(TEXT("- %s\n"), *Interface.Interface->GetName());
 				++InterfaceCount;
@@ -338,7 +473,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 		int32 NodeIndex = 1;
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
-			if (!Node)
+			if (!IsValid(Node))
 			{
 				continue;
 			}
@@ -361,7 +496,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 				{
 					for (UEdGraphPin* LinkedPin : ExecPin->LinkedTo)
 					{
-						if (LinkedPin && LinkedPin->GetOwningNode())
+						if (LinkedPin && IsValid(LinkedPin->GetOwningNode()))
 						{
 							FString LinkedTitle = LinkedPin->GetOwningNode()->GetNodeTitle(ENodeTitleType::ListView).ToString();
 							StatusText += FString::Printf(TEXT("   -> exec -> [%s]\n"), *LinkedTitle);
@@ -378,7 +513,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 			TSet<UObject*> NodeSet;
 			for (UEdGraphNode* Node : Graph->Nodes)
 			{
-				if (Node)
+				if (IsValid(Node))
 				{
 					NodeSet.Add(Node);
 				}
@@ -393,7 +528,7 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 			}
 		}
 
-		return MakeSuccessResult(ResponseData, StatusText + GuidCorrectionNote + SessionHintSummaryTag);
+		return MakeSuccessResultWithHint(ResponseData, StatusText + GuidCorrectionNote, SessionHint);
 	}
 }
 
@@ -408,7 +543,7 @@ void ClaireonBlueprintGraphEditToolBase::ValidateCursor(FBlueprintEditToolData* 
 	if (Data->Cursor.FocusedNodeGuid.IsValid())
 	{
 		UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Data->Graph.Get(), Data->Cursor.FocusedNodeGuid);
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			// Node was deleted, reset cursor to first root node
 			TArray<UEdGraphNode*> RootNodes = ClaireonBlueprintHelpers::FindRootNodes(Data->Graph.Get());
@@ -440,7 +575,7 @@ bool ClaireonBlueprintGraphEditToolBase::ResolveTargetNode(
 {
 	OutNode = nullptr;
 
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		OutError = MakeErrorResult(TEXT("ResolveTargetNode: Graph is null"));
 		return false;
@@ -449,19 +584,10 @@ bool ClaireonBlueprintGraphEditToolBase::ResolveTargetNode(
 	FString NodeGuidStr;
 	if (Params.IsValid() && Params->TryGetStringField(TEXT("node_guid"), NodeGuidStr))
 	{
-		FGuid NodeGuid;
-		if (!FGuid::Parse(NodeGuidStr, NodeGuid))
+		FString ResolveError;
+		if (!ClaireonBlueprintHelpers::ResolveNodeGuidString(Graph, NodeGuidStr, OutNode, ResolveError))
 		{
-			OutError = MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
-			return false;
-		}
-		OutNode = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
-		if (!OutNode)
-		{
-			const FString Available = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
-			OutError = MakeErrorResult(FString::Printf(
-				TEXT("Node %s not found in graph '%s'. Available nodes: %s"),
-				*NodeGuidStr, *Graph->GetName(), *Available));
+			OutError = MakeErrorResult(ResolveError);
 			return false;
 		}
 		return true;
@@ -471,25 +597,10 @@ bool ClaireonBlueprintGraphEditToolBase::ResolveTargetNode(
 	if (Params.IsValid() && Params->TryGetStringField(TEXT("node_title"), NodeTitle))
 	{
 		TArray<UEdGraphNode*> Matches = ClaireonBlueprintHelpers::FindNodesByTitle(Graph, NodeTitle, /*bExactMatch=*/true);
-		if (Matches.Num() == 0)
+		if (Matches.Num() != 1)
 		{
-			const FString Available = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
-			OutError = MakeErrorResult(FString::Printf(
-				TEXT("Node not found by title '%s' in graph '%s'. Available nodes: %s"),
-				*NodeTitle, *Graph->GetName(), *Available));
-			return false;
-		}
-		if (Matches.Num() > 1)
-		{
-			FString GuidList;
-			for (int32 Idx = 0; Idx < Matches.Num(); ++Idx)
-			{
-				if (Idx > 0) { GuidList += TEXT(", "); }
-				GuidList += Matches[Idx]->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens);
-			}
-			OutError = MakeErrorResult(FString::Printf(
-				TEXT("Ambiguous node title '%s' -- %d matches with GUIDs: %s. Pass node_guid to disambiguate."),
-				*NodeTitle, Matches.Num(), *GuidList));
+			OutError = MakeErrorResult(ClaireonBlueprintHelpers::FormatTitleMatchFailure(
+				Graph, NodeTitle, Matches, TEXT("node_guid")));
 			return false;
 		}
 		OutNode = Matches[0];
@@ -505,20 +616,25 @@ void ClaireonBlueprintGraphEditToolBase::InitToolDataForSession(const FString& S
 	FBlueprintEditToolData NewData;
 	NewData.Blueprint = Blueprint;
 	NewData.Graph = Graph;
-	NewData.Cursor.GraphName = Graph->GetName();
+	// Graph is legitimately null for a MacroLibrary/Interface session, which has no
+	// ubergraph and possibly no graphs at all until bp_add_macro runs.
+	NewData.Cursor.GraphName = IsValid(Graph) ? Graph->GetName() : FString();
 	NewData.Cursor.ViewportCenter = FVector2D(0.0f, 0.0f);
 
 	// Find first event node to focus cursor
-	TArray<UEdGraphNode*> RootNodes = ClaireonBlueprintHelpers::FindRootNodes(Graph);
-	if (RootNodes.Num() > 0)
+	if (IsValid(Graph))
 	{
-		UEdGraphNode* FirstNode = RootNodes[0];
-		NewData.Cursor.FocusedNodeGuid = FirstNode->NodeGuid;
-		UEdGraphPin* FirstOutput = ClaireonBlueprintHelpers::GetFirstOutputPin(FirstNode);
-		if (FirstOutput)
+		TArray<UEdGraphNode*> RootNodes = ClaireonBlueprintHelpers::FindRootNodes(Graph);
+		if (RootNodes.Num() > 0)
 		{
-			NewData.Cursor.FocusedPinName = FirstOutput->PinName;
-			NewData.Cursor.FocusedPinDirection = FirstOutput->Direction;
+			UEdGraphNode* FirstNode = RootNodes[0];
+			NewData.Cursor.FocusedNodeGuid = FirstNode->NodeGuid;
+			UEdGraphPin* FirstOutput = ClaireonBlueprintHelpers::GetFirstOutputPin(FirstNode);
+			if (FirstOutput)
+			{
+				NewData.Cursor.FocusedPinName = FirstOutput->PinName;
+				NewData.Cursor.FocusedPinDirection = FirstOutput->Direction;
+			}
 		}
 	}
 
@@ -567,13 +683,16 @@ bool ClaireonBlueprintGraphEditToolBase::BeginSessionOp(
 	OutData->bSuppressOutput = bSuppressOutput;
 	OutData->ResponseMode = ResponseMode;
 	OutData->LastOperationAffectedNodes.Empty();
+	// Session data is shared across every bp_* tool, so a status left behind by the
+	// previous op would be echoed as this op's own status by BuildStateResponse.
+	OutData->Cursor.LastOperationStatus = FString();
 
 	OutData->PreOpPinConnections.Empty();
-	if (UEdGraph* SnapGraph = OutData->Graph.Get())
+	if (UEdGraph* SnapGraph = OutData->Graph.Get(); IsValid(SnapGraph))
 	{
 		for (UEdGraphNode* SnapNode : SnapGraph->Nodes)
 		{
-			if (!SnapNode)
+			if (!IsValid(SnapNode))
 			{
 				continue;
 			}
@@ -587,7 +706,7 @@ bool ClaireonBlueprintGraphEditToolBase::BeginSessionOp(
 				TArray<FString> ConnectedTo;
 				for (UEdGraphPin* LinkedPin : SnapPin->LinkedTo)
 				{
-					if (LinkedPin && LinkedPin->GetOwningNode())
+					if (LinkedPin && IsValid(LinkedPin->GetOwningNode()))
 					{
 						ConnectedTo.Add(LinkedPin->GetOwningNode()->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
 					}
@@ -611,6 +730,134 @@ FToolResult ClaireonBlueprintGraphEditToolBase::CheckMutationAffectedNodes(const
 			*OpName);
 	}
 	return Result;
+}
+
+bool ClaireonBlueprintGraphEditToolBase::ResolveBlueprintAndGraph(
+	const TSharedPtr<FJsonObject>& Params,
+	FString& InOutAssetPath,
+	UBlueprint*& OutBlueprint,
+	UEdGraph*& OutGraph,
+	FToolResult& OutError)
+{
+	OutBlueprint = nullptr;
+	OutGraph = nullptr;
+
+	// Canonicalize via the same resolver bp_open uses.
+	auto ResolveResult = ClaireonPathResolver::Resolve(InOutAssetPath);
+	if (!ResolveResult.bSuccess)
+	{
+		OutError = MakeErrorResult(ResolveResult.Error);
+		return false;
+	}
+	InOutAssetPath = ResolveResult.ResolvedPath.Path;
+
+	OutBlueprint = LoadObject<UBlueprint>(nullptr, *InOutAssetPath);
+	if (!IsValid(OutBlueprint))
+	{
+		OutError = MakeErrorResult(FString::Printf(TEXT("Failed to load Blueprint: %s"), *InOutAssetPath));
+		return false;
+	}
+
+	// Graph: default to EventGraph, or caller-supplied graph_name. Mirrors
+	// bp_open's default handling.
+	FString GraphName;
+	const bool bGraphNameExplicit = Params->TryGetStringField(TEXT("graph_name"), GraphName);
+	if (!bGraphNameExplicit)
+	{
+		GraphName = TEXT("EventGraph");
+	}
+	OutGraph = ClaireonBlueprintHelpers::FindGraphByName(OutBlueprint, GraphName);
+	if (!IsValid(OutGraph))
+	{
+		// A MacroLibrary/Interface Blueprint has no EventGraph, and a freshly created
+		// one has no graphs at all -- erroring on the DEFAULT graph name would make
+		// bp_add_macro unable to auto-open the very asset it exists to populate.
+		// Open graph-less instead. An explicitly named missing graph still errors.
+		const bool bSupportsEventGraph = OutBlueprint->BlueprintType == BPTYPE_Normal;
+		if (bGraphNameExplicit || bSupportsEventGraph)
+		{
+			OutError = MakeErrorResult(FString::Printf(TEXT("Graph '%s' not found in Blueprint %s"), *GraphName, *InOutAssetPath));
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool ClaireonBlueprintGraphEditToolBase::BeginReadOnlySessionOp(
+	const TSharedPtr<FJsonObject>& Arguments,
+	const FString& OperationName,
+	TSharedPtr<FJsonObject>& OutParams,
+	FString& OutSessionId,
+	FBlueprintEditToolData*& OutData,
+	FToolResult& OutError)
+{
+	OutSessionId.Reset();
+	OutData = nullptr;
+
+	TSharedPtr<FJsonObject> Params = Arguments.IsValid() ? Arguments : MakeShared<FJsonObject>();
+	if (Params->HasField(TEXT("params")))
+	{
+		const TSharedPtr<FJsonObject>* NestedObj = nullptr;
+		if (Params->TryGetObjectField(TEXT("params"), NestedObj) && NestedObj && NestedObj->IsValid())
+		{
+			Params = *NestedObj;
+		}
+	}
+	OutParams = Params;
+
+	// An explicit session_id means the caller already owns a session and is asking us
+	// to read within it. Reusing it is correct -- and skipping it would be worse, since
+	// the response would stop reporting the session state they are tracking. Only the
+	// asset_path path, where WE would be the one to open a session, avoids doing so.
+	FString SessionId;
+	if (Params->TryGetStringField(TEXT("session_id"), SessionId) && !SessionId.IsEmpty())
+	{
+		return BeginSessionOp(Arguments, OperationName, OutParams, OutSessionId, OutData, OutError);
+	}
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	{
+		OutError = MakeErrorResult(FString::Printf(
+			TEXT("Missing 'session_id' (or 'asset_path') for operation '%s'. Supply one of: session_id (from a prior open/create) or asset_path (read-only, opens no session)."),
+			*OperationName));
+		return false;
+	}
+
+	UBlueprint* Blueprint = nullptr;
+	UEdGraph* Graph = nullptr;
+	if (!ResolveBlueprintAndGraph(Params, AssetPath, Blueprint, Graph, OutError))
+	{
+		return false;
+	}
+
+	// Scratch data, deliberately NOT registered in ToolData: there is no session to key
+	// it by and nothing may outlive this call. One instance per tool object, reset each
+	// time, so the returned pointer stays valid for the caller's duration.
+	ReadOnlyScratchData = FBlueprintEditToolData();
+	ReadOnlyScratchData.Blueprint = Blueprint;
+	ReadOnlyScratchData.Graph = Graph;
+	ReadOnlyScratchData.Cursor.GraphName = IsValid(Graph) ? Graph->GetName() : FString();
+
+	bool bSuppressOutput = false;
+	Arguments->TryGetBoolField(TEXT("suppress_output"), bSuppressOutput);
+	FString ResponseMode = TEXT("changed");
+	Arguments->TryGetStringField(TEXT("response_mode"), ResponseMode);
+	if (bSuppressOutput && !Arguments->HasField(TEXT("response_mode")))
+	{
+		ResponseMode = TEXT("status");
+	}
+	ReadOnlyScratchData.bSuppressOutput = bSuppressOutput;
+	ReadOnlyScratchData.ResponseMode = ResponseMode;
+
+	// Left at zero on purpose: the auto-open nudge counts consecutive auto-opens, and
+	// this path never opens anything, so there is no discipline to nudge toward.
+	ReadOnlyScratchData.ConsecutiveAssetPathCalls = 0;
+
+	OutSessionId = FString();
+	OutData = &ReadOnlyScratchData;
+	return true;
 }
 
 bool ClaireonBlueprintGraphEditToolBase::ResolveOrOpenSession(
@@ -662,39 +909,15 @@ bool ClaireonBlueprintGraphEditToolBase::ResolveOrOpenSession(
 			bDelegateRegistered = true;
 		}
 
-		// Canonicalize via the same resolver bp_open uses.
-		auto ResolveResult = ClaireonPathResolver::Resolve(AssetPath);
-		if (!ResolveResult.bSuccess)
+		UBlueprint* Blueprint = nullptr;
+		UEdGraph* Graph = nullptr;
+		if (!ResolveBlueprintAndGraph(Params, AssetPath, Blueprint, Graph, OutError))
 		{
-			OutError = MakeErrorResult(ResolveResult.Error);
-			return false;
-		}
-		AssetPath = ResolveResult.ResolvedPath.Path;
-
-		// Load Blueprint (needed to build tool data on a fresh session).
-		UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
-		if (!Blueprint)
-		{
-			OutError = MakeErrorResult(FString::Printf(TEXT("Failed to load Blueprint: %s"), *AssetPath));
-			return false;
-		}
-
-		// Graph: default to EventGraph, or caller-supplied graph_name. Mirrors
-		// bp_open's default handling.
-		FString GraphName;
-		if (!Params->TryGetStringField(TEXT("graph_name"), GraphName))
-		{
-			GraphName = TEXT("EventGraph");
-		}
-		UEdGraph* Graph = ClaireonBlueprintHelpers::FindGraphByName(Blueprint, GraphName);
-		if (!Graph)
-		{
-			OutError = MakeErrorResult(FString::Printf(TEXT("Graph '%s' not found in Blueprint %s"), *GraphName, *AssetPath));
 			return false;
 		}
 
 		// Open (or reuse) a session via the manager.
-		double TimeoutMinutes = 60.0;
+		double TimeoutMinutes = ClaireonDefaultSessionTimeoutMinutes;
 		Params->TryGetNumberField(TEXT("timeout_minutes"), TimeoutMinutes);
 		FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(AssetPath, TEXT("bp"), TimeoutMinutes);
 
@@ -703,11 +926,11 @@ bool ClaireonBlueprintGraphEditToolBase::ResolveOrOpenSession(
 			const FMCPSession& Blocker = OpenResult.BlockingSession.GetValue();
 			const FTimespan Elapsed = FDateTime::UtcNow() - Blocker.LastAccessTime;
 			OutError = MakeErrorResult(FString::Printf(
-				TEXT("Asset is locked by %s session %s (last activity %dm %ds ago). Close that session first, or use mcp_release_sessions(asset_path='%s') to force-release it."),
+				TEXT("Asset is locked by %s session %s (last activity %dm %ds ago). Close that session first, or call session_release(session_id='%s') to force-release it."),
 				*Blocker.ToolName, *Blocker.SessionId,
 				static_cast<int32>(Elapsed.GetTotalMinutes()),
 				static_cast<int32>(Elapsed.GetTotalSeconds()) % 60,
-				*AssetPath));
+				*Blocker.SessionId));
 			return false;
 		}
 

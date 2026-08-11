@@ -10,7 +10,11 @@ FString FClaireonNiagaraTool_ApplyDelta::GetOperation() const { return TEXT("app
 
 FString FClaireonNiagaraTool_ApplyDelta::GetDescription() const
 {
-	return TEXT("Atomic batch niagara parameter modification. Removes and creates User parameters in one transactional call. Counterpart to niagara_apply_spec. Execution order: remove -> create. (No disconnect/connect phases; emitters/modules/renderers not yet supported -- see F1 backlog.)");
+	return TEXT("Apply an atomic batch of Niagara User-parameter edits in one transactional call. Execution "
+				"order: remove -> create; any phase failure cancels the transaction so nothing lands. No "
+				"disconnect/connect phases, and emitters/modules/renderers are not supported yet. Counterpart "
+				"to niagara_apply_spec. Pass session_id for an already open niagara session (niagara_open), "
+				"or asset_path for a temporary one.");
 }
 
 TSharedPtr<FJsonObject> FClaireonNiagaraTool_ApplyDelta::GetInputSchema() const

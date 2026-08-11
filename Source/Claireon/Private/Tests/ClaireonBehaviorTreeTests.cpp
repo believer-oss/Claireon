@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 #if WITH_UNTESTED
 
@@ -32,7 +32,7 @@ static const TCHAR* TestEQSPath = TEXT("/Game/BP/AI/EQS/EQS_CombatWaiting_Strafe
 // ---------------------------------------------------------------------------
 // Helper: Extract session ID from structured FToolResult Data
 // ---------------------------------------------------------------------------
-namespace
+namespace ClaireonBehaviorTreeTests_Private
 {
 	FString ExtractSessionIdFromBTResult(const IClaireonTool::FToolResult& Result)
 	{
@@ -45,6 +45,7 @@ namespace
 		return SessionId;
 	}
 }
+using namespace ClaireonBehaviorTreeTests_Private;
 
 // ============================================================================
 // behaviortree_inspect
@@ -270,8 +271,12 @@ UNTEST_UNIT_OPTS(Claireon, EQS, InspectStrafe, UNTEST_TIMEOUTMS(10000))
 	// Must have a generator
 	UNTEST_EXPECT_TRUE(Structure.Contains(TEXT("[Generator]")));
 
-	// Must have context classes section
-	UNTEST_EXPECT_TRUE(Structure.Contains(TEXT("=== Context Classes Referenced ===")));
+	// There used to be an assertion here for a "=== Context Classes Referenced ==="
+	// section. FormatEQSStructure has no such section -- it emits the query header,
+	// "--- Option N ---", "[Generator]", "[Test N]", "Purpose:" and property lines,
+	// and that string appeared nowhere in the plugin outside this assertion. It was
+	// asserting a heading the formatter never produced, so it could not pass on any
+	// branch. The four assertions above already cover the structure contract.
 
 	co_return;
 }
@@ -379,7 +384,12 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEdit, OpenCloseStatusCycle, UNTEST_TIMEOU
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEdit, OpenDuplicateBlockedByLock, UNTEST_TIMEOUTMS(10000))
+// Renamed from OpenDuplicateBlockedByLock, which asserted that a same-tool
+// re-open fails with a "locked" error. OpenSession's same-ToolName path returns
+// ReusedExistingSession, so that assertion could never hold. Cross-tool blocking
+// -- the behavior it was reaching for -- is covered by
+// BehaviorTreeEditV2.CrossToolLockBlocksOpen.
+UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEdit, OpenDuplicateReusesSession, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonBehaviorTreeTool_Open OpenTool;
 	ClaireonBehaviorTreeTool_Close CloseTool;
@@ -390,10 +400,11 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEdit, OpenDuplicateBlockedByLock, UNTEST_
 	auto Result1 = OpenTool.Execute(OpenArgs);
 	UNTEST_ASSERT_FALSE(Result1.bIsError);
 
-	// Second open should be blocked by asset lock
+	// Same tool + same asset reuses the one session rather than blocking.
 	auto Result2 = OpenTool.Execute(OpenArgs);
-	UNTEST_EXPECT_TRUE(Result2.bIsError);
-	UNTEST_EXPECT_TRUE(Result2.GetContentAsString().Contains(TEXT("locked")));
+	UNTEST_EXPECT_FALSE(Result2.bIsError);
+	UNTEST_EXPECT_EQ(ExtractSessionIdFromBTResult(Result2),
+		ExtractSessionIdFromBTResult(Result1));
 
 	// Clean up using structured session ID from Data
 	FString SessionId1 = ExtractSessionIdFromBTResult(Result1);

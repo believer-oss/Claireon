@@ -15,9 +15,10 @@ FString ClaireonTool_AnimGraphGetGraph::GetOperation() const { return TEXT("get_
 
 FString ClaireonTool_AnimGraphGetGraph::GetDescription() const
 {
-	return TEXT("Inspect a specific graph within an Animation Blueprint. Returns all nodes with their types, "
-		"categories, pins (with pose connections), property bindings, fast path status, and sub-graph "
-		"references. Use animbp_inspect first to discover available graph names.");
+	return TEXT("Inspect one graph inside an Animation Blueprint, addressed by asset_path plus graph_name. "
+		"Stateless / read-only / non-session: reads the asset directly and requires no open session. Returns nodes "
+		"with types, categories, pins (with pose connections), property bindings, fast-path status, and sub-graph "
+		"references; detail_level and max_nodes trim the payload. Call animbp_inspect for graph names.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AnimGraphGetGraph::GetInputSchema() const
@@ -58,13 +59,13 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphGetGraph::Execute(const TShared
 
 	FString Error;
 	UAnimBlueprint* AnimBP = ClaireonAnimGraphHelpers::LoadAnimBlueprint(AssetPath, Error);
-	if (!AnimBP)
+	if (!IsValid(AnimBP))
 	{
 		return MakeErrorResult(Error);
 	}
 
 	UEdGraph* Graph = ClaireonAnimGraphHelpers::FindAnimGraphByName(AnimBP, GraphName, Error);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -88,7 +89,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphGetGraph::Execute(const TShared
 
 	for (UEdGraphNode* Node : Graph->Nodes)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			continue;
 		}
@@ -108,7 +109,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphGetGraph::Execute(const TShared
 	TSet<UEdGraphNode*> ProcessedSet;
 	for (UEdGraphNode* Node : Graph->Nodes)
 	{
-		if (Node)
+		if (IsValid(Node))
 		{
 			ProcessedSet.Add(Node);
 		}
@@ -116,7 +117,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphGetGraph::Execute(const TShared
 
 	for (UEdGraphNode* Node : Graph->Nodes)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			continue;
 		}
@@ -128,7 +129,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphGetGraph::Execute(const TShared
 			}
 			for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
 			{
-				if (!LinkedPin || !LinkedPin->GetOwningNode())
+				if (!LinkedPin || !IsValid(LinkedPin->GetOwningNode()))
 				{
 					continue;
 				}
@@ -167,7 +168,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphGetGraph::Execute(const TShared
 		int32 Processed = 0;
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
-			if (!Node)
+			if (!IsValid(Node))
 			{
 				continue;
 			}

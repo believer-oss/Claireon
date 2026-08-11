@@ -12,15 +12,11 @@ FString FClaireonMetaSoundTool_ApplySpec::GetOperation() const { return TEXT("ap
 
 FString FClaireonMetaSoundTool_ApplySpec::GetDescription() const
 {
-	return TEXT("Apply a MetaSound declarative spec in one transactional pass. Accepts either "
-				"{kind=\"MetaSoundSource\", ...} or {kind=\"MetaSoundPatch\", ...} (both share "
-				"IMetaSoundDocumentInterface). Spec body sections (all optional): "
-				"interfaces:[name,...]; inputs:[{name,type,default?}]; outputs:[{name,type,default?}]; "
-				"nodes:[{class_namespace,class_name,class_variant?,major_version?}]; "
-				"input_defaults:[{name,type,value}]; connections:[{graph_input_name,graph_output_name}]. "
-				"Non-session/stateless. Rollback-on-failure deletes the asset if it was created by "
-				"this call. Use claireon.metasound_list_available_interfaces (D4) to discover interface "
-				"names. D7 + B24-style rollback.");
+	return TEXT("Apply a MetaSound spec in one transactional pass. kind: MetaSoundSource | MetaSoundPatch. "
+				"Optional sections: interfaces[name]; inputs/outputs[{name,type,default?}]; "
+				"nodes[{class_namespace,class_name,class_variant?,major_version?}]; "
+				"input_defaults[{name,type,value}]; connections[{graph_input_name,graph_output_name}]. "
+				"Stateless / non-session; rolls back on failure, deleting an asset it created.");
 }
 
 TSharedPtr<FJsonObject> FClaireonMetaSoundTool_ApplySpec::GetInputSchema() const

@@ -124,10 +124,10 @@ void FClaireonPIEManager::HandleBeginPIE(bool bIsSimulating)
 
 	// Detect map path from editor world
 	FString MapPath;
-	if (GEditor)
+	if (IsValid(GEditor))
 	{
 		UWorld* EditorWorld = GEditor->GetEditorWorldContext().World();
-		if (EditorWorld)
+		if (IsValid(EditorWorld))
 		{
 			MapPath = EditorWorld->GetPathName();
 		}
@@ -157,7 +157,7 @@ void FClaireonPIEManager::HandleEndPIE(bool bIsSimulating)
 
 FString FClaireonPIEManager::GetActorId(AActor* Actor)
 {
-	if (!Actor)
+	if (!IsValid(Actor))
 	{
 		return FString();
 	}
@@ -187,7 +187,42 @@ AActor* FClaireonPIEManager::ResolveActorId(const FString& ActorId, UWorld* Worl
 	{
 		if (WeakActor->IsValid())
 		{
-			return WeakActor->Get();
+			AActor* Actor = WeakActor->Get();
+
+			// P0-8a: this used to ignore World entirely -- it was a flat id->actor
+			// map lookup, so every caller that carefully resolved a PIE world by
+			// net_mode / pie_instance then got whatever world the id happened to be
+			// minted in. pie_get_component(actorId, net_mode='client') would return
+			// a SERVER-world component with no warning, and pie_wait_for's
+			// actorValid / initState conditions inherited the same hole.
+			//
+			// The actor's own world is the authority; nothing migrates actors
+			// between worlds, so no separate mint-time record is needed.
+			//
+			// A null World keeps the old permissive behaviour for callers that
+			// deliberately do not scope. Every in-tree caller passes a resolved PIE
+			// world, so this makes all of them correct at once.
+			if (World != nullptr)
+			{
+				UWorld* ActorWorld = Actor->GetWorld();
+				if (ActorWorld != World)
+				{
+					// nullptr rather than an error return: every caller already
+					// treats "not found" correctly, and pie_wait_for specifically
+					// needs a miss to mean "condition not met" rather than to abort
+					// the wait. The log line carries the diagnosis.
+					UE_LOG(LogClaireon, Warning,
+						TEXT("[PIE] Actor id '%s' belongs to world '%s' but was requested against world '%s'. ")
+						TEXT("Returning not-found rather than a cross-world object. Register the actor in the ")
+						TEXT("world you are querying (note: pie_register_actor is instance-0-only)."),
+						*ActorId,
+						ActorWorld ? *ActorWorld->GetName() : TEXT("<none>"),
+						*World->GetName());
+					return nullptr;
+				}
+			}
+
+			return Actor;
 		}
 		else
 		{
@@ -202,7 +237,7 @@ AActor* FClaireonPIEManager::ResolveActorId(const FString& ActorId, UWorld* Worl
 
 FString FClaireonPIEManager::RegisterDamageListener(AActor* Actor)
 {
-	if (!Actor)
+	if (!IsValid(Actor))
 	{
 		return FString();
 	}
@@ -217,7 +252,7 @@ FString FClaireonPIEManager::RegisterDamageListener(AActor* Actor)
 
 	for (UActorComponent* Component : Components)
 	{
-		if (!Component)
+		if (!IsValid(Component))
 		{
 			continue;
 		}
@@ -236,7 +271,7 @@ FString FClaireonPIEManager::RegisterDamageListener(AActor* Actor)
 		}
 	}
 
-	if (!HealthComponent)
+	if (!IsValid(HealthComponent))
 	{
 		UE_LOG(LogClaireon, Warning, TEXT("[MCP] No health component found on actor %s"),
 			*Actor->GetName());
@@ -323,7 +358,7 @@ bool FClaireonPIEManager::UnregisterDamageListener(const FString& ListenerId)
 void FClaireonPIEManager::DisableThrottleCPU()
 {
 	UEditorPerformanceSettings* PerfSettings = GetMutableDefault<UEditorPerformanceSettings>();
-	if (!PerfSettings)
+	if (!IsValid(PerfSettings))
 	{
 		return;
 	}
@@ -348,7 +383,7 @@ void FClaireonPIEManager::RestoreThrottleCPU()
 	}
 
 	UEditorPerformanceSettings* PerfSettings = GetMutableDefault<UEditorPerformanceSettings>();
-	if (!PerfSettings)
+	if (!IsValid(PerfSettings))
 	{
 		return;
 	}

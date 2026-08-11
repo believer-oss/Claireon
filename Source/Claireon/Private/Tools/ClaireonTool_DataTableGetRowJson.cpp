@@ -73,7 +73,7 @@ IClaireonTool::FToolResult ClaireonTool_DataTableGetRowJson::Execute(const TShar
 
 	FString LoadError;
 	UDataTable* DataTable = ClaireonDataTableHelpers::LoadDataTableAsset(AssetPath, LoadError);
-	if (!DataTable)
+	if (!IsValid(DataTable))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -86,7 +86,7 @@ IClaireonTool::FToolResult ClaireonTool_DataTableGetRowJson::Execute(const TShar
 	}
 
 	UScriptStruct* RowStruct = const_cast<UScriptStruct*>(DataTable->GetRowStruct());
-	if (!RowStruct)
+	if (!IsValid(RowStruct))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("DataTable '%s' has no row struct"), *AssetPath));
 	}

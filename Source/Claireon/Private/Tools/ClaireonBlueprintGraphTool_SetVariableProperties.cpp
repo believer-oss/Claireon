@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_SetVariableProperties::GetOperation() const {
 
 FString ClaireonBlueprintGraphTool_SetVariableProperties::GetDescription() const
 {
-    return TEXT("Set properties on an existing Blueprint variable (flags, category, tooltip, replication, metadata) in the open editing session. Requires open session_id from bp_open (or pass asset_path to auto-open). Transactional. Common pitfall: switching replication to RepNotify auto-creates the OnRep handler function graph if absent. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+    return TEXT("Set properties on an existing Blueprint variable (flags, category, tooltip, replication, metadata) in the open editing session. Requires open session_id from bp_open (or pass asset_path to auto-open). Transactional. Common pitfall: switching replication to RepNotify auto-creates the OnRep handler function graph if absent.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetVariableProperties::GetInputSchema() const
@@ -154,7 +154,7 @@ FToolResult ClaireonBlueprintGraphTool_SetVariableProperties::Execute(const TSha
     }
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
 	}

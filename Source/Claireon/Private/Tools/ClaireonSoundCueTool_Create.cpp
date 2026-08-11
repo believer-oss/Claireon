@@ -43,7 +43,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_Create::Execute(const TSharedPt
 	}
 	const FString ObjectName = FPackageName::GetShortName(Canon);
 
-	if (UObject* Existing = LoadObject<UObject>(nullptr, *Canon))
+	if (UObject* Existing = LoadObject<UObject>(nullptr, *Canon); IsValid(Existing))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset already exists at path: %s"), *Canon));
 	}
@@ -51,7 +51,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_Create::Execute(const TSharedPt
 	UPackage* Package = CreatePackage(*Canon);
 	UObject* NewAsset = NewObject<UObject>(Package, USoundCue::StaticClass(), *ObjectName,
 		RF_Public | RF_Standalone | RF_Transactional | RF_LoadCompleted);
-	if (!NewAsset) return MakeErrorResult(TEXT("NewObject failed"));
+	if (!IsValid(NewAsset)) return MakeErrorResult(TEXT("NewObject failed"));
 	FAssetRegistryModule::AssetCreated(NewAsset);
 	Package->MarkPackageDirty();
 

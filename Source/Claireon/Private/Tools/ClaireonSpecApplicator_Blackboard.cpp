@@ -23,7 +23,7 @@
 #include "BehaviorTree/Blackboard/BlackboardKeyType_Class.h"
 #include "BehaviorTree/Blackboard/BlackboardKeyType_Enum.h"
 
-namespace
+namespace ClaireonSpecApplicator_Blackboard_Private
 {
 	UBlackboardKeyType* CreateKeyTypeForBBName(const FString& TypeName, UObject* Outer, FString& OutError)
 	{
@@ -50,6 +50,7 @@ namespace
 		return NewObject<UBlackboardKeyType>(Outer, *FoundClass);
 	}
 } // namespace
+using namespace ClaireonSpecApplicator_Blackboard_Private;
 
 bool FClaireonSpecApplicator_Blackboard::ValidateToolSpec(const TSharedPtr<FJsonObject>& Spec, TArray<FString>& OutErrors)
 {
@@ -101,7 +102,7 @@ bool FClaireonSpecApplicator_Blackboard::OpenOrCreateAsset(const FString& AssetP
 	const FString ResolvedPath = ResolveResult.ResolvedPath.Path;
 
 	UBlackboardData* BB = ClaireonBehaviorTreeHelpers::LoadBlackboardAsset(ResolvedPath, OutError);
-	if (!BB)
+	if (!IsValid(BB))
 	{
 		return false;
 	}
@@ -131,7 +132,7 @@ bool FClaireonSpecApplicator_Blackboard::OpenOrCreateAsset(const FString& AssetP
 bool FClaireonSpecApplicator_Blackboard::ApplyPass1_CreateEntities(const FString& SessionId, const TSharedPtr<FJsonObject>& Spec)
 {
 	UBlackboardData* BB = BlackboardData.Get();
-	if (!BB)
+	if (!IsValid(BB))
 	{
 		AddError(TEXT("BlackboardData is no longer valid"));
 		return false;
@@ -143,12 +144,12 @@ bool FClaireonSpecApplicator_Blackboard::ApplyPass1_CreateEntities(const FString
 	{
 		FString Error;
 		UBlackboardData* ParentBB = ClaireonBehaviorTreeHelpers::LoadBlackboardAsset(ParentPath, Error);
-		if (ParentBB && ParentBB != BB)
+		if (IsValid(ParentBB) && ParentBB != BB)
 		{
 			BB->Parent = ParentBB;
 			BB->UpdateKeyIDs();
 		}
-		else if (!ParentBB)
+		else if (!IsValid(ParentBB))
 		{
 			AddWarning(FString::Printf(TEXT("Could not load parent blackboard: %s"), *Error));
 		}
@@ -199,7 +200,7 @@ bool FClaireonSpecApplicator_Blackboard::ApplyPass1_CreateEntities(const FString
 
 		FString Error;
 		UBlackboardKeyType* NewKeyType = CreateKeyTypeForBBName(KeyType, BB, Error);
-		if (!NewKeyType)
+		if (!IsValid(NewKeyType))
 		{
 			RecordEntryFailure(SpecId, Error);
 			continue;
@@ -239,7 +240,7 @@ bool FClaireonSpecApplicator_Blackboard::CompileAsset(const FString& SessionId, 
 bool FClaireonSpecApplicator_Blackboard::SaveAsset(const FString& SessionId, FString& OutError)
 {
 	UBlackboardData* BB = BlackboardData.Get();
-	if (!BB)
+	if (!IsValid(BB))
 	{
 		OutError = TEXT("BlackboardData is no longer valid");
 		return false;

@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -129,7 +129,7 @@ FToolResult ClaireonBlueprintGraphTool_MoveCursor::Execute(const TSharedPtr<FJso
     }
 	UEdGraph* Graph = Data->Graph.Get();
 
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(TEXT("Graph is no longer valid"));
 	}
@@ -148,7 +148,7 @@ FToolResult ClaireonBlueprintGraphTool_MoveCursor::Execute(const TSharedPtr<FJso
 	}
 
 	UEdGraphNode* CurrentNode = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, Data->Cursor.FocusedNodeGuid);
-	if (!CurrentNode)
+	if (!IsValid(CurrentNode))
 	{
 		return MakeErrorResult(TEXT("Current cursor node not found (may have been deleted)"));
 	}
@@ -182,7 +182,7 @@ FToolResult ClaireonBlueprintGraphTool_MoveCursor::Execute(const TSharedPtr<FJso
 		float MinDistance = FLT_MAX;
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
-			if (Node && Node != CurrentNode && Node->NodePosY < CurrentNode->NodePosY)
+			if (IsValid(Node) && Node != CurrentNode && Node->NodePosY < CurrentNode->NodePosY)
 			{
 				float Distance = FMath::Abs(Node->NodePosX - CurrentNode->NodePosX) + (CurrentNode->NodePosY - Node->NodePosY);
 				if (Distance < MinDistance)
@@ -200,7 +200,7 @@ FToolResult ClaireonBlueprintGraphTool_MoveCursor::Execute(const TSharedPtr<FJso
 		float MinDistance = FLT_MAX;
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
-			if (Node && Node != CurrentNode && Node->NodePosY > CurrentNode->NodePosY)
+			if (IsValid(Node) && Node != CurrentNode && Node->NodePosY > CurrentNode->NodePosY)
 			{
 				float Distance = FMath::Abs(Node->NodePosX - CurrentNode->NodePosX) + (Node->NodePosY - CurrentNode->NodePosY);
 				if (Distance < MinDistance)
@@ -263,7 +263,7 @@ FToolResult ClaireonBlueprintGraphTool_MoveCursor::Execute(const TSharedPtr<FJso
 		return MakeErrorResult(FString::Printf(TEXT("Unknown direction: %s (valid: right, left, up, down, exec_next, exec_prev, next_pin, prev_pin)"), *Direction));
 	}
 
-	if (!TargetNode)
+	if (!IsValid(TargetNode))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("No node found in direction: %s"), *Direction));
 	}

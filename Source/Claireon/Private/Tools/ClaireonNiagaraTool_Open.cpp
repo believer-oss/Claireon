@@ -48,7 +48,7 @@ FToolResult ClaireonNiagaraTool_Open::Execute(const TSharedPtr<FJsonObject>& Arg
 
 	FString Error;
 	UNiagaraSystem* System = ClaireonNiagaraHelpers::LoadNiagaraSystemAsset(AssetPath, Error);
-	if (!System)
+	if (!IsValid(System))
 	{
 		return MakeErrorResult(Error);
 	}

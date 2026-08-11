@@ -126,9 +126,9 @@ Include exact file paths, class names, and code patterns where possible.
 How to verify this stage succeeded before moving on.
 Reference the appropriate script(s):
 
-- **Build check**: `Scripts\Utilities\Invoke-EditorBuild.ps1`
+- **Build check**: `Plugins\Claireon\Scripts\Utilities\Invoke-EditorBuild.ps1`
 - **Unit tests**: Your project's test runner with appropriate filters
-- **Asset validation**: `Scripts\Utilities\Invoke-ValidateAssets.ps1`
+- **Asset validation**: `Plugins\Claireon\Scripts\Utilities\Invoke-ValidateAssets.ps1`
 - **Smoke test**: Your project's end-to-end test (build + PIE)
 - **Format check**: Your project's format checker on changed files
 - **Diff regex**: Quick grep/regex on staged diffs for non-compile stages
@@ -247,10 +247,10 @@ These scripts are available and should be invoked as specified in each stage:
 
 | Script | Purpose | Example |
 |--------|---------|---------|
-| `Scripts\Utilities\Invoke-EditorBuild.ps1` | Build the editor (waits for UBT by default) | `-SkipWaitForUBT` |
-| `Scripts\Utilities\Invoke-ValidateAssets.ps1` | Validate asset integrity | |
-| `Scripts\Utilities\Invoke-CleanProject.ps1` | Clean build artifacts | `-IncludePlugins` |
-| `Scripts\Utilities\Invoke-FixupRedirectors.ps1` | Fix asset redirectors | |
+| `Plugins\Claireon\Scripts\Utilities\Invoke-EditorBuild.ps1` | Build the editor (waits for UBT by default) | `-SkipWaitForUBT` |
+| `Plugins\Claireon\Scripts\Utilities\Invoke-ValidateAssets.ps1` | Validate asset integrity | |
+| `Plugins\Claireon\Scripts\Utilities\Invoke-CleanProject.ps1` | Clean build artifacts | `-IncludePlugins` |
+| `Plugins\Claireon\Scripts\Utilities\Invoke-FixupRedirectors.ps1` | Fix asset redirectors | |
 
 > **Note:** Some validation scripts referenced in the stage templates (test runners, smoke tests,
 > format checkers) are project-specific and not included in this repository. Replace them with
@@ -300,7 +300,7 @@ Follow the conventional commit format:
 - **Stage files are living documents**: The implementer or reviewer may revise stages after initial authoring. The breakdown is a plan, not a contract.
 - **Each stage must be independently understandable**: An implementer reading stage 005 should be able to understand what to do without re-reading stages 001-004 (though they should reference prerequisites).
 - **Prefer more stages over fewer**: Smaller stages are easier to validate, review, and roll back. A stage that takes more than ~30 minutes to implement is probably too large.
-- **Reference existing scripts, never re-implement**: Build via `Invoke-EditorBuild.ps1`, test via `Invoke-UntestTests.ps1`, etc. Do not inline build commands or test logic into stage documents.
+- **Reference existing scripts, never re-implement**: Build via `Plugins\Claireon\Scripts\Utilities\Invoke-EditorBuild.ps1`, test via your project's test runner, etc. Do not inline build commands or test logic into stage documents.
 - **The 000 file is the entry point**: An implementer starting from scratch reads 000 first, then proceeds through the stages. It must be self-sufficient as a starting guide.
 - **Test stages for interactive systems are not build wrappers**: A test stage that only runs `Invoke-EditorBuild.ps1` is appropriate after skeleton stages. For stages implementing MCP tools, APIs, or any system with external callers, the test stage must call the system with real inputs, verify real outputs, test error paths, and verify round-trip correctness for persistent operations. A test stage that doesn't exercise the implementation's behavior provides false confidence and defeats the purpose of the test-after-implement pattern.
 

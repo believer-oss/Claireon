@@ -16,16 +16,10 @@ FString ClaireonTool_DataTableGetRowStructured::GetOperation() const { return TE
 FString ClaireonTool_DataTableGetRowStructured::GetDescription() const
 {
 	return TEXT(
-		"Get a single DataTable row as a nested JSON tree mirroring the row struct's property layout. "
-		"BP user-defined struct GUID suffixes are stripped (PossibleLines_17_<GUID> -> PossibleLines). "
-		"FText is exploded into { text, namespace, key }. "
-		"TMap is emitted as an array of { key, value } pairs so non-string keys (FGameplayTag, structs, etc.) round-trip without lossy stringification. "
-		"TArray and TSet are emitted as JSON arrays. "
-		"Soft and hard object references emit the asset path string (soft references never force-load). "
-		"Enums emit { value, name } objects. "
-		"Optional 'columns' filter accepts friendly or raw property names, case-insensitive. "
-		"Optional 'include_schema' flag adds a sibling top-level 'schema' field for callers that need the struct shape alongside values. "
-		"For bulk row pulls use datatable_export_json or datatable_get_rows with a columns filter."
+		"Get a single DataTable row as a nested JSON tree mirroring the row struct's layout. BP struct GUID "
+		"suffixes are stripped; FText explodes into {text, namespace, key}; TMap becomes an array of "
+		"{key, value} so non-string keys round-trip; enums emit {value, name}; object refs emit path "
+		"strings. Optional columns filter and include_schema. Read-only / non-session."
 	);
 }
 
@@ -104,7 +98,7 @@ IClaireonTool::FToolResult ClaireonTool_DataTableGetRowStructured::Execute(const
 
 	FString LoadError;
 	UDataTable* DataTable = ClaireonDataTableHelpers::LoadDataTableAsset(AssetPath, LoadError);
-	if (!DataTable)
+	if (!IsValid(DataTable))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -117,7 +111,7 @@ IClaireonTool::FToolResult ClaireonTool_DataTableGetRowStructured::Execute(const
 	}
 
 	UScriptStruct* RowStruct = const_cast<UScriptStruct*>(DataTable->GetRowStruct());
-	if (!RowStruct)
+	if (!IsValid(RowStruct))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("DataTable '%s' has no row struct"), *AssetPath));
 	}

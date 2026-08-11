@@ -16,6 +16,50 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
+namespace ClaireonAnimToolsMontageInternal
+{
+	// Shared post-edit fixup for every montage segment mutation in this file
+	// (add_segment, remove_segment, set_segment_property, retime_segment,
+	// batch_retime). Name carries the ClaireonMontageTool_ discriminator prefix
+	// because anonymous namespaces are not isolation under unity batching
+	// (linux-build-server-v2).
+	//
+	// UAnimMontage::PostEditChangeProperty does NOT recalculate SequenceLength
+	// (the engine only recalcs on PostLoad), so without an explicit recalc the
+	// cached play length goes stale after segment edits: notify adds past the
+	// old length are rejected by GetPlayLength() range checks and playback
+	// truncates. This mirrors the engine's own PostLoad repair pattern:
+	// SetCompositeLength(CalculateSequenceLength()).
+	//
+	// When notify times/durations may have been mutated (the retime paths call
+	// SetTime/SetDuration directly), RefreshCacheData() re-sorts the Notifies
+	// array and rebuilds the notify track cache -- the same call the plugin's
+	// MoveNotify helper treats as mandatory.
+	//
+	// Must run BEFORE any downstream notify-range validation or status
+	// reporting reads GetPlayLength().
+	void ClaireonMontageTool_PostMontageEdit(UAnimMontage* Montage, bool bNotifyTimesMutated)
+	{
+		const float RecalculatedLength = Montage->CalculateSequenceLength();
+		if (!FMath::IsNearlyEqual(RecalculatedLength, Montage->GetPlayLength(), KINDA_SMALL_NUMBER))
+		{
+			Montage->SetCompositeLength(RecalculatedLength);
+		}
+
+		if (bNotifyTimesMutated)
+		{
+			Montage->RefreshCacheData();
+		}
+
+		Montage->UpdateLinkableElements();
+		Montage->PostEditChange();
+		Montage->MarkPackageDirty();
+		ClaireonAssetUtils::RefreshAssetEditorIfOpen(Montage);
+	}
+} // namespace ClaireonAnimToolsMontageInternal
+
+using namespace ClaireonAnimToolsMontageInternal;
+
 // ============================================================================
 // anim_add_section
 // ============================================================================
@@ -45,7 +89,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddSection::Execute(const TSharedPtr
 		return Error;
 
 	UAnimMontage* Montage = RequireMontage(Data, Error);
-	if (!Montage) return Error;
+	if (!IsValid(Montage)) return Error;
 
 	FString SectionName;
 	if (!Arguments->TryGetStringField(TEXT("section_name"), SectionName) || SectionName.IsEmpty())
@@ -97,7 +141,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_RemoveSection::Execute(const TShared
 		return Error;
 
 	UAnimMontage* Montage = RequireMontage(Data, Error);
-	if (!Montage) return Error;
+	if (!IsValid(Montage)) return Error;
 
 	FString SectionName;
 	if (!Arguments->TryGetStringField(TEXT("section_name"), SectionName) || SectionName.IsEmpty())
@@ -146,7 +190,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_SetSectionLink::Execute(const TShare
 		return Error;
 
 	UAnimMontage* Montage = RequireMontage(Data, Error);
-	if (!Montage) return Error;
+	if (!IsValid(Montage)) return Error;
 
 	FString SectionName;
 	if (!Arguments->TryGetStringField(TEXT("section_name"), SectionName) || SectionName.IsEmpty())
@@ -200,7 +244,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_SetSectionLinkMethod::Execute(const 
 		return Error;
 
 	UAnimMontage* Montage = RequireMontage(Data, Error);
-	if (!Montage) return Error;
+	if (!IsValid(Montage)) return Error;
 
 	FString SectionName;
 	if (!Arguments->TryGetStringField(TEXT("section_name"), SectionName) || SectionName.IsEmpty())
@@ -284,7 +328,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddSegment::Execute(const TSharedPtr
 		return Error;
 
 	UAnimMontage* Montage = RequireMontage(Data, Error);
-	if (!Montage) return Error;
+	if (!IsValid(Montage)) return Error;
 
 	// Animation asset path (required)
 	FString AnimPath;
@@ -298,7 +342,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddSegment::Execute(const TSharedPtr
 	AnimPath = AnimPathResolve.ResolvedPath.Path;
 
 	UAnimSequenceBase* AnimAsset = LoadObject<UAnimSequenceBase>(nullptr, *AnimPath);
-	if (!AnimAsset)
+	if (!IsValid(AnimAsset))
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load animation: %s"), *AnimPath));
 
 	// Slot index (default 0)
@@ -361,10 +405,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddSegment::Execute(const TSharedPtr
 		Montage->AddAnimCompositeSection(FName(*SectionName), ActualStartPos);
 	}
 
-	Montage->UpdateLinkableElements();
-	Montage->PostEditChange();
-	Montage->MarkPackageDirty();
-	ClaireonAssetUtils::RefreshAssetEditorIfOpen(Montage);
+	ClaireonMontageTool_PostMontageEdit(Montage, /*bNotifyTimesMutated=*/false);
 
 	Data->LastOperationStatus = FString::Printf(TEXT("add_segment -> Added '%s' to slot [%d] at %.6fs [%d]%s"),
 		*AnimAsset->GetName(), SlotIndex, ActualStartPos, NewIndex,
@@ -401,7 +442,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_RemoveSegment::Execute(const TShared
 		return Error;
 
 	UAnimMontage* Montage = RequireMontage(Data, Error);
-	if (!Montage) return Error;
+	if (!IsValid(Montage)) return Error;
 
 	double SlotIndexD = 0.0;
 	Arguments->TryGetNumberField(TEXT("slot_index"), SlotIndexD);
@@ -426,10 +467,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_RemoveSegment::Execute(const TShared
 
 	Track.AnimSegments.RemoveAt(SegIndex);
 	Track.CollapseAnimSegments();
-	Montage->UpdateLinkableElements();
-	Montage->PostEditChange();
-	Montage->MarkPackageDirty();
-	ClaireonAssetUtils::RefreshAssetEditorIfOpen(Montage);
+	ClaireonMontageTool_PostMontageEdit(Montage, /*bNotifyTimesMutated=*/false);
 
 	Data->LastOperationStatus = FString::Printf(TEXT("remove_segment -> Removed '%s' from slot [%d] segment [%d]"), *SegName, SlotIndex, SegIndex);
 	return BuildStateResponse(SessionId, Data);
@@ -466,7 +504,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_SetSegmentProperty::Execute(const TS
 		return Error;
 
 	UAnimMontage* Montage = RequireMontage(Data, Error);
-	if (!Montage) return Error;
+	if (!IsValid(Montage)) return Error;
 
 	double SlotIndexD = 0.0;
 	Arguments->TryGetNumberField(TEXT("slot_index"), SlotIndexD);
@@ -501,7 +539,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_SetSegmentProperty::Execute(const TS
 	if (PropLower == TEXT("anim_path") || PropLower == TEXT("animation"))
 	{
 		UAnimSequenceBase* NewAnim = LoadObject<UAnimSequenceBase>(nullptr, *Value);
-		if (!NewAnim)
+		if (!IsValid(NewAnim))
 			return MakeErrorResult(FString::Printf(TEXT("Failed to load animation: %s"), *Value));
 		Seg.SetAnimReference(NewAnim);
 	}
@@ -531,10 +569,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_SetSegmentProperty::Execute(const TS
 	}
 
 	Track.CollapseAnimSegments();
-	Montage->UpdateLinkableElements();
-	Montage->PostEditChange();
-	Montage->MarkPackageDirty();
-	ClaireonAssetUtils::RefreshAssetEditorIfOpen(Montage);
+	ClaireonMontageTool_PostMontageEdit(Montage, /*bNotifyTimesMutated=*/false);
 
 	Data->LastOperationStatus = FString::Printf(TEXT("set_segment_property -> slot [%d] segment [%d]: %s = %s"), SlotIndex, SegIndex, *PropertyName, *Value);
 	return BuildStateResponse(SessionId, Data);
@@ -568,7 +603,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddSlot::Execute(const TSharedPtr<FJ
 		return Error;
 
 	UAnimMontage* Montage = RequireMontage(Data, Error);
-	if (!Montage) return Error;
+	if (!IsValid(Montage)) return Error;
 
 	FString SlotName;
 	if (!Arguments->TryGetStringField(TEXT("slot_name"), SlotName) || SlotName.IsEmpty())
@@ -615,7 +650,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_RemoveSlot::Execute(const TSharedPtr
 		return Error;
 
 	UAnimMontage* Montage = RequireMontage(Data, Error);
-	if (!Montage) return Error;
+	if (!IsValid(Montage)) return Error;
 
 	double SlotIndexD = -1.0;
 	if (!Arguments->TryGetNumberField(TEXT("slot_index"), SlotIndexD))
@@ -671,7 +706,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_SetSlotProperty::Execute(const TShar
 		return Error;
 
 	UAnimMontage* Montage = RequireMontage(Data, Error);
-	if (!Montage) return Error;
+	if (!IsValid(Montage)) return Error;
 
 	double SlotIndexD = -1.0;
 	if (!Arguments->TryGetNumberField(TEXT("slot_index"), SlotIndexD))
@@ -727,7 +762,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_InspectSegment::Execute(const TShare
 		return Error;
 
 	UAnimMontage* Montage = RequireMontage(Data, Error);
-	if (!Montage) return Error;
+	if (!IsValid(Montage)) return Error;
 
 	double SlotIndexD = 0.0;
 	Arguments->TryGetNumberField(TEXT("slot_index"), SlotIndexD);
@@ -752,8 +787,8 @@ IClaireonTool::FToolResult ClaireonAnimTool_InspectSegment::Execute(const TShare
 	Result->SetStringField(TEXT("session_id"), SessionId);
 	Result->SetNumberField(TEXT("slot_index"), SlotIndex);
 	Result->SetNumberField(TEXT("segment_index"), SegIndex);
-	Result->SetStringField(TEXT("animation"), AnimRef ? AnimRef->GetPathName() : TEXT("None"));
-	Result->SetStringField(TEXT("animation_name"), AnimRef ? AnimRef->GetName() : TEXT("None"));
+	Result->SetStringField(TEXT("animation"), IsValid(AnimRef) ? AnimRef->GetPathName() : TEXT("None"));
+	Result->SetStringField(TEXT("animation_name"), IsValid(AnimRef) ? AnimRef->GetName() : TEXT("None"));
 	Result->SetNumberField(TEXT("start_pos"), Seg.StartPos);
 	Result->SetNumberField(TEXT("anim_start_time"), Seg.AnimStartTime);
 	Result->SetNumberField(TEXT("anim_end_time"), Seg.AnimEndTime);
@@ -761,7 +796,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_InspectSegment::Execute(const TShare
 	Result->SetNumberField(TEXT("looping_count"), Seg.LoopingCount);
 	Result->SetNumberField(TEXT("duration"), Seg.GetLength());
 	Result->SetNumberField(TEXT("end_pos"), Seg.StartPos + Seg.GetLength());
-	Result->SetNumberField(TEXT("source_length"), AnimRef ? AnimRef->GetPlayLength() : 0.0f);
+	Result->SetNumberField(TEXT("source_length"), IsValid(AnimRef) ? AnimRef->GetPlayLength() : 0.0f);
 
 	// Find notifies linked to this segment
 	TArray<TSharedPtr<FJsonValue>> NotifyArray;
@@ -796,7 +831,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_InspectSegment::Execute(const TShare
 	Result->SetArrayField(TEXT("notifies"), NotifyArray);
 
 	Data->LastOperationStatus = FString::Printf(TEXT("inspect_segment -> slot [%d] segment [%d]: %s (%.3fs-%.3fs)"),
-		SlotIndex, SegIndex, AnimRef ? *AnimRef->GetName() : TEXT("None"), Seg.StartPos, Seg.StartPos + Seg.GetLength());
+		SlotIndex, SegIndex, IsValid(AnimRef) ? *AnimRef->GetName() : TEXT("None"), Seg.StartPos, Seg.StartPos + Seg.GetLength());
 	Result->SetStringField(TEXT("status"), Data->LastOperationStatus);
 	return MakeSuccessResult(Result, Data->LastOperationStatus);
 }
@@ -836,7 +871,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_RetimeSegment::Execute(const TShared
 		return Error;
 
 	UAnimMontage* Montage = RequireMontage(Data, Error);
-	if (!Montage) return Error;
+	if (!IsValid(Montage)) return Error;
 
 	double SlotIndexD = 0.0;
 	Arguments->TryGetNumberField(TEXT("slot_index"), SlotIndexD);
@@ -963,10 +998,11 @@ IClaireonTool::FToolResult ClaireonAnimTool_RetimeSegment::Execute(const TShared
 	}
 
 	Track.CollapseAnimSegments();
-	Montage->UpdateLinkableElements();
-	Montage->PostEditChange();
-	Montage->MarkPackageDirty();
-	ClaireonAssetUtils::RefreshAssetEditorIfOpen(Montage);
+	// The manual mode above mutates notify times/durations via SetTime/SetDuration
+	// and the link-method modes relink notifies, so the notify cache must refresh
+	// whenever notifies were touched.
+	const bool bNotifiesTouched = (NotifyMode != TEXT("none"));
+	ClaireonMontageTool_PostMontageEdit(Montage, bNotifiesTouched);
 
 	Data->LastOperationStatus = FString::Printf(TEXT("retime_segment -> slot [%d] segment [%d]: %.3fs -> %.3fs (ratio: %.3f, notify_mode: %s)"),
 		SlotIndex, SegIndex, OldLength, NewLength, LengthRatio, *NotifyMode);
@@ -1005,7 +1041,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BatchRetimeAnimation::Execute(const 
 		return Error;
 
 	UAnimMontage* Montage = RequireMontage(Data, Error);
-	if (!Montage) return Error;
+	if (!IsValid(Montage)) return Error;
 
 	FString AnimPath;
 	if (!Arguments->TryGetStringField(TEXT("anim_path"), AnimPath) || AnimPath.IsEmpty())
@@ -1018,7 +1054,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BatchRetimeAnimation::Execute(const 
 	AnimPath = AnimPathResolve.ResolvedPath.Path;
 
 	UAnimSequenceBase* TargetAnim = LoadObject<UAnimSequenceBase>(nullptr, *AnimPath);
-	if (!TargetAnim)
+	if (!IsValid(TargetAnim))
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load animation: %s"), *AnimPath));
 
 	float CurrentAnimLength = TargetAnim->GetPlayLength();
@@ -1071,7 +1107,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BatchRetimeAnimation::Execute(const 
 			}
 
 			UAnimMontage* RefMontage = Cast<UAnimMontage>(AssetData.GetAsset());
-			if (!RefMontage) continue;
+			if (!IsValid(RefMontage)) continue;
 
 			bool bMontageModified = false;
 
@@ -1149,10 +1185,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BatchRetimeAnimation::Execute(const 
 
 			if (bMontageModified)
 			{
-				RefMontage->UpdateLinkableElements();
-				RefMontage->PostEditChange();
-				RefMontage->MarkPackageDirty();
-				ClaireonAssetUtils::RefreshAssetEditorIfOpen(RefMontage);
+				ClaireonMontageTool_PostMontageEdit(RefMontage, /*bNotifyTimesMutated=*/NotifyMode != TEXT("none"));
 				MontagesUpdated++;
 
 				TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();

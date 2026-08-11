@@ -20,7 +20,8 @@ FString ClaireonTool_NiagaraInspect::GetDescription() const
 	return TEXT("Read the structure of a Niagara System asset. "
 				"Displays emitters (with renderers and properties), user parameters, "
 				"and system-level settings. Useful for understanding particle effect "
-				"configuration and identifying what can be edited.");
+				"configuration and identifying what can be edited. "
+				"Stateless / read-only / non-session: never mutates and requires no open session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_NiagaraInspect::GetInputSchema() const
@@ -74,7 +75,7 @@ IClaireonTool::FToolResult ClaireonTool_NiagaraInspect::Execute(const TSharedPtr
 
 	FString Error;
 	UNiagaraSystem* System = ClaireonNiagaraHelpers::LoadNiagaraSystemAsset(AssetPath, Error);
-	if (!System)
+	if (!IsValid(System))
 	{
 		return MakeErrorResult(Error);
 	}

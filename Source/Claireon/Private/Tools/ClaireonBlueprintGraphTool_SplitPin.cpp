@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_SplitPin::GetOperation() const { return TEXT(
 
 FString ClaireonBlueprintGraphTool_SplitPin::GetDescription() const
 {
-    return TEXT("Split a struct pin into its component sub-pins in the open Blueprint editing session. Requires open session_id from bp_open (or pass asset_path to auto-open). Transactional. Common pitfall: only struct-typed pins are splittable; non-struct pins error. Existing connections to the parent pin are dropped. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+    return TEXT("Split a struct pin into its component sub-pins in the open Blueprint editing session. Requires open session_id from bp_open (or pass asset_path to auto-open). Transactional. Common pitfalls: only struct-typed pins are splittable; a pin with existing connections refuses to split (disconnect first, or split immediately after node creation before wiring).");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SplitPin::GetInputSchema() const
@@ -135,7 +135,7 @@ FToolResult ClaireonBlueprintGraphTool_SplitPin::SplitPin_Impl(
 {
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
-	if (!Blueprint || !Graph)
+	if (!IsValid(Blueprint) || !IsValid(Graph))
 		return MakeErrorResult(TEXT("Blueprint or Graph is no longer valid"));
 
 	FString NodeGuidStr;
@@ -146,15 +146,11 @@ FToolResult ClaireonBlueprintGraphTool_SplitPin::SplitPin_Impl(
 	if (!Params->TryGetStringField(TEXT("pin_name"), PinName))
 		return MakeErrorResult(TEXT("Missing required field: pin_name"));
 
-	FGuid NodeGuid;
-	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
-		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
-
-	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperation(Graph, NodeGuid, Data);
-	if (!Node)
+	FString ResolveError;
+	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperationStr(Graph, NodeGuidStr, Data, ResolveError);
+	if (!IsValid(Node))
 	{
-		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
-		return MakeErrorResult(FString::Printf(TEXT("Node not found with GUID: %s.\n%s"), *NodeGuidStr, *AvailableNodes));
+		return MakeErrorResult(ResolveError);
 	}
 
 	TArray<FString> ResolutionWarnings;
@@ -169,9 +165,35 @@ FToolResult ClaireonBlueprintGraphTool_SplitPin::SplitPin_Impl(
 		ResolutionWarnings.Add(SplitPinResult.ResolutionNote);
 	}
 
+	if (Pin->SubPins.Num() > 0)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Pin '%s' is already split"), *PinName));
+	}
+
+	// Splitting a connected pin hides the parent pin but leaves its LinkedTo intact on
+	// the far side; downstream churn then trashes pins that are still referenced, which
+	// asserts during save and corrupts the asset. Refuse loudly instead (the editor UI
+	// disables Split for connected pins for the same reason).
+	if (Pin->LinkedTo.Num() > 0)
+	{
+		TArray<FString> LinkDescs;
+		for (const UEdGraphPin* Linked : Pin->LinkedTo)
+		{
+			if (Linked && IsValid(Linked->GetOwningNodeUnchecked()))
+			{
+				LinkDescs.Add(FString::Printf(TEXT("'%s' on '%s'"), *Linked->PinName.ToString(),
+					*Linked->GetOwningNode()->GetNodeTitle(ENodeTitleType::ListView).ToString()));
+			}
+		}
+		return MakeErrorResult(FString::Printf(
+			TEXT("Pin '%s' has %d existing connection(s) (%s) and cannot be split safely. ")
+			TEXT("Split pins immediately after node creation (before connecting), or bp_disconnect_pin first and reconnect to the sub-pins after the split."),
+			*PinName, Pin->LinkedTo.Num(), *FString::Join(LinkDescs, TEXT(", "))));
+	}
+
 	if (!Node->CanSplitPin(Pin))
 	{
-		return MakeErrorResult(FString::Printf(TEXT("Pin '%s' cannot be split (not a struct pin or already split)"), *PinName));
+		return MakeErrorResult(FString::Printf(TEXT("Pin '%s' cannot be split (not a struct pin, or the node forbids splitting it)"), *PinName));
 	}
 
 	const UEdGraphSchema_K2* K2Schema = GetDefault<UEdGraphSchema_K2>();

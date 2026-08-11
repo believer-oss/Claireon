@@ -89,7 +89,7 @@ IClaireonTool::FToolResult FClaireonSpecApplicatorBase::ApplySpec(
 		{
 			UE_LOG(LogClaireon, Error, TEXT("[apply_spec:%s] Critical error after Pass 1, rolling back"), *GetToolName());
 			// Undo the scoped transaction
-			if (GEditor)
+			if (IsValid(GEditor))
 			{
 				GEditor->UndoTransaction();
 			}
@@ -107,7 +107,7 @@ IClaireonTool::FToolResult FClaireonSpecApplicatorBase::ApplySpec(
 		if (HasCriticalError())
 		{
 			UE_LOG(LogClaireon, Error, TEXT("[apply_spec:%s] Critical error after Pass 2, rolling back"), *GetToolName());
-			if (GEditor)
+			if (IsValid(GEditor))
 			{
 				GEditor->UndoTransaction();
 			}
@@ -144,7 +144,7 @@ IClaireonTool::FToolResult FClaireonSpecApplicatorBase::ApplySpec(
 		// back any asset-auto-create, Pass1 entity-creation, and Pass2
 		// wiring before the transaction commits, so dry_run leaves zero
 		// on-disk state changes.
-		if (bInDryRun && GEditor)
+		if (bInDryRun && IsValid(GEditor))
 		{
 			UE_LOG(LogClaireon, Log, TEXT("[apply_spec:%s] dry_run: rolling back transaction"), *GetToolName());
 			GEditor->UndoTransaction();

@@ -40,7 +40,7 @@ IClaireonTool::FToolResult ClaireonTool_ProxyTableAddInherit::Execute(const TSha
 
 	FString Error;
 	UProxyTable* ProxyTable = ClaireonProxyTableHelpers::LoadProxyTableAsset(AssetPath, Error);
-	if (!ProxyTable)
+	if (!IsValid(ProxyTable))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -50,7 +50,7 @@ IClaireonTool::FToolResult ClaireonTool_ProxyTableAddInherit::Execute(const TSha
 	ProxyTable->Modify();
 
 	UProxyTable* ParentTable = ClaireonProxyTableHelpers::LoadProxyTableAsset(ParentPath, Error);
-	if (!ParentTable)
+	if (!IsValid(ParentTable))
 	{
 		return MakeErrorResult(Error);
 	}

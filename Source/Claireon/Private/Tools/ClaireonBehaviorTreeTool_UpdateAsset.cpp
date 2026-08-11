@@ -42,7 +42,7 @@ FToolResult ClaireonBehaviorTreeTool_UpdateAsset::Execute(const TSharedPtr<FJson
 	}
 
 	UBehaviorTreeGraph* Graph = ClaireonBehaviorTreeHelpers::GetBTGraph(Data->BehaviorTree.Get(), Error);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(Error);
 	}

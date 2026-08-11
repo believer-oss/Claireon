@@ -49,7 +49,7 @@ IClaireonTool::FToolResult FClaireonConcurrencyTool_Create::Execute(const TShare
 	}
 	const FString ObjectName = FPackageName::GetShortName(Canon);
 
-	if (UObject* Existing = LoadObject<UObject>(nullptr, *Canon))
+	if (UObject* Existing = LoadObject<UObject>(nullptr, *Canon); IsValid(Existing))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset already exists at path: %s"), *Canon));
 	}
@@ -57,7 +57,7 @@ IClaireonTool::FToolResult FClaireonConcurrencyTool_Create::Execute(const TShare
 	UPackage* Package = CreatePackage(*Canon);
 	UObject* NewAsset = NewObject<UObject>(Package, USoundConcurrency::StaticClass(), *ObjectName,
 		RF_Public | RF_Standalone | RF_Transactional | RF_LoadCompleted);
-	if (!NewAsset)
+	if (!IsValid(NewAsset))
 	{
 		return MakeErrorResult(TEXT("NewObject failed"));
 	}

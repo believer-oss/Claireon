@@ -12,6 +12,7 @@
 #include "MVVMBlueprintView.h"
 #include "MVVMBlueprintViewModelContext.h"
 #include "MVVMViewModelBase.h"
+#include "UObject/UnrealType.h"
 #include "Tools/ClaireonWidgetBPEditToolBase_Internal.h"
 
 using FToolResult = IClaireonTool::FToolResult;
@@ -20,7 +21,8 @@ FString ClaireonWidgetBPTool_AddMVVMViewModel::GetOperation() const { return TEX
 
 FString ClaireonWidgetBPTool_AddMVVMViewModel::GetDescription() const
 {
-    return TEXT("Add an MVVM ViewModel context to the Widget Blueprint in the open editing session. Requires open session_id from widgetbp_open. Transactional. The viewmodel_class must be a UMVVMViewModelBase subclass. Once added, bindings sourced from this viewmodel resolve via widgetbp_add_mvvm_binding.");
+    // Kept under the 400-char P5 description cap that DescriptionLint enforces.
+    return TEXT("Add an MVVM ViewModel context to the Widget Blueprint in the open editing session. Requires an open session_id from widgetbp_open. Transactional. viewmodel_class must be a CONCRETE UMVVMViewModelBase subclass with at least one UPROPERTY; abstract or property-less classes are rejected, because no binding source path can resolve against them. Returns name and id.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_AddMVVMViewModel::GetInputSchema() const
@@ -45,7 +47,7 @@ FToolResult ClaireonWidgetBPTool_AddMVVMViewModel::Execute(const TSharedPtr<FJso
         return Error;
     }
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
-	if (!WBP)
+	if (!IsValid(WBP))
 	{
 		return MakeErrorResult(TEXT("Widget Blueprint is no longer valid"));
 	}
@@ -65,14 +67,34 @@ FToolResult ClaireonWidgetBPTool_AddMVVMViewModel::Execute(const TSharedPtr<FJso
 	// Resolve viewmodel class
 	ClaireonNameResolver::FNameResolveResult VMClassResult;
 	UClass* VMClass = ClaireonNameResolver::ResolveClassName(ViewModelClassStr, UMVVMViewModelBase::StaticClass(), VMClassResult);
-	if (!VMClass)
+	if (!IsValid(VMClass))
 	{
 		// Fall back to LoadClass for asset paths
 		VMClass = LoadClass<UMVVMViewModelBase>(nullptr, *ViewModelClassStr);
 	}
-	if (!VMClass || !VMClass->IsChildOf(UMVVMViewModelBase::StaticClass()))
+	if (!IsValid(VMClass) || !VMClass->IsChildOf(UMVVMViewModelBase::StaticClass()))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Could not resolve '%s' to a UMVVMViewModelBase subclass"), *ViewModelClassStr));
+	}
+
+	// Reject abstract classes (including UMVVMViewModelBase itself, which is
+	// abstract) and classes with zero UPROPERTYs: neither can back a working
+	// binding source path, so silently accepting them would create a context
+	// that looks valid but can never resolve a binding against.
+	if (VMClass->HasAnyClassFlags(CLASS_Abstract))
+	{
+		return MakeErrorResult(FString::Printf(
+			TEXT("Class is abstract: %s. Pass a concrete UMVVMViewModelBase subclass with at least one UPROPERTY instead."),
+			*VMClass->GetName()));
+	}
+	{
+		TFieldIterator<FProperty> VMPropIt(VMClass);
+		if (!VMPropIt)
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("Class has no UPROPERTY fields: %s. No binding source path could ever resolve against it; pass a concrete UMVVMViewModelBase subclass with at least one UPROPERTY instead."),
+				*VMClass->GetName()));
+		}
 	}
 
 	// Parse optional params
@@ -91,7 +113,7 @@ FToolResult ClaireonWidgetBPTool_AddMVVMViewModel::Execute(const TSharedPtr<FJso
 
 	// Get or create MVVM view
 	UMVVMBlueprintView* View = ClaireonWidgetHelpers::GetOrCreateMVVMBlueprintView(WBP);
-	if (!View)
+	if (!IsValid(View))
 	{
 		return MakeErrorResult(TEXT("Failed to get or create MVVM Blueprint View"));
 	}
@@ -117,9 +139,13 @@ FToolResult ClaireonWidgetBPTool_AddMVVMViewModel::Execute(const TSharedPtr<FJso
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
 	Data->bModified = true;
 
-	// Return the created context info
+	// Return the created context info. The identity field is `name` (not
+	// `viewmodel_name`) to match list_mvvm_viewmodels / SerializeMVVMViewModelContexts,
+	// which is the established convention for named-entity returns elsewhere in the
+	// widgetbp family (e.g. create_animation also returns bare `name`). See C7 in
+	// Docs/llm/todo/claireon-product-defects.md.
 	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
-	ResultObj->SetStringField(TEXT("viewmodel_name"), ViewModelName);
+	ResultObj->SetStringField(TEXT("name"), ViewModelName);
 	ResultObj->SetStringField(TEXT("viewmodel_class"), VMClass->GetPathName());
 	ResultObj->SetStringField(TEXT("creation_type"), CreationTypeStr.IsEmpty() ? TEXT("Manual") : *CreationTypeStr);
 	ResultObj->SetBoolField(TEXT("optional"), bOptional);

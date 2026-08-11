@@ -72,7 +72,7 @@ IClaireonTool::FToolResult ClaireonTool_DataTableGetRows::Execute(const TSharedP
 
 	FString LoadError;
 	UDataTable* DataTable = ClaireonDataTableHelpers::LoadDataTableAsset(AssetPath, LoadError);
-	if (!DataTable)
+	if (!IsValid(DataTable))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -132,7 +132,7 @@ IClaireonTool::FToolResult ClaireonTool_DataTableGetRows::Execute(const TSharedP
 		TSharedPtr<FJsonObject> RowObj = MakeShared<FJsonObject>();
 		RowObj->SetStringField(TEXT("row_name"), RowName.ToString());
 
-		if (RowStruct && RowData)
+		if (IsValid(RowStruct) && RowData)
 		{
 			for (TFieldIterator<FProperty> It(RowStruct); It; ++It)
 			{

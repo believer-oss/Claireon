@@ -40,7 +40,7 @@ FToolResult ClaireonStateTreeTool_SetStateProperty::Execute(const TSharedPtr<FJs
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	FGuid StateId;
@@ -54,7 +54,7 @@ FToolResult ClaireonStateTreeTool_SetStateProperty::Execute(const TSharedPtr<FJs
 		return MakeErrorResult(TEXT("Missing parameter: property_value"));
 
 	UStateTreeState* State = ClaireonStateTreeHelpers::FindStateById(EditorData, StateId);
-	if (!State)
+	if (!IsValid(State))
 	{
 		const FString AssetName = Data->StateTree.IsValid() ? Data->StateTree->GetName() : TEXT("(unknown)");
 		return MakeErrorResult(FString::Printf(TEXT("State '%s' not found in tree '%s'"),

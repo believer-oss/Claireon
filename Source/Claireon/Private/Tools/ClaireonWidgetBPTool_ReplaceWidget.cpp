@@ -58,21 +58,21 @@ FToolResult ClaireonWidgetBPTool_ReplaceWidget::Execute(const TSharedPtr<FJsonOb
 	Params->TryGetBoolField(TEXT("preserve_children"), bPreserveChildren);
 
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
-	if (!WBP || !WBP->WidgetTree)
+	if (!IsValid(WBP) || !WBP->WidgetTree)
 	{
 		return MakeErrorResult(TEXT("Widget Blueprint or WidgetTree is no longer valid"));
 	}
 	UWidgetTree* Tree = WBP->WidgetTree;
 
 	UWidget* OldWidget = ClaireonWidgetHelpers::FindWidgetByName(Tree, FName(*WidgetName));
-	if (!OldWidget)
+	if (!IsValid(OldWidget))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Widget '%s' not found"), *WidgetName));
 	}
 
 	FString ClassError;
 	UClass* NewClass = ClaireonWidgetHelpers::ResolveWidgetClass(NewWidgetClassStr, ClassError);
-	if (!NewClass)
+	if (!IsValid(NewClass))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Could not resolve new widget class '%s': %s"), *NewWidgetClassStr, *ClassError));
 	}
@@ -84,7 +84,7 @@ FToolResult ClaireonWidgetBPTool_ReplaceWidget::Execute(const TSharedPtr<FJsonOb
 	// Collect children from old widget before replacing (if it's a panel)
 	TArray<UWidget*> OldChildren;
 	UPanelWidget* OldPanel = Cast<UPanelWidget>(OldWidget);
-	if (bPreserveChildren && OldPanel)
+	if (bPreserveChildren && IsValid(OldPanel))
 	{
 		for (int32 i = 0; i < OldPanel->GetChildrenCount(); ++i)
 		{
@@ -94,7 +94,7 @@ FToolResult ClaireonWidgetBPTool_ReplaceWidget::Execute(const TSharedPtr<FJsonOb
 
 	// Create new widget
 	UWidget* NewWidget = ClaireonWidgetHelpers::CreateWidget(Tree, NewClass, NAME_None);
-	if (!NewWidget)
+	if (!IsValid(NewWidget))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create new widget of class '%s'"), *NewWidgetClassStr));
 	}
@@ -107,7 +107,7 @@ FToolResult ClaireonWidgetBPTool_ReplaceWidget::Execute(const TSharedPtr<FJsonOb
 		// Replace root
 		Tree->RootWidget = NewWidget;
 	}
-	else if (ParentPanel)
+	else if (IsValid(ParentPanel))
 	{
 		// Use ReplaceChild to maintain slot position
 		if (!ParentPanel->ReplaceChild(OldWidget, NewWidget))
@@ -120,11 +120,11 @@ FToolResult ClaireonWidgetBPTool_ReplaceWidget::Execute(const TSharedPtr<FJsonOb
 
 	// Reparent children to the new widget if it's a panel
 	UPanelWidget* NewPanel = Cast<UPanelWidget>(NewWidget);
-	if (OldChildren.Num() > 0 && NewPanel)
+	if (OldChildren.Num() > 0 && IsValid(NewPanel))
 	{
 		for (UWidget* Child : OldChildren)
 		{
-			if (OldPanel)
+			if (IsValid(OldPanel))
 			{
 				OldPanel->RemoveChild(Child);
 			}
@@ -132,7 +132,7 @@ FToolResult ClaireonWidgetBPTool_ReplaceWidget::Execute(const TSharedPtr<FJsonOb
 		}
 		UE_LOG(LogClaireon, Log, TEXT("[EditWidgetBP] Reparented %d children to replacement widget"), OldChildren.Num());
 	}
-	else if (OldChildren.Num() > 0 && !NewPanel)
+	else if (OldChildren.Num() > 0 && !IsValid(NewPanel))
 	{
 		UE_LOG(LogClaireon, Warning, TEXT("[EditWidgetBP] Replacement widget '%s' is not a panel -- %d children were lost"), *NewWidgetClassStr, OldChildren.Num());
 	}

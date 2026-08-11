@@ -20,14 +20,15 @@
 
 #include "Dom/JsonObject.h"
 
-namespace
+#include "Tests/ClaireonTestAssetDeletion.h"
+namespace ClaireonCameraAssetTool_Lifecycle_spec_Private
 {
 	/** Best-effort cleanup of a /Game/Tests/<X> asset; ignores absence. */
 	void CALifecycleSpec_DeleteIfExists(const FString& Path)
 	{
 		if (UEditorAssetLibrary::DoesAssetExist(Path))
 		{
-			UEditorAssetLibrary::DeleteAsset(Path);
+			ClaireonTestAssetDeletion::DeleteAssetForTest(Path);
 		}
 	}
 
@@ -62,6 +63,7 @@ namespace
 			TEXT("dest_path"), Dest));
 	}
 } // namespace
+using namespace ClaireonCameraAssetTool_Lifecycle_spec_Private;
 
 // =====================================================================================
 // Test: Create_HappyPath
@@ -69,7 +71,7 @@ namespace
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetLifecycle_Create_HappyPath,
 	"Claireon.CameraAsset.Lifecycle.Create_HappyPath",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FCameraAssetLifecycle_Create_HappyPath::RunTest(const FString& /*Parameters*/)
 {
@@ -84,7 +86,7 @@ bool FCameraAssetLifecycle_Create_HappyPath::RunTest(const FString& /*Parameters
 	}
 
 	UCameraAsset* Asset = LoadObject<UCameraAsset>(nullptr, *Path);
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		AddError(TEXT("Asset not found after Create"));
 		return false;
@@ -106,7 +108,7 @@ bool FCameraAssetLifecycle_Create_HappyPath::RunTest(const FString& /*Parameters
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetLifecycle_Create_PathOutsideGame,
 	"Claireon.CameraAsset.Lifecycle.Create_PathOutsideGame",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FCameraAssetLifecycle_Create_PathOutsideGame::RunTest(const FString& /*Parameters*/)
 {
@@ -125,7 +127,7 @@ bool FCameraAssetLifecycle_Create_PathOutsideGame::RunTest(const FString& /*Para
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetLifecycle_Create_AlreadyExists,
 	"Claireon.CameraAsset.Lifecycle.Create_AlreadyExists",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FCameraAssetLifecycle_Create_AlreadyExists::RunTest(const FString& /*Parameters*/)
 {
@@ -148,7 +150,7 @@ bool FCameraAssetLifecycle_Create_AlreadyExists::RunTest(const FString& /*Parame
 	}
 
 	UCameraAsset* Asset = LoadObject<UCameraAsset>(nullptr, *Path);
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		AddError(TEXT("Asset disappeared after second Create"));
 		return false;
@@ -164,7 +166,7 @@ bool FCameraAssetLifecycle_Create_AlreadyExists::RunTest(const FString& /*Parame
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetLifecycle_Duplicate_HappyPath,
 	"Claireon.CameraAsset.Lifecycle.Duplicate_HappyPath",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FCameraAssetLifecycle_Duplicate_HappyPath::RunTest(const FString& /*Parameters*/)
 {
@@ -189,7 +191,7 @@ bool FCameraAssetLifecycle_Duplicate_HappyPath::RunTest(const FString& /*Paramet
 	}
 
 	UCameraAsset* DupAsset = LoadObject<UCameraAsset>(nullptr, *Dst);
-	if (!DupAsset)
+	if (!IsValid(DupAsset))
 	{
 		AddError(TEXT("Duplicate dest not loadable as UCameraAsset"));
 		CALifecycleSpec_DeleteIfExists(Src);
@@ -207,7 +209,7 @@ bool FCameraAssetLifecycle_Duplicate_HappyPath::RunTest(const FString& /*Paramet
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetLifecycle_Duplicate_MissingSource,
 	"Claireon.CameraAsset.Lifecycle.Duplicate_MissingSource",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FCameraAssetLifecycle_Duplicate_MissingSource::RunTest(const FString& /*Parameters*/)
 {
@@ -230,10 +232,31 @@ bool FCameraAssetLifecycle_Duplicate_MissingSource::RunTest(const FString& /*Par
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetLifecycle_Save_RoundTrip,
 	"Claireon.CameraAsset.Lifecycle.Save_RoundTrip",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FCameraAssetLifecycle_Save_RoundTrip::RunTest(const FString& /*Parameters*/)
 {
+
+	// Declare the engine's save-time validation errors as expected.
+	//
+	// Saving a camera asset runs UCameraAsset validation, which logs at Error verbosity --
+	// and the automation framework turns any captured Error into a failure. Both messages
+	// are correct and neither is fixable from the test:
+	//
+	//   "Camera has no director set"  -- on 5.7+ camera_asset_add_rig installs a
+	//     USingleCameraDirector on demand, but on UE 5.5/5.6 hosts AddRig
+	//     takes the pre-5.7 AddCameraRig() path which installs no director at all. No
+	//     camera_asset tool can set one on this version.
+	//   "has no root node"            -- camera_asset_add_rig documents that it creates the
+	//     rig "with a null root node"; that is the tool's contract, not a fixture defect.
+	//
+	// These tests are about round-tripping the asset, not about producing a runnable
+	// camera, so the right move is to declare the errors rather than suppress them
+	// wholesale: anything else LogCameraSystem reports still fails the test.
+	AddExpectedError(TEXT("Camera has no director set"),
+		EAutomationExpectedErrorFlags::Contains, /*Occurrences=*/0);
+	AddExpectedError(TEXT("has no root node"),
+		EAutomationExpectedErrorFlags::Contains, /*Occurrences=*/0);
 	const FString Path = TEXT("/Game/Tests/CA_Lifecycle_SaveRT");
 	CALifecycleSpec_DeleteIfExists(Path);
 
@@ -294,7 +317,7 @@ bool FCameraAssetLifecycle_Save_RoundTrip::RunTest(const FString& /*Parameters*/
 	}
 
 	// 4. Unload the package so a fresh LoadObject re-pulls from disk.
-	if (UPackage* Pkg = FindPackage(nullptr, *Path))
+	if (UPackage* Pkg = FindPackage(nullptr, *Path); IsValid(Pkg))
 	{
 		FText UnloadErr;
 		const bool bUnloaded = UPackageTools::UnloadPackages({ Pkg }, UnloadErr, /*bUnloadDirtyPackages=*/true);
@@ -308,7 +331,7 @@ bool FCameraAssetLifecycle_Save_RoundTrip::RunTest(const FString& /*Parameters*/
 
 	// 5. Reload + verify the rig persisted.
 	UCameraAsset* Reloaded = LoadObject<UCameraAsset>(nullptr, *Path);
-	if (!Reloaded)
+	if (!IsValid(Reloaded))
 	{
 		AddError(TEXT("Asset failed to reload after unload"));
 		CALifecycleSpec_DeleteIfExists(Path);

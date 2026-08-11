@@ -24,13 +24,10 @@ FString ClaireonTool_FixupStaleEnumValues::GetDescription() const
 {
 	// One-shot resave commandlet wrapped as an MCP tool. EnumRedirects only fires
 	// on Save; tracked assets carrying stale values stay broken until forced through.
-	return TEXT("Walk the Asset Registry and resave assets whose serialized state references "
-				"a specified stale enum value. The actual value rewrite is handled by UE's "
-				"EnumRedirects on Save; this tool's job is to force every referencing asset "
-				"through SaveLoadedAsset. Supports dry_run=true to list candidates without "
-				"resaving. Refuses to run while PIE is active. "
-				"Use after editing Config/DefaultEngine.ini's [CoreRedirects] section to "
-				"convert old enum values to new ones across the project.");
+	return TEXT("Resave every asset whose serialized state references a named stale enum value, forcing UE's "
+				"EnumRedirects to rewrite it (redirects only fire on Save). Run after adding [CoreRedirects] "
+				"entries to Config/DefaultEngine.ini. dry_run=true lists candidates without resaving. "
+				"Non-session, refuses to run while PIE is active.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_FixupStaleEnumValues::GetInputSchema() const
@@ -59,18 +56,18 @@ TSharedPtr<FJsonObject> ClaireonTool_FixupStaleEnumValues::GetInputSchema() cons
 	return Schema;
 }
 
-namespace
+namespace ClaireonTool_FixupStaleEnumValues_Private
 {
 	// Recursively scan a UObject's properties for an enum field with the given UEnum
 	// and matching stored value name. Returns true on first hit.
 	bool ObjectReferencesStaleEnumValue(UObject* Obj, UEnum* TargetEnum, const FString& OldValueName, int32 Depth = 0)
 	{
-		if (!Obj || !TargetEnum || Depth > 4)
+		if (!IsValid(Obj) || !IsValid(TargetEnum) || Depth > 4)
 		{
 			return false;
 		}
 		UClass* Class = Obj->GetClass();
-		if (!Class)
+		if (!IsValid(Class))
 		{
 			return false;
 		}
@@ -148,6 +145,7 @@ namespace
 		return false;
 	}
 }
+using namespace ClaireonTool_FixupStaleEnumValues_Private;
 
 IClaireonTool::FToolResult ClaireonTool_FixupStaleEnumValues::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
@@ -176,11 +174,11 @@ IClaireonTool::FToolResult ClaireonTool_FixupStaleEnumValues::Execute(const TSha
 	}
 
 	UEnum* TargetEnum = FindObject<UEnum>(nullptr, *EnumPath);
-	if (!TargetEnum)
+	if (!IsValid(TargetEnum))
 	{
 		TargetEnum = LoadObject<UEnum>(nullptr, *EnumPath);
 	}
-	if (!TargetEnum)
+	if (!IsValid(TargetEnum))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Could not resolve UEnum: %s"), *EnumPath));
 	}
@@ -206,7 +204,7 @@ IClaireonTool::FToolResult ClaireonTool_FixupStaleEnumValues::Execute(const TSha
 		++Scanned;
 
 		UObject* Obj = AD.GetAsset();
-		if (!Obj)
+		if (!IsValid(Obj))
 		{
 			++Skipped;
 			continue;

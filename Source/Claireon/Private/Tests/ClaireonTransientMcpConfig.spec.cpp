@@ -6,8 +6,8 @@
 // that wraps ClaireonLaunch::TransientMcpConfig_BuildJson) without any I/O or
 // a running editor.
 //
-// Category: Claireon.TransientMcpConfig.* (run via
-// `Scripts\Testing\Invoke-UntestTests.ps1 -TestFilter "Claireon.TransientMcpConfig"`).
+// Category: Claireon.TransientMcpConfig.* (run with the automation test
+// filter "Claireon.TransientMcpConfig").
 
 #if WITH_UNTESTED
 
@@ -22,7 +22,7 @@
 // Forward-declare the test seam defined in ClaireonModule.cpp.
 extern FString Claireon_Test_BuildTransientMcpConfigJson(const FString& ExistingMcpJsonContent, uint32 Port);
 
-namespace
+namespace ClaireonTransientMcpConfig_spec_Private
 {
 	// File-local prefix on all helpers to avoid unity-batching symbol collisions.
 
@@ -63,6 +63,7 @@ namespace
 		return Out;
 	}
 } // namespace
+using namespace ClaireonTransientMcpConfig_spec_Private;
 
 // ---------------------------------------------------------------------------
 // Key rename: "claireon" present, "unreal-editor" absent (empty project json).

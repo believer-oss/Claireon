@@ -33,7 +33,7 @@ TSharedPtr<FJsonObject> ClaireonTool_PIEStop::GetInputSchema() const
 
 IClaireonTool::FToolResult ClaireonTool_PIEStop::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("GEditor is not available"));
 	}
@@ -63,7 +63,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEStop::Execute(const TSharedPtr<FJsonO
 
 void ClaireonTool_PIEStop::ExecuteDeferredPIEStop()
 {
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return;
 	}

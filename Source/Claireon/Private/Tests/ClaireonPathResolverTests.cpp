@@ -11,7 +11,7 @@
 // Basic Format Tests
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, PathResolver, CanonicalGamePath)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, CanonicalGamePath, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("/Game/Path/Asset"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -22,7 +22,7 @@ UNTEST_UNIT(Claireon, PathResolver, CanonicalGamePath)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, GamePathWithUasset)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, GamePathWithUasset, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("/Game/Path/Asset.uasset"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -31,7 +31,7 @@ UNTEST_UNIT(Claireon, PathResolver, GamePathWithUasset)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, GamePathWithUmap)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, GamePathWithUmap, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("/Game/Path/Asset.umap"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -40,7 +40,7 @@ UNTEST_UNIT(Claireon, PathResolver, GamePathWithUmap)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, DuplicateObjectName)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, DuplicateObjectName, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("/Game/Path/Asset.Asset"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -49,7 +49,7 @@ UNTEST_UNIT(Claireon, PathResolver, DuplicateObjectName)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, NonDuplicateObjectName)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, NonDuplicateObjectName, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("/Game/Path/Asset.SubObject"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -58,7 +58,7 @@ UNTEST_UNIT(Claireon, PathResolver, NonDuplicateObjectName)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, ContentRelativePath)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, ContentRelativePath, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("Content/Path/Asset"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -67,7 +67,7 @@ UNTEST_UNIT(Claireon, PathResolver, ContentRelativePath)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, ContentRelativeWithExtension)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, ContentRelativeWithExtension, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("Content/Path/Asset.uasset"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -76,7 +76,7 @@ UNTEST_UNIT(Claireon, PathResolver, ContentRelativeWithExtension)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, AbsoluteFilesystemPath)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, AbsoluteFilesystemPath, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("D:/proj/Content/Path/Asset.uasset"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -85,7 +85,7 @@ UNTEST_UNIT(Claireon, PathResolver, AbsoluteFilesystemPath)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, UnixAbsoluteFilesystemPath)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, UnixAbsoluteFilesystemPath, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("/home/user/proj/Content/Path/Asset"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -94,7 +94,7 @@ UNTEST_UNIT(Claireon, PathResolver, UnixAbsoluteFilesystemPath)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, GameWithoutLeadingSlash)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, GameWithoutLeadingSlash, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("Game/Path/Asset"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -103,7 +103,7 @@ UNTEST_UNIT(Claireon, PathResolver, GameWithoutLeadingSlash)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, BareRelativePath)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, BareRelativePath, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("Path/Asset"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -116,7 +116,7 @@ UNTEST_UNIT(Claireon, PathResolver, BareRelativePath)
 // Special Path Tests
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, PathResolver, ScriptEnginePath)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, ScriptEnginePath, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("/Script/Engine.Actor"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -127,7 +127,7 @@ UNTEST_UNIT(Claireon, PathResolver, ScriptEnginePath)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, ScriptCustomModule)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, ScriptCustomModule, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("/Script/MyModule.MyClass"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -137,7 +137,7 @@ UNTEST_UNIT(Claireon, PathResolver, ScriptCustomModule)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, EngineContentPath)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, EngineContentPath, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("/Engine/BasicShapes/Cube"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -147,7 +147,7 @@ UNTEST_UNIT(Claireon, PathResolver, EngineContentPath)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, PluginContentPath)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, PluginContentPath, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("/PluginName/SubPath"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -201,7 +201,7 @@ UNTEST_UNIT_OPTS(Claireon, PathResolver, ClassSuffix_ExactAssetExists, UNTEST_TI
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, ClassSuffix_NeitherExists)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, ClassSuffix_NeitherExists, UNTEST_TIMEOUTMS(5000))
 {
 	// No assets registered at either path -- best-effort strip
 	auto Result = ClaireonPathResolver::Resolve(TEXT("/Game/ClaireonTest/BP_NoSuchAsset_C"));
@@ -216,7 +216,7 @@ UNTEST_UNIT(Claireon, PathResolver, ClassSuffix_NeitherExists)
 // Normalization Edge Case Tests
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, PathResolver, EmptyString)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, EmptyString, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT(""));
 	UNTEST_ASSERT_FALSE(Result.bSuccess);
@@ -224,7 +224,7 @@ UNTEST_UNIT(Claireon, PathResolver, EmptyString)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, WhitespaceOnly)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, WhitespaceOnly, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("   "));
 	UNTEST_ASSERT_FALSE(Result.bSuccess);
@@ -232,7 +232,7 @@ UNTEST_UNIT(Claireon, PathResolver, WhitespaceOnly)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, OnlyUassetExtension)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, OnlyUassetExtension, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT(".uasset"));
 	UNTEST_ASSERT_FALSE(Result.bSuccess);
@@ -240,7 +240,7 @@ UNTEST_UNIT(Claireon, PathResolver, OnlyUassetExtension)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, BackslashPaths)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, BackslashPaths, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("\\Game\\Path\\Asset"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -249,7 +249,7 @@ UNTEST_UNIT(Claireon, PathResolver, BackslashPaths)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, DoubleSlashes)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, DoubleSlashes, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("/Game//Path/Asset"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -258,7 +258,7 @@ UNTEST_UNIT(Claireon, PathResolver, DoubleSlashes)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, TrailingSlash)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, TrailingSlash, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("/Game/Path/"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -267,7 +267,7 @@ UNTEST_UNIT(Claireon, PathResolver, TrailingSlash)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, MultipleDotsDuplicate)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, MultipleDotsDuplicate, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("/Game/BP_V2.0.BP_V2.0"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -278,7 +278,7 @@ UNTEST_UNIT(Claireon, PathResolver, MultipleDotsDuplicate)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, ContentFolder)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, ContentFolder, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("Content"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -287,7 +287,7 @@ UNTEST_UNIT(Claireon, PathResolver, ContentFolder)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, UnicodeInPath)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, UnicodeInPath, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("/Game/Characters/BP_Player_e"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -296,7 +296,7 @@ UNTEST_UNIT(Claireon, PathResolver, UnicodeInPath)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, LeadingWhitespace)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, LeadingWhitespace, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("  /Game/Path/Asset  "));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -305,7 +305,7 @@ UNTEST_UNIT(Claireon, PathResolver, LeadingWhitespace)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, DotDotResolution)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, DotDotResolution, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("/Game/Path/../Other/Asset"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -318,7 +318,7 @@ UNTEST_UNIT(Claireon, PathResolver, DotDotResolution)
 // Object-Path Append Tests
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, PathResolver, ObjectNameAppendedForPackagePath)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, ObjectNameAppendedForPackagePath, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("/Game/Foo/BP_Bar"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -327,7 +327,7 @@ UNTEST_UNIT(Claireon, PathResolver, ObjectNameAppendedForPackagePath)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, ObjectNameNotAppendedForSubObjectPath)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, ObjectNameNotAppendedForSubObjectPath, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("/Game/Foo/BP_Bar.SubObject"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);
@@ -336,7 +336,7 @@ UNTEST_UNIT(Claireon, PathResolver, ObjectNameNotAppendedForSubObjectPath)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PathResolver, ObjectNameNotAppendedForNativeClassPath)
+UNTEST_UNIT_OPTS(Claireon, PathResolver, ObjectNameNotAppendedForNativeClassPath, UNTEST_TIMEOUTMS(10000))
 {
 	auto Result = ClaireonPathResolver::Resolve(TEXT("/Script/Engine.Actor"));
 	UNTEST_ASSERT_TRUE(Result.bSuccess);

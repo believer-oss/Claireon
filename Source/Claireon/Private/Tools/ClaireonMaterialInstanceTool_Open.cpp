@@ -35,7 +35,7 @@ FToolResult ClaireonMaterialInstanceTool_Open::Execute(const TSharedPtr<FJsonObj
 
 	FString LoadErr;
 	UMaterialInstanceConstant* Instance = ClaireonMaterialHelpers::LoadMaterialInstanceAsset(AssetPath, LoadErr);
-	if (!Instance)
+	if (!IsValid(Instance))
 	{
 		return MakeErrorResult(LoadErr);
 	}

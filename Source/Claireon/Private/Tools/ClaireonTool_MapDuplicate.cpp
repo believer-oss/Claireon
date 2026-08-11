@@ -7,6 +7,7 @@
 #include "ClaireonLog.h"
 #include "ClaireonSafeExec.h"
 
+#include "AssetCompilingManager.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
 #include "Containers/Ticker.h"
@@ -32,14 +33,11 @@ FString ClaireonTool_MapDuplicate::GetCategory() const
 
 FString ClaireonTool_MapDuplicate::GetDescription() const
 {
-	return TEXT("Duplicate a map asset and open the copy in the editor. "
-				"The duplication and map open are deferred until after the current script finishes "
-				"(world transition). Do not depend on the new map being loaded in subsequent lines "
-				"of the same execute() call. "
-				"If you need to duplicate a map and then open it, ALWAYS use this tool -- "
-				"do not chain unreal.EditorAssetLibrary.duplicate_asset() followed by "
-				"map_open_async; the duplicated World will remain loaded in memory "
-				"and the leaked-World guard will abort the next world transition.");
+	return TEXT("Duplicate a map asset and open the copy in the editor. Async: both steps are deferred until "
+				"after the current script finishes, so do not depend on the new map being loaded later in the "
+				"same execute() call. Always prefer this over duplicate_asset() followed by map_open_async -- "
+				"that leaves the duplicated World in memory and the leaked-World guard aborts the next "
+				"transition. Non-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_MapDuplicate::GetInputSchema() const
@@ -85,7 +83,7 @@ FToolResult ClaireonTool_MapDuplicate::Execute(const TSharedPtr<FJsonObject>& Ar
 		return MakeErrorResult(TEXT("Missing required field: destination_path"));
 	}
 
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("Editor not available"));
 	}
@@ -167,16 +165,33 @@ void ClaireonTool_MapDuplicate::ExecuteDeferredDuplicateAndOpenMap(const FString
 	//          DuplicateAsset loads the result into memory — if we don't unload it,
 	//          LoadMap's world transition sees it as a "World Memory Leak" and fatally asserts.
 	// Phase 2: Load the map fresh from disk in a separate tick.
+	TSharedRef<bool> bLoggedScanWait = MakeShared<bool>(false);
 	FTSTicker::GetCoreTicker().AddTicker(
-		FTickerDelegate::CreateLambda([Source, Dest](float) -> bool
+		FTickerDelegate::CreateLambda([Source, Dest, bLoggedScanWait](float) -> bool
 	{
+		// Gate on the asset-registry scan: DuplicateAsset loads the source map,
+		// and loading assets while the initial scan is still running is the
+		// same crash class as loading from init_unreal during startup.
+		IAssetRegistry& AssetRegistry =
+			FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		if (AssetRegistry.IsLoadingAssets())
+		{
+			if (!*bLoggedScanWait)
+			{
+				UE_LOG(LogClaireon, Log,
+					TEXT("[duplicate_map_async] Asset registry scan in progress; duplicate waits for it to complete."));
+				*bLoggedScanWait = true;
+			}
+			return true; // keep waiting
+		}
+
 		FClaireonBridge::RunWorldTransitionBarrier();
 
 		// Phase 1: Duplicate, save, and unload
 		UEditorAssetSubsystem* AssetSubsystem = GEditor->GetEditorSubsystem<UEditorAssetSubsystem>();
 		UObject* DuplicatedAsset = AssetSubsystem->DuplicateAsset(Source, Dest);
 
-		if (!DuplicatedAsset)
+		if (!IsValid(DuplicatedAsset))
 		{
 			UE_LOG(LogClaireon, Error, TEXT("[MCP MapDuplicate] Failed to duplicate %s to %s"), *Source, *Dest);
 			return false;
@@ -184,7 +199,7 @@ void ClaireonTool_MapDuplicate::ExecuteDeferredDuplicateAndOpenMap(const FString
 
 		// Save the duplicated package to disk
 		UPackage* Package = DuplicatedAsset->GetOutermost();
-		if (Package)
+		if (IsValid(Package))
 		{
 			FString PackageFilename;
 			if (FPackageName::TryConvertLongPackageNameToFilename(Package->GetName(), PackageFilename, FPackageName::GetMapPackageExtension()))
@@ -231,6 +246,17 @@ void ClaireonTool_MapDuplicate::ExecuteDeferredDuplicateAndOpenMap(const FString
 			}
 
 			FEditorFileUtils::LoadMap(MapPath);
+
+			// Drain async asset compilation before the next frame renders the
+			// freshly-loaded world (cold-DDC render assert; see map_open_async).
+			const int32 NumRemaining = FAssetCompilingManager::Get().GetNumRemainingAssets();
+			if (NumRemaining > 0)
+			{
+				UE_LOG(LogClaireon, Log,
+					TEXT("[duplicate_map_async] Draining %d compiling asset(s) after map load to avoid a "
+						 "mid-compile render assert."), NumRemaining);
+				FAssetCompilingManager::Get().FinishAllCompilation();
+			}
 			return false;
 		}),
 			0.0f);

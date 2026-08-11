@@ -18,11 +18,10 @@ FString ClaireonTool_GasApplyEffect::GetOperation() const { return TEXT("apply_e
 
 FString ClaireonTool_GasApplyEffect::GetDescription() const
 {
-	return TEXT("Apply a GameplayEffect to a live PIE actor's ASC. Identify the GE by effect_class_path "
-		"(authoritative, e.g. '/Game/.../GE_X.GE_X_C') or effect_name (substring of a loaded GE class). "
-		"Supports level, SetByCaller magnitudes, and a duration override (HasDuration policy only). "
-		"Defaults to the server (authoritative) world so the effect replicates. Returns a stable "
-		"effect_handle_id for gas_remove_effect. Requires PIE.");
+	return TEXT("Apply a GameplayEffect to a live PIE actor's ASC. Identify the GE by effect_class_path (e.g. "
+		"'/Game/.../GE_X.GE_X_C') or effect_name (substring of a loaded GE class). Supports level, "
+		"SetByCaller magnitudes, and a duration override (HasDuration policy only). Requires a live PIE "
+		"session; net_mode defaults to the server world so the effect replicates. Returns effect_handle_id.");
 }
 
 EClaireonToolSessionMode ClaireonTool_GasApplyEffect::GetSessionMode() const
@@ -90,7 +89,7 @@ IClaireonTool::FToolResult ClaireonTool_GasApplyEffect::Execute(const TSharedPtr
 	UAbilitySystemComponent* ASC = Target.ASC;
 
 	TSubclassOf<UGameplayEffect> GEClass = ClaireonGasToolCommon::ResolveEffectClass(Arguments, Error);
-	if (!GEClass)
+	if (!IsValid(GEClass))
 	{
 		return MakeErrorResult(Error);
 	}

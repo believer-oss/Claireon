@@ -10,8 +10,8 @@
 // inject deterministic outcomes for /editor/register and /editor/heartbeat
 // and step the state machine pulse-by-pulse.
 //
-// Category: Claireon.RetryRegister.* (run via
-// `Scripts\Testing\Invoke-UntestTests.ps1 -TestFilter "Claireon.RetryRegister."`).
+// Category: Claireon.RetryRegister.* (run with the automation test
+// filter "Claireon.RetryRegister.").
 
 #if WITH_UNTESTED
 
@@ -22,7 +22,7 @@
 #include "CoreMinimal.h"
 #include "HAL/PlatformTime.h"
 
-namespace
+namespace ClaireonRetryRegister_spec_Private
 {
 	// File-local prefix on every helper to avoid colliding with other anon-NS
 	// helpers under unity batching.
@@ -74,6 +74,7 @@ namespace
 		Client.SetState_TestOnly(EClaireonProxyState::RetryRegister);
 	}
 } // namespace
+using namespace ClaireonRetryRegister_spec_Private;
 
 // ---------------------------------------------------------------------------
 // Scenario 1: cold start, transport returns Transient twice then Accepted.

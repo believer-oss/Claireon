@@ -62,11 +62,11 @@ FToolResult ClaireonLevelSequenceTool_AddPossessable::Execute(const TSharedPtr<F
 		return MakeErrorResult(TEXT("Missing required parameter: object_class"));
 	}
 	UClass* ObjectClass = FindObject<UClass>(nullptr, *ObjectClassPath);
-	if (!ObjectClass)
+	if (!IsValid(ObjectClass))
 	{
 		ObjectClass = LoadObject<UClass>(nullptr, *ObjectClassPath);
 	}
-	if (!ObjectClass)
+	if (!IsValid(ObjectClass))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Could not resolve object_class: %s"), *ObjectClassPath));
 	}

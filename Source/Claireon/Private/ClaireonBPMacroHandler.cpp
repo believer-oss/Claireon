@@ -9,7 +9,7 @@
 #include "EdGraphSchema_K2.h"
 #include "K2Node_MacroInstance.h"
 
-namespace
+namespace ClaireonBPMacroHandler_Private
 {
 	FString MakeMacroIndent(int32 IndentLevel)
 	{
@@ -23,7 +23,7 @@ namespace
 
 	FString GetMacroGuidStr(const UEdGraphNode* Node)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			return TEXT("null");
 		}
@@ -33,7 +33,7 @@ namespace
 	// Get a short GUID suffix for member variable naming (first 8 hex chars)
 	FString GetShortGuid(const UEdGraphNode* Node)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			return TEXT("0000");
 		}
@@ -46,7 +46,7 @@ namespace
 	FString GetMacroName(const UEdGraphNode* Node)
 	{
 		const UK2Node_MacroInstance* MacroNode = Cast<UK2Node_MacroInstance>(Node);
-		if (MacroNode && MacroNode->GetMacroGraph())
+		if (IsValid(MacroNode) && IsValid(MacroNode->GetMacroGraph()))
 		{
 			FString MacroName = MacroNode->GetMacroGraph()->GetName();
 			MacroName.ReplaceInline(TEXT(" "), TEXT(""));
@@ -63,7 +63,7 @@ namespace
 	// placeholders or as the upstream pin-name string.
 	FString GetMacroPinExpression(const UEdGraphNode* Node, const FName& PinName, EEdGraphPinDirection Direction)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			return TEXT("/* unconnected */");
 		}
@@ -95,7 +95,7 @@ namespace
 	int32 CountOutputExecPins(const UEdGraphNode* Node)
 	{
 		int32 Count = 0;
-		if (Node)
+		if (IsValid(Node))
 		{
 			for (UEdGraphPin* Pin : Node->Pins)
 			{
@@ -109,6 +109,7 @@ namespace
 		return Count;
 	}
 }
+using namespace ClaireonBPMacroHandler_Private;
 
 bool FClaireonBPMacroHandler::IsKnownMacro(const UEdGraphNode* Node) const
 {
@@ -327,7 +328,7 @@ FClaireonBPMacroResult FClaireonBPMacroHandler::HandleSequence(const UEdGraphNod
 
 	// Count output exec pins to determine sequence count
 	int32 OutputCount = 0;
-	if (Node)
+	if (IsValid(Node))
 	{
 		for (UEdGraphPin* Pin : Node->Pins)
 		{
@@ -549,7 +550,7 @@ FClaireonBPMacroResult FClaireonBPMacroHandler::HandleMultiGate(const UEdGraphNo
 	// Count output exec pins (excluding special pins like Reset)
 	int32 OutputCount = 0;
 	TArray<FString> OutputPinNames;
-	if (Node)
+	if (IsValid(Node))
 	{
 		for (UEdGraphPin* Pin : Node->Pins)
 		{

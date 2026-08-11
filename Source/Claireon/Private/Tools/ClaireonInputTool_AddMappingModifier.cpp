@@ -38,7 +38,7 @@ FToolResult ClaireonInputTool_AddMappingModifier::Execute(const TSharedPtr<FJson
 	}
 
 	UInputMappingContext* IMC = RequireMappingContext(Data, Error);
-	if (!IMC)
+	if (!IsValid(IMC))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -62,7 +62,7 @@ FToolResult ClaireonInputTool_AddMappingModifier::Execute(const TSharedPtr<FJson
 	}
 
 	UClass* ModifierClass = ClaireonEnhancedInputHelpers::ResolveModifierClass(ModifierClassName, Error);
-	if (!ModifierClass)
+	if (!IsValid(ModifierClass))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -71,7 +71,7 @@ FToolResult ClaireonInputTool_AddMappingModifier::Execute(const TSharedPtr<FJson
 	IMC->Modify();
 
 	UInputModifier* NewModifier = ClaireonEnhancedInputHelpers::CreateModifier(IMC, ModifierClass);
-	if (!NewModifier)
+	if (!IsValid(NewModifier))
 	{
 		return MakeErrorResult(TEXT("Failed to create modifier instance"));
 	}

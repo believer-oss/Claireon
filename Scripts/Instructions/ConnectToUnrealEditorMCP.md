@@ -46,7 +46,7 @@ If no editor is running with MCP, launch one. Use the project's existing build/l
 
 ```powershell
 # Import common utilities
-Import-Module (Join-Path $ProjectDir "Scripts\Utilities\ClaireonCommon.psm1") -Force
+Import-Module (Join-Path $ProjectDir "Plugins\Claireon\Scripts\Utilities\ClaireonCommon.psm1") -Force
 
 # Find the engine
 $Engine = Find-UnrealEngine -ProjectPath $ProjectPath

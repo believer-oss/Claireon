@@ -115,7 +115,7 @@ FToolResult ClaireonStateTreeEditToolBase::BuildStateResponse(
 
 	FString Error;
 	UStateTreeEditorData* EditorData = ClaireonStateTreeHelpers::GetEditorData(Data->StateTree.Get(), Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Session error: %s"), *Error));
 	}
@@ -128,7 +128,7 @@ FToolResult ClaireonStateTreeEditToolBase::BuildStateResponse(
 	if (Data->FocusedStateId.IsValid())
 	{
 		UStateTreeState* FocusState = ClaireonStateTreeHelpers::FindStateById(EditorData, Data->FocusedStateId);
-		if (FocusState)
+		if (IsValid(FocusState))
 		{
 			Output += FString::Printf(TEXT("Focused State: [%s] %s\n"),
 				*Data->FocusedStateId.ToString(EGuidFormats::DigitsWithHyphensLower),
@@ -143,7 +143,7 @@ FToolResult ClaireonStateTreeEditToolBase::BuildStateResponse(
 	if (Data->FocusedStateId.IsValid())
 	{
 		UStateTreeState* FocusState = ClaireonStateTreeHelpers::FindStateById(EditorData, Data->FocusedStateId);
-		if (FocusState)
+		if (IsValid(FocusState))
 		{
 			Output += TEXT("=== Affected Area ===\n");
 			Output += ClaireonStateTreeHelpers::FormatStateArea(FocusState);
@@ -165,8 +165,8 @@ FToolResult ClaireonStateTreeEditToolBase::BuildStateResponse(
 	const FString Summary = FString::Printf(TEXT("Session %s: %s"),
 		*SessionId.Left(8), *Data->LastOperationStatus);
 
-	FString SessionHintSummaryTag;
-	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResponseData, Data->ConsecutiveAssetPathCalls, Data->StateTree->GetPathName(), SessionId, SessionHintSummaryTag);
+	TSharedPtr<FJsonObject> SessionHint;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResponseData, Data->ConsecutiveAssetPathCalls, Data->StateTree->GetPathName(), SessionId, GetName(), SessionHint);
 
-	return MakeSuccessResult(ResponseData, Summary + SessionHintSummaryTag);
+	return MakeSuccessResultWithHint(ResponseData, Summary, SessionHint);
 }

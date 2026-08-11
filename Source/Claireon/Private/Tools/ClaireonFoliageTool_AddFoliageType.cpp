@@ -50,7 +50,7 @@ FToolResult ClaireonFoliageTool_AddFoliageType::Execute(const TSharedPtr<FJsonOb
 	AssetPath = AssetPathResolve.ResolvedPath.Path;
 
 	UFoliageType* FoliageType = LoadObject<UFoliageType>(nullptr, *AssetPath);
-	if (!FoliageType)
+	if (!IsValid(FoliageType))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Failed to load UFoliageType at '%s'. Verify the path points to a FoliageType asset."), *AssetPath));

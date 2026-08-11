@@ -65,19 +65,19 @@ IClaireonTool::FToolResult ClaireonTool_GetEditorPropertyRaw::Execute(const TSha
 	}
 
 	UObject* Obj = FindObject<UObject>(nullptr, *R.ResolvedPath.Path);
-	if (!Obj)
+	if (!IsValid(Obj))
 	{
 		Obj = LoadObject<UObject>(nullptr, *R.ResolvedPath.Path);
 	}
-	if (!Obj)
+	if (!IsValid(Obj))
 	{
 		// Allow class-path / CDO query.
-		if (UClass* AsClass = FindObject<UClass>(nullptr, *R.ResolvedPath.Path))
+		if (UClass* AsClass = FindObject<UClass>(nullptr, *R.ResolvedPath.Path); IsValid(AsClass))
 		{
 			Obj = AsClass->GetDefaultObject();
 		}
 	}
-	if (!Obj)
+	if (!IsValid(Obj))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Could not resolve object: %s"), *R.ResolvedPath.Path));
 	}
@@ -113,7 +113,7 @@ IClaireonTool::FToolResult ClaireonTool_GetEditorPropertyRaw::Execute(const TSha
 	{
 		const int64 V = EnumProp->GetUnderlyingProperty()->GetSignedIntPropertyValue(ValuePtr);
 		Data->SetNumberField(TEXT("raw_value"), static_cast<double>(V));
-		if (UEnum* E = EnumProp->GetEnum())
+		if (UEnum* E = EnumProp->GetEnum(); IsValid(E))
 		{
 			Data->SetStringField(TEXT("enum_path"), E->GetPathName());
 			const FString Name = E->GetNameStringByValue(V);
@@ -127,7 +127,7 @@ IClaireonTool::FToolResult ClaireonTool_GetEditorPropertyRaw::Execute(const TSha
 	else if (FObjectProperty* ObjProp = CastField<FObjectProperty>(Prop))
 	{
 		UObject* Linked = ObjProp->GetObjectPropertyValue(ValuePtr);
-		Data->SetStringField(TEXT("raw_value"), Linked ? Linked->GetPathName() : FString(TEXT("None")));
+		Data->SetStringField(TEXT("raw_value"), IsValid(Linked) ? Linked->GetPathName() : FString(TEXT("None")));
 	}
 	else if (Prop->IsA<FIntProperty>() || Prop->IsA<FInt64Property>() || Prop->IsA<FUInt32Property>())
 	{

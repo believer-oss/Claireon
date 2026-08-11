@@ -13,6 +13,7 @@
 #if WITH_UNTESTED
 
 #include "Untest.h"
+#include "IPythonScriptPlugin.h"
 #include "ClaireonBridge.h"
 #include "ClaireonModule.h"
 #include "ClaireonServer.h"
@@ -61,34 +62,42 @@ namespace ClaireonPythonBridgeBootstrapTestsHelpers
 	}
 }
 
+// Root cause of the historical failure (test defect, no product bug): this body
+// used StartServer()/GetServer(), but in commandlet mode StartupModule()
+// short-circuits on the GIsEditor/IsRunningCommandlet guard, so Server was never
+// constructed. StartServer() then logs "called before Server was constructed"
+// and returns, GetServer() stays null, and UNTEST_ASSERT_PTR fired BEFORE the
+// zero-tools skip below could run. EnsureServerForTest() -- already used by
+// ToolSearchBoolean in this same file -- constructs and populates the registry
+// headlessly, which both fixes the null pointer and gives this test real
+// coverage in commandlet runs instead of a skip.
 UNTEST_UNIT_OPTS(Claireon, PythonBridgeBootstrap, DirClaireonExceedsHundred, UNTEST_TIMEOUTMS(15000))
 {
-	// Ensure the live server has its tools registered.
 	FClaireonModule& Module = FClaireonModule::Get();
-	bool bWeStartedServer = false;
-	if (!Module.IsServerRunning())
-	{
-		Module.StartServer();
-		bWeStartedServer = true;
-	}
-	FClaireonServer* Server = Module.GetServer();
+	FClaireonServer* Server = Module.EnsureServerForTest();
 	UNTEST_ASSERT_PTR(Server);
 
-	// In commandlet mode the BuiltinToolProvider is never registered (see
-	// ClaireonModule::StartupModule's IsRunningCommandlet early-return), so
-	// the live tools map is empty and the bridge cannot bootstrap a
-	// claireon.* attribute namespace. Skip; -FullEditor / CI exercises this.
+	// If the registry still could not be populated (no IClaireonToolProvider
+	// modular feature at all), the bridge cannot bootstrap a claireon namespace.
+	// Skip LOUDLY -- never silently report a pass for coverage that did not run.
 	if (Server->GetTools().Num() == 0)
 	{
 		UE_LOG(LogTemp, Warning,
-			TEXT("[PythonBridgeBootstrap] SKIPPED -- live server has zero tools "
-			     "(commandlet mode short-circuits provider registration)"));
-		if (bWeStartedServer)
-		{
-			Module.StopServer();
-		}
+			TEXT("[PythonBridgeBootstrap] SKIPPED -- tool registry is empty "
+			     "(no IClaireonToolProvider registered); dir(claireon) canary did NOT run"));
 		co_return;
 	}
+
+	// RebuildClaireonModule() takes the GIL, so Python must actually be up.
+	IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get();
+	if (!PythonPlugin || !PythonPlugin->IsPythonAvailable())
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[PythonBridgeBootstrap] SKIPPED -- Python is not available in this "
+			     "configuration; dir(claireon) canary did NOT run"));
+		co_return;
+	}
+
 	UNTEST_ASSERT_TRUE(Server->GetTools().Num() > 100);
 
 	// Force the bridge to (re)register so the bootstrap script runs.
@@ -130,15 +139,13 @@ UNTEST_UNIT_OPTS(Claireon, PythonBridgeBootstrap, DirClaireonExceedsHundred, UNT
 	UE_LOG(LogTemp, Log, TEXT("[PythonBridgeBootstrap] dir(claireon) length = %d"), DirCount);
 	UNTEST_EXPECT_TRUE(DirCount > 100);
 
-	if (bWeStartedServer)
-	{
-		Module.StopServer();
-	}
-
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchBoolean, StripsAndOrNotOperators, UNTEST_TIMEOUTMS(10000))
+// 60s budget: this can be the first Execute() in the process and so pay the
+// one-time full-catalog embedding build (~20s on a dev machine); later
+// rebuilds hit the per-tool embedding cache.
+UNTEST_UNIT_OPTS(Claireon, ToolSearchBoolean, StripsAndOrNotOperators, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonPythonBridgeBootstrapTestsHelpers;
 

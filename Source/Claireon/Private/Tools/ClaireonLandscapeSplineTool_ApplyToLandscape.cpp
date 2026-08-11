@@ -12,7 +12,7 @@ FString ClaireonLandscapeSplineTool_ApplyToLandscape::GetOperation() const { ret
 
 FString ClaireonLandscapeSplineTool_ApplyToLandscape::GetDescription() const
 {
-    return TEXT("Apply spline deformation to the landscape heightmap and weightmap. Session-mode tool: open via landscape_spline_open first.");
+    return TEXT("Apply spline deformation to the landscape heightmap and weightmap. Session-mode tool: open via landscape_spline_spline_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeSplineTool_ApplyToLandscape::GetInputSchema() const
@@ -33,7 +33,7 @@ FToolResult ClaireonLandscapeSplineTool_ApplyToLandscape::Execute(const TSharedP
 	}
 
 	ULandscapeInfo* LandscapeInfo = Data->LandscapeInfo.Get();
-	if (!LandscapeInfo)
+	if (!IsValid(LandscapeInfo))
 	{
 		return MakeErrorResult(TEXT("No landscape info available for spline application"));
 	}

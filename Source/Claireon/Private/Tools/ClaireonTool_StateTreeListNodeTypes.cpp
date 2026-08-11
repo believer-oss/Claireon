@@ -74,7 +74,7 @@ TSharedPtr<FJsonObject> ClaireonTool_StateTreeListNodeTypes::GetInputSchema() co
 	return Schema;
 }
 
-namespace
+namespace ClaireonTool_StateTreeListNodeTypes_Private
 {
 	struct FCategoryInfo
 	{
@@ -84,7 +84,7 @@ namespace
 
 	FString FormatNodeTypeProperties(const UScriptStruct* Struct)
 	{
-		if (!Struct)
+		if (!IsValid(Struct))
 		{
 			return TEXT("");
 		}
@@ -126,12 +126,12 @@ namespace
 	// path, with no hardcoded project names.
 	FString GetNodeGroup(const UScriptStruct* NodeStruct)
 	{
-		if (!NodeStruct)
+		if (!IsValid(NodeStruct))
 		{
 			return TEXT("Unknown");
 		}
 		const UObject* Pkg = NodeStruct->GetOutermost();
-		const FString PkgName = Pkg ? Pkg->GetName() : FString();
+		const FString PkgName = IsValid(Pkg) ? Pkg->GetName() : FString();
 		if (PkgName.StartsWith(TEXT("/Script/")))
 		{
 			return PkgName.RightChop(8); // strip "/Script/"
@@ -139,6 +139,7 @@ namespace
 		return PkgName.IsEmpty() ? TEXT("Other") : PkgName;
 	}
 } // namespace
+using namespace ClaireonTool_StateTreeListNodeTypes_Private;
 
 IClaireonTool::FToolResult ClaireonTool_StateTreeListNodeTypes::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
@@ -178,7 +179,7 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeListNodeTypes::Execute(const TS
 	{
 		FString Error;
 		UStateTree* StateTree = ClaireonStateTreeHelpers::LoadStateTreeAsset(AssetPath, Error);
-		if (StateTree)
+		if (IsValid(StateTree))
 		{
 			Schema = StateTree->GetSchema();
 		}
@@ -231,7 +232,7 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeListNodeTypes::Execute(const TS
 			}
 
 			UScriptStruct* NodeStruct = ClassData->GetScriptStruct(false);
-			if (!NodeStruct)
+			if (!IsValid(NodeStruct))
 			{
 				continue;
 			}
@@ -245,7 +246,7 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeListNodeTypes::Execute(const TS
 			}
 
 			// Filter by schema compatibility
-			if (Schema && !Schema->IsStructAllowed(NodeStruct))
+			if (IsValid(Schema) && !Schema->IsStructAllowed(NodeStruct))
 			{
 				continue;
 			}
@@ -261,7 +262,7 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeListNodeTypes::Execute(const TS
 			TotalCount++;
 		}
 
-		FString SchemaStr = Schema ? FString::Printf(TEXT(" (filtered by schema: %s)"), *Schema->GetClass()->GetName()) : TEXT("");
+		FString SchemaStr = IsValid(Schema) ? FString::Printf(TEXT(" (filtered by schema: %s)"), *Schema->GetClass()->GetName()) : TEXT("");
 		Output += FString::Printf(TEXT("=== Available %s%s ===\n"), *CatInfo.Name, *SchemaStr);
 
 		// Output groups in a stable, generic order: module names sorted alphabetically.
@@ -280,7 +281,7 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeListNodeTypes::Execute(const TS
 			for (const TSharedPtr<FStateTreeNodeClassData>& ClassData : *GroupClasses)
 			{
 				UScriptStruct* NodeStruct = ClassData->GetScriptStruct(false);
-				if (!NodeStruct)
+				if (!IsValid(NodeStruct))
 					continue;
 
 				Output += FString::Printf(TEXT("\n%s"), *NodeStruct->GetName());
@@ -296,10 +297,10 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeListNodeTypes::Execute(const TS
 				FStateTreeNodeBase* DefaultNode = reinterpret_cast<FStateTreeNodeBase*>(FMemory::Malloc(NodeStruct->GetStructureSize()));
 				NodeStruct->InitializeStruct(DefaultNode);
 				const UStruct* InstanceType = DefaultNode->GetInstanceDataType();
-				if (InstanceType)
+				if (IsValid(InstanceType))
 				{
 					Output += FString::Printf(TEXT("\n  InstanceData: %s"), *InstanceType->GetName());
-					if (const UScriptStruct* InstanceStruct = Cast<const UScriptStruct>(InstanceType))
+					if (const UScriptStruct* InstanceStruct = Cast<const UScriptStruct>(InstanceType); IsValid(InstanceStruct))
 					{
 						FString InstanceProps = FormatNodeTypeProperties(InstanceStruct);
 						if (!InstanceProps.IsEmpty())

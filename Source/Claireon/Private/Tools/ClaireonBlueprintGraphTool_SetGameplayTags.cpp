@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -101,7 +101,10 @@ FString ClaireonBlueprintGraphTool_SetGameplayTags::GetOperation() const { retur
 
 FString ClaireonBlueprintGraphTool_SetGameplayTags::GetDescription() const
 {
-    return TEXT("Surgically add/remove gameplay tags from a FGameplayTagContainer property on a Blueprint CDO. Stateless / non-session: writes the asset directly by path, no open session required. Common pitfall: the property must be a FGameplayTagContainer (not a single FGameplayTag); the tags must already be registered in a tag table. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+    return TEXT("Add or remove gameplay tags on an FGameplayTagContainer property of a Blueprint CDO, leaving the rest of "
+                "the container intact. Stateless / non-session: writes the asset directly by path, no open session "
+                "required. Common pitfall: the property must be an FGameplayTagContainer (not a single FGameplayTag), and "
+                "the tags must already be registered in a tag table.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetGameplayTags::GetInputSchema() const
@@ -157,14 +160,14 @@ FToolResult ClaireonBlueprintGraphTool_SetGameplayTags::Execute(const TSharedPtr
 		return MakeErrorResult(ValidationError);
 
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load Blueprint: %s"), *AssetPath));
 
-	if (!Blueprint->GeneratedClass)
+	if (!IsValid(Blueprint->GeneratedClass))
 		return MakeErrorResult(TEXT("Blueprint has no GeneratedClass (compile it first)"));
 
 	UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
-	if (!CDO)
+	if (!IsValid(CDO))
 		return MakeErrorResult(TEXT("Failed to get Blueprint CDO"));
 
 	// Parse tags_to_add and tags_to_remove arrays

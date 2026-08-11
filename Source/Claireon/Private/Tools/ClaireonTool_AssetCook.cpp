@@ -17,8 +17,11 @@ FString ClaireonTool_AssetCook::GetOperation() const { return TEXT("cook"); }
 
 FString ClaireonTool_AssetCook::GetDescription() const
 {
-	return TEXT("[DEPRECATED] Cook content for a target platform. "
-				"Use Scripts/Utilities/Invoke-CookContent.ps1 directly instead.");
+	return TEXT("Run a cook for a target platform by launching a subprocess (the project's "
+				"Scripts/Utilities/Invoke-CookContent.ps1 if present, else UnrealEditor-Cmd) and blocking "
+				"until it exits, up to 1800s. DEPRECATED -- do not use; run the cook outside the editor "
+				"instead (UnrealEditor-Cmd -run=Cook, or your project's cook tooling). Non-session: "
+				"requires no open session and touches no editor state.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AssetCook::GetInputSchema() const
@@ -69,11 +72,12 @@ IClaireonTool::FToolResult ClaireonTool_AssetCook::Execute(const TSharedPtr<FJso
 	// tick loop), can only run if GUnrealEd->CookServer was initialized as CookByTheBookFromTheEditor
 	// (gated on bDisableCookInEditor setting), requires ITargetPlatform* lookups, and blocks the
 	// running editor's GC and DDC during the session. The subprocess approach used here is the
-	// correct pattern — matching Scripts/Utilities/Invoke-CookContent.ps1 which is the canonical
-	// entry point. Prefer calling that script directly over this MCP tool.
+	// correct pattern: delegate to the hosting project's cook script when it provides one at
+	// Scripts/Utilities/Invoke-CookContent.ps1, otherwise invoke UnrealEditor-Cmd directly.
 	UE_LOG(LogClaireon, Warning,
 		TEXT("[DEPRECATED] %s is deprecated and will be removed in a future release. "
-			 "Use Scripts/Utilities/Invoke-CookContent.ps1 directly instead."),
+			 "Run the cook outside the editor instead (UnrealEditor-Cmd -run=Cook, "
+			 "or your project's cook tooling)."),
 		*GetName());
 
 	if (!Arguments.IsValid())
@@ -302,7 +306,8 @@ IClaireonTool::FToolResult ClaireonTool_AssetCook::Execute(const TSharedPtr<FJso
 	const bool bIsError = (ReturnCode != 0) || bTimedOut;
 
 	const FString DeprecationNotice = FString::Printf(
-		TEXT("[DEPRECATED] %s will be removed. Use Scripts/Utilities/Invoke-CookContent.ps1 directly.\n\n"),
+		TEXT("[DEPRECATED] %s will be removed. Run the cook outside the editor instead "
+			 "(UnrealEditor-Cmd -run=Cook, or your project's cook tooling).\n\n"),
 		*GetName());
 	const FString FinalText = DeprecationNotice + Result;
 	return bIsError ? MakeErrorResult(FinalText) : MakeSuccessResult(nullptr, FinalText);

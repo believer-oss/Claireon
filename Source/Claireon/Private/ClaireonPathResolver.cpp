@@ -3,10 +3,14 @@
 
 #include "ClaireonPathResolver.h"
 #include "ClaireonLog.h"
+#include "Engine/Blueprint.h"
 #include "Misc/Paths.h"
 #include "Misc/PackageName.h"
 #include "AssetRegistry/AssetData.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "UObject/Object.h"
+#include "UObject/Package.h"
+#include "UObject/UObjectGlobals.h"
 
 namespace ClaireonPathResolver
 {
@@ -19,6 +23,45 @@ void AppendTrace(FString& Trace, const TCHAR* Step)
 	}
 	Trace += Step;
 }
+
+namespace ClaireonPathResolverInternal
+{
+	// Named file-local namespace (NOT a raw anonymous namespace): under
+	// linux-build-server-v2 unity batching, anonymous namespaces from separate
+	// .cpp merge into one TU and collide -- a named namespace is the isolation.
+	// Splits an object path into its package-prefix form (everything before the
+	// first '.' after the last '/').
+	FString ClaireonPathResolver_PackagePartOf(const FString& ObjectPath)
+	{
+		int32 DotIndex = INDEX_NONE;
+		if (ObjectPath.FindChar(TEXT('.'), DotIndex))
+		{
+			return ObjectPath.Left(DotIndex);
+		}
+		return ObjectPath;
+	}
+
+	// Attempts a direct in-memory lookup for a rooted path that the disk-based
+	// heuristics cannot classify. Game-thread only; returns nullptr off-thread.
+	// UPackage hits are rejected: a package-level input (e.g. '/Temp/Untitled_1'
+	// for an unsaved map) must keep the historical pass-through + object-name
+	// append behavior rather than resolving to the package object itself.
+	UObject* ClaireonPathResolver_TryStaticFind(const FString& Path)
+	{
+		if (!IsInGameThread())
+		{
+			return nullptr;
+		}
+		UObject* Found = StaticFindObject(UObject::StaticClass(), /*Outer=*/nullptr, *Path, /*ExactClass=*/false);
+		if (IsValid(Found) && Found->IsA<UPackage>())
+		{
+			return nullptr;
+		}
+		return Found;
+	}
+} // namespace ClaireonPathResolverInternal
+
+using namespace ClaireonPathResolverInternal;
 
 FResolveResult Resolve(const FString& InPath)
 {
@@ -96,6 +139,47 @@ FResolveResult Resolve(const FString& InPath)
 		Result.ResolvedPath.Kind = EPathKind::NativeClassPath;
 		Result.ResolvedPath.bIsClassReference = false;
 		AppendTrace(Result.ResolvedPath.NormalizationTrace, TEXT("Native class path (/Script/)"));
+		return Result;
+	}
+
+	// -----------------------------------------------------------------
+	// Step 4.5: Rooted in-memory mounts (/Memory/, /Temp/)
+	// -----------------------------------------------------------------
+	// These packages never exist on disk, so the filesystem/Content/
+	// heuristics below would misclassify them as absolute filesystem paths
+	// and fail with a misleading error. Resolve directly via StaticFindObject
+	// when possible; otherwise pass the path through unchanged so the
+	// caller's own lookup can report a precise "not found" error.
+	if (Path.StartsWith(TEXT("/Memory/")) || Path.StartsWith(TEXT("/Temp/")))
+	{
+		if (UObject* InMemoryObject = ClaireonPathResolver_TryStaticFind(Path); IsValid(InMemoryObject))
+		{
+			Result.bSuccess = true;
+			Result.ResolvedPath.Path = InMemoryObject->GetPathName();
+			Result.ResolvedPath.PackagePath = InMemoryObject->GetOutermost()->GetName();
+			Result.ResolvedPath.Kind = EPathKind::PackagePath;
+			AppendTrace(Result.ResolvedPath.NormalizationTrace,
+				TEXT("Resolved in-memory mount via StaticFindObject"));
+			return Result;
+		}
+
+		// Not currently in memory (or off game thread): pass through as-is,
+		// mirroring the object-name append of Step 12.5 for bare package paths.
+		Result.ResolvedPath.PackagePath = ClaireonPathResolver_PackagePartOf(Path);
+		{
+			const int32 LastSlash = Path.Find(TEXT("/"), ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+			const FString FinalSegment = (LastSlash != INDEX_NONE) ? Path.Mid(LastSlash + 1) : Path;
+			if (!FinalSegment.IsEmpty() && !FinalSegment.Contains(TEXT(".")))
+			{
+				Path = Path + TEXT(".") + FinalSegment;
+				AppendTrace(Result.ResolvedPath.NormalizationTrace, TEXT("Appended object-name suffix"));
+			}
+		}
+		Result.bSuccess = true;
+		Result.ResolvedPath.Path = Path;
+		Result.ResolvedPath.Kind = EPathKind::PackagePath;
+		AppendTrace(Result.ResolvedPath.NormalizationTrace,
+			TEXT("In-memory mount passed through (object not found in memory)"));
 		return Result;
 	}
 
@@ -180,6 +264,20 @@ FResolveResult Resolve(const FString& InPath)
 					{
 						Path = OutPackageName;
 						AppendTrace(Result.ResolvedPath.NormalizationTrace, TEXT("Converted absolute path via FPackageName"));
+					}
+					else if (UObject* InMemoryObject = ClaireonPathResolver_TryStaticFind(Path); IsValid(InMemoryObject))
+					{
+						// Last chance before failing: the rooted path may name
+						// an object that lives only in memory on a mount
+						// FPackageName does not know about (e.g. transient
+						// packages backing live PIE state).
+						Result.bSuccess = true;
+						Result.ResolvedPath.Path = InMemoryObject->GetPathName();
+						Result.ResolvedPath.PackagePath = InMemoryObject->GetOutermost()->GetName();
+						Result.ResolvedPath.Kind = EPathKind::PackagePath;
+						AppendTrace(Result.ResolvedPath.NormalizationTrace,
+							TEXT("Resolved rooted non-mounted path via StaticFindObject"));
+						return Result;
 					}
 					else
 					{
@@ -341,6 +439,165 @@ FResolveResult Resolve(const FString& InPath)
 	Result.ResolvedPath.Path = Path;
 	Result.ResolvedPath.Kind = EPathKind::PackagePath;
 	return Result;
+}
+
+UObject* ResolveObjectFromPath(const FString& InPath, bool bAllowLoad, FString& OutError,
+	FString* OutCoercionNote)
+{
+	UObject* Found = nullptr;
+	bool bIsSubObject = false;
+
+	FResolveResult Resolved = Resolve(InPath);
+	if (Resolved.bSuccess)
+	{
+		const FString& Path = Resolved.ResolvedPath.Path;
+
+		if (Resolved.ResolvedPath.Kind == EPathKind::NativeClassPath)
+		{
+			// (a) Native class path -> CDO.
+			UClass* ResolvedClass = FindObject<UClass>(nullptr, *Path);
+			if (!IsValid(ResolvedClass))
+			{
+				ResolvedClass = FindFirstObjectSafe<UClass>(*Path);
+			}
+			if (!IsValid(ResolvedClass) && bAllowLoad)
+			{
+				ResolvedClass = LoadObject<UClass>(nullptr, *Path);
+			}
+			if (IsValid(ResolvedClass))
+			{
+				return ResolvedClass->GetDefaultObject();
+			}
+			// Deliberately fall through rather than erroring here: a CDO SUB-OBJECT
+			// ("/Script/Mod.Default__Foo.MyComp") is classified NativeClassPath by the
+			// grammar but is not a class, and the raw fallback below resolves it.
+		}
+		else
+		{
+			// (b) Asset path or sub-object path.
+			Found = StaticFindObject(
+				UObject::StaticClass(),
+				/*Outer=*/nullptr,
+				*Path,
+				/*ExactClass=*/false);
+
+			bIsSubObject = Path.Contains(TEXT(":"));
+			if (!IsValid(Found) && bIsSubObject)
+			{
+				// ANY_PACKAGE is deprecated in UE 5.1+; use FindFirstObjectSafe for
+				// sub-object / world-actor paths that may not have a known outer.
+				Found = FindFirstObjectSafe<UObject>(*Path);
+			}
+
+			if (!IsValid(Found) && !bIsSubObject && bAllowLoad)
+			{
+				Found = StaticLoadObject(
+					UObject::StaticClass(),
+					/*Outer=*/nullptr,
+					*Path,
+					/*Filename=*/nullptr,
+					LOAD_None);
+			}
+		}
+	}
+
+	// (c) Raw-path fallback, tried LAST so nothing above changes behavior.
+	//
+	// Resolve() normalizes for ASSET paths -- appending an object-name suffix,
+	// stripping _C. Applied to a path that is already a precise object path it can
+	// produce something that resolves to nothing: a CDO sub-object, or an object in a
+	// transient / test world whose package name contains dots. Those are exactly the
+	// paths GetPathName() hands back, so they must work.
+	//
+	// A hit here is unambiguous -- the caller named a real object -- and this can only
+	// convert a previous failure into a success.
+	if (!IsValid(Found))
+	{
+		Found = StaticFindObject(
+			UObject::StaticClass(),
+			/*Outer=*/nullptr,
+			*InPath,
+			/*ExactClass=*/false);
+		if (!IsValid(Found))
+		{
+			Found = FindFirstObjectSafe<UObject>(*InPath);
+		}
+	}
+
+	if (!IsValid(Found))
+	{
+		if (!Resolved.bSuccess)
+		{
+			OutError = FString::Printf(
+				TEXT("Could not resolve path '%s': %s"),
+				*InPath,
+				*Resolved.Error);
+		}
+		else if (!bAllowLoad && !bIsSubObject)
+		{
+			OutError = FString::Printf(
+				TEXT("Object '%s' is not loaded (allow_load=false)."),
+				*InPath);
+		}
+		else
+		{
+			OutError = FString::Printf(
+				TEXT("Could not find object '%s'."),
+				*InPath);
+		}
+		return nullptr;
+	}
+
+	// (d) P0-8b: coerce a class reference to the object whose properties the
+	// caller meant.
+	//
+	// bIsClassReference was computed by the grammar above and then ignored, and
+	// only /Script/ native-class paths got CDO coercion (branch (a)). So
+	// "/Game/.../BP_Foo.BP_Foo_C" resolved to the UBlueprintGeneratedClass
+	// itself and a plain asset path to the UBlueprint -- and uobject_inspect /
+	// uobject_set_property then walked the wrong object's property list and
+	// failed with "Property 'X' not found on 'BlueprintGeneratedClass'".
+	//
+	// This is also why the SCS-subobject redirect looked broken: it exists, but
+	// only fires when the property walk starts from the CDO.
+	//
+	// Narrow by construction: all three callers of this function are
+	// property-oriented (uobject_inspect, uobject_set_property,
+	// component_reregister), so none of them wants the raw UBlueprint asset. A
+	// caller that did want it would need its own lookup rather than this one.
+	if (UClass* AsClass = Cast<UClass>(Found))
+	{
+		if (UObject* DefaultObject = AsClass->GetDefaultObject())
+		{
+			if (OutCoercionNote)
+			{
+				*OutCoercionNote = FString::Printf(
+					TEXT("Path named the class '%s'; resolved to its class default object. "
+					     "Property reads and writes apply to the CDO."),
+					*AsClass->GetPathName());
+			}
+			return DefaultObject;
+		}
+	}
+	else if (const UBlueprint* AsBlueprint = Cast<UBlueprint>(Found))
+	{
+		if (UClass* GeneratedClass = AsBlueprint->GeneratedClass)
+		{
+			if (UObject* DefaultObject = GeneratedClass->GetDefaultObject())
+			{
+				if (OutCoercionNote)
+				{
+					*OutCoercionNote = FString::Printf(
+						TEXT("Path named the Blueprint asset '%s'; resolved to the class default object of "
+						     "its generated class. Property reads and writes apply to the CDO."),
+						*AsBlueprint->GetPathName());
+				}
+				return DefaultObject;
+			}
+		}
+	}
+
+	return Found;
 }
 
 } // namespace ClaireonPathResolver

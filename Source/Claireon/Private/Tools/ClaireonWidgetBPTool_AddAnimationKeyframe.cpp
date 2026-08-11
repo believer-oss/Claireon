@@ -59,9 +59,9 @@ namespace ClaireonWidgetKeyframe
 
     static UMovieSceneSection* ResolveFirstSection(UWidgetAnimation* Anim, const FGuid& BindingGuid, const FString& TrackNameOrProperty, UMovieScene*& OutMS, UMovieSceneTrack*& OutTrack)
     {
-        OutMS = Anim ? Anim->GetMovieScene() : nullptr;
+        OutMS = IsValid(Anim) ? Anim->GetMovieScene() : nullptr;
         OutTrack = nullptr;
-        if (!OutMS)
+        if (!IsValid(OutMS))
         {
             return nullptr;
         }
@@ -74,7 +74,7 @@ namespace ClaireonWidgetKeyframe
         const FName Wanted(*TrackNameOrProperty);
         for (UMovieSceneTrack* Track : MSBinding->GetTracks())
         {
-            if (!Track) { continue; }
+            if (!IsValid(Track)) { continue; }
             if (TrackNameOrProperty.IsEmpty() || Track->GetTrackName() == Wanted
                 || Track->GetClass()->GetName() == TrackNameOrProperty)
             {
@@ -82,12 +82,12 @@ namespace ClaireonWidgetKeyframe
                 break;
             }
         }
-        if (!OutTrack && MSBinding->GetTracks().Num() > 0)
+        if (!IsValid(OutTrack) && MSBinding->GetTracks().Num() > 0)
         {
             // Fallback: first track on binding.
             OutTrack = MSBinding->GetTracks()[0];
         }
-        if (!OutTrack)
+        if (!IsValid(OutTrack))
         {
             return nullptr;
         }
@@ -109,7 +109,7 @@ FToolResult ClaireonWidgetBPTool_AddAnimationKeyframe::Execute(const TSharedPtr<
     using namespace ClaireonWidgetKeyframe;
 
     UWidgetBlueprint* WBP = Data ? Data->WidgetBlueprint.Get() : nullptr;
-    if (!WBP)
+    if (!IsValid(WBP))
     {
         return MakeErrorResult(TEXT("widget blueprint unavailable on session"));
     }
@@ -134,7 +134,7 @@ FToolResult ClaireonWidgetBPTool_AddAnimationKeyframe::Execute(const TSharedPtr<
     }
 
     UWidgetAnimation* Anim = Claireon::WidgetAnimation::FindWidgetAnimationByName(WBP, AnimationName);
-    if (!Anim)
+    if (!IsValid(Anim))
     {
         return MakeErrorResult(FString::Printf(TEXT("animation '%s' not found on %s"), *AnimationName, *WBP->GetName()));
     }
@@ -161,7 +161,7 @@ FToolResult ClaireonWidgetBPTool_AddAnimationKeyframe::Execute(const TSharedPtr<
     UMovieSceneTrack* Track = nullptr;
     UMovieSceneSection* Section = ResolveFirstSection(Anim, BindingGuid,
         TrackName.IsEmpty() ? PropertyName : TrackName, MS, Track);
-    if (!Section)
+    if (!IsValid(Section))
     {
         return MakeErrorResult(TEXT("no section found on target track; call add_animation_track first"));
     }

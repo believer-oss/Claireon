@@ -43,13 +43,13 @@ FToolResult ClaireonWidgetBPTool_Focus::Execute(const TSharedPtr<FJsonObject>& A
 	}
 
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
-	if (!WBP || !WBP->WidgetTree)
+	if (!IsValid(WBP) || !WBP->WidgetTree)
 	{
 		return MakeErrorResult(TEXT("Widget Blueprint or WidgetTree is no longer valid"));
 	}
 
 	UWidget* FoundWidget = ClaireonWidgetHelpers::FindWidgetByName(WBP->WidgetTree, FName(*WidgetName));
-	if (!FoundWidget)
+	if (!IsValid(FoundWidget))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Widget '%s' not found in widget tree"), *WidgetName));
 	}

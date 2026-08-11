@@ -9,7 +9,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-namespace
+namespace ClaireonTool_ProxyTableInspect_Private
 {
 	// Augment a serialized entry with provenance info from inheritance flattening.
 	void AddProvenance(TSharedPtr<FJsonObject> Entry, const UProxyTable* SourceTable, int32 OriginalIndex, int32 Depth)
@@ -34,6 +34,7 @@ namespace
 		return false;
 	}
 }
+using namespace ClaireonTool_ProxyTableInspect_Private;
 
 FString ClaireonTool_ProxyTableInspect::GetCategory() const { return TEXT("proxytable"); }
 FString ClaireonTool_ProxyTableInspect::GetOperation() const { return TEXT("inspect"); }
@@ -45,11 +46,10 @@ TArray<FString> ClaireonTool_ProxyTableInspect::GetSearchKeywords() const
 
 FString ClaireonTool_ProxyTableInspect::GetDescription() const
 {
-	return TEXT("Inspect a ProxyTable. Returns local entries (proxy ref + value + output struct), "
-		"the inheritance chain, and optionally the resolved entry set across that chain. "
-		"include_inherited='flat' walks parents and merges entries with provenance ('_resolved_from'). "
-		"include_inherited='chain' returns the per-level entries in order. "
-		"find_proxy='<name-or-path-substring>' filters to a single matching entry (composes with include_inherited).");
+	return TEXT("Inspect a ProxyTable: local entries (proxy reference, value, output struct) plus the inheritance "
+		"chain. include_inherited=flat merges parent entries and tags each with _resolved_from provenance; "
+		"chain returns per-level entries in order; find_proxy filters to entries whose proxy name or path "
+		"contains a substring. Read-only / non-session: no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ProxyTableInspect::GetInputSchema() const
@@ -75,7 +75,7 @@ IClaireonTool::FToolResult ClaireonTool_ProxyTableInspect::Execute(const TShared
 
 	FString Error;
 	UProxyTable* ProxyTable = ClaireonProxyTableHelpers::LoadProxyTableAsset(AssetPath, Error);
-	if (!ProxyTable)
+	if (!IsValid(ProxyTable))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -171,7 +171,7 @@ IClaireonTool::FToolResult ClaireonTool_ProxyTableInspect::Execute(const TShared
 			while (Head < Queue.Num())
 			{
 				FWalkLevel L = Queue[Head++];
-				if (!L.Table) { continue; }
+				if (!IsValid(L.Table)) { continue; }
 				const FString TPath = L.Table->GetPathName();
 				if (Visited.Contains(TPath)) { continue; }
 				Visited.Add(TPath);

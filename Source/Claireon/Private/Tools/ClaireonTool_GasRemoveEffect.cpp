@@ -17,10 +17,10 @@ FString ClaireonTool_GasRemoveEffect::GetOperation() const { return TEXT("remove
 
 FString ClaireonTool_GasRemoveEffect::GetDescription() const
 {
-	return TEXT("Remove an applied GameplayEffect from a live PIE actor's ASC. Address it by "
-		"effect_handle_id (from gas_runtime_inspect / gas_apply_effect) to remove one, or by "
-		"effect_class_path / effect_name to remove all matching. Optional stacks_to_remove "
-		"(default -1 = all stacks). Defaults to the server world. Requires PIE.");
+	return TEXT("Remove an applied GameplayEffect from a live PIE actor's ASC. Address it by effect_handle_id (from "
+		"gas_runtime_inspect / gas_apply_effect) to remove one, or by effect_class_path / effect_name to "
+		"remove all matching. Optional stacks_to_remove (default -1 = all stacks). Requires a live PIE "
+		"session; net_mode defaults to the server world.");
 }
 
 EClaireonToolSessionMode ClaireonTool_GasRemoveEffect::GetSessionMode() const
@@ -114,7 +114,7 @@ IClaireonTool::FToolResult ClaireonTool_GasRemoveEffect::Execute(const TSharedPt
 	else if (bHasClass)
 	{
 		TSubclassOf<UGameplayEffect> GEClass = ClaireonGasToolCommon::ResolveEffectClass(Arguments, Error);
-		if (!GEClass)
+		if (!IsValid(GEClass))
 		{
 			return MakeErrorResult(Error);
 		}

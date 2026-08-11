@@ -12,7 +12,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-namespace
+namespace ClaireonSoundMixTool_SetClassAdjusterProperty_Private
 {
 	FString SoundMixSetAdjuster_JsonValueToString(const TSharedPtr<FJsonValue>& V)
 	{
@@ -33,6 +33,7 @@ namespace
 		return FString();
 	}
 }
+using namespace ClaireonSoundMixTool_SetClassAdjusterProperty_Private;
 
 FString FClaireonSoundMixTool_SetClassAdjusterProperty::GetCategory() const { return TEXT("soundmix"); }
 FString FClaireonSoundMixTool_SetClassAdjusterProperty::GetOperation() const { return TEXT("set_class_adjuster_property"); }
@@ -80,10 +81,7 @@ IClaireonTool::FToolResult FClaireonSoundMixTool_SetClassAdjusterProperty::Execu
 	FString PropertyPath;
 	if (!Arguments->TryGetStringField(TEXT("property_path"), PropertyPath) || PropertyPath.IsEmpty())
 	{
-		if (!Arguments->TryGetStringField(TEXT("field_name"), PropertyPath) || PropertyPath.IsEmpty())
-		{
-			return MakeErrorResult(TEXT("Missing required parameter: property_path"));
-		}
+		return MakeErrorResult(TEXT("Missing required parameter: property_path"));
 	}
 	const TSharedPtr<FJsonValue> ValueJson = Arguments->TryGetField(TEXT("value"));
 	if (!ValueJson.IsValid())
@@ -95,12 +93,12 @@ IClaireonTool::FToolResult FClaireonSoundMixTool_SetClassAdjusterProperty::Execu
 	FString Error;
 	EClaireonAudioAssetKind Kind = EClaireonAudioAssetKind::Unknown;
 	UObject* Loaded = ClaireonAudioHelpers::LoadAudioAsset(AssetPath, Kind, Error);
-	if (!Loaded)
+	if (!IsValid(Loaded))
 	{
 		return MakeErrorResult(Error);
 	}
 	USoundMix* Mix = Cast<USoundMix>(Loaded);
-	if (!Mix || Kind != EClaireonAudioAssetKind::SoundMix)
+	if (!IsValid(Mix) || Kind != EClaireonAudioAssetKind::SoundMix)
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset is not a SoundMix: %s"), *AssetPath));
 	}

@@ -5,7 +5,7 @@
 
 #include "Misc/Paths.h"
 
-namespace
+namespace ClaireonPortDerivation_Private
 {
 	// File-local discriminator on the anonymous namespace: anon-NS helper
 	// names can collide under non-unity Linux clang strict if another TU
@@ -162,6 +162,7 @@ namespace
 		return Full.ToLower();
 	}
 }
+using namespace ClaireonPortDerivation_Private;
 
 namespace Claireon
 {

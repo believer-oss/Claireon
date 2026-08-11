@@ -16,7 +16,7 @@ bool ClaireonPropertyResolver::ResolvePropertyOnActor(
 	FString& OutError)
 {
 	// Step 1: Null check + parse the first path segment
-	if (!Actor)
+	if (!IsValid(Actor))
 	{
 		OutError = TEXT("Null actor");
 		return false;
@@ -36,7 +36,7 @@ bool ClaireonPropertyResolver::ResolvePropertyOnActor(
 
 	for (UActorComponent* Component : AllComponents)
 	{
-		if (!Component)
+		if (!IsValid(Component))
 		{
 			continue;
 		}
@@ -80,7 +80,7 @@ bool ClaireonPropertyResolver::ResolvePropertyOnActor(
 
 	// Step 4: Check RootComponent
 	USceneComponent* RootComp = Actor->GetRootComponent();
-	if (RootComp && RootComp->GetClass()->FindPropertyByName(FName(*FirstSegment)))
+	if (IsValid(RootComp) && RootComp->GetClass()->FindPropertyByName(FName(*FirstSegment)))
 	{
 		OutResolved.TargetObject = RootComp;
 		OutResolved.ResolvedOn = TEXT("RootComponent");
@@ -93,7 +93,7 @@ bool ClaireonPropertyResolver::ResolvePropertyOnActor(
 	// Step 5: Iterate all components (excluding RootComponent, already checked)
 	for (UActorComponent* Component : AllComponents)
 	{
-		if (!Component || Component == RootComp)
+		if (!IsValid(Component) || Component == RootComp)
 		{
 			continue;
 		}
@@ -110,13 +110,13 @@ bool ClaireonPropertyResolver::ResolvePropertyOnActor(
 
 	// Step 6: Not found -- build descriptive error
 	OutError = FString::Printf(TEXT("Property '%s' not found. Searched: %s (actor root)"), *FirstSegment, *Actor->GetClass()->GetName());
-	if (RootComp)
+	if (IsValid(RootComp))
 	{
 		OutError += FString::Printf(TEXT(", %s (RootComponent)"), *RootComp->GetClass()->GetName());
 	}
 	for (UActorComponent* Component : AllComponents)
 	{
-		if (!Component || Component == RootComp)
+		if (!IsValid(Component) || Component == RootComp)
 		{
 			continue;
 		}
@@ -201,18 +201,18 @@ bool ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(
 	FString& OutError)
 {
 	// Step 1: Validate inputs and get CDO
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		OutError = TEXT("Null Blueprint");
 		return false;
 	}
-	if (!Blueprint->GeneratedClass)
+	if (!IsValid(Blueprint->GeneratedClass))
 	{
 		OutError = TEXT("Blueprint has no GeneratedClass");
 		return false;
 	}
 	UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
-	if (!CDO)
+	if (!IsValid(CDO))
 	{
 		OutError = TEXT("Failed to get CDO");
 		return false;
@@ -251,7 +251,7 @@ bool ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(
 	{
 		for (USCS_Node* Node : Blueprint->SimpleConstructionScript->GetAllNodes())
 		{
-			if (!Node || !Node->ComponentTemplate)
+			if (!IsValid(Node) || !Node->ComponentTemplate)
 			{
 				continue;
 			}
@@ -272,22 +272,63 @@ bool ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(
 		}
 	}
 
+	// Step 2a2: explicit AddComponent-node template prefix. The dynamic
+	// 'Add Component' graph node binds a template stored in the Blueprint's
+	// ComponentTemplates array (object names like "NODE_AddWidgetComponent-3");
+	// match by template object name so replay can write its configured values.
+	for (UActorComponent* NodeTemplate : Blueprint->ComponentTemplates)
+	{
+		if (!IsValid(NodeTemplate))
+		{
+			continue;
+		}
+		if (NodeTemplate->GetName() == BareFirst)
+		{
+			if (Remainder.IsEmpty())
+			{
+				OutError = FString::Printf(TEXT("'%s' is an AddComponent-node template name, not a property. Use 'TemplateName.PropertyName' syntax."), *FirstSegment);
+				return false;
+			}
+			OutResolved.TargetObject = NodeTemplate;
+			OutResolved.ResolvedOn = NodeTemplate->GetName();
+			OutResolved.RemainingPath = Remainder;
+			OutResolved.QualifiedPath = PropertyPath;
+			OutResolved.Note = TEXT("Resolved via explicit AddComponent-node template name prefix");
+			return true;
+		}
+	}
+
 	// Step 2b: explicit native-subobject prefix. Walk the CDO's default
 	// subobjects (which includes inherited native components declared on a
 	// parent actor/class). Match by FName so that
 	// `MyComponent.SomeProperty` resolves to the inherited template even when
 	// the BP does not redeclare it in SCS.
+	//
+	// A bare name (no remainder) that is ALSO a property on the CDO's class must
+	// not be intercepted here: ClaireonPropertyUtils::SetInstancedSubObject names
+	// the sub-object it constructs after the UPROPERTY(Instanced) slot it fills
+	// (ObjectProp->GetFName(), for cooked-client archetype linkage), so once such
+	// a slot is populated the CDO owns a default subobject whose FName equals the
+	// property name. Intercepting that made the slot write-once -- every later
+	// write, including "None" to clear it, was rejected with "is a subobject
+	// name, not a property". Prefer the property (Step 3) whenever the class
+	// declares one; the guidance error still fires for subobject names that are
+	// not properties, which is the case it was written for.
 	{
 		TArray<UObject*> DefaultSubobjects;
 		CDO->GetDefaultSubobjects(DefaultSubobjects);
 		for (UObject* Subobject : DefaultSubobjects)
 		{
-			if (!Subobject)
+			if (!IsValid(Subobject))
 			{
 				continue;
 			}
 			if (Subobject->GetFName().ToString() == BareFirst)
 			{
+				if (Remainder.IsEmpty() && CDO->GetClass()->FindPropertyByName(FName(*BareFirst)))
+				{
+					break;
+				}
 				if (Remainder.IsEmpty())
 				{
 					OutError = FString::Printf(TEXT("'%s' is a subobject name, not a property. Use 'SubobjectName.PropertyName' syntax."), *FirstSegment);
@@ -319,7 +360,7 @@ bool ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(
 	{
 		for (USCS_Node* Node : Blueprint->SimpleConstructionScript->GetAllNodes())
 		{
-			if (!Node || !Node->ComponentTemplate)
+			if (!IsValid(Node) || !Node->ComponentTemplate)
 			{
 				continue;
 			}
@@ -344,7 +385,7 @@ bool ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(
 		CDO->GetDefaultSubobjects(DefaultSubobjects);
 		for (UObject* Subobject : DefaultSubobjects)
 		{
-			if (!Subobject)
+			if (!IsValid(Subobject))
 			{
 				continue;
 			}
@@ -367,7 +408,7 @@ bool ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(
 	{
 		for (USCS_Node* Node : Blueprint->SimpleConstructionScript->GetAllNodes())
 		{
-			if (!Node || !Node->ComponentTemplate)
+			if (!IsValid(Node) || !Node->ComponentTemplate)
 			{
 				continue;
 			}
@@ -379,7 +420,7 @@ bool ClaireonPropertyResolver::ResolvePropertyOnBlueprintCDO(
 		CDO->GetDefaultSubobjects(DefaultSubobjects);
 		for (UObject* Subobject : DefaultSubobjects)
 		{
-			if (!Subobject)
+			if (!IsValid(Subobject))
 			{
 				continue;
 			}

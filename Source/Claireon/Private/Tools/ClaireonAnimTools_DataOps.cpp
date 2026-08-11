@@ -22,13 +22,13 @@
 // File-scope helpers
 // ============================================================================
 
-namespace
+namespace ClaireonAnimTools_DataOps_Private
 {
 	static const TArray<UAnimationModifier*> EmptyModifiers;
 
 	const TArray<UAnimationModifier*>& GetModifierInstances(const UAnimSequence* AnimSeq)
 	{
-		if (const UAnimationModifiersAssetUserData* ModUserData = const_cast<UAnimSequence*>(AnimSeq)->GetAssetUserData<UAnimationModifiersAssetUserData>())
+		if (const UAnimationModifiersAssetUserData* ModUserData = const_cast<UAnimSequence*>(AnimSeq)->GetAssetUserData<UAnimationModifiersAssetUserData>(); IsValid(ModUserData))
 		{
 			return ModUserData->GetAnimationModifierInstances();
 		}
@@ -42,7 +42,7 @@ namespace
 		// Try the core resolver first
 		ClaireonNameResolver::FNameResolveResult NameResult;
 		UClass* FoundClass = ClaireonNameResolver::ResolveClassName(ClassName, BaseClass, NameResult);
-		if (FoundClass)
+		if (IsValid(FoundClass))
 		{
 			return FoundClass;
 		}
@@ -61,7 +61,7 @@ namespace
 			if (Asset.AssetName.ToString().Contains(ClassName, ESearchCase::IgnoreCase))
 			{
 				UClass* BPClass = Cast<UClass>(Asset.GetAsset());
-				if (BPClass && BPClass->IsChildOf(BaseClass))
+				if (IsValid(BPClass) && BPClass->IsChildOf(BaseClass))
 				{
 					return BPClass;
 				}
@@ -92,6 +92,7 @@ namespace
 		return Prop->ContainerPtrToValuePtr<TMap<FSoftObjectPath, TObjectPtr<UAnimationModifier>>>(AssetUserData);
 	}
 }
+using namespace ClaireonAnimTools_DataOps_Private;
 
 // ============================================================================
 // anim_list_modifiers
@@ -120,7 +121,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_ListModifiers::Execute(const TShared
 		return Error;
 
 	UAnimSequence* AnimSeq = RequireAnimSequence(Data, Error);
-	if (!AnimSeq)
+	if (!IsValid(AnimSeq))
 		return Error;
 
 	FString ModifiersText = ClaireonAnimHelpers::FormatModifiers(AnimSeq, true);
@@ -162,7 +163,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddModifier::Execute(const TSharedPt
 		return Error;
 
 	UAnimSequence* AnimSeq = RequireAnimSequence(Data, Error);
-	if (!AnimSeq)
+	if (!IsValid(AnimSeq))
 		return Error;
 
 	FString ClassName;
@@ -173,14 +174,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddModifier::Execute(const TSharedPt
 
 	FString ResolveError;
 	UClass* ModifierClass = ResolveModifierClass(ClassName, ResolveError);
-	if (!ModifierClass)
+	if (!IsValid(ModifierClass))
 	{
 		return MakeErrorResult(ResolveError);
 	}
 
 	// Get or create asset user data
 	UAnimationModifiersAssetUserData* AssetUserData = AnimSeq->GetAssetUserData<UAnimationModifiersAssetUserData>();
-	if (!AssetUserData)
+	if (!IsValid(AssetUserData))
 	{
 		AssetUserData = NewObject<UAnimationModifiersAssetUserData>(AnimSeq, UAnimationModifiersAssetUserData::StaticClass());
 		AssetUserData->SetFlags(RF_Transactional);
@@ -192,7 +193,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddModifier::Execute(const TSharedPt
 
 	// Create the modifier instance
 	UAnimationModifier* NewModifier = NewObject<UAnimationModifier>(AssetUserData, ModifierClass, NAME_None, RF_Transactional);
-	if (!NewModifier)
+	if (!IsValid(NewModifier))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create modifier instance of class %s"), *ClassName));
 	}
@@ -241,7 +242,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_RemoveModifier::Execute(const TShare
 		return Error;
 
 	UAnimSequence* AnimSeq = RequireAnimSequence(Data, Error);
-	if (!AnimSeq)
+	if (!IsValid(AnimSeq))
 		return Error;
 
 	double IndexD = -1.0;
@@ -252,7 +253,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_RemoveModifier::Execute(const TShare
 	int32 Index = static_cast<int32>(IndexD);
 
 	UAnimationModifiersAssetUserData* AssetUserData = AnimSeq->GetAssetUserData<UAnimationModifiersAssetUserData>();
-	if (!AssetUserData)
+	if (!IsValid(AssetUserData))
 	{
 		return MakeErrorResult(TEXT("No modifier asset user data found on this animation"));
 	}
@@ -264,7 +265,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_RemoveModifier::Execute(const TShare
 	}
 
 	UAnimationModifier* ModifierToRemove = Modifiers[Index];
-	FString ModifierName = ModifierToRemove ? ModifierToRemove->GetClass()->GetName() : TEXT("null");
+	FString ModifierName = IsValid(ModifierToRemove) ? ModifierToRemove->GetClass()->GetName() : TEXT("null");
 
 	FScopedTransaction Transaction(NSLOCTEXT("Claireon", "AnimRemoveModifier", "MCP: Remove Animation Modifier"));
 	AnimSeq->Modify();
@@ -277,7 +278,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_RemoveModifier::Execute(const TShare
 	}
 
 	// Also remove from AppliedModifiers map (mirrors RemoveAnimationModifierInstance behavior)
-	if (ModifierToRemove)
+	if (IsValid(ModifierToRemove))
 	{
 		TMap<FSoftObjectPath, TObjectPtr<UAnimationModifier>>* MapPtr = GetAppliedModifiersMapPtr(AssetUserData);
 		if (MapPtr)
@@ -323,7 +324,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_ApplyModifier::Execute(const TShared
 		return Error;
 
 	UAnimSequence* AnimSeq = RequireAnimSequence(Data, Error);
-	if (!AnimSeq)
+	if (!IsValid(AnimSeq))
 		return Error;
 
 	double IndexD = -1.0;
@@ -340,7 +341,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_ApplyModifier::Execute(const TShared
 	}
 
 	UAnimationModifier* Modifier = Modifiers[Index];
-	if (!Modifier)
+	if (!IsValid(Modifier))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Modifier at index %d is null"), Index));
 	}
@@ -382,7 +383,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_RevertModifier::Execute(const TShare
 		return Error;
 
 	UAnimSequence* AnimSeq = RequireAnimSequence(Data, Error);
-	if (!AnimSeq)
+	if (!IsValid(AnimSeq))
 		return Error;
 
 	double IndexD = -1.0;
@@ -399,7 +400,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_RevertModifier::Execute(const TShare
 	}
 
 	UAnimationModifier* Modifier = Modifiers[Index];
-	if (!Modifier)
+	if (!IsValid(Modifier))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Modifier at index %d is null"), Index));
 	}
@@ -485,7 +486,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddMetadata::Execute(const TSharedPt
 
 	ClaireonNameResolver::FNameResolveResult NameResult;
 	UClass* MetaDataClass = ClaireonNameResolver::ResolveClassName(ClassName, UAnimMetaData::StaticClass(), NameResult);
-	if (!MetaDataClass)
+	if (!IsValid(MetaDataClass))
 	{
 		return MakeErrorResult(NameResult.Error);
 	}
@@ -494,7 +495,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddMetadata::Execute(const TSharedPt
 	Data->Animation->Modify();
 
 	UAnimMetaData* NewMetaData = NewObject<UAnimMetaData>(Data->Animation.Get(), MetaDataClass);
-	if (!NewMetaData)
+	if (!IsValid(NewMetaData))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create metadata of class %s"), *ClassName));
 	}
@@ -550,7 +551,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_RemoveMetadata::Execute(const TShare
 	}
 
 	UAnimMetaData* MetaDataObj = MetaDataArray[Index];
-	if (!MetaDataObj)
+	if (!IsValid(MetaDataObj))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Metadata at index %d is null"), Index));
 	}
@@ -621,7 +622,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_SetMetadataProperty::Execute(const T
 	}
 
 	UAnimMetaData* MetaDataObj = MetaDataArray[Index];
-	if (!MetaDataObj)
+	if (!IsValid(MetaDataObj))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Metadata at index %d is null"), Index));
 	}
@@ -695,7 +696,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_SetProperty::Execute(const TSharedPt
 	else if (PropertyName == TEXT("root_motion_enabled"))
 	{
 		UAnimSequence* AnimSeq = Cast<UAnimSequence>(Anim);
-		if (!AnimSeq)
+		if (!IsValid(AnimSeq))
 		{
 			return MakeErrorResult(TEXT("root_motion_enabled only applies to AnimSequence"));
 		}
@@ -706,7 +707,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_SetProperty::Execute(const TSharedPt
 	else if (PropertyName == TEXT("force_root_lock"))
 	{
 		UAnimSequence* AnimSeq = Cast<UAnimSequence>(Anim);
-		if (!AnimSeq)
+		if (!IsValid(AnimSeq))
 		{
 			return MakeErrorResult(TEXT("force_root_lock only applies to AnimSequence"));
 		}
@@ -717,7 +718,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_SetProperty::Execute(const TSharedPt
 	else if (PropertyName == TEXT("root_motion_root_lock"))
 	{
 		UAnimSequence* AnimSeq = Cast<UAnimSequence>(Anim);
-		if (!AnimSeq)
+		if (!IsValid(AnimSeq))
 		{
 			return MakeErrorResult(TEXT("root_motion_root_lock only applies to AnimSequence"));
 		}
@@ -743,7 +744,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_SetProperty::Execute(const TSharedPt
 	else if (PropertyName == TEXT("blend_in_time"))
 	{
 		UAnimMontage* Montage = Cast<UAnimMontage>(Anim);
-		if (!Montage)
+		if (!IsValid(Montage))
 		{
 			return MakeErrorResult(TEXT("blend_in_time only applies to AnimMontage"));
 		}
@@ -754,7 +755,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_SetProperty::Execute(const TSharedPt
 	else if (PropertyName == TEXT("blend_out_time"))
 	{
 		UAnimMontage* Montage = Cast<UAnimMontage>(Anim);
-		if (!Montage)
+		if (!IsValid(Montage))
 		{
 			return MakeErrorResult(TEXT("blend_out_time only applies to AnimMontage"));
 		}

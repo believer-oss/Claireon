@@ -14,8 +14,9 @@ FString ClaireonTool_ChooserSetContextParameterDirection::GetOperation() const {
 
 FString ClaireonTool_ChooserSetContextParameterDirection::GetDescription() const
 {
-	return TEXT("Set the direction (Input / Output / InputOutput) on an existing ChooserTable context parameter. "
-		"Triggers a recompile of the chooser bindings.");
+	return TEXT("Set the direction (Input / Output / InputOutput) of an existing ChooserTable context parameter by "
+		"index, then recompile the chooser bindings. Stateless / non-session: writes the asset directly by "
+		"path, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ChooserSetContextParameterDirection::GetInputSchema() const
@@ -51,7 +52,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserSetContextParameterDirection::Exe
 
 	FString Error;
 	UChooserTable* Chooser = ClaireonChooserHelpers::LoadChooserTableAsset(AssetPath, Error);
-	if (!Chooser)
+	if (!IsValid(Chooser))
 	{
 		return MakeErrorResult(Error);
 	}

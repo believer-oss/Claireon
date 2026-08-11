@@ -14,11 +14,39 @@
 #include "Tools/ClaireonEQSEditToolBase.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "EditorAssetLibrary.h"
 #include "EnvironmentQuery/EnvQuery.h"
+#include "Misc/ScopeExit.h"
 
+#include "ClaireonTestAssetDeletion.h"
 namespace ClaireonEQSTool_ApplyDeltaTests_anon
 {
-	static const TCHAR* EQSDeltaTestAssetPath = TEXT("/Game/BP/AI/EQS/EQS_CombatWaiting_Strafe");
+	// The source is READ-ONLY. eqs_apply_delta writes through to the asset, so
+	// running it against shipping content dirties a tracked .uasset on every run
+	// and leaves the asset mutated for whoever inspects it later -- that is what
+	// made Claireon.EQS.InspectStrafe pass alone and fail in a full run.
+	static const TCHAR* EQSDeltaSourceAssetPath = TEXT("/Game/BP/AI/EQS/EQS_CombatWaiting_Strafe");
+	static const TCHAR* EQSDeltaTestAssetPath   = TEXT("/Game/__MCPTests/EQS_ApplyDeltaTest");
+
+	// Delete any copy left behind by a previous run before duplicating:
+	// /Game/__MCPTests is NOT gitignored and persists, so a run that dies mid-test
+	// would otherwise hand a mutated fixture to the next one.
+	static bool EQSDeltaTest_EnsureFreshDuplicate()
+	{
+		if (UEditorAssetLibrary::DoesAssetExist(EQSDeltaTestAssetPath))
+		{
+			ClaireonTestAssetDeletion::DeleteAssetForTest(EQSDeltaTestAssetPath);
+		}
+		return UEditorAssetLibrary::DuplicateAsset(EQSDeltaSourceAssetPath, EQSDeltaTestAssetPath) != nullptr;
+	}
+
+	static void EQSDeltaTest_DeleteDuplicate()
+	{
+		if (UEditorAssetLibrary::DoesAssetExist(EQSDeltaTestAssetPath))
+		{
+			ClaireonTestAssetDeletion::DeleteAssetForTest(EQSDeltaTestAssetPath);
+		}
+	}
 
 	static TSharedPtr<FJsonValue> EQSDeltaTest_ObjVal(const TSharedPtr<FJsonObject>& O) { return MakeShared<FJsonValueObject>(O); }
 
@@ -126,6 +154,12 @@ UNTEST_UNIT_OPTS(Claireon, EQSApplyDelta, RejectsPhase4NonEmpty, UNTEST_TIMEOUTM
 UNTEST_UNIT_OPTS(Claireon, EQSApplyDelta, AR9_EmptyArraysAccepted, UNTEST_TIMEOUTMS(15000))
 {
 	using namespace ClaireonEQSTool_ApplyDeltaTests_anon;
+
+	// Operate on a throwaway duplicate: this test applies a delta, which writes
+	// through to the asset.
+	EQSDeltaTest_EnsureFreshDuplicate();
+	ON_SCOPE_EXIT { EQSDeltaTest_DeleteDuplicate(); };
+
 	const FString SessionId = EQSDeltaTest_OpenSession();
 	if (SessionId.IsEmpty())
 	{

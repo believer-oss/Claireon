@@ -63,4 +63,36 @@ namespace ClaireonPathResolver
 	 * _C stripping without registry validation.
 	 */
 	CLAIREON_API FResolveResult Resolve(const FString& InPath);
+
+	/**
+	 * Resolve a user-provided path all the way to a live UObject.
+	 *
+	 * Runs Resolve() first, then materializes the object per path kind:
+	 *  - NativeClassPath (/Script/Module.ClassName) -> that class's CDO.
+	 *  - Sub-object / world-actor paths (containing ':', including live PIE
+	 *    actor paths) -> StaticFindObject, then FindFirstObjectSafe.
+	 *  - Asset paths -> StaticFindObject, then StaticLoadObject when bAllowLoad.
+	 *
+	 * Falls back to looking the RAW input up verbatim if all of that misses. Resolve()
+	 * normalizes for asset paths, which can mangle an already-precise object path --
+	 * a CDO sub-object, or an object in a world whose package name contains dots.
+	 * Those are what GetPathName() returns, so they have to resolve.
+	 *
+	 * Shared by uobject_inspect, uobject_set_property, and component_reregister so the
+	 * read, write, and repair surfaces reach exactly the same set of objects.
+	 *
+	 * @param InPath     - Asset path, native class path, sub-object path, or rooted
+	 *                     in-memory path (/Memory/..., /Temp/...)
+	 * @param bAllowLoad - When true, fall back to StaticLoadObject for asset paths
+	 *                     not already in memory. When false, an unloaded asset is an error.
+	 * @param OutError   - Populated on failure
+	 * @param OutCoercionNote - Optional. Populated when the named object was a class
+	 *                     or Blueprint asset and the result was coerced to its class
+	 *                     default object, so a caller can disclose the substitution
+	 *                     rather than silently reporting properties of a different
+	 *                     object than the one the path named.
+	 * @return The resolved UObject, or nullptr on failure
+	 */
+	CLAIREON_API UObject* ResolveObjectFromPath(const FString& InPath, bool bAllowLoad, FString& OutError,
+		FString* OutCoercionNote = nullptr);
 }

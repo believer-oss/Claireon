@@ -22,7 +22,7 @@
 // File-scope helpers
 // ============================================================================
 
-namespace
+namespace ClaireonAnimTools_Create_Private
 {
 	bool AnimToolsCreate_ValidateNewAssetPath(const FString& InPath, FString& OutCanonPath, FString& OutAssetName, FString& OutError)
 	{
@@ -32,7 +32,7 @@ namespace
 			OutError = TEXT("Invalid asset path. Must start with /Game/.");
 			return false;
 		}
-		if (StaticFindObject(nullptr, nullptr, *OutCanonPath))
+		if (IsValid(StaticFindObject(nullptr, nullptr, *OutCanonPath)))
 		{
 			OutError = FString::Printf(TEXT("Asset already exists at '%s'"), *OutCanonPath);
 			return false;
@@ -57,6 +57,7 @@ namespace
 		return true;
 	}
 }
+using namespace ClaireonAnimTools_Create_Private;
 
 // ============================================================================
 // anim_create_montage
@@ -72,8 +73,8 @@ FString ClaireonAnimTool_CreateMontage::GetDescription() const
 TSharedPtr<FJsonObject> ClaireonAnimTool_CreateMontage::GetInputSchema() const
 {
 	FToolSchemaBuilder S;
-	S.AddString(TEXT("path"), TEXT("Target asset path (e.g. /Game/Char/STELLA/Anim/AM_NewMontage)"), true);
-	S.AddString(TEXT("skeleton"), TEXT("Skeleton asset path (e.g. /Game/Char/STELLA/STELLA_Skeleton)"), true);
+	S.AddString(TEXT("path"), TEXT("Target asset path (e.g. /Game/Characters/Hero/Anim/AM_NewMontage)"), true);
+	S.AddString(TEXT("skeleton"), TEXT("Skeleton asset path (e.g. /Game/Characters/Hero/SK_Hero_Skeleton)"), true);
 	S.AddString(TEXT("animation"), TEXT("Source AnimSequence asset path to populate the montage"));
 	S.AddString(TEXT("slot_name"), TEXT("Montage slot name (default: DefaultSlot)"));
 	return S.Build();
@@ -101,7 +102,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_CreateMontage::Execute(const TShared
 
 	// Load skeleton
 	USkeleton* Skeleton = LoadObject<USkeleton>(nullptr, *SkeletonPath);
-	if (!Skeleton)
+	if (!IsValid(Skeleton))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load skeleton at '%s'"), *SkeletonPath));
 	}
@@ -112,7 +113,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_CreateMontage::Execute(const TShared
 	if (Arguments->TryGetStringField(TEXT("animation"), AnimPath) && !AnimPath.IsEmpty())
 	{
 		SourceAnim = LoadObject<UAnimSequence>(nullptr, *AnimPath);
-		if (!SourceAnim)
+		if (!IsValid(SourceAnim))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Failed to load animation at '%s'"), *AnimPath));
 		}
@@ -132,7 +133,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_CreateMontage::Execute(const TShared
 
 	UAnimMontageFactory* Factory = NewObject<UAnimMontageFactory>();
 	Factory->TargetSkeleton = Skeleton;
-	if (SourceAnim)
+	if (IsValid(SourceAnim))
 	{
 		Factory->SourceAnimation = SourceAnim;
 	}
@@ -140,7 +141,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_CreateMontage::Execute(const TShared
 	UAnimMontage* Montage = Cast<UAnimMontage>(
 		Factory->FactoryCreateNew(UAnimMontage::StaticClass(), Package,
 			FName(*AssetName), RF_Public | RF_Standalone, nullptr, GWarn));
-	if (!Montage)
+	if (!IsValid(Montage))
 	{
 		return MakeErrorResult(TEXT("Factory failed to create montage"));
 	}
@@ -165,7 +166,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_CreateMontage::Execute(const TShared
 	Result->SetStringField(TEXT("asset_type"), TEXT("AnimMontage"));
 	Result->SetStringField(TEXT("skeleton"), Skeleton->GetPathName());
 	Result->SetStringField(TEXT("slot_name"), SlotName);
-	if (SourceAnim)
+	if (IsValid(SourceAnim))
 	{
 		Result->SetStringField(TEXT("animation"), SourceAnim->GetPathName());
 		Result->SetNumberField(TEXT("length"), Montage->GetPlayLength());
@@ -188,8 +189,8 @@ FString ClaireonAnimTool_CreateComposite::GetDescription() const
 TSharedPtr<FJsonObject> ClaireonAnimTool_CreateComposite::GetInputSchema() const
 {
 	FToolSchemaBuilder S;
-	S.AddString(TEXT("path"), TEXT("Target asset path (e.g. /Game/Char/STELLA/Anim/AC_NewComposite)"), true);
-	S.AddString(TEXT("skeleton"), TEXT("Skeleton asset path (e.g. /Game/Char/STELLA/STELLA_Skeleton)"), true);
+	S.AddString(TEXT("path"), TEXT("Target asset path (e.g. /Game/Characters/Hero/Anim/AC_NewComposite)"), true);
+	S.AddString(TEXT("skeleton"), TEXT("Skeleton asset path (e.g. /Game/Characters/Hero/SK_Hero_Skeleton)"), true);
 	S.AddString(TEXT("animation"), TEXT("Source AnimSequence asset path to populate the composite"));
 	return S.Build();
 }
@@ -216,7 +217,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_CreateComposite::Execute(const TShar
 
 	// Load skeleton
 	USkeleton* Skeleton = LoadObject<USkeleton>(nullptr, *SkeletonPath);
-	if (!Skeleton)
+	if (!IsValid(Skeleton))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load skeleton at '%s'"), *SkeletonPath));
 	}
@@ -227,7 +228,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_CreateComposite::Execute(const TShar
 	if (Arguments->TryGetStringField(TEXT("animation"), AnimPath) && !AnimPath.IsEmpty())
 	{
 		SourceAnim = LoadObject<UAnimSequence>(nullptr, *AnimPath);
-		if (!SourceAnim)
+		if (!IsValid(SourceAnim))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Failed to load animation at '%s'"), *AnimPath));
 		}
@@ -242,7 +243,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_CreateComposite::Execute(const TShar
 
 	UAnimCompositeFactory* CompositeFactory = NewObject<UAnimCompositeFactory>();
 	CompositeFactory->TargetSkeleton = Skeleton;
-	if (SourceAnim)
+	if (IsValid(SourceAnim))
 	{
 		CompositeFactory->SourceAnimation = SourceAnim;
 	}
@@ -250,14 +251,14 @@ IClaireonTool::FToolResult ClaireonAnimTool_CreateComposite::Execute(const TShar
 	UAnimComposite* Composite = Cast<UAnimComposite>(
 		CompositeFactory->FactoryCreateNew(UAnimComposite::StaticClass(), Package,
 			FName(*AssetName), RF_Public | RF_Standalone, nullptr, GWarn));
-	if (!Composite)
+	if (!IsValid(Composite))
 	{
 		return MakeErrorResult(TEXT("Factory failed to create composite"));
 	}
 
 	// Composite factory doesn't call UpdateCommonTargetFrameRate (unlike montage factory).
 	// Set CommonTargetFrameRate via reflection since it's a protected UPROPERTY.
-	if (SourceAnim)
+	if (IsValid(SourceAnim))
 	{
 		FProperty* FrameRateProp = UAnimCompositeBase::StaticClass()->FindPropertyByName(TEXT("CommonTargetFrameRate"));
 		if (FrameRateProp)
@@ -280,7 +281,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_CreateComposite::Execute(const TShar
 	Result->SetStringField(TEXT("path"), Composite->GetPathName());
 	Result->SetStringField(TEXT("asset_type"), TEXT("AnimComposite"));
 	Result->SetStringField(TEXT("skeleton"), Skeleton->GetPathName());
-	if (SourceAnim)
+	if (IsValid(SourceAnim))
 	{
 		Result->SetStringField(TEXT("animation"), SourceAnim->GetPathName());
 		Result->SetNumberField(TEXT("length"), Composite->GetPlayLength());
@@ -335,20 +336,20 @@ IClaireonTool::FToolResult ClaireonAnimTool_DuplicateAsset::Execute(const TShare
 
 	// Load source asset
 	UObject* SourceObj = FSoftObjectPath(SourcePath).TryLoad();
-	if (!SourceObj)
+	if (!IsValid(SourceObj))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load source asset at '%s'"), *SourcePath));
 	}
 
 	// Verify it's an animation asset
 	UAnimSequenceBase* SourceAnim = Cast<UAnimSequenceBase>(SourceObj);
-	if (!SourceAnim)
+	if (!IsValid(SourceAnim))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Source asset '%s' is not an animation asset (AnimSequence, AnimMontage, or AnimComposite)"), *SourcePath));
 	}
 
 	// Check dest doesn't already exist
-	if (StaticFindObject(nullptr, nullptr, *DestPath))
+	if (IsValid(StaticFindObject(nullptr, nullptr, *DestPath)))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset already exists at '%s'"), *DestPath));
 	}
@@ -360,7 +361,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_DuplicateAsset::Execute(const TShare
 	// Duplicate via engine AssetTools
 	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
 	UObject* NewAsset = AssetTools.DuplicateAsset(DestName, DestFolder, SourceObj);
-	if (!NewAsset)
+	if (!IsValid(NewAsset))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Engine failed to duplicate asset to '%s/%s'"), *DestFolder, *DestName));
 	}

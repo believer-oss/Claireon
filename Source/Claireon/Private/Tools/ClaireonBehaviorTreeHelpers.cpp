@@ -42,14 +42,14 @@ UBehaviorTree* ClaireonBehaviorTreeHelpers::LoadBehaviorTreeAsset(const FString&
 
 	FSoftObjectPath SoftPath(ResolvedPath);
 	UObject* LoadedObj = SoftPath.TryLoad();
-	if (!LoadedObj)
+	if (!IsValid(LoadedObj))
 	{
 		OutError = FString::Printf(TEXT("Failed to load asset at path: %s"), *ResolvedPath);
 		return nullptr;
 	}
 
 	UBehaviorTree* BT = Cast<UBehaviorTree>(LoadedObj);
-	if (!BT)
+	if (!IsValid(BT))
 	{
 		OutError = FString::Printf(TEXT("Asset at %s is not a Behavior Tree (actual type: %s)"), *ResolvedPath, *LoadedObj->GetClass()->GetName());
 		return nullptr;
@@ -70,14 +70,14 @@ UBlackboardData* ClaireonBehaviorTreeHelpers::LoadBlackboardAsset(const FString&
 
 	FSoftObjectPath SoftPath(ResolvedPath);
 	UObject* LoadedObj = SoftPath.TryLoad();
-	if (!LoadedObj)
+	if (!IsValid(LoadedObj))
 	{
 		OutError = FString::Printf(TEXT("Failed to load asset at path: %s"), *ResolvedPath);
 		return nullptr;
 	}
 
 	UBlackboardData* BB = Cast<UBlackboardData>(LoadedObj);
-	if (!BB)
+	if (!IsValid(BB))
 	{
 		OutError = FString::Printf(TEXT("Asset at %s is not a Blackboard Data (actual type: %s)"), *ResolvedPath, *LoadedObj->GetClass()->GetName());
 		return nullptr;
@@ -90,11 +90,11 @@ UBlackboardData* ClaireonBehaviorTreeHelpers::LoadBlackboardAsset(const FString&
 // Formatting Helpers
 // ============================================================================
 
-namespace
+namespace ClaireonBehaviorTreeHelpers_Private
 {
 	FString BehaviorTreeHelpers_GetNodeClassName(const UBTNode* Node)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			return TEXT("(null)");
 		}
@@ -109,7 +109,7 @@ namespace
 
 	FString BehaviorTreeHelpers_GetNodeDisplayName(const UBTNode* Node)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			return TEXT("(null)");
 		}
@@ -123,7 +123,7 @@ namespace
 
 	FString BehaviorTreeHelpers_GetCompositeTypeName(const UBTCompositeNode* Composite)
 	{
-		if (!Composite)
+		if (!IsValid(Composite))
 		{
 			return TEXT("Unknown");
 		}
@@ -145,7 +145,7 @@ namespace
 
 	void BehaviorTreeHelpers_FormatCompositeNodeRecursive(const UBTCompositeNode* Composite, FString& Output, const FString& Indent, bool bFullDetail)
 	{
-		if (!Composite)
+		if (!IsValid(Composite))
 		{
 			return;
 		}
@@ -153,7 +153,7 @@ namespace
 		// Services on this composite
 		for (const UBTService* Service : Composite->Services)
 		{
-			if (!Service)
+			if (!IsValid(Service))
 			{
 				continue;
 			}
@@ -184,7 +184,7 @@ namespace
 			// Decorators on this child
 			for (const UBTDecorator* Decorator : Child.Decorators)
 			{
-				if (!Decorator)
+				if (!IsValid(Decorator))
 				{
 					continue;
 				}
@@ -223,7 +223,7 @@ namespace
 				// Services on the task
 				for (const UBTService* Service : Child.ChildTask->Services)
 				{
-					if (!Service)
+					if (!IsValid(Service))
 					{
 						continue;
 					}
@@ -244,11 +244,12 @@ namespace
 			}
 		}
 	}
-} // anonymous namespace
+} // namespace ClaireonBehaviorTreeHelpers_Private
+using namespace ClaireonBehaviorTreeHelpers_Private;
 
 FString ClaireonBehaviorTreeHelpers::FormatNodeProperties(const UBTNode* Node, const FString& Indent)
 {
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return FString();
 	}
@@ -277,7 +278,7 @@ FString ClaireonBehaviorTreeHelpers::FormatNodeProperties(const UBTNode* Node, c
 
 FString ClaireonBehaviorTreeHelpers::FormatBehaviorTreeStructure(const UBehaviorTree* BehaviorTree, bool bFullDetail)
 {
-	if (!BehaviorTree)
+	if (!IsValid(BehaviorTree))
 	{
 		return TEXT("(null Behavior Tree)");
 	}
@@ -300,7 +301,7 @@ FString ClaireonBehaviorTreeHelpers::FormatBehaviorTreeStructure(const UBehavior
 
 	// Root node
 	UBTCompositeNode* RootNode = BehaviorTree->RootNode;
-	if (!RootNode)
+	if (!IsValid(RootNode))
 	{
 		Output += TEXT("(empty tree - no root node)\n");
 		return Output;
@@ -315,7 +316,7 @@ FString ClaireonBehaviorTreeHelpers::FormatBehaviorTreeStructure(const UBehavior
 	TSet<FString> ReferencedKeys;
 	TFunction<void(const UBTNode*)> CollectKeys = [&](const UBTNode* Node)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			return;
 		}
@@ -353,7 +354,7 @@ FString ClaireonBehaviorTreeHelpers::FormatBehaviorTreeStructure(const UBehavior
 	// Walk all nodes to collect keys
 	TFunction<void(const UBTCompositeNode*)> WalkComposite = [&](const UBTCompositeNode* Composite)
 	{
-		if (!Composite)
+		if (!IsValid(Composite))
 		{
 			return;
 		}
@@ -405,7 +406,7 @@ FString ClaireonBehaviorTreeHelpers::FormatBehaviorTreeStructure(const UBehavior
 
 FString ClaireonBehaviorTreeHelpers::FormatBlackboardData(const UBlackboardData* BlackboardData, bool bFullDetail)
 {
-	if (!BlackboardData)
+	if (!IsValid(BlackboardData))
 	{
 		return TEXT("(null Blackboard Data)");
 	}
@@ -482,14 +483,14 @@ FString ClaireonBehaviorTreeHelpers::FormatBlackboardData(const UBlackboardData*
 
 UBehaviorTreeGraph* ClaireonBehaviorTreeHelpers::GetBTGraph(UBehaviorTree* BehaviorTree, FString& OutError)
 {
-	if (!BehaviorTree)
+	if (!IsValid(BehaviorTree))
 	{
 		OutError = TEXT("BehaviorTree is null");
 		return nullptr;
 	}
 
 	UBehaviorTreeGraph* BTGraph = Cast<UBehaviorTreeGraph>(BehaviorTree->BTGraph);
-	if (!BTGraph)
+	if (!IsValid(BTGraph))
 	{
 		OutError = TEXT("BehaviorTree has no BTGraph (or cast failed)");
 		return nullptr;
@@ -500,7 +501,7 @@ UBehaviorTreeGraph* ClaireonBehaviorTreeHelpers::GetBTGraph(UBehaviorTree* Behav
 
 UBehaviorTreeGraphNode* ClaireonBehaviorTreeHelpers::FindGraphNodeByGuid(UBehaviorTreeGraph* Graph, const FGuid& NodeGuid)
 {
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return nullptr;
 	}
@@ -508,17 +509,17 @@ UBehaviorTreeGraphNode* ClaireonBehaviorTreeHelpers::FindGraphNodeByGuid(UBehavi
 	for (UEdGraphNode* GraphNode : Graph->Nodes)
 	{
 		UBehaviorTreeGraphNode* BTGraphNode = Cast<UBehaviorTreeGraphNode>(GraphNode);
-		if (BTGraphNode && BTGraphNode->NodeGuid == NodeGuid)
+		if (IsValid(BTGraphNode) && BTGraphNode->NodeGuid == NodeGuid)
 		{
 			return BTGraphNode;
 		}
 		// Also check sub-nodes (decorators, services)
-		if (BTGraphNode)
+		if (IsValid(BTGraphNode))
 		{
 			for (UAIGraphNode* SubNode : BTGraphNode->SubNodes)
 			{
 				UBehaviorTreeGraphNode* SubBTNode = Cast<UBehaviorTreeGraphNode>(SubNode);
-				if (SubBTNode && SubBTNode->NodeGuid == NodeGuid)
+				if (IsValid(SubBTNode) && SubBTNode->NodeGuid == NodeGuid)
 				{
 					return SubBTNode;
 				}
@@ -531,14 +532,14 @@ UBehaviorTreeGraphNode* ClaireonBehaviorTreeHelpers::FindGraphNodeByGuid(UBehavi
 
 UBehaviorTreeGraphNode_Root* ClaireonBehaviorTreeHelpers::FindRootGraphNode(UBehaviorTreeGraph* Graph)
 {
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return nullptr;
 	}
 
 	for (UEdGraphNode* GraphNode : Graph->Nodes)
 	{
-		if (UBehaviorTreeGraphNode_Root* RootNode = Cast<UBehaviorTreeGraphNode_Root>(GraphNode))
+		if (UBehaviorTreeGraphNode_Root* RootNode = Cast<UBehaviorTreeGraphNode_Root>(GraphNode); IsValid(RootNode))
 		{
 			return RootNode;
 		}
@@ -549,7 +550,7 @@ UBehaviorTreeGraphNode_Root* ClaireonBehaviorTreeHelpers::FindRootGraphNode(UBeh
 
 UBehaviorTreeGraphNode* ClaireonBehaviorTreeHelpers::CreateGraphNodeForClass(UBehaviorTreeGraph* Graph, UClass* NodeClass, FVector2D Position, FString& OutError)
 {
-	if (!Graph || !NodeClass)
+	if (!IsValid(Graph) || !IsValid(NodeClass))
 	{
 		OutError = TEXT("Invalid Graph or NodeClass");
 		return nullptr;
@@ -582,7 +583,7 @@ UBehaviorTreeGraphNode* ClaireonBehaviorTreeHelpers::CreateGraphNodeForClass(UBe
 	// Create the graph node
 	FGraphNodeCreator<UBehaviorTreeGraphNode> NodeCreator(*Graph);
 	UBehaviorTreeGraphNode* NewGraphNode = NodeCreator.CreateNode(false, GraphNodeClass);
-	if (!NewGraphNode)
+	if (!IsValid(NewGraphNode))
 	{
 		OutError = TEXT("Failed to create graph node");
 		return nullptr;
@@ -603,7 +604,7 @@ UBehaviorTreeGraphNode* ClaireonBehaviorTreeHelpers::CreateGraphNodeForClass(UBe
 
 bool ClaireonBehaviorTreeHelpers::ConnectNodes(UBehaviorTreeGraphNode* Parent, UBehaviorTreeGraphNode* Child, int32 ChildIndex, FString& OutError)
 {
-	if (!Parent || !Child)
+	if (!IsValid(Parent) || !IsValid(Child))
 	{
 		OutError = TEXT("Invalid parent or child node");
 		return false;
@@ -651,7 +652,7 @@ bool ClaireonBehaviorTreeHelpers::ConnectNodes(UBehaviorTreeGraphNode* Parent, U
 
 bool ClaireonBehaviorTreeHelpers::DisconnectNode(UBehaviorTreeGraphNode* Node, FString& OutError)
 {
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		OutError = TEXT("Node is null");
 		return false;
@@ -673,7 +674,7 @@ bool ClaireonBehaviorTreeHelpers::DisconnectNode(UBehaviorTreeGraphNode* Node, F
 
 bool ClaireonBehaviorTreeHelpers::SetBTNodeProperty(UBTNode* Node, const FString& PropertyName, const FString& PropertyValue, FString& OutError)
 {
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		OutError = TEXT("Node is null");
 		return false;
@@ -721,7 +722,7 @@ bool ClaireonBehaviorTreeHelpers::SetBTNodeProperty(UBTNode* Node, const FString
 
 FString ClaireonBehaviorTreeHelpers::FormatBTGraphStructure(UBehaviorTreeGraph* Graph, bool bFullDetail)
 {
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return TEXT("(null graph)");
 	}
@@ -730,7 +731,7 @@ FString ClaireonBehaviorTreeHelpers::FormatBTGraphStructure(UBehaviorTreeGraph* 
 
 	// Find root node
 	UBehaviorTreeGraphNode_Root* RootNode = FindRootGraphNode(Graph);
-	if (!RootNode)
+	if (!IsValid(RootNode))
 	{
 		return TEXT("(no root node found in graph)");
 	}
@@ -739,7 +740,7 @@ FString ClaireonBehaviorTreeHelpers::FormatBTGraphStructure(UBehaviorTreeGraph* 
 	TFunction<void(UBehaviorTreeGraphNode*, const FString&, bool)> FormatGraphNode;
 	FormatGraphNode = [&](UBehaviorTreeGraphNode* GraphNode, const FString& Indent, bool bIsLast)
 	{
-		if (!GraphNode)
+		if (!IsValid(GraphNode))
 		{
 			return;
 		}
@@ -751,7 +752,7 @@ FString ClaireonBehaviorTreeHelpers::FormatBTGraphStructure(UBehaviorTreeGraph* 
 		// Determine node type label
 		FString TypeLabel;
 		FString NodeName;
-		if (UBTNode* NodeInstance = Cast<UBTNode>(GraphNode->NodeInstance))
+		if (UBTNode* NodeInstance = Cast<UBTNode>(GraphNode->NodeInstance); IsValid(NodeInstance))
 		{
 			FString ClassName = NodeInstance->GetClass()->GetName();
 			if (NodeInstance->IsA(UBTCompositeNode::StaticClass()))
@@ -791,14 +792,14 @@ FString ClaireonBehaviorTreeHelpers::FormatBTGraphStructure(UBehaviorTreeGraph* 
 		for (UAIGraphNode* SubNode : GraphNode->SubNodes)
 		{
 			UBehaviorTreeGraphNode* SubBTNode = Cast<UBehaviorTreeGraphNode>(SubNode);
-			if (!SubBTNode)
+			if (!IsValid(SubBTNode))
 			{
 				continue;
 			}
 
 			FString SubGuidStr = SubBTNode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphensLower);
 			UBTNode* SubNodeInstance = Cast<UBTNode>(SubBTNode->NodeInstance);
-			if (SubNodeInstance)
+			if (IsValid(SubNodeInstance))
 			{
 				FString SubClassName = SubNodeInstance->GetClass()->GetName();
 				FString SubTypeLabel;
@@ -834,7 +835,7 @@ FString ClaireonBehaviorTreeHelpers::FormatBTGraphStructure(UBehaviorTreeGraph* 
 		if (bFullDetail)
 		{
 			UBTNode* NodeInst = Cast<UBTNode>(GraphNode->NodeInstance);
-			if (NodeInst)
+			if (IsValid(NodeInst))
 			{
 				Output += FormatNodeProperties(NodeInst, ChildIndent + TEXT("  "));
 			}
@@ -851,7 +852,7 @@ FString ClaireonBehaviorTreeHelpers::FormatBTGraphStructure(UBehaviorTreeGraph* 
 					if (LinkedPin)
 					{
 						UBehaviorTreeGraphNode* ChildNode = Cast<UBehaviorTreeGraphNode>(LinkedPin->GetOwningNode());
-						if (ChildNode)
+						if (IsValid(ChildNode))
 						{
 							Children.Add(ChildNode);
 						}
@@ -879,7 +880,7 @@ FString ClaireonBehaviorTreeHelpers::FormatBTGraphStructure(UBehaviorTreeGraph* 
 				if (LinkedPin)
 				{
 					UBehaviorTreeGraphNode* ChildNode = Cast<UBehaviorTreeGraphNode>(LinkedPin->GetOwningNode());
-					if (ChildNode)
+					if (IsValid(ChildNode))
 					{
 						RootChildren.Add(ChildNode);
 					}
@@ -908,14 +909,14 @@ UEnvQuery* ClaireonBehaviorTreeHelpers::LoadEQSAsset(const FString& AssetPath, F
 
 	FSoftObjectPath SoftPath(ResolvedPath);
 	UObject* LoadedObj = SoftPath.TryLoad();
-	if (!LoadedObj)
+	if (!IsValid(LoadedObj))
 	{
 		OutError = FString::Printf(TEXT("Failed to load asset at path: %s"), *ResolvedPath);
 		return nullptr;
 	}
 
 	UEnvQuery* Query = Cast<UEnvQuery>(LoadedObj);
-	if (!Query)
+	if (!IsValid(Query))
 	{
 		OutError = FString::Printf(TEXT("Asset at %s is not an EQS Query (actual type: %s)"), *ResolvedPath, *LoadedObj->GetClass()->GetName());
 		return nullptr;
@@ -926,7 +927,7 @@ UEnvQuery* ClaireonBehaviorTreeHelpers::LoadEQSAsset(const FString& AssetPath, F
 
 FString ClaireonBehaviorTreeHelpers::FormatEQSStructure(const UEnvQuery* Query, bool bFullDetail)
 {
-	if (!Query)
+	if (!IsValid(Query))
 	{
 		return TEXT("(null EQS query)");
 	}
@@ -939,7 +940,7 @@ FString ClaireonBehaviorTreeHelpers::FormatEQSStructure(const UEnvQuery* Query, 
 	for (int32 OptIdx = 0; OptIdx < Query->GetOptions().Num(); ++OptIdx)
 	{
 		UEnvQueryOption* Option = Query->GetOptions()[OptIdx];
-		if (!Option)
+		if (!IsValid(Option))
 		{
 			continue;
 		}
@@ -947,7 +948,7 @@ FString ClaireonBehaviorTreeHelpers::FormatEQSStructure(const UEnvQuery* Query, 
 		Output += FString::Printf(TEXT("--- Option %d ---\n"), OptIdx);
 
 		UEnvQueryGenerator* Generator = Option->Generator;
-		if (Generator)
+		if (IsValid(Generator))
 		{
 			Output += FString::Printf(TEXT("  [Generator] %s\n"), *Generator->GetClass()->GetName());
 			if (bFullDetail)
@@ -978,7 +979,7 @@ FString ClaireonBehaviorTreeHelpers::FormatEQSStructure(const UEnvQuery* Query, 
 		for (int32 TestIdx = 0; TestIdx < Option->Tests.Num(); ++TestIdx)
 		{
 			UEnvQueryTest* Test = Option->Tests[TestIdx];
-			if (!Test)
+			if (!IsValid(Test))
 			{
 				continue;
 			}

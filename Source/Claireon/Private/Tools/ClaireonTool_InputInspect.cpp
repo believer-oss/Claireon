@@ -12,9 +12,10 @@ FString ClaireonTool_InputInspect::GetOperation() const { return TEXT("inspect")
 
 FString ClaireonTool_InputInspect::GetDescription() const
 {
-	return TEXT("Read the structure of an Enhanced Input asset (Input Action or Input Mapping Context). "
-				"Auto-detects the asset type from the path. Shows value type, triggers, modifiers, "
-				"and key mappings.");
+	return TEXT("Read the structure of an Enhanced Input asset (Input Action or Input Mapping Context), "
+				"auto-detecting the asset type from asset_path. Reports value type, triggers, modifiers, and "
+				"key mappings, with detail_level controlling verbosity. Stateless / read-only / non-session: "
+				"never mutates the asset and requires no open session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_InputInspect::GetInputSchema() const
@@ -67,7 +68,7 @@ IClaireonTool::FToolResult ClaireonTool_InputInspect::Execute(const TSharedPtr<F
 
 	FString LoadError;
 	UObject* Asset = ClaireonEnhancedInputHelpers::LoadInputAsset(AssetPath, LoadError);
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -75,12 +76,12 @@ IClaireonTool::FToolResult ClaireonTool_InputInspect::Execute(const TSharedPtr<F
 	FString AssetType;
 	FString FormattedOutput;
 
-	if (UInputAction* IA = Cast<UInputAction>(Asset))
+	if (UInputAction* IA = Cast<UInputAction>(Asset); IsValid(IA))
 	{
 		AssetType = TEXT("input_action");
 		FormattedOutput = ClaireonEnhancedInputHelpers::FormatInputAction(IA, bSummaryOnly);
 	}
-	else if (UInputMappingContext* IMC = Cast<UInputMappingContext>(Asset))
+	else if (UInputMappingContext* IMC = Cast<UInputMappingContext>(Asset); IsValid(IMC))
 	{
 		AssetType = TEXT("mapping_context");
 		FormattedOutput = ClaireonEnhancedInputHelpers::FormatMappingContext(IMC, bSummaryOnly);

@@ -76,7 +76,7 @@ FToolResult ClaireonNiagaraTool_Compile::Execute(const TSharedPtr<FJsonObject>& 
 
 		auto CheckScript = [&](UNiagaraScript* Script, const FString& ScriptLabel)
 		{
-			if (!Script)
+			if (!IsValid(Script))
 			{
 				return;
 			}

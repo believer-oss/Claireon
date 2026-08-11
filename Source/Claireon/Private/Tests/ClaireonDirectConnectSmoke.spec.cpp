@@ -7,23 +7,42 @@
 // direct-connect / no-proxy path) serves /mcp correctly:
 //   1. initialize JSON-RPC POST returns HTTP 200 with a non-empty
 //      result.serverInfo.name.
-//   2. tools/list JSON-RPC POST returns the registered tools, including
-//      the test-registered claireon_search and claireon_execute stubs that
-//      mirror the Code Mode pair.
-//   3. The bound port is released after Stop() (verified by re-binding
-//      the same port).
+//   2. tools/list JSON-RPC POST returns the MCP-visible pair, using
+//      test-registered tool_search / python_execute stubs (the only two names
+//      FClaireonServer::MCPVisibleTools advertises).
+//   3. The same port can be re-bound after Stop() (see the note in
+//      SmokeStopThenRestartSamePort about what that does and does not prove).
 //
 // The fixture is intentionally lightweight: it does NOT depend on the
 // editor module's full tool catalogue. Two stub IClaireonTool subclasses
-// stand in for search / python_execute so the assertions
+// stand in for tool_search / python_execute so the assertions
 // have a deterministic surface regardless of what the live module
 // registered. This spec doubles as a regression guard: every later
 // stage in the multi-worktree-proxy workflow modifies FClaireonServer
 // or FClaireonProxyClient; if any stage breaks the no-proxy path, this
 // spec is the first thing that fires.
 //
-// Category: Claireon.DirectConnect.Smoke.* (run via
-// `Scripts\Testing\Invoke-UntestTests.ps1 -TestFilter "Claireon.DirectConnect.Smoke."`).
+// Category: Claireon.DirectConnect.Smoke.* (run with the automation test
+// filter "Claireon.DirectConnect.Smoke.").
+//
+// TWO FLAKE ROOT CAUSES WERE FIXED HERE (2026-07-29). Read these before
+// "simplifying" the helpers back:
+//   1. Server readiness is not a sleep -- it is an engine tick. UE's HTTP
+//      server accepts sockets and dispatches routes only from
+//      FHttpServerModule::Tick (a core-ticker object). The old helper
+//      busy-waited in the test body and ticked only the CLIENT FHttpManager,
+//      so the listener never ran and every /mcp POST died on the client
+//      timeout. The specs now co_await Squid::WaitUntil, which hands control
+//      back to the Untest runner so the commandlet's engine tick advances the
+//      server between polls.
+//   2. Ports must be acquired with StartEphemeral, not Start(random). Windows
+//      hosts running Hyper-V / WSL / Docker reserve contiguous 100-port blocks
+//      inside the ephemeral range. Start() used to retry only the next 10
+//      CONSECUTIVE ports and therefore could not escape such a block, producing
+//      "Failed to bind any port in range NNNNN-NNNNN" for whichever spec drew
+//      a poisoned candidate that run. Start() now strides like StartEphemeral,
+//      but StartEphemeral remains the right entrypoint here: it is the path the
+//      editor actually takes.
 
 #if WITH_UNTESTED
 
@@ -37,18 +56,17 @@
 #include "Dom/JsonValue.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformTime.h"
-#include "HttpManager.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
-#include "Math/RandomStream.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "SquidTasks/Task.h"
 
-namespace
+namespace ClaireonDirectConnectSmoke_spec_Private1
 {
 	// File-local prefix on every helper to avoid collisions under unity
 	// batching (anon-namespace helpers can otherwise alias on Linux clang).
@@ -96,41 +114,59 @@ namespace
 		FString ToolDescription;
 	};
 
+	/** Seconds a single /mcp round trip is allowed to take. */
+	constexpr double DirectConnectSmoke_RequestTimeoutSeconds = 10.0;
+
 	/**
-	 * Pick a candidate ephemeral port. The platform's IHttpRouter does not
-	 * expose a true bind(0) primitive, so we approximate it: choose a high
-	 * port from the IANA dynamic range (49152-65000) seeded from the
-	 * current cycle counter, then let FClaireonServer::Start auto-increment
-	 * on collision (it retries up to 10 times). Collision probability is
-	 * ~0 in practice because the test harness runs a single fixture at a
-	 * time.
+	 * Bring a server up on some bindable ephemeral port and report it.
+	 *
+	 * ROOT CAUSE this guards (do not simplify back to a single Start(random)):
+	 * FClaireonServer::Start() is the legacy entrypoint. It USED to retry only
+	 * the next 10 CONSECUTIVE ports on a bind failure. Windows boxes running
+	 * Hyper-V / WSL / Docker reserve whole contiguous blocks of the ephemeral
+	 * range (see `netsh interface ipv4 show excludedportrange protocol=tcp`;
+	 * on this hardware the blocks are 100 ports wide, e.g. 50160-50259 and
+	 * 50263-50362). A randomly chosen candidate that lands inside such a block
+	 * can never escape it with a +1 walk, so Start() returned false and the
+	 * spec failed with "Failed to bind any port in range 50173-50182". Which
+	 * member of the spec drew a poisoned port varied run to run, which is why
+	 * the failures looked random. Start() now strides by 1009 like
+	 * StartEphemeral, so that specific failure mode is fixed at the source --
+	 * but this helper still belongs on StartEphemeral, see below.
+	 *
+	 * FClaireonServer::StartEphemeral() is the production entrypoint (it is
+	 * what FClaireonModule falls back to) and it walks the ephemeral range
+	 * with a 1009-port stride for 32 attempts, so it steps straight over a
+	 * reserved block. Using it here both removes the flake and makes the spec
+	 * exercise the path the editor actually takes.
 	 */
-	uint32 DirectConnectSmoke_PickEphemeralPort()
+	uint32 DirectConnectSmoke_StartOnBindablePort(FClaireonServer& Server)
 	{
-		FRandomStream Stream(static_cast<int32>(FPlatformTime::Cycles()));
-		const uint32 Min = 49152u;
-		const uint32 Max = 65000u;
-		return Min + (Stream.GetUnsignedInt() % (Max - Min));
+		return static_cast<uint32>(Server.StartEphemeral());
 	}
 
 	/**
-	 * Single-shot synchronous HTTP POST against http://127.0.0.1:Port/mcp.
-	 * Drives the FHttpManager tick loop until the request completes or the
-	 * deadline elapses. Returns true with OutStatus / OutBody populated on
-	 * success; false otherwise. This MUST live outside any UNTEST_*
-	 * assertion lambda -- UNTEST macros expand to co_return and cannot be
-	 * used inside non-coroutine callables.
+	 * Kick off a JSON-RPC POST against http://127.0.0.1:Port/mcp and hand back
+	 * the in-flight request. Returns an invalid ptr if ProcessRequest failed.
+	 *
+	 * ROOT CAUSE this split guards (do not fold it back into a blocking
+	 * helper): UE's HTTP *server* accepts connections and dispatches route
+	 * handlers only from FHttpServerModule::Tick, which runs off the core
+	 * ticker as part of the engine tick. The previous version of this helper
+	 * busy-waited inside the test body and ticked only FHttpManager (the
+	 * CLIENT side), so the engine never ticked while the request was in
+	 * flight, the listener never accepted the socket, and the request always
+	 * died on the client timeout ("HTTP request timed out after 5.00 seconds
+	 * URL=http://127.0.0.1:<port>/mcp", immediately followed after the test by
+	 * the server finally waking up and failing to write to the abandoned
+	 * socket: "WriteBytes sent -1/92 bytes"). The caller must instead
+	 * co_await Squid::WaitUntil(...) so the Untest runner returns control to
+	 * the commandlet's engine tick between polls.
 	 */
-	bool DirectConnectSmoke_PostJsonRpc(
+	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> DirectConnectSmoke_BeginPostJsonRpc(
 		uint32 Port,
-		const FString& Body,
-		double TimeoutSeconds,
-		int32& OutStatus,
-		FString& OutBody)
+		const FString& Body)
 	{
-		OutStatus = 0;
-		OutBody.Reset();
-
 		const FString Url = FString::Printf(TEXT("http://127.0.0.1:%u/mcp"), Port);
 
 		TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request =
@@ -139,27 +175,46 @@ namespace
 		Request->SetVerb(TEXT("POST"));
 		Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
 		Request->SetHeader(TEXT("Accept"), TEXT("application/json"));
-		Request->SetTimeout(static_cast<float>(TimeoutSeconds));
+		Request->SetTimeout(static_cast<float>(DirectConnectSmoke_RequestTimeoutSeconds));
 		Request->SetContentAsString(Body);
 
 		if (!Request->ProcessRequest())
 		{
+			return nullptr;
+		}
+		return Request;
+	}
+
+	/** True once the request has left the Processing/NotStarted states. */
+	bool DirectConnectSmoke_IsRequestSettled(
+		const TSharedPtr<IHttpRequest, ESPMode::ThreadSafe>& Request)
+	{
+		if (!Request.IsValid())
+		{
+			return true;
+		}
+		const EHttpRequestStatus::Type Status = Request->GetStatus();
+		return Status != EHttpRequestStatus::Processing
+			&& Status != EHttpRequestStatus::NotStarted;
+	}
+
+	/**
+	 * Harvest a settled request. Returns true with OutStatus / OutBody
+	 * populated when a response arrived. Kept out of any UNTEST_* lambda --
+	 * UNTEST macros expand to co_return and cannot be used inside
+	 * non-coroutine callables.
+	 */
+	bool DirectConnectSmoke_FinishPostJsonRpc(
+		const TSharedPtr<IHttpRequest, ESPMode::ThreadSafe>& Request,
+		int32& OutStatus,
+		FString& OutBody)
+	{
+		OutStatus = 0;
+		OutBody.Reset();
+		if (!Request.IsValid())
+		{
 			return false;
 		}
-
-		const double Deadline = FPlatformTime::Seconds() + TimeoutSeconds;
-		while (FPlatformTime::Seconds() < Deadline)
-		{
-			const EHttpRequestStatus::Type Status = Request->GetStatus();
-			if (Status != EHttpRequestStatus::Processing
-				&& Status != EHttpRequestStatus::NotStarted)
-			{
-				break;
-			}
-			FHttpModule::Get().GetHttpManager().Tick(0.0f);
-			FPlatformProcess::Sleep(0.005f);
-		}
-
 		FHttpResponsePtr Response = Request->GetResponse();
 		if (!Response.IsValid())
 		{
@@ -223,31 +278,46 @@ namespace
 		return Out;
 	}
 } // namespace
+using namespace ClaireonDirectConnectSmoke_spec_Private1;
 
 // ---------------------------------------------------------------------------
 // Initialize handshake: HTTP 200 + non-empty serverInfo.name.
 // ---------------------------------------------------------------------------
 
-UNTEST_UNIT_OPTS(Claireon, DirectConnect, SmokeInitialize, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, DirectConnect, SmokeInitialize, UNTEST_TIMEOUTMS(30000))
 {
 	auto Server = MakeShared<FClaireonServer>();
 	// Empty token = direct-connect / no-proxy path. The server logs a
 	// Warning on Start and accepts unauthenticated /mcp traffic.
 	Server->SetSessionToken(FString());
 
-	const uint32 Candidate = DirectConnectSmoke_PickEphemeralPort();
-	const bool bStarted = Server->Start(Candidate);
-	UNTEST_ASSERT_TRUE(bStarted);
+	const uint32 StartedPort = DirectConnectSmoke_StartOnBindablePort(*Server);
+	UNTEST_ASSERT_TRUE(StartedPort > 0);
 	UNTEST_ASSERT_TRUE(Server->IsRunning());
 
 	const uint32 BoundPort = Server->GetPort();
+	UNTEST_ASSERT_EQ(BoundPort, StartedPort);
 	UNTEST_ASSERT_TRUE(BoundPort > 0);
 
 	const FString Body = DirectConnectSmoke_BuildInitializeBody();
+	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> Request =
+		DirectConnectSmoke_BeginPostJsonRpc(BoundPort, Body);
+	UNTEST_ASSERT_VALID(Request);
+
+	// Yield to the engine tick between polls. The HTTP server only services
+	// sockets from FHttpServerModule::Tick, so a busy-wait here starves it and
+	// the request can never be answered (see the helper's comment).
+	const double Deadline =
+		FPlatformTime::Seconds() + DirectConnectSmoke_RequestTimeoutSeconds;
+	co_await Squid::WaitUntil([Request, Deadline]()
+	{
+		return DirectConnectSmoke_IsRequestSettled(Request)
+			|| FPlatformTime::Seconds() >= Deadline;
+	});
+
 	int32 Status = 0;
 	FString ResponseBody;
-	const bool bOk = DirectConnectSmoke_PostJsonRpc(
-		BoundPort, Body, /*TimeoutSeconds=*/ 5.0, Status, ResponseBody);
+	const bool bOk = DirectConnectSmoke_FinishPostJsonRpc(Request, Status, ResponseBody);
 	UNTEST_ASSERT_TRUE(bOk);
 	UNTEST_ASSERT_EQ(Status, 200);
 
@@ -275,31 +345,51 @@ UNTEST_UNIT_OPTS(Claireon, DirectConnect, SmokeInitialize, UNTEST_TIMEOUTMS(1500
 // tools/list returns the Code Mode pair (claireon_search + claireon_execute).
 // ---------------------------------------------------------------------------
 
-UNTEST_UNIT_OPTS(Claireon, DirectConnect, SmokeToolsList, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, DirectConnect, SmokeToolsList, UNTEST_TIMEOUTMS(30000))
 {
 	auto Server = MakeShared<FClaireonServer>();
 	Server->SetSessionToken(FString());
 
 	// Register the Code Mode pair stubs so tools/list has a deterministic
 	// surface independent of any module-level tool collection.
+	//
+	// The names MUST be exactly tool_search / python_execute. FClaireonServer's
+	// MCPVisibleTools allow-list advertises only those two names in tools/list;
+	// anything else is reachable only through python_execute. This spec used to
+	// register claireon_search / claireon_execute and assert they appeared,
+	// which could never have held -- the stale names went unnoticed because the
+	// request never completed (see readiness root cause at the top of the file),
+	// so the loop below always ran over an empty array on a failed assert.
 	Server->RegisterTool(MakeShared<FDirectConnectSmoke_StubTool>(
-		TEXT("claireon_search"),
+		TEXT("tool_search"),
 		TEXT("Search Claireon's editor tool catalogue (smoke stub).")));
 	Server->RegisterTool(MakeShared<FDirectConnectSmoke_StubTool>(
-		TEXT("claireon_execute"),
+		TEXT("python_execute"),
 		TEXT("Execute Python inside the editor (smoke stub).")));
 
-	const uint32 Candidate = DirectConnectSmoke_PickEphemeralPort();
-	const bool bStarted = Server->Start(Candidate);
-	UNTEST_ASSERT_TRUE(bStarted);
+	const uint32 StartedPort = DirectConnectSmoke_StartOnBindablePort(*Server);
+	UNTEST_ASSERT_TRUE(StartedPort > 0);
 
 	const uint32 BoundPort = Server->GetPort();
 
 	const FString Body = DirectConnectSmoke_BuildToolsListBody();
+	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> Request =
+		DirectConnectSmoke_BeginPostJsonRpc(BoundPort, Body);
+	UNTEST_ASSERT_VALID(Request);
+
+	// Same readiness contract as SmokeInitialize: the engine must tick while
+	// the request is in flight or the HTTP server never accepts the socket.
+	const double Deadline =
+		FPlatformTime::Seconds() + DirectConnectSmoke_RequestTimeoutSeconds;
+	co_await Squid::WaitUntil([Request, Deadline]()
+	{
+		return DirectConnectSmoke_IsRequestSettled(Request)
+			|| FPlatformTime::Seconds() >= Deadline;
+	});
+
 	int32 Status = 0;
 	FString ResponseBody;
-	const bool bOk = DirectConnectSmoke_PostJsonRpc(
-		BoundPort, Body, /*TimeoutSeconds=*/ 5.0, Status, ResponseBody);
+	const bool bOk = DirectConnectSmoke_FinishPostJsonRpc(Request, Status, ResponseBody);
 	UNTEST_ASSERT_TRUE(bOk);
 	UNTEST_ASSERT_EQ(Status, 200);
 
@@ -328,11 +418,11 @@ UNTEST_UNIT_OPTS(Claireon, DirectConnect, SmokeToolsList, UNTEST_TIMEOUTMS(15000
 		{
 			continue;
 		}
-		if (ToolName == TEXT("claireon_search"))
+		if (ToolName == TEXT("tool_search"))
 		{
 			bSawSearch = true;
 		}
-		else if (ToolName == TEXT("claireon_execute"))
+		else if (ToolName == TEXT("python_execute"))
 		{
 			bSawExecute = true;
 		}
@@ -345,24 +435,45 @@ UNTEST_UNIT_OPTS(Claireon, DirectConnect, SmokeToolsList, UNTEST_TIMEOUTMS(15000
 }
 
 // ---------------------------------------------------------------------------
-// Stop releases the bound port: a fresh server can rebind it without the
-// auto-increment retry kicking in. This guards against route-handle leaks
-// that would silently steal ports from later test runs.
+// Stop() lets a FRESH FClaireonServer instance reuse the same port number,
+// in-process, without the auto-increment retry kicking in. This guards
+// against route-handle leaks that would silently steal ports from later
+// test runs or from a later Start() in the same process.
+//
+// NOT a port-release test. Investigated for the C2 hardening item: Stop()
+// unbinds routes only. FHttpServerModule owns one process-wide listener per
+// port and keeps it alive (still bound, still listening at the OS level) for
+// the life of the process; there is no per-port stop/destroy API reachable
+// from plugin code, only a process-wide StopAllListeners() that would also
+// take down every other consumer of the shared module in this editor process
+// (FSRemoteStatusSubsystem, FriendshipperHttpRouter, FSAssetImporter,
+// PragmaActiveDebugServer all bind their own ports on the same singleton --
+// see the note on FClaireonServer::Stop()'s implementation). So what
+// Second->Start(BoundFirst) below actually exercises is "the still-listening
+// FHttpListener for this port is found again via GetHttpRouter() and handed
+// fresh routes" -- never a release-and-reacquire of the OS socket, which
+// never happens until the process exits.
 // ---------------------------------------------------------------------------
 
-UNTEST_UNIT_OPTS(Claireon, DirectConnect, SmokePortReleased, UNTEST_TIMEOUTMS(10000))
+UNTEST_UNIT_OPTS(Claireon, DirectConnect, SmokeStopThenRestartSamePort, UNTEST_TIMEOUTMS(10000))
 {
-	const uint32 Candidate = DirectConnectSmoke_PickEphemeralPort();
-
 	auto First = MakeShared<FClaireonServer>();
 	First->SetSessionToken(FString());
-	UNTEST_ASSERT_TRUE(First->Start(Candidate));
+	// StartEphemeral, not Start(random): StartEphemeral is the production
+	// entrypoint, and it sweeps the ephemeral range instead of anchoring on a
+	// single caller-chosen candidate.
+	UNTEST_ASSERT_TRUE(DirectConnectSmoke_StartOnBindablePort(*First) > 0);
 	const uint32 BoundFirst = First->GetPort();
 	First->Stop();
 	UNTEST_ASSERT_FALSE(First->IsRunning());
 
 	auto Second = MakeShared<FClaireonServer>();
 	Second->SetSessionToken(FString());
+	// Deliberately Start(BoundFirst), not StartEphemeral: the point is that the
+	// exact same port comes back. Start()'s first attempt is always exactly the
+	// requested port, and BoundFirst is already proven bindable, so there is no
+	// reserved-block flake here; if the rebind slipped to another port (which
+	// only happens if attempt 0 failed) the GetPort() assertion below catches it.
 	UNTEST_ASSERT_TRUE(Second->Start(BoundFirst));
 	UNTEST_ASSERT_EQ(Second->GetPort(), BoundFirst);
 	Second->Stop();
@@ -373,7 +484,7 @@ UNTEST_UNIT_OPTS(Claireon, DirectConnect, SmokePortReleased, UNTEST_TIMEOUTMS(10
 // WritePortFile schema: JSON contains publicPort, mode, and preserves port/pid.
 // ---------------------------------------------------------------------------
 
-namespace
+namespace ClaireonDirectConnectSmoke_spec_Private2
 {
 	/**
 	 * Read and parse the Claireon port file. Returns nullptr if the file does
@@ -412,6 +523,7 @@ namespace
 		}
 	}
 } // namespace
+using namespace ClaireonDirectConnectSmoke_spec_Private2;
 
 // ---------------------------------------------------------------------------
 // WritePortFile direct mode: JSON has port/pid preserved, publicPort == port,
@@ -420,12 +532,20 @@ namespace
 
 UNTEST_UNIT_OPTS(Claireon, DirectConnect, WritePortFileDirect, UNTEST_TIMEOUTMS(5000))
 {
+	// RESIDUAL RISK (not a defect in this spec): Saved/Claireon/MCPServer.json is
+	// a per-project, cross-process singleton. If a real editor with a live
+	// Claireon server is running against this same project directory while the
+	// test commandlet executes, it can rewrite the file between WritePortFile and
+	// the read below and the port/pid assertions will legitimately disagree.
+	// Run the suite without a co-resident editor on the same project dir.
 	DirectConnectSmoke_DeletePortFile();
 
 	auto Server = MakeShared<FClaireonServer>();
 	Server->SetSessionToken(FString());
-	const uint32 Candidate = DirectConnectSmoke_PickEphemeralPort();
-	UNTEST_ASSERT_TRUE(Server->Start(Candidate));
+	// StartEphemeral, not Start(random): a random candidate used to land inside a
+	// Windows-reserved 100-port block that Start()'s old +1 retry could not
+	// escape, which is what made this test fail intermittently.
+	UNTEST_ASSERT_TRUE(DirectConnectSmoke_StartOnBindablePort(*Server) > 0);
 	const uint16 BoundPort = static_cast<uint16>(Server->GetPort());
 
 	Server->WritePortFile(BoundPort, /*bProxyAttached=*/false);

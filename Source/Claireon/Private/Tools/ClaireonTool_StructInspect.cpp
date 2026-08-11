@@ -14,11 +14,11 @@ FString ClaireonTool_StructInspect::GetOperation() const { return TEXT("inspect"
 
 FString ClaireonTool_StructInspect::GetDescription() const
 {
-	return TEXT("Inspect a USTRUCT's complete field schema. Accepts native paths "
+	return TEXT("Inspect a USTRUCT's complete field schema. struct_path accepts native paths "
 		"(/Script/ModuleName.FStructName) and Blueprint user-defined struct asset paths "
-		"(/Game/Path/To/Asset.AssetName — also accepts bare /Game/Path/To/Asset). "
-		"Returns fields with name, friendly_name, cpp_type, kind, flags, metadata, and optional default_value. "
-		"Use this to diff struct shapes before data migrations.");
+		"(/Game/Path/To/Asset.AssetName, or bare /Game/Path/To/Asset). Returns fields with name, "
+		"friendly_name, cpp_type, kind, flags, optional metadata and default_value. "
+		"Stateless / read-only / non-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_StructInspect::GetInputSchema() const
@@ -46,7 +46,7 @@ FToolResult ClaireonTool_StructInspect::Execute(const TSharedPtr<FJsonObject>& A
 
 	FString Error;
 	UScriptStruct* Struct = ClaireonStructReflection::ResolveStructPath(StructPath, Error);
-	if (!Struct)
+	if (!IsValid(Struct))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -55,7 +55,7 @@ FToolResult ClaireonTool_StructInspect::Execute(const TSharedPtr<FJsonObject>& A
 		Struct, bIncludeDefaults, bIncludeMetadata);
 
 	// Identify BP user-defined structs by class name (avoids header dep, see ClaireonStructReflection.cpp)
-	const bool bIsBP = Struct->GetClass() && Struct->GetClass()->GetName() == TEXT("UserDefinedStruct");
+	const bool bIsBP = IsValid(Struct->GetClass()) && Struct->GetClass()->GetName() == TEXT("UserDefinedStruct");
 	const FString Summary = FString::Printf(
 		TEXT("struct_inspect: %s (%s) — %d field(s)"),
 		*Struct->GetName(),

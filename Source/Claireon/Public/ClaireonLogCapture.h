@@ -8,14 +8,15 @@
 
 /**
  * RAII guard: attaches to GLog on construction, detaches on destruction.
- * Captures Error and Warning messages emitted during its lifetime.
+ * Captures every message emitted during its lifetime whose verbosity is at
+ * least as severe as InMinVerbosity (default Warning). Pass
+ * ELogVerbosity::Log to also capture Display and Log lines -- most console
+ * commands (`stat dumpframe`, `obj list`) report at those levels, so a
+ * Warning floor captures nothing from them.
  *
  * Threading contract:
  * - The critical section (CaptureCS) guards ONLY the mutable message buffer
  *   (CapturedMessages, TotalTextBytes, bCapExceeded).
- * - ExcludedCategoriesSnapshot is const and lock-free post-construction;
- *   safety relies on the release fence provided by GLog->AddOutputDevice
- *   at the end of the constructor.
  * - MinVerbosity is read-only after construction and is intentionally not
  *   under the lock.
  */
@@ -33,7 +34,16 @@ public:
 
 	virtual void Serialize(const TCHAR* V, ELogVerbosity::Type Verbosity, const FName& Category) override;
 
-	/** Returns captured messages formatted as "[Error] Category: text" or "[Warning] Category: text", one per line. */
+	/** Registers as an UNBUFFERED device: GLog calls Serialize synchronously on the
+	 *  emitting thread instead of routing through the async primary-log-thread queue.
+	 *  Serialize is CaptureCS-guarded, so concurrent calls are safe, and synchronous
+	 *  delivery makes GetCapturedOutput() complete for callers that read immediately
+	 *  after the scope of interest (tool execution, tests). As a buffered device the
+	 *  read raced asynchronous delivery and could miss lines still in the queue. */
+	virtual bool CanBeUsedOnMultipleThreads() const override { return true; }
+
+	/** Returns captured messages formatted as "[Verbosity] Category: text", one per line
+	 *  (e.g. "[Error] LogClaireon: ...", "[Log] LogTemp: ..."). */
 	FString GetCapturedOutput() const;
 
 	/** Returns true if any Error-level messages were captured. */
@@ -63,10 +73,4 @@ private:
 	bool bCapExceeded = false;
 	// Guards ONLY the mutable message buffer (CapturedMessages, TotalTextBytes, bCapExceeded).
 	mutable FCriticalSection CaptureCS;
-
-	// Snapshot of the user denylist at construction time. Captured here so
-	// that off-thread log emissions (AnimBP compile, async loading, etc.) can
-	// still be filtered without touching the UObject CDO from a worker thread.
-	// const + lock-free post-construction; safety via GLog->AddOutputDevice release fence.
-	const TSet<FName> ExcludedCategoriesSnapshot;
 };

@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 #if WITH_UNTESTED
 
@@ -365,6 +365,60 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, PathCanonTrailingSlash, UNTEST_TIMEOU
 	UNTEST_EXPECT_TRUE(Second.SessionId == First.SessionId);
 
 	ClaireonSessionManagerTest::CleanupAllSessions();
+	co_return;
+}
+
+// ---------------------------------------------------------------------------
+// C5 hardening: an unsaved-world /Temp/ path canonicalizes ONLY when the caller
+// explicitly opts in via bAllowUnsavedWorldPackage, and a /Temp/ path is still
+// rejected by default -- this is not a blanket relaxation of the /Game/ rule.
+// ---------------------------------------------------------------------------
+
+UNTEST_UNIT_OPTS(Claireon, SessionManager, PathCanonTempWorldAllowedWhenFlagged, UNTEST_TIMEOUTMS(5000))
+{
+	// Bare package form, as used by ClaireonMaterialTool_ApplyToActor.cpp
+	// (World->GetOutermost()->GetName()).
+	const FString CanonBarePackage = FClaireonSessionManager::CanonicalizePath(
+		TEXT("/Temp/Untitled_1"), /*bAllowUnsavedWorldPackage=*/true);
+	UNTEST_EXPECT_TRUE(CanonBarePackage == TEXT("/Temp/Untitled_1"));
+
+	// Object-path form, as used by ClaireonFoliageTool_Open.cpp
+	// (World->PersistentLevel->GetPathName()). ULevel's outer is the UWorld (see
+	// UWorld::InitializeNewWorld: "NewObject<ULevel>(this, TEXT(\"PersistentLevel\"))"),
+	// so the real shape repeats the world's object name and crosses into it with a
+	// colon, e.g. "/Temp/Untitled_1.Untitled_1:PersistentLevel" -- exercised here rather
+	// than a simplified dot-only path so this test matches what the tool actually
+	// passes. Must canonicalize to the SAME package-prefix key as the bare form above,
+	// so the two world-locking tools contend for the same lock on the same unsaved world.
+	const FString CanonLevelObject = FClaireonSessionManager::CanonicalizePath(
+		TEXT("/Temp/Untitled_1.Untitled_1:PersistentLevel"), /*bAllowUnsavedWorldPackage=*/true);
+	UNTEST_EXPECT_TRUE(CanonLevelObject == TEXT("/Temp/Untitled_1"));
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, SessionManager, PathCanonTempRejectedWithoutFlag, UNTEST_TIMEOUTMS(5000))
+{
+	// Same /Temp/ path as above, default flag (false): must still be rejected. This is
+	// the behavior for every one of the ~40 other CanonicalizePath callers that have NOT
+	// identified their target as the world package -- the regression this guards is a
+	// blanket /Temp/ relaxation creeping in where only explicit world-package callers
+	// should get it.
+	const FString Canon = FClaireonSessionManager::CanonicalizePath(TEXT("/Temp/Untitled_1"));
+	UNTEST_EXPECT_TRUE(Canon.IsEmpty());
+
+	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
+		TEXT("/Temp/Untitled_1"), TEXT("test_edit"));
+	UNTEST_EXPECT_TRUE(OpenResult.Result == EOpenSessionResult::InvalidAssetPath);
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, SessionManager, PathCanonGameStillWorksWithFlagSet, UNTEST_TIMEOUTMS(5000))
+{
+	// The flag must not change behavior for an ordinary /Game/ path -- it only ADDS a
+	// /Temp/ allowance, it does not touch the existing /Game/ acceptance path at all.
+	const FString Canon = FClaireonSessionManager::CanonicalizePath(
+		TEXT("/Game/Test/BP_WithFlag"), /*bAllowUnsavedWorldPackage=*/true);
+	UNTEST_EXPECT_TRUE(Canon == TEXT("/Game/Test/BP_WithFlag"));
 	co_return;
 }
 

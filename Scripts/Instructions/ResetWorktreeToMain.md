@@ -37,7 +37,7 @@ Git worktrees cannot check out the same branch simultaneously. When resetting to
    ```
 3. Capture git user identifier using the utility script:
    ```powershell
-   Scripts\Utilities\Get-GitUsername.ps1
+   Plugins\Claireon\Scripts\Utilities\Get-GitUsername.ps1
    ```
    - Returns the username portion of git user.email (e.g., `jdoe` from `jdoe@example.com`)
 4. Get the worktree name from the `<repo>` directory basename
@@ -59,7 +59,7 @@ Git worktrees cannot check out the same branch simultaneously. When resetting to
 ### 3. Create Parking Branch
 
 1. Generate parking branch name in format: `llm/<git_user>/<worktree>-parking-<date>`
-   - `<git_user>`: Output from `Scripts\Utilities\Get-GitUsername.ps1` (e.g., "jdoe")
+   - `<git_user>`: Output from `Plugins\Claireon\Scripts\Utilities\Get-GitUsername.ps1` (e.g., "jdoe")
    - `<worktree>`: Current worktree directory name, lowercased
    - `<date>`: Current date in format `YYYYMMDD`
    - Example: `llm/arcmage404/worktree-3-parking-20250205`

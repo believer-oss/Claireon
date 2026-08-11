@@ -65,14 +65,14 @@ UChooserTable* LoadChooserTableAsset(const FString& AssetPath, FString& OutError
 	const FString ResolvedPath = ResolveResult.ResolvedPath.Path;
 
 	UObject* LoadedObj = FSoftObjectPath(ResolvedPath).TryLoad();
-	if (!LoadedObj)
+	if (!IsValid(LoadedObj))
 	{
 		OutError = FString::Printf(TEXT("Failed to load asset at path: %s"), *ResolvedPath);
 		return nullptr;
 	}
 
 	UChooserTable* Chooser = Cast<UChooserTable>(LoadedObj);
-	if (!Chooser)
+	if (!IsValid(Chooser))
 	{
 		OutError = FString::Printf(TEXT("Asset at %s is not a ChooserTable (actual type: %s)"),
 			*ResolvedPath, *LoadedObj->GetClass()->GetName());
@@ -84,7 +84,7 @@ UChooserTable* LoadChooserTableAsset(const FString& AssetPath, FString& OutError
 
 bool SaveChooserTable(UChooserTable* Chooser, FString& OutError)
 {
-	if (!Chooser)
+	if (!IsValid(Chooser))
 	{
 		OutError = TEXT("Chooser table is null");
 		return false;
@@ -186,7 +186,7 @@ TArray<TSharedPtr<FJsonValue>> SerializeContextData(const TArray<FInstancedStruc
 		}
 		else
 		{
-			ParamObj->SetStringField(TEXT("param_type"), ScriptStruct ? ScriptStruct->GetName() : TEXT("Unknown"));
+			ParamObj->SetStringField(TEXT("param_type"), IsValid(ScriptStruct) ? ScriptStruct->GetName() : TEXT("Unknown"));
 		}
 
 		Result.Add(MakeShared<FJsonValueObject>(ParamObj));
@@ -205,7 +205,7 @@ namespace ClaireonChooserHelpersInternal
 /** Resolve a property chain through a UStruct to find the final property type. */
 void ResolvePropertyChainType(const UStruct* StartStruct, const TArray<FName>& Chain, TSharedPtr<FJsonObject>& BindingObj)
 {
-	if (!StartStruct || Chain.IsEmpty())
+	if (!IsValid(StartStruct) || Chain.IsEmpty())
 	{
 		return;
 	}
@@ -216,7 +216,7 @@ void ResolvePropertyChainType(const UStruct* StartStruct, const TArray<FName>& C
 
 	for (int32 i = 0; i < Chain.Num(); ++i)
 	{
-		if (!CurrentStruct)
+		if (!IsValid(CurrentStruct))
 		{
 			break;
 		}
@@ -225,10 +225,10 @@ void ResolvePropertyChainType(const UStruct* StartStruct, const TArray<FName>& C
 		if (!Prop)
 		{
 			// Try as a function
-			if (const UClass* AsClass = Cast<UClass>(CurrentStruct))
+			if (const UClass* AsClass = Cast<UClass>(CurrentStruct); IsValid(AsClass))
 			{
 				UFunction* Func = AsClass->FindFunctionByName(Chain[i]);
-				if (Func)
+				if (IsValid(Func))
 				{
 					if (!ResolvedPath.IsEmpty()) ResolvedPath += TEXT(".");
 					ResolvedPath += Chain[i].ToString() + TEXT("()");
@@ -284,7 +284,7 @@ void ResolvePropertyChainType(const UStruct* StartStruct, const TArray<FName>& C
 
 		if (const FEnumProperty* EnumProp = CastField<FEnumProperty>(FinalProp))
 		{
-			if (const UEnum* Enum = EnumProp->GetEnum())
+			if (const UEnum* Enum = EnumProp->GetEnum(); IsValid(Enum))
 			{
 				BindingObj->SetStringField(TEXT("enum_type"), Enum->GetName());
 			}
@@ -332,7 +332,7 @@ TSharedPtr<FJsonObject> SerializePropertyBinding(const FInstancedStruct& ColumnS
 
 	// Access the InputValue field from the column struct
 	const UScriptStruct* ColStruct = ColumnStruct.GetScriptStruct();
-	if (ColStruct)
+	if (IsValid(ColStruct))
 	{
 		const FStructProperty* InputValueProp = CastField<FStructProperty>(ColStruct->FindPropertyByName(TEXT("InputValue")));
 		if (InputValueProp && InputValueProp->Struct == TBaseStructure<FInstancedStruct>::Get())
@@ -342,7 +342,7 @@ TSharedPtr<FJsonObject> SerializePropertyBinding(const FInstancedStruct& ColumnS
 			{
 				const UScriptStruct* ParamStruct = InputValuePtr->GetScriptStruct();
 
-				if (ParamStruct)
+				if (IsValid(ParamStruct))
 				{
 					const FProperty* BindingProp = ParamStruct->FindPropertyByName(TEXT("Binding"));
 					if (BindingProp)
@@ -384,7 +384,7 @@ TSharedPtr<FJsonObject> SerializePropertyBinding(const FInstancedStruct& ColumnS
 								BindingObj->SetStringField(TEXT("context_class"), ClassCtx->Class ? ClassCtx->Class->GetName() : TEXT("None"));
 							}
 
-							if (ContextStruct)
+							if (IsValid(ContextStruct))
 							{
 								ClaireonChooserHelpersInternal::ResolvePropertyChainType(ContextStruct, Binding->PropertyBindingChain, BindingObj);
 							}
@@ -414,7 +414,7 @@ TSharedPtr<FJsonObject> SerializeColumn(const FInstancedStruct& ColumnStruct, in
 	}
 
 	const UScriptStruct* ScriptStruct = ColumnStruct.GetScriptStruct();
-	ColObj->SetStringField(TEXT("type"), ScriptStruct ? ScriptStruct->GetName() : TEXT("Unknown"));
+	ColObj->SetStringField(TEXT("type"), IsValid(ScriptStruct) ? ScriptStruct->GetName() : TEXT("Unknown"));
 
 	const FChooserColumnBase* ColBase = ColumnStruct.GetPtr<FChooserColumnBase>();
 	if (!ColBase)
@@ -462,7 +462,7 @@ TSharedPtr<FJsonObject> SerializeColumn(const FInstancedStruct& ColumnStruct, in
 		ColObj->SetNumberField(TEXT("row_count"), EnumCol->RowValues.Num());
 #if WITH_EDITOR
 		const UEnum* Enum = EnumCol->GetEnum();
-		if (Enum)
+		if (IsValid(Enum))
 		{
 			ColObj->SetStringField(TEXT("enum_type"), Enum->GetName());
 		}
@@ -473,7 +473,7 @@ TSharedPtr<FJsonObject> SerializeColumn(const FInstancedStruct& ColumnStruct, in
 		ColObj->SetNumberField(TEXT("row_count"), MultiEnumCol->RowValues.Num());
 #if WITH_EDITOR
 		const UEnum* Enum = MultiEnumCol->GetEnum();
-		if (Enum)
+		if (IsValid(Enum))
 		{
 			ColObj->SetStringField(TEXT("enum_type"), Enum->GetName());
 			// List all enum values for reference
@@ -525,7 +525,7 @@ TSharedPtr<FJsonObject> SerializeColumn(const FInstancedStruct& ColumnStruct, in
 		ColObj->SetNumberField(TEXT("row_count"), OutEnumCol->RowValues.Num());
 #if WITH_EDITOR
 		const UEnum* Enum = OutEnumCol->GetEnum();
-		if (Enum)
+		if (IsValid(Enum))
 		{
 			ColObj->SetStringField(TEXT("enum_type"), Enum->GetName());
 		}
@@ -588,7 +588,7 @@ TSharedPtr<FJsonValue> SerializeColumnCellValue(const FInstancedStruct& ColumnSt
 			// Resolve display name from the bound UEnum so callers don't need a
 			// separate enum_inspect to humanise the row. UDEs cache "NewEnumeratorN"
 			// as ValueName; the display name is what the designer actually typed.
-			if (const UEnum* Enum = EnumCol->GetEnum())
+			if (const UEnum* Enum = EnumCol->GetEnum(); IsValid(Enum))
 			{
 				EnumObj->SetStringField(TEXT("display_name"),
 					Enum->GetDisplayNameTextByValue(Data.Value).ToString());
@@ -667,7 +667,7 @@ TSharedPtr<FJsonValue> SerializeColumnCellValue(const FInstancedStruct& ColumnSt
 				// sparse or flag enum (and skips bits past NumEnums).
 				TArray<TSharedPtr<FJsonValue>> MatchedValues;
 				TArray<TSharedPtr<FJsonValue>> MatchedEntries;
-				if (const UEnum* Enum = MultiEnumCol->GetEnum())
+				if (const UEnum* Enum = MultiEnumCol->GetEnum(); IsValid(Enum))
 				{
 					const int32 NumEntries = Enum->NumEnums() - 1; // exclude _MAX
 					for (int32 i = 0; i < NumEntries; ++i)
@@ -742,7 +742,7 @@ TSharedPtr<FJsonValue> SerializeColumnCellValue(const FInstancedStruct& ColumnSt
 			{
 				EnumObj->SetStringField(TEXT("value_name"), Data.ValueName.ToString());
 			}
-			if (const UEnum* Enum = OutEnumCol->GetEnum())
+			if (const UEnum* Enum = OutEnumCol->GetEnum(); IsValid(Enum))
 			{
 				EnumObj->SetStringField(TEXT("display_name"),
 					Enum->GetDisplayNameTextByValue(Data.Value).ToString());
@@ -774,7 +774,7 @@ TSharedPtr<FJsonObject> SerializeRowResult(const FInstancedStruct& ResultStruct)
 	}
 
 	const UScriptStruct* ScriptStruct = ResultStruct.GetScriptStruct();
-	Result->SetStringField(TEXT("struct_type"), ScriptStruct ? ScriptStruct->GetName() : TEXT("Unknown"));
+	Result->SetStringField(TEXT("struct_type"), IsValid(ScriptStruct) ? ScriptStruct->GetName() : TEXT("Unknown"));
 
 	// FAssetChooser - hard asset reference
 	if (const FAssetChooser* AssetChooser = ResultStruct.GetPtr<FAssetChooser>())
@@ -843,7 +843,7 @@ TSharedPtr<FJsonObject> SerializeRowResult(const FInstancedStruct& ResultStruct)
 	else
 	{
 		// Unknown result type - serialize generically
-		Result->SetStringField(TEXT("type"), ScriptStruct ? ScriptStruct->GetName() : TEXT("Unknown"));
+		Result->SetStringField(TEXT("type"), IsValid(ScriptStruct) ? ScriptStruct->GetName() : TEXT("Unknown"));
 		TSharedPtr<FJsonObject> Fields = SerializeInstancedStructToJson(ResultStruct);
 		Result->SetObjectField(TEXT("fields"), Fields);
 	}
@@ -895,7 +895,7 @@ TSharedPtr<FJsonValue> SerializePropertyToJsonValue(
 	if (const FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(Property))
 	{
 		UObject* Obj = ObjProp->GetObjectPropertyValue(ValuePtr);
-		return MakeShared<FJsonValueString>(Obj ? Obj->GetPathName() : TEXT("None"));
+		return MakeShared<FJsonValueString>(IsValid(Obj) ? Obj->GetPathName() : TEXT("None"));
 	}
 
 	// Struct: recurse, with FGameplayTag / FGameplayTagContainer collapsed
@@ -903,7 +903,7 @@ TSharedPtr<FJsonValue> SerializePropertyToJsonValue(
 	if (const FStructProperty* StructProp = CastField<FStructProperty>(Property))
 	{
 		const UScriptStruct* InnerStruct = StructProp->Struct;
-		if (InnerStruct)
+		if (IsValid(InnerStruct))
 		{
 			const FName StructName = InnerStruct->GetFName();
 			if (StructName == TEXT("GameplayTag"))
@@ -1001,7 +1001,7 @@ TSharedPtr<FJsonValue> SerializePropertyToJsonValue(
 	{
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 		Obj->SetNumberField(TEXT("value"), static_cast<double>(Value));
-		if (Enum)
+		if (IsValid(Enum))
 		{
 			Obj->SetStringField(TEXT("name"), Enum->GetNameStringByValue(Value));
 			Obj->SetStringField(TEXT("display_name"), Enum->GetDisplayNameTextByValue(Value).ToString());
@@ -1076,7 +1076,7 @@ TSharedPtr<FJsonObject> SerializeScriptStructToJson(
 	int32 RemainingDepth)
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	if (!ScriptStruct || !StructMemory)
+	if (!IsValid(ScriptStruct) || !StructMemory)
 	{
 		return Result;
 	}
@@ -1099,7 +1099,7 @@ TSharedPtr<FJsonObject> SerializeInstancedStructToJson(const FInstancedStruct& S
 	}
 
 	const UScriptStruct* ScriptStruct = Struct.GetScriptStruct();
-	if (!ScriptStruct)
+	if (!IsValid(ScriptStruct))
 	{
 		return Result;
 	}
@@ -1122,7 +1122,7 @@ bool EnsureBindingInvariant(FInstancedStruct& ColumnStruct, bool& bOutFixed)
 	}
 
 	const UScriptStruct* ColStructType = ColumnStruct.GetScriptStruct();
-	if (!ColStructType)
+	if (!IsValid(ColStructType))
 	{
 		return false;
 	}
@@ -1144,7 +1144,7 @@ bool EnsureBindingInvariant(FInstancedStruct& ColumnStruct, bool& bOutFixed)
 	}
 
 	const UScriptStruct* ParamStruct = InputValuePtr->GetScriptStruct();
-	if (!ParamStruct)
+	if (!IsValid(ParamStruct))
 	{
 		return false;
 	}
@@ -1295,7 +1295,7 @@ bool SetColumnCellValue(FInstancedStruct& ColumnStruct, int32 RowIndex,
 			// Resolve enum value
 #if WITH_EDITOR
 			const UEnum* Enum = EnumCol->GetEnum();
-			if (Enum)
+			if (IsValid(Enum))
 			{
 				int64 EnumValue = Enum->GetValueByNameString(ValueName);
 				if (EnumValue != INDEX_NONE)
@@ -1319,7 +1319,7 @@ bool SetColumnCellValue(FInstancedStruct& ColumnStruct, int32 RowIndex,
 #endif
 #if WITH_EDITOR
 			const UEnum* Enum = EnumCol->GetEnum();
-			if (Enum)
+			if (IsValid(Enum))
 			{
 				int64 EnumValue = Enum->GetValueByNameString(StrValue);
 				if (EnumValue != INDEX_NONE)
@@ -1480,9 +1480,24 @@ bool SetColumnCellValue(FInstancedStruct& ColumnStruct, int32 RowIndex,
 		else
 		{
 			auto ResolveResult = ClaireonPathResolver::Resolve(AssetPath);
-			Data.Value = ResolveResult.bSuccess
-				? FSoftObjectPath(ResolveResult.ResolvedPath.Path)
-				: FSoftObjectPath(AssetPath);
+			if (!ResolveResult.bSuccess)
+			{
+				// Defect note: this used to fall back to FSoftObjectPath(AssetPath)
+				// when Resolve failed. That fallback was dead code that could only
+				// store garbage, so it is deliberately gone -- do not reinstate it.
+				// Resolve does no asset-registry existence check (its only registry
+				// lookup is the _C disambiguation) and always canonicalizes, so it
+				// never fails for a well-formed /Game/ path. The only inputs that DO
+				// make it fail are empty strings, extension-only strings, and
+				// absolute filesystem paths with no Content/ segment -- none of which
+				// FSoftObjectPath can represent either. Surfacing the resolver's own
+				// error is the only honest outcome.
+				OutError = FString::Printf(
+					TEXT("Object column value '%s' could not be resolved to an asset path: %s"),
+					*AssetPath, *ResolveResult.Error);
+				return false;
+			}
+			Data.Value = FSoftObjectPath(ResolveResult.ResolvedPath.Path);
 		}
 
 		if (CompStr.Equals(TEXT("MatchNotEqual"), ESearchCase::IgnoreCase))      Data.Comparison = EObjectColumnCellValueComparison::MatchNotEqual;
@@ -1492,7 +1507,7 @@ bool SetColumnCellValue(FInstancedStruct& ColumnStruct, int32 RowIndex,
 	}
 
 	OutError = FString::Printf(TEXT("Unsupported column type for editing: %s"),
-		ColumnStruct.GetScriptStruct() ? *ColumnStruct.GetScriptStruct()->GetName() : TEXT("Unknown"));
+		IsValid(ColumnStruct.GetScriptStruct()) ? *ColumnStruct.GetScriptStruct()->GetName() : TEXT("Unknown"));
 	return false;
 }
 
@@ -1513,7 +1528,7 @@ bool MakeRowResult(const FString& ResultType, const FString& ResultValue,
 			{
 				Asset = FSoftObjectPath(ResolveResult.ResolvedPath.Path).TryLoad();
 			}
-			if (!Asset)
+			if (!IsValid(Asset))
 			{
 				OutError = FString::Printf(TEXT("Failed to load asset: %s"), *ResultValue);
 				return false;
@@ -1535,7 +1550,7 @@ bool MakeRowResult(const FString& ResultType, const FString& ResultValue,
 		if (!ResultValue.IsEmpty())
 		{
 			Chooser = LoadChooserTableAsset(ResultValue, OutError);
-			if (!Chooser)
+			if (!IsValid(Chooser))
 			{
 				return false;
 			}
@@ -1555,7 +1570,7 @@ bool MakeRowResult(const FString& ResultType, const FString& ResultValue,
 				UObject* LoadedObj = FSoftObjectPath(ResolveResult.ResolvedPath.Path).TryLoad();
 				Proxy = Cast<UProxyAsset>(LoadedObj);
 			}
-			if (!Proxy)
+			if (!IsValid(Proxy))
 			{
 				OutError = FString::Printf(TEXT("Failed to load proxy asset: %s"), *ResultValue);
 				return false;
@@ -1582,7 +1597,7 @@ bool ValidateNewAssetPath(const FString& InPath, FString& OutCanonPath, FString&
 		OutError = TEXT("Invalid asset path. Must start with /Game/.");
 		return false;
 	}
-	if (StaticFindObject(nullptr, nullptr, *OutCanonPath))
+	if (IsValid(StaticFindObject(nullptr, nullptr, *OutCanonPath)))
 	{
 		OutError = FString::Printf(TEXT("Asset already exists at '%s'"), *OutCanonPath);
 		return false;
@@ -1634,8 +1649,8 @@ bool AddContextParameter(
 	if (TypeString.Equals(TEXT("struct"), ESearchCase::IgnoreCase))
 	{
 		UScriptStruct* Struct = FindObject<UScriptStruct>(nullptr, *NameString);
-		if (!Struct) Struct = LoadObject<UScriptStruct>(nullptr, *NameString);
-		if (!Struct)
+		if (!IsValid(Struct)) Struct = LoadObject<UScriptStruct>(nullptr, *NameString);
+		if (!IsValid(Struct))
 		{
 			OutError = FString::Printf(TEXT("Could not find struct: %s"), *NameString);
 			return false;
@@ -1654,8 +1669,8 @@ bool AddContextParameter(
 	if (TypeString.Equals(TEXT("class"), ESearchCase::IgnoreCase))
 	{
 		UClass* Class = FindObject<UClass>(nullptr, *NameString);
-		if (!Class) Class = LoadObject<UClass>(nullptr, *NameString);
-		if (!Class)
+		if (!IsValid(Class)) Class = LoadObject<UClass>(nullptr, *NameString);
+		if (!IsValid(Class))
 		{
 			OutError = FString::Printf(TEXT("Could not find class: %s"), *NameString);
 			return false;

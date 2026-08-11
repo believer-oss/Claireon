@@ -51,7 +51,7 @@ FToolResult ClaireonWidgetBPTool_EditMVVMBinding::Execute(const TSharedPtr<FJson
         return Error;
     }
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
-	if (!WBP)
+	if (!IsValid(WBP))
 	{
 		return MakeErrorResult(TEXT("Widget Blueprint is no longer valid"));
 	}
@@ -69,7 +69,7 @@ FToolResult ClaireonWidgetBPTool_EditMVVMBinding::Execute(const TSharedPtr<FJson
 	}
 
 	UMVVMBlueprintView* View = ClaireonWidgetHelpers::GetOrCreateMVVMBlueprintView(WBP);
-	if (!View)
+	if (!IsValid(View))
 	{
 		return MakeErrorResult(TEXT("No MVVM Blueprint View exists"));
 	}
@@ -113,7 +113,7 @@ FToolResult ClaireonWidgetBPTool_EditMVVMBinding::Execute(const TSharedPtr<FJson
 			return MakeErrorResult(TEXT("Cannot update viewmodel_property: ViewModel context not found for this binding's source"));
 		}
 		UClass* VMClass = VMContext->GetViewModelClass();
-		if (!VMClass)
+		if (!IsValid(VMClass))
 		{
 			return MakeErrorResult(TEXT("ViewModel class is null"));
 		}
@@ -134,7 +134,7 @@ FToolResult ClaireonWidgetBPTool_EditMVVMBinding::Execute(const TSharedPtr<FJson
 	{
 		FName WidgetName = Binding->DestinationPath.GetWidgetName();
 		UWidget* Widget = ClaireonWidgetHelpers::FindWidgetByName(WBP->WidgetTree, WidgetName);
-		if (!Widget)
+		if (!IsValid(Widget))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Widget '%s' not found in the tree for property path update"), *WidgetName.ToString()));
 		}
@@ -157,7 +157,7 @@ FToolResult ClaireonWidgetBPTool_EditMVVMBinding::Execute(const TSharedPtr<FJson
 		{
 			// Clear conversion
 			UMVVMBlueprintViewConversionFunction* Existing = Binding->Conversion.GetConversionFunction(/*bSourceToDestination=*/true);
-			if (Existing)
+			if (IsValid(Existing))
 			{
 				Existing->RemoveWrapperGraph(WBP);
 			}
@@ -167,7 +167,7 @@ FToolResult ClaireonWidgetBPTool_EditMVVMBinding::Execute(const TSharedPtr<FJson
 		{
 			FString ConvError;
 			const UFunction* ConvFunc = ClaireonWidgetBPInternal::ResolveConversionFunction(WBP, ConversionFunctionStr, ConvError);
-			if (!ConvFunc)
+			if (!IsValid(ConvFunc))
 			{
 				return MakeErrorResult(FString::Printf(TEXT("Failed to resolve conversion function '%s': %s"), *ConversionFunctionStr, *ConvError));
 			}

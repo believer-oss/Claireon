@@ -114,7 +114,7 @@ FToolResult ClaireonTool_LevelSetActorProperty::Execute(const TSharedPtr<FJsonOb
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
 		AActor* Actor = *It;
-		if (!Actor)
+		if (!IsValid(Actor))
 		{
 			continue;
 		}
@@ -144,7 +144,7 @@ FToolResult ClaireonTool_LevelSetActorProperty::Execute(const TSharedPtr<FJsonOb
 		}
 	}
 
-	if (!TargetActor)
+	if (!IsValid(TargetActor))
 	{
 		return MakeErrorResult(TEXT("Actor not found"));
 	}

@@ -129,13 +129,13 @@ IClaireonTool::FToolResult ClaireonTool_DataTableFindRows::Execute(const TShared
 
 	FString LoadError;
 	UDataTable* DataTable = ClaireonDataTableHelpers::LoadDataTableAsset(AssetPath, LoadError);
-	if (!DataTable)
+	if (!IsValid(DataTable))
 	{
 		return MakeErrorResult(LoadError);
 	}
 
 	const UScriptStruct* RowStruct = DataTable->GetRowStruct();
-	if (!RowStruct)
+	if (!IsValid(RowStruct))
 	{
 		return MakeErrorResult(TEXT("DataTable has no row struct"));
 	}

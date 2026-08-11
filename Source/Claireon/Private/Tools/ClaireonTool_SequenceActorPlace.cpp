@@ -130,7 +130,7 @@ TSharedPtr<FJsonObject> ClaireonTool_SequenceActorPlace::GetInputSchema() const
 	return Schema;
 }
 
-namespace
+namespace ClaireonTool_SequenceActorPlace_Private
 {
 	// Ensure path has a .ObjectName suffix so UEditorLoadingAndSavingUtils::LoadMap
 	// and resolver canonicalization can consume it.
@@ -156,6 +156,7 @@ namespace
 		return InPath;
 	}
 } // namespace
+using namespace ClaireonTool_SequenceActorPlace_Private;
 
 FToolResult ClaireonTool_SequenceActorPlace::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
@@ -212,13 +213,13 @@ FToolResult ClaireonTool_SequenceActorPlace::Execute(const TSharedPtr<FJsonObjec
 	// --- Load Level Sequence asset -----------------------------------------------
 	ULevelSequence* Sequence = Cast<ULevelSequence>(
 		StaticLoadObject(ULevelSequence::StaticClass(), nullptr, *SequenceAssetPath));
-	if (!Sequence)
+	if (!IsValid(Sequence))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Could not load Level Sequence asset: %s"), *SequenceAssetPath));
 	}
 
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("Editor not available"));
 	}
@@ -226,14 +227,14 @@ FToolResult ClaireonTool_SequenceActorPlace::Execute(const TSharedPtr<FJsonObjec
 	// --- Ensure target map is the current editor world ----------------------------
 	UWorld* CurrentWorld = GEditor->GetEditorWorldContext().World();
 	const FString MapPackagePath = StripObjectNameSuffix(MapPath);
-	const bool bMapAlreadyOpen = CurrentWorld &&
-		CurrentWorld->GetOutermost() &&
+	const bool bMapAlreadyOpen = IsValid(CurrentWorld) &&
+		IsValid(CurrentWorld->GetOutermost()) &&
 		CurrentWorld->GetOutermost()->GetName() == MapPackagePath;
 
 	if (!bMapAlreadyOpen)
 	{
 		UWorld* LoadedWorld = UEditorLoadingAndSavingUtils::LoadMap(MapPath);
-		if (!LoadedWorld)
+		if (!IsValid(LoadedWorld))
 		{
 			return MakeErrorResult(FString::Printf(
 				TEXT("Failed to load map: %s"), *MapPath));
@@ -241,7 +242,7 @@ FToolResult ClaireonTool_SequenceActorPlace::Execute(const TSharedPtr<FJsonObjec
 		CurrentWorld = GEditor->GetEditorWorldContext().World();
 	}
 
-	if (!CurrentWorld)
+	if (!IsValid(CurrentWorld))
 	{
 		return MakeErrorResult(TEXT("No editor world available after map load"));
 	}
@@ -253,7 +254,7 @@ FToolResult ClaireonTool_SequenceActorPlace::Execute(const TSharedPtr<FJsonObjec
 
 	// --- Spawn + configure under a scoped transaction ----------------------------
 	UEditorActorSubsystem* EditorActorSubsystem = GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
-	if (!EditorActorSubsystem)
+	if (!IsValid(EditorActorSubsystem))
 	{
 		return MakeErrorResult(TEXT("UEditorActorSubsystem not available"));
 	}
@@ -265,7 +266,7 @@ FToolResult ClaireonTool_SequenceActorPlace::Execute(const TSharedPtr<FJsonObjec
 
 		SpawnedActor = EditorActorSubsystem->SpawnActorFromClass(
 			ActorClass, FVector::ZeroVector, FRotator::ZeroRotator, /*bTransient=*/false);
-		if (!SpawnedActor)
+		if (!IsValid(SpawnedActor))
 		{
 			return MakeErrorResult(FString::Printf(
 				TEXT("Failed to spawn actor of class %s"), *ActorClass->GetName()));
@@ -274,7 +275,7 @@ FToolResult ClaireonTool_SequenceActorPlace::Execute(const TSharedPtr<FJsonObjec
 		SpawnedActor->SetActorLabel(ActorLabel, /*bMarkDirty=*/true);
 
 		ALevelSequenceActor* SequenceActor = Cast<ALevelSequenceActor>(SpawnedActor);
-		if (!SequenceActor)
+		if (!IsValid(SequenceActor))
 		{
 			return MakeErrorResult(FString::Printf(
 				TEXT("Spawned actor is not a LevelSequenceActor: %s"), *SpawnedActor->GetClass()->GetName()));
@@ -355,7 +356,7 @@ FToolResult ClaireonTool_SequenceActorPlace::Execute(const TSharedPtr<FJsonObjec
 		}
 
 		// --- MarkPackageDirty (parity with place_actor) ------------------
-		if (UPackage* OuterPackage = CurrentWorld->GetOutermost())
+		if (UPackage* OuterPackage = CurrentWorld->GetOutermost(); IsValid(OuterPackage))
 		{
 			OuterPackage->MarkPackageDirty();
 		}

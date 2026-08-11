@@ -35,7 +35,7 @@
 // ProcessRequestUntilComplete() for synchronous completion inside StartServer
 // without blocking the game thread meaningfully (responses are tiny and local).
 
-namespace
+namespace ClaireonProxyClient_Private
 {
 	/** Compose http://127.0.0.1:PROXY_REG_PORT<path> */
 	FString MakeRegUrl(const TCHAR* Path)
@@ -150,6 +150,7 @@ namespace
 		return Out;
 	}
 } // namespace
+using namespace ClaireonProxyClient_Private;
 
 FClaireonProxyClient::FClaireonProxyClient()
 {
@@ -266,7 +267,7 @@ bool FClaireonProxyClient::EnsureWorktreeBound(const FString& WorktreeRoot)
 	// editor tries to bind it locally. Without this, the proxy only owns
 	// PROXY_REG_PORT (43017) and the SHA port is unowned; the editor's
 	// TryStart wins the race, takes DirectConnect mode, and a later
-	// /admin/ensure_worktree from Initialize-WorktreeMCP.ps1 lands a second
+	// /admin/ensure_worktree from an external launcher lands a second
 	// loopback bind on top of the editor's wildcard bind (Windows allows it,
 	// the proxy then forwards to itself, traffic loops to 10048/10055).
 	const FString Url = FString::Printf(

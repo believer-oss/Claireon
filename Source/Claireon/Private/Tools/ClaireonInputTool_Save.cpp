@@ -39,7 +39,7 @@ FToolResult ClaireonInputTool_Save::Execute(const TSharedPtr<FJsonObject>& Argum
 		? static_cast<UObject*>(Data->InputAction.Get())
 		: static_cast<UObject*>(Data->MappingContext.Get());
 
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		return MakeErrorResult(TEXT("Asset is no longer valid"));
 	}

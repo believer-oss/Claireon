@@ -16,10 +16,14 @@ TSharedPtr<FJsonObject> ClaireonTool_FlythroughStatus::GetInputSchema() const
 {
 	TSharedPtr<FJsonObject> Schema = MakeShared<FJsonObject>();
 	Schema->SetStringField(TEXT("type"), TEXT("object"));
+	// Parameterless, but the empty properties object is not decoration: the
+	// argument gate stays permissive for a schema with no "properties" at all,
+	// so omitting it opts this tool out of undeclared-argument rejection.
+	Schema->SetObjectField(TEXT("properties"), MakeShared<FJsonObject>());
 	return Schema;
 }
 
-namespace
+namespace ClaireonTool_FlythroughStatus_Private
 {
 	FString FlythroughStatus_StateToString(EFlythroughState InState)
 	{
@@ -36,6 +40,7 @@ namespace
 		}
 	}
 }
+using namespace ClaireonTool_FlythroughStatus_Private;
 
 IClaireonTool::FToolResult ClaireonTool_FlythroughStatus::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {

@@ -10,7 +10,7 @@ FClaireonWorldReadinessResult FClaireonWorldReadiness::Check()
 {
 	FClaireonWorldReadinessResult Result;
 
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		Result.Reason = EClaireonWorldNotReadyReason::NoEditor;
 		Result.Message = TEXT("Editor is not available.");
@@ -19,7 +19,7 @@ FClaireonWorldReadinessResult FClaireonWorldReadiness::Check()
 	}
 
 	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
+	if (!IsValid(World))
 	{
 		Result.Reason = EClaireonWorldNotReadyReason::NoWorld;
 		Result.Message = TEXT("No world loaded.");

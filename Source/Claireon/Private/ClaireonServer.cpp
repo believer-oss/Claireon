@@ -34,7 +34,39 @@
 
 #include <atomic>
 
-static constexpr uint32 MaxPortRetries = 10;
+// Start()'s bind-retry budget. Matches StartEphemeral's 32-attempt sweep: with
+// the 1009 stride below, 32 attempts cover the high-port range widely enough to
+// escape any contiguous reservation block.
+static constexpr uint32 MaxPortRetries = 32;
+
+namespace ClaireonServerInternal
+{
+	// Named file-local namespace (NOT a raw anonymous namespace): under
+	// linux-build-server-v2 unity batching, anonymous namespaces from separate
+	// .cpp merge into one TU and collide.
+
+	// 1009 is prime and larger than the 100-port blocks Windows reserves in the
+	// ephemeral range, so a single retry always leaves the block the previous
+	// candidate was inside. Same constant StartEphemeral strides by.
+	static constexpr uint32 PortRetryStride = 1009;
+
+	// Retries stay in the non-well-known range 1024..65535 and wrap inside it, so
+	// a high requested port cannot stride past 65535 and truncate to a privileged
+	// port when cast to uint16.
+	static constexpr uint32 PortRetryRangeBase = 1024;
+	static constexpr uint32 PortRetryRangeSpan = 65536 - PortRetryRangeBase;
+
+	/** Attempt 0 is the exact requested port; later attempts stride by PortRetryStride. */
+	inline uint32 RetryPortCandidate(uint32 RequestedPort, uint32 Attempt)
+	{
+		if (Attempt == 0)
+		{
+			return RequestedPort;
+		}
+		const uint32 Anchor = FMath::Max(RequestedPort, PortRetryRangeBase) - PortRetryRangeBase;
+		return PortRetryRangeBase + ((Anchor + Attempt * PortRetryStride) % PortRetryRangeSpan);
+	}
+} // namespace ClaireonServerInternal
 
 // Tools exposed directly via MCP tools/list / tools/call. The MCP surface is
 // exactly two meta-tools: tool_search and python_execute. Every other
@@ -183,101 +215,48 @@ bool FClaireonServer::Start(uint32 Port)
 		return false;
 	}
 
-	FHttpServerModule& HttpModule = FHttpServerModule::Get();
-
-	// Legacy increment-on-failure path. Prefer TryStart / StartEphemeral.
-	// Try binding to the requested port, incrementing on failure
-	TSharedPtr<IHttpRouter> Router;
-	uint32 AttemptPort = Port;
+	// Legacy retry-on-failure path. Prefer TryStart / StartEphemeral.
+	//
+	// Defect note: this used to walk AttemptPort + 1 for MaxPortRetries attempts.
+	// Windows reserves contiguous 100-port blocks in the ephemeral range
+	// (Hyper-V / WSL / Docker; on one dev host 49678-49777, 50160-50259,
+	// 50263-50362, 50463-50562 and 50945-51044 were all reserved), so a +1 walk
+	// of ten attempts can never escape a single block. Real observed failures
+	// walked 50173-50182 and 50338-50347 and gave up while still inside the same
+	// reserved block. The stride below is what StartEphemeral already uses; do
+	// not collapse it back to +1.
+	//
+	// Contract preserved: attempt 0 is always exactly the requested port, and the
+	// documented behaviour ("if binding fails, retries with incremented ports")
+	// already permits landing on a different port, so retrying at a stride does
+	// not narrow or widen what a caller may rely on. A caller that needs an
+	// exact-port-or-fail bind must use TryStart, which is single-attempt.
+	//
+	// The per-attempt work (route binding, StartAllListeners, counters,
+	// LoadMCPContent, listening/token logging) is TryStart's body verbatim; it
+	// used to be duplicated here, which is how the two retry policies drifted
+	// apart in the first place.
 	for (uint32 Attempt = 0; Attempt < MaxPortRetries; ++Attempt)
 	{
-		Router = HttpModule.GetHttpRouter(AttemptPort, /*bFailOnBindFailure=*/true);
-		if (Router.IsValid())
+		const uint32 Candidate = ClaireonServerInternal::RetryPortCandidate(Port, Attempt);
+		if (TryStart(static_cast<uint16>(Candidate)))
 		{
-			BoundPort = AttemptPort;
-			break;
+			// WritePortFile is NOT called here; callers that go through Start()
+			// must call it explicitly once EffectivePublicPort and mode are known.
+			return true;
 		}
-		UE_LOG(LogClaireon, Warning, TEXT("[MCP] Failed to bind port %u, trying %u"), AttemptPort, AttemptPort + 1);
-		++AttemptPort;
-	}
 
-	if (!Router.IsValid())
-	{
-		UE_LOG(LogClaireon, Error, TEXT("[MCP] Failed to bind any port in range %u-%u"), Port, Port + MaxPortRetries - 1);
-		return false;
-	}
-
-	// Bind POST /mcp
-	{
-		FHttpPath RoutePath(TEXT("/mcp"));
-		FHttpRequestHandler Handler = FHttpRequestHandler::CreateRaw(this, &FClaireonServer::HandlePostRequest);
-		FHttpRouteHandle Handle = Router->BindRoute(RoutePath, EHttpServerRequestVerbs::VERB_POST, Handler);
-		if (Handle)
+		if (Attempt + 1 < MaxPortRetries)
 		{
-			RouteHandles.Add(Handle);
-		}
-		else
-		{
-			UE_LOG(LogClaireon, Error, TEXT("[MCP] Failed to bind POST /mcp route"));
-			Stop();
-			return false;
+			UE_LOG(LogClaireon, Warning, TEXT("[MCP] Failed to bind port %u, trying %u"),
+				Candidate, ClaireonServerInternal::RetryPortCandidate(Port, Attempt + 1));
 		}
 	}
 
-	// Bind GET /mcp (returns 405 for now — SSE deferred)
-	{
-		FHttpPath RoutePath(TEXT("/mcp"));
-		FHttpRequestHandler Handler = FHttpRequestHandler::CreateRaw(this, &FClaireonServer::HandleGetRequest);
-		FHttpRouteHandle Handle = Router->BindRoute(RoutePath, EHttpServerRequestVerbs::VERB_GET, Handler);
-		if (Handle)
-		{
-			RouteHandles.Add(Handle);
-		}
-	}
-
-	// Bind DELETE /mcp (returns 405 for now — session termination deferred)
-	{
-		FHttpPath RoutePath(TEXT("/mcp"));
-		FHttpRequestHandler Handler = FHttpRequestHandler::CreateRaw(this, &FClaireonServer::HandleDeleteRequest);
-		FHttpRouteHandle Handle = Router->BindRoute(RoutePath, EHttpServerRequestVerbs::VERB_DELETE, Handler);
-		if (Handle)
-		{
-			RouteHandles.Add(Handle);
-		}
-	}
-
-	HttpModule.StartAllListeners();
-
-	bIsRunning = true;
-	bInitialized = false;
-	TotalRequestCount = 0;
-	ErrorCount = 0;
-	StartTime = FDateTime::Now();
-
-	LoadMCPContent();
-
-	// WritePortFile is NOT called here; callers that go through Start() instead
-	// of TryStart() must call WritePortFile explicitly once EffectivePublicPort
-	// and mode are known.
-
-	UE_LOG(LogClaireon, Display, TEXT("[MCP] Server listening on port %u"), BoundPort);
-	if (SessionToken.IsEmpty())
-	{
-		// Direct-connect path (no proxy wiring / command-line override).
-		// Log once at Warning so an operator who expected the proxy's
-		// token-gated path sees it clearly in the log.
-		UE_LOG(LogClaireon, Warning,
-			TEXT("[MCP] Session token is empty -- token gating DISABLED. ")
-			TEXT("This is the direct-connect path; expected only when ")
-			TEXT("the always-on proxy is disabled."));
-	}
-	else
-	{
-		UE_LOG(LogClaireon, Display,
-			TEXT("[MCP] Session token gating ACTIVE (length=%d chars)"), SessionToken.Len());
-	}
-
-	return true;
+	UE_LOG(LogClaireon, Error,
+		TEXT("[MCP] Failed to bind any port after %u attempts starting from %u (stride %u)"),
+		MaxPortRetries, Port, ClaireonServerInternal::PortRetryStride);
+	return false;
 }
 
 void FClaireonServer::Stop()
@@ -287,6 +266,30 @@ void FClaireonServer::Stop()
 		return;
 	}
 
+	// NOTE (investigated for the C2 hardening item; do not re-attempt without re-reading
+	// this): this unbinds routes only. It does NOT release the OS-level listening socket,
+	// and that is not a gap in THIS function -- there is no plugin-reachable way to do it.
+	//
+	// FHttpServerModule owns one process-wide TMap<Port, FHttpListener> (FHttpServerModuleImpl,
+	// private to HttpServerModule.cpp) and exposes exactly three public entry points:
+	// GetHttpRouter(Port, bFailOnBindFailure) (find-or-create, returns the IHttpRouter only, never
+	// the listener), StartAllListeners(), and StopAllListeners(). The listener that actually owns
+	// the socket (FHttpListener::StopListening -> ListenSocket.Reset()) is reachable only through
+	// StopAllListeners(), which iterates and stops EVERY listener in the process -- there is no
+	// per-port stop/destroy. Calling it here would take down every other consumer of the shared
+	// module in this same editor process, confirmed live in this codebase:
+	// FSRemoteStatusSubsystem (Source/FSRemoteStatus), FriendshipperHttpRouter
+	// (Plugins/FriendshipperSourceControl), FSAssetImporter, and PragmaActiveDebugServer
+	// (Plugins/PragmaSDK) all call FHttpServerModule::Get().StartAllListeners() and bind their own
+	// long-lived ports on the same singleton. A Claireon Stop() that calls StopAllListeners() would
+	// silently kill their listeners too, and re-enabling via StartAllListeners() on the next
+	// Claireon Start() would restart ones Claireon never owned. Unloading the whole HTTPServer
+	// module is equally out of the question for the same reason (ShutdownModule calls
+	// StopAllListeners() first).
+	//
+	// So the port genuinely stays bound at the OS level for the life of the process, by design
+	// of the shared module, not by an oversight here. See SmokeStopThenRestartSamePort in
+	// ClaireonDirectConnectSmoke.spec.cpp for what IS verified instead.
 	if (FHttpServerModule::IsAvailable())
 	{
 		TSharedPtr<IHttpRouter> Router = FHttpServerModule::Get().GetHttpRouter(BoundPort, /*bFailOnBindFailure=*/false);
@@ -393,7 +396,7 @@ void FClaireonServer::ActivateUserStop()
 	UE_LOG(LogClaireon, Warning, TEXT("[MCP] User stop activated (Ctrl+.)"));
 
 	// Start cooldown timer
-	if (GEditor)
+	if (IsValid(GEditor))
 	{
 		const float Cooldown = UClaireonSettings::Get()->UserStopCooldownSeconds;
 		GEditor->GetTimerManager()->SetTimer(UserStopCooldownHandle,
@@ -416,7 +419,7 @@ void FClaireonServer::ClearUserStop()
 	if (!bUserStopActive)
 		return;
 	bUserStopActive = false;
-	if (GEditor && UserStopCooldownHandle.IsValid())
+	if (IsValid(GEditor) && UserStopCooldownHandle.IsValid())
 	{
 		GEditor->GetTimerManager()->ClearTimer(UserStopCooldownHandle);
 	}
@@ -845,7 +848,7 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsCall(const FMCPRequestContex
 	}
 
 	// Block tools that require no PIE session
-	if ((*FoundTool)->RequiresNoPIE() && GEditor && GEditor->IsPlaySessionInProgress())
+	if ((*FoundTool)->RequiresNoPIE() && IsValid(GEditor) && GEditor->IsPlaySessionInProgress())
 	{
 		return FMCPJsonRpcResponse::MakeError(Id, -32000,
 			TEXT("This tool cannot be used while Play In Editor (PIE) is running. "
@@ -950,7 +953,36 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsCall(const FMCPRequestContex
 	if (FClaireonBridge::HasDeferredActions())
 	{
 		// Auto-save before world-transition actions (map load, PIE, etc.)
-		FClaireonAutoSave::SaveIfNeeded(/*bIsPythonExecution=*/false);
+		//
+		// P0-7: this writes every dirty world AND content package to disk with no
+		// prompt, no source-control consultation and no path filter. The return
+		// value used to be discarded here, so the only trace of a write was a log
+		// line -- which is how a throwaway actor placed by level_place_actor ended
+		// up persisted into a tracked LFS umap with a clean-looking result.
+		TArray<FString> AutoSavedPackages;
+		FClaireonAutoSave::SaveIfNeeded(/*bIsPythonExecution=*/false, &AutoSavedPackages);
+		if (AutoSavedPackages.Num() > 0)
+		{
+			TArray<TSharedPtr<FJsonValue>> SavedArray;
+			SavedArray.Reserve(AutoSavedPackages.Num());
+			for (const FString& PackageName : AutoSavedPackages)
+			{
+				SavedArray.Add(MakeShared<FJsonValueString>(PackageName));
+			}
+
+			if (!ToolResult.Data.IsValid())
+			{
+				ToolResult.Data = MakeShared<FJsonObject>();
+			}
+			ToolResult.Data->SetArrayField(TEXT("auto_saved_packages"), SavedArray);
+
+			// A warning, not only a data field: the caller who most needs this is
+			// the one who did not know a write was possible.
+			ToolResult.Warnings.Add(FString::Printf(
+				TEXT("Auto-save wrote %d package(s) to disk before the deferred action: %s. ")
+				TEXT("Disable with ClaireonSettings.bAutoSaveBeforeDeferredActions if this is unwanted."),
+				AutoSavedPackages.Num(), *FString::Join(AutoSavedPackages, TEXT(", "))));
+		}
 
 		TArray<FClaireonDeferredAction> Actions = FClaireonBridge::DrainDeferredActions();
 		for (const FClaireonDeferredAction& Action : Actions)
@@ -1984,10 +2016,10 @@ TMap<FString, FString> FClaireonServer::BuildRuntimeVariables() const
 	Vars.Add(TEXT("project.engine_version"), FApp::GetBuildVersion());
 
 	FString MapName = TEXT("No map loaded");
-	if (GEditor)
+	if (IsValid(GEditor))
 	{
 		UWorld* World = GEditor->GetEditorWorldContext().World();
-		if (World)
+		if (IsValid(World))
 		{
 			MapName = World->GetMapName();
 		}

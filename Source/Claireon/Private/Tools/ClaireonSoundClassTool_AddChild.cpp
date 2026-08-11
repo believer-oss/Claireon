@@ -26,6 +26,9 @@ TSharedPtr<FJsonObject> FClaireonSoundClassTool_AddChild::GetInputSchema() const
 	FToolSchemaBuilder S;
 	S.AddString(TEXT("asset_path"), TEXT("Path to the parent USoundClass"), true);
 	S.AddString(TEXT("child_path"), TEXT("Path to the child USoundClass to add"), true);
+	// Accepted by Execute as a back-compat alias; declared so it is not rejected
+	// as an unknown argument (and so callers can see it exists).
+	S.AddString(TEXT("child_class_path"), TEXT("Deprecated alias for child_path. Prefer child_path."));
 	return S.Build();
 }
 
@@ -53,17 +56,17 @@ IClaireonTool::FToolResult FClaireonSoundClassTool_AddChild::Execute(const TShar
 	FString Error;
 	EClaireonAudioAssetKind Kind = EClaireonAudioAssetKind::Unknown;
 	UObject* Loaded = ClaireonAudioHelpers::LoadAudioAsset(AssetPath, Kind, Error);
-	if (!Loaded || Kind != EClaireonAudioAssetKind::SoundClass)
+	if (!IsValid(Loaded) || Kind != EClaireonAudioAssetKind::SoundClass)
 	{
-		if (Loaded) return MakeErrorResult(FString::Printf(TEXT("Asset is not a SoundClass: %s"), *AssetPath));
+		if (IsValid(Loaded)) return MakeErrorResult(FString::Printf(TEXT("Asset is not a SoundClass: %s"), *AssetPath));
 		return MakeErrorResult(Error);
 	}
 	USoundClass* Parent = Cast<USoundClass>(Loaded);
-	if (!Parent) return MakeErrorResult(FString::Printf(TEXT("Asset is not a SoundClass: %s"), *AssetPath));
+	if (!IsValid(Parent)) return MakeErrorResult(FString::Printf(TEXT("Asset is not a SoundClass: %s"), *AssetPath));
 
 	const ClaireonPathResolver::FResolveResult Resolved = ClaireonPathResolver::Resolve(ChildPath);
 	USoundClass* Child = Resolved.bSuccess ? LoadObject<USoundClass>(nullptr, *Resolved.ResolvedPath.Path) : nullptr;
-	if (!Child)
+	if (!IsValid(Child))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Could not load SoundClass at %s"), *ChildPath));
 	}

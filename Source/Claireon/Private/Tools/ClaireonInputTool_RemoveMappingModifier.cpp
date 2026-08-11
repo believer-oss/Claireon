@@ -38,7 +38,7 @@ FToolResult ClaireonInputTool_RemoveMappingModifier::Execute(const TSharedPtr<FJ
 	}
 
 	UInputMappingContext* IMC = RequireMappingContext(Data, Error);
-	if (!IMC)
+	if (!IsValid(IMC))
 	{
 		return MakeErrorResult(Error);
 	}

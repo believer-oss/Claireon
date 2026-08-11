@@ -52,7 +52,7 @@ FToolResult ClaireonLevelSequenceTool_Open::Execute(const TSharedPtr<FJsonObject
 
 	FString LoadError;
 	ULevelSequence* Sequence = FClaireonSequenceHelpers::LoadLevelSequenceAsset(AssetPath, LoadError);
-	if (!Sequence && bCreateIfMissing)
+	if (!IsValid(Sequence) && bCreateIfMissing)
 	{
 		ClaireonPathResolver::FResolveResult Resolved = ClaireonPathResolver::Resolve(AssetPath);
 		FString TargetPath = Resolved.bSuccess ? Resolved.ResolvedPath.Path : AssetPath;
@@ -64,12 +64,12 @@ FToolResult ClaireonLevelSequenceTool_Open::Execute(const TSharedPtr<FJsonObject
 		}
 		FString CreateError;
 		Sequence = ClaireonLevelSequenceInternal::CreateLevelSequenceAtPath(PackageName, CreateError);
-		if (!Sequence)
+		if (!IsValid(Sequence))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("create_if_missing failed: %s"), *CreateError));
 		}
 	}
-	if (!Sequence)
+	if (!IsValid(Sequence))
 	{
 		return MakeErrorResult(LoadError.IsEmpty() ? TEXT("Failed to load Level Sequence") : LoadError);
 	}

@@ -22,9 +22,10 @@ FString FClaireonMetaSoundTool_ListAvailableInterfaces::GetOperation() const { r
 FString FClaireonMetaSoundTool_ListAvailableInterfaces::GetDescription() const
 {
 	return TEXT("Return all registered MetaSound frontend interface names (e.g. 'UE.Spatialization', "
-				"'UE.Source.Stereo'). Stateless; no session required. Use to discover the correct name "
-				"before metasound_add_interface (D4). Returns {interfaces:[{name, major_version, "
-				"minor_version}, ...]}.");
+				"'UE.Source.Stereo'). Stateless / read-only / non-session: reads the interface registry, "
+				"so no open session is required. Use it to discover the exact name to put in the "
+				"interfaces[] section of metasound_apply_spec. Returns {interfaces:[{name, "
+				"major_version, minor_version}, ...]}.");
 }
 
 TSharedPtr<FJsonObject> FClaireonMetaSoundTool_ListAvailableInterfaces::GetInputSchema() const

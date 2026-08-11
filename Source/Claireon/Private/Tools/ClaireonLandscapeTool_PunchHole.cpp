@@ -56,7 +56,7 @@ FToolResult ClaireonLandscapeTool_PunchHole::Execute(const TSharedPtr<FJsonObjec
 	Arguments->TryGetBoolField(TEXT("visible"), bVisible);
 
 	ULandscapeLayerInfoObject* VisibilityLayerInfo = ALandscapeProxy::VisibilityLayer;
-	if (!VisibilityLayerInfo)
+	if (!IsValid(VisibilityLayerInfo))
 	{
 		return MakeErrorResult(TEXT("Landscape visibility layer not available"));
 	}

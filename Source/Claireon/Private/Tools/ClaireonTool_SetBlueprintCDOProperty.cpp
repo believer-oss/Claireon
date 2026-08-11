@@ -23,12 +23,10 @@ FString ClaireonTool_SetBlueprintCDOProperty::GetCategory() const
 
 FString ClaireonTool_SetBlueprintCDOProperty::GetDescription() const
 {
-	return TEXT("Set a property on a Blueprint's Class Default Object (CDO) by asset path. "
-		"Supports all property types via ImportText serialization including TSoftClassPtr. "
-		"Sessionless alternative to edit_blueprint_graph for simple property changes. "
-		"Supports component template properties via automatic SCS component lookup. "
-		"Supports nested struct and array element writes via the `property_path` argument; "
-		"each path segment may be suffixed with `[N]` to index a TArray. Immediate-mode tool: no session required.");
+	return TEXT("Set a property on a Blueprint's Class Default Object by asset path, via ImportText serialization so every "
+		"property type (including TSoftClassPtr) is supported. property_path addresses nested structs and array "
+		"elements, any segment taking a `[N]` suffix; component template properties resolve by automatic SCS "
+		"lookup. Immediate-mode tool: writes the asset directly, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_SetBlueprintCDOProperty::GetInputSchema() const
@@ -102,6 +100,26 @@ IClaireonTool::FToolResult ClaireonTool_SetBlueprintCDOProperty::Execute(const T
 	FString PropertyPath;
 	Arguments->TryGetStringField(TEXT("property_path"), PropertyPath);
 
+	// Ergonomics guard, before any asset work: callers reasonably read
+	// property_path as "the whole path" and pass
+	// property_path='PrimaryActorTick.bCanEverTick' together with
+	// property_name='bCanEverTick'. These two are concatenated as
+	// property_path + '.' + property_name, so that gives
+	// 'PrimaryActorTick.bCanEverTick.bCanEverTick' and the resolver's reply was
+	// the raw "Cannot navigate through non-struct" leak, which names neither
+	// parameter. This is an argument-shape error, so it is answered without
+	// loading anything.
+	if (!PropertyPath.IsEmpty()
+		&& (PropertyPath.EndsWith(TEXT(".") + PropertyName) || PropertyPath.Equals(PropertyName)))
+	{
+		return MakeErrorResult(FString::Printf(
+			TEXT("property_path ('%s') already ends with property_name ('%s'). These two are "
+				 "concatenated as property_path + '.' + property_name: pass the container path in "
+				 "property_path and the leaf alone in property_name, or pass the whole dotted path "
+				 "in property_name and leave property_path empty."),
+			*PropertyPath, *PropertyName));
+	}
+
 	// Step 1: Resolve asset_path
 	auto ResolveResult = ClaireonPathResolver::Resolve(AssetPath);
 	if (!ResolveResult.bSuccess)
@@ -112,20 +130,20 @@ IClaireonTool::FToolResult ClaireonTool_SetBlueprintCDOProperty::Execute(const T
 
 	// Step 2: Load Blueprint
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load Blueprint: %s"), *AssetPath));
 	}
 
 	// Step 3: Validate GeneratedClass
-	if (!Blueprint->GeneratedClass)
+	if (!IsValid(Blueprint->GeneratedClass))
 	{
 		return MakeErrorResult(TEXT("Blueprint has no GeneratedClass -- compile it first"));
 	}
 
 	// Step 4: Get CDO
 	UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
-	if (!CDO)
+	if (!IsValid(CDO))
 	{
 		return MakeErrorResult(TEXT("Failed to get Blueprint CDO"));
 	}
@@ -140,6 +158,7 @@ IClaireonTool::FToolResult ClaireonTool_SetBlueprintCDOProperty::Execute(const T
 	}
 	else
 	{
+		// The overlap form is rejected up front, before any asset work.
 		CombinedPath = PropertyPath + TEXT(".") + PropertyName;
 	}
 
@@ -154,7 +173,7 @@ IClaireonTool::FToolResult ClaireonTool_SetBlueprintCDOProperty::Execute(const T
 	}
 
 	UObject* TargetObject = Resolved.TargetObject;
-	if (!TargetObject)
+	if (!IsValid(TargetObject))
 	{
 		// Defensive: ResolvePropertyOnBlueprintCDO should never succeed with a null target.
 		return MakeErrorResult(TEXT("Internal error: resolver returned null TargetObject"));
@@ -191,15 +210,32 @@ IClaireonTool::FToolResult ClaireonTool_SetBlueprintCDOProperty::Execute(const T
 	// FScopedTransaction + CDO->Modify() capture the whole object's serialized state so
 	// in-place array element writes performed by FScriptArrayHelper::GetRawPtr inside
 	// WritePropertyByPath are rolled back on undo.
+	//
+	// SetFlags(RF_Transactional) before Modify() is load-bearing, not defensive. A Blueprint
+	// CDO is allocated with only RF_Public|RF_ClassDefaultObject|RF_ArchetypeObject
+	// (UClass::CreateDefaultObject, Class.cpp:4867) and SaveToTransactionBuffer refuses any
+	// object lacking RF_Transactional (UObjectGlobals.cpp:3256-3259). Without the flag,
+	// CDO->Modify() only marks the package dirty and records nothing -- so this tool opened a
+	// transaction, advertising undo, and delivered none of it for CDO writes. Epic hits the
+	// same wall and works around it identically for Widget Blueprint CDOs
+	// (WidgetBlueprintEditorUtils.cpp:240-241, 265-266). The flag is read inside Modify(), so
+	// the order matters.
+	//
+	// Known side effect: RF_Transactional is part of RF_Load (ObjectMacros.h:598), so the flag
+	// persists into the saved package's CDO export. Each asset this tool writes therefore takes
+	// a one-time binary flag diff. Epic accepts that cost for widget CDOs; the alternative is a
+	// tool that claims to be undoable and is not.
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Set Blueprint CDO Property")));
 	Blueprint->Modify();
 	UObject* CDOForModify = Blueprint->GeneratedClass->GetDefaultObject();
-	if (CDOForModify)
+	if (IsValid(CDOForModify))
 	{
+		CDOForModify->SetFlags(RF_Transactional);
 		CDOForModify->Modify();
 	}
 	if (TargetObject != CDOForModify)
 	{
+		TargetObject->SetFlags(RF_Transactional);
 		TargetObject->Modify();
 	}
 
@@ -224,7 +260,7 @@ IClaireonTool::FToolResult ClaireonTool_SetBlueprintCDOProperty::Execute(const T
 		if (Value.IsEmpty() || Value.Equals(TEXT("None"), ESearchCase::IgnoreCase))
 		{
 			void* SlotPtr = ObjectProp->ContainerPtrToValuePtr<void>(SlotContainer);
-			if (UObject* PrevValue = ObjectProp->GetObjectPropertyValue(SlotPtr))
+			if (UObject* PrevValue = ObjectProp->GetObjectPropertyValue(SlotPtr); IsValid(PrevValue))
 			{
 				PrevValue->MarkAsGarbage();
 			}
@@ -234,28 +270,75 @@ IClaireonTool::FToolResult ClaireonTool_SetBlueprintCDOProperty::Execute(const T
 		else
 		{
 			UClass* SubObjectClass = LoadClass<UObject>(nullptr, *Value);
-			if (!SubObjectClass)
+			if (!IsValid(SubObjectClass))
 			{
 				// Blueprint generated classes resolve with a trailing "_C" suffix.
 				SubObjectClass = LoadClass<UObject>(nullptr, *(Value + TEXT("_C")));
 			}
-			if (!SubObjectClass)
+			if (IsValid(SubObjectClass))
 			{
-				return MakeErrorResult(FString::Printf(
-					TEXT("'%s' is UPROPERTY(Instanced); value must be a class path or 'None' to clear. Failed to load class from '%s'."),
-					*CombinedPath, *Value));
+				FString WriteError;
+				UObject* NewSubObject = ClaireonPropertyUtils::SetInstancedSubObject(
+					TargetObject, SubObjectClass, Resolved.RemainingPath, WriteError);
+				if (!IsValid(NewSubObject))
+				{
+					return MakeErrorResult(WriteError);
+				}
+				InstancedNote = FString::Printf(
+					TEXT("auto-constructed instanced sub-object of class '%s' via SetInstancedSubObject"),
+					*SubObjectClass->GetName());
 			}
+			else
+			{
+				// Not a class path. Accept an exported OBJECT reference -- either a
+				// bare path or the ClassName'"/Path.To:Subobject"' export form -- by
+				// duplicating the referenced template into this object. This is what
+				// a cdo_fields_text export of an instanced slot round-trips through.
+				FString ObjectPath = Value;
+				int32 ApostropheIdx = INDEX_NONE;
+				if (ObjectPath.FindChar(TEXT('\''), ApostropheIdx) && ObjectPath.EndsWith(TEXT("'")) && ApostropheIdx < ObjectPath.Len() - 1)
+				{
+					ObjectPath = ObjectPath.Mid(ApostropheIdx + 1, ObjectPath.Len() - ApostropheIdx - 2);
+				}
+				ObjectPath = ObjectPath.TrimQuotes();
+				UObject* TemplateObj = LoadObject<UObject>(nullptr, *ObjectPath);
+				if (!IsValid(TemplateObj))
+				{
+					TemplateObj = FindObject<UObject>(nullptr, *ObjectPath);
+				}
+				if (!IsValid(TemplateObj))
+				{
+					return MakeErrorResult(FString::Printf(
+						TEXT("'%s' is UPROPERTY(Instanced); value must be a class path, an object path to duplicate, or 'None' to clear. Failed to resolve '%s'."),
+						*CombinedPath, *Value));
+				}
 
-			FString WriteError;
-			UObject* NewSubObject = ClaireonPropertyUtils::SetInstancedSubObject(
-				TargetObject, SubObjectClass, Resolved.RemainingPath, WriteError);
-			if (!NewSubObject)
-			{
-				return MakeErrorResult(WriteError);
+				void* SlotPtr = ObjectProp->ContainerPtrToValuePtr<void>(SlotContainer);
+				FName DupName = TemplateObj->GetFName();
+				if (IsValid(StaticFindObjectFast(nullptr, TargetObject, DupName)))
+				{
+					DupName = MakeUniqueObjectName(TargetObject, TemplateObj->GetClass(), DupName);
+				}
+				UObject* Dup = StaticDuplicateObject(TemplateObj, TargetObject, DupName);
+				if (!IsValid(Dup))
+				{
+					return MakeErrorResult(FString::Printf(
+						TEXT("Failed to duplicate '%s' into '%s'"), *ObjectPath, *TargetObject->GetName()));
+				}
+				Dup->SetFlags(RF_Transactional);
+				if (TargetObject->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject))
+				{
+					Dup->SetFlags(RF_ArchetypeObject);
+				}
+				if (UObject* PrevValue = ObjectProp->GetObjectPropertyValue(SlotPtr); IsValid(PrevValue))
+				{
+					PrevValue->MarkAsGarbage();
+				}
+				ObjectProp->SetObjectPropertyValue(SlotPtr, Dup);
+				InstancedNote = FString::Printf(
+					TEXT("duplicated instanced sub-object from '%s' (class '%s')"),
+					*ObjectPath, *Dup->GetClass()->GetName());
 			}
-			InstancedNote = FString::Printf(
-				TEXT("auto-constructed instanced sub-object of class '%s' via SetInstancedSubObject"),
-				*SubObjectClass->GetName());
 		}
 	}
 	else

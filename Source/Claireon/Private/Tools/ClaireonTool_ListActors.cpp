@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonTool_ListActors.h"
 #include "ClaireonLog.h"
+#include "ClaireonPIEWorldResolver.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -17,9 +18,10 @@ FString ClaireonTool_ListActors::GetOperation() const { return TEXT("list_actors
 
 FString ClaireonTool_ListActors::GetDescription() const
 {
-    return TEXT("List actors in the currently loaded map. Optionally filter by class name or label wildcard pattern. "
-        "PIE-aware: world_context='auto' (default) returns PIE actors when PIE is running, editor actors otherwise. "
-        "Returns actor labels, classes, locations, rotations, and full paths. Stateless / read-only / non-session.");
+    return TEXT("List actors in the currently loaded map, optionally filtered by class name or by a wildcard "
+        "pattern matched against BOTH the actor label and object name. PIE-aware: world_context='auto' "
+        "(default) returns PIE actors while PIE runs, editor actors otherwise; pie_instance/net_mode "
+        "pick a specific PIE world. Stateless / read-only / non-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ListActors::GetInputSchema() const
@@ -38,7 +40,11 @@ TSharedPtr<FJsonObject> ClaireonTool_ListActors::GetInputSchema() const
 	// label_pattern - optional
 	TSharedPtr<FJsonObject> LabelProp = MakeShared<FJsonObject>();
 	LabelProp->SetStringField(TEXT("type"), TEXT("string"));
-	LabelProp->SetStringField(TEXT("description"), TEXT("Filter by actor label using wildcard matching (e.g. *Player*, SM_Wall*)"));
+	LabelProp->SetStringField(TEXT("description"),
+		TEXT("Wildcard pattern matched against the actor label OR the actor object name; the actor is included "
+			 "if either matches (e.g. *Player*, SM_Wall*, BP_Turret_C_*). Labels are the editable display names "
+			 "shown in the outliner; object names are the stable FNames (e.g. 'BP_Turret_C_1') and can differ "
+			 "from labels, especially at runtime."));
 	Properties->SetObjectField(TEXT("label_pattern"), LabelProp);
 
 	// world_context - optional
@@ -54,6 +60,10 @@ TSharedPtr<FJsonObject> ClaireonTool_ListActors::GetInputSchema() const
 	WorldCtxProp->SetArrayField(TEXT("enum"), WorldCtxEnum);
 	WorldCtxProp->SetStringField(TEXT("default"), TEXT("auto"));
 	Properties->SetObjectField(TEXT("world_context"), WorldCtxProp);
+
+	// pie_instance / net_mode - optional PIE world selectors (shared contract).
+	// Ignored when world_context='editor'.
+	ClaireonPIEWorldResolver::AddSchemaParams(Properties);
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
@@ -77,35 +87,38 @@ IClaireonTool::FToolResult ClaireonTool_ListActors::Execute(const TSharedPtr<FJs
 
 	if (WorldContext != TEXT("editor"))
 	{
-		// Look for a live PIE world.
-		if (GEngine)
+		// Look for a live PIE world, honoring the optional pie_instance /
+		// net_mode selectors (shared resolver, WI-13).
+		FString PIEResolveError;
+		UWorld* PIEWorld = ClaireonPIEWorldResolver::ResolvePIEWorld(Arguments, PIEResolveError);
+		if (IsValid(PIEWorld))
 		{
-			for (const FWorldContext& WorldCtx : GEngine->GetWorldContexts())
-			{
-				if (WorldCtx.WorldType == EWorldType::PIE && WorldCtx.World())
-				{
-					World = WorldCtx.World();
-					UsedContext = TEXT("pie");
-					break;
-				}
-			}
+			World = PIEWorld;
+			UsedContext = TEXT("pie");
 		}
-
-		if (!World && WorldContext == TEXT("pie"))
+		else if (WorldContext == TEXT("pie"))
 		{
-			return MakeErrorResult(TEXT("PIE is not running. Start a PIE session first, or use world_context='editor' to list editor-world actors."));
+			return MakeErrorResult(FString::Printf(
+				TEXT("%s Use world_context='editor' to list editor-world actors."), *PIEResolveError));
+		}
+		else if (Arguments->HasField(TEXT("pie_instance")) || Arguments->HasField(TEXT("net_mode")))
+		{
+			// The caller explicitly asked for a specific PIE world under
+			// world_context='auto'; silently falling back to the editor world
+			// would return the wrong actor set.
+			return MakeErrorResult(PIEResolveError);
 		}
 	}
 
-	if (!World)
+	if (!IsValid(World))
 	{
 		// Fall through to editor world.
-		if (!GEditor)
+		if (!IsValid(GEditor))
 		{
 			return MakeErrorResult(TEXT("Editor is not available. Wait for the editor to finish initializing."));
 		}
 		World = GEditor->GetEditorWorldContext().World();
-		if (!World)
+		if (!IsValid(World))
 		{
 			return MakeErrorResult(TEXT("No world loaded. Use open_map to load a map first."));
 		}
@@ -132,12 +145,13 @@ IClaireonTool::FToolResult ClaireonTool_ListActors::Execute(const TSharedPtr<FJs
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
 		AActor* Actor = *It;
-		if (!Actor)
+		if (!IsValid(Actor))
 		{
 			continue;
 		}
 
 		const FString ActorLabel = Actor->GetActorLabel();
+		const FString ActorObjectName = Actor->GetName();
 		const FString ActorClassName = Actor->GetClass()->GetName();
 
 		// Apply class filter (case-insensitive contains)
@@ -149,10 +163,14 @@ IClaireonTool::FToolResult ClaireonTool_ListActors::Execute(const TSharedPtr<FJs
 			}
 		}
 
-		// Apply label pattern (wildcard matching)
+		// Apply pattern (wildcard matching against label OR object name).
+		// Labels and object names differ, especially for runtime-spawned
+		// actors; matching either lets callers use whichever they have.
 		if (!LabelPattern.IsEmpty())
 		{
-			if (!ActorLabel.MatchesWildcard(LabelPattern, ESearchCase::IgnoreCase))
+			const bool bLabelMatches = ActorLabel.MatchesWildcard(LabelPattern, ESearchCase::IgnoreCase);
+			const bool bNameMatches = ActorObjectName.MatchesWildcard(LabelPattern, ESearchCase::IgnoreCase);
+			if (!bLabelMatches && !bNameMatches)
 			{
 				continue;
 			}
@@ -163,6 +181,7 @@ IClaireonTool::FToolResult ClaireonTool_ListActors::Execute(const TSharedPtr<FJs
 		// Build actor JSON object
 		TSharedPtr<FJsonObject> ActorObj = MakeShared<FJsonObject>();
 		ActorObj->SetStringField(TEXT("label"), ActorLabel);
+		ActorObj->SetStringField(TEXT("name"), ActorObjectName);
 		ActorObj->SetStringField(TEXT("class"), ActorClassName);
 
 		// Location as [X, Y, Z]

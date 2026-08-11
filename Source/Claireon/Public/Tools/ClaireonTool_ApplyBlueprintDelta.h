@@ -4,6 +4,7 @@
 #pragma once
 
 #include "Tools/IClaireonTool.h"
+#include "Tools/ClaireonBlueprintGraphEditToolBase.h"
 
 /**
  * Atomic batch Blueprint graph editor — K2 counterpart to animbp_apply_delta.
@@ -22,13 +23,16 @@
  * Rare types (Timeline, Delegate variants, EventOverride) are handled by the incremental
  * bp_add_node tool until the factory's typed dispatch is extended.
  */
-class CLAIREON_API ClaireonTool_ApplyBlueprintDelta : public IClaireonTool
+// Inherits the shared bp session base (rather than IClaireonTool directly) so
+// Execute can use BeginSessionOp: that is what makes the long-advertised
+// asset_path auto-open real, and it brings the nested-params unwrap and
+// response_mode handling every sibling bp_* tool already has. GetCategory /
+// RequiresNoPIE come from the base with the same values this tool declared.
+class CLAIREON_API ClaireonTool_ApplyBlueprintDelta : public ClaireonBlueprintGraphEditToolBase
 {
 public:
 	FString GetOperation() const override;
 	FString GetDescription() const override;
-	FString GetCategory() const override;
-	bool RequiresNoPIE() const override { return true; }
 	TSharedPtr<FJsonObject> GetInputSchema() const override;
 	FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;
 };

@@ -14,9 +14,10 @@ FString ClaireonTool_WaitSeconds::GetOperation() const { return TEXT("wait_secon
 
 FString ClaireonTool_WaitSeconds::GetDescription() const
 {
-	return TEXT("Sleep for a wall-clock duration while keeping the editor tick alive. "
-		"Use this instead of `time.sleep` (which is intercepted with a RuntimeWarning because it freezes the editor). "
-		"The tool blocks for `seconds` wall-clock then returns; FTSTicker keeps deferred actions, async loads, and the editor UI responsive.");
+	return TEXT("Wait a wall-clock duration while keeping the editor tick alive. Use this instead of `time.sleep`, "
+		"which is intercepted with a RuntimeWarning because it freezes the editor. Blocks for `seconds` "
+		"(clamped to [0.0, 300.0]) then returns; an FTSTicker keeps deferred actions, async loads, and the "
+		"editor UI responsive. Non-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_WaitSeconds::GetInputSchema() const

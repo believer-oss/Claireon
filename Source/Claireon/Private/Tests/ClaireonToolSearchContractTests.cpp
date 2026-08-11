@@ -8,12 +8,19 @@
 // Drives ClaireonTool_SearchTools::Execute for a FIXED query set and splits
 // assertions into two classes:
 //
-//   (A) DETERMINISTIC, RANKER-INDEPENDENT paths -- `select:`, `name=`/`tool_name=`
-//       deep-inspect, and `mode=categories`. These do NOT touch the ranker, so
+//   (A) DETERMINISTIC, RANKER-INDEPENDENT paths -- `select:` and
+//       `name=`/`tool_name=` deep-inspect. These do NOT touch the ranker, so
 //       their full output (Data JSON + Summary) is serialized to a CANONICAL
 //       (recursively key-sorted) JSON string and compared BYTE-FOR-BYTE against
 //       a golden fixture. On first run (golden absent) the golden is written;
 //       on every subsequent run byte equality is asserted.
+//
+//   (A2) `mode=categories` is ranker-independent but REGISTRY-DEPENDENT: it
+//       reports a per-category tool COUNT over the live registry, so adding any
+//       tool anywhere in the plugin rewrites its payload. It is asserted by
+//       INVARIANT (see the block inside DeterministicSnapshot) rather
+//       than byte-compared, so ordinary tool growth cannot masquerade as a
+//       contract break.
 //
 //   (B) RANKED query paths -- these are NOT byte-compared. Instead we assert
 //       INVARIANTS:
@@ -208,6 +215,57 @@ namespace ClaireonToolSearchContractTestsNS
 	// wire; exact-pin semantics are observable via the rank-0 name and the
 	// footer suppression rule, which is what the ranked contract asserts.
 
+	// -----------------------------------------------------------------------
+	// Aggregate facts about a mode=categories payload. Used instead of a byte
+	// compare because the counts track the live registry. No UNTEST macros
+	// inside (they expand to co_return and cannot live in a helper).
+	// -----------------------------------------------------------------------
+	struct FCategoryStats
+	{
+		int32 SumCounts = 0;
+		bool bAllCountsPositive = true;
+		bool bAllNamesNonEmpty = true;
+		bool bNamesStrictlyAscending = true;
+	};
+
+	static FCategoryStats SummariseCategories(const TArray<TSharedPtr<FJsonValue>>& Cats)
+	{
+		FCategoryStats S;
+		FString PrevName;
+		bool bHavePrev = false;
+		for (const TSharedPtr<FJsonValue>& CatVal : Cats)
+		{
+			const TSharedPtr<FJsonObject>* CatObj = nullptr;
+			if (!CatVal.IsValid() || !CatVal->TryGetObject(CatObj) || !CatObj || !(*CatObj).IsValid())
+			{
+				S.bAllNamesNonEmpty = false;
+				continue;
+			}
+
+			FString Name;
+			(*CatObj)->TryGetStringField(TEXT("name"), Name);
+			if (Name.IsEmpty())
+			{
+				S.bAllNamesNonEmpty = false;
+			}
+			if (bHavePrev && !(PrevName < Name))
+			{
+				S.bNamesStrictlyAscending = false;
+			}
+			PrevName = Name;
+			bHavePrev = true;
+
+			double Count = 0.0;
+			(*CatObj)->TryGetNumberField(TEXT("tool_count"), Count);
+			if (Count < 1.0)
+			{
+				S.bAllCountsPositive = false;
+			}
+			S.SumCounts += static_cast<int32>(Count);
+		}
+		return S;
+	}
+
 	// Name of the rank-0 tool in a flat tools[] result (empty when none).
 	static FString FirstName(const IClaireonTool::FToolResult& Result)
 	{
@@ -264,12 +322,8 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchContract, DeterministicSnapshot, UNTEST_TIM
 		A->SetStringField(TEXT("tool_name"), TEXT("chooser_duplicate"));
 		Cases.Add(A);
 	}
-	// 4) mode=categories grouped catalog listing.
-	{
-		TSharedPtr<FJsonObject> A = MakeShared<FJsonObject>();
-		A->SetStringField(TEXT("mode"), TEXT("categories"));
-		Cases.Add(A);
-	}
+	// mode=categories is deliberately NOT in this array -- see the invariants
+	// block immediately below the snapshot build.
 
 	// Build the combined snapshot string across all deterministic cases.
 	FString Combined;
@@ -279,6 +333,51 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchContract, DeterministicSnapshot, UNTEST_TIM
 		Combined += FString::Printf(TEXT("=== case %d ===\n"), i);
 		Combined += CanonicalSnapshot(Result);
 		Combined += TEXT("\n");
+	}
+
+	// --- mode=categories: invariants, NOT byte-compared. --------------------
+	// Root cause of the previous failure: mode=categories used to be case 3 of
+	// the byte-compared golden. Its payload is a per-category tool COUNT over
+	// the live registry, so every tool added anywhere in the plugin rewrites the
+	// golden. The committed golden was captured at total_tools=709; the registry
+	// has grown since, which is exactly the reported delta ("Golden len=7835,
+	// actual len=7933" -- two new short-named categories' worth of JSON, with
+	// cases 0-2 byte-identical since neither ClaireonTool_SearchTools.cpp nor
+	// ClaireonChooserTools_Lifecycle.cpp has changed since the golden commit).
+	// That is registry churn, not a contract change, so a byte compare is the
+	// wrong instrument here. The path stays pinned by its real invariants:
+	// self-consistent totals, sorted unique-ish category names, positive counts,
+	// and a summary derived from the same two numbers.
+	{
+		TSharedPtr<FJsonObject> CatArgs = MakeShared<FJsonObject>();
+		CatArgs->SetStringField(TEXT("mode"), TEXT("categories"));
+		const IClaireonTool::FToolResult CatResult = ExecCase(Tool, CatArgs);
+
+		UNTEST_EXPECT_FALSE(CatResult.bIsError);
+		UNTEST_ASSERT_TRUE(CatResult.Data.IsValid());
+
+		const TArray<TSharedPtr<FJsonValue>>* Cats = nullptr;
+		const bool bHasCats = CatResult.Data->TryGetArrayField(TEXT("categories"), Cats);
+		UNTEST_ASSERT_TRUE(bHasCats && Cats != nullptr);
+		UNTEST_EXPECT_TRUE(Cats->Num() > 0);
+
+		double TotalCategories = 0.0;
+		double TotalTools = 0.0;
+		const bool bHasTotalCategories = CatResult.Data->TryGetNumberField(TEXT("total_categories"), TotalCategories);
+		const bool bHasTotalTools = CatResult.Data->TryGetNumberField(TEXT("total_tools"), TotalTools);
+		UNTEST_EXPECT_TRUE(bHasTotalCategories);
+		UNTEST_EXPECT_TRUE(bHasTotalTools);
+
+		const FCategoryStats Stats = SummariseCategories(*Cats);
+		UNTEST_EXPECT_EQ(static_cast<int32>(TotalCategories), Cats->Num());
+		UNTEST_EXPECT_EQ(Stats.SumCounts, static_cast<int32>(TotalTools));
+		UNTEST_EXPECT_TRUE(Stats.bAllCountsPositive);
+		UNTEST_EXPECT_TRUE(Stats.bAllNamesNonEmpty);
+		UNTEST_EXPECT_TRUE(Stats.bNamesStrictlyAscending);
+
+		const FString ExpectedCatSummary = FString::Printf(
+			TEXT("Found %d categories spanning %d tools"), Cats->Num(), Stats.SumCounts);
+		UNTEST_EXPECT_STREQ(*CatResult.Summary, *ExpectedCatSummary);
 	}
 
 	const FString GoldenPath = GetGoldenPath();

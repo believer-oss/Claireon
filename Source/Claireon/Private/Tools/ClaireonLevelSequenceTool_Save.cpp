@@ -39,7 +39,7 @@ FToolResult ClaireonLevelSequenceTool_Save::Execute(const TSharedPtr<FJsonObject
 		return MakeErrorResult(TEXT("Session is invalid"));
 	}
 	UPackage* Package = Data->Sequence->GetOutermost();
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		return MakeErrorResult(TEXT("Level Sequence has no package"));
 	}

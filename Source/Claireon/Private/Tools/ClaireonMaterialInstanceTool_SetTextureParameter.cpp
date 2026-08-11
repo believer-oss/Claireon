@@ -14,7 +14,7 @@ FString ClaireonMaterialInstanceTool_SetTextureParameter::GetOperation() const {
 
 FString ClaireonMaterialInstanceTool_SetTextureParameter::GetDescription() const
 {
-    return TEXT("Set a texture parameter override on a UMaterialInstanceConstant. Pass empty texture_path or 'None' to clear. Session-mode tool: open via material_instance_open first.");
+    return TEXT("Set a texture parameter override on a UMaterialInstanceConstant. Pass empty texture_path or 'None' to clear. Session-mode tool: open via material_instance_instance_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialInstanceTool_SetTextureParameter::GetInputSchema() const
@@ -51,7 +51,7 @@ FToolResult ClaireonMaterialInstanceTool_SetTextureParameter::Execute(const TSha
 	{
 		FSoftObjectPath SoftPath(TexturePath);
 		Tex = Cast<UTexture>(SoftPath.TryLoad());
-		if (!Tex)
+		if (!IsValid(Tex))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Failed to load texture '%s'"), *TexturePath));
 		}
@@ -64,7 +64,7 @@ FToolResult ClaireonMaterialInstanceTool_SetTextureParameter::Execute(const TSha
 		return MakeErrorResult(Err);
 	}
 
-	const FString TexLabel = Tex ? Tex->GetPathName() : FString(TEXT("(none)"));
+	const FString TexLabel = IsValid(Tex) ? Tex->GetPathName() : FString(TEXT("(none)"));
 	Data->LastOperationStatus = FString::Printf(TEXT("Effect: set texture override '%s' = %s"), *ParameterName, *TexLabel);
 	return BuildStateResponse(SessionId, Data);
 }

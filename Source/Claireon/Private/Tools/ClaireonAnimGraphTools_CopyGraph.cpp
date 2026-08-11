@@ -34,17 +34,11 @@ FString ClaireonAnimGraphTool_CopyGraph::GetOperation() const { return TEXT("cop
 
 FString ClaireonAnimGraphTool_CopyGraph::GetDescription() const
 {
-	return TEXT("Copy a single graph's nodes (and any subobject graphs they own, such as state-machine "
-		"state graphs and transition rule graphs) from one Animation Blueprint into another. "
-		"Uses T3D round-trip so native UEdGraphNode serialization handles nested graphs automatically. "
-		"Destination graph must already exist on the destination AnimBP; overwrite=true clears it first. "
-		"A freshly-created AnimBP (via animbp_create) already has its root AnimGraph auto-created and works "
-		"as a destination — you don't need extra scaffolding to copy 'AnimGraph' into a fresh ABP. "
-		"For custom-named graphs, scaffold them first via the session-based animgraph tools. "
-		"Stateless — no session required.\n\n"
-		"Known benign log noise: T3D paste of state-machine graphs that reference variables inside "
-		"transition rule graphs can trigger a non-fatal UK2Node_Variable::FunctionParameterExists ensure. "
-		"It's an engine-side edge case; the copied content is unaffected.");
+	return TEXT("Copy one graph's nodes, plus the subobject graphs they own (state graphs, transition "
+		"rules), from one Animation Blueprint to another via T3D round-trip. The named destination graph "
+		"must already exist; overwrite=true clears it first. Stateless / non-session: both AnimBPs are "
+		"addressed by path, no open session required. Pasted state machines can trip a benign "
+		"FunctionParameterExists ensure.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_CopyGraph::GetInputSchema() const
@@ -117,13 +111,13 @@ FToolResult ClaireonAnimGraphTool_CopyGraph::Execute(const TSharedPtr<FJsonObjec
 
 	FString LoadError;
 	UAnimBlueprint* SourceBP = ClaireonAnimGraphHelpers::LoadAnimBlueprint(SourceResolve.ResolvedPath.Path, LoadError);
-	if (!SourceBP)
+	if (!IsValid(SourceBP))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load source AnimBP: %s"), *LoadError));
 	}
 
 	UEdGraph* SourceGraph = ClaireonAnimGraphHelpers::FindAnimGraphByName(SourceBP, SourceGraphName, LoadError);
-	if (!SourceGraph)
+	if (!IsValid(SourceGraph))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Source graph not found: %s"), *LoadError));
 	}
@@ -136,13 +130,13 @@ FToolResult ClaireonAnimGraphTool_CopyGraph::Execute(const TSharedPtr<FJsonObjec
 	}
 
 	UAnimBlueprint* DestBP = ClaireonAnimGraphHelpers::LoadAnimBlueprint(DestResolve.ResolvedPath.Path, LoadError);
-	if (!DestBP)
+	if (!IsValid(DestBP))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load destination AnimBP: %s"), *LoadError));
 	}
 
 	UEdGraph* DestGraph = ClaireonAnimGraphHelpers::FindAnimGraphByName(DestBP, DestGraphName, LoadError);
-	if (!DestGraph)
+	if (!IsValid(DestGraph))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Destination graph '%s' not found on %s. Create it first (e.g. via bp_create) — this tool does not create graphs. %s"),
@@ -180,7 +174,7 @@ FToolResult ClaireonAnimGraphTool_CopyGraph::Execute(const TSharedPtr<FJsonObjec
 		TArray<UEdGraphNode*> NodesToRemove = DestGraph->Nodes;
 		for (UEdGraphNode* Node : NodesToRemove)
 		{
-			if (!Node) continue;
+			if (!IsValid(Node)) continue;
 			if (Node->IsA<UAnimGraphNode_Root>())
 			{
 				++PreservedRootCount;
@@ -195,7 +189,7 @@ FToolResult ClaireonAnimGraphTool_CopyGraph::Execute(const TSharedPtr<FJsonObjec
 	TSet<UObject*> NodesToExport;
 	for (UEdGraphNode* Node : SourceGraph->Nodes)
 	{
-		if (Node)
+		if (IsValid(Node))
 		{
 			NodesToExport.Add(Node);
 		}
@@ -306,7 +300,7 @@ FToolResult ClaireonAnimGraphTool_CopyGraph::Execute(const TSharedPtr<FJsonObjec
 
 				// Determine schema class from source (preserves animgraph vs k2 vs state-machine schemas)
 				const UEdGraphSchema* SrcSchema = Src->GetSchema();
-				TSubclassOf<UEdGraphSchema> SchemaClass = SrcSchema
+				TSubclassOf<UEdGraphSchema> SchemaClass = IsValid(SrcSchema)
 					? SrcSchema->GetClass()
 					: UEdGraphSchema_K2::StaticClass();
 
@@ -314,7 +308,7 @@ FToolResult ClaireonAnimGraphTool_CopyGraph::Execute(const TSharedPtr<FJsonObjec
 				// PostPasteNode can walk the outer chain to find DestBP during retargeting.
 				UEdGraph* NewGraph = FBlueprintEditorUtils::CreateNewGraph(
 					DestBP, SrcName, UEdGraph::StaticClass(), SchemaClass);
-				if (!NewGraph)
+				if (!IsValid(NewGraph))
 				{
 					Warnings.Add(FString::Printf(TEXT("%s '%s': CreateNewGraph returned null"),
 						Category, *SrcName.ToString()));
@@ -335,7 +329,7 @@ FToolResult ClaireonAnimGraphTool_CopyGraph::Execute(const TSharedPtr<FJsonObjec
 				TSet<UObject*> SrcNodesToExport;
 				for (UEdGraphNode* N : Src->Nodes)
 				{
-					if (N) SrcNodesToExport.Add(N);
+					if (IsValid(N)) SrcNodesToExport.Add(N);
 				}
 
 				FString T3D;
@@ -363,14 +357,14 @@ FToolResult ClaireonAnimGraphTool_CopyGraph::Execute(const TSharedPtr<FJsonObjec
 				// non-null, so without this repair we get "The function name in node X is
 				// already used" on every override. Mirrors Operation_AddFunctionOverride
 				// at ClaireonTool_EditBlueprintGraph.cpp:5451.
-				if (DestBP->ParentClass)
+				if (IsValid(DestBP->ParentClass))
 				{
 					UFunction* ParentFunc = DestBP->ParentClass->FindFunctionByName(SrcName);
-					if (ParentFunc)
+					if (IsValid(ParentFunc))
 					{
 						for (UEdGraphNode* Imp : ImportedFnNodes)
 						{
-							if (UK2Node_FunctionEntry* Entry = Cast<UK2Node_FunctionEntry>(Imp))
+							if (UK2Node_FunctionEntry* Entry = Cast<UK2Node_FunctionEntry>(Imp); IsValid(Entry))
 							{
 								Entry->FunctionReference.SetExternalMember(SrcName, DestBP->ParentClass);
 								Entry->ReconstructNode();
@@ -406,14 +400,14 @@ FToolResult ClaireonAnimGraphTool_CopyGraph::Execute(const TSharedPtr<FJsonObjec
 		UAnimGraphNode_Root* DestRoot = nullptr;
 		for (UEdGraphNode* N : DestGraph->Nodes)
 		{
-			if (UAnimGraphNode_Root* R = Cast<UAnimGraphNode_Root>(N))
+			if (UAnimGraphNode_Root* R = Cast<UAnimGraphNode_Root>(N); IsValid(R))
 			{
 				DestRoot = R;
 				break;
 			}
 		}
 
-		if (DestRoot)
+		if (IsValid(DestRoot))
 		{
 			UEdGraphPin* RootInput = nullptr;
 			for (UEdGraphPin* Pin : DestRoot->Pins)
@@ -430,11 +424,11 @@ FToolResult ClaireonAnimGraphTool_CopyGraph::Execute(const TSharedPtr<FJsonObjec
 				const UEdGraphSchema* DestSchema = DestGraph->GetSchema();
 				for (UEdGraphNode* Imported : ImportedNodes)
 				{
-					if (!Imported) continue;
+					if (!IsValid(Imported)) continue;
 					for (UEdGraphPin* OutPin : Imported->Pins)
 					{
 						if (!OutPin || OutPin->Direction != EGPD_Output) continue;
-						if (DestSchema && DestSchema->TryCreateConnection(OutPin, RootInput))
+						if (IsValid(DestSchema) && DestSchema->TryCreateConnection(OutPin, RootInput))
 						{
 							bRootWired = true;
 							break;

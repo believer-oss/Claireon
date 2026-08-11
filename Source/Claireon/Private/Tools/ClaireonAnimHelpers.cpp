@@ -40,20 +40,20 @@ UAnimSequenceBase* ClaireonAnimHelpers::LoadAnimAsset(const FString& AssetPath, 
 	// Try loading via soft object path first for reliable package resolution
 	FSoftObjectPath SoftPath(ResolvedPath);
 	UObject* LoadedObj = SoftPath.TryLoad();
-	if (!LoadedObj)
+	if (!IsValid(LoadedObj))
 	{
 		// Fallback: try LoadObject directly
 		LoadedObj = LoadObject<UAnimSequenceBase>(nullptr, *ResolvedPath);
 	}
 
-	if (!LoadedObj)
+	if (!IsValid(LoadedObj))
 	{
 		OutError = FString::Printf(TEXT("Failed to load asset at path: %s. Verify the path is correct and the asset exists."), *ResolvedPath);
 		return nullptr;
 	}
 
 	UAnimSequenceBase* Anim = Cast<UAnimSequenceBase>(LoadedObj);
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		OutError = FString::Printf(TEXT("Asset at %s is not an animation (actual type: %s). Expected AnimSequence, AnimMontage, or AnimComposite."),
 			*ResolvedPath, *LoadedObj->GetClass()->GetName());
@@ -87,7 +87,7 @@ UAnimSequenceBase* ClaireonAnimHelpers::LoadAnimAsset(const FString& AssetPath, 
 
 FString ClaireonAnimHelpers::FormatNotifySubObjectProperties(const UObject* NotifyObj, const FString& Indent)
 {
-	if (!NotifyObj)
+	if (!IsValid(NotifyObj))
 	{
 		return FString();
 	}
@@ -192,7 +192,7 @@ FString ClaireonAnimHelpers::FormatNotifyEvent(const UAnimSequenceBase* Anim, co
 
 FString ClaireonAnimHelpers::FormatSingleNotify(const UAnimSequenceBase* Anim, int32 NotifyIndex)
 {
-	if (!Anim || NotifyIndex < 0 || NotifyIndex >= Anim->Notifies.Num())
+	if (!IsValid(Anim) || NotifyIndex < 0 || NotifyIndex >= Anim->Notifies.Num())
 	{
 		return TEXT("(invalid notify index)");
 	}
@@ -203,7 +203,7 @@ FString ClaireonAnimHelpers::FormatSingleNotify(const UAnimSequenceBase* Anim, i
 
 FString ClaireonAnimHelpers::FormatNotifies(const UAnimSequenceBase* Anim, bool bFullDetail)
 {
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		return FString();
 	}
@@ -236,7 +236,7 @@ FString ClaireonAnimHelpers::FormatNotifies(const UAnimSequenceBase* Anim, bool 
 
 FString ClaireonAnimHelpers::FormatCurves(const UAnimSequenceBase* Anim, bool bFullDetail)
 {
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		return FString();
 	}
@@ -299,7 +299,7 @@ FString ClaireonAnimHelpers::FormatCurves(const UAnimSequenceBase* Anim, bool bF
 
 FString ClaireonAnimHelpers::FormatSyncMarkers(const UAnimSequence* AnimSeq)
 {
-	if (!AnimSeq)
+	if (!IsValid(AnimSeq))
 	{
 		return FString();
 	}
@@ -327,7 +327,7 @@ FString ClaireonAnimHelpers::FormatSyncMarkers(const UAnimSequence* AnimSeq)
 
 FString ClaireonAnimHelpers::FormatMontageSections(const UAnimMontage* Montage)
 {
-	if (!Montage)
+	if (!IsValid(Montage))
 	{
 		return FString();
 	}
@@ -358,7 +358,7 @@ FString ClaireonAnimHelpers::FormatMontageSections(const UAnimMontage* Montage)
 
 FString ClaireonAnimHelpers::FormatMontageSlots(const UAnimMontage* Montage)
 {
-	if (!Montage)
+	if (!IsValid(Montage))
 	{
 		return FString();
 	}
@@ -419,7 +419,7 @@ FString ClaireonAnimHelpers::FormatMontageSlots(const UAnimMontage* Montage)
 
 FString ClaireonAnimHelpers::FormatMontageBlendSettings(const UAnimMontage* Montage)
 {
-	if (!Montage)
+	if (!IsValid(Montage))
 	{
 		return FString();
 	}
@@ -464,7 +464,7 @@ FString ClaireonAnimHelpers::FormatMontageBlendSettings(const UAnimMontage* Mont
 
 FString ClaireonAnimHelpers::FormatModifiers(const UAnimSequence* AnimSeq, bool bFullDetail)
 {
-	if (!AnimSeq)
+	if (!IsValid(AnimSeq))
 	{
 		return FString();
 	}
@@ -473,7 +473,7 @@ FString ClaireonAnimHelpers::FormatModifiers(const UAnimSequence* AnimSeq, bool 
 	Output += TEXT("=== Modifiers ===\n");
 
 	const UAnimationModifiersAssetUserData* ModUserData = const_cast<UAnimSequence*>(AnimSeq)->GetAssetUserData<UAnimationModifiersAssetUserData>();
-	const TArray<UAnimationModifier*>& Modifiers = ModUserData ? ModUserData->GetAnimationModifierInstances() : TArray<UAnimationModifier*>();
+	const TArray<UAnimationModifier*>& Modifiers = IsValid(ModUserData) ? ModUserData->GetAnimationModifierInstances() : TArray<UAnimationModifier*>();
 
 	if (Modifiers.Num() == 0)
 	{
@@ -484,7 +484,7 @@ FString ClaireonAnimHelpers::FormatModifiers(const UAnimSequence* AnimSeq, bool 
 	for (int32 i = 0; i < Modifiers.Num(); ++i)
 	{
 		const UAnimationModifier* Modifier = Modifiers[i];
-		if (!Modifier)
+		if (!IsValid(Modifier))
 		{
 			Output += FString::Printf(TEXT("  [%d] (null)\n"), i);
 			continue;
@@ -508,7 +508,7 @@ FString ClaireonAnimHelpers::FormatModifiers(const UAnimSequence* AnimSeq, bool 
 
 FString ClaireonAnimHelpers::FormatMetadata(const UAnimationAsset* Asset, bool bFullDetail)
 {
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		return FString();
 	}
@@ -527,7 +527,7 @@ FString ClaireonAnimHelpers::FormatMetadata(const UAnimationAsset* Asset, bool b
 	for (int32 i = 0; i < MetaDataArray.Num(); ++i)
 	{
 		const UAnimMetaData* Meta = MetaDataArray[i];
-		if (!Meta)
+		if (!IsValid(Meta))
 		{
 			Output += FString::Printf(TEXT("  [%d] (null)\n"), i);
 			continue;
@@ -551,7 +551,7 @@ FString ClaireonAnimHelpers::FormatMetadata(const UAnimationAsset* Asset, bool b
 
 FString ClaireonAnimHelpers::FormatAnimStructure(const UAnimSequenceBase* Anim, const FString& AssetType, bool bFullDetail, const FString& FocusSection)
 {
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		return TEXT("(null animation asset)");
 	}
@@ -577,7 +577,7 @@ FString ClaireonAnimHelpers::FormatAnimStructure(const UAnimSequenceBase* Anim, 
 	// Root motion and skeleton
 	bool bHasRootMotion = false;
 	bool bIsAdditive = false;
-	if (const UAnimSequence* AnimSeq = Cast<UAnimSequence>(Anim))
+	if (const UAnimSequence* AnimSeq = Cast<UAnimSequence>(Anim); IsValid(AnimSeq))
 	{
 		bHasRootMotion = AnimSeq->bEnableRootMotion;
 		bIsAdditive = (AnimSeq->AdditiveAnimType != AAT_None);
@@ -586,7 +586,7 @@ FString ClaireonAnimHelpers::FormatAnimStructure(const UAnimSequenceBase* Anim, 
 		bHasRootMotion ? TEXT("Yes") : TEXT("No"),
 		bIsAdditive ? TEXT("Yes") : TEXT("No"));
 
-	const FString SkeletonPath = Anim->GetSkeleton() ? Anim->GetSkeleton()->GetPathName() : TEXT("None");
+	const FString SkeletonPath = IsValid(Anim->GetSkeleton()) ? Anim->GetSkeleton()->GetPathName() : TEXT("None");
 	Output += FString::Printf(TEXT("Skeleton: %s\n"), *SkeletonPath);
 	Output += TEXT("\n");
 
@@ -606,7 +606,7 @@ FString ClaireonAnimHelpers::FormatAnimStructure(const UAnimSequenceBase* Anim, 
 	}
 
 	// AnimSequence-specific sections
-	if (const UAnimSequence* AnimSeq = Cast<UAnimSequence>(Anim))
+	if (const UAnimSequence* AnimSeq = Cast<UAnimSequence>(Anim); IsValid(AnimSeq))
 	{
 		if (bShowAll || FocusSection == TEXT("sync_markers"))
 		{
@@ -622,7 +622,7 @@ FString ClaireonAnimHelpers::FormatAnimStructure(const UAnimSequenceBase* Anim, 
 	}
 
 	// Montage-specific sections
-	if (const UAnimMontage* Montage = Cast<UAnimMontage>(Anim))
+	if (const UAnimMontage* Montage = Cast<UAnimMontage>(Anim); IsValid(Montage))
 	{
 		if (bShowAll || FocusSection == TEXT("sections"))
 		{
@@ -680,7 +680,7 @@ UClass* ClaireonAnimHelpers::ResolveNotifyClass(const FString& ClassName, bool b
 	// Try the core resolver first
 	ClaireonNameResolver::FNameResolveResult NameResult;
 	UClass* FoundClass = ClaireonNameResolver::ResolveClassName(ClassName, BaseClass, NameResult);
-	if (FoundClass)
+	if (IsValid(FoundClass))
 	{
 		return FoundClass;
 	}
@@ -699,7 +699,7 @@ UClass* ClaireonAnimHelpers::ResolveNotifyClass(const FString& ClassName, bool b
 		if (Asset.AssetName.ToString().Contains(ClassName, ESearchCase::IgnoreCase))
 		{
 			UClass* BPClass = Cast<UClass>(Asset.GetAsset());
-			if (BPClass && BPClass->IsChildOf(BaseClass))
+			if (IsValid(BPClass) && BPClass->IsChildOf(BaseClass))
 			{
 				return BPClass;
 			}
@@ -732,14 +732,14 @@ void EnsureNotifyTrackExists(UAnimSequenceBase* Anim, int32 TrackIndex)
 
 int32 ClaireonAnimHelpers::AddSkeletonNotify(UAnimSequenceBase* Anim, const FString& NotifyName, float Time, int32 TrackIndex, FString& OutError)
 {
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		OutError = TEXT("Animation is null");
 		return -1;
 	}
 
 	USkeleton* Skeleton = Anim->GetSkeleton();
-	if (!Skeleton)
+	if (!IsValid(Skeleton))
 	{
 		OutError = TEXT("Animation has no skeleton");
 		return -1;
@@ -779,13 +779,13 @@ int32 ClaireonAnimHelpers::AddSkeletonNotify(UAnimSequenceBase* Anim, const FStr
 
 int32 ClaireonAnimHelpers::AddClassNotify(UAnimSequenceBase* Anim, UClass* NotifyClass, float Time, float Duration, int32 TrackIndex, FString& OutError)
 {
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		OutError = TEXT("Animation is null");
 		return -1;
 	}
 
-	if (!NotifyClass)
+	if (!IsValid(NotifyClass))
 	{
 		OutError = TEXT("Notify class is null");
 		return -1;
@@ -842,7 +842,7 @@ int32 ClaireonAnimHelpers::AddClassNotify(UAnimSequenceBase* Anim, UClass* Notif
 
 bool ClaireonAnimHelpers::RemoveNotify(UAnimSequenceBase* Anim, int32 NotifyIndex, FString& OutError)
 {
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		OutError = TEXT("Animation is null");
 		return false;
@@ -862,7 +862,7 @@ bool ClaireonAnimHelpers::RemoveNotify(UAnimSequenceBase* Anim, int32 NotifyInde
 
 bool ClaireonAnimHelpers::MoveNotify(UAnimSequenceBase* Anim, int32 NotifyIndex, float NewTime, float NewDuration, int32 NewTrackIndex, FString& OutError)
 {
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		OutError = TEXT("Animation is null");
 		return false;
@@ -914,7 +914,7 @@ bool ClaireonAnimHelpers::MoveNotify(UAnimSequenceBase* Anim, int32 NotifyIndex,
 
 bool ClaireonAnimHelpers::SetNotifyProperty(UAnimSequenceBase* Anim, int32 NotifyIndex, const FString& PropertyName, const FString& PropertyValue, FString& OutError)
 {
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		OutError = TEXT("Animation is null");
 		return false;
@@ -930,7 +930,7 @@ bool ClaireonAnimHelpers::SetNotifyProperty(UAnimSequenceBase* Anim, int32 Notif
 
 	// Get the sub-object (notify or state)
 	UObject* SubObject = Event.Notify ? static_cast<UObject*>(Event.Notify) : static_cast<UObject*>(Event.NotifyStateClass);
-	if (!SubObject)
+	if (!IsValid(SubObject))
 	{
 		OutError = FString::Printf(TEXT("Notify at index %d is a skeleton notify (no sub-object). Cannot set properties on skeleton notifies."), NotifyIndex);
 		return false;
@@ -946,7 +946,7 @@ bool ClaireonAnimHelpers::SetNotifyProperty(UAnimSequenceBase* Anim, int32 Notif
 
 FString ClaireonAnimHelpers::GetNotifyProperty(const UAnimSequenceBase* Anim, int32 NotifyIndex, const FString& PropertyName, FString& OutError)
 {
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		OutError = TEXT("Animation is null");
 		return FString();
@@ -962,7 +962,7 @@ FString ClaireonAnimHelpers::GetNotifyProperty(const UAnimSequenceBase* Anim, in
 
 	// Get the sub-object (notify or state)
 	const UObject* SubObject = Event.Notify ? static_cast<const UObject*>(Event.Notify) : static_cast<const UObject*>(Event.NotifyStateClass);
-	if (!SubObject)
+	if (!IsValid(SubObject))
 	{
 		OutError = FString::Printf(TEXT("Notify at index %d is a skeleton notify (no sub-object). Cannot read properties on skeleton notifies."), NotifyIndex);
 		return FString();
@@ -977,14 +977,14 @@ FString ClaireonAnimHelpers::GetNotifyProperty(const UAnimSequenceBase* Anim, in
 
 bool ClaireonAnimHelpers::AddCurve(UAnimSequenceBase* Anim, const FString& CurveName, FString& OutError)
 {
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		OutError = TEXT("Animation is null");
 		return false;
 	}
 
 	USkeleton* Skeleton = Anim->GetSkeleton();
-	if (!Skeleton)
+	if (!IsValid(Skeleton))
 	{
 		OutError = TEXT("Animation has no skeleton");
 		return false;
@@ -1006,14 +1006,14 @@ bool ClaireonAnimHelpers::AddCurve(UAnimSequenceBase* Anim, const FString& Curve
 
 bool ClaireonAnimHelpers::RemoveCurve(UAnimSequenceBase* Anim, const FString& CurveName, FString& OutError)
 {
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		OutError = TEXT("Animation is null");
 		return false;
 	}
 
 	USkeleton* Skeleton = Anim->GetSkeleton();
-	if (!Skeleton)
+	if (!IsValid(Skeleton))
 	{
 		OutError = TEXT("Animation has no skeleton");
 		return false;
@@ -1035,14 +1035,14 @@ bool ClaireonAnimHelpers::RemoveCurve(UAnimSequenceBase* Anim, const FString& Cu
 
 bool ClaireonAnimHelpers::AddCurveKey(UAnimSequenceBase* Anim, const FString& CurveName, const FRichCurveKey& Key, FString& OutError)
 {
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		OutError = TEXT("Animation is null");
 		return false;
 	}
 
 	USkeleton* Skeleton = Anim->GetSkeleton();
-	if (!Skeleton)
+	if (!IsValid(Skeleton))
 	{
 		OutError = TEXT("Animation has no skeleton");
 		return false;
@@ -1071,14 +1071,14 @@ bool ClaireonAnimHelpers::AddCurveKey(UAnimSequenceBase* Anim, const FString& Cu
 
 bool ClaireonAnimHelpers::RemoveCurveKey(UAnimSequenceBase* Anim, const FString& CurveName, float Time, FString& OutError)
 {
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		OutError = TEXT("Animation is null");
 		return false;
 	}
 
 	USkeleton* Skeleton = Anim->GetSkeleton();
-	if (!Skeleton)
+	if (!IsValid(Skeleton))
 	{
 		OutError = TEXT("Animation has no skeleton");
 		return false;
@@ -1127,14 +1127,14 @@ bool ClaireonAnimHelpers::RemoveCurveKey(UAnimSequenceBase* Anim, const FString&
 
 const FRichCurveKey* ClaireonAnimHelpers::FindCurveKey(const UAnimSequenceBase* Anim, const FString& CurveName, float Time, float& OutSnappedTime, FString& OutError)
 {
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		OutError = TEXT("Animation is null");
 		return nullptr;
 	}
 
 	const USkeleton* Skeleton = Anim->GetSkeleton();
-	if (!Skeleton)
+	if (!IsValid(Skeleton))
 	{
 		OutError = TEXT("Animation has no skeleton");
 		return nullptr;
@@ -1223,7 +1223,7 @@ ERichCurveTangentWeightMode ParseTangentWeightMode(const FString& Value, bool& b
 
 bool ClaireonAnimHelpers::SetCurveKeyProperty(UAnimSequenceBase* Anim, const FString& CurveName, float Time, const FString& PropertyName, const FString& Value, FString& OutError)
 {
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		OutError = TEXT("Animation is null");
 		return false;
@@ -1302,7 +1302,7 @@ bool ClaireonAnimHelpers::SetCurveKeyProperty(UAnimSequenceBase* Anim, const FSt
 
 bool ClaireonAnimHelpers::AddMontageSection(UAnimMontage* Montage, const FString& SectionName, float StartTime, FString& OutError)
 {
-	if (!Montage)
+	if (!IsValid(Montage))
 	{
 		OutError = TEXT("Montage is null");
 		return false;
@@ -1338,7 +1338,7 @@ bool ClaireonAnimHelpers::AddMontageSection(UAnimMontage* Montage, const FString
 
 bool ClaireonAnimHelpers::RemoveMontageSection(UAnimMontage* Montage, const FString& SectionName, FString& OutError)
 {
-	if (!Montage)
+	if (!IsValid(Montage))
 	{
 		OutError = TEXT("Montage is null");
 		return false;
@@ -1378,7 +1378,7 @@ bool ClaireonAnimHelpers::RemoveMontageSection(UAnimMontage* Montage, const FStr
 
 bool ClaireonAnimHelpers::SetMontageSectionLink(UAnimMontage* Montage, const FString& SectionName, const FString& NextSectionName, FString& OutError)
 {
-	if (!Montage)
+	if (!IsValid(Montage))
 	{
 		OutError = TEXT("Montage is null");
 		return false;

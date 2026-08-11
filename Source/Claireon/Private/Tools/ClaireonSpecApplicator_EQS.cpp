@@ -16,7 +16,7 @@
 #include "EnvironmentQuery/EnvQueryGenerator.h"
 #include "EnvironmentQuery/EnvQueryTest.h"
 
-namespace
+namespace ClaireonSpecApplicator_EQS_Private
 {
 	TArray<UEnvQueryOption*>& GetOptionsMutable(UEnvQuery* InQuery)
 	{
@@ -32,14 +32,14 @@ namespace
 	UClass* ResolveEQSNodeClass(const FString& ClassName, UClass* BaseClass, const FString& BasePrefix, FString& OutError)
 	{
 		UClass* FoundClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
-		if (FoundClass && FoundClass->IsChildOf(BaseClass))
+		if (IsValid(FoundClass) && FoundClass->IsChildOf(BaseClass))
 		{
 			return FoundClass;
 		}
 
 		FString PrefixedName = BasePrefix + ClassName;
 		FoundClass = FindFirstObject<UClass>(*PrefixedName, EFindFirstObjectOptions::NativeFirst);
-		if (FoundClass && FoundClass->IsChildOf(BaseClass))
+		if (IsValid(FoundClass) && FoundClass->IsChildOf(BaseClass))
 		{
 			return FoundClass;
 		}
@@ -48,7 +48,7 @@ namespace
 		{
 			FString WithoutU = ClassName.Mid(1);
 			FoundClass = FindFirstObject<UClass>(*WithoutU, EFindFirstObjectOptions::NativeFirst);
-			if (FoundClass && FoundClass->IsChildOf(BaseClass))
+			if (IsValid(FoundClass) && FoundClass->IsChildOf(BaseClass))
 			{
 				return FoundClass;
 			}
@@ -60,7 +60,7 @@ namespace
 
 	bool SpecApplicatorEQS_SetEQSProperty(UObject* Node, const FString& PropertyName, const FString& PropertyValue, FString& OutError)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			OutError = TEXT("Node is null");
 			return false;
@@ -84,6 +84,7 @@ namespace
 		return true;
 	}
 } // namespace
+using namespace ClaireonSpecApplicator_EQS_Private;
 
 bool FClaireonSpecApplicator_EQS::ValidateToolSpec(const TSharedPtr<FJsonObject>& Spec, TArray<FString>& OutErrors)
 {
@@ -149,7 +150,7 @@ bool FClaireonSpecApplicator_EQS::OpenOrCreateAsset(const FString& AssetPath, FS
 	const FString ResolvedPath = ResolveResult.ResolvedPath.Path;
 
 	UEnvQuery* EQS = ClaireonBehaviorTreeHelpers::LoadEQSAsset(ResolvedPath, OutError);
-	if (!EQS)
+	if (!IsValid(EQS))
 	{
 		return false;
 	}
@@ -179,7 +180,7 @@ bool FClaireonSpecApplicator_EQS::OpenOrCreateAsset(const FString& AssetPath, FS
 bool FClaireonSpecApplicator_EQS::ApplyPass1_CreateEntities(const FString& SessionId, const TSharedPtr<FJsonObject>& Spec)
 {
 	UEnvQuery* EQS = Query.Get();
-	if (!EQS)
+	if (!IsValid(EQS))
 	{
 		AddError(TEXT("EQS Query is no longer valid"));
 		return false;
@@ -214,7 +215,7 @@ bool FClaireonSpecApplicator_EQS::ApplyPass1_CreateEntities(const FString& Sessi
 		{
 			FString Error;
 			GeneratorClass = ResolveEQSNodeClass(GeneratorClassName, UEnvQueryGenerator::StaticClass(), TEXT("EnvQueryGenerator_"), Error);
-			if (!GeneratorClass)
+			if (!IsValid(GeneratorClass))
 			{
 				RecordEntryFailure(SpecId, Error);
 				continue;
@@ -222,7 +223,7 @@ bool FClaireonSpecApplicator_EQS::ApplyPass1_CreateEntities(const FString& Sessi
 		}
 
 		UEnvQueryOption* NewOption = NewObject<UEnvQueryOption>(EQS);
-		if (GeneratorClass)
+		if (IsValid(GeneratorClass))
 		{
 			NewOption->Generator = NewObject<UEnvQueryGenerator>(NewOption, GeneratorClass);
 		}
@@ -246,7 +247,7 @@ bool FClaireonSpecApplicator_EQS::ApplyPass1_CreateEntities(const FString& Sessi
 bool FClaireonSpecApplicator_EQS::ApplyPass2_WireRelationships(const FString& SessionId, const TSharedPtr<FJsonObject>& Spec)
 {
 	UEnvQuery* EQS = Query.Get();
-	if (!EQS)
+	if (!IsValid(EQS))
 	{
 		AddError(TEXT("EQS Query is no longer valid"));
 		return false;
@@ -315,7 +316,7 @@ bool FClaireonSpecApplicator_EQS::ApplyPass2_WireRelationships(const FString& Se
 
 				FString Error;
 				UClass* TestClass = ResolveEQSNodeClass(TestType, UEnvQueryTest::StaticClass(), TEXT("EnvQueryTest_"), Error);
-				if (!TestClass)
+				if (!IsValid(TestClass))
 				{
 					RecordEntryFailure(TestId, Error);
 					continue;
@@ -363,7 +364,7 @@ bool FClaireonSpecApplicator_EQS::CompileAsset(const FString& SessionId, FString
 bool FClaireonSpecApplicator_EQS::SaveAsset(const FString& SessionId, FString& OutError)
 {
 	UEnvQuery* EQS = Query.Get();
-	if (!EQS)
+	if (!IsValid(EQS))
 	{
 		OutError = TEXT("EQS Query is no longer valid");
 		return false;

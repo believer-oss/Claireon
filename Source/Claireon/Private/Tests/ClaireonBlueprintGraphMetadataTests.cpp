@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 // Tests for bp_* metadata overrides. Asserts
@@ -63,7 +63,10 @@ namespace BPGraphMetadataTestHelpers
 // 1+2+6: Length assertions + non-empty example + standard description range
 // for all 10 P1 tools.
 // ---------------------------------------------------------------------------
-UNTEST_UNIT(Claireon, BlueprintGraphMetadata, AllTenToolsHaveRichMetadata)
+// Budget: the bare UNTEST_UNIT default is 0.50ms (FUntestUnitFixture::DefaultTimeoutMs),
+// which is not a deliberate perf assertion. This test sweeps the fully-populated
+// ~717-tool registry, so give it real headroom instead of restoring the default.
+UNTEST_UNIT_OPTS(Claireon, BlueprintGraphMetadata, AllTenToolsHaveRichMetadata, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace BPGraphMetadataTestHelpers;
 	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_Open>(TEXT("bp_open")));
@@ -82,7 +85,7 @@ UNTEST_UNIT(Claireon, BlueprintGraphMetadata, AllTenToolsHaveRichMetadata)
 // ---------------------------------------------------------------------------
 // 3: auto_connect_from_cursor token surfaces in add_node full description.
 // ---------------------------------------------------------------------------
-UNTEST_UNIT(Claireon, BlueprintGraphMetadata, AddNodeFullDescriptionMentionsAutoConnect)
+UNTEST_UNIT_OPTS(Claireon, BlueprintGraphMetadata, AddNodeFullDescriptionMentionsAutoConnect, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonBlueprintGraphTool_AddNode Tool;
 	const FString Full = Tool.GetFullDescription();
@@ -96,7 +99,7 @@ UNTEST_UNIT(Claireon, BlueprintGraphMetadata, AddNodeFullDescriptionMentionsAuto
 // or asset_path (auto-opens a transient session, formats, closes); the
 // description must surface that ergonomic.
 // ---------------------------------------------------------------------------
-UNTEST_UNIT(Claireon, BlueprintGraphMetadata, FormatFullDescriptionMentionsAutoOpenPath)
+UNTEST_UNIT_OPTS(Claireon, BlueprintGraphMetadata, FormatFullDescriptionMentionsAutoOpenPath, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonBlueprintGraphTool_Format Tool;
 	const FString Full = Tool.GetFullDescription();
@@ -110,18 +113,22 @@ UNTEST_UNIT(Claireon, BlueprintGraphMetadata, FormatFullDescriptionMentionsAutoO
 // connect_pins, set_pin_value, add_variable). Each tool's tooltip object
 // must contain entries for the named required parameters.
 // ---------------------------------------------------------------------------
-UNTEST_UNIT(Claireon, BlueprintGraphMetadata, AddNodeParameterTooltipsCoverRequired)
+UNTEST_UNIT_OPTS(Claireon, BlueprintGraphMetadata, AddNodeParameterTooltipsCoverRequired, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonBlueprintGraphTool_AddNode Tool;
 	TSharedPtr<FJsonObject> T = Tool.GetParameterTooltips();
 	UNTEST_ASSERT_TRUE(T.IsValid());
 	UNTEST_EXPECT_TRUE(T->HasField(TEXT("session_id")));
+	// node_type is the tool's only REQUIRED argument, so a test named
+	// "CoverRequired" must assert it; it previously asserted only node_class,
+	// which the schema scopes to CallFunction overrides.
+	UNTEST_EXPECT_TRUE(T->HasField(TEXT("node_type")));
 	UNTEST_EXPECT_TRUE(T->HasField(TEXT("node_class")));
 	UNTEST_EXPECT_TRUE(T->HasField(TEXT("auto_connect_from_cursor")));
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, BlueprintGraphMetadata, ConnectPinsParameterTooltipsCoverRequired)
+UNTEST_UNIT_OPTS(Claireon, BlueprintGraphMetadata, ConnectPinsParameterTooltipsCoverRequired, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonBlueprintGraphTool_ConnectPins Tool;
 	TSharedPtr<FJsonObject> T = Tool.GetParameterTooltips();
@@ -133,23 +140,35 @@ UNTEST_UNIT(Claireon, BlueprintGraphMetadata, ConnectPinsParameterTooltipsCoverR
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, BlueprintGraphMetadata, SetPinValueParameterTooltipsCoverRequired)
+// These two asserted the tooltip keys "node"/"pin"/"name", which no schema declares
+// and no Execute() reads -- bp_set_pin_value requires node_guid/pin_name and
+// bp_add_variable requires variable_name. So they pinned false documentation: an agent
+// following those tooltips gets "Missing required field: node_guid". Contrast
+// bp_connect_pins, which really does accept from_*/to_* and therefore DECLARES those
+// aliases in its schema (the pattern to follow when an alias is intended); here the
+// short names were never accepted, so the tooltips were renamed rather than turned
+// into new aliases. Assert the canonical required names, which is what these tests'
+// "CoverRequired" names always claimed to check.
+// Cross-checked by
+// BPFeedbackSessionContract.ToolMetadata_TooltipKeysAreSchemaProperties, which now
+// audits the whole registry for exactly this class of drift.
+UNTEST_UNIT_OPTS(Claireon, BlueprintGraphMetadata, SetPinValueParameterTooltipsCoverRequired, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonBlueprintGraphTool_SetPinValue Tool;
 	TSharedPtr<FJsonObject> T = Tool.GetParameterTooltips();
 	UNTEST_ASSERT_TRUE(T.IsValid());
-	UNTEST_EXPECT_TRUE(T->HasField(TEXT("node")));
-	UNTEST_EXPECT_TRUE(T->HasField(TEXT("pin")));
+	UNTEST_EXPECT_TRUE(T->HasField(TEXT("node_guid")));
+	UNTEST_EXPECT_TRUE(T->HasField(TEXT("pin_name")));
 	UNTEST_EXPECT_TRUE(T->HasField(TEXT("value")));
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, BlueprintGraphMetadata, AddVariableParameterTooltipsCoverRequired)
+UNTEST_UNIT_OPTS(Claireon, BlueprintGraphMetadata, AddVariableParameterTooltipsCoverRequired, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonBlueprintGraphTool_AddVariable Tool;
 	TSharedPtr<FJsonObject> T = Tool.GetParameterTooltips();
 	UNTEST_ASSERT_TRUE(T.IsValid());
-	UNTEST_EXPECT_TRUE(T->HasField(TEXT("name")));
+	UNTEST_EXPECT_TRUE(T->HasField(TEXT("variable_name")));
 	UNTEST_EXPECT_TRUE(T->HasField(TEXT("variable_type")));
 	UNTEST_EXPECT_TRUE(T->HasField(TEXT("variable_type_spec")));
 	co_return;
@@ -160,7 +179,7 @@ UNTEST_UNIT(Claireon, BlueprintGraphMetadata, AddVariableParameterTooltipsCoverR
 // the migrated content no longer lives in GetFullDescription().
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, BlueprintGraphMetadata, AddNodePatternsNonEmptyAndAscii)
+UNTEST_UNIT_OPTS(Claireon, BlueprintGraphMetadata, AddNodePatternsNonEmptyAndAscii, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonBlueprintGraphTool_AddNode Tool;
 	const FString Patterns = Tool.GetPatterns();
@@ -178,7 +197,7 @@ UNTEST_UNIT(Claireon, BlueprintGraphMetadata, AddNodePatternsNonEmptyAndAscii)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, BlueprintGraphMetadata, AddNodeFullDescriptionDoesNotMentionPerNodeCycle)
+UNTEST_UNIT_OPTS(Claireon, BlueprintGraphMetadata, AddNodeFullDescriptionDoesNotMentionPerNodeCycle, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonBlueprintGraphTool_AddNode Tool;
 	const FString Full = Tool.GetFullDescription();

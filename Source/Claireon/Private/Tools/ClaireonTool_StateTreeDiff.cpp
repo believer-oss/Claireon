@@ -15,22 +15,22 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-// Ã¢Â”Â€Ã¢Â”Â€ Local Helpers Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€
+// -- Local Helpers -------------------------------------------------------
 
-namespace
+namespace ClaireonTool_StateTreeDiff_Private
 {
 
 /** Format a state's hierarchical path (e.g. "Root.Combat.Attack"). */
 FString GetStatePath(const UStateTreeState* State)
 {
-	if (!State)
+	if (!IsValid(State))
 	{
 		return TEXT("(null)");
 	}
 
 	TArray<FString> PathParts;
 	const UStateTreeState* Current = State;
-	while (Current)
+	while (IsValid(Current))
 	{
 		PathParts.Insert(Current->Name.ToString(), 0);
 		Current = Current->Parent;
@@ -49,7 +49,7 @@ struct FStateEntry
 
 void CollectStatesRecursive(UStateTreeState* State, TArray<FStateEntry>& OutEntries)
 {
-	if (!State)
+	if (!IsValid(State))
 	{
 		return;
 	}
@@ -68,7 +68,7 @@ void CollectStatesRecursive(UStateTreeState* State, TArray<FStateEntry>& OutEntr
 
 void CollectAllStates(UStateTreeEditorData* EditorData, TArray<FStateEntry>& OutEntries)
 {
-	if (!EditorData)
+	if (!IsValid(EditorData))
 	{
 		return;
 	}
@@ -256,7 +256,7 @@ bool CompareNodeArrays(
 				}
 				OutText += FString::Printf(TEXT("- %s [TypeChanged]\n"), *Pair.Label);
 			}
-			else if (StructA && StructB)
+			else if (IsValid(StructA) && IsValid(StructB))
 			{
 				// Compare struct data
 				const uint8* DataA = Pair.NodeA->Node.GetMemory();
@@ -285,9 +285,10 @@ bool CompareNodeArrays(
 	return false; // did not early-out
 }
 
-} // anonymous namespace
+} // namespace ClaireonTool_StateTreeDiff_Private
+using namespace ClaireonTool_StateTreeDiff_Private;
 
-// Ã¢Â”Â€Ã¢Â”Â€ Tool Interface Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€
+// -- Tool Interface ------------------------------------------------------
 
 FString ClaireonTool_StateTreeDiff::GetCategory() const { return TEXT("statetree"); }
 FString ClaireonTool_StateTreeDiff::GetOperation() const { return TEXT("diff"); }
@@ -432,7 +433,7 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeDiff::Execute(const TSharedPtr<
 	const UStateTree* STA = Cast<UStateTree>(SideA.Object);
 	const UStateTree* STB = Cast<UStateTree>(SideB.Object);
 
-	if (!STA || !STB)
+	if (!IsValid(STA) || !IsValid(STB))
 	{
 		return MakeErrorResult(TEXT("One or both assets are not State Trees"));
 	}
@@ -441,7 +442,7 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeDiff::Execute(const TSharedPtr<
 	UStateTreeEditorData* EditorDataA = Cast<UStateTreeEditorData>(STA->EditorData);
 	UStateTreeEditorData* EditorDataB = Cast<UStateTreeEditorData>(STB->EditorData);
 
-	if (!EditorDataA || !EditorDataB)
+	if (!IsValid(EditorDataA) || !IsValid(EditorDataB))
 	{
 		return MakeErrorResult(TEXT("State Tree editor data not available"));
 	}

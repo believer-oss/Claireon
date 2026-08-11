@@ -43,7 +43,7 @@ FToolResult ClaireonStateTreeTool_AddState::Execute(const TSharedPtr<FJsonObject
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	FGuid ParentStateId;
@@ -62,7 +62,7 @@ FToolResult ClaireonStateTreeTool_AddState::Execute(const TSharedPtr<FJsonObject
 	Arguments->TryGetStringField(TEXT("state_type"), StateTypeStr);
 
 	UStateTreeState* ParentState = ClaireonStateTreeHelpers::FindStateById(EditorData, ParentStateId);
-	if (!ParentState)
+	if (!IsValid(ParentState))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Parent state not found: %s"), *ParentStateId.ToString()));
 	}

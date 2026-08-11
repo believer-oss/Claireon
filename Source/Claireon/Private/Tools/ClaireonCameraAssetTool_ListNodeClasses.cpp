@@ -15,7 +15,9 @@ FString FClaireonCameraAssetTool_ListNodeClasses::GetOperation() const { return 
 
 FString FClaireonCameraAssetTool_ListNodeClasses::GetDescription() const
 {
-	return TEXT("Enumerate concrete UCameraNode subclasses (filters CLASS_Abstract / CLASS_Deprecated) for caller discovery.");
+	return TEXT("Enumerate the concrete UCameraNode subclasses accepted by camera_asset_add_node, skipping abstract "
+		"and deprecated classes, and return class_name plus super_class for each. Read-only / non-session: "
+		"takes no arguments, opens no session, and loads no asset.");
 }
 
 TSharedPtr<FJsonObject> FClaireonCameraAssetTool_ListNodeClasses::GetInputSchema() const
@@ -32,14 +34,14 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_ListNodeClasses::Execute(con
 	ClassesJson.Reserve(Classes.Num());
 	for (UClass* Cls : Classes)
 	{
-		if (!Cls)
+		if (!IsValid(Cls))
 		{
 			continue;
 		}
 		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
 		Entry->SetStringField(TEXT("class_name"), Cls->GetName());
 		Entry->SetStringField(TEXT("super_class"),
-			Cls->GetSuperClass() ? Cls->GetSuperClass()->GetName() : FString());
+			IsValid(Cls->GetSuperClass()) ? Cls->GetSuperClass()->GetName() : FString());
 		// EnumerateCameraNodeClasses already filters CLASS_Abstract; field kept
 		// for forward-compat if the filter ever changes.
 		Entry->SetBoolField(TEXT("is_abstract"), false);

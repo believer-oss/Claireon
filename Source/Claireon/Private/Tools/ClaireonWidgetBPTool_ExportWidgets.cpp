@@ -68,7 +68,7 @@ FToolResult ClaireonWidgetBPTool_ExportWidgets::Execute(const TSharedPtr<FJsonOb
 	}
 
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
-	if (!WBP || !WBP->WidgetTree)
+	if (!IsValid(WBP) || !WBP->WidgetTree)
 	{
 		return MakeErrorResult(TEXT("Widget Blueprint or WidgetTree is no longer valid"));
 	}
@@ -78,7 +78,7 @@ FToolResult ClaireonWidgetBPTool_ExportWidgets::Execute(const TSharedPtr<FJsonOb
 	{
 		FString Name = NameValue->AsString();
 		UWidget* Widget = ClaireonWidgetHelpers::FindWidgetByName(WBP->WidgetTree, FName(*Name));
-		if (!Widget)
+		if (!IsValid(Widget))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Widget '%s' not found"), *Name));
 		}

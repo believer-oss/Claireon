@@ -21,7 +21,10 @@ FString FClaireonCameraAssetTool_Create::GetOperation() const { return TEXT("cre
 
 FString FClaireonCameraAssetTool_Create::GetDescription() const
 {
-	return TEXT("Create an empty UCameraAsset at the given /Game/ path. Errors if an asset already exists.");
+	return TEXT("Create an empty UCameraAsset at the given /Game/ path, erroring if any asset already exists there. "
+		"The new asset is registered and left dirty in memory. Non-session: the asset is addressed by "
+		"asset_path and the write is transactional; there is no camera_asset_open -- persist with "
+		"camera_asset_save.");
 }
 
 TSharedPtr<FJsonObject> FClaireonCameraAssetTool_Create::GetInputSchema() const
@@ -49,7 +52,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_Create::Execute(const TShare
 	}
 	const FString ObjectName = FPackageName::GetShortName(Canon);
 
-	if (UObject* Existing = LoadObject<UObject>(nullptr, *Canon))
+	if (UObject* Existing = LoadObject<UObject>(nullptr, *Canon); IsValid(Existing))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset already exists at path: %s"), *Canon));
 	}
@@ -57,13 +60,13 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_Create::Execute(const TShare
 	FScopedTransaction Transaction(LOCTEXT("CreateCameraAsset", "[Claireon] Create Camera Asset"));
 
 	UPackage* Package = CreatePackage(*Canon);
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		return MakeErrorResult(TEXT("CreatePackage failed"));
 	}
 	UCameraAsset* NewAsset = NewObject<UCameraAsset>(Package, UCameraAsset::StaticClass(), *ObjectName,
 		RF_Public | RF_Standalone | RF_Transactional | RF_LoadCompleted);
-	if (!NewAsset)
+	if (!IsValid(NewAsset))
 	{
 		return MakeErrorResult(TEXT("NewObject failed"));
 	}

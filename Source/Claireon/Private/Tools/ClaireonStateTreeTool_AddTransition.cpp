@@ -47,7 +47,7 @@ FToolResult ClaireonStateTreeTool_AddTransition::Execute(const TSharedPtr<FJsonO
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	FGuid StateId;
@@ -61,7 +61,7 @@ FToolResult ClaireonStateTreeTool_AddTransition::Execute(const TSharedPtr<FJsonO
 		return MakeErrorResult(TEXT("Missing parameter: target_type"));
 
 	UStateTreeState* State = ClaireonStateTreeHelpers::FindStateById(EditorData, StateId);
-	if (!State)
+	if (!IsValid(State))
 		return MakeErrorResult(TEXT("State not found"));
 
 	EStateTreeTransitionTrigger Trigger = ClaireonStateTreeEditInternal::ParseTransitionTrigger(TriggerStr);
@@ -95,7 +95,7 @@ FToolResult ClaireonStateTreeTool_AddTransition::Execute(const TSharedPtr<FJsonO
 			return MakeErrorResult(TEXT("target_state_id required when target_type is GotoState"));
 		}
 		TargetState = ClaireonStateTreeHelpers::FindStateById(EditorData, TargetStateId);
-		if (!TargetState)
+		if (!IsValid(TargetState))
 			return MakeErrorResult(TEXT("Target state not found"));
 	}
 

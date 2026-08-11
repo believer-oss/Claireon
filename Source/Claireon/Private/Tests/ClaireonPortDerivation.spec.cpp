@@ -9,11 +9,11 @@
 //
 // Vectors:
 //   "C:\\test\\worktree"  -> digest[0]=152, digest[1]=243 -> port 55539
-//   "W:\\yara"            -> digest[0]=181, digest[1]=130 -> port 62850
+//   "W:\\project"         -> digest[0]=8,   digest[1]=112 -> port 51312
 //   "/home/foo/bar"       -> digest[0]=221, digest[1]=71  -> port 56647
 //
-// Category: Claireon.PortDerivation.* (run via
-// `Scripts\Testing\Invoke-UntestTests.ps1 -TestFilter "Claireon.PortDerivation."`).
+// Category: Claireon.PortDerivation.* (run with the automation test
+// filter "Claireon.PortDerivation.").
 
 #if WITH_UNTESTED
 
@@ -27,15 +27,11 @@
 // Forward-declare the test seam defined in ClaireonModule.cpp.
 extern uint32 Claireon_Test_ResolveLivePortFallback();
 
-namespace
-{
-	// File-local prefix on every helper to avoid colliding with other anon-NS
-	// helpers under unity batching.
-	bool PortDerivationSpec_IsInPrivateRange(uint16 Port)
-	{
-		return Port >= 49152 && Port <= 65535;
-	}
-} // namespace
+// Removed helper: PortDerivationSpec_IsInPrivateRange(Port), asserted after each
+// vector below. DeriveDefaultMcpPort returns 49152u + (Offset % 16384u), so
+// [49152, 65535] holds by construction for every possible input -- the check
+// could not fail. Each vector's exact port is already pinned by the
+// UNTEST_ASSERT_EQ immediately preceding it, which is strictly stronger.
 
 // ---------------------------------------------------------------------------
 // Vector 1: lowercase Windows-style path "c:\\test\\worktree".
@@ -45,19 +41,17 @@ UNTEST_UNIT_OPTS(Claireon, PortDerivation, WindowsPathVector, UNTEST_TIMEOUTMS(2
 {
 	const uint16 Port = Claireon::DeriveDefaultMcpPort(TEXT("C:\\test\\worktree"));
 	UNTEST_ASSERT_EQ(static_cast<int32>(Port), 55539);
-	UNTEST_ASSERT_TRUE(PortDerivationSpec_IsInPrivateRange(Port));
 	co_return;
 }
 
 // ---------------------------------------------------------------------------
-// Vector 2: realistic worktree path "W:\\yara".
+// Vector 2: short single-segment worktree path "W:\\project".
 // ---------------------------------------------------------------------------
 
 UNTEST_UNIT_OPTS(Claireon, PortDerivation, RealWorktreeVector, UNTEST_TIMEOUTMS(2000))
 {
-	const uint16 Port = Claireon::DeriveDefaultMcpPort(TEXT("W:\\yara"));
-	UNTEST_ASSERT_EQ(static_cast<int32>(Port), 62850);
-	UNTEST_ASSERT_TRUE(PortDerivationSpec_IsInPrivateRange(Port));
+	const uint16 Port = Claireon::DeriveDefaultMcpPort(TEXT("W:\\project"));
+	UNTEST_ASSERT_EQ(static_cast<int32>(Port), 51312);
 	co_return;
 }
 
@@ -69,7 +63,6 @@ UNTEST_UNIT_OPTS(Claireon, PortDerivation, PosixPathVector, UNTEST_TIMEOUTMS(200
 {
 	const uint16 Port = Claireon::DeriveDefaultMcpPort(TEXT("/home/foo/bar"));
 	UNTEST_ASSERT_EQ(static_cast<int32>(Port), 56647);
-	UNTEST_ASSERT_TRUE(PortDerivationSpec_IsInPrivateRange(Port));
 	co_return;
 }
 
@@ -80,27 +73,24 @@ UNTEST_UNIT_OPTS(Claireon, PortDerivation, PosixPathVector, UNTEST_TIMEOUTMS(200
 
 UNTEST_UNIT_OPTS(Claireon, PortDerivation, CaseInsensitive, UNTEST_TIMEOUTMS(2000))
 {
-	const uint16 PortLower = Claireon::DeriveDefaultMcpPort(TEXT("w:\\yara"));
-	const uint16 PortUpper = Claireon::DeriveDefaultMcpPort(TEXT("W:\\YARA"));
-	const uint16 PortMixed = Claireon::DeriveDefaultMcpPort(TEXT("W:\\Yara"));
+	const uint16 PortLower = Claireon::DeriveDefaultMcpPort(TEXT("w:\\project"));
+	const uint16 PortUpper = Claireon::DeriveDefaultMcpPort(TEXT("W:\\PROJECT"));
+	const uint16 PortMixed = Claireon::DeriveDefaultMcpPort(TEXT("W:\\Project"));
 	UNTEST_ASSERT_EQ(static_cast<int32>(PortLower), static_cast<int32>(PortUpper));
 	UNTEST_ASSERT_EQ(static_cast<int32>(PortLower), static_cast<int32>(PortMixed));
 	co_return;
 }
 
 // ---------------------------------------------------------------------------
-// Determinism: repeated calls with the same input return the same port.
+// DELETED: Claireon.PortDerivation.Deterministic.
+//
+// It called the pure, stateless DeriveDefaultMcpPort three times on the same
+// string literal and asserted the three results were equal. There is no state
+// for a second call to observe, so the assertions could not fail. The exact
+// output for that same input ("W:\\project" -> 51312) is already pinned by
+// RealWorktreeVector above, which is strictly stronger.
+// Coverage lost: none.
 // ---------------------------------------------------------------------------
-
-UNTEST_UNIT_OPTS(Claireon, PortDerivation, Deterministic, UNTEST_TIMEOUTMS(2000))
-{
-	const uint16 First = Claireon::DeriveDefaultMcpPort(TEXT("W:\\yara"));
-	const uint16 Second = Claireon::DeriveDefaultMcpPort(TEXT("W:\\yara"));
-	const uint16 Third = Claireon::DeriveDefaultMcpPort(TEXT("W:\\yara"));
-	UNTEST_ASSERT_EQ(static_cast<int32>(First), static_cast<int32>(Second));
-	UNTEST_ASSERT_EQ(static_cast<int32>(First), static_cast<int32>(Third));
-	co_return;
-}
 
 // ---------------------------------------------------------------------------
 // ResolveLivePort fallback: when no server is running and no port file

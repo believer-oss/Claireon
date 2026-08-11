@@ -28,7 +28,7 @@ TSharedPtr<FJsonObject> ClaireonTool_PIEUnregisterDamageListener::GetInputSchema
 	TSharedPtr<FJsonObject> ListenerIdProp = MakeShared<FJsonObject>();
 	ListenerIdProp->SetStringField(TEXT("type"), TEXT("string"));
 	ListenerIdProp->SetStringField(TEXT("description"),
-		TEXT("The listener ID returned by editor.pie.registerDamageListener"));
+		TEXT("The listener ID returned by pie_register_damage_listener"));
 	Properties->SetObjectField(TEXT("listenerId"), ListenerIdProp);
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
@@ -45,7 +45,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEUnregisterDamageListener::Execute(con
 {
 	UE_LOG(LogClaireon, Display, TEXT("[MCP] editor.pie.unregisterDamageListener"));
 
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("Editor is not available"));
 	}

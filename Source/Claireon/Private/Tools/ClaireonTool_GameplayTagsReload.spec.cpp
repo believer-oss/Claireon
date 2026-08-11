@@ -17,7 +17,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
-namespace
+namespace ClaireonTool_GameplayTagsReload_spec_Private
 {
 	const TCHAR* const ReloadSpec_TransientSourceName = TEXT("ClaireonSpecGameplayTags.ini");
 
@@ -44,6 +44,7 @@ namespace
 		UGameplayTagsManager::Get().EditorRefreshGameplayTagTree();
 	}
 }
+using namespace ClaireonTool_GameplayTagsReload_spec_Private;
 
 // =====================================================================================
 // Test 1: Reload picks up an out-of-band ini edit (file written directly via IPlatformFile,
@@ -52,7 +53,7 @@ namespace
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonGameplayTagsReloadTest_OutOfBandEdit,
 	"Claireon.GameplayTagsReload.OutOfBandEdit",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonGameplayTagsReloadTest_OutOfBandEdit::RunTest(const FString& /*Parameters*/)
 {
@@ -75,8 +76,15 @@ bool FClaireonGameplayTagsReloadTest_OutOfBandEdit::RunTest(const FString& /*Par
 	}
 
 	// Write the ini row directly via IPlatformFile (simulating an external text-editor write).
+	// No '+' prefix on the key. A tag source ini is read as a standalone file
+	// (FConfigFile::Read -> FillFileFromDisk with bHandleSymbolCommands=false), so the
+	// +/-/./! command prefixes are NOT stripped: '+GameplayTagList' parses as a key literally
+	// named "+GameplayTagList", matches no UPROPERTY, and the row is silently dropped. Only
+	// files combined through the config hierarchy (FConfigFile::Combine, bHandleSymbolCommands
+	// =true) honor '+'. This is the format AddNewGameplayTagToINI itself writes -- compare any
+	// row in Config/Tags/*.ini.
 	const FString IniContents = FString::Printf(
-		TEXT("[/Script/GameplayTags.GameplayTagsList]\r\n+GameplayTagList=(Tag=\"%s\",DevComment=\"\")\r\n"),
+		TEXT("[/Script/GameplayTags.GameplayTagsList]\r\nGameplayTagList=(Tag=\"%s\",DevComment=\"\")\r\n"),
 		*ExternalTagName);
 	if (!FFileHelper::SaveStringToFile(IniContents, *ReloadSpec_TransientFile()))
 	{
@@ -129,7 +137,7 @@ bool FClaireonGameplayTagsReloadTest_OutOfBandEdit::RunTest(const FString& /*Par
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonGameplayTagsReloadTest_SourcePath,
 	"Claireon.GameplayTagsReload.SourcePath",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonGameplayTagsReloadTest_SourcePath::RunTest(const FString& /*Parameters*/)
 {

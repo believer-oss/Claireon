@@ -4,6 +4,7 @@
 #include "Tools/ClaireonTool_StateTreeRuntimeSendEvent.h"
 #include "ClaireonLog.h"
 #include "ClaireonPIEManager.h"
+#include "ClaireonStateTreeComponentResolver.h"
 #include "GameplayTagContainer.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
@@ -40,6 +41,13 @@ TSharedPtr<FJsonObject> ClaireonTool_StateTreeRuntimeSendEvent::GetInputSchema()
 	PayloadProp->SetStringField(TEXT("description"), TEXT("Optional event payload properties as key-value pairs"));
 	Properties->SetObjectField(TEXT("payload"), PayloadProp);
 
+	// Same escape hatch statetree_runtime_inspect has. Without it this tool had
+	// no workaround at all when component resolution picked the wrong component.
+	TSharedPtr<FJsonObject> ComponentClassProp = MakeShared<FJsonObject>();
+	ComponentClassProp->SetStringField(TEXT("type"), TEXT("string"));
+	ComponentClassProp->SetStringField(TEXT("description"), TEXT("Optional component class-name substring, case-insensitive. Default: the first component of any UStateTreeComponent subclass, StateTreeAIComponent included. Use this only to disambiguate between several."));
+	Properties->SetObjectField(TEXT("component_class"), ComponentClassProp);
+
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	TArray<TSharedPtr<FJsonValue>> Required;
@@ -50,31 +58,13 @@ TSharedPtr<FJsonObject> ClaireonTool_StateTreeRuntimeSendEvent::GetInputSchema()
 	return Schema;
 }
 
-namespace
+namespace ClaireonTool_StateTreeRuntimeSendEvent_Private
 {
-	UActorComponent* FindSTComponentOnActor(AActor* Actor)
-	{
-		if (!Actor)
-			return nullptr;
-
-		TArray<UActorComponent*> Components;
-		Actor->GetComponents(Components);
-
-		for (UActorComponent* Component : Components)
-		{
-			if (Component && Component->GetClass()->GetName().Contains(TEXT("StateTreeComponent"), ESearchCase::IgnoreCase))
-			{
-				return Component;
-			}
-		}
-		return nullptr;
-	}
-
 	UWorld* GetActivePIEWorld()
 	{
 		for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
 		{
-			if (WorldContext.WorldType == EWorldType::PIE && WorldContext.World())
+			if (WorldContext.WorldType == EWorldType::PIE && IsValid(WorldContext.World()))
 			{
 				return WorldContext.World();
 			}
@@ -82,6 +72,7 @@ namespace
 		return nullptr;
 	}
 } // namespace
+using namespace ClaireonTool_StateTreeRuntimeSendEvent_Private;
 
 IClaireonTool::FToolResult ClaireonTool_StateTreeRuntimeSendEvent::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
@@ -102,7 +93,7 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeRuntimeSendEvent::Execute(const
 
 	// Get PIE world
 	UWorld* PIEWorld = GetActivePIEWorld();
-	if (!PIEWorld)
+	if (!IsValid(PIEWorld))
 	{
 		return MakeErrorResult(TEXT("No active PIE session. Start Play-in-Editor first."));
 	}
@@ -110,17 +101,23 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeRuntimeSendEvent::Execute(const
 	// Resolve actor
 	FClaireonPIEManager& PIEManager = FClaireonPIEManager::Get();
 	AActor* Actor = PIEManager.ResolveActorId(ActorId, PIEWorld);
-	if (!Actor)
+	if (!IsValid(Actor))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Actor not found or destroyed: %s"), *ActorId));
 	}
 
 	// Find State Tree component
-	UActorComponent* Component = FindSTComponentOnActor(Actor);
-	if (!Component)
+	FString ComponentClass;
+	Arguments->TryGetStringField(TEXT("component_class"), ComponentClass);
+
+	UActorComponent* Component = ClaireonStateTreeComponentResolver::FindStateTreeComponent(Actor, ComponentClass);
+	if (!IsValid(Component))
 	{
-		return MakeErrorResult(FString::Printf(TEXT("No State Tree component found on actor %s (%s)"),
-			*ActorId, *Actor->GetClass()->GetName()));
+		// Enumerate, like inspect does: a caller told only "none found" cannot
+		// tell a missing component from a component this tool failed to match.
+		const FString ComponentList = ClaireonStateTreeComponentResolver::DescribeComponents(Actor);
+		return MakeErrorResult(FString::Printf(TEXT("No State Tree component found on actor %s (%s). Components:%s"),
+			*ActorId, *Actor->GetClass()->GetName(), *ComponentList));
 	}
 
 	// Validate the event tag
@@ -132,7 +129,7 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeRuntimeSendEvent::Execute(const
 
 	// Find SendStateTreeEvent UFunction
 	UFunction* SendEventFunc = Component->FindFunction(FName("SendStateTreeEvent"));
-	if (!SendEventFunc)
+	if (!IsValid(SendEventFunc))
 	{
 		return MakeErrorResult(TEXT("SendStateTreeEvent function not found on component. The component may not support event sending via reflection."));
 	}
@@ -159,7 +156,7 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeRuntimeSendEvent::Execute(const
 
 	// Try to read current state after event
 	UFunction* IsRunningFunc = Component->FindFunction(FName("IsRunning"));
-	if (IsRunningFunc)
+	if (IsValid(IsRunningFunc))
 	{
 		struct
 		{

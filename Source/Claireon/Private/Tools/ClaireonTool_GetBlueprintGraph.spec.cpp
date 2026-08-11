@@ -28,7 +28,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 
-namespace
+namespace ClaireonTool_GetBlueprintGraph_spec_Private
 {
 	// Helpers are prefixed to avoid unity-build ODR collisions with
 	// same-named helpers in ClaireonTool_EditBlueprintGraph.spec.cpp.
@@ -138,10 +138,10 @@ namespace
 	UEdGraph* GetEventGraphFromAsset(const FString& AssetPath)
 	{
 		UBlueprint* BP = LoadObject<UBlueprint>(nullptr, *AssetPath);
-		if (!BP) { return nullptr; }
+		if (!IsValid(BP)) { return nullptr; }
 		for (UEdGraph* G : BP->UbergraphPages)
 		{
-			if (G && G->GetName() == TEXT("EventGraph"))
+			if (IsValid(G) && G->GetName() == TEXT("EventGraph"))
 			{
 				return G;
 			}
@@ -153,6 +153,7 @@ namespace
 	static const FString kOutlineRegex =
 		TEXT("^\\s*(\\d+)\\.\\s+(\\w+)\\s+([0-9a-fA-F]{8})\\s{2}(.+?)\\s{2}@\\s+\\((-?\\d+),\\s*(-?\\d+)\\)\\s*$");
 }
+using namespace ClaireonTool_GetBlueprintGraph_spec_Private;
 
 // =====================================================================================
 // Test 13: OutlineFormat.SingleLineGrammar
@@ -162,7 +163,7 @@ namespace
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetBlueprintGraphTest_OutlineFormat_SingleLineGrammar,
 	"Claireon.GetBlueprintGraph.OutlineFormat.SingleLineGrammar",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FGetBlueprintGraphTest_OutlineFormat_SingleLineGrammar::RunTest(const FString& Parameters)
 {
@@ -182,7 +183,7 @@ bool FGetBlueprintGraphTest_OutlineFormat_SingleLineGrammar::RunTest(const FStri
 	}
 
 	UEdGraph* EventGraph = GetEventGraphFromAsset(AssetPath);
-	if (!EventGraph)
+	if (!IsValid(EventGraph))
 	{
 		AddError(TEXT("Failed to resolve EventGraph from session"));
 		CloseSession(SessionId);
@@ -246,7 +247,7 @@ bool FGetBlueprintGraphTest_OutlineFormat_SingleLineGrammar::RunTest(const FStri
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetBlueprintGraphTest_OutlineFormat_NoEmbeddedNewlines,
 	"Claireon.GetBlueprintGraph.OutlineFormat.NoEmbeddedNewlines",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FGetBlueprintGraphTest_OutlineFormat_NoEmbeddedNewlines::RunTest(const FString& Parameters)
 {
@@ -259,7 +260,7 @@ bool FGetBlueprintGraphTest_OutlineFormat_NoEmbeddedNewlines::RunTest(const FStr
 	if (PrintGuid.IsEmpty()) { CloseSession(SessionId); return false; }
 
 	UEdGraph* EventGraph = GetEventGraphFromAsset(AssetPath);
-	if (!EventGraph)
+	if (!IsValid(EventGraph))
 	{
 		AddError(TEXT("Failed to resolve EventGraph from session"));
 		CloseSession(SessionId);
@@ -311,7 +312,7 @@ bool FGetBlueprintGraphTest_OutlineFormat_NoEmbeddedNewlines::RunTest(const FStr
 		return false;
 	}
 	UEdGraphNode* PrintNode = ClaireonBlueprintHelpers::FindNodeByGuid(EventGraph, PrintGuidParsed);
-	if (!PrintNode)
+	if (!IsValid(PrintNode))
 	{
 		AddError(TEXT("Failed to find PrintString node"));
 		CloseSession(SessionId);
@@ -337,7 +338,7 @@ bool FGetBlueprintGraphTest_OutlineFormat_NoEmbeddedNewlines::RunTest(const FStr
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetBlueprintGraphTest_OutlineFormat_ShortGuidUniqueness,
 	"Claireon.GetBlueprintGraph.OutlineFormat.ShortGuidUniqueness",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FGetBlueprintGraphTest_OutlineFormat_ShortGuidUniqueness::RunTest(const FString& Parameters)
 {
@@ -358,7 +359,7 @@ bool FGetBlueprintGraphTest_OutlineFormat_ShortGuidUniqueness::RunTest(const FSt
 	}
 
 	UEdGraph* EventGraph = GetEventGraphFromAsset(AssetPath);
-	if (!EventGraph)
+	if (!IsValid(EventGraph))
 	{
 		AddError(TEXT("Failed to resolve EventGraph"));
 		CloseSession(SessionId);
@@ -415,7 +416,7 @@ bool FGetBlueprintGraphTest_OutlineFormat_ShortGuidUniqueness::RunTest(const FSt
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetBlueprintGraphTest_OutlineFormat_PositionParsesSigned,
 	"Claireon.GetBlueprintGraph.OutlineFormat.PositionParsesSigned",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FGetBlueprintGraphTest_OutlineFormat_PositionParsesSigned::RunTest(const FString& Parameters)
 {
@@ -447,7 +448,7 @@ bool FGetBlueprintGraphTest_OutlineFormat_PositionParsesSigned::RunTest(const FS
 	}
 
 	UEdGraph* EventGraph = GetEventGraphFromAsset(AssetPath);
-	if (!EventGraph)
+	if (!IsValid(EventGraph))
 	{
 		AddError(TEXT("Failed to resolve EventGraph"));
 		CloseSession(SessionId);
@@ -457,7 +458,7 @@ bool FGetBlueprintGraphTest_OutlineFormat_PositionParsesSigned::RunTest(const FS
 	FGuid PrintGuidParsed;
 	FGuid::Parse(PrintGuid, PrintGuidParsed);
 	UEdGraphNode* PrintNode = ClaireonBlueprintHelpers::FindNodeByGuid(EventGraph, PrintGuidParsed);
-	if (!PrintNode)
+	if (!IsValid(PrintNode))
 	{
 		AddError(TEXT("Failed to resolve PrintString node"));
 		CloseSession(SessionId);
@@ -523,7 +524,7 @@ bool FGetBlueprintGraphTest_OutlineFormat_PositionParsesSigned::RunTest(const FS
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetBlueprintGraphTest_NodeIdSelfHealHyphenated,
 	"Claireon.GetBlueprintGraph.NodeId.SelfHealHyphenated",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FGetBlueprintGraphTest_NodeIdSelfHealHyphenated::RunTest(const FString& Parameters)
 {
@@ -636,7 +637,7 @@ bool FGetBlueprintGraphTest_NodeIdSelfHealHyphenated::RunTest(const FString& Par
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetBlueprintGraphTest_NodeIdCrossToolHandoff,
 	"Claireon.GetBlueprintGraph.NodeId.CrossToolHandoff",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FGetBlueprintGraphTest_NodeIdCrossToolHandoff::RunTest(const FString& Parameters)
 {
@@ -696,7 +697,7 @@ bool FGetBlueprintGraphTest_NodeIdCrossToolHandoff::RunTest(const FString& Param
 	// The inspect_node path goes through ClaireonBlueprintNodeSerializer, which also emits
 	// DigitsWithHyphens; a ParseExact on get_graph's output round-trips into the graph.
 	UEdGraph* EventGraph = GetEventGraphFromAsset(AssetPath);
-	if (!EventGraph)
+	if (!IsValid(EventGraph))
 	{
 		AddError(TEXT("Failed to resolve EventGraph for handoff check"));
 		CloseSession(SessionId);
@@ -710,7 +711,7 @@ bool FGetBlueprintGraphTest_NodeIdCrossToolHandoff::RunTest(const FString& Param
 		return false;
 	}
 	UEdGraphNode* Found = ClaireonBlueprintHelpers::FindNodeByGuid(EventGraph, Parsed);
-	if (!Found)
+	if (!IsValid(Found))
 	{
 		AddError(FString::Printf(TEXT("get_graph node_id '%s' does not resolve to a node in EventGraph"), *AnyNodeId));
 		CloseSession(SessionId);
@@ -730,7 +731,7 @@ bool FGetBlueprintGraphTest_NodeIdCrossToolHandoff::RunTest(const FString& Param
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetBlueprintGraphTest_ApplyGraphIdMapFormat,
 	"Claireon.GetBlueprintGraph.NodeId.ApplyGraphIdMapFormat",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FGetBlueprintGraphTest_ApplyGraphIdMapFormat::RunTest(const FString& Parameters)
 {
@@ -825,7 +826,7 @@ bool FGetBlueprintGraphTest_ApplyGraphIdMapFormat::RunTest(const FString& Parame
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetBlueprintGraphTest_FieldAliases_GraphAndNodeObjects,
 	"Claireon.GetBlueprintGraph.FieldAliases.GraphAndNodeObjects",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FGetBlueprintGraphTest_FieldAliases_GraphAndNodeObjects::RunTest(const FString& Parameters)
 {
@@ -913,7 +914,7 @@ bool FGetBlueprintGraphTest_FieldAliases_GraphAndNodeObjects::RunTest(const FStr
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetBlueprintGraphTest_FieldAliases_ResponseSizeSmoke,
 	"Claireon.GetBlueprintGraph.FieldAliases.ResponseSizeSmoke",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FGetBlueprintGraphTest_FieldAliases_ResponseSizeSmoke::RunTest(const FString& Parameters)
 {
@@ -971,7 +972,7 @@ bool FGetBlueprintGraphTest_FieldAliases_ResponseSizeSmoke::RunTest(const FStrin
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetBlueprintGraphTest_Spill_LoudOnSilentEmpty,
 	"Claireon.GetBlueprintGraph.Spill.LoudOnSilentEmpty",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FGetBlueprintGraphTest_Spill_LoudOnSilentEmpty::RunTest(const FString& Parameters)
 {

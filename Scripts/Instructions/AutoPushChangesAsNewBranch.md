@@ -25,7 +25,7 @@ The script should:
    - If no changes and no unmerged commits exist, exit with informational message
 4. Capture the git user identifier using the utility script:
    ```powershell
-   Scripts\Utilities\Get-GitUsername.ps1
+   Plugins\Claireon\Scripts\Utilities\Get-GitUsername.ps1
    ```
    - Returns the username portion of git user.email (e.g., `jdoe` from `jdoe@example.com`)
 5. Get the worktree name from the current directory basename
@@ -38,7 +38,7 @@ The script should:
 ### 3. Create New Branch from Current State
 
 1. Generate branch name in format: `llm/<git_user>/<worktree>/<generated-name>`
-   - `<git_user>`: Output from `Scripts\Utilities\Get-GitUsername.ps1` (e.g., "jdoe")
+   - `<git_user>`: Output from `Plugins\Claireon\Scripts\Utilities\Get-GitUsername.ps1` (e.g., "jdoe")
    - `<worktree>`: Current worktree directory name, lowercased
    - `<generated-name>`: Short descriptive name based on changed files/modules
      - If changes affect single module/component, use that name

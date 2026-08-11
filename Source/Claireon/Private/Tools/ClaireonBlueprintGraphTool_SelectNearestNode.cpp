@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -126,7 +126,7 @@ FToolResult ClaireonBlueprintGraphTool_SelectNearestNode::Execute(const TSharedP
     }
 	UEdGraph* Graph = Data->Graph.Get();
 
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(TEXT("Graph is no longer valid"));
 	}
@@ -152,7 +152,7 @@ FToolResult ClaireonBlueprintGraphTool_SelectNearestNode::Execute(const TSharedP
 
 	for (UEdGraphNode* Node : Graph->Nodes)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			continue;
 		}
@@ -167,7 +167,7 @@ FToolResult ClaireonBlueprintGraphTool_SelectNearestNode::Execute(const TSharedP
 		}
 	}
 
-	if (!NearestNode)
+	if (!IsValid(NearestNode))
 	{
 		return MakeErrorResult(TEXT("No nodes found in graph"));
 	}

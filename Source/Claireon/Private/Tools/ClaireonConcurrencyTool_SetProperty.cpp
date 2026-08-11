@@ -12,7 +12,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-namespace
+namespace ClaireonConcurrencyTool_SetProperty_Private
 {
 	// discriminator-prefixed file-local helper (avoids unity collisions across cohort .cpp files).
 	FString ConcurrencySetProperty_JsonValueToString(const TSharedPtr<FJsonValue>& V)
@@ -34,6 +34,7 @@ namespace
 		return FString();
 	}
 }
+using namespace ClaireonConcurrencyTool_SetProperty_Private;
 
 FString FClaireonConcurrencyTool_SetProperty::GetCategory() const { return TEXT("concurrency"); }
 FString FClaireonConcurrencyTool_SetProperty::GetOperation() const { return TEXT("set_property"); }
@@ -71,14 +72,9 @@ IClaireonTool::FToolResult FClaireonConcurrencyTool_SetProperty::Execute(const T
 	FString PropertyPath;
 	if (!Arguments->TryGetStringField(TEXT("property_path"), PropertyPath) || PropertyPath.IsEmpty())
 	{
-		FString FieldName;
-		if (!Arguments->TryGetStringField(TEXT("field_name"), FieldName) || FieldName.IsEmpty())
-		{
-			return MakeErrorResult(TEXT("Missing required parameter: property_path"));
-		}
-		PropertyPath = FString::Printf(TEXT("Concurrency.%s"), *FieldName);
+		return MakeErrorResult(TEXT("Missing required parameter: property_path"));
 	}
-	else if (!PropertyPath.StartsWith(TEXT("Concurrency.")))
+	if (!PropertyPath.StartsWith(TEXT("Concurrency.")))
 	{
 		PropertyPath = FString::Printf(TEXT("Concurrency.%s"), *PropertyPath);
 	}
@@ -93,12 +89,12 @@ IClaireonTool::FToolResult FClaireonConcurrencyTool_SetProperty::Execute(const T
 	FString Error;
 	EClaireonAudioAssetKind Kind = EClaireonAudioAssetKind::Unknown;
 	UObject* Loaded = ClaireonAudioHelpers::LoadAudioAsset(AssetPath, Kind, Error);
-	if (!Loaded)
+	if (!IsValid(Loaded))
 	{
 		return MakeErrorResult(Error);
 	}
 	USoundConcurrency* Conc = Cast<USoundConcurrency>(Loaded);
-	if (!Conc || Kind != EClaireonAudioAssetKind::Concurrency)
+	if (!IsValid(Conc) || Kind != EClaireonAudioAssetKind::Concurrency)
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset is not a SoundConcurrency: %s"), *AssetPath));
 	}

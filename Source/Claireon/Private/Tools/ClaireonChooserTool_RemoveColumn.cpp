@@ -42,7 +42,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserRemoveColumn::Execute(const TShar
 
 	FString Error;
 	UChooserTable* Chooser = ClaireonChooserHelpers::LoadChooserTableAsset(AssetPath, Error);
-	if (!Chooser)
+	if (!IsValid(Chooser))
 	{
 		return MakeErrorResult(Error);
 	}

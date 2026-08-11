@@ -40,7 +40,7 @@ FToolResult ClaireonBehaviorTreeTool_RemoveService::Execute(const TSharedPtr<FJs
 	}
 
 	UBehaviorTreeGraph* Graph = ClaireonBehaviorTreeHelpers::GetBTGraph(Data->BehaviorTree.Get(), Error);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -58,7 +58,7 @@ FToolResult ClaireonBehaviorTreeTool_RemoveService::Execute(const TSharedPtr<FJs
 	}
 
 	UBehaviorTreeGraphNode* ParentGraphNode = ClaireonBehaviorTreeHelpers::FindGraphNodeByGuid(Graph, NodeGuid);
-	if (!ParentGraphNode)
+	if (!IsValid(ParentGraphNode))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Node not found: %s"), *NodeGuid.ToString(EGuidFormats::DigitsWithHyphensLower)));
 	}
@@ -67,14 +67,14 @@ FToolResult ClaireonBehaviorTreeTool_RemoveService::Execute(const TSharedPtr<FJs
 	for (UAIGraphNode* SubNode : ParentGraphNode->SubNodes)
 	{
 		UBehaviorTreeGraphNode* SubBTNode = Cast<UBehaviorTreeGraphNode>(SubNode);
-		if (SubBTNode && SubBTNode->NodeGuid == ServiceGuid)
+		if (IsValid(SubBTNode) && SubBTNode->NodeGuid == ServiceGuid)
 		{
 			ServiceSubNode = SubNode;
 			break;
 		}
 	}
 
-	if (!ServiceSubNode)
+	if (!IsValid(ServiceSubNode))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Service not found with GUID: %s"), *ServiceGuid.ToString(EGuidFormats::DigitsWithHyphensLower)));
 	}

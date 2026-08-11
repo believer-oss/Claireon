@@ -24,7 +24,7 @@ TSharedPtr<FJsonObject> ClaireonTool_TransactionUndo::GetInputSchema() const
 
 FToolResult ClaireonTool_TransactionUndo::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("GEditor is not available"));
 	}
@@ -48,7 +48,7 @@ FToolResult ClaireonTool_TransactionUndo::Execute(const TSharedPtr<FJsonObject>&
 
 		// Get the description of what was just undone from the redo buffer position.
 		FString Description = TEXT("(unknown)");
-		if (UTransBuffer* TransBuffer = Cast<UTransBuffer>(GEditor->Trans))
+		if (UTransBuffer* TransBuffer = Cast<UTransBuffer>(GEditor->Trans); IsValid(TransBuffer))
 		{
 			int32 UndoBufferNum = TransBuffer->GetUndoCount();
 			int32 BufferSize = TransBuffer->GetQueueLength();

@@ -27,7 +27,9 @@ FString FClaireonCameraAssetTool_Compile::GetOperation() const { return TEXT("co
 
 FString FClaireonCameraAssetTool_Compile::GetDescription() const
 {
-	return TEXT("Run UCameraAsset::BuildCamera against in-memory state without persisting; returns build diagnostics.");
+	return TEXT("Run UCameraAsset::BuildCamera against the current in-memory state of the asset at asset_path and "
+		"return ok plus the build diagnostics, without persisting anything. Read-only / non-session: opens no "
+		"session and never writes; use it to gate before camera_asset_save.");
 }
 
 TSharedPtr<FJsonObject> FClaireonCameraAssetTool_Compile::GetInputSchema() const
@@ -56,7 +58,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_Compile::Execute(const TShar
 	}
 
 	UCameraAsset* Asset = LoadObject<UCameraAsset>(nullptr, *Canon);
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Camera asset not found: %s"), *Canon));
 	}

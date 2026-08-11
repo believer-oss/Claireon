@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -6,6 +6,7 @@
 #include "Tools/FToolSchemaBuilder.h"
 #include "ClaireonBlueprintHelpers.h"
 #include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
 #include "Tools/ClaireonSpecApplicator_Blueprint.h"
 #include "Tools/ClaireonBlueprintGraphEditToolBase_Internal.h"
 #include "ClaireonLog.h"
@@ -136,7 +137,7 @@ FToolResult ClaireonBlueprintGraphTool_ListGraphs::Execute(const TSharedPtr<FJso
 	}
 
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load Blueprint: %s"), *AssetPath));
 	}
@@ -152,12 +153,12 @@ FToolResult ClaireonBlueprintGraphTool_ListGraphs::Execute(const TSharedPtr<FJso
 
 	for (UEdGraph* Graph : Blueprint->UbergraphPages)
 	{
-		if (Graph)
+		if (IsValid(Graph))
 			Graphs.Add({ Graph->GetName(), TEXT("Ubergraph"), Graph->Nodes.Num() });
 	}
 	for (UEdGraph* Graph : Blueprint->FunctionGraphs)
 	{
-		if (!Graph)
+		if (!IsValid(Graph))
 			continue;
 		// UAnimationGraph instances in FunctionGraphs are anim graphs, not regular functions
 		const FString GraphType = Cast<UAnimationGraph>(Graph) ? TEXT("AnimGraph") : TEXT("Function");
@@ -165,13 +166,32 @@ FToolResult ClaireonBlueprintGraphTool_ListGraphs::Execute(const TSharedPtr<FJso
 	}
 	for (UEdGraph* Graph : Blueprint->MacroGraphs)
 	{
-		if (Graph)
+		if (IsValid(Graph))
 			Graphs.Add({ Graph->GetName(), TEXT("Macro"), Graph->Nodes.Num() });
 	}
 	for (UEdGraph* Graph : Blueprint->DelegateSignatureGraphs)
 	{
-		if (Graph)
+		if (IsValid(Graph))
 			Graphs.Add({ Graph->GetName(), TEXT("DelegateSignature"), Graph->Nodes.Num() });
+	}
+	{
+		// Collapsed-graph (Composite) bodies live in SubGraphs, not the top-level
+		// arrays; list them too so replay can enumerate every reachable graph.
+		TSet<FString> ListedNames;
+		for (const FGraphEntry& Entry : Graphs)
+		{
+			ListedNames.Add(Entry.Name);
+		}
+		TArray<UEdGraph*> AllGraphs;
+		Blueprint->GetAllGraphs(AllGraphs);
+		for (UEdGraph* Graph : AllGraphs)
+		{
+			if (IsValid(Graph) && !ListedNames.Contains(Graph->GetName()))
+			{
+				Graphs.Add({ Graph->GetName(), TEXT("Subgraph"), Graph->Nodes.Num() });
+				ListedNames.Add(Graph->GetName());
+			}
+		}
 	}
 
 	FString Output = FString::Printf(TEXT("Graphs in %s (%d total):\n"), *AssetPath, Graphs.Num());
@@ -181,7 +201,25 @@ FToolResult ClaireonBlueprintGraphTool_ListGraphs::Execute(const TSharedPtr<FJso
 			*Entry.Name, *Entry.Type, Entry.NodeCount);
 	}
 
-	return MakeSuccessResult(nullptr, Output);
+	// Structured payload: ClaireonBridge's BuildResultEnvelope substitutes {}
+	// for a null Data object, so programmatic callers reading result["data"]
+	// would otherwise always see an empty object (summary-only results).
+	TSharedPtr<FJsonObject> ResultData = MakeShared<FJsonObject>();
+	ResultData->SetStringField(TEXT("asset_path"), AssetPath);
+	ResultData->SetNumberField(TEXT("count"), Graphs.Num());
+	TArray<TSharedPtr<FJsonValue>> GraphValues;
+	GraphValues.Reserve(Graphs.Num());
+	for (const FGraphEntry& Entry : Graphs)
+	{
+		TSharedPtr<FJsonObject> GraphJson = MakeShared<FJsonObject>();
+		GraphJson->SetStringField(TEXT("name"), Entry.Name);
+		GraphJson->SetStringField(TEXT("type"), Entry.Type);
+		GraphJson->SetNumberField(TEXT("node_count"), Entry.NodeCount);
+		GraphValues.Add(MakeShared<FJsonValueObject>(GraphJson));
+	}
+	ResultData->SetArrayField(TEXT("graphs"), GraphValues);
+
+	return MakeSuccessResult(ResultData, Output);
 }
 
 #undef LOCTEXT_NAMESPACE

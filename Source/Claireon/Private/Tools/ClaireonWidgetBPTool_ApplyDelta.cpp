@@ -10,7 +10,11 @@ FString FClaireonWidgetBPTool_ApplyDelta::GetOperation() const { return TEXT("ap
 
 FString FClaireonWidgetBPTool_ApplyDelta::GetDescription() const
 {
-	return TEXT("Atomic batch widgetbp modification. Removes, creates, and reparents widgets in one transactional call. Counterpart to widgetbp_apply_spec. Execution order: remove -> create -> reparent. (No disconnect phase -- widgets always have exactly one parent.)");
+	return TEXT("Apply an atomic batch of Widget Blueprint edits in one transactional call. Execution order: "
+				"remove -> create -> reparent; any phase failure cancels the transaction so nothing lands. No "
+				"disconnect phase -- widgets always have exactly one parent. Counterpart to "
+				"widgetbp_apply_spec. Pass session_id for an already open widgetbp session (widgetbp_open), "
+				"or asset_path for a temporary one.");
 }
 
 TSharedPtr<FJsonObject> FClaireonWidgetBPTool_ApplyDelta::GetInputSchema() const

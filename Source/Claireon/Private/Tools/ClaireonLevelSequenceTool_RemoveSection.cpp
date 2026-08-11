@@ -54,7 +54,7 @@ FToolResult ClaireonLevelSequenceTool_RemoveSection::Execute(const TSharedPtr<FJ
 
 	UMovieSceneTrack* Track = ClaireonLevelSequenceInternal::ResolveFocusedTrack(
 		Data->Sequence->GetMovieScene(), Data->FocusedBindingIndex, Data->FocusedTrackIndex, Error);
-	if (!Track)
+	if (!IsValid(Track))
 	{
 		return MakeErrorResult(Error);
 	}

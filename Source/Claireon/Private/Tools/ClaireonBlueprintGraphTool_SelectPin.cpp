@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_SelectPin::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_SelectPin::GetDescription() const
 {
-    return TEXT("Moves the session cursor to a specific pin on a node. Subsequent bp_add_node calls with auto_connect_from_cursor=true will wire to this pin if compatible. Most-common pitfall: the cursor is per-session, so re-running select_pin between sessions is a no-op for any session you already closed. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+    return TEXT("Move the session cursor to a specific pin on a node. Subsequent bp_add_node calls with auto_connect_from_cursor=true will wire to this pin if compatible. Most-common pitfall: the cursor is per-session, so re-running select_pin between sessions is a no-op for any session you already closed. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SelectPin::GetInputSchema() const
@@ -132,7 +132,7 @@ FToolResult ClaireonBlueprintGraphTool_SelectPin::Execute(const TSharedPtr<FJson
     }
 	UEdGraph* Graph = Data->Graph.Get();
 
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(TEXT("Graph is no longer valid"));
 	}
@@ -148,19 +148,12 @@ FToolResult ClaireonBlueprintGraphTool_SelectPin::Execute(const TSharedPtr<FJson
 		return MakeErrorResult(TEXT("Missing required field: pin_name"));
 	}
 
-	FGuid NodeGuid;
-	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
+	// Find the node (full GUID or >=8-hex prefix)
+	FString ResolveError;
+	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperationStr(Graph, NodeGuidStr, Data, ResolveError);
+	if (!IsValid(Node))
 	{
-		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
-	}
-
-	// Find the node
-	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperation(Graph, NodeGuid, Data);
-	if (!Node)
-	{
-		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
-		return MakeErrorResult(FString::Printf(TEXT("Node not found with GUID: %s in graph '%s'.\n%s"),
-			*NodeGuidStr, *Graph->GetName(), *AvailableNodes));
+		return MakeErrorResult(ResolveError);
 	}
 
 	// Resolve the pin using fuzzy matching
@@ -178,7 +171,7 @@ FToolResult ClaireonBlueprintGraphTool_SelectPin::Execute(const TSharedPtr<FJson
 
 	// Move cursor to this pin
 	Data->Cursor.PushHistory(Data->Cursor.GraphName);
-	Data->Cursor.FocusedNodeGuid = NodeGuid;
+	Data->Cursor.FocusedNodeGuid = Node->NodeGuid;
 	Data->Cursor.FocusedPinName = Pin->PinName;
 	Data->Cursor.FocusedPinDirection = Pin->Direction;
 

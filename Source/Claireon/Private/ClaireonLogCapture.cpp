@@ -2,32 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 #include "ClaireonLogCapture.h"
-#include "ClaireonSettings.h"
-
-namespace ClaireonLogCaptureSnapshot
-{
-	// Snapshot the denylist on construction — must be on the game thread so
-	// the UObject CDO read is safe. From here on, Serialize() reads only the
-	// snapshot and works from any thread (AnimBP compile warnings, async
-	// loading, etc. routinely fire from worker threads and would otherwise
-	// bypass the per-call IsInGameThread()-guarded settings lookup).
-	static TSet<FName> SnapshotDenylist()
-	{
-		if (!IsInGameThread())
-		{
-			return {};
-		}
-		if (const UClaireonSettings* Settings = UClaireonSettings::Get())
-		{
-			return Settings->ExcludedEngineLogCategories;
-		}
-		return {};
-	}
-}
 
 FClaireonLogCapture::FClaireonLogCapture(ELogVerbosity::Type InMinVerbosity)
 	: MinVerbosity(InMinVerbosity)
-	, ExcludedCategoriesSnapshot(ClaireonLogCaptureSnapshot::SnapshotDenylist())
 {
 	GLog->AddOutputDevice(this);
 }
@@ -42,14 +19,6 @@ void FClaireonLogCapture::Serialize(const TCHAR* V, ELogVerbosity::Type Verbosit
 	// Lower numeric value = more severe. Warning=3, Error=2, Fatal=1.
 	// Filter out messages less severe than our threshold.
 	if (Verbosity > MinVerbosity)
-	{
-		return;
-	}
-
-	// Use the snapshot taken at construction — works from any thread.
-	// Read is lock-free: ExcludedCategoriesSnapshot is const post-construction,
-	// safety via the release fence in GLog->AddOutputDevice.
-	if (ExcludedCategoriesSnapshot.Contains(Category))
 	{
 		return;
 	}
@@ -79,7 +48,12 @@ FString FClaireonLogCapture::GetCapturedOutput() const
 	FString Output;
 	for (const FCapturedMessage& Message : CapturedMessages)
 	{
-		const TCHAR* VerbosityLabel = (Message.Verbosity <= ELogVerbosity::Error) ? TEXT("Error") : TEXT("Warning");
+		// Label with the message's own verbosity name. The old two-way
+		// Error/Warning split was correct only while the floor was Warning; at a
+		// Log floor it stamped "[Warning]" on Display and Log lines, which is a
+		// silent wrong answer about severity. ::ToString still yields exactly
+		// "Error"/"Warning" for the pre-existing cases.
+		const TCHAR* VerbosityLabel = ::ToString(Message.Verbosity);
 		Output += FString::Printf(TEXT("[%s] %s: %s\n"), VerbosityLabel, *Message.Category.ToString(), *Message.Text);
 	}
 

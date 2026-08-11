@@ -107,7 +107,7 @@ IClaireonTool::FToolResult ClaireonTool_SetBlueprintMetadata::Execute(const TSha
 
 	// Load Blueprint
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load Blueprint: %s"), *AssetPath));
 	}
@@ -225,7 +225,7 @@ IClaireonTool::FToolResult ClaireonTool_SetBlueprintMetadata::Execute(const TSha
 	else if (PropertyName == TEXT("compile_mode"))
 	{
 		// Export old value
-		if (const UEnum* CompileModeEnum = StaticEnum<EBlueprintCompileMode>())
+		if (const UEnum* CompileModeEnum = StaticEnum<EBlueprintCompileMode>(); IsValid(CompileModeEnum))
 		{
 			OldValue = CompileModeEnum->GetNameStringByValue(
 				static_cast<int64>(Blueprint->CompileMode));

@@ -9,7 +9,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-namespace
+namespace ClaireonTool_ChooserInspect_Private
 {
 	bool ShouldEmit(const TSet<FString>& Selected, const TCHAR* Field)
 	{
@@ -29,7 +29,7 @@ namespace
 
 	int32 CountReachableSubChoosers(const UChooserTable* Chooser)
 	{
-		if (!Chooser) { return 0; }
+		if (!IsValid(Chooser)) { return 0; }
 		int32 Fanout = 0;
 #if WITH_EDITORONLY_DATA
 		for (const FInstancedStruct& Result : Chooser->ResultsStructs)
@@ -49,7 +49,7 @@ namespace
 	TSharedPtr<FJsonObject> SerializeSubChooserRef(const UChooserTable* Nested)
 	{
 		TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-		if (!Nested) { return Out; }
+		if (!IsValid(Nested)) { return Out; }
 		Out->SetStringField(TEXT("name"), Nested->GetName());
 		Out->SetStringField(TEXT("path"), Nested->GetPathName());
 #if WITH_EDITORONLY_DATA
@@ -68,6 +68,7 @@ namespace
 		return Out;
 	}
 }
+using namespace ClaireonTool_ChooserInspect_Private;
 
 FString ClaireonTool_ChooserInspect::GetCategory() const { return TEXT("chooser"); }
 FString ClaireonTool_ChooserInspect::GetOperation() const { return TEXT("inspect"); }
@@ -79,13 +80,11 @@ TArray<FString> ClaireonTool_ChooserInspect::GetSearchKeywords() const
 
 FString ClaireonTool_ChooserInspect::GetDescription() const
 {
-	return TEXT("Inspect a ChooserTable asset. Returns result type, output class, context parameters, "
-		"columns, rows (results + cell values), and the fallback result. Supports field projection "
-		"(fields=[...]) and row paging (row_offset/row_limit) to keep payloads small. Sub-chooser "
-		"handling is controlled by include_subchoosers: 'none' omits, 'refs' (default) returns "
-		"compact per-nested triage info (name/path/row_count/etc.) without recursing into bodies, "
-		"'recursive' inlines the full nested tree. Use chooser_walk for tree traversal "
-		"instead of include_subchoosers='recursive' on deep trees.");
+	return TEXT("Inspect a ChooserTable: result type, output class, context parameters, columns, rows (results plus "
+		"cell values) and the fallback result. Supports field projection (fields) and row paging "
+		"(row_offset/row_limit). include_subchoosers: none, refs (default; compact per-nested triage) or "
+		"recursive (inlines bodies) -- prefer chooser_walk on deep trees. Read-only / non-session: no open "
+		"session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ChooserInspect::GetInputSchema() const
@@ -118,7 +117,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserInspect::Execute(const TSharedPtr
 
 	FString Error;
 	UChooserTable* Chooser = ClaireonChooserHelpers::LoadChooserTableAsset(AssetPath, Error);
-	if (!Chooser)
+	if (!IsValid(Chooser))
 	{
 		return MakeErrorResult(Error);
 	}

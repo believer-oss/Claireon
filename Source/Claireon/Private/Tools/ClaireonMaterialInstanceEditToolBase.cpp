@@ -104,7 +104,7 @@ FToolResult ClaireonMaterialInstanceEditToolBase::BuildStateResponse(const FStri
 	}
 
 	UMaterialInstanceConstant* Instance = Data->Instance.Get();
-	if (!Instance)
+	if (!IsValid(Instance))
 	{
 		return MakeErrorResult(TEXT("MaterialInstance is no longer valid"));
 	}
@@ -132,8 +132,8 @@ FToolResult ClaireonMaterialInstanceEditToolBase::BuildStateResponse(const FStri
 	RespData->SetNumberField(TEXT("texture_override_count"), Instance->TextureParameterValues.Num());
 	RespData->SetStringField(TEXT("last_operation_status"), Data->LastOperationStatus);
 
-	FString SessionHintSummaryTag;
-	ClaireonAssetUtils::EmitSessionHintIfNeeded(RespData, Data->ConsecutiveAssetPathCalls, Instance->GetPathName(), SessionId, SessionHintSummaryTag);
+	TSharedPtr<FJsonObject> SessionHint;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(RespData, Data->ConsecutiveAssetPathCalls, Instance->GetPathName(), SessionId, GetName(), SessionHint);
 
-	return MakeSuccessResult(RespData, Output + SessionHintSummaryTag);
+	return MakeSuccessResultWithHint(RespData, Output, SessionHint);
 }

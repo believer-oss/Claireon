@@ -17,8 +17,10 @@ FString ClaireonTool_PIERegisterDamageListener::GetOperation() const { return TE
 
 FString ClaireonTool_PIERegisterDamageListener::GetDescription() const
 {
-	return TEXT("Register a damage event listener on an actor's health component. "
-		"Returns a listener ID that can be used with getDamageEvents and unregisterDamageListener.");
+	return TEXT("Register a damage-event listener on a PIE actor's health component, addressed by the actorId from "
+		"pie_register_actor. Returns a listener ID for pie_get_damage_events and "
+		"pie_unregister_damage_listener. Requires a live PIE session; the listener lives only as long as "
+		"that play session and opens no editing session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PIERegisterDamageListener::GetInputSchema() const
@@ -47,9 +49,9 @@ TSharedPtr<FJsonObject> ClaireonTool_PIERegisterDamageListener::GetInputSchema()
 
 IClaireonTool::FToolResult ClaireonTool_PIERegisterDamageListener::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	UE_LOG(LogClaireon, Display, TEXT("[MCP] editor.pie.registerDamageListener"));
+	UE_LOG(LogClaireon, Display, TEXT("[MCP] pie_register_damage_listener"));
 
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("Editor is not available"));
 	}
@@ -71,14 +73,14 @@ IClaireonTool::FToolResult ClaireonTool_PIERegisterDamageListener::Execute(const
 	UWorld* PIEWorld = nullptr;
 	for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
 	{
-		if (WorldContext.WorldType == EWorldType::PIE && WorldContext.World())
+		if (WorldContext.WorldType == EWorldType::PIE && IsValid(WorldContext.World()))
 		{
 			PIEWorld = WorldContext.World();
 			break;
 		}
 	}
 
-	if (!PIEWorld)
+	if (!IsValid(PIEWorld))
 	{
 		return MakeErrorResult(TEXT("PIE world not found. PIE may still be initializing."));
 	}
@@ -87,7 +89,7 @@ IClaireonTool::FToolResult ClaireonTool_PIERegisterDamageListener::Execute(const
 	FClaireonPIEManager& PIEManager = FClaireonPIEManager::Get();
 	AActor* Actor = PIEManager.ResolveActorId(ActorId, PIEWorld);
 
-	if (!Actor)
+	if (!IsValid(Actor))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Could not resolve actor '%s'. The actor may have been destroyed or the ID is stale."),
@@ -101,7 +103,7 @@ IClaireonTool::FToolResult ClaireonTool_PIERegisterDamageListener::Execute(const
 
 	for (const UActorComponent* Component : Components)
 	{
-		if (Component && Component->GetClass()->GetName().Contains(TEXT("Health")))
+		if (IsValid(Component) && Component->GetClass()->GetName().Contains(TEXT("Health")))
 		{
 			HealthComponentInfo += FString::Printf(TEXT("  - %s (%s)\n"),
 				*Component->GetName(), *Component->GetClass()->GetName());
@@ -122,7 +124,7 @@ IClaireonTool::FToolResult ClaireonTool_PIERegisterDamageListener::Execute(const
 
 		for (const UActorComponent* Component : Components)
 		{
-			if (Component)
+			if (IsValid(Component))
 			{
 				ErrorMsg += FString::Printf(TEXT("  - %s (%s)\n"),
 					*Component->GetName(), *Component->GetClass()->GetName());

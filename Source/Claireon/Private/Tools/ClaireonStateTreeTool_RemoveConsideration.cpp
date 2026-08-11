@@ -40,7 +40,7 @@ FToolResult ClaireonStateTreeTool_RemoveConsideration::Execute(const TSharedPtr<
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	FGuid StateId, NodeId;
@@ -50,7 +50,7 @@ FToolResult ClaireonStateTreeTool_RemoveConsideration::Execute(const TSharedPtr<
 		return MakeErrorResult(Error);
 
 	UStateTreeState* State = ClaireonStateTreeHelpers::FindStateById(EditorData, StateId);
-	if (!State)
+	if (!IsValid(State))
 		return MakeErrorResult(TEXT("State not found"));
 
 	int32 Index = State->Considerations.IndexOfByPredicate([&NodeId](const FStateTreeEditorNode& N)

@@ -30,7 +30,7 @@
 // same PR.
 // ---------------------------------------------------------------------------
 
-namespace
+namespace ClaireonTool_SequenceListTrackTypes_Private
 {
 	struct FTrackTypeEntry
 	{
@@ -91,6 +91,7 @@ namespace
 		},
 	};
 }
+using namespace ClaireonTool_SequenceListTrackTypes_Private;
 
 FString ClaireonTool_SequenceListTrackTypes::GetCategory() const { return TEXT("level"); }
 FString ClaireonTool_SequenceListTrackTypes::GetOperation() const { return TEXT("sequence_list_track_types"); }

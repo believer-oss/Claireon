@@ -181,7 +181,7 @@ UNTEST_UNIT_OPTS(Claireon, OutputGate, LargeGenericDataSpillsAsData, UNTEST_TIME
 	FScopedTestRoot Scope(TEXT("LargeGenericDataSpillsAsData"));
 
 	const UClaireonSettings* S = UClaireonSettings::Get();
-	const int32 Threshold = S ? S->ResultSpillThresholdBytes : 8192;
+	const int32 Threshold = IsValid(S) ? S->ResultSpillThresholdBytes : 8192;
 
 	// Construct a payload guaranteed to exceed threshold once serialised.
 	IClaireonTool::FToolResult R = MakeGenericDataResult(Threshold * 2);
@@ -224,7 +224,7 @@ UNTEST_UNIT_OPTS(Claireon, OutputGate, PythonStdoutSpillsOnly, UNTEST_TIMEOUTMS(
 	FScopedTestRoot Scope(TEXT("PythonStdoutSpillsOnly"));
 
 	const UClaireonSettings* S = UClaireonSettings::Get();
-	const int32 Threshold = S ? S->ResultSpillThresholdBytes : 8192;
+	const int32 Threshold = IsValid(S) ? S->ResultSpillThresholdBytes : 8192;
 
 	const FString Big = FString::ChrN(Threshold * 2, TEXT('s'));
 	const FString Small = TEXT("small uelog");
@@ -267,7 +267,7 @@ UNTEST_UNIT_OPTS(Claireon, OutputGate, PythonBothStreamsSpill, UNTEST_TIMEOUTMS(
 	FScopedTestRoot Scope(TEXT("PythonBothStreamsSpill"));
 
 	const UClaireonSettings* S = UClaireonSettings::Get();
-	const int32 Threshold = S ? S->ResultSpillThresholdBytes : 8192;
+	const int32 Threshold = IsValid(S) ? S->ResultSpillThresholdBytes : 8192;
 
 	const FString BigStdout = FString::ChrN(Threshold * 2, TEXT('s'));
 	const FString BigUELog = FString::ChrN(Threshold * 2, TEXT('u'));
@@ -316,7 +316,7 @@ UNTEST_UNIT_OPTS(Claireon, OutputGate, BinaryDataSpillsAsBin, UNTEST_TIMEOUTMS(3
 	FScopedTestRoot Scope(TEXT("BinaryDataSpillsAsBin"));
 
 	const UClaireonSettings* S = UClaireonSettings::Get();
-	const int32 Threshold = S ? S->ResultSpillThresholdBytes : 8192;
+	const int32 Threshold = IsValid(S) ? S->ResultSpillThresholdBytes : 8192;
 
 	// Build a result whose serialised Data JSON embeds a high-bit byte sequence.
 	// The JSON serialiser emits ASCII for the TArray<uint8> string only when we
@@ -397,7 +397,7 @@ UNTEST_UNIT_OPTS(Claireon, OutputGate, WriteFailureIsCaptured, UNTEST_TIMEOUTMS(
 	FClaireonOutputGate::SetResultsRootOverrideForTests(BadRoot);
 
 	const UClaireonSettings* S = UClaireonSettings::Get();
-	const int32 Threshold = S ? S->ResultSpillThresholdBytes : 8192;
+	const int32 Threshold = IsValid(S) ? S->ResultSpillThresholdBytes : 8192;
 
 	IClaireonTool::FToolResult R = MakeGenericDataResult(Threshold * 2);
 	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
@@ -444,7 +444,7 @@ UNTEST_UNIT_OPTS(Claireon, OutputGate, GenericDataOverCeilingTruncates, UNTEST_T
 	// the truncated-at-ceiling file size whenever bOverCeiling is true.
 
 	const UClaireonSettings* S = UClaireonSettings::Get();
-	const int32 Ceiling = S ? S->ResultSpillMaxBytes : 52428800;
+	const int32 Ceiling = IsValid(S) ? S->ResultSpillMaxBytes : 52428800;
 	if (Ceiling > 4 * 1024 * 1024)
 	{
 		// Skip: building a payload larger than 4 MiB just to hit the default
@@ -488,7 +488,7 @@ UNTEST_UNIT_OPTS(Claireon, OutputGate, PythonUELogOverCeiling, UNTEST_TIMEOUTMS(
 	FScopedTestRoot Scope(TEXT("PythonUELogOverCeiling"));
 
 	const UClaireonSettings* S = UClaireonSettings::Get();
-	const int32 Ceiling = S ? S->ResultSpillMaxBytes : 52428800;
+	const int32 Ceiling = IsValid(S) ? S->ResultSpillMaxBytes : 52428800;
 	if (Ceiling > 4 * 1024 * 1024)
 	{
 		UE_LOG(LogTemp, Log,
@@ -536,7 +536,7 @@ UNTEST_UNIT_OPTS(Claireon, OutputGate, GenericDataSpillSummaryCarriesLoudMarker,
 	FScopedTestRoot Scope(TEXT("GenericDataSpillSummaryCarriesLoudMarker"));
 
 	const UClaireonSettings* S = UClaireonSettings::Get();
-	const int32 Threshold = S ? S->ResultSpillThresholdBytes : 8192;
+	const int32 Threshold = IsValid(S) ? S->ResultSpillThresholdBytes : 8192;
 
 	IClaireonTool::FToolResult R = MakeGenericDataResult(Threshold * 2, TEXT("EventGraph: 33 nodes, 12 connections"));
 	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
@@ -557,7 +557,7 @@ UNTEST_UNIT_OPTS(Claireon, OutputGate, GenericDataSpillEnvelopeCarriesErrorHintA
 	FScopedTestRoot Scope(TEXT("GenericDataSpillEnvelopeCarriesErrorHintAndInlineOmitted"));
 
 	const UClaireonSettings* S = UClaireonSettings::Get();
-	const int32 Threshold = S ? S->ResultSpillThresholdBytes : 8192;
+	const int32 Threshold = IsValid(S) ? S->ResultSpillThresholdBytes : 8192;
 
 	IClaireonTool::FToolResult R = MakeGenericDataResult(Threshold * 2);
 	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
@@ -594,7 +594,7 @@ UNTEST_UNIT_OPTS(Claireon, OutputGate, GenericDataSpillPreservesSmallScalarIdent
 	FScopedTestRoot Scope(TEXT("GenericDataSpillPreservesSmallScalarIdentityFields"));
 
 	const UClaireonSettings* S = UClaireonSettings::Get();
-	const int32 Threshold = S ? S->ResultSpillThresholdBytes : 8192;
+	const int32 Threshold = IsValid(S) ? S->ResultSpillThresholdBytes : 8192;
 
 	// Build a result with a session_id (small scalar) and a payload large enough to spill.
 	IClaireonTool::FToolResult R;
@@ -645,7 +645,7 @@ UNTEST_UNIT_OPTS(Claireon, OutputGate, PythonStdoutSpillSummaryCarriesLoudMarker
 	FScopedTestRoot Scope(TEXT("PythonStdoutSpillSummaryCarriesLoudMarker"));
 
 	const UClaireonSettings* S = UClaireonSettings::Get();
-	const int32 Threshold = S ? S->ResultSpillThresholdBytes : 8192;
+	const int32 Threshold = IsValid(S) ? S->ResultSpillThresholdBytes : 8192;
 
 	const FString Big = FString::ChrN(Threshold * 2, TEXT('s'));
 	IClaireonTool::FToolResult R = MakePythonResult(Big, TEXT("uelog ok"));

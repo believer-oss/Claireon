@@ -16,17 +16,23 @@
 #include "Engine/World.h"
 #include "FileHelpers.h"
 #include "Settings/LevelEditorPlaySettings.h"
+#include "AssetCompilingManager.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetRegistry/IAssetRegistry.h"
+#include "Containers/Ticker.h"
 
 FString ClaireonTool_PIEStart::GetCategory() const { return TEXT("pie"); }
 FString ClaireonTool_PIEStart::GetOperation() const { return TEXT("start_async"); }
 
 FString ClaireonTool_PIEStart::GetDescription() const
 {
+	// Kept under the 400-char budget Claireon.DescriptionLint enforces.
 	return TEXT("Start a Play In Editor (PIE) session, optionally loading a map first. "
-		"The PIE start is deferred until after the current script finishes. "
-		"If mapPath is supplied, a leaked-World guard runs before the pre-PIE map load: "
-		"a leaked World aborts the PIE start with a structured error -- "
-		"use duplicate_and_open_map_async if you need to PIE into a freshly-duplicated map.");
+		"The start is deferred until the current script finishes, and waits for any "
+		"in-progress asset-registry scan. "
+		"If mapPath is supplied, a leaked-World guard runs before the pre-PIE map load and "
+		"aborts with a structured error; "
+		"use duplicate_and_open_map_async to PIE into a freshly-duplicated map.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PIEStart::GetInputSchema() const
@@ -42,6 +48,17 @@ TSharedPtr<FJsonObject> ClaireonTool_PIEStart::GetInputSchema() const
 	MapPathProp->SetStringField(TEXT("description"),
 		TEXT("Asset path of the map to load before starting PIE (optional, uses current map if not specified)"));
 	Properties->SetObjectField(TEXT("mapPath"), MapPathProp);
+
+	// wait_for_asset_compilation - optional, DEFAULT TRUE
+	TSharedPtr<FJsonObject> WaitCompileProp = MakeShared<FJsonObject>();
+	WaitCompileProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	WaitCompileProp->SetStringField(TEXT("description"),
+		TEXT("Wait for in-flight asset compilation (shaders, textures, post-process resources) to "
+			 "drain before starting PIE. Default: true. Starting PIE while assets are still async-"
+			 "compiling can hard-crash the editor on a render assert -- a cold-DDC ambient cubemap "
+			 "hits FAmbientCubemapCompositePS with an unset AmbientCubemapSampler. Pass false only "
+			 "when the DDC is known warm and the extra wait is unwanted."));
+	Properties->SetObjectField(TEXT("wait_for_asset_compilation"), WaitCompileProp);
 
 	// netMode - optional, filtered by settings
 	TSharedPtr<FJsonObject> NetModeProp = MakeShared<FJsonObject>();
@@ -78,7 +95,7 @@ TSharedPtr<FJsonObject> ClaireonTool_PIEStart::GetInputSchema() const
 
 IClaireonTool::FToolResult ClaireonTool_PIEStart::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("GEditor is not available"));
 	}
@@ -115,9 +132,15 @@ IClaireonTool::FToolResult ClaireonTool_PIEStart::Execute(const TSharedPtr<FJson
 	FString MapPath;
 	Arguments->TryGetStringField(TEXT("mapPath"), MapPath);
 
+	// Defaults to true: a hard editor crash is a worse failure than a slow call, and the crash
+	// only occurs on the cold path where the wait was unavoidable anyway.
+	bool bWaitForAssetCompilation = true;
+	Arguments->TryGetBoolField(TEXT("wait_for_asset_compilation"), bWaitForAssetCompilation);
+
 	// Serialize validated args as JSON payload for deferred execution
 	TSharedPtr<FJsonObject> PayloadObj = MakeShared<FJsonObject>();
 	PayloadObj->SetStringField(TEXT("netMode"), NetModeStr);
+	PayloadObj->SetBoolField(TEXT("waitForAssetCompilation"), bWaitForAssetCompilation);
 	if (!MapPath.IsEmpty())
 	{
 		PayloadObj->SetStringField(TEXT("mapPath"), MapPath);
@@ -138,15 +161,77 @@ IClaireonTool::FToolResult ClaireonTool_PIEStart::Execute(const TSharedPtr<FJson
 	Data->SetStringField(TEXT("action"), TEXT("pie_start"));
 	Data->SetStringField(TEXT("net_mode"), NetModeStr);
 
-	FString Summary = FString::Printf(TEXT("PIE start queued (net mode: %s) — executes after script completes"), *NetModeStr);
-	return MakeSuccessResult(Data, Summary);
+	// P0-7: pre-flight dirty-package census.
+	//
+	// This payload is built and returned BEFORE the deferred action runs, so the
+	// post-save list of written packages does not exist yet. Report what WILL be
+	// written instead -- deliberately labelled as prospective, because claiming a
+	// write that has not happened is the same overclaiming disease in reverse.
+	//
+	// Reuses EnsureNoUnsavedWork rather than re-enumerating: it already builds
+	// exactly this list with bIsMapPackage flags.
+	TArray<FClaireonUnsavedPackage> DirtyPackages;
+	FClaireonBridge::EnsureNoUnsavedWork(DirtyPackages);
+	if (DirtyPackages.Num() > 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> PendingArray;
+		PendingArray.Reserve(DirtyPackages.Num());
+		for (const FClaireonUnsavedPackage& Package : DirtyPackages)
+		{
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("package_name"), Package.PackageName);
+			Entry->SetBoolField(TEXT("is_map_package"), Package.bIsMapPackage);
+			PendingArray.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		Data->SetArrayField(TEXT("packages_pending_auto_save"), PendingArray);
+	}
+
+	FString Summary = FString::Printf(TEXT("PIE start queued (net mode: %s) -- executes after script completes"), *NetModeStr);
+
+	FToolResult Result = MakeSuccessResult(Data, Summary);
+	if (DirtyPackages.Num() > 0)
+	{
+		Result.Warnings.Add(FString::Printf(
+			TEXT("%d dirty package(s) will be written to disk by auto-save when this deferred PIE start runs. ")
+			TEXT("Disable with ClaireonSettings.bAutoSaveBeforeDeferredActions if this is unwanted."),
+			DirtyPackages.Num()));
+	}
+	return Result;
 }
 
 void ClaireonTool_PIEStart::ExecuteDeferredPIEStart(const FString& Payload)
 {
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return;
+	}
+
+	// Gate on the asset-registry scan: starting PIE (or the pre-PIE map load
+	// below) while the initial scan is still running is the same crash class
+	// as loading assets from init_unreal during startup. Re-dispatch this
+	// whole action once the scan drains.
+	{
+		IAssetRegistry& AssetRegistry =
+			FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		if (AssetRegistry.IsLoadingAssets())
+		{
+			UE_LOG(LogClaireon, Log,
+				TEXT("[pie_start_async] Asset registry scan in progress; PIE start waits for it to complete."));
+			const FString CapturedPayload = Payload;
+			FTSTicker::GetCoreTicker().AddTicker(
+				FTickerDelegate::CreateLambda([CapturedPayload](float)
+				{
+					IAssetRegistry& InnerRegistry =
+						FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+					if (InnerRegistry.IsLoadingAssets())
+					{
+						return true; // keep waiting
+					}
+					ExecuteDeferredPIEStart(CapturedPayload);
+					return false; // one-shot
+				}), 0.25f);
+			return;
+		}
 	}
 
 	// Parse payload
@@ -186,6 +271,25 @@ void ClaireonTool_PIEStart::ExecuteDeferredPIEStart(const FString& Payload)
 		FEditorFileUtils::LoadMap(MapPath);
 	}
 
+	// Drain async asset compilation before PIE. Must run AFTER any map load, since loading is
+	// what queues the newly-referenced assets. Starting PIE mid-compile can fatally assert in
+	// the renderer (a cold-DDC post-process ambient cubemap reaches
+	// FAmbientCubemapCompositePS with AmbientCubemapSampler unset), which is unrecoverable --
+	// so this defaults on and is only skipped when the caller opts out.
+	bool bWaitForAssetCompilation = true;
+	PayloadObj->TryGetBoolField(TEXT("waitForAssetCompilation"), bWaitForAssetCompilation);
+	if (bWaitForAssetCompilation)
+	{
+		const int32 Remaining = FAssetCompilingManager::Get().GetNumRemainingAssets();
+		if (Remaining > 0)
+		{
+			UE_LOG(LogClaireon, Log,
+				TEXT("[pie_start_async] Draining %d compiling asset(s) before PIE to avoid a "
+					 "mid-compile render assert."), Remaining);
+			FAssetCompilingManager::Get().FinishAllCompilation();
+		}
+	}
+
 	// Configure net mode
 	ULevelEditorPlaySettings* PlaySettings = GetMutableDefault<ULevelEditorPlaySettings>();
 	if (NetModeStr == TEXT("Standalone"))
@@ -204,7 +308,7 @@ void ClaireonTool_PIEStart::ExecuteDeferredPIEStart(const FString& Payload)
 	// Determine map path for session registration
 	FString CurrentMapPath;
 	UWorld* EditorWorld = GEditor->GetEditorWorldContext().World();
-	if (EditorWorld)
+	if (IsValid(EditorWorld))
 	{
 		CurrentMapPath = EditorWorld->GetPathName();
 		if (!MapPath.IsEmpty())

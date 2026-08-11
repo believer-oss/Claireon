@@ -61,7 +61,7 @@ bool FClaireonDeltaApplicator_Niagara::OpenOrReuseSession(const TSharedPtr<FJson
 	}
 
 	UNiagaraSystem* System = ClaireonNiagaraHelpers::LoadNiagaraSystemAsset(AssetPathArg, OutError);
-	if (!System) { return false; }
+	if (!IsValid(System)) { return false; }
 
 	ClaireonNiagaraEditToolBase::EnsureDelegateRegistered();
 
@@ -96,7 +96,7 @@ bool FClaireonDeltaApplicator_Niagara::ApplyPhase2_Remove(const FString& Session
 	using namespace ClaireonDeltaApplicator_Niagara_anon;
 	(void)SessionId;
 	UNiagaraSystem* System = CachedSystem.Get();
-	if (!System)
+	if (!IsValid(System))
 	{
 		AddError(TEXT("niagara_apply_delta: system is no longer valid"));
 		return false;
@@ -145,7 +145,7 @@ bool FClaireonDeltaApplicator_Niagara::ApplyPhase3_Create(const FString& Session
 	using namespace ClaireonDeltaApplicator_Niagara_anon;
 	(void)SessionId;
 	UNiagaraSystem* System = CachedSystem.Get();
-	if (!System)
+	if (!IsValid(System))
 	{
 		AddError(TEXT("niagara_apply_delta: system is no longer valid"));
 		return false;
@@ -218,7 +218,7 @@ void FClaireonDeltaApplicator_Niagara::FinalizeSession(const FString& SessionId)
 {
 	(void)SessionId;
 	UNiagaraSystem* System = CachedSystem.Get();
-	if (System) { System->MarkPackageDirty(); }
+	if (IsValid(System)) { System->MarkPackageDirty(); }
 }
 
 void FClaireonDeltaApplicator_Niagara::CloseSessionIfOwned(const FString& SessionId)
@@ -234,7 +234,7 @@ void FClaireonDeltaApplicator_Niagara::Phase3CleanupOnFailure(const FString& Ses
 {
 	(void)SessionId;
 	UNiagaraSystem* System = CachedSystem.Get();
-	if (!System) { return; }
+	if (!IsValid(System)) { return; }
 	for (const FString& Name : CreatedParameterNamesThisCall)
 	{
 		FString Normalized, RemErr;

@@ -36,7 +36,7 @@ FToolResult ClaireonInputTool_SetValueType::Execute(const TSharedPtr<FJsonObject
 	}
 
 	UInputAction* IA = RequireInputAction(Data, Error);
-	if (!IA)
+	if (!IsValid(IA))
 	{
 		return MakeErrorResult(Error);
 	}

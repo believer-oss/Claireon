@@ -54,7 +54,7 @@ FToolResult ClaireonPCGGraphTool_Disconnect::Execute(const TSharedPtr<FJsonObjec
 	UPCGNode* FromNode = ClaireonPCGGraphHelpers::FindNodeByIdentifier(Data->PCGGraph.Get(), FromNodeId, FromIndex);
 	UPCGNode* ToNode = ClaireonPCGGraphHelpers::FindNodeByIdentifier(Data->PCGGraph.Get(), ToNodeId, ToIndex);
 
-	if (!FromNode || !ToNode)
+	if (!IsValid(FromNode) || !IsValid(ToNode))
 	{
 		return MakeErrorResult(TEXT("Source or target node not found"));
 	}

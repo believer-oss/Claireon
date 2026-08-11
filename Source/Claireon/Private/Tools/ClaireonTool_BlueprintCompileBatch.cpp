@@ -11,9 +11,13 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
 #include "BlueprintEditorLibrary.h"
+#include "EdGraph/EdGraphNode.h"
 #include "Engine/Blueprint.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Kismet2/CompilerResultsLog.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Logging/TokenizedMessage.h"
+#include "Misc/UObjectToken.h"
 #include "UObject/SoftObjectPath.h"
 
 FString ClaireonTool_BlueprintCompileBatch::GetCategory() const { return kBPCategory; }
@@ -26,13 +30,10 @@ TArray<FString> ClaireonTool_BlueprintCompileBatch::GetSearchKeywords() const
 
 FString ClaireonTool_BlueprintCompileBatch::GetDescription() const
 {
-	return TEXT("Compile multiple Blueprints by asset path or content folder. Each entry in paths is auto-detected: "
-		"a path that resolves to a Blueprint asset is compiled directly; a path that matches a content "
-		"folder compiles all Blueprints under it recursively. Defaults to /Game (everything) when paths is omitted. "
-		"Default max_count is 50 -- if more blueprints are found, returns immediately with the count. "
-		"Pass max_count=0 for unlimited or raise the limit explicitly. "
-		"Editor-wide tool: acquires an exclusive lock that blocks all other Claireon sessions for the duration of this call. "
-		"Fails fast if any other session is currently held. Immediate-mode tool: no session required.");
+	return TEXT("Compile multiple Blueprints by asset path or content folder: each paths entry auto-detects, a folder "
+		"compiling every Blueprint under it recursively. Defaults to all of /Game when paths is omitted. max_count "
+		"defaults to 50 -- past that only the count is returned; pass 0 for unlimited. Immediate-mode: needs no "
+		"session, but takes an editor-wide lock and fails if any session is open.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_BlueprintCompileBatch::GetInputSchema() const
@@ -88,8 +89,42 @@ TSharedPtr<FJsonObject> ClaireonTool_BlueprintCompileBatch::GetInputSchema() con
 
 // File-prefixed helpers (anon-namespace collisions under unity batching are
 // avoided by giving these unique file-local names).
-namespace
+namespace ClaireonTool_BlueprintCompileBatch_Private
 {
+	// Extract the source graph-node name from a compiler message's tokens, if
+	// the message carries a node reference. Returns empty when no node token is
+	// present (e.g. Blueprint-level messages).
+	static FString BatchCompileGetMessageSourceNodeName(const TSharedRef<FTokenizedMessage>& Message)
+	{
+		for (const TSharedRef<IMessageToken>& Token : Message->GetMessageTokens())
+		{
+			if (Token->GetType() != EMessageToken::Object)
+			{
+				continue;
+			}
+			const TSharedRef<FUObjectToken> ObjectToken = StaticCastSharedRef<FUObjectToken>(Token);
+			if (const UEdGraphNode* SourceNode = Cast<UEdGraphNode>(ObjectToken->GetObject().Get()); IsValid(SourceNode))
+			{
+				return SourceNode->GetNodeTitle(ENodeTitleType::ListView).ToString();
+			}
+		}
+		return FString();
+	}
+
+	// Render one compiler message as "text [node: <name>]", attaching the
+	// source node name when the message carries a node token and the rendered
+	// text does not already include it.
+	static FString BatchCompileFormatMessage(const TSharedRef<FTokenizedMessage>& Message)
+	{
+		FString MessageText = Message->ToText().ToString();
+		const FString SourceNodeName = BatchCompileGetMessageSourceNodeName(Message);
+		if (!SourceNodeName.IsEmpty() && !MessageText.Contains(SourceNodeName))
+		{
+			MessageText += FString::Printf(TEXT(" [node: %s]"), *SourceNodeName);
+		}
+		return MessageText;
+	}
+
 	// Compile a single Blueprint and return a per-asset result object.
 	static TSharedPtr<FJsonObject> BatchCompileOneBlueprint(
 		const FString& BlueprintPath,
@@ -101,7 +136,7 @@ namespace
 		double StartTime = FPlatformTime::Seconds();
 
 		UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-		if (!Blueprint)
+		if (!IsValid(Blueprint))
 		{
 			OutFailed++;
 
@@ -127,9 +162,16 @@ namespace
 		}
 
 		// Compile with BatchCompile to suppress modal error dialogs that would
-		// deadlock the game thread when called from the MCP HTTP handler
+		// deadlock the game thread when called from the MCP HTTP handler.
+		// FCompilerResultsLog captures per-message errors/warnings for the payload;
+		// without it a failing compile reported errors=[] and callers had to scrape
+		// the UE log.
+		FCompilerResultsLog ResultsLog;
+		ResultsLog.SetSourcePath(Blueprint->GetPathName());
+		ResultsLog.BeginEvent(TEXT("BatchCompile"));
 		EBlueprintCompileOptions CompileOptions = EBlueprintCompileOptions::BatchCompile;
-		FKismetEditorUtilities::CompileBlueprint(Blueprint, CompileOptions);
+		FKismetEditorUtilities::CompileBlueprint(Blueprint, CompileOptions, &ResultsLog);
+		ResultsLog.EndEvent();
 
 		double ElapsedMs = (FPlatformTime::Seconds() - StartTime) * 1000.0;
 
@@ -148,11 +190,42 @@ namespace
 			OutFailed++;
 		}
 
+		TArray<TSharedPtr<FJsonValue>> Errors;
+		TArray<TSharedPtr<FJsonValue>> Warnings;
+		for (const TSharedRef<FTokenizedMessage>& Message : ResultsLog.Messages)
+		{
+			const FString MessageText = BatchCompileFormatMessage(Message);
+			switch (Message->GetSeverity())
+			{
+			case EMessageSeverity::Error:
+				Errors.Add(MakeShared<FJsonValueString>(MessageText));
+				break;
+			case EMessageSeverity::Warning:
+			case EMessageSeverity::PerformanceWarning:
+				Warnings.Add(MakeShared<FJsonValueString>(MessageText));
+				break;
+			default:
+				break;
+			}
+		}
+
+		// Fail loudly: a BS_Error compile must never ship an empty errors[].
+		// (A failOnWarnings-induced failure legitimately has its text in
+		// warnings[] instead, so only the hard-error status gets the fallback.)
+		if (Blueprint->Status == BS_Error && Errors.Num() == 0)
+		{
+			Errors.Add(MakeShared<FJsonValueString>(FString::Printf(
+				TEXT("Compile failed for %s but the compiler log captured no error messages; see the editor log for details"),
+				*BlueprintPath)));
+		}
+
 		TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
 		ResultObj->SetStringField(TEXT("blueprint_path"), BlueprintPath);
 		ResultObj->SetStringField(TEXT("status"), bCompileSucceeded ? TEXT("succeeded") : TEXT("failed"));
-		ResultObj->SetArrayField(TEXT("errors"), TArray<TSharedPtr<FJsonValue>>());
-		ResultObj->SetArrayField(TEXT("warnings"), TArray<TSharedPtr<FJsonValue>>());
+		ResultObj->SetArrayField(TEXT("errors"), Errors);
+		ResultObj->SetArrayField(TEXT("warnings"), Warnings);
+		ResultObj->SetNumberField(TEXT("error_count"), Errors.Num());
+		ResultObj->SetNumberField(TEXT("warning_count"), Warnings.Num());
 		ResultObj->SetNumberField(TEXT("compile_time_ms"), ElapsedMs);
 
 		if (bRemoveUnused && RemovedVariables > 0)
@@ -188,6 +261,7 @@ namespace
 		}
 	}
 }
+using namespace ClaireonTool_BlueprintCompileBatch_Private;
 
 IClaireonTool::FToolResult ClaireonTool_BlueprintCompileBatch::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
@@ -278,10 +352,24 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintCompileBatch::Execute(const TSh
 		Data->SetNumberField(TEXT("total_found"), Total);
 		Data->SetNumberField(TEXT("max_count"), MaxCount);
 		Data->SetNumberField(TEXT("compiled"), 0);
-		Data->SetStringField(TEXT("hint"),
-			FString::Printf(TEXT("Found %d blueprints. Pass max_count=%d to compile all, or use narrower paths."), Total, Total));
-		return MakeSuccessResult(Data,
+		FToolResult Capped = MakeSuccessResult(Data,
 			FString::Printf(TEXT("Capped: %d blueprints found, max_count=%d. None compiled. Raise max_count or narrow paths."), Total, MaxCount));
+
+		// Migrated off the retired Data.hint string convention onto the structured channel.
+		// args echoes the original call with the correction applied, so it stays directly
+		// callable -- a bare {max_count} delta would re-issue without 'paths'.
+		//
+		// NOT latched: unlike the log-filter hints, this fires only when a cap was actually
+		// hit, which is a real per-call condition carrying a call-specific count.
+		TSharedPtr<FJsonObject> RetryArgs = CloneHintArgs(Arguments);
+		RetryArgs->SetNumberField(TEXT("max_count"), Total);
+		Capped.Hint = MakeGuidanceHint(GetName(),
+			FString::Printf(
+				TEXT("max_count=%d capped a set of %d blueprints, so none were compiled. ")
+				TEXT("Re-issue with max_count=%d to compile all of them, or narrow 'paths' to a smaller set."),
+				MaxCount, Total, Total),
+			RetryArgs);
+		return Capped;
 	}
 
 	// Compile each Blueprint, yielding after every compile to keep the editor alive

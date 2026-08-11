@@ -1,7 +1,7 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Tests for blueprint_duplicate (fracture 04).
+// Tests for bp_duplicate (fracture 04).
 //
 // The project's Untest framework exposes UNTEST_UNIT and UNTEST_WORLD (plus a few
 // client/server variants); there is no standalone UNTEST_FUNCTIONAL macro. Per the
@@ -12,9 +12,8 @@
 // argument: Unit_* vs Functional_* to allow test-name filtering.
 //
 // Test skip policy:
-//  - The acceptance-case test targets /Game/Trajan/Mobs/TerminusTick/BP_TerminusTick
-//    which is a product path that may drift; if the asset is absent the test logs a
-//    note and early-returns success rather than failing.
+//  - The acceptance-case test auto-discovers any project UBlueprint to duplicate; if the
+//    project has none (e.g. a bare host), the test logs a note and early-returns success.
 //  - Branch-2 IsChildOf<UBlueprint> requires a concrete UBlueprint-derived class
 //    that is NOT in the {Blueprint, AnimBlueprint, WidgetBlueprint} allowlist. The
 //    project currently has no such class in a discoverable fixture path; the test
@@ -25,6 +24,31 @@
 //    rewrite tests instead.
 //  - "DuplicateAsset returns nullptr" and "SavePackage fails" cannot be simulated
 //    without invasive fakes and are omitted per the fracture's allowance.
+//
+// Fixture and crash-avoidance policy (see Docs/llm/todo/claireon-untest-harness-
+// reliability.md item 1 for the full mechanism -- a whole-object-graph referencer scan
+// that DeleteAsset/ForceDeleteObjects runs before deleting, which crashes serializing
+// Niagara type data if any Niagara asset happens to be resident in memory):
+//  - SOURCE fixtures (CreatePlainBlueprintFixture) are created in-memory only and
+//    deliberately never saved, mirroring FindBlueprintWithStructArray in
+//    ClaireonTool_SetBlueprintCDOPropertyTests.cpp. bp_duplicate only needs the source
+//    registered with the asset registry and loadable, not present on disk, so this
+//    avoids a delete call -- and therefore a referencer scan -- for every source fixture.
+//  - DESTINATION fixtures cannot use that trick: bp_duplicate unconditionally saves the
+//    duplicate to disk (that is the behavior under test), so every functional test's
+//    destination is a real .uasset and its cleanup delete is a genuine referencer-scan
+//    trigger. That is unavoidable without changing the tool's own behavior, which is out
+//    of scope here.
+//  - Destinations live under /Game/__MCPTests/ (normalized from the previous
+//    /Game/Sandbox/, which was the only Claireon suite not following the standard
+//    convention). SweepStaleDestinationFixturesOnce() clears all of this suite's known
+//    destination paths exactly once, before the first functional test's body runs. This
+//    does not make any single delete safer -- deleting a Niagara-referencing duplicate
+//    (Functional_AcceptanceCaseMatchesParentProposal, which duplicates a discovered project
+//    Blueprint that may reference Niagara systems) is exactly as likely to hit the crash as
+//    before. What it fixes is a crashed run's leftover poisoning
+//    `git status --porcelain -- Content/` indefinitely: the next run's sweep clears it
+//    before that run has loaded anything Niagara-related, which is the safe place to do it.
 
 #if WITH_UNTESTED
 
@@ -32,6 +56,8 @@
 
 #include "Tools/ClaireonTool_BlueprintDuplicate.h"
 #include "Tools/IClaireonTool.h"
+#include "ClaireonTestAssetDiscovery.h"
+#include "Misc/PackageName.h"
 
 #include "AssetRegistry/AssetData.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -55,7 +81,8 @@
 
 #include "Kismet2/KismetEditorUtilities.h"
 
-namespace
+#include "ClaireonTestAssetDeletion.h"
+namespace ClaireonTool_BlueprintDuplicateTests_Private
 {
 
 static const TCHAR* FixtureFolder = TEXT("/Game/Tests/ClaireonBlueprintDuplicate");
@@ -81,28 +108,70 @@ TSharedPtr<FJsonObject> MakeDuplicateArgsWithRename(const TCHAR* SourcePath, con
 
 void DeleteIfExists(const FString& ObjectPath)
 {
-	if (UObject* Asset = FSoftObjectPath(ObjectPath).TryLoad())
+	if (UObject* Asset = FSoftObjectPath(ObjectPath).TryLoad(); IsValid(Asset))
 	{
 		TArray<UObject*> AssetsToDelete;
 		AssetsToDelete.Add(Asset);
-		ObjectTools::ForceDeleteObjects(AssetsToDelete, false);
+		ClaireonTestAssetDeletion::DeleteObjectsForTest(AssetsToDelete);
 	}
+}
+
+// Deletes any stale leftover at this suite's known destination paths, exactly once per
+// process, before the first functional test's body runs. A function-local static
+// initializer (rather than hooking a specific "first" test by declaration order) means
+// this fires correctly no matter which functional test happens to run first under a
+// narrower -TestFilter.
+//
+// This does NOT make any single delete safer -- deleting a Niagara-referencing duplicate
+// (Functional_AcceptanceCaseMatchesParentProposal) is exactly as likely to hit the
+// GetAllReferencersIncludingWeak crash as before. What it fixes is a crashed run's
+// leftover poisoning `git status --porcelain -- Content/` indefinitely: the next run's
+// sweep clears it before this suite has loaded anything Niagara-related, which is the
+// safe place to do it (see Docs/llm/todo/claireon-untest-harness-reliability.md item 1).
+void SweepStaleDestinationFixturesOnce()
+{
+	static const bool bSwept = []() -> bool
+	{
+		// Kept in sync by hand with the DestPackage/DestPath literals in the functional
+		// tests below; a path missing here just means that one test does not benefit
+		// from the cross-run sweep (its own per-test pre-flight DeleteIfExists still
+		// protects it exactly as before).
+		static const TCHAR* KnownDestinationPaths[] =
+		{
+			TEXT("/Game/__MCPTests/BP_DoesNotExist_Clone.BP_DoesNotExist_Clone"),
+			TEXT("/Game/__MCPTests/BP_Plain_Happy_Clone.BP_Plain_Happy_Clone"),
+			TEXT("/Game/__MCPTests/BP_Plain_Branch1_Clone.BP_Plain_Branch1_Clone"),
+			TEXT("/Game/__MCPTests/BP_Plain_DefaultRename_Clone.BP_Plain_DefaultRename_Clone"),
+			TEXT("/Game/__MCPTests/BP_Plain_DestExists_Clone.BP_Plain_DestExists_Clone"),
+			TEXT("/Game/__MCPTests/BP_Plain_RenameTrue_Clone.BP_Plain_RenameTrue_Clone"),
+		};
+		for (const TCHAR* Path : KnownDestinationPaths)
+		{
+			DeleteIfExists(Path);
+		}
+		return true;
+	}();
+	(void)bSwept;
 }
 
 // --- fixture creation -------------------------------------------------------
 
-// Create a plain Blueprint (parent=AActor) at PackagePath on disk and return it.
-// Returns nullptr if creation fails. Caller is responsible for deletion.
+// Create a plain Blueprint (parent=AActor) at PackagePath, registered with the asset
+// registry but deliberately NEVER saved to disk -- bp_duplicate only needs the source
+// loadable and registry-visible, not present in Content/, and an in-memory-only source
+// needs no cleanup delete, which is what triggers the referencer-scan crash (see the
+// file-level comment above). Same pattern as FindBlueprintWithStructArray in
+// ClaireonTool_SetBlueprintCDOPropertyTests.cpp. Returns nullptr if creation fails.
 UBlueprint* CreatePlainBlueprintFixture(const FString& PackagePath)
 {
-	// If it already exists, return it.
-	if (UBlueprint* Existing = Cast<UBlueprint>(FSoftObjectPath(PackagePath + TEXT(".") + FPackageName::GetShortName(PackagePath)).TryLoad()))
+	// If it already exists (an earlier test in this run created it), reuse it.
+	if (UBlueprint* Existing = Cast<UBlueprint>(FSoftObjectPath(PackagePath + TEXT(".") + FPackageName::GetShortName(PackagePath)).TryLoad()); IsValid(Existing))
 	{
 		return Existing;
 	}
 
 	UPackage* Package = CreatePackage(*PackagePath);
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		return nullptr;
 	}
@@ -117,35 +186,35 @@ UBlueprint* CreatePlainBlueprintFixture(const FString& PackagePath)
 		UBlueprintGeneratedClass::StaticClass(),
 		NAME_None);
 
-	if (!BP)
+	if (!IsValid(BP))
 	{
 		return nullptr;
 	}
 
 	FAssetRegistryModule::AssetCreated(BP);
-	BP->MarkPackageDirty();
-
-	const FString PackageFileName = FPackageName::LongPackageNameToFilename(
-		PackagePath, FPackageName::GetAssetPackageExtension());
-	FSavePackageArgs SaveArgs;
-	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
-	UPackage::Save(Package, BP, *PackageFileName, SaveArgs);
+	// Deliberately no UPackage::Save call -- see the function comment above.
 
 	return BP;
 }
 
-} // anonymous namespace
+} // namespace ClaireonTool_BlueprintDuplicateTests_Private
+using namespace ClaireonTool_BlueprintDuplicateTests_Private;
 
 // ============================================================================
 // Unit tests -- parameter parsing and error surface
 // ============================================================================
 
-UNTEST_UNIT(Claireon, BlueprintDuplicate, Unit_MissingSourcePathReturnsStructuredError)
+// Budget: same reason as Unit_InvalidDestinationPathPropagatesResolverError below --
+// the bare UNTEST_UNIT default is 0.50ms (FUntestUnitFixture::DefaultTimeoutMs), which
+// is not a deliberate perf assertion. This is the first test in the suite, so it absorbs
+// one-time construction/registry warmup and measured 0.65ms while its siblings run in
+// 0.02ms. Do not restore the default.
+UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Unit_MissingSourcePathReturnsStructuredError, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonTool_BlueprintDuplicate Tool;
 
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("dest_path"), TEXT("/Game/Sandbox/Foo"));
+	Args->SetStringField(TEXT("dest_path"), TEXT("/Game/__MCPTests/Foo"));
 
 	IClaireonTool::FToolResult Result = Tool.Execute(Args);
 	UNTEST_ASSERT_TRUE(Result.bIsError);
@@ -153,12 +222,14 @@ UNTEST_UNIT(Claireon, BlueprintDuplicate, Unit_MissingSourcePathReturnsStructure
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, BlueprintDuplicate, Unit_MissingDestPathReturnsStructuredError)
+// Budget: see the UNTEST_TIMEOUTMS rationale on Unit_MissingSourcePathReturnsStructuredError
+// above -- the bare default (0.50ms) is not a deliberate perf assertion.
+UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Unit_MissingDestPathReturnsStructuredError, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonTool_BlueprintDuplicate Tool;
 
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("source_path"), TEXT("/Game/Sandbox/Foo"));
+	Args->SetStringField(TEXT("source_path"), TEXT("/Game/__MCPTests/Foo"));
 
 	IClaireonTool::FToolResult Result = Tool.Execute(Args);
 	UNTEST_ASSERT_TRUE(Result.bIsError);
@@ -166,13 +237,15 @@ UNTEST_UNIT(Claireon, BlueprintDuplicate, Unit_MissingDestPathReturnsStructuredE
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, BlueprintDuplicate, Unit_EmptySourcePathReturnsStructuredError)
+// Budget: see the UNTEST_TIMEOUTMS rationale on Unit_MissingSourcePathReturnsStructuredError
+// above -- the bare default (0.50ms) is not a deliberate perf assertion.
+UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Unit_EmptySourcePathReturnsStructuredError, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonTool_BlueprintDuplicate Tool;
 
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 	Args->SetStringField(TEXT("source_path"), TEXT(""));
-	Args->SetStringField(TEXT("dest_path"), TEXT("/Game/Sandbox/Foo"));
+	Args->SetStringField(TEXT("dest_path"), TEXT("/Game/__MCPTests/Foo"));
 
 	IClaireonTool::FToolResult Result = Tool.Execute(Args);
 	UNTEST_ASSERT_TRUE(Result.bIsError);
@@ -180,12 +253,14 @@ UNTEST_UNIT(Claireon, BlueprintDuplicate, Unit_EmptySourcePathReturnsStructuredE
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, BlueprintDuplicate, Unit_EmptyDestPathReturnsStructuredError)
+// Budget: see the UNTEST_TIMEOUTMS rationale on Unit_MissingSourcePathReturnsStructuredError
+// above -- the bare default (0.50ms) is not a deliberate perf assertion.
+UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Unit_EmptyDestPathReturnsStructuredError, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonTool_BlueprintDuplicate Tool;
 
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("source_path"), TEXT("/Game/Sandbox/Foo"));
+	Args->SetStringField(TEXT("source_path"), TEXT("/Game/__MCPTests/Foo"));
 	Args->SetStringField(TEXT("dest_path"), TEXT(""));
 
 	IClaireonTool::FToolResult Result = Tool.Execute(Args);
@@ -194,14 +269,17 @@ UNTEST_UNIT(Claireon, BlueprintDuplicate, Unit_EmptyDestPathReturnsStructuredErr
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, BlueprintDuplicate, Unit_InvalidDestinationPathPropagatesResolverError)
+// Budget: the bare UNTEST_UNIT default is 0.50ms (FUntestUnitFixture::DefaultTimeoutMs),
+// which is not a deliberate perf assertion. Too tight now that the tool registry is
+// populated process-wide and this test does real work -- do not restore the default.
+UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Unit_InvalidDestinationPathPropagatesResolverError, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonTool_BlueprintDuplicate Tool;
 
 	// A source path that cannot be resolved (no /Game/ and no Content/ anchor).
 	TSharedPtr<FJsonObject> Args = MakeDuplicateArgs(
 		TEXT("Z:\\no\\such\\anchor\\asset"),
-		TEXT("/Game/Sandbox/WhateverDest"));
+		TEXT("/Game/__MCPTests/WhateverDest"));
 
 	IClaireonTool::FToolResult Result = Tool.Execute(Args);
 	UNTEST_ASSERT_TRUE(Result.bIsError);
@@ -209,21 +287,34 @@ UNTEST_UNIT(Claireon, BlueprintDuplicate, Unit_InvalidDestinationPathPropagatesR
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, BlueprintDuplicate, Unit_GetNameReturnsCanonicalString)
+// Root cause of the previous failure: these two asserted the pre-migration
+// category spelling "blueprint". The Blueprint tool family is registered under
+// kBPCategory == "bp" (Tools/ClaireonBlueprintGraphEditToolBase.h), and
+// IClaireonTool::GetName() is sealed to GetCategory() + "_" + GetOperation(),
+// so the wire name is "bp_duplicate". No tool in the registry has category
+// "blueprint". Test defect, not a product bug -- updated to the shipped names.
+// Budget: see the UNTEST_TIMEOUTMS rationale on Unit_MissingSourcePathReturnsStructuredError
+// above -- the bare default (0.50ms) is not a deliberate perf assertion.
+UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Unit_GetNameReturnsCanonicalString, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonTool_BlueprintDuplicate Tool;
-	UNTEST_EXPECT_STREQ(*Tool.GetName(), TEXT("blueprint_duplicate"));
+	UNTEST_EXPECT_STREQ(*Tool.GetName(), TEXT("bp_duplicate"));
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, BlueprintDuplicate, Unit_CategoryDerivesToBlueprint)
+// Budget: see the UNTEST_TIMEOUTMS rationale on Unit_MissingSourcePathReturnsStructuredError
+// above -- the bare default (0.50ms) is not a deliberate perf assertion.
+UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Unit_CategoryDerivesToBlueprint, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonTool_BlueprintDuplicate Tool;
-	UNTEST_EXPECT_STREQ(*Tool.GetCategory(), TEXT("blueprint"));
+	UNTEST_EXPECT_STREQ(*Tool.GetCategory(), TEXT("bp"));
+	UNTEST_EXPECT_STREQ(*Tool.GetOperation(), TEXT("duplicate"));
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, BlueprintDuplicate, Unit_InputSchemaDeclaresRequiredFields)
+// Budget: see the UNTEST_TIMEOUTMS rationale on Unit_MissingSourcePathReturnsStructuredError
+// above -- the bare default (0.50ms) is not a deliberate perf assertion.
+UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Unit_InputSchemaDeclaresRequiredFields, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonTool_BlueprintDuplicate Tool;
 	TSharedPtr<FJsonObject> Schema = Tool.GetInputSchema();
@@ -261,8 +352,10 @@ UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_SourceNotFoundReturnsS
 {
 	ClaireonTool_BlueprintDuplicate Tool;
 
+	SweepStaleDestinationFixturesOnce();
+
 	const FString MissingSource = TEXT("/Game/Tests/ClaireonBlueprintDuplicate/DoesNotExist_123456");
-	const FString DestPath = TEXT("/Game/Sandbox/BP_DoesNotExist_Clone");
+	const FString DestPath = TEXT("/Game/__MCPTests/BP_DoesNotExist_Clone");
 
 	DeleteIfExists(DestPath + TEXT(".BP_DoesNotExist_Clone"));
 
@@ -280,9 +373,11 @@ UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_HappyPathDuplicatesPla
 {
 	ClaireonTool_BlueprintDuplicate Tool;
 
+	SweepStaleDestinationFixturesOnce();
+
 	const FString SourcePackage = FString::Printf(TEXT("%s/BP_Plain_Happy"), FixtureFolder);
 	const FString SourceObject = SourcePackage + TEXT(".BP_Plain_Happy");
-	const FString DestPackage = TEXT("/Game/Sandbox/BP_Plain_Happy_Clone");
+	const FString DestPackage = TEXT("/Game/__MCPTests/BP_Plain_Happy_Clone");
 	const FString DestObject = DestPackage + TEXT(".BP_Plain_Happy_Clone");
 
 	// Clean up any previous run.
@@ -317,9 +412,9 @@ UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_HappyPathDuplicatesPla
 	UObject* LoadedDup = FSoftObjectPath(DestObject).TryLoad();
 	UNTEST_EXPECT_PTR(LoadedDup);
 
-	// Cleanup.
+	// Cleanup. SourceObject is never saved (CreatePlainBlueprintFixture), so it needs no
+	// delete -- only the destination that bp_duplicate wrote to disk does.
 	DeleteIfExists(DestObject);
-	DeleteIfExists(SourceObject);
 	co_return;
 }
 
@@ -327,9 +422,11 @@ UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_Branch1AllowlistAccept
 {
 	ClaireonTool_BlueprintDuplicate Tool;
 
+	SweepStaleDestinationFixturesOnce();
+
 	const FString SourcePackage = FString::Printf(TEXT("%s/BP_Plain_Branch1"), FixtureFolder);
 	const FString SourceObject = SourcePackage + TEXT(".BP_Plain_Branch1");
-	const FString DestPackage = TEXT("/Game/Sandbox/BP_Plain_Branch1_Clone");
+	const FString DestPackage = TEXT("/Game/__MCPTests/BP_Plain_Branch1_Clone");
 	const FString DestObject = DestPackage + TEXT(".BP_Plain_Branch1_Clone");
 
 	DeleteIfExists(DestObject);
@@ -349,8 +446,8 @@ UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_Branch1AllowlistAccept
 	Result.Data->TryGetStringField(TEXT("asset_class"), AssetClass);
 	UNTEST_EXPECT_STREQ(*AssetClass, TEXT("Blueprint"));
 
+	// SourceObject is never saved (CreatePlainBlueprintFixture), so it needs no delete.
 	DeleteIfExists(DestObject);
-	DeleteIfExists(SourceObject);
 	co_return;
 }
 
@@ -358,9 +455,11 @@ UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_DefaultRenameDependenc
 {
 	ClaireonTool_BlueprintDuplicate Tool;
 
+	SweepStaleDestinationFixturesOnce();
+
 	const FString SourcePackage = FString::Printf(TEXT("%s/BP_Plain_DefaultRename"), FixtureFolder);
 	const FString SourceObject = SourcePackage + TEXT(".BP_Plain_DefaultRename");
-	const FString DestPackage = TEXT("/Game/Sandbox/BP_Plain_DefaultRename_Clone");
+	const FString DestPackage = TEXT("/Game/__MCPTests/BP_Plain_DefaultRename_Clone");
 	const FString DestObject = DestPackage + TEXT(".BP_Plain_DefaultRename_Clone");
 
 	DeleteIfExists(DestObject);
@@ -375,8 +474,8 @@ UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_DefaultRenameDependenc
 	UNTEST_ASSERT_TRUE(Result.Data->TryGetBoolField(TEXT("rename_dependencies"), bRenameField));
 	UNTEST_EXPECT_FALSE(bRenameField);
 
+	// SourceObject is never saved (CreatePlainBlueprintFixture), so it needs no delete.
 	DeleteIfExists(DestObject);
-	DeleteIfExists(SourceObject);
 	co_return;
 }
 
@@ -384,9 +483,11 @@ UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_DestinationAlreadyExis
 {
 	ClaireonTool_BlueprintDuplicate Tool;
 
+	SweepStaleDestinationFixturesOnce();
+
 	const FString SourcePackage = FString::Printf(TEXT("%s/BP_Plain_DestExists"), FixtureFolder);
 	const FString SourceObject = SourcePackage + TEXT(".BP_Plain_DestExists");
-	const FString DestPackage = TEXT("/Game/Sandbox/BP_Plain_DestExists_Clone");
+	const FString DestPackage = TEXT("/Game/__MCPTests/BP_Plain_DestExists_Clone");
 	const FString DestObject = DestPackage + TEXT(".BP_Plain_DestExists_Clone");
 
 	DeleteIfExists(DestObject);
@@ -404,8 +505,8 @@ UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_DestinationAlreadyExis
 	UNTEST_EXPECT_TRUE(Result2.ErrorMessage.StartsWith(TEXT("Destination already exists: ")));
 	UNTEST_EXPECT_TRUE(Result2.ErrorMessage.Contains(TEXT("class=")));
 
+	// SourceObject is never saved (CreatePlainBlueprintFixture), so it needs no delete.
 	DeleteIfExists(DestObject);
-	DeleteIfExists(SourceObject);
 	co_return;
 }
 
@@ -416,9 +517,11 @@ UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_RenameDependenciesTrue
 	// to rewrite in a plain fixture, the rewrite pass is a no-op).
 	ClaireonTool_BlueprintDuplicate Tool;
 
+	SweepStaleDestinationFixturesOnce();
+
 	const FString SourcePackage = FString::Printf(TEXT("%s/BP_Plain_RenameTrue"), FixtureFolder);
 	const FString SourceObject = SourcePackage + TEXT(".BP_Plain_RenameTrue");
-	const FString DestPackage = TEXT("/Game/Sandbox/BP_Plain_RenameTrue_Clone");
+	const FString DestPackage = TEXT("/Game/__MCPTests/BP_Plain_RenameTrue_Clone");
 	const FString DestObject = DestPackage + TEXT(".BP_Plain_RenameTrue_Clone");
 
 	DeleteIfExists(DestObject);
@@ -433,32 +536,38 @@ UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_RenameDependenciesTrue
 	UNTEST_ASSERT_TRUE(Result.Data->TryGetBoolField(TEXT("rename_dependencies"), bRenameField));
 	UNTEST_EXPECT_TRUE(bRenameField);
 
+	// SourceObject is never saved (CreatePlainBlueprintFixture), so it needs no delete.
 	DeleteIfExists(DestObject);
-	DeleteIfExists(SourceObject);
 	co_return;
 }
 
 UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_AcceptanceCaseMatchesParentProposal, UNTEST_TIMEOUTMS(60000))
 {
-	// Parent proposal acceptance case:
-	//   blueprint_duplicate('/Game/Trajan/Mobs/TerminusTick/BP_TerminusTick',
-	//                              '/Game/Sandbox/BP_TerminusTick_Clone')
-	// Skip (pass) if the acceptance-case source asset has moved or is absent.
+	// Parent-proposal acceptance case: duplicate a real, on-disk project UBlueprint
+	// (auto-discovered) and verify the clone is created. Skip (pass) if the project has
+	// no UBlueprint to duplicate.
+	//
+	// CRASH NOTE: duplicating a Blueprint that references Niagara systems loads those
+	// assets into memory, making the end-of-test DeleteIfExists a reproducible trigger for
+	// the GetAllReferencersIncludingWeak referencer-scan crash (see the file-level comment
+	// and Docs/llm/todo/claireon-untest-harness-reliability.md item 1). bp_duplicate
+	// unconditionally saves the destination to disk, so the delete cannot be avoided;
+	// SweepStaleDestinationFixturesOnce() clears any crashed-run leftover on the next run.
+	SweepStaleDestinationFixturesOnce();
 
-	const FString SourcePackage = TEXT("/Game/Trajan/Mobs/TerminusTick/BP_TerminusTick");
-	const FString SourceObject = SourcePackage + TEXT(".BP_TerminusTick");
-	const FString DestPackage = TEXT("/Game/Sandbox/BP_TerminusTick_Clone");
-	const FString DestObject = DestPackage + TEXT(".BP_TerminusTick_Clone");
-
-	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-	FAssetData SourceData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(SourceObject));
-	if (!SourceData.IsValid())
+	const FString SourceObject = ClaireonTestAssetDiscovery::FindProjectBlueprintObjectPath();
+	if (SourceObject.IsEmpty())
 	{
 		UE_LOG(LogTemp, Display,
-			TEXT("[BlueprintDuplicate] Acceptance-case source %s not present; skipping test."),
-			*SourceObject);
+			TEXT("[BlueprintDuplicate] No project UBlueprint available to duplicate; skipping acceptance case."));
 		co_return;
 	}
+	const FString SourcePackage = FPackageName::ObjectPathToPackageName(SourceObject);
+	const FString ShortName = FPackageName::GetShortName(SourcePackage);
+	const FString DestPackage = FString::Printf(TEXT("/Game/__MCPTests/%s_Clone"), *ShortName);
+	const FString DestObject = FString::Printf(TEXT("%s.%s_Clone"), *DestPackage, *ShortName);
+
+	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
 	DeleteIfExists(DestObject);
 

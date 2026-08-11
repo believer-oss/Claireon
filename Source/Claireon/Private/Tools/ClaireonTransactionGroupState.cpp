@@ -14,7 +14,7 @@ namespace ClaireonTransactionGroupState
 	{
 		if (bGroupActive)
 		{
-			if (GEditor)
+			if (IsValid(GEditor))
 			{
 				GEditor->EndTransaction();
 			}

@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -125,13 +125,13 @@ FToolResult ClaireonBlueprintGraphTool_RemoveComponent::Execute(const TSharedPtr
         return Error;
     }
 	UBlueprint* Blueprint = Data->Blueprint.Get();
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
 	}
 
 	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
-	if (!SCS)
+	if (!IsValid(SCS))
 	{
 		return MakeErrorResult(TEXT("Blueprint does not have a SimpleConstructionScript (not an Actor Blueprint?)"));
 	}
@@ -145,7 +145,7 @@ FToolResult ClaireonBlueprintGraphTool_RemoveComponent::Execute(const TSharedPtr
 
 	// Find node
 	USCS_Node* Node = SCS->FindSCSNode(FName(*ComponentName));
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Component not found: %s"), *ComponentName));
 	}

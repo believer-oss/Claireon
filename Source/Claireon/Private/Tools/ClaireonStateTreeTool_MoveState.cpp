@@ -42,7 +42,7 @@ FToolResult ClaireonStateTreeTool_MoveState::Execute(const TSharedPtr<FJsonObjec
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	FGuid StateId, NewParentId;
@@ -53,9 +53,9 @@ FToolResult ClaireonStateTreeTool_MoveState::Execute(const TSharedPtr<FJsonObjec
 
 	UStateTreeState* State = ClaireonStateTreeHelpers::FindStateById(EditorData, StateId);
 	UStateTreeState* NewParent = ClaireonStateTreeHelpers::FindStateById(EditorData, NewParentId);
-	if (!State)
+	if (!IsValid(State))
 		return MakeErrorResult(TEXT("State not found"));
-	if (!NewParent)
+	if (!IsValid(NewParent))
 		return MakeErrorResult(TEXT("New parent state not found"));
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Move State")));
@@ -85,7 +85,7 @@ FToolResult ClaireonStateTreeTool_MoveState::Execute(const TSharedPtr<FJsonObjec
 
 	// Remove from old parent
 	UStateTreeState* OldParent = Cast<UStateTreeState>(State->GetOuter());
-	if (OldParent)
+	if (IsValid(OldParent))
 	{
 		OldParent->Children.Remove(State);
 	}
@@ -105,7 +105,7 @@ FToolResult ClaireonStateTreeTool_MoveState::Execute(const TSharedPtr<FJsonObjec
 			TargetIndex, ResolutionNote, ResolveError))
 	{
 		// Restore: put state back in old parent to avoid orphaning.
-		if (OldParent)
+		if (IsValid(OldParent))
 		{
 			OldParent->Children.Add(State);
 		}

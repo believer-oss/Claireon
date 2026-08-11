@@ -27,12 +27,21 @@ TSharedPtr<FJsonObject> ClaireonBlueprintTranslateTool_Implement::GetInputSchema
 	Schema->SetStringField(TEXT("type"), TEXT("object"));
 
 	TSharedPtr<FJsonObject> Properties = MakeShared<FJsonObject>();
-	for (const TCHAR* Field : { TEXT("session_id"), TEXT("session_file"), TEXT("blueprint"), TEXT("node_guid"), TEXT("code") })
+	// Explicit per-field declarations, not a name loop: the loop form could
+	// carry no description, so every one of these parameters was undescribed
+	// -- invisible in help and in the MCP schema.
+	auto AddStringParam = [&Properties](const TCHAR* Name, const TCHAR* Description)
 	{
 		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
 		P->SetStringField(TEXT("type"), TEXT("string"));
-		Properties->SetObjectField(Field, P);
-	}
+		P->SetStringField(TEXT("description"), Description);
+		Properties->SetObjectField(Name, P);
+	};
+	AddStringParam(TEXT("session_id"), TEXT("Session ID returned by the scaffold tool."));
+	AddStringParam(TEXT("session_file"), TEXT("Direct path to the session JSON file. Alternative to session_id."));
+	AddStringParam(TEXT("blueprint"), TEXT("Blueprint asset path within the session."));
+	AddStringParam(TEXT("node_guid"), TEXT("GUID of the node to operate on."));
+	AddStringParam(TEXT("code"), TEXT("C++ implementation text to record for this node."));
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	TArray<TSharedPtr<FJsonValue>> Required;

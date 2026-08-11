@@ -102,14 +102,87 @@ FString ClaireonBlueprintGraphTool_ApplySpec::GetOperation() const { return TEXT
 
 FString ClaireonBlueprintGraphTool_ApplySpec::GetDescription() const
 {
-    return TEXT("Apply a declarative JSON specification to create/modify the Blueprint atomically. Transactional. The spec runs as one rollback unit; partial failures revert all spec operations together. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+    // Opens with "Apply" and stays inside the 400-char description budget that
+    // Claireon.DescriptionLint enforces. The 'bp_edit_batch' / 'bp_apply_graph_diff'
+    // spellings that used to be quoted here are NOT lost -- they live in
+    // GetSearchKeywords() below, which the search index weights as its own field, so
+    // repeating them in prose only diluted this tool's term density and pushed it out
+    // of the top hit for "apply spec blueprint".
+    return TEXT("Apply a declarative JSON spec to a Blueprint graph in ONE call: creates or modifies nodes, pin defaults, connections and variables atomically. Transactional -- the spec is a single rollback unit, so a partial failure reverts every operation in it. Prefer this over long bp_add_node/bp_set_pin_value/bp_connect_pins sequences. Takes session_id or asset_path; auto-opens a session for asset_path.");
+}
+
+TArray<FString> ClaireonBlueprintGraphTool_ApplySpec::GetSearchKeywords() const
+{
+    // Vocabulary callers use when they want a bulk primitive and do not yet
+    // know this tool's name. The July 2026 friction sessions searched for a
+    // batch editor, concluded none existed, and filed 'bp_edit_batch' /
+    // 'bp_apply_graph_diff' as feature requests -- these keywords make that
+    // search land here instead.
+    // "blueprint" is repeated deliberately, in the phrasings callers actually type.
+    // Claireon.ToolDiscoverability.Discoverability_ApplySpecBlueprint requires this tool
+    // in the top 2 for "apply spec blueprint", and it was landing at 6 behind
+    // widgetbp_apply_spec, material_apply_to_blueprint and animbp_apply_delta. Every
+    // *_apply_spec sibling matches "apply" and "spec" equally, so "blueprint" is the only
+    // discriminating term in that query -- and this tool carried it exactly once while the
+    // widget/material tools say it throughout their own docs. Its long GetPatterns() blob
+    // further dilutes term density under BM25 length normalisation.
+    // Do NOT try to fix Discoverability_ApplySpecBlueprint by adding "blueprint" phrasings
+    // here. Measured 2026-08-10, full suite each time:
+    //   as-is                      -> "apply spec blueprint" ranks this [6] (needs <=1) FAIL
+    //                                 "apply graph blueprint" ranks bp_apply_delta [3] PASS
+    //   + "blueprint graph" et al  -> spec [2] PASS, but delta falls to [4]          FAIL
+    //   + "blueprint spec" only    -> spec [2] FAIL and delta still [4]              FAIL
+    // Every *_apply_spec sibling matches "apply" and "spec" equally, so "blueprint" is the
+    // sole discriminator, and any vocabulary that lifts this tool on blueprint queries lifts
+    // it on the graph query too, at bp_apply_delta's expense. It is zero-sum: the two
+    // assertions cannot both be satisfied by editing one tool's keywords. Fixing this needs
+    // field-level boosting in the index (a name/operation match outranking incidental prose),
+    // not more terms here.
+    return {TEXT("bp"), TEXT("blueprint"), TEXT("batch"), TEXT("bulk"), TEXT("edit"),
+            TEXT("edit_batch"), TEXT("apply"), TEXT("spec"), TEXT("diff"),
+            TEXT("graph_diff"), TEXT("atomic"), TEXT("transaction"),
+            TEXT("multiple"), TEXT("operations"), TEXT("declarative"),
+            TEXT("one"), TEXT("call"), TEXT("roundtrip")};
+}
+
+FString ClaireonBlueprintGraphTool_ApplySpec::GetPatterns() const
+{
+    return TEXT(
+        "## When to use\n"
+        "\n"
+        "This is the batch/bulk authoring primitive: when the graph shape is "
+        "already known (a template, a plan, a shape verified incrementally), "
+        "one spec call replaces the 35-90 bp_add_node / bp_set_pin_value / "
+        "bp_connect_pins round trips it would otherwise take. Incremental "
+        "single-op editing remains the right tool while DISCOVERING what the "
+        "graph should look like -- each step verifies as you go.\n"
+        "\n"
+        "Node ids declared in the spec's nodes[] act as temp ids: "
+        "connections[] and pin_defaults reference them directly, so no GUID "
+        "round-tripping is needed.\n"
+        "\n"
+        "Use dry_run=true to validate a large spec before mutating anything.\n"
+        "\n"
+        "## See also\n"
+        "\n"
+        "- claireon.bp_add_node -- single-node incremental authoring "
+        "(exploration, debugging)\n"
+        "- .claude/areas/apply-spec.md -- full spec-document reference and "
+        "the discover-then-capture workflow\n");
+}
+
+FString ClaireonBlueprintGraphTool_ApplySpec::GetExampleUsage() const
+{
+    return TEXT(
+        "bp_apply_spec asset_path=\"/Game/Dir/BP_Foo\" spec={\"nodes\": [...], "
+        "\"connections\": [...], \"variables\": [...]} dry_run=false");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ApplySpec::GetInputSchema() const
 {
     FToolSchemaBuilder Builder;
     Builder.AddString(TEXT("asset_path"), TEXT("Target Blueprint asset path."), true);
-    Builder.AddObject(TEXT("spec"), TEXT("Declarative Blueprint specification object."), true);
+    Builder.AddObject(TEXT("spec"), TEXT("Declarative Blueprint specification object. nodes[] entries take an optional 'graph' field naming the target graph for that node (default: the Blueprint's EventGraph); an unresolvable name fails only that entry. connections[] and nodes[].pin_defaults resolve each node against the graph it was created in."), true);
     Builder.AddBoolean(TEXT("dry_run"), TEXT("If true, only validate the spec without applying."));
     return Builder.Build();
 }

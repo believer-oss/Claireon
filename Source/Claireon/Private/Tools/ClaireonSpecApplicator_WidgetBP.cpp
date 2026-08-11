@@ -137,7 +137,7 @@ bool FClaireonSpecApplicator_WidgetBP::OpenOrCreateAsset(const FString& AssetPat
 
 	// Try to load existing
 	UWidgetBlueprint* WBP = LoadObject<UWidgetBlueprint>(nullptr, *ResolvedPath);
-	if (!WBP)
+	if (!IsValid(WBP))
 	{
 		// auto-create the Widget Blueprint when it doesn't exist, mirroring the
 		// behavior of bp_apply_spec. Reads optional parent_class from the active spec
@@ -160,7 +160,7 @@ bool FClaireonSpecApplicator_WidgetBP::OpenOrCreateAsset(const FString& AssetPat
 
 		ClaireonNameResolver::FNameResolveResult ParentClassResult;
 		UClass* ParentClass = ClaireonNameResolver::ResolveClassName(ParentClassName, nullptr, ParentClassResult);
-		if (!ParentClass || !ParentClass->IsChildOf(UUserWidget::StaticClass()))
+		if (!IsValid(ParentClass) || !ParentClass->IsChildOf(UUserWidget::StaticClass()))
 		{
 			OutError = FString::Printf(TEXT("widgetbp_apply_spec auto-create: parent_class '%s' not found or not a UUserWidget subclass"), *ParentClassName);
 			return false;
@@ -196,7 +196,7 @@ bool FClaireonSpecApplicator_WidgetBP::OpenOrCreateAsset(const FString& AssetPat
 		}
 
 		UPackage* Package = CreatePackage(*PackageName);
-		if (!Package)
+		if (!IsValid(Package))
 		{
 			OutError = FString::Printf(TEXT("widgetbp_apply_spec auto-create: failed to create package '%s'"), *PackageName);
 			return false;
@@ -216,7 +216,7 @@ bool FClaireonSpecApplicator_WidgetBP::OpenOrCreateAsset(const FString& AssetPat
 			NAME_None);
 
 		WBP = Cast<UWidgetBlueprint>(CreatedBP);
-		if (!WBP)
+		if (!IsValid(WBP))
 		{
 			OutError = FString::Printf(TEXT("widgetbp_apply_spec auto-create: FKismetEditorUtilities::CreateBlueprint failed for '%s'"), *PackageName);
 			return false;
@@ -256,7 +256,7 @@ bool FClaireonSpecApplicator_WidgetBP::OpenOrCreateAsset(const FString& AssetPat
 bool FClaireonSpecApplicator_WidgetBP::ApplyPass1_CreateEntities(const FString& SessionId, const TSharedPtr<FJsonObject>& Spec)
 {
 	UWidgetBlueprint* WBP = WidgetBlueprint.Get();
-	if (!WBP || !WBP->WidgetTree)
+	if (!IsValid(WBP) || !WBP->WidgetTree)
 	{
 		AddError(TEXT("WidgetBlueprint or WidgetTree is no longer valid"));
 		return false;
@@ -316,7 +316,7 @@ bool FClaireonSpecApplicator_WidgetBP::ApplyPass1_CreateEntities(const FString& 
 
 		FString Error;
 		UClass* WidgetClass = ClaireonWidgetHelpers::ResolveWidgetClass(WidgetType, Error);
-		if (!WidgetClass)
+		if (!IsValid(WidgetClass))
 		{
 			RecordEntryFailure(WidgetId, Error);
 			continue;
@@ -325,7 +325,7 @@ bool FClaireonSpecApplicator_WidgetBP::ApplyPass1_CreateEntities(const FString& 
 		FName WidgetName(*WidgetId);
 		// Generate a unique name for the widget
 		UWidget* NewWidget = ClaireonWidgetHelpers::CreateWidget(WidgetTree, WidgetClass, WidgetName);
-		if (!NewWidget)
+		if (!IsValid(NewWidget))
 		{
 			RecordEntryFailure(WidgetId, FString::Printf(TEXT("Failed to create widget of type: %s"), *WidgetType));
 			continue;
@@ -360,7 +360,7 @@ bool FClaireonSpecApplicator_WidgetBP::ApplyPass1_CreateEntities(const FString& 
 bool FClaireonSpecApplicator_WidgetBP::ApplyPass2_WireRelationships(const FString& SessionId, const TSharedPtr<FJsonObject>& Spec)
 {
 	UWidgetBlueprint* WBP = WidgetBlueprint.Get();
-	if (!WBP || !WBP->WidgetTree)
+	if (!IsValid(WBP) || !WBP->WidgetTree)
 	{
 		AddError(TEXT("WidgetBlueprint or WidgetTree is no longer valid"));
 		return false;
@@ -404,7 +404,7 @@ bool FClaireonSpecApplicator_WidgetBP::ApplyPass2_WireRelationships(const FStrin
 			{
 				if (TWeakObjectPtr<UWidget>* Stashed = WidgetsBySpecId.Find(Id))
 				{
-					if (UWidget* W = Stashed->Get()) return W;
+					if (UWidget* W = Stashed->Get(); IsValid(W)) return W;
 				}
 				return ClaireonWidgetHelpers::FindWidgetByName(WidgetTree, FName(*Name));
 			};
@@ -412,7 +412,7 @@ bool FClaireonSpecApplicator_WidgetBP::ApplyPass2_WireRelationships(const FStrin
 			UWidget* ChildWidget = LookupWidget(SpecId, ChildName);
 			UWidget* ParentWidget = LookupWidget(ParentId, ParentName);
 
-			if (!ChildWidget || !ParentWidget)
+			if (!IsValid(ChildWidget) || !IsValid(ParentWidget))
 			{
 				AddWarning(FString::Printf(TEXT("Could not find widgets for parent-child: '%s' -> '%s'"), *ParentId, *SpecId));
 				continue;
@@ -427,14 +427,14 @@ bool FClaireonSpecApplicator_WidgetBP::ApplyPass2_WireRelationships(const FStrin
 			}
 
 			UPanelWidget* ParentPanel = Cast<UPanelWidget>(ParentWidget);
-			if (!ParentPanel)
+			if (!IsValid(ParentPanel))
 			{
 				AddWarning(FString::Printf(TEXT("Parent '%s' is not a panel widget, cannot add children"), *ParentId));
 				continue;
 			}
 
 			UPanelSlot* Slot = ClaireonWidgetHelpers::AddChildToPanel(ParentPanel, ChildWidget, SlotPropsObj);
-			if (!Slot)
+			if (!IsValid(Slot))
 			{
 				AddWarning(FString::Printf(TEXT("Failed to add '%s' as child of '%s'"), *SpecId, *ParentId));
 			}
@@ -475,11 +475,11 @@ bool FClaireonSpecApplicator_WidgetBP::ApplyPass2_WireRelationships(const FStrin
 			{
 				Widget = Stashed->Get();
 			}
-			if (!Widget)
+			if (!IsValid(Widget))
 			{
 				Widget = ClaireonWidgetHelpers::FindWidgetByName(WidgetTree, FName(*WidgetName));
 			}
-			if (Widget)
+			if (IsValid(Widget))
 			{
 				for (const auto& Prop : (*PropsPtr)->Values)
 				{
@@ -559,11 +559,11 @@ bool FClaireonSpecApplicator_WidgetBP::ApplyPass2_WireRelationships(const FStrin
 				{
 					Widget = Stashed->Get();
 				}
-				if (!Widget)
+				if (!IsValid(Widget))
 				{
 					Widget = ClaireonWidgetHelpers::FindWidgetByName(WidgetTree, FName(*BindWidget));
 				}
-				if (!Widget)
+				if (!IsValid(Widget))
 				{
 					RecordEntryFailure(AnimName, FString::Printf(TEXT("binding widget '%s' not found"), *BindWidget));
 					continue;
@@ -601,14 +601,14 @@ bool FClaireonSpecApplicator_WidgetBP::ApplyPass2_WireRelationships(const FStrin
 						continue;
 					}
 
-					if (!NewTrack || NewTrack->GetAllSections().Num() == 0)
+					if (!IsValid(NewTrack) || NewTrack->GetAllSections().Num() == 0)
 					{
 						RecordEntryFailure(AnimName, TEXT("track has no sections"));
 						continue;
 					}
 					UMovieSceneSection* Section = NewTrack->GetAllSections()[0];
 					UMovieScene* MS = Anim->GetMovieScene();
-					if (!Section || !MS) continue;
+					if (!IsValid(Section) || !IsValid(MS)) continue;
 
 					const FFrameRate TickResolution = MS->GetTickResolution();
 					const TArray<TSharedPtr<FJsonValue>>* KeysArr = nullptr;
@@ -689,7 +689,7 @@ bool FClaireonSpecApplicator_WidgetBP::ApplyPass2_WireRelationships(const FStrin
 bool FClaireonSpecApplicator_WidgetBP::CompileAsset(const FString& SessionId, FString& OutError)
 {
 	UWidgetBlueprint* WBP = WidgetBlueprint.Get();
-	if (!WBP)
+	if (!IsValid(WBP))
 	{
 		OutError = TEXT("Widget Blueprint is no longer valid");
 		return false;
@@ -710,7 +710,7 @@ bool FClaireonSpecApplicator_WidgetBP::CompileAsset(const FString& SessionId, FS
 bool FClaireonSpecApplicator_WidgetBP::SaveAsset(const FString& SessionId, FString& OutError)
 {
 	UWidgetBlueprint* WBP = WidgetBlueprint.Get();
-	if (!WBP)
+	if (!IsValid(WBP))
 	{
 		OutError = TEXT("Widget Blueprint is no longer valid");
 		return false;

@@ -29,7 +29,7 @@ void FClaireonREPLLogger::Initialize()
     }
 
     const UClaireonSettings* Settings = UClaireonSettings::Get();
-    if (!Settings || !Settings->bEnableLogging)
+    if (!IsValid(Settings) || !Settings->bEnableLogging)
     {
         return;
     }

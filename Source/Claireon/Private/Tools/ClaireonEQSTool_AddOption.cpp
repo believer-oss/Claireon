@@ -45,7 +45,7 @@ FToolResult ClaireonEQSTool_AddOption::Execute(const TSharedPtr<FJsonObject>& Ar
 	}
 
 	UClass* GeneratorClass = ResolveEQSClass(GeneratorClassName, UEnvQueryGenerator::StaticClass(), TEXT("EnvQueryGenerator_"), Error);
-	if (!GeneratorClass)
+	if (!IsValid(GeneratorClass))
 	{
 		return MakeErrorResult(Error);
 	}

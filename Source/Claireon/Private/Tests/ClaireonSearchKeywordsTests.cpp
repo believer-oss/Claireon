@@ -104,7 +104,7 @@ namespace SearchKeywordsTestHelpers
 // ---------------------------------------------------------------------------
 // 1: Per-tool keyword count for the picklist tools.
 // ---------------------------------------------------------------------------
-UNTEST_UNIT(Claireon, SearchKeywords, TierA_SessionEntryPoints)
+UNTEST_UNIT_OPTS(Claireon, SearchKeywords, TierA_SessionEntryPoints, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace SearchKeywordsTestHelpers;
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBehaviorTreeTool_Open>(TEXT("behaviortree_open")));
@@ -118,7 +118,7 @@ UNTEST_UNIT(Claireon, SearchKeywords, TierA_SessionEntryPoints)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, SearchKeywords, TierB_BlueprintGraphSlate)
+UNTEST_UNIT_OPTS(Claireon, SearchKeywords, TierB_BlueprintGraphSlate, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace SearchKeywordsTestHelpers;
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_Open>(TEXT("bp_open")));
@@ -134,7 +134,7 @@ UNTEST_UNIT(Claireon, SearchKeywords, TierB_BlueprintGraphSlate)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, SearchKeywords, TierC_ReadInspectDiscovery)
+UNTEST_UNIT_OPTS(Claireon, SearchKeywords, TierC_ReadInspectDiscovery, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace SearchKeywordsTestHelpers;
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_SearchTools>(TEXT("tool_search")));
@@ -169,14 +169,14 @@ UNTEST_UNIT(Claireon, SearchKeywords, TierC_ReadInspectDiscovery)
 //      stays scoped. They remain in scope for the broader description-audit
 //      lint.
 // ---------------------------------------------------------------------------
-UNTEST_UNIT(Claireon, SearchKeywords, AnimgraphSynonymMapsToAnimGraphInspect)
+UNTEST_UNIT_OPTS(Claireon, SearchKeywords, AnimgraphSynonymMapsToAnimGraphInspect, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace SearchKeywordsTestHelpers;
 	UNTEST_EXPECT_TRUE(KeywordsContain<ClaireonTool_AnimGraphInspect>(TEXT("animgraph")));
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, SearchKeywords, BpVariableSynonymMapsToAddVariable)
+UNTEST_UNIT_OPTS(Claireon, SearchKeywords, BpVariableSynonymMapsToAddVariable, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace SearchKeywordsTestHelpers;
 	// 'bp variable' -> bp_add_variable
@@ -185,7 +185,7 @@ UNTEST_UNIT(Claireon, SearchKeywords, BpVariableSynonymMapsToAddVariable)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, SearchKeywords, BtTaskSynonymMapsToBehaviorTreeOpen)
+UNTEST_UNIT_OPTS(Claireon, SearchKeywords, BtTaskSynonymMapsToBehaviorTreeOpen, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace SearchKeywordsTestHelpers;
 	// 'bt task' -> behaviortree_open (substituted from P3 _edit per registry)
@@ -194,7 +194,7 @@ UNTEST_UNIT(Claireon, SearchKeywords, BtTaskSynonymMapsToBehaviorTreeOpen)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, SearchKeywords, AbbreviationSynonymsHonoredOnSessionEntryPoints)
+UNTEST_UNIT_OPTS(Claireon, SearchKeywords, AbbreviationSynonymsHonoredOnSessionEntryPoints, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace SearchKeywordsTestHelpers;
 	// 'st' -> statetree_open

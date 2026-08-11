@@ -52,7 +52,7 @@ FToolResult ClaireonPCGGraphTool_DisconnectAll::Execute(const TSharedPtr<FJsonOb
 
 	int32 NodeIndex;
 	UPCGNode* Node = ClaireonPCGGraphHelpers::FindNodeByIdentifier(Data->PCGGraph.Get(), NodeIdentifier, NodeIndex);
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Node not found: %s"), *NodeIdentifier));
 	}

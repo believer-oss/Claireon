@@ -14,6 +14,10 @@ public:
 	virtual TSharedPtr<FJsonObject> GetInputSchema() const override;
 	virtual FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;
 
-	/** Execute the deferred map load (called from the post-execution hook). */
-	static void ExecuteDeferredLoadMap(const FString& MapPath);
+	/**
+	 * Execute the deferred map load (called from the post-execution hook).
+	 * Payload is the JSON object queued by Execute ({"mapPath", "waitForAssetCompilation"});
+	 * a bare object path is accepted as a fallback.
+	 */
+	static void ExecuteDeferredLoadMap(const FString& Payload);
 };

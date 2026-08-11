@@ -11,8 +11,10 @@ FString ClaireonTool_LandscapeImport::GetOperation() const { return TEXT("import
 
 FString ClaireonTool_LandscapeImport::GetDescription() const
 {
-	return TEXT("DEPRECATED: dispatches on the 'type' enum. Use the per-type tools instead: "
-	            "landscape_import_heightmap, landscape_import_weightmap. Stateless / non-session.");
+	return TEXT("Import heightmap or weightmap data into a landscape, dispatching on the 'type' enum. "
+	            "DEPRECATED: use the per-type tools instead -- landscape_import_heightmap, "
+	            "landscape_import_weightmap. Stateless / non-session: forwards the arguments to the per-type "
+	            "tool, which edits the landscape actor in the current editor world; no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_LandscapeImport::GetInputSchema() const

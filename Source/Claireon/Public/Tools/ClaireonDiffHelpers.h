@@ -36,12 +36,49 @@ namespace ClaireonDiffHelpers
 
 	// ── Git Revision Support ────────────────────────────────────────────
 
-	/** Convert a /Game/ asset path to a git-relative path (e.g. Content/...). */
+	/**
+	 * Convert a content path to a path relative to the project directory, as git
+	 * names it (e.g. /Game/Foo/Bar -> Content/Foo/Bar.uasset). Handles plugin
+	 * mount points, picks .umap for map packages, and tolerates a trailing
+	 * .ObjectName ("/Game/Foo/Bar.Bar").
+	 */
 	FString ConvertAssetPathToGitRelativePath(const FString& AssetPath);
+
+	/** Outcome of one git invocation. */
+	struct FGitCommandResult
+	{
+		/** False when the process could not be launched at all. */
+		bool bLaunched = false;
+		bool bTimedOut = false;
+		int32 ReturnCode = -1;
+		TArray<uint8> StdOut;
+		FString StdErr;
+
+		bool Succeeded() const { return bLaunched && !bTimedOut && ReturnCode == 0; }
+	};
+
+	/**
+	 * Run `git <Args>` in ProjectDir with no shell involved, capturing stdout as
+	 * raw bytes and stderr separately.
+	 *
+	 * Each entry of Args becomes exactly one argv entry, so a revision containing
+	 * `^` survives and a path containing a space survives. The previous
+	 * implementation interpolated both into a cmd.exe command string, where `^`
+	 * is the escape character: `rev-parse HEAD^` came back as HEAD's own sha, so
+	 * `bp_diff(revision_a='HEAD^')` compared HEAD against HEAD and reported "no
+	 * differences". Dropping the shell also drops the silent Windows-only
+	 * coupling of hard-coding cmd.exe.
+	 *
+	 * @param OptionalStdIn  Bytes to feed the child's stdin, or null for none.
+	 * @return The result. Callers check Succeeded() and read StdErr for detail.
+	 */
+	FGitCommandResult RunGitCommand(
+		const TArray<FString>& Args,
+		const TArray<uint8>* OptionalStdIn,
+		double TimeoutSeconds);
 
 	/**
 	 * Extract a .uasset from a git revision to a temp file.
-	 * Uses cmd.exe /C with shell redirection for binary-safe extraction.
 	 * Returns the temp file path, or empty string + error on failure.
 	 */
 	FString ExtractAssetFromGitRevision(const FString& GitRelativePath, const FString& Revision, FString& OutError);

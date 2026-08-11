@@ -43,11 +43,11 @@ FToolResult ClaireonStateTreeTool_SetSchemaProperty::Execute(const TSharedPtr<FJ
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	UStateTreeSchema* Schema = EditorData->Schema;
-	if (!Schema)
+	if (!IsValid(Schema))
 		return MakeErrorResult(TEXT("State-tree has no schema; cannot set schema property."));
 
 	FString PropertyName, PropertyValue;

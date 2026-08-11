@@ -84,7 +84,7 @@ FToolResult ClaireonLandscapeTool_PaintLayer::Execute(const TSharedPtr<FJsonObje
 		}
 	}
 
-	if (!LayerInfoObj)
+	if (!IsValid(LayerInfoObj))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Layer '%s' not found. Available: %s"),

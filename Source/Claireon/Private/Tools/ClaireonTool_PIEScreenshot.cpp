@@ -61,7 +61,7 @@ TSharedPtr<FJsonObject> ClaireonTool_PIEScreenshot::GetInputSchema() const
 
 IClaireonTool::FToolResult ClaireonTool_PIEScreenshot::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("GEditor is not available"));
 	}
@@ -119,7 +119,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEScreenshot::Execute(const TSharedPtr<
 
 	// Build a rough resolution string from the viewport
 	FString ResolutionStr = TEXT("unknown");
-	if (GEngine && GEngine->GameViewport)
+	if (IsValid(GEngine) && GEngine->GameViewport)
 	{
 		FViewport* Viewport = GEngine->GameViewport->Viewport;
 		if (Viewport)

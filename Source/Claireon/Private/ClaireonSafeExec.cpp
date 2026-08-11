@@ -5,9 +5,140 @@
 #include "ClaireonLog.h"
 
 #include "BlueprintEditorLibrary.h"
+#include "Dom/JsonObject.h"
 #include "Engine/Blueprint.h"
 
 static bool bLastExecutionCrashed = false;
+
+// ---------------------------------------------------------------------------
+// Declared-vs-supplied argument validation (P1-2 / T1).
+//
+// This is the single funnel both transports pass through -- the HTTP server
+// (ClaireonServer.cpp) and the Python bridge (ClaireonBridge.cpp) both reach
+// tools only via ExecuteTool -- and it is the only place where the schema and
+// the supplied arguments are both in hand. Doing it per-tool would mean editing
+// ~700 Execute bodies that have no common params type.
+// ---------------------------------------------------------------------------
+
+namespace ClaireonSafeExecArgs
+{
+	// Arguments the TRANSPORT consumes, not the tool. Schemas do not declare
+	// them (they are cross-cutting), so they must be accepted everywhere or the
+	// gate would reject a flag the server itself documents.
+	// File-local prefix to avoid anon-NS collisions under unity batching.
+	static const TCHAR* const kCl612TransportArgs[] =
+	{
+		// Read by FClaireonServer::HandleToolCall and by several edit-tool bases.
+		TEXT("suppress_output"),
+	};
+
+	// Case- and separator-insensitive key, so "actorId" and "actor_id" collapse
+	// to the same string. Almost every misspelling reported in this catalog is
+	// exactly that swap, and a suggestion is worth more than a bare rejection.
+	static FString Cl612NormalizeParamName(const FString& Name)
+	{
+		FString Out;
+		Out.Reserve(Name.Len());
+		for (const TCHAR Ch : Name)
+		{
+			if (Ch != TEXT('_'))
+			{
+				Out.AppendChar(FChar::ToLower(Ch));
+			}
+		}
+		return Out;
+	}
+}
+
+bool ClaireonSafeExec::IsTransportLevelArgument(const FString& ArgumentName)
+{
+	for (const TCHAR* const Known : ClaireonSafeExecArgs::kCl612TransportArgs)
+	{
+		if (ArgumentName.Equals(Known, ESearchCase::CaseSensitive))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+FString ClaireonSafeExec::ValidateArgumentsAgainstSchema(
+	const IClaireonTool* Tool,
+	const TSharedPtr<FJsonObject>& Arguments)
+{
+	if (Tool == nullptr || !Arguments.IsValid() || Arguments->Values.Num() == 0)
+	{
+		return FString();
+	}
+
+	const TSharedPtr<FJsonObject> Schema = Tool->GetInputSchema();
+	if (!Schema.IsValid())
+	{
+		return FString();
+	}
+
+	const TSharedPtr<FJsonObject>* PropertiesPtr = nullptr;
+	if (!Schema->TryGetObjectField(TEXT("properties"), PropertiesPtr)
+		|| PropertiesPtr == nullptr
+		|| !(*PropertiesPtr).IsValid())
+	{
+		// No declared properties: there is nothing to validate against, so stay
+		// permissive rather than rejecting every argument to such a tool.
+		return FString();
+	}
+
+	const TSharedPtr<FJsonObject>& Properties = *PropertiesPtr;
+
+	TArray<FString> Unknown;
+	for (const TPair<FString, TSharedPtr<FJsonValue>>& Supplied : Arguments->Values)
+	{
+		if (Properties->HasField(Supplied.Key) || IsTransportLevelArgument(Supplied.Key))
+		{
+			continue;
+		}
+		Unknown.Add(Supplied.Key);
+	}
+
+	if (Unknown.Num() == 0)
+	{
+		return FString();
+	}
+
+	Unknown.Sort();
+
+	TArray<FString> Declared;
+	Properties->Values.GetKeys(Declared);
+	Declared.Sort();
+
+	// Suggest the closest declared name for each unknown one.
+	FString Detail;
+	for (const FString& Bad : Unknown)
+	{
+		const FString BadKey = ClaireonSafeExecArgs::Cl612NormalizeParamName(Bad);
+		const FString* Suggestion = Declared.FindByPredicate(
+			[&BadKey](const FString& Candidate)
+			{
+				return ClaireonSafeExecArgs::Cl612NormalizeParamName(Candidate) == BadKey;
+			});
+
+		if (!Detail.IsEmpty())
+		{
+			Detail += TEXT("; ");
+		}
+		Detail += Suggestion != nullptr
+			? FString::Printf(TEXT("'%s' (did you mean '%s'?)"), *Bad, **Suggestion)
+			: FString::Printf(TEXT("'%s'"), *Bad);
+	}
+
+	return FString::Printf(
+		TEXT("Tool '%s' does not accept %s: %s. Declared parameters: %s. "
+			 "An argument the schema does not declare is never read, so the call would "
+			 "have appeared to succeed while doing nothing."),
+		*Tool->GetName(),
+		Unknown.Num() == 1 ? TEXT("this argument") : TEXT("these arguments"),
+		*Detail,
+		Declared.Num() > 0 ? *FString::Join(Declared, TEXT(", ")) : TEXT("(none)"));
+}
 
 #if PLATFORM_WINDOWS
 
@@ -109,6 +240,17 @@ FClaireonSafeExecResult ClaireonSafeExec::ExecuteTool(
 {
 	FClaireonSafeExecResult Result;
 	TCHAR ExceptionMsg[2048] = {};
+
+	// Reject undeclared arguments BEFORE executing: the tool would ignore them,
+	// and a partial write done under a misread argument is worse than no write.
+	{
+		const FString ArgError = ValidateArgumentsAgainstSchema(Tool, Arguments);
+		if (!ArgError.IsEmpty())
+		{
+			Result.ToolResult = IClaireonTool::MakeErrorResult(ArgError);
+			return Result;
+		}
+	}
 
 	FExecuteToolContext Ctx;
 	Ctx.Tool = Tool;
@@ -218,6 +360,17 @@ FClaireonSafeExecResult ClaireonSafeExec::ExecuteTool(
 	const TSharedPtr<FJsonObject>& Arguments)
 {
 	FClaireonSafeExecResult Result;
+
+	// Same pre-execution gate as the Windows path. See the comment there.
+	{
+		const FString ArgError = ValidateArgumentsAgainstSchema(Tool, Arguments);
+		if (!ArgError.IsEmpty())
+		{
+			Result.ToolResult = IClaireonTool::MakeErrorResult(ArgError);
+			return Result;
+		}
+	}
+
 	try
 	{
 		Result.ToolResult = Tool->Execute(Arguments);

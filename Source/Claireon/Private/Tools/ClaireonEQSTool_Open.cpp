@@ -51,7 +51,7 @@ FToolResult ClaireonEQSTool_Open::Execute(const TSharedPtr<FJsonObject>& Argumen
 
 	FString Error;
 	UEnvQuery* Query = ClaireonBehaviorTreeHelpers::LoadEQSAsset(AssetPath, Error);
-	if (!Query)
+	if (!IsValid(Query))
 	{
 		return MakeErrorResult(Error);
 	}

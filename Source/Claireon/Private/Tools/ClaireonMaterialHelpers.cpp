@@ -39,7 +39,7 @@ namespace ClaireonMaterialHelpers
 	// Internal: per-material FMaterialUpdateContext stash (for BeginEdit/EndEdit batching)
 	// ------------------------------------------------------------------
 
-	namespace
+	namespace ClaireonMaterialHelpers_Private1
 	{
 		static TMap<TWeakObjectPtr<UMaterial>, TUniquePtr<FMaterialUpdateContext>>& GetEditContexts()
 		{
@@ -91,7 +91,8 @@ namespace ClaireonMaterialHelpers
 			Out.RemoveFromStart(TEXT("MaterialExpression"));
 			return Out.IsEmpty() ? InName : Out;
 		}
-	} // anonymous namespace
+	} // namespace ClaireonMaterialHelpers_Private1
+	using namespace ClaireonMaterialHelpers_Private1;
 
 	// ============================================================================
 	// Asset loading
@@ -109,14 +110,14 @@ namespace ClaireonMaterialHelpers
 		const FString ResolvedPath = Resolve.ResolvedPath.Path;
 		FSoftObjectPath SoftPath(ResolvedPath);
 		UObject* Loaded = SoftPath.TryLoad();
-		if (!Loaded)
+		if (!IsValid(Loaded))
 		{
 			OutError = FString::Printf(TEXT("Failed to load asset at path: %s"), *ResolvedPath);
 			return nullptr;
 		}
 
 		UMaterial* Material = Cast<UMaterial>(Loaded);
-		if (!Material)
+		if (!IsValid(Material))
 		{
 			OutError = FString::Printf(TEXT("Asset at %s is not a UMaterial (actual type: %s)"),
 				*ResolvedPath, *Loaded->GetClass()->GetName());
@@ -138,14 +139,14 @@ namespace ClaireonMaterialHelpers
 		const FString ResolvedPath = Resolve.ResolvedPath.Path;
 		FSoftObjectPath SoftPath(ResolvedPath);
 		UObject* Loaded = SoftPath.TryLoad();
-		if (!Loaded)
+		if (!IsValid(Loaded))
 		{
 			OutError = FString::Printf(TEXT("Failed to load asset at path: %s"), *ResolvedPath);
 			return nullptr;
 		}
 
 		UMaterialInstanceConstant* Instance = Cast<UMaterialInstanceConstant>(Loaded);
-		if (!Instance)
+		if (!IsValid(Instance))
 		{
 			OutError = FString::Printf(TEXT("Asset at %s is not a UMaterialInstanceConstant (actual type: %s)"),
 				*ResolvedPath, *Loaded->GetClass()->GetName());
@@ -178,7 +179,7 @@ namespace ClaireonMaterialHelpers
 		for (const FString& Candidate : Candidates)
 		{
 			UClass* Found = FindFirstObject<UClass>(*Candidate, EFindFirstObjectOptions::None);
-			if (Found && Found->IsChildOf(UMaterialExpression::StaticClass()) && !Found->HasAnyClassFlags(CLASS_Abstract))
+			if (IsValid(Found) && Found->IsChildOf(UMaterialExpression::StaticClass()) && !Found->HasAnyClassFlags(CLASS_Abstract))
 			{
 				return Found;
 			}
@@ -190,7 +191,7 @@ namespace ClaireonMaterialHelpers
 
 		for (UClass* Class : DerivedClasses)
 		{
-			if (!Class || Class->HasAnyClassFlags(CLASS_Abstract | CLASS_Deprecated))
+			if (!IsValid(Class) || Class->HasAnyClassFlags(CLASS_Abstract | CLASS_Deprecated))
 			{
 				continue;
 			}
@@ -211,7 +212,7 @@ namespace ClaireonMaterialHelpers
 	UMaterialExpression* FindExpressionByIdentifier(UMaterial* Material, const FString& Identifier, int32& OutIndex)
 	{
 		OutIndex = INDEX_NONE;
-		if (!Material || Identifier.IsEmpty())
+		if (!IsValid(Material) || Identifier.IsEmpty())
 		{
 			return nullptr;
 		}
@@ -233,7 +234,7 @@ namespace ClaireonMaterialHelpers
 		for (int32 i = 0; i < Expressions.Num(); ++i)
 		{
 			UMaterialExpression* Expr = Expressions[i];
-			if (!Expr)
+			if (!IsValid(Expr))
 			{
 				continue;
 			}
@@ -248,7 +249,7 @@ namespace ClaireonMaterialHelpers
 		for (int32 i = 0; i < Expressions.Num(); ++i)
 		{
 			UMaterialExpression* Expr = Expressions[i];
-			if (!Expr)
+			if (!IsValid(Expr))
 			{
 				continue;
 			}
@@ -266,7 +267,7 @@ namespace ClaireonMaterialHelpers
 		for (int32 i = 0; i < Expressions.Num(); ++i)
 		{
 			UMaterialExpression* Expr = Expressions[i];
-			if (!Expr)
+			if (!IsValid(Expr))
 			{
 				continue;
 			}
@@ -291,11 +292,11 @@ namespace ClaireonMaterialHelpers
 	// Markdown formatting (for inspect tools)
 	// ============================================================================
 
-	namespace
+	namespace ClaireonMaterialHelpers_Private2
 	{
 		static FString GetExpressionShortName(const UMaterialExpression* Expr)
 		{
-			if (!Expr)
+			if (!IsValid(Expr))
 			{
 				return TEXT("(null)");
 			}
@@ -308,7 +309,7 @@ namespace ClaireonMaterialHelpers
 		 */
 		static FString GetSourceOutputDisplayName(UMaterialExpression* Source, int32 OutputIndex)
 		{
-			if (!Source)
+			if (!IsValid(Source))
 			{
 				return TEXT("?");
 			}
@@ -326,7 +327,7 @@ namespace ClaireonMaterialHelpers
 
 		static FString FormatLegacyAttributeRow(const TCHAR* AttributeLabel, const FExpressionInput& Input, const TConstArrayView<TObjectPtr<UMaterialExpression>>& Expressions)
 		{
-			if (!Input.Expression)
+			if (!IsValid(Input.Expression))
 			{
 				return FString();
 			}
@@ -338,10 +339,11 @@ namespace ClaireonMaterialHelpers
 			return FString::Printf(TEXT("- %s: %s.%s\n"), AttributeLabel, *SourceName, *OutputName);
 		}
 	}
+	using namespace ClaireonMaterialHelpers_Private2;
 
 	FString FormatMaterialStructure(const UMaterial* Material, const FString& DetailLevel)
 	{
-		if (!Material)
+		if (!IsValid(Material))
 		{
 			return TEXT("(null material)\n");
 		}
@@ -378,7 +380,7 @@ namespace ClaireonMaterialHelpers
 		Out += FString::Printf(TEXT("- Expressions: %d\n\n"), Expressions.Num());
 
 		// Material attribute connections (legacy pins via UMaterialEditorOnlyData).
-		if (const UMaterialEditorOnlyData* EOData = Material->GetEditorOnlyData())
+		if (const UMaterialEditorOnlyData* EOData = Material->GetEditorOnlyData(); IsValid(EOData))
 		{
 			FString Attrs;
 			Attrs += FormatLegacyAttributeRow(TEXT("BaseColor"), EOData->BaseColor, Expressions);
@@ -433,7 +435,7 @@ namespace ClaireonMaterialHelpers
 
 	FString FormatExpressionDetail(const UMaterial* Material, const UMaterialExpression* Expression, int32 Index, bool bIncludeConnections)
 	{
-		if (!Expression)
+		if (!IsValid(Expression))
 		{
 			return TEXT("(null expression)\n");
 		}
@@ -478,7 +480,7 @@ namespace ClaireonMaterialHelpers
 		// Inputs and their source connections.
 		if (bIncludeConnections)
 		{
-			TConstArrayView<TObjectPtr<UMaterialExpression>> AllExprs = Material ? Material->GetExpressions() : TConstArrayView<TObjectPtr<UMaterialExpression>>();
+			TConstArrayView<TObjectPtr<UMaterialExpression>> AllExprs = IsValid(Material) ? Material->GetExpressions() : TConstArrayView<TObjectPtr<UMaterialExpression>>();
 
 			for (int32 InputIdx = 0; ; ++InputIdx)
 			{
@@ -489,7 +491,7 @@ namespace ClaireonMaterialHelpers
 				}
 				const FName InputName = MutableExpr->GetInputName(InputIdx);
 				const FString InputLabel = InputName != NAME_None ? InputName.ToString() : FString::Printf(TEXT("Input%d"), InputIdx);
-				if (Input->Expression)
+				if (IsValid(Input->Expression))
 				{
 					int32 SourceIdx = AllExprs.IndexOfByKey(Input->Expression);
 					const FString SourceLabel = SourceIdx != INDEX_NONE
@@ -506,7 +508,7 @@ namespace ClaireonMaterialHelpers
 
 	FString FormatParameterSummary(const UMaterial* Material)
 	{
-		if (!Material)
+		if (!IsValid(Material))
 		{
 			return FString();
 		}
@@ -516,7 +518,7 @@ namespace ClaireonMaterialHelpers
 
 		auto ParamGroup = [](const UMaterialExpressionParameter* Param) -> FString
 		{
-			if (!Param || Param->Group == NAME_None) return FString();
+			if (!IsValid(Param) || Param->Group == NAME_None) return FString();
 			return Param->Group.ToString();
 		};
 
@@ -525,7 +527,7 @@ namespace ClaireonMaterialHelpers
 			TArray<FString> Rows;
 			for (UMaterialExpression* Expr : Expressions)
 			{
-				if (UMaterialExpressionScalarParameter* Scalar = Cast<UMaterialExpressionScalarParameter>(Expr))
+				if (UMaterialExpressionScalarParameter* Scalar = Cast<UMaterialExpressionScalarParameter>(Expr); IsValid(Scalar))
 				{
 					Rows.Add(FString::Printf(TEXT("| %s | Scalar | %f | %s |"),
 						*Scalar->ParameterName.ToString(), Scalar->DefaultValue, *ParamGroup(Scalar)));
@@ -545,7 +547,7 @@ namespace ClaireonMaterialHelpers
 			TArray<FString> Rows;
 			for (UMaterialExpression* Expr : Expressions)
 			{
-				if (UMaterialExpressionVectorParameter* Vec = Cast<UMaterialExpressionVectorParameter>(Expr))
+				if (UMaterialExpressionVectorParameter* Vec = Cast<UMaterialExpressionVectorParameter>(Expr); IsValid(Vec))
 				{
 					Rows.Add(FString::Printf(TEXT("| %s | Vector | (%f, %f, %f, %f) | %s |"),
 						*Vec->ParameterName.ToString(),
@@ -567,7 +569,7 @@ namespace ClaireonMaterialHelpers
 			TArray<FString> Rows;
 			for (UMaterialExpression* Expr : Expressions)
 			{
-				if (UMaterialExpressionTextureSampleParameter* Tex = Cast<UMaterialExpressionTextureSampleParameter>(Expr))
+				if (UMaterialExpressionTextureSampleParameter* Tex = Cast<UMaterialExpressionTextureSampleParameter>(Expr); IsValid(Tex))
 				{
 					const FString TexName = Tex->Texture ? Tex->Texture->GetPathName() : TEXT("(none)");
 					const FString GroupStr = Tex->Group != NAME_None ? Tex->Group.ToString() : FString();
@@ -589,7 +591,7 @@ namespace ClaireonMaterialHelpers
 			TArray<FString> Rows;
 			for (UMaterialExpression* Expr : Expressions)
 			{
-				if (UMaterialExpressionStaticSwitchParameter* SS = Cast<UMaterialExpressionStaticSwitchParameter>(Expr))
+				if (UMaterialExpressionStaticSwitchParameter* SS = Cast<UMaterialExpressionStaticSwitchParameter>(Expr); IsValid(SS))
 				{
 					Rows.Add(FString::Printf(TEXT("| %s | StaticSwitch | %s | %s |"),
 						*SS->ParameterName.ToString(),
@@ -611,7 +613,7 @@ namespace ClaireonMaterialHelpers
 			TArray<FString> Rows;
 			for (UMaterialExpression* Expr : Expressions)
 			{
-				if (UMaterialExpressionStaticComponentMaskParameter* M = Cast<UMaterialExpressionStaticComponentMaskParameter>(Expr))
+				if (UMaterialExpressionStaticComponentMaskParameter* M = Cast<UMaterialExpressionStaticComponentMaskParameter>(Expr); IsValid(M))
 				{
 					Rows.Add(FString::Printf(TEXT("| %s | StaticComponentMask | (R=%s, G=%s, B=%s, A=%s) | %s |"),
 						*M->ParameterName.ToString(),
@@ -636,7 +638,7 @@ namespace ClaireonMaterialHelpers
 
 	FString FormatMaterialInstance(const UMaterialInstanceConstant* Instance)
 	{
-		if (!Instance)
+		if (!IsValid(Instance))
 		{
 			return TEXT("(null material instance)\n");
 		}
@@ -650,10 +652,10 @@ namespace ClaireonMaterialHelpers
 			TArray<UMaterialInterface*> Chain;
 			UMaterialInterface* Cursor = Instance->Parent;
 			int32 Safety = 0;
-			while (Cursor && Safety++ < 32)
+			while (IsValid(Cursor) && Safety++ < 32)
 			{
 				Chain.Add(Cursor);
-				if (UMaterialInstance* MI = Cast<UMaterialInstance>(Cursor))
+				if (UMaterialInstance* MI = Cast<UMaterialInstance>(Cursor); IsValid(MI))
 				{
 					Cursor = MI->Parent;
 				}
@@ -767,7 +769,7 @@ namespace ClaireonMaterialHelpers
 				{
 					UTexture* InheritedValue = nullptr;
 					Instance->GetTextureParameterValue(FHashedMaterialParameterInfo(Info.Name), InheritedValue);
-					const FString InheritedStr = InheritedValue ? InheritedValue->GetPathName() : FString(TEXT("(none)"));
+					const FString InheritedStr = IsValid(InheritedValue) ? InheritedValue->GetPathName() : FString(TEXT("(none)"));
 					FString OverrideStr;
 					for (const FTextureParameterValue& Override : Instance->TextureParameterValues)
 					{
@@ -863,7 +865,7 @@ namespace ClaireonMaterialHelpers
 
 	bool ConnectExpressions(UMaterial* Material, UMaterialExpression* From, const FString& FromOutput, UMaterialExpression* To, const FString& ToInput, FString& OutError)
 	{
-		if (!Material || !From || !To)
+		if (!IsValid(Material) || !IsValid(From) || !IsValid(To))
 		{
 			OutError = TEXT("ConnectExpressions: null material/from/to");
 			return false;
@@ -898,7 +900,7 @@ namespace ClaireonMaterialHelpers
 
 	bool DisconnectExpressionInput(UMaterial* Material, UMaterialExpression* Expr, const FString& InputName, FString& OutError)
 	{
-		if (!Material || !Expr)
+		if (!IsValid(Material) || !IsValid(Expr))
 		{
 			OutError = TEXT("DisconnectExpressionInput: null material/expression");
 			return false;
@@ -940,7 +942,7 @@ namespace ClaireonMaterialHelpers
 
 	bool ConnectToMaterialAttribute(UMaterial* Material, UMaterialExpression* From, const FString& AttributeName, const FString& OutputName, FString& OutError)
 	{
-		if (!Material || !From)
+		if (!IsValid(Material) || !IsValid(From))
 		{
 			OutError = TEXT("ConnectToMaterialAttribute: null material/from");
 			return false;
@@ -972,7 +974,7 @@ namespace ClaireonMaterialHelpers
 
 	bool SetExpressionProperty(UMaterial* Material, UMaterialExpression* Expr, const FString& PropertyName, const FString& TextValue, FString& OutError)
 	{
-		if (!Expr)
+		if (!IsValid(Expr))
 		{
 			OutError = TEXT("SetExpressionProperty: null expression");
 			return false;
@@ -1017,12 +1019,12 @@ namespace ClaireonMaterialHelpers
 	// Parameter defaults
 	// ============================================================================
 
-	namespace
+	namespace ClaireonMaterialHelpers_Private3
 	{
 		template<typename TParam>
 		TParam* FindParamExpression(UMaterial* Material, const FName& ParamName)
 		{
-			if (!Material) return nullptr;
+			if (!IsValid(Material)) return nullptr;
 			for (UMaterialExpression* Expr : Material->GetExpressions())
 			{
 				if (TParam* Param = Cast<TParam>(Expr))
@@ -1036,11 +1038,12 @@ namespace ClaireonMaterialHelpers
 			return nullptr;
 		}
 	}
+	using namespace ClaireonMaterialHelpers_Private3;
 
 	bool SetScalarParameterDefault(UMaterial* Material, const FName& ParamName, float Value, FString& OutError)
 	{
 		UMaterialExpressionScalarParameter* Param = FindParamExpression<UMaterialExpressionScalarParameter>(Material, ParamName);
-		if (!Param)
+		if (!IsValid(Param))
 		{
 			OutError = FString::Printf(TEXT("ScalarParameter '%s' not found"), *ParamName.ToString());
 			return false;
@@ -1056,7 +1059,7 @@ namespace ClaireonMaterialHelpers
 	bool SetVectorParameterDefault(UMaterial* Material, const FName& ParamName, const FLinearColor& Value, FString& OutError)
 	{
 		UMaterialExpressionVectorParameter* Param = FindParamExpression<UMaterialExpressionVectorParameter>(Material, ParamName);
-		if (!Param)
+		if (!IsValid(Param))
 		{
 			OutError = FString::Printf(TEXT("VectorParameter '%s' not found"), *ParamName.ToString());
 			return false;
@@ -1072,7 +1075,7 @@ namespace ClaireonMaterialHelpers
 	bool SetTextureParameterDefault(UMaterial* Material, const FName& ParamName, UTexture* Value, FString& OutError)
 	{
 		UMaterialExpressionTextureSampleParameter* Param = FindParamExpression<UMaterialExpressionTextureSampleParameter>(Material, ParamName);
-		if (!Param)
+		if (!IsValid(Param))
 		{
 			OutError = FString::Printf(TEXT("TextureParameter '%s' not found"), *ParamName.ToString());
 			return false;
@@ -1088,7 +1091,7 @@ namespace ClaireonMaterialHelpers
 	bool SetStaticSwitchParameterDefault(UMaterial* Material, const FName& ParamName, bool Value, FString& OutError)
 	{
 		UMaterialExpressionStaticSwitchParameter* Param = FindParamExpression<UMaterialExpressionStaticSwitchParameter>(Material, ParamName);
-		if (!Param)
+		if (!IsValid(Param))
 		{
 			OutError = FString::Printf(TEXT("StaticSwitchParameter '%s' not found"), *ParamName.ToString());
 			return false;
@@ -1104,7 +1107,7 @@ namespace ClaireonMaterialHelpers
 	bool SetStaticComponentMaskParameterDefault(UMaterial* Material, const FName& ParamName, bool R, bool G, bool B, bool A, FString& OutError)
 	{
 		UMaterialExpressionStaticComponentMaskParameter* Param = FindParamExpression<UMaterialExpressionStaticComponentMaskParameter>(Material, ParamName);
-		if (!Param)
+		if (!IsValid(Param))
 		{
 			OutError = FString::Printf(TEXT("StaticComponentMaskParameter '%s' not found"), *ParamName.ToString());
 			return false;
@@ -1126,7 +1129,7 @@ namespace ClaireonMaterialHelpers
 
 	bool SetMICScalar(UMaterialInstanceConstant* Instance, const FName& ParamName, float Value, FString& OutError)
 	{
-		if (!Instance)
+		if (!IsValid(Instance))
 		{
 			OutError = TEXT("SetMICScalar: null instance");
 			return false;
@@ -1142,7 +1145,7 @@ namespace ClaireonMaterialHelpers
 
 	bool SetMICVector(UMaterialInstanceConstant* Instance, const FName& ParamName, const FLinearColor& Value, FString& OutError)
 	{
-		if (!Instance)
+		if (!IsValid(Instance))
 		{
 			OutError = TEXT("SetMICVector: null instance");
 			return false;
@@ -1158,7 +1161,7 @@ namespace ClaireonMaterialHelpers
 
 	bool SetMICTexture(UMaterialInstanceConstant* Instance, const FName& ParamName, UTexture* Value, FString& OutError)
 	{
-		if (!Instance)
+		if (!IsValid(Instance))
 		{
 			OutError = TEXT("SetMICTexture: null instance");
 			return false;
@@ -1174,7 +1177,7 @@ namespace ClaireonMaterialHelpers
 
 	bool SetMICStaticSwitch(UMaterialInstanceConstant* Instance, const FName& ParamName, bool Value, FString& OutError)
 	{
-		if (!Instance)
+		if (!IsValid(Instance))
 		{
 			OutError = TEXT("SetMICStaticSwitch: null instance");
 			return false;
@@ -1205,7 +1208,7 @@ namespace ClaireonMaterialHelpers
 
 	bool SetMICStaticComponentMask(UMaterialInstanceConstant* Instance, const FName& ParamName, bool R, bool G, bool B, bool A, FString& OutError)
 	{
-		if (!Instance)
+		if (!IsValid(Instance))
 		{
 			OutError = TEXT("SetMICStaticComponentMask: null instance");
 			return false;
@@ -1238,7 +1241,7 @@ namespace ClaireonMaterialHelpers
 
 	bool ClearMICOverride(UMaterialInstanceConstant* Instance, const FName& ParamName, EMaterialParameterType Type, FString& OutError)
 	{
-		if (!Instance)
+		if (!IsValid(Instance))
 		{
 			OutError = TEXT("ClearMICOverride: null instance");
 			return false;
@@ -1334,7 +1337,7 @@ namespace ClaireonMaterialHelpers
 
 	bool SetShadingModel(UMaterial* Material, EMaterialShadingModel NewModel, FString& OutError)
 	{
-		if (!Material)
+		if (!IsValid(Material))
 		{
 			OutError = TEXT("SetShadingModel: null material");
 			return false;
@@ -1355,7 +1358,7 @@ namespace ClaireonMaterialHelpers
 
 	bool SetBlendMode(UMaterial* Material, EBlendMode NewMode, FString& OutError)
 	{
-		if (!Material)
+		if (!IsValid(Material))
 		{
 			OutError = TEXT("SetBlendMode: null material");
 			return false;
@@ -1380,7 +1383,7 @@ namespace ClaireonMaterialHelpers
 
 	bool CompileMaterial(UMaterial* Material, bool bWaitForCompile, FString& OutError)
 	{
-		if (!Material)
+		if (!IsValid(Material))
 		{
 			OutError = TEXT("CompileMaterial: null material");
 			return false;
@@ -1427,13 +1430,13 @@ namespace ClaireonMaterialHelpers
 
 	bool SaveMaterialAsset(UMaterial* Material, FString& OutError)
 	{
-		if (!Material)
+		if (!IsValid(Material))
 		{
 			OutError = TEXT("SaveMaterialAsset: null material");
 			return false;
 		}
 		UPackage* Package = Material->GetPackage();
-		if (!Package)
+		if (!IsValid(Package))
 		{
 			OutError = TEXT("SaveMaterialAsset: material has no package");
 			return false;
@@ -1453,13 +1456,13 @@ namespace ClaireonMaterialHelpers
 
 	bool SaveMaterialInstanceAsset(UMaterialInstanceConstant* Instance, FString& OutError)
 	{
-		if (!Instance)
+		if (!IsValid(Instance))
 		{
 			OutError = TEXT("SaveMaterialInstanceAsset: null instance");
 			return false;
 		}
 		UPackage* Package = Instance->GetPackage();
-		if (!Package)
+		if (!IsValid(Package))
 		{
 			OutError = TEXT("SaveMaterialInstanceAsset: instance has no package");
 			return false;
@@ -1483,7 +1486,7 @@ namespace ClaireonMaterialHelpers
 
 	void BeginEdit(UMaterial* Material)
 	{
-		if (!Material)
+		if (!IsValid(Material))
 		{
 			return;
 		}
@@ -1500,7 +1503,7 @@ namespace ClaireonMaterialHelpers
 
 	void EndEdit(UMaterial* Material)
 	{
-		if (!Material)
+		if (!IsValid(Material))
 		{
 			return;
 		}

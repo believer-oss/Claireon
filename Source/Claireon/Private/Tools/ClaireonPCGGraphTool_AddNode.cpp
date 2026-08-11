@@ -47,7 +47,7 @@ FToolResult ClaireonPCGGraphTool_AddNode::Execute(const TSharedPtr<FJsonObject>&
 	}
 
 	UClass* SettingsClass = ClaireonPCGGraphHelpers::ResolveSettingsClass(SettingsClassName, Error);
-	if (!SettingsClass)
+	if (!IsValid(SettingsClass))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -56,7 +56,7 @@ FToolResult ClaireonPCGGraphTool_AddNode::Execute(const TSharedPtr<FJsonObject>&
 
 	UPCGSettings* DefaultSettings = nullptr;
 	UPCGNode* NewNode = Data->PCGGraph->AddNodeOfType(TSubclassOf<UPCGSettings>(SettingsClass), DefaultSettings);
-	if (!NewNode)
+	if (!IsValid(NewNode))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to add node of type: %s"), *SettingsClassName));
 	}

@@ -115,7 +115,7 @@ FToolResult ClaireonBehaviorTreeEditToolBase::BuildStateResponse(const FString& 
 
 	FString Error;
 	UBehaviorTreeGraph* Graph = ClaireonBehaviorTreeHelpers::GetBTGraph(Data->BehaviorTree.Get(), Error);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Session error: %s"), *Error));
 	}
@@ -135,11 +135,11 @@ FToolResult ClaireonBehaviorTreeEditToolBase::BuildStateResponse(const FString& 
 	ResponseData->SetStringField(TEXT("tree_view"), Output);
 
 	const FString BtAssetPath = Data->BehaviorTree->GetPathName();
-	FString SessionHintSummaryTag;
-	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResponseData, Data->ConsecutiveAssetPathCalls, BtAssetPath, SessionId, SessionHintSummaryTag);
+	TSharedPtr<FJsonObject> SessionHint;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResponseData, Data->ConsecutiveAssetPathCalls, BtAssetPath, SessionId, GetName(), SessionHint);
 
 	const FString Summary = FString::Printf(TEXT("Session %s: %s"),
 		*SessionId.Left(8), *Data->LastOperationStatus);
 
-	return MakeSuccessResult(ResponseData, Summary + SessionHintSummaryTag);
+	return MakeSuccessResultWithHint(ResponseData, Summary, SessionHint);
 }

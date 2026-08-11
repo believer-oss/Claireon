@@ -10,7 +10,11 @@ FString FClaireonEQSTool_ApplyDelta::GetOperation() const { return TEXT("apply_d
 
 FString FClaireonEQSTool_ApplyDelta::GetDescription() const
 {
-	return TEXT("Atomic batch eqs modification. Removes and creates in one transactional call. Counterpart to eqs_apply_spec. Execution order: remove -> create. (No disconnect/connect phases -- options have no inter-option wiring.)");
+	return TEXT("Apply an atomic batch of EQS query edits in one transactional call. Execution order: "
+				"remove -> create; any phase failure cancels the transaction so nothing lands. No "
+				"disconnect/connect phases -- options have no inter-option wiring. Counterpart to "
+				"eqs_apply_spec. Pass session_id to edit an already open eqs session (eqs_open), or "
+				"asset_path to use a temporary session.");
 }
 
 TSharedPtr<FJsonObject> FClaireonEQSTool_ApplyDelta::GetInputSchema() const

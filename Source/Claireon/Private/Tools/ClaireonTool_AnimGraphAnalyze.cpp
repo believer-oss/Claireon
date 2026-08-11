@@ -16,9 +16,10 @@ FString ClaireonTool_AnimGraphAnalyze::GetOperation() const { return TEXT("analy
 
 FString ClaireonTool_AnimGraphAnalyze::GetDescription() const
 {
-	return TEXT("Analyze an Animation Blueprint for fast path compliance, thread safety issues, "
-		"and compiler warnings. Returns per-node fast path status, per-function thread safety "
-		"flags, and categorized warning counts.");
+	return TEXT("Scan an Animation Blueprint for fast-path compliance, thread-safety issues, and compiler "
+		"warnings. Stateless / read-only / non-session: loads the asset by asset_path and never mutates it, so no "
+		"open session is required. Returns per-node fast-path status, per-function thread-safety flags, and "
+		"categorized warning counts; analysis_type narrows the report to one of those sections.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AnimGraphAnalyze::GetInputSchema() const
@@ -43,7 +44,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphAnalyze::Execute(const TSharedP
 
 	FString Error;
 	UAnimBlueprint* AnimBP = ClaireonAnimGraphHelpers::LoadAnimBlueprint(AssetPath, Error);
-	if (!AnimBP)
+	if (!IsValid(AnimBP))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -65,7 +66,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphAnalyze::Execute(const TSharedP
 		TArray<ClaireonAnimGraphHelpers::FAnimGraphInfo> AllGraphs = ClaireonAnimGraphHelpers::CollectAllGraphs(AnimBP);
 		for (const ClaireonAnimGraphHelpers::FAnimGraphInfo& GraphInfo : AllGraphs)
 		{
-			if (!GraphInfo.Graph)
+			if (!IsValid(GraphInfo.Graph))
 			{
 				continue;
 			}
@@ -73,7 +74,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphAnalyze::Execute(const TSharedP
 			for (UEdGraphNode* Node : GraphInfo.Graph->Nodes)
 			{
 				UAnimGraphNode_Base* AnimNode = Cast<UAnimGraphNode_Base>(Node);
-				if (!AnimNode)
+				if (!IsValid(AnimNode))
 				{
 					continue;
 				}

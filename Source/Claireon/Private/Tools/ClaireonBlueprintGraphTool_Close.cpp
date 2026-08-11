@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_Close::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_Close::GetDescription() const
 {
-    return TEXT("Closes the current Blueprint editing session, releasing the lock and clearing the in-session cursor. Implicitly compiles and saves before closing. Most-common pitfall: calling close on a session_id that does not exist (returns an error rather than a no-op); look up session ids via list_sessions if unsure. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+    return TEXT("Close the current Blueprint editing session, releasing the lock and clearing the in-session cursor. Does NOT compile or save -- call bp_save first, or bp_close_all to flush every open bp session. Most-common pitfall: closing a session_id that does not exist (an error, not a no-op); list ids via list_sessions. Accepts session_id or asset_path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Close::GetInputSchema() const
@@ -140,8 +140,10 @@ FString ClaireonBlueprintGraphTool_Close::GetFullDescription() const
 {
     return TEXT(
         "Closes the current Blueprint editing session, releases the in-session "
-        "lock, clears the per-session cursor used by auto_connect_from_cursor, "
-        "and triggers an implicit compile + save before tearing down. Always "
+        "lock, and clears the per-session cursor used by auto_connect_from_cursor. "
+        "Does NOT compile or save -- call bp_save first if you want the asset "
+        "written to disk, or use bp_close_all to compile+save+close every open "
+        "bp session at once. Always "
         "the last call in the per-node cycle from .claude/areas/blueprint-editing.md. "
         "The session_id becomes invalid after close; subsequent calls to any "
         "bp_* tool with the same id will return an error. "

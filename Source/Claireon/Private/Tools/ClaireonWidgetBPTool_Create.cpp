@@ -81,7 +81,7 @@ FToolResult ClaireonWidgetBPTool_Create::Execute(const TSharedPtr<FJsonObject>& 
 	// Resolve parent class -- must be a subclass of UUserWidget
 	ClaireonNameResolver::FNameResolveResult ParentClassResult;
 	UClass* ParentClass = ClaireonNameResolver::ResolveClassName(ParentClassName, nullptr, ParentClassResult);
-	if (!ParentClass)
+	if (!IsValid(ParentClass))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Parent class '%s' not found"), *ParentClassName));
 	}
@@ -120,7 +120,7 @@ FToolResult ClaireonWidgetBPTool_Create::Execute(const TSharedPtr<FJsonObject>& 
 
 	// Create package
 	UPackage* Package = CreatePackage(*PackageName);
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create package: %s"), *PackageName));
 	}
@@ -140,7 +140,7 @@ FToolResult ClaireonWidgetBPTool_Create::Execute(const TSharedPtr<FJsonObject>& 
 			UBlueprintGeneratedClass::StaticClass(),
 			NAME_None));
 
-	if (!NewWBP)
+	if (!IsValid(NewWBP))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create Widget Blueprint at %s"), *PackageName));
 	}
@@ -150,7 +150,7 @@ FToolResult ClaireonWidgetBPTool_Create::Execute(const TSharedPtr<FJsonObject>& 
 	{
 		FString RootClassError;
 		UClass* RootClass = ClaireonWidgetHelpers::ResolveWidgetClass(RootWidgetClassStr, RootClassError);
-		if (!RootClass)
+		if (!IsValid(RootClass))
 		{
 			// Non-fatal: log warning, continue without root widget
 			UE_LOG(LogClaireon, Warning, TEXT("[EditWidgetBP] Could not resolve root widget class '%s': %s"), *RootWidgetClassStr, *RootClassError);
@@ -158,7 +158,7 @@ FToolResult ClaireonWidgetBPTool_Create::Execute(const TSharedPtr<FJsonObject>& 
 		else if (NewWBP->WidgetTree)
 		{
 			UWidget* Root = ClaireonWidgetHelpers::CreateWidget(NewWBP->WidgetTree, RootClass, FName(*RootClass->GetName()));
-			if (Root)
+			if (IsValid(Root))
 			{
 				NewWBP->WidgetTree->RootWidget = Root;
 			}

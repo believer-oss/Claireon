@@ -8,7 +8,7 @@
 #include "ScopedTransaction.h"
 #include "Dom/JsonObject.h"
 
-namespace
+namespace ClaireonSkeletonTools_BlendProfiles_Private
 {
 	TSharedPtr<FJsonObject> BuildProfileSnapshot(const USkeleton* Skeleton, bool bMasksOnly, const FString& LastOperation)
 	{
@@ -22,7 +22,7 @@ namespace
 	UBlendProfile* RequireBlendProfile(USkeleton* Skeleton, const FString& ProfileName, bool bExpectMask, FString& OutError)
 	{
 		UBlendProfile* Profile = Skeleton->GetBlendProfile(FName(*ProfileName));
-		if (!Profile)
+		if (!IsValid(Profile))
 		{
 			OutError = FString::Printf(TEXT("Blend %s '%s' not found"),
 				bExpectMask ? TEXT("mask") : TEXT("profile"), *ProfileName);
@@ -42,6 +42,7 @@ namespace
 		return Profile;
 	}
 }
+using namespace ClaireonSkeletonTools_BlendProfiles_Private;
 
 // ============================================================================
 // skeleton_add_blend_profile
@@ -51,8 +52,9 @@ FString ClaireonSkeletonTool_AddBlendProfile::GetOperation() const { return TEXT
 
 FString ClaireonSkeletonTool_AddBlendProfile::GetDescription() const
 {
-	return TEXT("Add a new blend profile with the given name and mode. Mode must be 'TimeFactor' or 'WeightFactor'. "
-				"For blend masks use skeleton_add_blend_mask instead.");
+	return TEXT("Add a new blend profile to a skeleton with the given profile_name and mode, where mode is 'TimeFactor' or 'WeightFactor' (default TimeFactor); "
+				"mode=BlendMask is rejected here, use skeleton_add_blend_mask instead. Stateless / non-session: writes the skeleton directly by skeleton_path in one "
+				"transaction, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_AddBlendProfile::GetInputSchema() const
@@ -69,7 +71,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_AddBlendProfile::Execute(const T
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString ProfileNameStr;
 	if (!Arguments->TryGetStringField(TEXT("profile_name"), ProfileNameStr) || ProfileNameStr.IsEmpty())
@@ -97,7 +99,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_AddBlendProfile::Execute(const T
 	FScopedTransaction Transaction(NSLOCTEXT("Claireon", "SkeletonAddBlendProfile", "MCP: Add Blend Profile"));
 	Skeleton->Modify();
 	UBlendProfile* NewProfile = Skeleton->CreateNewBlendProfile(ProfileName);
-	if (!NewProfile)
+	if (!IsValid(NewProfile))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Engine refused to create blend profile '%s'"), *ProfileNameStr));
 	}
@@ -118,8 +120,9 @@ FString ClaireonSkeletonTool_RemoveBlendProfile::GetOperation() const { return T
 
 FString ClaireonSkeletonTool_RemoveBlendProfile::GetDescription() const
 {
-	return TEXT("Remove a blend profile (TimeFactor / WeightFactor). For blend masks removal is disallowed — "
-				"see skeleton_remove_blend_mask for the engine-bug explanation.");
+	return TEXT("Remove a blend profile (mode TimeFactor or WeightFactor) from a skeleton by profile_name; fails if the named entry is actually a blend mask, whose "
+				"removal is disallowed -- see skeleton_remove_blend_mask for the engine-bug explanation. Stateless / non-session: writes the skeleton directly by "
+				"skeleton_path in one transaction, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RemoveBlendProfile::GetInputSchema() const
@@ -135,7 +138,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RemoveBlendProfile::Execute(cons
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString ProfileNameStr;
 	if (!Arguments->TryGetStringField(TEXT("profile_name"), ProfileNameStr) || ProfileNameStr.IsEmpty())
@@ -143,7 +146,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RemoveBlendProfile::Execute(cons
 
 	FString ReqErr;
 	UBlendProfile* Profile = RequireBlendProfile(Skeleton, ProfileNameStr, /*bExpectMask*/false, ReqErr);
-	if (!Profile) return MakeErrorResult(ReqErr);
+	if (!IsValid(Profile)) return MakeErrorResult(ReqErr);
 
 	FScopedTransaction Transaction(NSLOCTEXT("Claireon", "SkeletonRemoveBlendProfile", "MCP: Remove Blend Profile"));
 	Skeleton->Modify();
@@ -164,7 +167,9 @@ FString ClaireonSkeletonTool_RenameBlendProfile::GetOperation() const { return T
 
 FString ClaireonSkeletonTool_RenameBlendProfile::GetDescription() const
 {
-    return TEXT("Rename a blend profile (TimeFactor/WeightFactor). For blend masks use skeleton_rename_blend_mask. Session-mode tool: open via skeleton_open first.");
+	return TEXT("Rename a blend profile (TimeFactor/WeightFactor) from old_name to new_name; fails if old_name is really a blend mask -- use "
+				"skeleton_rename_blend_mask for those -- or if new_name is already taken by any profile or mask. Stateless / non-session: writes "
+				"the skeleton directly by skeleton_path in one transaction, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RenameBlendProfile::GetInputSchema() const
@@ -181,7 +186,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RenameBlendProfile::Execute(cons
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString OldStr, NewStr;
 	if (!Arguments->TryGetStringField(TEXT("old_name"), OldStr) || OldStr.IsEmpty())
@@ -191,7 +196,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RenameBlendProfile::Execute(cons
 
 	FString ReqErr;
 	UBlendProfile* OldProfile = RequireBlendProfile(Skeleton, OldStr, /*bExpectMask*/false, ReqErr);
-	if (!OldProfile) return MakeErrorResult(ReqErr);
+	if (!IsValid(OldProfile)) return MakeErrorResult(ReqErr);
 	if (Skeleton->GetBlendProfile(FName(*NewStr)) != nullptr)
 	{
 		return MakeErrorResult(FString::Printf(TEXT("A blend profile/mask named '%s' already exists"), *NewStr));
@@ -199,7 +204,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RenameBlendProfile::Execute(cons
 
 	FScopedTransaction Transaction(NSLOCTEXT("Claireon", "SkeletonRenameBlendProfile", "MCP: Rename Blend Profile"));
 	UBlendProfile* Renamed = Skeleton->RenameBlendProfile(FName(*OldStr), FName(*NewStr));
-	if (!Renamed)
+	if (!IsValid(Renamed))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to rename blend profile '%s' -> '%s'"), *OldStr, *NewStr));
 	}
@@ -218,8 +223,9 @@ FString ClaireonSkeletonTool_SetBlendProfileMode::GetOperation() const { return 
 
 FString ClaireonSkeletonTool_SetBlendProfileMode::GetDescription() const
 {
-	return TEXT("Change the mode of an existing blend profile between TimeFactor and WeightFactor. "
-				"Switching to or from BlendMask is NOT supported here (masks have separate lifecycle tools).");
+	return TEXT("Set the mode of an existing blend profile on a skeleton to TimeFactor or WeightFactor. Switching to or from BlendMask is NOT supported here -- masks "
+				"have their own lifecycle tools (skeleton_add_blend_mask and friends). Stateless / non-session: writes the skeleton directly by skeleton_path in one "
+				"transaction, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_SetBlendProfileMode::GetInputSchema() const
@@ -236,7 +242,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_SetBlendProfileMode::Execute(con
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString ProfileNameStr, ModeStr;
 	if (!Arguments->TryGetStringField(TEXT("profile_name"), ProfileNameStr) || ProfileNameStr.IsEmpty())
@@ -257,7 +263,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_SetBlendProfileMode::Execute(con
 
 	FString ReqErr;
 	UBlendProfile* Profile = RequireBlendProfile(Skeleton, ProfileNameStr, /*bExpectMask*/false, ReqErr);
-	if (!Profile) return MakeErrorResult(ReqErr);
+	if (!IsValid(Profile)) return MakeErrorResult(ReqErr);
 
 	FScopedTransaction Transaction(NSLOCTEXT("Claireon", "SkeletonSetBlendProfileMode", "MCP: Set Blend Profile Mode"));
 	Skeleton->Modify();
@@ -278,8 +284,9 @@ FString ClaireonSkeletonTool_SetBlendProfileBoneScale::GetOperation() const { re
 
 FString ClaireonSkeletonTool_SetBlendProfileBoneScale::GetDescription() const
 {
-	return TEXT("Set the per-bone scale on a blend profile. For TimeFactor, values are typically in [0..1] (0 = instant). "
-				"For WeightFactor, values are typically >= 1.0. If recurse=true, the scale is applied to the bone and all descendants.");
+	return TEXT("Set the per-bone scale for bone_name on a blend profile: TimeFactor values are typically in [0..1] (0 = instant), WeightFactor values typically >= 1.0. "
+				"recurse=true applies the scale to the bone and all descendants; create=true (the default) adds the entry when absent. Stateless / non-session: "
+				"writes the skeleton directly by skeleton_path in one transaction, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_SetBlendProfileBoneScale::GetInputSchema() const
@@ -299,7 +306,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_SetBlendProfileBoneScale::Execut
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString ProfileNameStr, BoneNameStr;
 	if (!Arguments->TryGetStringField(TEXT("profile_name"), ProfileNameStr) || ProfileNameStr.IsEmpty())
@@ -318,7 +325,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_SetBlendProfileBoneScale::Execut
 
 	FString ReqErr;
 	UBlendProfile* Profile = RequireBlendProfile(Skeleton, ProfileNameStr, /*bExpectMask*/false, ReqErr);
-	if (!Profile) return MakeErrorResult(ReqErr);
+	if (!IsValid(Profile)) return MakeErrorResult(ReqErr);
 
 	const FName BoneName(*BoneNameStr);
 	if (Skeleton->GetReferenceSkeleton().FindBoneIndex(BoneName) == INDEX_NONE)
@@ -345,8 +352,9 @@ FString ClaireonSkeletonTool_ClearBlendProfileBoneScale::GetOperation() const { 
 
 FString ClaireonSkeletonTool_ClearBlendProfileBoneScale::GetDescription() const
 {
-	return TEXT("Remove the per-bone entry from a blend profile (reverts the bone to the default scale). "
-				"No-op if the profile had no entry for this bone.");
+	return TEXT("Remove the per-bone scale entry for bone_name from a blend profile, reverting that bone to the default scale. Errors out if the profile has no entry "
+				"for the bone, so it is not a silent no-op. Stateless / non-session: writes the skeleton directly by skeleton_path in one transaction, no open "
+				"session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_ClearBlendProfileBoneScale::GetInputSchema() const
@@ -363,7 +371,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_ClearBlendProfileBoneScale::Exec
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString ProfileNameStr, BoneNameStr;
 	if (!Arguments->TryGetStringField(TEXT("profile_name"), ProfileNameStr) || ProfileNameStr.IsEmpty())
@@ -373,7 +381,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_ClearBlendProfileBoneScale::Exec
 
 	FString ReqErr;
 	UBlendProfile* Profile = RequireBlendProfile(Skeleton, ProfileNameStr, /*bExpectMask*/false, ReqErr);
-	if (!Profile) return MakeErrorResult(ReqErr);
+	if (!IsValid(Profile)) return MakeErrorResult(ReqErr);
 
 	const FName BoneName(*BoneNameStr);
 	const int32 EntryIdx = Profile->GetEntryIndex(BoneName);
@@ -408,8 +416,9 @@ FString ClaireonSkeletonTool_AddBlendMask::GetOperation() const { return TEXT("a
 
 FString ClaireonSkeletonTool_AddBlendMask::GetDescription() const
 {
-	return TEXT("Add a new blend mask (a UBlendProfile with Mode=BlendMask). Mask weights are per-bone alpha in [0..1]; "
-				"default per-bone weight is 0 when no entry is present.");
+	return TEXT("Add a new blend mask to a skeleton by mask_name (a UBlendProfile with Mode=BlendMask). Mask weights are per-bone alpha in [0..1] and default to 0 for "
+				"bones with no entry; set them with skeleton_set_blend_mask_bone_weight. Stateless / non-session: writes the skeleton directly by skeleton_path in one "
+				"transaction, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_AddBlendMask::GetInputSchema() const
@@ -425,7 +434,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_AddBlendMask::Execute(const TSha
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString MaskNameStr;
 	if (!Arguments->TryGetStringField(TEXT("mask_name"), MaskNameStr) || MaskNameStr.IsEmpty())
@@ -440,7 +449,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_AddBlendMask::Execute(const TSha
 	FScopedTransaction Transaction(NSLOCTEXT("Claireon", "SkeletonAddBlendMask", "MCP: Add Blend Mask"));
 	Skeleton->Modify();
 	UBlendProfile* NewMask = Skeleton->CreateNewBlendProfile(MaskName);
-	if (!NewMask)
+	if (!IsValid(NewMask))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Engine refused to create blend mask '%s'"), *MaskNameStr));
 	}
@@ -459,7 +468,9 @@ FString ClaireonSkeletonTool_RenameBlendMask::GetOperation() const { return TEXT
 
 FString ClaireonSkeletonTool_RenameBlendMask::GetDescription() const
 {
-    return TEXT("Rename a blend mask. Validates that the target is actually a mask (Mode=BlendMask). Session-mode tool: open via skeleton_open first.");
+	return TEXT("Rename a blend mask from old_name to new_name, validating that old_name really is a mask (Mode=BlendMask) and that new_name is not "
+				"already taken by another profile or mask. Stateless / non-session: writes the skeleton directly by skeleton_path in one transaction, "
+				"no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RenameBlendMask::GetInputSchema() const
@@ -476,7 +487,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RenameBlendMask::Execute(const T
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString OldStr, NewStr;
 	if (!Arguments->TryGetStringField(TEXT("old_name"), OldStr) || OldStr.IsEmpty())
@@ -486,7 +497,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RenameBlendMask::Execute(const T
 
 	FString ReqErr;
 	UBlendProfile* Mask = RequireBlendProfile(Skeleton, OldStr, /*bExpectMask*/true, ReqErr);
-	if (!Mask) return MakeErrorResult(ReqErr);
+	if (!IsValid(Mask)) return MakeErrorResult(ReqErr);
 	if (Skeleton->GetBlendProfile(FName(*NewStr)) != nullptr)
 	{
 		return MakeErrorResult(FString::Printf(TEXT("A blend profile/mask named '%s' already exists"), *NewStr));
@@ -494,7 +505,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RenameBlendMask::Execute(const T
 
 	FScopedTransaction Transaction(NSLOCTEXT("Claireon", "SkeletonRenameBlendMask", "MCP: Rename Blend Mask"));
 	UBlendProfile* Renamed = Skeleton->RenameBlendProfile(FName(*OldStr), FName(*NewStr));
-	if (!Renamed)
+	if (!IsValid(Renamed))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to rename blend mask '%s' -> '%s'"), *OldStr, *NewStr));
 	}
@@ -511,8 +522,9 @@ FString ClaireonSkeletonTool_SetBlendMaskBoneWeight::GetOperation() const { retu
 
 FString ClaireonSkeletonTool_SetBlendMaskBoneWeight::GetDescription() const
 {
-	return TEXT("Set the per-bone alpha on a blend mask. Weight should be in [0..1]. "
-				"If recurse=true, applies to the bone and its descendants.");
+	return TEXT("Set the per-bone alpha for bone_name on a blend mask, with weight normally in [0..1]. recurse=true applies the weight to the bone and its "
+				"descendants; create=true (the default) adds the entry when absent. Stateless / non-session: writes the skeleton directly by skeleton_path in one "
+				"transaction, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_SetBlendMaskBoneWeight::GetInputSchema() const
@@ -532,7 +544,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_SetBlendMaskBoneWeight::Execute(
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString MaskNameStr, BoneNameStr;
 	if (!Arguments->TryGetStringField(TEXT("mask_name"), MaskNameStr) || MaskNameStr.IsEmpty())
@@ -551,7 +563,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_SetBlendMaskBoneWeight::Execute(
 
 	FString ReqErr;
 	UBlendProfile* Mask = RequireBlendProfile(Skeleton, MaskNameStr, /*bExpectMask*/true, ReqErr);
-	if (!Mask) return MakeErrorResult(ReqErr);
+	if (!IsValid(Mask)) return MakeErrorResult(ReqErr);
 
 	const FName BoneName(*BoneNameStr);
 	if (Skeleton->GetReferenceSkeleton().FindBoneIndex(BoneName) == INDEX_NONE)
@@ -576,7 +588,9 @@ FString ClaireonSkeletonTool_ClearBlendMaskBoneWeight::GetOperation() const { re
 
 FString ClaireonSkeletonTool_ClearBlendMaskBoneWeight::GetDescription() const
 {
-    return TEXT("Clear the per-bone entry from a blend mask (reverts the bone to the mask's default weight of 0). Session-mode tool: open via skeleton_open first.");
+	return TEXT("Clear the per-bone entry for bone_name from a blend mask, reverting that bone to the mask's default weight of 0. Errors out if the bone "
+				"is not on the skeleton or the mask has no entry for it, so it is not a silent no-op. Stateless / non-session: writes the skeleton "
+				"directly by skeleton_path in one transaction, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_ClearBlendMaskBoneWeight::GetInputSchema() const
@@ -593,7 +607,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_ClearBlendMaskBoneWeight::Execut
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString MaskNameStr, BoneNameStr;
 	if (!Arguments->TryGetStringField(TEXT("mask_name"), MaskNameStr) || MaskNameStr.IsEmpty())
@@ -603,7 +617,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_ClearBlendMaskBoneWeight::Execut
 
 	FString ReqErr;
 	UBlendProfile* Mask = RequireBlendProfile(Skeleton, MaskNameStr, /*bExpectMask*/true, ReqErr);
-	if (!Mask) return MakeErrorResult(ReqErr);
+	if (!IsValid(Mask)) return MakeErrorResult(ReqErr);
 
 	const FName BoneName(*BoneNameStr);
 	const int32 BoneIdx = Skeleton->GetReferenceSkeleton().FindBoneIndex(BoneName);
@@ -635,10 +649,9 @@ FString ClaireonSkeletonTool_RemoveBlendMask::GetOperation() const { return TEXT
 
 FString ClaireonSkeletonTool_RemoveBlendMask::GetDescription() const
 {
-	return TEXT("DISABLED. Removing a blend mask corrupts ALL other blend masks on the skeleton due to a known engine "
-				"issue in UE 5.5. This tool is registered only to document that and will always return an error. "
-				"If deletion is truly required, delete the mask manually in Persona while the engine issue is resolved, "
-				"and verify every remaining mask is still intact before saving.");
+	return TEXT("Remove a blend mask from a skeleton -- DISABLED: this call always returns an error and never touches the asset, because removing a blend mask corrupts "
+				"ALL other blend masks on the skeleton due to a known UE 5.5 engine issue. If deletion is truly required, delete the mask by hand in Persona and "
+				"verify every remaining mask before saving. Stateless / non-session: no open session is involved.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RemoveBlendMask::GetInputSchema() const

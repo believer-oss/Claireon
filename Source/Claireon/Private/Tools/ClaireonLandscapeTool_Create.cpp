@@ -55,13 +55,13 @@ TSharedPtr<FJsonObject> ClaireonLandscapeTool_Create::GetInputSchema() const
 
 FToolResult ClaireonLandscapeTool_Create::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("Editor not available"));
 	}
 
 	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
+	if (!IsValid(World))
 	{
 		return MakeErrorResult(TEXT("No editor world loaded"));
 	}
@@ -91,7 +91,7 @@ FToolResult ClaireonLandscapeTool_Create::Execute(const TSharedPtr<FJsonObject>&
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	ALandscape* NewLandscape = World->SpawnActor<ALandscape>(SpawnParams);
 
-	if (!NewLandscape)
+	if (!IsValid(NewLandscape))
 	{
 		return MakeErrorResult(TEXT("Failed to spawn ALandscape actor"));
 	}
@@ -144,7 +144,7 @@ FToolResult ClaireonLandscapeTool_Create::Execute(const TSharedPtr<FJsonObject>&
 		{
 			MaterialPath = MaterialPathResolve.ResolvedPath.Path;
 			UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, *MaterialPath);
-			if (Material)
+			if (IsValid(Material))
 			{
 				NewLandscape->LandscapeMaterial = Material;
 				NewLandscape->UpdateAllComponentMaterialInstances();
@@ -161,6 +161,32 @@ FToolResult ClaireonLandscapeTool_Create::Execute(const TSharedPtr<FJsonObject>&
 
 	const FString ActorPath = NewLandscape->GetPathName();
 	FMCPOpenSessionResult SessionResult = FClaireonSessionManager::Get().OpenSession(ActorPath, LandscapeSessionToolName);
+
+	// Defect guard: this used to handle NO OpenSession result at all -- worse than
+	// the seven sibling tools, which at least handled BlockedByOtherTool. Both
+	// failure modes fell through to a SUCCESS state response carrying an empty
+	// session_id, and ToolData.FindOrAdd(SessionId) below then keyed an entry on the
+	// empty string, so successive failures shared one slot.
+	//
+	// Reachable without contrivance: CanonicalizePath rejects anything not under
+	// /Game/, and a newly created landscape in an unsaved map lives under
+	// /Temp/Untitled_N -- which is the natural first step, since you create a
+	// landscape in a fresh level.
+	if (SessionResult.Result == EOpenSessionResult::BlockedByOtherTool)
+	{
+		const FMCPSession& Blocker = SessionResult.BlockingSession.GetValue();
+		return MakeErrorResult(FString::Printf(TEXT("Asset is locked by %s session %s"), *Blocker.ToolName, *Blocker.SessionId));
+	}
+	if (SessionResult.Result == EOpenSessionResult::InvalidAssetPath)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Invalid asset path: %s"), *ActorPath));
+	}
+	if (SessionResult.Result != EOpenSessionResult::Success && SessionResult.Result != EOpenSessionResult::ReusedExistingSession)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Failed to open a session for %s (unexpected OpenSession result %d)"),
+			*ActorPath, static_cast<int32>(SessionResult.Result)));
+	}
+
 	const FString SessionId = SessionResult.SessionId;
 
 	FLandscapeEditToolData& Data = ToolData.FindOrAdd(SessionId);

@@ -38,7 +38,7 @@ FToolResult ClaireonInputTool_SetActionModifierProperty::Execute(const TSharedPt
 	}
 
 	UInputAction* IA = RequireInputAction(Data, Error);
-	if (!IA)
+	if (!IsValid(IA))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -67,7 +67,7 @@ FToolResult ClaireonInputTool_SetActionModifierProperty::Execute(const TSharedPt
 	}
 
 	UInputModifier* Modifier = IA->Modifiers[Index];
-	if (!Modifier)
+	if (!IsValid(Modifier))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Modifier at index %d is null"), Index));
 	}

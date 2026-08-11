@@ -18,9 +18,11 @@ FString ClaireonTool_BlueprintTranslateImplement::GetOperation() const { return 
 
 FString ClaireonTool_BlueprintTranslateImplement::GetDescription() const
 {
-	return TEXT("DEPRECATED: dispatches on 'action'. Use the per-action tools instead: "
+	return TEXT("Apply one translate action to a bp_translate session, dispatching on 'action' "
+	            "(inspect, implement, force_implement, skip, mark_complete). Requires session_id from "
+	            "bp_translate_scaffold. DEPRECATED: only forwards to the per-action tools -- call "
 	            "bp_translate_inspect, bp_translate_implement_node, bp_translate_force_implement_node, "
-	            "bp_translate_skip_node, bp_translate_mark_complete.");
+	            "bp_translate_skip_node, or bp_translate_mark_complete instead.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_BlueprintTranslateImplement::GetInputSchema() const

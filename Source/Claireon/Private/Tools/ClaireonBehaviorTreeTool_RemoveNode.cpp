@@ -42,7 +42,7 @@ FToolResult ClaireonBehaviorTreeTool_RemoveNode::Execute(const TSharedPtr<FJsonO
 	}
 
 	UBehaviorTreeGraph* Graph = ClaireonBehaviorTreeHelpers::GetBTGraph(Data->BehaviorTree.Get(), Error);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -54,7 +54,7 @@ FToolResult ClaireonBehaviorTreeTool_RemoveNode::Execute(const TSharedPtr<FJsonO
 	}
 
 	UBehaviorTreeGraphNode* GraphNode = ClaireonBehaviorTreeHelpers::FindGraphNodeByGuid(Graph, NodeGuid);
-	if (!GraphNode)
+	if (!IsValid(GraphNode))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Node not found with GUID: %s"), *NodeGuid.ToString(EGuidFormats::DigitsWithHyphensLower)));
 	}

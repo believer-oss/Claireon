@@ -43,7 +43,7 @@ FToolResult ClaireonLevelSequenceTool_Close::Execute(const TSharedPtr<FJsonObjec
 	if (bSave && Data->IsValid())
 	{
 		UPackage* Package = Data->Sequence->GetOutermost();
-		if (Package && !ClaireonSafeExec::DidLastExecutionCrash())
+		if (IsValid(Package) && !ClaireonSafeExec::DidLastExecutionCrash())
 		{
 			FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Save Level Sequence")));
 			UEditorLoadingAndSavingUtils::SavePackages({ Package }, false);

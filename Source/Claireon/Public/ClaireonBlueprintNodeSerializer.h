@@ -31,4 +31,17 @@ namespace ClaireonBlueprintNodeSerializer
 		const UEdGraphNode* Node,
 		bool bIncludeConnections,
 		bool bIncludePinDefaults);
+
+	/**
+	 * Append the node's identity member references to an existing JSON object.
+	 * Covers everything needed to replay a node through bp_add_node:
+	 * function_reference (CallFunction/Event), variable_reference (Get/Set,
+	 * incl. member_parent/member_scope), macro_reference, target_type (casts),
+	 * proxy fields (async-task nodes), delegate_reference (MC delegate nodes),
+	 * struct_type, enum_type, timeline_name, component/delegate for bound
+	 * events, and bound graph name for composites. Used by bp_get_graph.
+	 */
+	void AppendMemberReferenceFields(
+		const UEdGraphNode* Node,
+		const TSharedPtr<FJsonObject>& OutJson);
 }

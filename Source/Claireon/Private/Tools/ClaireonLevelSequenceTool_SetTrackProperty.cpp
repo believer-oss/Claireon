@@ -86,7 +86,7 @@ FToolResult ClaireonLevelSequenceTool_SetTrackProperty::Execute(const TSharedPtr
 			Track = Tracks[TrackIndex];
 		}
 	}
-	if (!Track)
+	if (!IsValid(Track))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Track index %d not found"), TrackIndex));
 	}

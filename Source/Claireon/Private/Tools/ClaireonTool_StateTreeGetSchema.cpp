@@ -49,13 +49,13 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeGetSchema::Execute(const TShare
 
 	FString Error;
 	UStateTree* StateTree = ClaireonStateTreeHelpers::LoadStateTreeAsset(AssetPath, Error);
-	if (!StateTree)
+	if (!IsValid(StateTree))
 	{
 		return MakeErrorResult(Error);
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeHelpers::GetEditorData(StateTree, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -64,7 +64,7 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeGetSchema::Execute(const TShare
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 
-	if (!Schema)
+	if (!IsValid(Schema))
 	{
 		Data->SetField(TEXT("schema_class"), MakeShared<FJsonValueNull>());
 		Data->SetField(TEXT("schema_class_path"), MakeShared<FJsonValueNull>());

@@ -40,7 +40,7 @@ FToolResult ClaireonBehaviorTreeTool_RemoveDecorator::Execute(const TSharedPtr<F
 	}
 
 	UBehaviorTreeGraph* Graph = ClaireonBehaviorTreeHelpers::GetBTGraph(Data->BehaviorTree.Get(), Error);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -58,7 +58,7 @@ FToolResult ClaireonBehaviorTreeTool_RemoveDecorator::Execute(const TSharedPtr<F
 	}
 
 	UBehaviorTreeGraphNode* ParentGraphNode = ClaireonBehaviorTreeHelpers::FindGraphNodeByGuid(Graph, NodeGuid);
-	if (!ParentGraphNode)
+	if (!IsValid(ParentGraphNode))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Node not found: %s"), *NodeGuid.ToString(EGuidFormats::DigitsWithHyphensLower)));
 	}
@@ -67,14 +67,14 @@ FToolResult ClaireonBehaviorTreeTool_RemoveDecorator::Execute(const TSharedPtr<F
 	for (UAIGraphNode* SubNode : ParentGraphNode->SubNodes)
 	{
 		UBehaviorTreeGraphNode* SubBTNode = Cast<UBehaviorTreeGraphNode>(SubNode);
-		if (SubBTNode && SubBTNode->NodeGuid == DecoratorGuid)
+		if (IsValid(SubBTNode) && SubBTNode->NodeGuid == DecoratorGuid)
 		{
 			DecoratorSubNode = SubNode;
 			break;
 		}
 	}
 
-	if (!DecoratorSubNode)
+	if (!IsValid(DecoratorSubNode))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Decorator not found with GUID: %s"), *DecoratorGuid.ToString(EGuidFormats::DigitsWithHyphensLower)));
 	}

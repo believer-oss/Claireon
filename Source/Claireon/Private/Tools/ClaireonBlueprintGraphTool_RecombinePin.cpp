@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -136,7 +136,7 @@ FToolResult ClaireonBlueprintGraphTool_RecombinePin::RecombinePin_Impl(
 {
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
-	if (!Blueprint || !Graph)
+	if (!IsValid(Blueprint) || !IsValid(Graph))
 		return MakeErrorResult(TEXT("Blueprint or Graph is no longer valid"));
 
 	FString PinName;
@@ -171,6 +171,43 @@ FToolResult ClaireonBlueprintGraphTool_RecombinePin::RecombinePin_Impl(
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Recombine Blueprint Pin")));
 	Blueprint->Modify();
+
+	// UEdGraphSchema_K2::RecombinePin trashes sub-pins WITHOUT breaking their links;
+	// any far-side pin still holding a LinkedTo reference to a trashed sub-pin asserts
+	// during the next save ("serialized while trashed") and corrupts the asset. Break
+	// every sub-pin link (recursively) before recombining.
+	int32 BrokenLinks = 0;
+	TFunction<void(UEdGraphPin*)> BreakSubPinLinks = [&](UEdGraphPin* Parent)
+	{
+		for (UEdGraphPin* SubPin : Parent->SubPins)
+		{
+			if (!SubPin)
+			{
+				continue;
+			}
+			BreakSubPinLinks(SubPin);
+			if (SubPin->LinkedTo.Num() > 0)
+			{
+				BrokenLinks += SubPin->LinkedTo.Num();
+				for (UEdGraphPin* Linked : SubPin->LinkedTo)
+				{
+					if (Linked && IsValid(Linked->GetOwningNodeUnchecked()))
+					{
+						Linked->GetOwningNode()->Modify();
+					}
+				}
+				SubPin->BreakAllPinLinks(true);
+			}
+		}
+	};
+	Node->Modify();
+	BreakSubPinLinks(Pin);
+	if (BrokenLinks > 0)
+	{
+		ResolutionWarnings.Add(FString::Printf(
+			TEXT("Recombine dropped %d connection(s) that were attached to sub-pins of '%s'; reconnect to the parent pin if needed."),
+			BrokenLinks, *PinName));
+	}
 
 	K2Schema->RecombinePin(Pin);
 

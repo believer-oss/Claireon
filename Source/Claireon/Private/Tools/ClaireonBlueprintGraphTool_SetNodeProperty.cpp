@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonBlueprintGraphTool_SetNodeProperty.h"
@@ -31,13 +31,10 @@ TArray<FString> ClaireonBlueprintGraphTool_SetNodeProperty::GetSearchKeywords() 
 
 FString ClaireonBlueprintGraphTool_SetNodeProperty::GetDescription() const
 {
-	return TEXT("Set a UPROPERTY on a K2 node in the current session's graph. Targets the node "
-		"object itself (not its pins or the owning CDO). Use for protected node fields that drive "
-		"pin layout: K2Node_DynamicCast.TargetType, K2Node_SwitchEnum.Enum, K2Node_MakeStruct.StructType, "
-		"K2Node_BaseAsyncTask.ProxyFactoryClass/ProxyFactoryFunctionName, and similar. property_path "
-		"supports dot/array navigation through nested structs (e.g. 'ProxyClass' or "
-		"'StructType.Struct'). Calls ReconstructNode() after the write by default so dynamic pins "
-		"materialize. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+	return TEXT("Set a UPROPERTY on a K2 node in the current session's graph -- not its pins or the owning CDO. Use for "
+		"protected fields that drive pin layout: K2Node_DynamicCast.TargetType, K2Node_SwitchEnum.Enum, "
+		"K2Node_BaseAsyncTask.ProxyFactoryClass. property_path supports dot/array navigation. Reconstructs the "
+		"node after the write by default so dynamic pins materialize. Session-mode: session_id or asset_path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetNodeProperty::GetInputSchema() const
@@ -75,7 +72,7 @@ FToolResult ClaireonBlueprintGraphTool_SetNodeProperty::SetNodeProperty_Impl(
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
 
-	if (!Blueprint || !Graph)
+	if (!IsValid(Blueprint) || !IsValid(Graph))
 	{
 		return MakeErrorResult(TEXT("Blueprint or Graph is no longer valid"));
 	}
@@ -100,18 +97,11 @@ FToolResult ClaireonBlueprintGraphTool_SetNodeProperty::SetNodeProperty_Impl(
 	bool bReconstruct = true;
 	Params->TryGetBoolField(TEXT("reconstruct"), bReconstruct);
 
-	FGuid NodeGuid;
-	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
+	FString ResolveError;
+	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperationStr(Graph, NodeGuidStr, Data, ResolveError);
+	if (!IsValid(Node))
 	{
-		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
-	}
-
-	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperation(Graph, NodeGuid, Data);
-	if (!Node)
-	{
-		const FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
-		return MakeErrorResult(FString::Printf(TEXT("Node not found with GUID: %s in graph '%s'.\n%s"),
-			*NodeGuidStr, *Graph->GetName(), *AvailableNodes));
+		return MakeErrorResult(ResolveError);
 	}
 
 	const FString CombinedPath = PropertyPath.IsEmpty()

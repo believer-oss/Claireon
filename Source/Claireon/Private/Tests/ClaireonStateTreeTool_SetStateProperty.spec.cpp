@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 //
 // Spec tests for statetree_set_state_property.
@@ -17,13 +17,14 @@
 #include "GameplayTagContainer.h"
 #include "UObject/Package.h"
 
-namespace
+namespace ClaireonStateTreeTool_SetStateProperty_spec_Private
 {
 	UStateTreeState* MakeTransientState()
 	{
 		return NewObject<UStateTreeState>(GetTransientPackage(), UStateTreeState::StaticClass(), NAME_None, RF_Transient);
 	}
 }
+using namespace ClaireonStateTreeTool_SetStateProperty_spec_Private;
 
 // ---------------------------------------------------------------------------
 // Smoke: tool surface
@@ -131,7 +132,7 @@ UNTEST_UNIT_OPTS(Claireon, StateTreeSetStateProperty, HappyDotPathTag, UNTEST_TI
 	// Use ImportText format expected by FGameplayTag.
 	const bool bOk = ClaireonStateTreeHelpers::SetStateProperty(
 		*State, TEXT("RequiredEventToEnter.Tag"),
-		TEXT("(TagName=\"Trajan.Event.Puppet.MoveTo.Request\")"),
+		TEXT("(TagName=\"Claireon.Test.Event.Sample\")"),
 		Error);
 	// Tag may not be registered in test environments; the importer still
 	// succeeds even when the tag is unregistered (it stores the raw name).

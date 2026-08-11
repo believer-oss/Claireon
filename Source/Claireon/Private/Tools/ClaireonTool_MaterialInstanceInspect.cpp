@@ -22,7 +22,8 @@ FString ClaireonTool_MaterialInstanceInspect::GetDescription() const
 				"override vs inherited values. Emits one table per parameter type "
 				"(Scalar, Vector, Texture, Static Switch, Static Component Mask). "
 				"Override Value cell is empty when the MIC does not override that "
-				"parameter.");
+				"parameter. Stateless / read-only / non-session: never mutates and requires "
+				"no open session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_MaterialInstanceInspect::GetInputSchema() const
@@ -61,7 +62,7 @@ FToolResult ClaireonTool_MaterialInstanceInspect::Execute(const TSharedPtr<FJson
 
 	FString LoadError;
 	UMaterialInstanceConstant* Instance = ClaireonMaterialHelpers::LoadMaterialInstanceAsset(AssetPath, LoadError);
-	if (!Instance)
+	if (!IsValid(Instance))
 	{
 		return MakeErrorResult(LoadError);
 	}

@@ -20,17 +20,60 @@
 #include "Dom/JsonValue.h"
 #include "EditorAssetLibrary.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "PackageTools.h"
 #include "UObject/Package.h"
 
-namespace
+#include "Tests/ClaireonTestAssetDeletion.h"
+namespace ClaireonCameraAssetTool_NodeMutation_spec_Private
 {
+	/**
+	 * True only when the asset actually has a .uasset on disk.
+	 *
+	 * camera_asset_create builds its asset in a package from CreatePackage() and
+	 * never saves, and none of the mutation tools this spec drives (add_rig,
+	 * add_node, move_node, remove_node, set_node_property, get_node_property,
+	 * list_*) saves either -- only camera_asset_save does, and this spec never
+	 * calls it. The single exception is SetNodeProperty_Persistence, which calls
+	 * UEditorAssetLibrary::SaveAsset itself on purpose; that fixture IS on disk and
+	 * still gets deleted through the branch below.
+	 *
+	 * UEditorAssetLibrary::DoesAssetExist answers from the asset registry, which
+	 * includes in-memory assets, so it used to send every fixture through
+	 * DeleteAsset. DeleteAsset checks referencers first, and that
+	 * whole-object-graph referencer scan is the trigger for the nondeterministic
+	 * Niagara-serialization crash documented in
+	 * Docs/llm/todo/claireon-untest-harness-reliability.md item 1. This spec calls
+	 * the cleanup roughly 70 times per run.
+	 *
+	 * The check is kept rather than dropping the delete outright so a stale
+	 * .uasset left on disk by an older build or a crashed run is still cleaned and
+	 * `git status --porcelain -- Content/` stays empty.
+	 */
+	bool CANodeMutationSpec_HasFileOnDisk(const FString& AssetOrPackagePath)
+	{
+		const FString PackageName = FPackageName::ObjectPathToPackageName(AssetOrPackagePath);
+		FString FileName;
+		if (!FPackageName::TryConvertLongPackageNameToFilename(
+				PackageName, FileName, FPackageName::GetAssetPackageExtension()))
+		{
+			return false;
+		}
+		return FPaths::FileExists(FileName);
+	}
+
 	/** Best-effort cleanup of a /Game/Tests/<X> asset; ignores absence. */
 	void CANodeMutationSpec_DeleteIfExists(const FString& Path)
 	{
+		// In-memory fixture: nothing on disk, nothing to clean, no referencer scan.
+		if (!CANodeMutationSpec_HasFileOnDisk(Path))
+		{
+			return;
+		}
 		if (UEditorAssetLibrary::DoesAssetExist(Path))
 		{
-			UEditorAssetLibrary::DeleteAsset(Path);
+			ClaireonTestAssetDeletion::DeleteAssetForTest(Path);
 		}
 	}
 
@@ -198,6 +241,7 @@ namespace
 		return Out;
 	}
 } // namespace
+using namespace ClaireonCameraAssetTool_NodeMutation_spec_Private;
 
 // =====================================================================================
 // Test: AddRig_PopulatesIndex
@@ -206,7 +250,7 @@ namespace
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetNodeMutation_AddRig_PopulatesIndex,
 	"Claireon.CameraAsset.NodeMutation.AddRig_PopulatesIndex",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FCameraAssetNodeMutation_AddRig_PopulatesIndex::RunTest(const FString& /*Parameters*/)
 {
@@ -319,7 +363,7 @@ bool FCameraAssetNodeMutation_AddRig_PopulatesIndex::RunTest(const FString& /*Pa
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetNodeMutation_AddNode_AsRoot,
 	"Claireon.CameraAsset.NodeMutation.AddNode_AsRoot",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FCameraAssetNodeMutation_AddNode_AsRoot::RunTest(const FString& /*Parameters*/)
 {
@@ -386,7 +430,7 @@ bool FCameraAssetNodeMutation_AddNode_AsRoot::RunTest(const FString& /*Parameter
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetNodeMutation_AddNode_AsChildOfArray,
 	"Claireon.CameraAsset.NodeMutation.AddNode_AsChildOfArray",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FCameraAssetNodeMutation_AddNode_AsChildOfArray::RunTest(const FString& /*Parameters*/)
 {
@@ -449,7 +493,7 @@ bool FCameraAssetNodeMutation_AddNode_AsChildOfArray::RunTest(const FString& /*P
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetNodeMutation_AddNode_NonArrayParentRejects,
 	"Claireon.CameraAsset.NodeMutation.AddNode_NonArrayParentRejects",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FCameraAssetNodeMutation_AddNode_NonArrayParentRejects::RunTest(const FString& /*Parameters*/)
 {
@@ -499,7 +543,7 @@ bool FCameraAssetNodeMutation_AddNode_NonArrayParentRejects::RunTest(const FStri
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetNodeMutation_RemoveNode_ChildOfArray,
 	"Claireon.CameraAsset.NodeMutation.RemoveNode_ChildOfArray",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FCameraAssetNodeMutation_RemoveNode_ChildOfArray::RunTest(const FString& /*Parameters*/)
 {
@@ -583,7 +627,7 @@ bool FCameraAssetNodeMutation_RemoveNode_ChildOfArray::RunTest(const FString& /*
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetNodeMutation_MoveNode_ReorderWithinParent,
 	"Claireon.CameraAsset.NodeMutation.MoveNode_ReorderWithinParent",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FCameraAssetNodeMutation_MoveNode_ReorderWithinParent::RunTest(const FString& /*Parameters*/)
 {
@@ -676,10 +720,32 @@ bool FCameraAssetNodeMutation_MoveNode_ReorderWithinParent::RunTest(const FStrin
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetNodeMutation_SetGetNodeProperty_RoundTrip,
 	"Claireon.CameraAsset.NodeMutation.SetGetNodeProperty_RoundTrip",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FCameraAssetNodeMutation_SetGetNodeProperty_RoundTrip::RunTest(const FString& /*Parameters*/)
 {
+
+	// Declare the engine's save-time validation errors as expected.
+	//
+	// Saving a camera asset runs UCameraAsset validation, which logs at Error verbosity --
+	// and the automation framework turns any captured Error into a failure. Both messages
+	// are correct and neither is fixable from the test:
+	//
+	//   "Camera has no director set"  -- on 5.7+ camera_asset_add_rig installs a
+	//     USingleCameraDirector on demand, but on UE 5.5/5.6 hosts AddRig
+	//     takes the pre-5.7 AddCameraRig() path which installs no director at all. No
+	//     camera_asset tool can set one on this version.
+	//
+	// Only the director error is declared here. This test populates a root node, so the
+	// sibling "has no root node" error never fires -- and an expectation that does not
+	// occur is itself a failure, which is the framework being right: a declaration is a
+	// claim about what happens, not a blanket mute.
+	//
+	// This test is about round-tripping the asset, not about producing a runnable camera,
+	// so the right move is to declare the error rather than suppress LogCameraSystem
+	// wholesale: anything else it reports still fails the test.
+	AddExpectedError(TEXT("Camera has no director set"),
+		EAutomationExpectedErrorFlags::Contains, /*Occurrences=*/0);
 	const FString Path = TEXT("/Game/Tests/CA_PropMut");
 	CANodeMutationSpec_DeleteIfExists(Path);
 
@@ -745,7 +811,7 @@ bool FCameraAssetNodeMutation_SetGetNodeProperty_RoundTrip::RunTest(const FStrin
 		CANodeMutationSpec_DeleteIfExists(Path);
 		return false;
 	}
-	if (UPackage* Pkg = FindPackage(nullptr, *Path))
+	if (UPackage* Pkg = FindPackage(nullptr, *Path); IsValid(Pkg))
 	{
 		FText UnloadErr;
 		const bool bUnloaded = UPackageTools::UnloadPackages({ Pkg }, UnloadErr, /*bUnloadDirtyPackages=*/true);
@@ -794,7 +860,7 @@ bool FCameraAssetNodeMutation_SetGetNodeProperty_RoundTrip::RunTest(const FStrin
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetNodeMutation_SetNodeProperty_BadPath,
 	"Claireon.CameraAsset.NodeMutation.SetNodeProperty_BadPath",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FCameraAssetNodeMutation_SetNodeProperty_BadPath::RunTest(const FString& /*Parameters*/)
 {

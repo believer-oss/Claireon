@@ -184,10 +184,10 @@ IClaireonTool::FToolResult ClaireonTool_DataTableSearch::Execute(const TSharedPt
 		FString RowStructName = TEXT("Unknown");
 		int32 RowCount = 0;
 
-		if (DataTable)
+		if (IsValid(DataTable))
 		{
 			const UScriptStruct* RowStruct = DataTable->GetRowStruct();
-			if (RowStruct)
+			if (IsValid(RowStruct))
 			{
 				RowStructName = RowStruct->GetName();
 			}

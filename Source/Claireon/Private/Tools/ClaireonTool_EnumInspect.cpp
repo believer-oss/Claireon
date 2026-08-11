@@ -14,10 +14,10 @@ FString ClaireonTool_EnumInspect::GetOperation() const { return TEXT("inspect");
 
 FString ClaireonTool_EnumInspect::GetDescription() const
 {
-	return TEXT("Inspect a UEnum or UUserDefinedEnum and return its full entry table: "
-		"per-entry ordinal, raw name, display name, tooltip, and deprecated/hidden flags. "
-		"Resolves UDE display names that are not visible through chooser/proxy inspect "
-		"(those return raw 'NewEnumeratorN' names for UDEs).");
+	return TEXT("Inspect a UEnum or UUserDefinedEnum and return its full entry table: per-entry ordinal, raw "
+		"name, display name, tooltip, and deprecated/hidden flags. asset_path takes /Script/Module.EnumName, "
+		"a /Game/ package path, or a fuzzy enum name. Resolves UDE display names that chooser/proxy inspect "
+		"reports as raw 'NewEnumeratorN'. Stateless / read-only / non-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_EnumInspect::GetInputSchema() const
@@ -46,7 +46,7 @@ IClaireonTool::FToolResult ClaireonTool_EnumInspect::Execute(const TSharedPtr<FJ
 		if (PathResolve.bSuccess)
 		{
 			Enum = FindObject<UEnum>(nullptr, *PathResolve.ResolvedPath.Path);
-			if (!Enum)
+			if (!IsValid(Enum))
 			{
 				Enum = LoadObject<UEnum>(nullptr, *PathResolve.ResolvedPath.Path);
 			}
@@ -54,11 +54,11 @@ IClaireonTool::FToolResult ClaireonTool_EnumInspect::Execute(const TSharedPtr<FJ
 	}
 
 	// Fallback to fuzzy name resolution (E-prefix handling, module paths, etc.).
-	if (!Enum)
+	if (!IsValid(Enum))
 	{
 		ClaireonNameResolver::FNameResolveResult NameResolve;
 		Enum = ClaireonNameResolver::ResolveEnumName(AssetPath, NameResolve);
-		if (!Enum)
+		if (!IsValid(Enum))
 		{
 			FString Err = NameResolve.Error.IsEmpty()
 				? FString::Printf(TEXT("Could not resolve enum '%s'"), *AssetPath)

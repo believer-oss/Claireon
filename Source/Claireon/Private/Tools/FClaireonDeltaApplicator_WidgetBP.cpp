@@ -34,7 +34,7 @@ namespace ClaireonDeltaApplicator_WidgetBP_anon
 		FString Resolved = Ref;
 		if (const FString* Found = IdMap.Find(Ref)) { Resolved = *Found; }
 		UWidget* Widget = ClaireonWidgetHelpers::FindWidgetByName(Tree, FName(*Resolved));
-		if (!Widget)
+		if (!IsValid(Widget))
 		{
 			OutError = FString::Printf(TEXT("widget not found: '%s' (resolved: '%s')"), *Ref, *Resolved);
 			return nullptr;
@@ -85,7 +85,7 @@ bool FClaireonDeltaApplicator_WidgetBP::OpenOrReuseSession(const TSharedPtr<FJso
 	const FString ResolvedPath = ResolveResult.ResolvedPath.Path;
 
 	UWidgetBlueprint* WBP = LoadObject<UWidgetBlueprint>(nullptr, *ResolvedPath);
-	if (!WBP)
+	if (!IsValid(WBP))
 	{
 		OutError = FString::Printf(TEXT("widgetbp_apply_delta: failed to load Widget Blueprint: %s"), *ResolvedPath);
 		return false;
@@ -123,7 +123,7 @@ bool FClaireonDeltaApplicator_WidgetBP::ApplyPhase2_Remove(const FString& Sessio
 	using namespace ClaireonDeltaApplicator_WidgetBP_anon;
 	(void)SessionId;
 	UWidgetBlueprint* WBP = CachedWBP.Get();
-	if (!WBP || !WBP->WidgetTree)
+	if (!IsValid(WBP) || !WBP->WidgetTree)
 	{
 		AddError(TEXT("widgetbp_apply_delta: widget blueprint is no longer valid"));
 		return false;
@@ -154,7 +154,7 @@ bool FClaireonDeltaApplicator_WidgetBP::ApplyPhase2_Remove(const FString& Sessio
 		}
 		FString ResolveErr;
 		UWidget* Widget = WBPDelta_ResolveWidget(Tree, Ref, GetIdMap(), ResolveErr);
-		if (!Widget)
+		if (!IsValid(Widget))
 		{
 			AddError(FString::Printf(TEXT("widgetbp_apply_delta: remove_nodes[%d]: %s"), i, *ResolveErr));
 			return false;
@@ -182,7 +182,7 @@ bool FClaireonDeltaApplicator_WidgetBP::ApplyPhase3_Create(const FString& Sessio
 	using namespace ClaireonDeltaApplicator_WidgetBP_anon;
 	(void)SessionId;
 	UWidgetBlueprint* WBP = CachedWBP.Get();
-	if (!WBP || !WBP->WidgetTree)
+	if (!IsValid(WBP) || !WBP->WidgetTree)
 	{
 		AddError(TEXT("widgetbp_apply_delta: widget blueprint is no longer valid"));
 		return false;
@@ -209,7 +209,7 @@ bool FClaireonDeltaApplicator_WidgetBP::ApplyPhase3_Create(const FString& Sessio
 		}
 		FString ClassErr;
 		UClass* WidgetClass = ClaireonWidgetHelpers::ResolveWidgetClass(ClassStr, ClassErr);
-		if (!WidgetClass)
+		if (!IsValid(WidgetClass))
 		{
 			AddError(FString::Printf(TEXT("widgetbp_apply_delta: nodes[%d]: %s"), i, *ClassErr));
 			return false;
@@ -220,7 +220,7 @@ bool FClaireonDeltaApplicator_WidgetBP::ApplyPhase3_Create(const FString& Sessio
 
 		const FName FinalName = WidgetName.IsEmpty() ? NAME_None : FName(*WidgetName);
 		UWidget* NewWidget = ClaireonWidgetHelpers::CreateWidget(Tree, WidgetClass, FinalName);
-		if (!NewWidget)
+		if (!IsValid(NewWidget))
 		{
 			AddError(FString::Printf(TEXT("widgetbp_apply_delta: nodes[%d]: failed to create widget of class '%s'"),
 				i, *ClassStr));
@@ -248,13 +248,13 @@ bool FClaireonDeltaApplicator_WidgetBP::ApplyPhase3_Create(const FString& Sessio
 			{
 				FString ResolveErr;
 				UWidget* ParentWidget = WBPDelta_ResolveWidget(Tree, ParentRef, GetIdMap(), ResolveErr);
-				if (!ParentWidget)
+				if (!IsValid(ParentWidget))
 				{
 					AddError(FString::Printf(TEXT("widgetbp_apply_delta: nodes[%d]: parent_id %s"), i, *ResolveErr));
 					return false;
 				}
 				ParentPanel = Cast<UPanelWidget>(ParentWidget);
-				if (!ParentPanel)
+				if (!IsValid(ParentPanel))
 				{
 					AddError(FString::Printf(TEXT("widgetbp_apply_delta: nodes[%d]: parent_id '%s' is not a panel"), i, *ParentRef));
 					return false;
@@ -263,7 +263,7 @@ bool FClaireonDeltaApplicator_WidgetBP::ApplyPhase3_Create(const FString& Sessio
 			else
 			{
 				ParentPanel = Cast<UPanelWidget>(Tree->RootWidget);
-				if (!ParentPanel)
+				if (!IsValid(ParentPanel))
 				{
 					AddError(FString::Printf(TEXT("widgetbp_apply_delta: nodes[%d]: root widget is not a panel and no parent_id provided"), i));
 					return false;
@@ -288,7 +288,7 @@ bool FClaireonDeltaApplicator_WidgetBP::ApplyPhase4_Connect(const FString& Sessi
 	using namespace ClaireonDeltaApplicator_WidgetBP_anon;
 	(void)SessionId;
 	UWidgetBlueprint* WBP = CachedWBP.Get();
-	if (!WBP || !WBP->WidgetTree)
+	if (!IsValid(WBP) || !WBP->WidgetTree)
 	{
 		AddError(TEXT("widgetbp_apply_delta: widget blueprint is no longer valid"));
 		return false;
@@ -320,13 +320,13 @@ bool FClaireonDeltaApplicator_WidgetBP::ApplyPhase4_Connect(const FString& Sessi
 		}
 		FString WidgetErr, ParentErr;
 		UWidget* Widget = WBPDelta_ResolveWidget(Tree, WidgetRef, GetIdMap(), WidgetErr);
-		if (!Widget)
+		if (!IsValid(Widget))
 		{
 			AddError(FString::Printf(TEXT("widgetbp_apply_delta: connections[%d]: %s"), i, *WidgetErr));
 			return false;
 		}
 		UWidget* NewParent = WBPDelta_ResolveWidget(Tree, NewParentRef, GetIdMap(), ParentErr);
-		if (!NewParent)
+		if (!IsValid(NewParent))
 		{
 			AddError(FString::Printf(TEXT("widgetbp_apply_delta: connections[%d]: new_parent %s"), i, *ParentErr));
 			return false;
@@ -349,7 +349,7 @@ void FClaireonDeltaApplicator_WidgetBP::FinalizeSession(const FString& SessionId
 {
 	(void)SessionId;
 	UWidgetBlueprint* WBP = CachedWBP.Get();
-	if (WBP) { WBP->MarkPackageDirty(); }
+	if (IsValid(WBP)) { WBP->MarkPackageDirty(); }
 }
 
 void FClaireonDeltaApplicator_WidgetBP::CloseSessionIfOwned(const FString& SessionId)
@@ -365,12 +365,12 @@ void FClaireonDeltaApplicator_WidgetBP::Phase3CleanupOnFailure(const FString& Se
 {
 	(void)SessionId;
 	UWidgetBlueprint* WBP = CachedWBP.Get();
-	if (!WBP || !WBP->WidgetTree) { return; }
+	if (!IsValid(WBP) || !WBP->WidgetTree) { return; }
 	UWidgetTree* Tree = WBP->WidgetTree;
 	for (const TWeakObjectPtr<UWidget>& Weak : CreatedWidgetsThisCall)
 	{
 		UWidget* W = Weak.Get();
-		if (W)
+		if (IsValid(W))
 		{
 			if (Tree->RootWidget == W) { Tree->RootWidget = nullptr; }
 			else { Tree->RemoveWidget(W); }

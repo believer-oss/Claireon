@@ -8,18 +8,19 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-namespace
+namespace ClaireonMaterialTool_SetBlendMode_Private
 {
 	static bool ParseBlendMode_SetBlendMode(const FString& Str, EBlendMode& OutMode)
 	{
 		const UEnum* Enum = StaticEnum<EBlendMode>();
-		if (!Enum) return false;
+		if (!IsValid(Enum)) return false;
 		const int64 Val = Enum->GetValueByNameString(Str);
 		if (Val == INDEX_NONE) return false;
 		OutMode = static_cast<EBlendMode>(Val);
 		return true;
 	}
 }
+using namespace ClaireonMaterialTool_SetBlendMode_Private;
 
 FString ClaireonMaterialTool_SetBlendMode::GetOperation() const { return TEXT("set_blend_mode"); }
 

@@ -38,6 +38,12 @@ TSharedPtr<FJsonObject> ClaireonTool_DataTableRemoveRow::GetInputSchema() const
 	RowNameProp->SetStringField(TEXT("description"), TEXT("Name of the row to remove"));
 	Properties->SetObjectField(TEXT("row_name"), RowNameProp);
 
+	// refresh_composites - optional
+	TSharedPtr<FJsonObject> RefreshCompositesProp = MakeShared<FJsonObject>();
+	RefreshCompositesProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	RefreshCompositesProp->SetStringField(TEXT("description"), TEXT("After saving, refresh any composite data tables that aggregate this table (default: true). Set false for batch edits; follow with an explicit datatable_composite_refresh."));
+	Properties->SetObjectField(TEXT("refresh_composites"), RefreshCompositesProp);
+
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	TArray<TSharedPtr<FJsonValue>> Required;
@@ -68,9 +74,15 @@ IClaireonTool::FToolResult ClaireonTool_DataTableRemoveRow::Execute(const TShare
 		return MakeErrorResult(TEXT("Missing required parameter: row_name"));
 	}
 
+	bool bRefreshComposites = true;
+	if (Arguments->HasField(TEXT("refresh_composites")))
+	{
+		bRefreshComposites = Arguments->GetBoolField(TEXT("refresh_composites"));
+	}
+
 	FString LoadError;
 	UDataTable* DataTable = ClaireonDataTableHelpers::LoadDataTableAsset(AssetPath, LoadError);
-	if (!DataTable)
+	if (!IsValid(DataTable))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -105,7 +117,9 @@ IClaireonTool::FToolResult ClaireonTool_DataTableRemoveRow::Execute(const TShare
 	Data->SetBoolField(TEXT("removed"), true);
 	Data->SetNumberField(TEXT("remaining_rows"), RemainingRows);
 
-	const FString Summary = FString::Printf(TEXT("Removed row '%s' from %s"), *RowNameStr, *TableName);
+	const FString RefreshSuffix = ClaireonDataTableHelpers::RefreshDependentCompositesResult(DataTable, bRefreshComposites, Data);
+
+	const FString Summary = FString::Printf(TEXT("Removed row '%s' from %s"), *RowNameStr, *TableName) + RefreshSuffix;
 
 	return MakeSuccessResult(Data, Summary);
 }

@@ -17,9 +17,9 @@ FString ClaireonLevelSequenceTool_RemovePossessable::GetDescription() const
 {
     return TEXT("Remove a binding (possessable or spawnable) from the Level Sequence by label or guid. "
                 "Session-mode tool: open via level_sequence_open first. "
-                "In raw Python the equivalent is binding.remove() on the FMovieSceneBinding "
-                "(resolve the binding via for b in level_sequence.get_bindings(): if b.get_id() == guid: ...); "
-                "there is no top-level level_sequence.remove_possessable(guid) or remove_spawnable(guid) API.");
+                "The raw Python equivalent is binding.remove() on the FMovieSceneBinding found by "
+                "scanning level_sequence.get_bindings() for a matching b.get_id(); there is no "
+                "top-level remove_possessable(guid) or remove_spawnable(guid) API.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_RemovePossessable::GetInputSchema() const

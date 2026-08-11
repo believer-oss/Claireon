@@ -19,7 +19,7 @@
 // grouping can invalidate the transitive resolution. The "is user-defined" check uses
 // UClass::GetName() string comparison instead, which doesn't need the full type.
 
-namespace
+namespace ClaireonStructReflection_Private
 {
 	// Maximum recursion depth for value serialization. Cyclic struct references and very
 	// deeply nested rows hit this cap; truncation emits the sentinel below.
@@ -103,7 +103,7 @@ namespace
 			const int64 IntValue = UnderlyingProp ? UnderlyingProp->GetSignedIntPropertyValue(ValuePtr) : 0;
 			TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
 			Out->SetNumberField(TEXT("value"), static_cast<double>(IntValue));
-			Out->SetStringField(TEXT("name"), Enum ? Enum->GetDisplayNameTextByValue(IntValue).ToString() : FString());
+			Out->SetStringField(TEXT("name"), IsValid(Enum) ? Enum->GetDisplayNameTextByValue(IntValue).ToString() : FString());
 			return MakeShared<FJsonValueObject>(Out);
 		}
 
@@ -175,7 +175,7 @@ namespace
 		if (const FObjectPropertyBase* ObjPropBase = CastField<FObjectPropertyBase>(Property))
 		{
 			UObject* Target = ObjPropBase->GetObjectPtrPropertyValue(ValuePtr).Get();
-			if (!Target)
+			if (!IsValid(Target))
 			{
 				return MakeShared<FJsonValueNull>();
 			}
@@ -258,7 +258,7 @@ namespace
 		int32 Depth,
 		TArray<FString>& OutWarnings)
 	{
-		if (!Struct || !InstancePtr)
+		if (!IsValid(Struct) || !InstancePtr)
 		{
 			return MakeShared<FJsonObject>();
 		}
@@ -307,6 +307,7 @@ namespace
 		return Out;
 	}
 }
+using namespace ClaireonStructReflection_Private;
 
 namespace ClaireonStructReflection
 {
@@ -319,13 +320,13 @@ namespace ClaireonStructReflection
 		}
 
 		// 1) Direct lookup as a loaded/native struct
-		if (UScriptStruct* Found = FindObject<UScriptStruct>(nullptr, *Path))
+		if (UScriptStruct* Found = FindObject<UScriptStruct>(nullptr, *Path); IsValid(Found))
 		{
 			return Found;
 		}
 
 		// 2) Try loading the asset (BP user-defined structs are UUserDefinedStruct, a subclass of UScriptStruct)
-		if (UScriptStruct* Loaded = LoadObject<UScriptStruct>(nullptr, *Path))
+		if (UScriptStruct* Loaded = LoadObject<UScriptStruct>(nullptr, *Path); IsValid(Loaded))
 		{
 			return Loaded;
 		}
@@ -338,7 +339,7 @@ namespace ClaireonStructReflection
 			{
 				const FString AssetName = Path.Mid(LastSlash + 1);
 				const FString Fully = Path + TEXT(".") + AssetName;
-				if (UScriptStruct* Loaded2 = LoadObject<UScriptStruct>(nullptr, *Fully))
+				if (UScriptStruct* Loaded2 = LoadObject<UScriptStruct>(nullptr, *Fully); IsValid(Loaded2))
 				{
 					return Loaded2;
 				}
@@ -348,7 +349,7 @@ namespace ClaireonStructReflection
 		// 4) Bare struct name (best-effort) — must be already loaded
 		if (!Path.Contains(TEXT("/")) && !Path.Contains(TEXT(".")))
 		{
-			if (UScriptStruct* Bare = FindFirstObject<UScriptStruct>(*Path, EFindFirstObjectOptions::NativeFirst))
+			if (UScriptStruct* Bare = FindFirstObject<UScriptStruct>(*Path, EFindFirstObjectOptions::NativeFirst); IsValid(Bare))
 			{
 				return Bare;
 			}
@@ -417,7 +418,7 @@ namespace ClaireonStructReflection
 		}
 		if (const FEnumProperty* EP = CastField<FEnumProperty>(Property))
 		{
-			return EP->GetEnum() ? EP->GetEnum()->GetPathName() : FString();
+			return IsValid(EP->GetEnum()) ? EP->GetEnum()->GetPathName() : FString();
 		}
 		if (const FByteProperty* BP = CastField<FByteProperty>(Property))
 		{
@@ -455,7 +456,7 @@ namespace ClaireonStructReflection
 
 	bool GetPropertyDefaultValue(UScriptStruct* OwnerStruct, const FProperty* Property, FString& OutValue)
 	{
-		if (!OwnerStruct || !Property)
+		if (!IsValid(OwnerStruct) || !Property)
 		{
 			return false;
 		}
@@ -483,6 +484,32 @@ namespace ClaireonStructReflection
 	{
 		// Reuse the blueprint helper's implementation so flag naming stays consistent across tools.
 		return ClaireonBlueprintHelpers::FormatPropertyFlags(PropertyFlags);
+	}
+
+	FString DescribeAccess(EPropertyFlags Flags)
+	{
+		if (Flags & CPF_NativeAccessSpecifierPrivate)   { return TEXT("private"); }
+		if (Flags & CPF_NativeAccessSpecifierProtected) { return TEXT("protected"); }
+		return TEXT("public");
+	}
+
+	FString DescribeBpAccess(EPropertyFlags Flags)
+	{
+		if (Flags & CPF_BlueprintAssignable) { return TEXT("assignable"); }
+		if (Flags & CPF_BlueprintVisible)
+		{
+			return (Flags & CPF_BlueprintReadOnly) ? TEXT("read") : TEXT("read_write");
+		}
+		return TEXT("none");
+	}
+
+	FString DescribeEditorAccess(EPropertyFlags Flags)
+	{
+		const bool bEdit = (Flags & CPF_Edit) != 0;
+		const bool bEditConst = (Flags & CPF_EditConst) != 0;
+		if (bEdit && bEditConst) { return TEXT("edit_const"); }
+		if (bEdit)               { return TEXT("edit"); }
+		return TEXT("none");
 	}
 
 	TSharedPtr<FJsonObject> SerializeProperty(
@@ -537,7 +564,7 @@ namespace ClaireonStructReflection
 			}
 		}
 
-		if (bIncludeDefaults && OwnerStruct)
+		if (bIncludeDefaults && IsValid(OwnerStruct))
 		{
 			FString DefaultValue;
 			if (GetPropertyDefaultValue(OwnerStruct, Property, DefaultValue))
@@ -555,21 +582,21 @@ namespace ClaireonStructReflection
 		bool bIncludeMetadata)
 	{
 		TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-		if (!ScriptStruct) return Out;
+		if (!IsValid(ScriptStruct)) return Out;
 
 		// Identify BP user-defined structs by class name (avoids header dep; see include block note)
-		const bool bIsUserDefined = ScriptStruct->GetClass() && ScriptStruct->GetClass()->GetName() == TEXT("UserDefinedStruct");
+		const bool bIsUserDefined = IsValid(ScriptStruct->GetClass()) && ScriptStruct->GetClass()->GetName() == TEXT("UserDefinedStruct");
 		Out->SetStringField(TEXT("kind"), bIsUserDefined ? TEXT("Blueprint") : TEXT("Native"));
 		Out->SetStringField(TEXT("name"), ScriptStruct->GetName());
 		Out->SetStringField(TEXT("path"), ScriptStruct->GetPathName());
 		Out->SetStringField(TEXT("cpp_type"), FString::Printf(TEXT("F%s"), *ScriptStruct->GetName()));
 
-		if (UPackage* Pkg = ScriptStruct->GetPackage())
+		if (UPackage* Pkg = ScriptStruct->GetPackage(); IsValid(Pkg))
 		{
 			Out->SetStringField(TEXT("module"), Pkg->GetName());
 		}
 
-		if (UScriptStruct* Super = Cast<UScriptStruct>(ScriptStruct->GetSuperStruct()))
+		if (UScriptStruct* Super = Cast<UScriptStruct>(ScriptStruct->GetSuperStruct()); IsValid(Super))
 		{
 			Out->SetStringField(TEXT("super_path"), Super->GetPathName());
 		}

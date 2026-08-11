@@ -132,10 +132,10 @@ FToolResult ClaireonAnimEditToolBase::BuildStateResponse(const FString& SessionI
 	const FString Summary = FString::Printf(TEXT("Session %s: %s"),
 		*SessionId.Left(8), *Data->LastOperationStatus);
 
-	FString SessionHintSummaryTag;
-	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResponseData, Data->ConsecutiveAssetPathCalls, Data->Animation->GetPathName(), SessionId, SessionHintSummaryTag);
+	TSharedPtr<FJsonObject> SessionHint;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResponseData, Data->ConsecutiveAssetPathCalls, Data->Animation->GetPathName(), SessionId, GetName(), SessionHint);
 
-	return MakeSuccessResult(ResponseData, Summary + SessionHintSummaryTag);
+	return MakeSuccessResultWithHint(ResponseData, Summary, SessionHint);
 }
 
 // ============================================================================
@@ -150,7 +150,7 @@ UAnimMontage* ClaireonAnimEditToolBase::RequireMontage(FAnimEditToolData* Data, 
 		return nullptr;
 	}
 	UAnimMontage* Montage = Cast<UAnimMontage>(Data->Animation.Get());
-	if (!Montage)
+	if (!IsValid(Montage))
 	{
 		OutError = MakeErrorResult(TEXT("Failed to cast to AnimMontage"));
 	}
@@ -165,7 +165,7 @@ UAnimSequence* ClaireonAnimEditToolBase::RequireAnimSequence(FAnimEditToolData* 
 		return nullptr;
 	}
 	UAnimSequence* AnimSeq = Cast<UAnimSequence>(Data->Animation.Get());
-	if (!AnimSeq)
+	if (!IsValid(AnimSeq))
 	{
 		OutError = MakeErrorResult(TEXT("Failed to cast to AnimSequence"));
 	}

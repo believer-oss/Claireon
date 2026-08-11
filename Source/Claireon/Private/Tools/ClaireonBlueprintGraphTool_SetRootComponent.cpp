@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -125,13 +125,13 @@ FToolResult ClaireonBlueprintGraphTool_SetRootComponent::Execute(const TSharedPt
         return Error;
     }
 	UBlueprint* Blueprint = Data->Blueprint.Get();
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
 	}
 
 	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
-	if (!SCS)
+	if (!IsValid(SCS))
 	{
 		return MakeErrorResult(TEXT("Blueprint does not have a SimpleConstructionScript (not an Actor Blueprint?)"));
 	}
@@ -145,7 +145,7 @@ FToolResult ClaireonBlueprintGraphTool_SetRootComponent::Execute(const TSharedPt
 
 	// Find target node
 	USCS_Node* TargetNode = SCS->FindSCSNode(FName(*ComponentName));
-	if (!TargetNode)
+	if (!IsValid(TargetNode))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Component not found: %s"), *ComponentName));
 	}
@@ -181,13 +181,13 @@ FToolResult ClaireonBlueprintGraphTool_SetRootComponent::Execute(const TSharedPt
 
 	// Step 1: Detach target from current parent (if it has one)
 	USCS_Node* TargetParent = SCS->FindParentNode(TargetNode);
-	if (TargetParent)
+	if (IsValid(TargetParent))
 	{
 		TargetParent->RemoveChildNode(TargetNode);
 	}
 
 	// Reset target's relative transform since it becomes root
-	if (USceneComponent* SceneComp = Cast<USceneComponent>(TargetNode->ComponentTemplate))
+	if (USceneComponent* SceneComp = Cast<USceneComponent>(TargetNode->ComponentTemplate); IsValid(SceneComp))
 	{
 		SceneComp->SetRelativeLocation(FVector::ZeroVector);
 		SceneComp->SetRelativeRotation(FRotator::ZeroRotator);
@@ -199,7 +199,7 @@ FToolResult ClaireonBlueprintGraphTool_SetRootComponent::Execute(const TSharedPt
 	// The transient state (old root removed, new root not yet added) is safe because
 	// ValidateSceneRootNodes will be called by AddNode in the next step, at which point
 	// the new root is already in the root set. (Review item M1)
-	if (OldRootNode)
+	if (IsValid(OldRootNode))
 	{
 		SCS->RemoveNode(OldRootNode, /*bValidateSceneRootNodes=*/false);
 	}
@@ -210,7 +210,7 @@ FToolResult ClaireonBlueprintGraphTool_SetRootComponent::Execute(const TSharedPt
 	SCS->AddNode(TargetNode);
 
 	// Step 4: Reparent old root under new root
-	if (!bWasDefaultSceneRoot && OldRootNode)
+	if (!bWasDefaultSceneRoot && IsValid(OldRootNode))
 	{
 		// Old root was a real component -- make it a child of the new root
 		TargetNode->AddChildNode(OldRootNode);

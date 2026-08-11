@@ -39,7 +39,7 @@ FToolResult ClaireonStateTreeTool_AddEvaluator::Execute(const TSharedPtr<FJsonOb
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	FString NodeType;
@@ -47,7 +47,7 @@ FToolResult ClaireonStateTreeTool_AddEvaluator::Execute(const TSharedPtr<FJsonOb
 		return MakeErrorResult(TEXT("Missing parameter: node_type"));
 
 	UScriptStruct* NodeStruct = ClaireonStateTreeHelpers::ResolveNodeStruct(NodeType, Error);
-	if (!NodeStruct)
+	if (!IsValid(NodeStruct))
 		return MakeErrorResult(Error);
 
 	FStateTreeEditorNode NewNode;

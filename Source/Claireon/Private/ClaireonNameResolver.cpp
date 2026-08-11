@@ -3,6 +3,7 @@
 
 #include "ClaireonNameResolver.h"
 #include "UObject/UObjectIterator.h"
+#include "UObject/CoreRedirects.h"
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraphSchema_K2.h"
@@ -156,23 +157,63 @@ namespace ClaireonNameResolver
 		// Lambda to check base class constraint
 		auto PassesBaseCheck = [RequiredBaseClass](UClass* C) -> bool
 		{
-			return !RequiredBaseClass || C->IsChildOf(RequiredBaseClass);
+			return !IsValid(RequiredBaseClass) || C->IsChildOf(RequiredBaseClass);
 		};
 
 		// Lambda to try a single name via FindFirstObject
 		auto TryFind = [&](const FString& Name) -> UClass*
 		{
 			UClass* Found = FindFirstObject<UClass>(*Name, EFindFirstObjectOptions::NativeFirst);
-			if (Found && PassesBaseCheck(Found))
+			if (IsValid(Found) && PassesBaseCheck(Found))
 			{
 				return Found;
 			}
 			return nullptr;
 		};
 
+		// Step 0: Rooted object-path fast path ('/Script/Module.Class' or
+		// '/Game/Path/Asset.Asset_C'). FindFirstObject searches by short name,
+		// so pathed inputs must resolve via StaticFindObject. A path that
+		// resolves to a class of the wrong base is a definitive answer -- the
+		// short-name fuzzy steps below cannot succeed for a rooted path, so we
+		// return a precise wrong-base error instead of a generic not-found.
+		if (Input.StartsWith(TEXT("/")))
+		{
+			UClass* Found = FindObject<UClass>(nullptr, *Input);
+			if (!IsValid(Found))
+			{
+				// FindObject only sees classes already in memory; a rooted /Game
+				// path naming an unloaded Blueprint's generated class must LOAD it
+				// (a fresh editor session has none of them resident). Harmless for
+				// /Script/ paths (native classes are always registered).
+				Found = LoadObject<UClass>(nullptr, *Input);
+			}
+			if (!IsValid(Found) && !Input.EndsWith(TEXT("_C")))
+			{
+				// Accept an asset path spelled without the generated-class suffix
+				// (/Game/Dir/BP_Foo.BP_Foo -> class BP_Foo_C).
+				Found = LoadObject<UClass>(nullptr, *(Input + TEXT("_C")));
+			}
+			if (IsValid(Found))
+			{
+				if (PassesBaseCheck(Found))
+				{
+					OutResult.bSuccess = true;
+					OutResult.ResolvedName = Found->GetName();
+					return Found;
+				}
+				OutResult.bSuccess = false;
+				OutResult.Error = FString::Printf(
+					TEXT("Class '%s' (from path '%s') is not a child of '%s'"),
+					*Found->GetName(), *Input,
+					IsValid(RequiredBaseClass) ? *RequiredBaseClass->GetName() : TEXT("<none>"));
+				return nullptr;
+			}
+		}
+
 		// Step 1: Exact match (also tries stripping A/U prefix since UE internal
 		// names omit the C++ class prefix, e.g., "AActor" -> "Actor")
-		if (UClass* Found = TryFind(Input))
+		if (UClass* Found = TryFind(Input); IsValid(Found))
 		{
 			OutResult.bSuccess = true;
 			OutResult.ResolvedName = Found->GetName();
@@ -183,7 +224,7 @@ namespace ClaireonNameResolver
 			TCHAR First = FChar::ToUpper(Input[0]);
 			if (First == TEXT('A') || First == TEXT('U'))
 			{
-				if (UClass* Found = TryFind(Input.Mid(1)))
+				if (UClass* Found = TryFind(Input.Mid(1)); IsValid(Found))
 				{
 					OutResult.bSuccess = true;
 					OutResult.ResolvedName = Found->GetName();
@@ -211,32 +252,32 @@ namespace ClaireonNameResolver
 		// Step 2: Strip U prefix
 		if (Input.Len() > 1 && Input[0] == TEXT('U') && FChar::IsUpper(Input[1]))
 		{
-			if (UClass* Found = TryFind(Input.Mid(1)))
+			if (UClass* Found = TryFind(Input.Mid(1)); IsValid(Found))
 			{
 				AddCandidate(Found, FString::Printf(TEXT("Resolved '%s' to '%s' (stripped U prefix)"), *Input, *Found->GetName()));
 			}
 		}
 
 		// Step 3: Add U prefix
-		if (UClass* Found = TryFind(TEXT("U") + Input))
+		if (UClass* Found = TryFind(TEXT("U") + Input); IsValid(Found))
 		{
 			AddCandidate(Found, FString::Printf(TEXT("Resolved '%s' to '%s' (added U prefix)"), *Input, *Found->GetName()));
 		}
 
 		// Step 4: Add A prefix
-		if (UClass* Found = TryFind(TEXT("A") + Input))
+		if (UClass* Found = TryFind(TEXT("A") + Input); IsValid(Found))
 		{
 			AddCandidate(Found, FString::Printf(TEXT("Resolved '%s' to '%s' (added A prefix)"), *Input, *Found->GetName()));
 		}
 
 		// Step 5: Add Component suffix
-		if (UClass* Found = TryFind(Input + TEXT("Component")))
+		if (UClass* Found = TryFind(Input + TEXT("Component")); IsValid(Found))
 		{
 			AddCandidate(Found, FString::Printf(TEXT("Resolved '%s' to '%s' (added Component suffix)"), *Input, *Found->GetName()));
 		}
 
 		// Step 6: U prefix + Component suffix
-		if (UClass* Found = TryFind(TEXT("U") + Input + TEXT("Component")))
+		if (UClass* Found = TryFind(TEXT("U") + Input + TEXT("Component")); IsValid(Found))
 		{
 			AddCandidate(Found, FString::Printf(TEXT("Resolved '%s' to '%s' (added U prefix + Component suffix)"), *Input, *Found->GetName()));
 		}
@@ -255,18 +296,18 @@ namespace ClaireonNameResolver
 		// and tries each prefix combined with the input, both as-is and with a
 		// leading "U" object prefix. This is the canonical home for per-domain
 		// prefix-walking (anim notify and BT helpers route through here).
-		if (FuzzyCandidates.Num() == 0 && RequiredBaseClass)
+		if (FuzzyCandidates.Num() == 0 && IsValid(RequiredBaseClass))
 		{
 			const TMap<FString, TArray<FString>> PrefixMap = GetResolverPrefixMap();
 			if (const TArray<FString>* Prefixes = PrefixMap.Find(RequiredBaseClass->GetName()))
 			{
 				for (const FString& Prefix : *Prefixes)
 				{
-					if (UClass* Found = TryFind(Prefix + Input))
+					if (UClass* Found = TryFind(Prefix + Input); IsValid(Found))
 					{
 						AddCandidate(Found, FString::Printf(TEXT("Resolved '%s' to '%s' (added '%s' prefix)"), *Input, *Found->GetName(), *Prefix));
 					}
-					if (UClass* Found = TryFind(TEXT("U") + Prefix + Input))
+					if (UClass* Found = TryFind(TEXT("U") + Prefix + Input); IsValid(Found))
 					{
 						AddCandidate(Found, FString::Printf(TEXT("Resolved '%s' to '%s' (added 'U%s' prefix)"), *Input, *Found->GetName(), *Prefix));
 					}
@@ -289,7 +330,7 @@ namespace ClaireonNameResolver
 			for (const FString& Module : ResolverModules)
 			{
 				FString ScriptPath = FString::Printf(TEXT("/Script/%s.%s"), *Module, *Input);
-				if (UClass* Found = TryFind(ScriptPath))
+				if (UClass* Found = TryFind(ScriptPath); IsValid(Found))
 				{
 					AddCandidate(Found, FString::Printf(TEXT("Resolved '%s' to '%s' (found in /Script/%s)"), *Input, *Found->GetName(), *Module));
 				}
@@ -345,6 +386,117 @@ namespace ClaireonNameResolver
 	}
 
 	// =================================================================
+	// ResolveClassNameMultiBase
+	// =================================================================
+	UClass* ResolveClassNameMultiBase(
+		const FString& Input,
+		const TArray<UClass*>& AcceptableBaseClasses,
+		FNameResolveResult& OutResult)
+	{
+		OutResult = FNameResolveResult();
+
+		if (Input.IsEmpty())
+		{
+			OutResult.Error = TEXT("Class name is empty");
+			return nullptr;
+		}
+
+		bool bHasAnyBase = false;
+		for (UClass* Base : AcceptableBaseClasses)
+		{
+			if (IsValid(Base))
+			{
+				bHasAnyBase = true;
+				break;
+			}
+		}
+		if (!bHasAnyBase)
+		{
+			OutResult.Error = TEXT("ResolveClassNameMultiBase: no acceptable base classes were provided");
+			return nullptr;
+		}
+
+		// Run the full single-base pipeline once per base and merge the
+		// outcomes. This is the cross-base retry the single-base gate lacks:
+		// a class discarded under one base (IsChildOf failure) is retried under
+		// the next base before resolution gives up.
+		TArray<UClass*> ResolvedClasses;
+		TArray<FNameResolveResult> ResolvedResults;
+		TArray<FString> AttemptedScopes;
+		FString FirstPerBaseAmbiguityError;
+		TArray<FString> FirstPerBaseAmbiguityCandidates;
+
+		for (UClass* Base : AcceptableBaseClasses)
+		{
+			if (!IsValid(Base))
+			{
+				continue;
+			}
+			AttemptedScopes.Add(Base->GetName());
+
+			FNameResolveResult BaseResult;
+			if (UClass* Found = ResolveClassName(Input, Base, BaseResult); IsValid(Found))
+			{
+				if (!ResolvedClasses.Contains(Found))
+				{
+					ResolvedClasses.Add(Found);
+					ResolvedResults.Add(BaseResult);
+				}
+			}
+			else if (BaseResult.Candidates.Num() > 1 && FirstPerBaseAmbiguityError.IsEmpty())
+			{
+				// Ambiguity within one base scope: remember it (error AND
+				// candidates, so callers can inspect or tiebreak), but keep
+				// trying the other scopes -- a unique match under a later base
+				// is a better answer than an early ambiguity.
+				FirstPerBaseAmbiguityError = BaseResult.Error;
+				FirstPerBaseAmbiguityCandidates = BaseResult.Candidates;
+			}
+		}
+
+		if (ResolvedClasses.Num() == 1)
+		{
+			OutResult = ResolvedResults[0];
+			return ResolvedClasses[0];
+		}
+
+		if (ResolvedClasses.Num() > 1)
+		{
+			OutResult.bSuccess = false;
+			for (UClass* ResolvedClass : ResolvedClasses)
+			{
+				OutResult.Candidates.Add(ResolvedClass->GetName());
+			}
+			OutResult.Error = FString::Printf(
+				TEXT("Ambiguous class name '%s' resolved to %d different classes across base scopes (%s): %s"),
+				*Input, ResolvedClasses.Num(),
+				*FString::Join(AttemptedScopes, TEXT(", ")),
+				*JoinCandidates(OutResult.Candidates));
+			return nullptr;
+		}
+
+		OutResult.bSuccess = false;
+		if (!FirstPerBaseAmbiguityError.IsEmpty())
+		{
+			// Nothing resolved uniquely, but at least one scope had a
+			// within-base ambiguity: surface that error and its candidate
+			// list -- it is a more precise cause than a generic not-found.
+			OutResult.Error = FirstPerBaseAmbiguityError;
+			OutResult.Candidates = FirstPerBaseAmbiguityCandidates;
+		}
+		else
+		{
+			// NOTE: this exact error text is pinned by
+			// Tests/ClaireonNotifyClassResolveTests.cpp
+			// (MultiBase_GarbageNameNamesScopes). Keep them in sync.
+			OutResult.Error = FString::Printf(
+				TEXT("Class not found: '%s' (attempted scopes: %s)"),
+				*Input, *FString::Join(AttemptedScopes, TEXT(", ")));
+		}
+		return nullptr;
+	}
+
+	// =================================================================
 	// ResolvePinName
 	// =================================================================
 	UEdGraphPin* ResolvePinName(
@@ -355,7 +507,7 @@ namespace ClaireonNameResolver
 	{
 		OutResult = FNameResolveResult();
 
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			OutResult.Error = TEXT("Node is null");
 			return nullptr;
@@ -778,7 +930,7 @@ namespace ClaireonNameResolver
 	{
 		OutResult = FNameResolveResult();
 
-		if (!OwnerClass)
+		if (!IsValid(OwnerClass))
 		{
 			OutResult.Error = TEXT("Owner class is null");
 			return nullptr;
@@ -791,7 +943,7 @@ namespace ClaireonNameResolver
 		}
 
 		// Step 1: Exact match
-		if (UFunction* Found = OwnerClass->FindFunctionByName(FName(*Input)))
+		if (UFunction* Found = OwnerClass->FindFunctionByName(FName(*Input)); IsValid(Found))
 		{
 			OutResult.bSuccess = true;
 			OutResult.ResolvedName = Found->GetName();
@@ -804,7 +956,7 @@ namespace ClaireonNameResolver
 			FString LowerInput = Input.ToLower();
 			if (const FString* MappedName = Aliases.Find(LowerInput))
 			{
-				if (UFunction* Found = OwnerClass->FindFunctionByName(FName(**MappedName)))
+				if (UFunction* Found = OwnerClass->FindFunctionByName(FName(**MappedName)); IsValid(Found))
 				{
 					OutResult.bSuccess = true;
 					OutResult.ResolvedName = Found->GetName();
@@ -817,7 +969,7 @@ namespace ClaireonNameResolver
 		// Step 3: K2_ prefix addition
 		{
 			FString K2Name = TEXT("K2_") + Input;
-			if (UFunction* Found = OwnerClass->FindFunctionByName(FName(*K2Name)))
+			if (UFunction* Found = OwnerClass->FindFunctionByName(FName(*K2Name)); IsValid(Found))
 			{
 				OutResult.bSuccess = true;
 				OutResult.ResolvedName = Found->GetName();
@@ -830,7 +982,7 @@ namespace ClaireonNameResolver
 		if (Input.StartsWith(TEXT("K2_")))
 		{
 			FString Stripped = Input.Mid(3);
-			if (UFunction* Found = OwnerClass->FindFunctionByName(FName(*Stripped)))
+			if (UFunction* Found = OwnerClass->FindFunctionByName(FName(*Stripped)); IsValid(Found))
 			{
 				OutResult.bSuccess = true;
 				OutResult.ResolvedName = Found->GetName();
@@ -839,14 +991,61 @@ namespace ClaireonNameResolver
 			}
 		}
 
-		// Step 5: Case-insensitive
+		// Step 4.5: Core redirects. Serialized member references keep pre-rename
+		// names (e.g. AwaitPlayVO after a C++ rename); ini FunctionRedirects are
+		// registered with FCoreRedirects but FindFunctionByName never consults
+		// them. Try the redirect against the class and each of its supers (the
+		// redirect names the declaring class, which may be a base).
+		{
+			for (UClass* RedirectClass = OwnerClass; IsValid(RedirectClass); RedirectClass = RedirectClass->GetSuperClass())
+			{
+				// Include the declaring package: ini FunctionRedirects register their
+				// OldName fully qualified (/Script/Module.Class.Function) and a query
+				// with an unspecified package does not match them.
+				const FCoreRedirectObjectName OldRedirectName(FName(*Input), RedirectClass->GetFName(),
+					RedirectClass->GetOutermost()->GetFName());
+				const FCoreRedirectObjectName NewRedirectName =
+					FCoreRedirects::GetRedirectedName(ECoreRedirectFlags::Type_Function, OldRedirectName);
+				if (NewRedirectName.ObjectName != OldRedirectName.ObjectName && !NewRedirectName.ObjectName.IsNone())
+				{
+					if (UFunction* Found = OwnerClass->FindFunctionByName(NewRedirectName.ObjectName); IsValid(Found))
+					{
+						OutResult.bSuccess = true;
+						OutResult.ResolvedName = Found->GetName();
+						OutResult.ResolutionNote = FString::Printf(
+							TEXT("Resolved '%s' to '%s' (core redirect on %s)"),
+							*Input, *Found->GetName(), *RedirectClass->GetName());
+						return Found;
+					}
+				}
+			}
+		}
+
+		// Step 5: Case-insensitive; when the input carries spaces, also accept the
+		// editor display name ("Empower Ability" for EmpowerAbility or an explicit
+		// DisplayName meta) and the space-stripped spelling -- serialized graph
+		// dumps carry the friendly name for some event overrides.
+		const bool bInputHasSpaces = Input.Contains(TEXT(" "));
+		const FString InputNoSpaces = bInputHasSpaces ? Input.Replace(TEXT(" "), TEXT("")) : Input;
 		TArray<TPair<UFunction*, FString>> FuzzyCandidates;
 		for (TFieldIterator<UFunction> It(OwnerClass); It; ++It)
 		{
 			UFunction* Func = *It;
-			if (Func->GetName().Equals(Input, ESearchCase::IgnoreCase))
+			bool bMatched = Func->GetName().Equals(Input, ESearchCase::IgnoreCase);
+			FString Note;
+			if (bMatched)
 			{
-				FString Note = FString::Printf(TEXT("Resolved '%s' to '%s' (case-insensitive match)"), *Input, *Func->GetName());
+				Note = FString::Printf(TEXT("Resolved '%s' to '%s' (case-insensitive match)"), *Input, *Func->GetName());
+			}
+			else if (bInputHasSpaces
+				&& (Func->GetName().Equals(InputNoSpaces, ESearchCase::IgnoreCase)
+					|| Func->GetDisplayNameText().ToString().Equals(Input, ESearchCase::IgnoreCase)))
+			{
+				bMatched = true;
+				Note = FString::Printf(TEXT("Resolved '%s' to '%s' (display-name match)"), *Input, *Func->GetName());
+			}
+			if (bMatched)
+			{
 				// Avoid duplicates
 				bool bAlreadyAdded = false;
 				for (const auto& Pair : FuzzyCandidates)
@@ -901,7 +1100,7 @@ namespace ClaireonNameResolver
 	{
 		OutResult = FNameResolveResult();
 
-		if (!Struct)
+		if (!IsValid(Struct))
 		{
 			OutResult.Error = TEXT("Struct is null");
 			return nullptr;
@@ -1082,7 +1281,7 @@ namespace ClaireonNameResolver
 
 		// Step 1: Exact match (also tries stripping F prefix since UE internal
 		// names omit the C++ struct prefix, e.g., "FVector" -> "Vector")
-		if (UScriptStruct* Found = TryFind(Input))
+		if (UScriptStruct* Found = TryFind(Input); IsValid(Found))
 		{
 			OutResult.bSuccess = true;
 			OutResult.ResolvedName = Found->GetName();
@@ -1090,7 +1289,7 @@ namespace ClaireonNameResolver
 		}
 		if (Input.Len() > 1 && FChar::ToUpper(Input[0]) == TEXT('F'))
 		{
-			if (UScriptStruct* Found = TryFind(Input.Mid(1)))
+			if (UScriptStruct* Found = TryFind(Input.Mid(1)); IsValid(Found))
 			{
 				OutResult.bSuccess = true;
 				OutResult.ResolvedName = Found->GetName();
@@ -1114,7 +1313,7 @@ namespace ClaireonNameResolver
 		};
 
 		// Step 2: Add F prefix
-		if (UScriptStruct* Found = TryFind(TEXT("F") + Input))
+		if (UScriptStruct* Found = TryFind(TEXT("F") + Input); IsValid(Found))
 		{
 			AddCandidate(Found, FString::Printf(TEXT("Resolved '%s' to '%s' (added F prefix)"), *Input, *Found->GetName()));
 		}
@@ -1122,7 +1321,7 @@ namespace ClaireonNameResolver
 		// Step 3: Strip F prefix
 		if (FuzzyCandidates.Num() == 0 && Input.Len() > 1 && Input[0] == TEXT('F') && FChar::IsUpper(Input[1]))
 		{
-			if (UScriptStruct* Found = TryFind(Input.Mid(1)))
+			if (UScriptStruct* Found = TryFind(Input.Mid(1)); IsValid(Found))
 			{
 				AddCandidate(Found, FString::Printf(TEXT("Resolved '%s' to '%s' (stripped F prefix)"), *Input, *Found->GetName()));
 			}
@@ -1143,7 +1342,7 @@ namespace ClaireonNameResolver
 			for (const FString& Module : ResolverModules)
 			{
 				FString ScriptPath = FString::Printf(TEXT("/Script/%s.%s"), *Module, *Input);
-				if (UScriptStruct* Found = TryFind(ScriptPath))
+				if (UScriptStruct* Found = TryFind(ScriptPath); IsValid(Found))
 				{
 					AddCandidate(Found, FString::Printf(TEXT("Resolved '%s' to '%s' (found in /Script/%s)"), *Input, *Found->GetName(), *Module));
 				}
@@ -1221,7 +1420,7 @@ namespace ClaireonNameResolver
 
 		// Step 1: Exact match (also tries stripping E prefix since UE internal
 		// names may omit the C++ enum prefix)
-		if (UEnum* Found = TryFind(Input))
+		if (UEnum* Found = TryFind(Input); IsValid(Found))
 		{
 			OutResult.bSuccess = true;
 			OutResult.ResolvedName = Found->GetName();
@@ -1229,7 +1428,7 @@ namespace ClaireonNameResolver
 		}
 		if (Input.Len() > 1 && FChar::ToUpper(Input[0]) == TEXT('E'))
 		{
-			if (UEnum* Found = TryFind(Input.Mid(1)))
+			if (UEnum* Found = TryFind(Input.Mid(1)); IsValid(Found))
 			{
 				OutResult.bSuccess = true;
 				OutResult.ResolvedName = Found->GetName();
@@ -1253,7 +1452,7 @@ namespace ClaireonNameResolver
 		};
 
 		// Step 2: Add E prefix
-		if (UEnum* Found = TryFind(TEXT("E") + Input))
+		if (UEnum* Found = TryFind(TEXT("E") + Input); IsValid(Found))
 		{
 			AddCandidate(Found, FString::Printf(TEXT("Resolved '%s' to '%s' (added E prefix)"), *Input, *Found->GetName()));
 		}
@@ -1261,7 +1460,7 @@ namespace ClaireonNameResolver
 		// Step 3: Strip E prefix
 		if (FuzzyCandidates.Num() == 0 && Input.Len() > 1 && Input[0] == TEXT('E') && FChar::IsUpper(Input[1]))
 		{
-			if (UEnum* Found = TryFind(Input.Mid(1)))
+			if (UEnum* Found = TryFind(Input.Mid(1)); IsValid(Found))
 			{
 				AddCandidate(Found, FString::Printf(TEXT("Resolved '%s' to '%s' (stripped E prefix)"), *Input, *Found->GetName()));
 			}
@@ -1282,7 +1481,7 @@ namespace ClaireonNameResolver
 			for (const FString& Module : ResolverModules)
 			{
 				FString ScriptPath = FString::Printf(TEXT("/Script/%s.%s"), *Module, *Input);
-				if (UEnum* Found = TryFind(ScriptPath))
+				if (UEnum* Found = TryFind(ScriptPath); IsValid(Found))
 				{
 					AddCandidate(Found, FString::Printf(TEXT("Resolved '%s' to '%s' (found in /Script/%s)"), *Input, *Found->GetName(), *Module));
 				}

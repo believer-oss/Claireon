@@ -97,41 +97,85 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
+namespace ClaireonGetComponentDetailsInternal
+{
+	// Export a property value WITHOUT struct-member elision.
+	//
+	// ExportTextItem_Direct on a struct property emits brace-delta text: UScriptStruct's
+	// exporter omits any member equal to the struct's default. That is why
+	// PrimaryComponentTick rendered as
+	// "(TickGroup=TG_DuringPhysics,bCanEverTick=True,bAllowTickOnDedicatedServer=True)" with
+	// bStartWithTickEnabled absent even though it had been explicitly set to False AND
+	// persisted -- absent read as "unset", which nearly caused correct work to be reverted.
+	//
+	// So we expand members ourselves and let nothing be elided. Recursion covers nested
+	// structs; a struct cannot contain itself by value, so this terminates.
+	//
+	// File-local discriminator per project convention on unity-batch name collisions.
+	static FString Cl625GCD_ExportFullValue(FProperty* Property, const void* Container)
+	{
+		if (FStructProperty* StructProp = CastField<FStructProperty>(Property))
+		{
+			const void* StructPtr = StructProp->ContainerPtrToValuePtr<void>(Container);
+			TArray<FString> Parts;
+			for (TFieldIterator<FProperty> MemberIt(StructProp->Struct); MemberIt; ++MemberIt)
+			{
+				FProperty* Member = *MemberIt;
+				Parts.Add(FString::Printf(TEXT("%s=%s"),
+					*Member->GetName(), *Cl625GCD_ExportFullValue(Member, StructPtr)));
+			}
+			return FString::Printf(TEXT("(%s)"), *FString::Join(Parts, TEXT(",")));
+		}
+
+		FString Out;
+		Property->ExportTextItem_Direct(
+			Out, Property->ContainerPtrToValuePtr<void>(Container), nullptr, nullptr, PPF_None);
+		return Out;
+	}
+}
+
 FString ClaireonBlueprintGraphTool_GetComponentDetails::GetOperation() const { return TEXT("get_component_details"); }
 
 FString ClaireonBlueprintGraphTool_GetComponentDetails::GetDescription() const
 {
-    return TEXT("Inspect a component on the Blueprint's Simple Construction Script and return its properties in the open editing session. Requires open session_id from bp_open (or pass asset_path to auto-open). Read-only. Returns property name, type, and current value tuples for the component template. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+    return TEXT("Inspect an SCS component on a Blueprint and return its properties. Read-only, and opens NO session when given asset_path, so it never blocks bypass-mode tools; pass session_id to read inside a session you hold. Returns every reflected property, not just editable ones, with type, COMPLETE value, default_value, and override flags. Structs expand member-by-member, not as archetype deltas.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_GetComponentDetails::GetInputSchema() const
 {
     FToolSchemaBuilder Builder;
-    Builder.AddString(TEXT("session_id"), TEXT("Session id from a prior open/create (or use asset_path to auto-open)."), false);
-    Builder.AddString(TEXT("asset_path"), TEXT("Blueprint asset path (alternative to session_id)."), false);
+    Builder.AddString(TEXT("session_id"), TEXT("Session id from a prior open/create. Reads inside that session and reports its state."), false);
+    Builder.AddString(TEXT("asset_path"), TEXT("Blueprint asset path (alternative to session_id). Opens NO session -- the response carries read_only=true and an empty session_id."), false);
     Builder.AddString(TEXT("component_name"), TEXT("Name of the component to inspect."), true);
+    // Read at Execute but never declared until now, so the generated Python
+    // signature rejected it and an HTTP caller's value was dropped in silence.
+    Builder.AddBoolean(TEXT("include_defaults"), TEXT("Include each property's default_value and override flags (default: false)."));
     Builder.AddString(TEXT("response_mode"), TEXT("Response verbosity: 'full' | 'changed' | 'status' (default 'changed')."));
     return Builder.Build();
 }
 
 FToolResult ClaireonBlueprintGraphTool_GetComponentDetails::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
+    // Read-only: BeginReadOnlySessionOp resolves the asset without registering a blocking
+    // session. The old BeginSessionOp call made a self-described read-only inspector lock
+    // the Blueprint, which then refused every bypass-mode tool (console_execute) until it
+    // timed out. An explicit session_id still reuses that session -- see the helper.
     TSharedPtr<FJsonObject> Params;
     FString SessionId;
     FBlueprintEditToolData* Data = nullptr;
     FToolResult Error;
-    if (!BeginSessionOp(Arguments, TEXT("get_component_details"), Params, SessionId, Data, Error))
+    if (!BeginReadOnlySessionOp(Arguments, TEXT("get_component_details"), Params, SessionId, Data, Error))
     {
         return Error;
     }
 	UBlueprint* Blueprint = Data->Blueprint.Get();
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
 	}
 
 	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
-	if (!SCS)
+	if (!IsValid(SCS))
 	{
 		return MakeErrorResult(TEXT("Blueprint does not have a SimpleConstructionScript (not an Actor Blueprint?)"));
 	}
@@ -149,13 +193,13 @@ FToolResult ClaireonBlueprintGraphTool_GetComponentDetails::Execute(const TShare
 
 	// Find node
 	USCS_Node* Node = SCS->FindSCSNode(FName(*ComponentName));
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Component not found: %s"), *ComponentName));
 	}
 
 	UActorComponent* ComponentTemplate = Node->ComponentTemplate;
-	if (!ComponentTemplate)
+	if (!IsValid(ComponentTemplate))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Component '%s' has no template object"), *ComponentName));
 	}
@@ -176,7 +220,7 @@ FToolResult ClaireonBlueprintGraphTool_GetComponentDetails::Execute(const TShare
 
 	// parent
 	USCS_Node* ParentNode = SCS->FindParentNode(Node);
-	if (ParentNode)
+	if (IsValid(ParentNode))
 	{
 		Details->SetStringField(TEXT("parent"), ParentNode->GetVariableName().ToString());
 	}
@@ -186,7 +230,7 @@ FToolResult ClaireonBlueprintGraphTool_GetComponentDetails::Execute(const TShare
 	TArray<TSharedPtr<FJsonValue>> ChildrenArray;
 	for (USCS_Node* ChildNode : Node->GetChildNodes())
 	{
-		if (ChildNode)
+		if (IsValid(ChildNode))
 		{
 			ChildrenArray.Add(MakeShared<FJsonValueString>(ChildNode->GetVariableName().ToString()));
 		}
@@ -217,24 +261,17 @@ FToolResult ClaireonBlueprintGraphTool_GetComponentDetails::Execute(const TShare
 	{
 		FProperty* Property = *PropIt;
 
-		// Only include editable properties
-		if (!Property->HasAnyPropertyFlags(CPF_Edit))
-		{
-			continue;
-		}
+		// No editable-only / transient / deprecated filtering. Previously only CPF_Edit
+		// properties were reported, which made "absent" ambiguous between "not overridden"
+		// and "not editable" -- and for nav auditing, absent vs false genuinely matters.
+		// Reach now matches uobject_inspect, which deliberately keeps transient and
+		// deprecated fields. Flags below let a caller filter client-side instead.
 
-		// Skip deprecated and transient properties
-		if (Property->HasAnyPropertyFlags(CPF_Deprecated | CPF_Transient))
-		{
-			continue;
-		}
-
-		// Get values as strings for comparison
-		FString TemplateValue;
-		Property->ExportTextItem_Direct(TemplateValue, Property->ContainerPtrToValuePtr<void>(ComponentTemplate), nullptr, ComponentTemplate, PPF_None);
-
-		FString DefaultValue;
-		Property->ExportTextItem_Direct(DefaultValue, Property->ContainerPtrToValuePtr<void>(CDO), nullptr, CDO, PPF_None);
+		// Full values, member-by-member for structs -- see Cl625GCD_ExportFullValue.
+		const FString TemplateValue =
+			ClaireonGetComponentDetailsInternal::Cl625GCD_ExportFullValue(Property, ComponentTemplate);
+		const FString DefaultValue =
+			ClaireonGetComponentDetailsInternal::Cl625GCD_ExportFullValue(Property, CDO);
 
 		// If not including defaults, skip properties that match CDO
 		if (!bIncludeDefaults && TemplateValue == DefaultValue)
@@ -246,6 +283,14 @@ FToolResult ClaireonBlueprintGraphTool_GetComponentDetails::Execute(const TShare
 		PropObj->SetStringField(TEXT("name"), Property->GetName());
 		PropObj->SetStringField(TEXT("type"), Property->GetCPPType());
 		PropObj->SetStringField(TEXT("value"), TemplateValue);
+		// The value above is COMPLETE, not a delta vs the archetype. default_value is the
+		// class-default for the same property, so a caller can tell overridden from inherited
+		// without inferring it from absence.
+		PropObj->SetStringField(TEXT("default_value"), DefaultValue);
+		PropObj->SetBoolField(TEXT("overridden"), TemplateValue != DefaultValue);
+		PropObj->SetBoolField(TEXT("editable"), Property->HasAnyPropertyFlags(CPF_Edit));
+		PropObj->SetBoolField(TEXT("transient"), Property->HasAnyPropertyFlags(CPF_Transient));
+		PropObj->SetBoolField(TEXT("deprecated"), Property->HasAnyPropertyFlags(CPF_Deprecated));
 		PropertiesArray.Add(MakeShared<FJsonValueObject>(PropObj));
 	}
 	Details->SetArrayField(TEXT("properties"), PropertiesArray);
@@ -270,6 +315,23 @@ FToolResult ClaireonBlueprintGraphTool_GetComponentDetails::Execute(const TShare
 	if (Result.Data.IsValid())
 	{
 		Result.Data->SetObjectField(TEXT("component"), Details);
+	}
+
+	// Success-path guidance, LATCHED per session by code. With include_defaults=false the
+	// response omits every property equal to the class default, which made "absent" ambiguous
+	// against "explicitly false" -- the distinction that matters for nav auditing. Values are
+	// complete now and each property carries default_value/overridden, but the omission itself
+	// still needs saying out loud.
+	if (!bIncludeDefaults && ShouldEmitLatchedHint(TEXT("bp_get_component_details_defaults_omitted")))
+	{
+		TSharedPtr<FJsonObject> WithDefaults = CloneHintArgs(Arguments);
+		WithDefaults->SetBoolField(TEXT("include_defaults"), true);
+		Result.Hint = MakeGuidanceHint(GetName(),
+			TEXT("Properties equal to the class default were omitted (include_defaults=false), so an "
+				 "absent property does not mean unset. Re-issue with include_defaults=true for the "
+				 "complete set. Values that ARE returned are full struct values, not archetype deltas, "
+				 "and each carries default_value plus an overridden flag."),
+			WithDefaults);
 	}
 	return Result;
 }

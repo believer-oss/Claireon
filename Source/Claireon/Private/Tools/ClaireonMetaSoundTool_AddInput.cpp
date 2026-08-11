@@ -22,7 +22,7 @@
 #endif
 
 #if CLAIREON_HAS_METASOUND_BUILDER_API
-namespace
+namespace ClaireonMetaSoundTool_AddInput_Private
 {
 	// File-local discriminator prefix (MSAddInput_) avoids unity-batch name collisions with
 	// the same helper names in other ClaireonMetaSoundTool_*.cpp files.
@@ -63,6 +63,7 @@ namespace
 		return false;
 	}
 }
+using namespace ClaireonMetaSoundTool_AddInput_Private;
 #endif
 
 FString FClaireonMetaSoundTool_AddInput::GetCategory() const { return TEXT("metasound"); }

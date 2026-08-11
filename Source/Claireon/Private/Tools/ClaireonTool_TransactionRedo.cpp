@@ -24,7 +24,7 @@ TSharedPtr<FJsonObject> ClaireonTool_TransactionRedo::GetInputSchema() const
 
 FToolResult ClaireonTool_TransactionRedo::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("GEditor is not available"));
 	}
@@ -42,7 +42,7 @@ FToolResult ClaireonTool_TransactionRedo::Execute(const TSharedPtr<FJsonObject>&
 	{
 		// Before redo, capture the description of what will be redone.
 		FString Description = TEXT("(unknown)");
-		if (UTransBuffer* TransBuffer = Cast<UTransBuffer>(GEditor->Trans))
+		if (UTransBuffer* TransBuffer = Cast<UTransBuffer>(GEditor->Trans); IsValid(TransBuffer))
 		{
 			int32 UndoCount = TransBuffer->GetUndoCount();
 			if (UndoCount > 0)

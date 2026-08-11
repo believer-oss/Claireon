@@ -45,7 +45,7 @@ FToolResult ClaireonPCGGraphTool_GetNodeProperties::Execute(const TSharedPtr<FJs
 
 	int32 NodeIndex;
 	UPCGNode* Node = ClaireonPCGGraphHelpers::FindNodeByIdentifier(Data->PCGGraph.Get(), NodeIdentifier, NodeIndex);
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Node not found: %s"), *NodeIdentifier));
 	}

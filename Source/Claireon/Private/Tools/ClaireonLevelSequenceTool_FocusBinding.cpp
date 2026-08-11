@@ -14,8 +14,9 @@ FString ClaireonLevelSequenceTool_FocusBinding::GetOperation() const { return TE
 
 FString ClaireonLevelSequenceTool_FocusBinding::GetDescription() const
 {
-	return TEXT("Focus a binding within the sequence (by label or guid). Subsequent track/section/keyframe "
-				"operations target this binding.");
+	return TEXT("Focus a binding within the sequence by label or guid, so that subsequent track, section, "
+				"and keyframe operations target it. Required before adding any binding-context track. "
+				"Session-mode tool: open via level_sequence_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_FocusBinding::GetInputSchema() const

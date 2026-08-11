@@ -167,7 +167,7 @@ UWorld* FindPIEWorldWithLocalPlayer()
 {
 	for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
 	{
-		if (WorldContext.WorldType == EWorldType::PIE && WorldContext.World())
+		if (WorldContext.WorldType == EWorldType::PIE && IsValid(WorldContext.World()))
 		{
 			for (FConstPlayerControllerIterator It = WorldContext.World()->GetPlayerControllerIterator(); It; ++It)
 			{
@@ -186,7 +186,7 @@ UWorld* FindPIEServerWorld()
 {
 	for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
 	{
-		if (WorldContext.WorldType == EWorldType::PIE && WorldContext.World())
+		if (WorldContext.WorldType == EWorldType::PIE && IsValid(WorldContext.World()))
 		{
 			const ENetMode NetMode = WorldContext.World()->GetNetMode();
 			if (NetMode == NM_DedicatedServer || NetMode == NM_ListenServer)
@@ -204,20 +204,20 @@ UWorld* FindPIEServerWorld()
  */
 void DisablePawnMovement(APawn* Pawn)
 {
-	if (!Pawn)
+	if (!IsValid(Pawn))
 	{
 		return;
 	}
-	if (UPawnMovementComponent* MoveComp = Pawn->GetMovementComponent())
+	if (UPawnMovementComponent* MoveComp = Pawn->GetMovementComponent(); IsValid(MoveComp))
 	{
 		MoveComp->StopMovementImmediately();
 
-		if (UCharacterMovementComponent* CMC = Cast<UCharacterMovementComponent>(MoveComp))
+		if (UCharacterMovementComponent* CMC = Cast<UCharacterMovementComponent>(MoveComp); IsValid(CMC))
 		{
 			CMC->ClearAccumulatedForces();
 
 			// Flush any buffered server moves so the server doesn't replay stale input
-			if (Pawn->GetWorld() && Pawn->GetWorld()->GetNetMode() != NM_Client)
+			if (IsValid(Pawn->GetWorld()) && Pawn->GetWorld()->GetNetMode() != NM_Client)
 			{
 				CMC->FlushServerMoves();
 			}
@@ -240,17 +240,17 @@ void DisablePawnMovement(APawn* Pawn)
  */
 void EnablePawnMovement(APawn* Pawn)
 {
-	if (!Pawn)
+	if (!IsValid(Pawn))
 	{
 		return;
 	}
-	if (UPawnMovementComponent* MoveComp = Pawn->GetMovementComponent())
+	if (UPawnMovementComponent* MoveComp = Pawn->GetMovementComponent(); IsValid(MoveComp))
 	{
-		if (UCharacterMovementComponent* CMC = Cast<UCharacterMovementComponent>(MoveComp))
+		if (UCharacterMovementComponent* CMC = Cast<UCharacterMovementComponent>(MoveComp); IsValid(CMC))
 		{
 			CMC->ClearAccumulatedForces();
 
-			if (Pawn->GetWorld() && Pawn->GetWorld()->GetNetMode() != NM_Client)
+			if (IsValid(Pawn->GetWorld()) && Pawn->GetWorld()->GetNetMode() != NM_Client)
 			{
 				CMC->FlushServerMoves();
 			}
@@ -273,7 +273,7 @@ void EnablePawnMovement(APawn* Pawn)
  */
 APawn* FindServerPawnForLocalPlayer(UWorld* ServerWorld, APlayerController* ClientPC)
 {
-	if (!ServerWorld || !ClientPC || !ClientPC->PlayerState)
+	if (!IsValid(ServerWorld) || !IsValid(ClientPC) || !ClientPC->PlayerState)
 	{
 		return nullptr;
 	}
@@ -283,7 +283,7 @@ APawn* FindServerPawnForLocalPlayer(UWorld* ServerWorld, APlayerController* Clie
 	for (FConstPlayerControllerIterator It = ServerWorld->GetPlayerControllerIterator(); It; ++It)
 	{
 		APlayerController* ServerPC = It->Get();
-		if (ServerPC && ServerPC->PlayerState && ServerPC->PlayerState->GetPlayerId() == LocalPlayerId)
+		if (IsValid(ServerPC) && ServerPC->PlayerState && ServerPC->PlayerState->GetPlayerId() == LocalPlayerId)
 		{
 			return ServerPC->GetPawn();
 		}
@@ -343,7 +343,7 @@ void FClaireonFlythroughManager::UpdateCameraPosition(float Distance)
 	// Apply position/rotation to both client and server pawns.
 	// The server pawn must be teleported first so it doesn't send corrections.
 	UWorld* PIEWorld = ClaireonFlythroughManagerInternal::FindPIEWorldWithLocalPlayer();
-	if (!PIEWorld)
+	if (!IsValid(PIEWorld))
 	{
 		return;
 	}
@@ -352,30 +352,30 @@ void FClaireonFlythroughManager::UpdateCameraPosition(float Distance)
 	for (FConstPlayerControllerIterator It = PIEWorld->GetPlayerControllerIterator(); It; ++It)
 	{
 		APlayerController* PC = It->Get();
-		if (PC && PC->IsLocalController())
+		if (IsValid(PC) && PC->IsLocalController())
 		{
 			ClientPC = PC;
 			break;
 		}
 	}
 
-	if (!ClientPC)
+	if (!IsValid(ClientPC))
 	{
 		return;
 	}
 
 	// Teleport the server-side pawn first (authoritative position)
 	UWorld* ServerWorld = ClaireonFlythroughManagerInternal::FindPIEServerWorld();
-	if (ServerWorld)
+	if (IsValid(ServerWorld))
 	{
-		if (APawn* ServerPawn = ClaireonFlythroughManagerInternal::FindServerPawnForLocalPlayer(ServerWorld, ClientPC))
+		if (APawn* ServerPawn = ClaireonFlythroughManagerInternal::FindServerPawnForLocalPlayer(ServerWorld, ClientPC); IsValid(ServerPawn))
 		{
 			ServerPawn->SetActorLocation(CurrentPosition);
 		}
 	}
 
 	// Teleport the client-side pawn and set control rotation
-	if (APawn* ClientPawn = ClientPC->GetPawn())
+	if (APawn* ClientPawn = ClientPC->GetPawn(); IsValid(ClientPawn))
 	{
 		ClientPawn->SetActorLocation(CurrentPosition);
 	}
@@ -435,8 +435,12 @@ void FClaireonFlythroughManager::ProcessWaypointEvents(int32 WaypointIndex)
 					? FPaths::ProjectSavedDir() / TEXT("Profiling")
 					: Config.ScreenshotDirectory;
 
-				const FString TraceFilename = TraceDir / FString::Printf(TEXT("flythrough_%s.utrace"),
-					*FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S")));
+				// Absolute: FTraceAuxiliary::Start resolves a relative path differently than
+				// IPlatformFile does, so a relative TraceDir creates the directory in one
+				// place and writes the capture in another. See ClaireonTool_PIETraceStart.cpp.
+				const FString TraceFilename = FPaths::ConvertRelativePathToFull(
+					TraceDir / FString::Printf(TEXT("flythrough_%s.utrace"),
+						*FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"))));
 
 				IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
 				PlatformFile.CreateDirectoryTree(*FPaths::GetPath(TraceFilename));
@@ -467,7 +471,7 @@ void FClaireonFlythroughManager::ProcessWaypointEvents(int32 WaypointIndex)
 		else if (Evt.StartsWith(TEXT("console_command:")))
 		{
 			const FString Cmd = Evt.Mid(16); // len("console_command:") == 16
-			if (UWorld* PIEWorld = ClaireonFlythroughManagerInternal::FindPIEWorldWithLocalPlayer())
+			if (UWorld* PIEWorld = ClaireonFlythroughManagerInternal::FindPIEWorldWithLocalPlayer(); IsValid(PIEWorld))
 			{
 				GEngine->Exec(PIEWorld, *Cmd);
 			}
@@ -494,7 +498,7 @@ void FClaireonFlythroughManager::DisableDebugCamera()
 {
 	// Re-enable the movement components and player input that were disabled in Start().
 	UWorld* PIEWorld = ClaireonFlythroughManagerInternal::FindPIEWorldWithLocalPlayer();
-	if (!PIEWorld)
+	if (!IsValid(PIEWorld))
 	{
 		return;
 	}
@@ -503,14 +507,14 @@ void FClaireonFlythroughManager::DisableDebugCamera()
 	for (FConstPlayerControllerIterator It = PIEWorld->GetPlayerControllerIterator(); It; ++It)
 	{
 		APlayerController* PC = It->Get();
-		if (PC && PC->IsLocalController())
+		if (IsValid(PC) && PC->IsLocalController())
 		{
 			ClientPC = PC;
 			break;
 		}
 	}
 
-	if (!ClientPC)
+	if (!IsValid(ClientPC))
 	{
 		return;
 	}
@@ -521,9 +525,9 @@ void FClaireonFlythroughManager::DisableDebugCamera()
 
 	// Re-enable server pawn movement
 	UWorld* ServerWorld = ClaireonFlythroughManagerInternal::FindPIEServerWorld();
-	if (ServerWorld)
+	if (IsValid(ServerWorld))
 	{
-		if (APawn* ServerPawn = ClaireonFlythroughManagerInternal::FindServerPawnForLocalPlayer(ServerWorld, ClientPC))
+		if (APawn* ServerPawn = ClaireonFlythroughManagerInternal::FindServerPawnForLocalPlayer(ServerWorld, ClientPC); IsValid(ServerPawn))
 		{
 			ClaireonFlythroughManagerInternal::EnablePawnMovement(ServerPawn);
 		}
@@ -543,7 +547,7 @@ bool FClaireonFlythroughManager::Start(TArray<FFlythroughWaypoint> InWaypoints, 
 		return false;
 	}
 
-	if (!GEditor || !GEditor->IsPlaySessionInProgress())
+	if (!IsValid(GEditor) || !GEditor->IsPlaySessionInProgress())
 	{
 		ErrorMessage = TEXT("PIE is not running");
 		State = EFlythroughState::Error;
@@ -654,7 +658,7 @@ bool FClaireonFlythroughManager::Start(TArray<FFlythroughWaypoint> InWaypoints, 
 	// Find the PIE world with a local player controller — Client netmode creates both
 	// a server and client world; only the client world has a local player controller.
 	UWorld* PIEWorld = ClaireonFlythroughManagerInternal::FindPIEWorldWithLocalPlayer();
-	if (!PIEWorld)
+	if (!IsValid(PIEWorld))
 	{
 		ErrorMessage = TEXT("Cannot find PIE world with local player");
 		State = EFlythroughState::Error;
@@ -671,7 +675,7 @@ bool FClaireonFlythroughManager::Start(TArray<FFlythroughWaypoint> InWaypoints, 
 		}
 	}
 
-	if (!PC)
+	if (!IsValid(PC))
 	{
 		ErrorMessage = TEXT("Cannot find local player controller in PIE");
 		State = EFlythroughState::Error;
@@ -679,7 +683,7 @@ bool FClaireonFlythroughManager::Start(TArray<FFlythroughWaypoint> InWaypoints, 
 	}
 
 	UCheatManager* CheatMgr = PC->CheatManager;
-	if (Config.bAutoGodMode && CheatMgr)
+	if (Config.bAutoGodMode && IsValid(CheatMgr))
 	{
 		CheatMgr->God();
 	}
@@ -691,9 +695,9 @@ bool FClaireonFlythroughManager::Start(TArray<FFlythroughWaypoint> InWaypoints, 
 	PC->DisableInput(PC);
 
 	UWorld* ServerWorld = ClaireonFlythroughManagerInternal::FindPIEServerWorld();
-	if (ServerWorld)
+	if (IsValid(ServerWorld))
 	{
-		if (APawn* ServerPawn = ClaireonFlythroughManagerInternal::FindServerPawnForLocalPlayer(ServerWorld, PC))
+		if (APawn* ServerPawn = ClaireonFlythroughManagerInternal::FindServerPawnForLocalPlayer(ServerWorld, PC); IsValid(ServerPawn))
 		{
 			ClaireonFlythroughManagerInternal::DisablePawnMovement(ServerPawn);
 		}
@@ -750,7 +754,7 @@ void FClaireonFlythroughManager::Stop()
 bool FClaireonFlythroughManager::Tick(float DeltaTime)
 {
 	// Safety: if PIE ended, stop
-	if (!GEditor || !GEditor->IsPlaySessionInProgress())
+	if (!IsValid(GEditor) || !GEditor->IsPlaySessionInProgress())
 	{
 		State = EFlythroughState::Complete;
 		if (TickerHandle.IsValid())
@@ -886,8 +890,10 @@ bool FClaireonFlythroughManager::Tick(float DeltaTime)
 							const FString TraceDir = Config.ScreenshotDirectory.IsEmpty()
 								? FPaths::ProjectSavedDir() / TEXT("Profiling")
 								: Config.ScreenshotDirectory;
-							const FString TraceFilename = TraceDir / FString::Printf(TEXT("flythrough_%s.utrace"),
-								*FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S")));
+							// Absolute, for the same reason as the sibling start_trace path above.
+							const FString TraceFilename = FPaths::ConvertRelativePathToFull(
+								TraceDir / FString::Printf(TEXT("flythrough_%s.utrace"),
+									*FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"))));
 							IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
 							PF.CreateDirectoryTree(*FPaths::GetPath(TraceFilename));
 							bTraceRecording = FTraceAuxiliary::Start(
@@ -909,7 +915,7 @@ bool FClaireonFlythroughManager::Tick(float DeltaTime)
 					}
 					else if (Evt.StartsWith(TEXT("console_command:")))
 					{
-						if (UWorld* CmdWorld = ClaireonFlythroughManagerInternal::FindPIEWorldWithLocalPlayer())
+						if (UWorld* CmdWorld = ClaireonFlythroughManagerInternal::FindPIEWorldWithLocalPlayer(); IsValid(CmdWorld))
 						{
 							GEngine->Exec(CmdWorld, *Evt.Mid(16));
 						}

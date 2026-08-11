@@ -80,7 +80,7 @@ bool FClaireonSpecApplicator_PCGGraph::OpenOrCreateAsset(const FString& AssetPat
 	const FString ResolvedPath = ResolveResult.ResolvedPath.Path;
 
 	UPCGGraph* Graph = ClaireonPCGGraphHelpers::LoadPCGGraphAsset(ResolvedPath, OutError);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return false;
 	}
@@ -110,7 +110,7 @@ bool FClaireonSpecApplicator_PCGGraph::OpenOrCreateAsset(const FString& AssetPat
 bool FClaireonSpecApplicator_PCGGraph::ApplyPass1_CreateEntities(const FString& SessionId, const TSharedPtr<FJsonObject>& Spec)
 {
 	UPCGGraph* Graph = PCGGraph.Get();
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		AddError(TEXT("PCG Graph is no longer valid"));
 		return false;
@@ -135,7 +135,7 @@ bool FClaireonSpecApplicator_PCGGraph::ApplyPass1_CreateEntities(const FString& 
 
 		FString Error;
 		UClass* SettingsClass = ClaireonPCGGraphHelpers::ResolveSettingsClass(NodeType, Error);
-		if (!SettingsClass)
+		if (!IsValid(SettingsClass))
 		{
 			RecordEntryFailure(SpecId, Error);
 			continue;
@@ -143,7 +143,7 @@ bool FClaireonSpecApplicator_PCGGraph::ApplyPass1_CreateEntities(const FString& 
 
 		UPCGSettings* DefaultSettings = nullptr;
 		UPCGNode* NewNode = Graph->AddNodeOfType(TSubclassOf<UPCGSettings>(SettingsClass), DefaultSettings);
-		if (!NewNode)
+		if (!IsValid(NewNode))
 		{
 			RecordEntryFailure(SpecId, FString::Printf(TEXT("Failed to add PCG node of type: %s"), *NodeType));
 			continue;
@@ -185,7 +185,7 @@ bool FClaireonSpecApplicator_PCGGraph::ApplyPass1_CreateEntities(const FString& 
 bool FClaireonSpecApplicator_PCGGraph::ApplyPass2_WireRelationships(const FString& SessionId, const TSharedPtr<FJsonObject>& Spec)
 {
 	UPCGGraph* Graph = PCGGraph.Get();
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		AddError(TEXT("PCG Graph is no longer valid"));
 		return false;
@@ -231,12 +231,12 @@ bool FClaireonSpecApplicator_PCGGraph::ApplyPass2_WireRelationships(const FStrin
 		UPCGNode* SourceNode = ClaireonPCGGraphHelpers::FindNodeByIdentifier(Graph, SourceIndexStr, DummyIndex);
 		UPCGNode* TargetNode = ClaireonPCGGraphHelpers::FindNodeByIdentifier(Graph, TargetIndexStr, DummyIndex);
 
-		if (!SourceNode)
+		if (!IsValid(SourceNode))
 		{
 			AddWarning(FString::Printf(TEXT("connections[%d]: source node index %d not found"), i, SourceIndex));
 			continue;
 		}
-		if (!TargetNode)
+		if (!IsValid(TargetNode))
 		{
 			AddWarning(FString::Printf(TEXT("connections[%d]: target node index %d not found"), i, TargetIndex));
 			continue;
@@ -244,14 +244,14 @@ bool FClaireonSpecApplicator_PCGGraph::ApplyPass2_WireRelationships(const FStrin
 
 		// Verify pins
 		UPCGPin* SourcePin = SourceNode->GetOutputPin(FName(*SourcePinLabel));
-		if (!SourcePin)
+		if (!IsValid(SourcePin))
 		{
 			AddWarning(FString::Printf(TEXT("connections[%d]: output pin '%s' not found on source node"), i, *SourcePinLabel));
 			continue;
 		}
 
 		UPCGPin* TargetPin = TargetNode->GetInputPin(FName(*TargetPinLabel));
-		if (!TargetPin)
+		if (!IsValid(TargetPin))
 		{
 			AddWarning(FString::Printf(TEXT("connections[%d]: input pin '%s' not found on target node"), i, *TargetPinLabel));
 			continue;
@@ -274,14 +274,14 @@ bool FClaireonSpecApplicator_PCGGraph::CompileAsset(const FString& SessionId, FS
 bool FClaireonSpecApplicator_PCGGraph::SaveAsset(const FString& SessionId, FString& OutError)
 {
 	UPCGGraph* Graph = PCGGraph.Get();
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		OutError = TEXT("PCG Graph is no longer valid");
 		return false;
 	}
 
 	UPackage* Package = Graph->GetOutermost();
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		OutError = TEXT("Could not find package for PCG Graph");
 		return false;

@@ -36,7 +36,7 @@ FToolResult ClaireonLandscapeTool_Save::Execute(const TSharedPtr<FJsonObject>& A
 
 	ALandscapeProxy* Proxy = Data->LandscapeProxy.Get();
 	UPackage* Package = Proxy->GetOutermost();
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		return MakeErrorResult(TEXT("Failed to get landscape package"));
 	}

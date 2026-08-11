@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -137,7 +137,7 @@ FToolResult ClaireonBlueprintGraphTool_DisconnectPin::DisconnectPin_Impl(
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
 
-	if (!Blueprint || !Graph)
+	if (!IsValid(Blueprint) || !IsValid(Graph))
 	{
 		return MakeErrorResult(TEXT("Blueprint or Graph is no longer valid"));
 	}
@@ -179,7 +179,7 @@ FToolResult ClaireonBlueprintGraphTool_DisconnectPin::DisconnectPin_Impl(
 	Data->LastOperationAffectedNodes.Add(Node->NodeGuid);
 	for (UEdGraphPin* LinkedDisconPin : Pin->LinkedTo)
 	{
-		if (LinkedDisconPin && LinkedDisconPin->GetOwningNode())
+		if (LinkedDisconPin && IsValid(LinkedDisconPin->GetOwningNode()))
 		{
 			Data->LastOperationAffectedNodes.Add(LinkedDisconPin->GetOwningNode()->NodeGuid);
 		}

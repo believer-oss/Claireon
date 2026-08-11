@@ -36,7 +36,7 @@ FToolResult ClaireonInputTool_AddActionTrigger::Execute(const TSharedPtr<FJsonOb
 	}
 
 	UInputAction* IA = RequireInputAction(Data, Error);
-	if (!IA)
+	if (!IsValid(IA))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -48,7 +48,7 @@ FToolResult ClaireonInputTool_AddActionTrigger::Execute(const TSharedPtr<FJsonOb
 	}
 
 	UClass* TriggerClass = ClaireonEnhancedInputHelpers::ResolveTriggerClass(TriggerClassName, Error);
-	if (!TriggerClass)
+	if (!IsValid(TriggerClass))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -57,7 +57,7 @@ FToolResult ClaireonInputTool_AddActionTrigger::Execute(const TSharedPtr<FJsonOb
 	IA->Modify();
 
 	UInputTrigger* NewTrigger = ClaireonEnhancedInputHelpers::CreateTrigger(IA, TriggerClass);
-	if (!NewTrigger)
+	if (!IsValid(NewTrigger))
 	{
 		return MakeErrorResult(TEXT("Failed to create trigger instance"));
 	}

@@ -16,9 +16,10 @@ FString ClaireonTool_AnimGraphGetStateMachine::GetOperation() const { return TEX
 
 FString ClaireonTool_AnimGraphGetStateMachine::GetDescription() const
 {
-	return TEXT("Inspect a state machine's topology within an Animation Blueprint. Returns the entry state, "
-		"all states (with bound graph info), all transitions (with blend mode, duration, priority), "
-		"and conduits. Use animbp_inspect to discover state machine names.");
+	return TEXT("Inspect a state machine's topology inside an Animation Blueprint, addressed by asset_path plus "
+		"state_machine_name. Stateless / read-only / non-session: reads the asset directly and needs no open "
+		"session. Returns the entry state, all states with bound-graph info, all transitions (blend mode, "
+		"duration, priority), and conduits. Call animbp_inspect to discover state machine names.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AnimGraphGetStateMachine::GetInputSchema() const
@@ -49,20 +50,20 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphGetStateMachine::Execute(const 
 
 	FString Error;
 	UAnimBlueprint* AnimBP = ClaireonAnimGraphHelpers::LoadAnimBlueprint(AssetPath, Error);
-	if (!AnimBP)
+	if (!IsValid(AnimBP))
 	{
 		return MakeErrorResult(Error);
 	}
 
 	// Find the state machine graph
 	UEdGraph* Graph = ClaireonAnimGraphHelpers::FindAnimGraphByName(AnimBP, SMName, Error);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(Error);
 	}
 
 	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(Graph);
-	if (!SMGraph)
+	if (!IsValid(SMGraph))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Graph '%s' is not a State Machine graph (actual type: %s). "
 			"Use animbp_inspect to find state machine graphs."), *SMName, *Graph->GetClass()->GetName()));
@@ -77,7 +78,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphGetStateMachine::Execute(const 
 		TArray<TSharedPtr<FJsonValue>> DetailedTransitions;
 		for (UEdGraphNode* Node : SMGraph->Nodes)
 		{
-			if (UAnimStateTransitionNode* TransNode = Cast<UAnimStateTransitionNode>(Node))
+			if (UAnimStateTransitionNode* TransNode = Cast<UAnimStateTransitionNode>(Node); IsValid(TransNode))
 			{
 				DetailedTransitions.Add(MakeShared<FJsonValueObject>(
 					ClaireonAnimGraphHelpers::SerializeTransition(TransNode)));

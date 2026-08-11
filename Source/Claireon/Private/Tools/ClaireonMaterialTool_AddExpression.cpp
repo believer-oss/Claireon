@@ -49,7 +49,7 @@ FToolResult ClaireonMaterialTool_AddExpression::Execute(const TSharedPtr<FJsonOb
 
 	FString ResolveErr;
 	UClass* ExprClass = ClaireonMaterialHelpers::ResolveExpressionClass(ClassStr, ResolveErr);
-	if (!ExprClass)
+	if (!IsValid(ExprClass))
 	{
 		return MakeErrorResult(ResolveErr);
 	}
@@ -64,7 +64,7 @@ FToolResult ClaireonMaterialTool_AddExpression::Execute(const TSharedPtr<FJsonOb
 
 	UMaterialExpression* Expr = UMaterialEditingLibrary::CreateMaterialExpression(
 		Material, ExprClass, static_cast<int32>(X), static_cast<int32>(Y));
-	if (!Expr)
+	if (!IsValid(Expr))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("CreateMaterialExpression returned null for class '%s'"), *ClassStr));
 	}
@@ -72,7 +72,7 @@ FToolResult ClaireonMaterialTool_AddExpression::Execute(const TSharedPtr<FJsonOb
 	FString ExpressionName;
 	if (Arguments->TryGetStringField(TEXT("expression_name"), ExpressionName) && !ExpressionName.IsEmpty())
 	{
-		if (UMaterialExpressionParameter* AsParam = Cast<UMaterialExpressionParameter>(Expr))
+		if (UMaterialExpressionParameter* AsParam = Cast<UMaterialExpressionParameter>(Expr); IsValid(AsParam))
 		{
 			AsParam->Modify();
 			AsParam->ParameterName = FName(*ExpressionName);

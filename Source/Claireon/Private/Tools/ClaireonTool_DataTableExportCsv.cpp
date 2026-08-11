@@ -49,7 +49,7 @@ IClaireonTool::FToolResult ClaireonTool_DataTableExportCsv::Execute(const TShare
 
 	FString Error;
 	UDataTable* Table = ClaireonDataTableHelpers::LoadDataTableAsset(AssetPath, Error);
-	if (!Table)
+	if (!IsValid(Table))
 	{
 		return MakeErrorResult(Error);
 	}

@@ -17,9 +17,10 @@ FString ClaireonBlueprintTranslateTool_MarkComplete::GetOperation() const { retu
 
 FString ClaireonBlueprintTranslateTool_MarkComplete::GetDescription() const
 {
-	return TEXT("Declare a translation session 'complete' once every //[BP] tagged node is either implemented "
-	            "or skipped. Walks every blueprint's node map, checks for residual TODO markers, and updates "
-	            "the session status. Returns per-blueprint and overall completion counts plus a verdict "
+	return TEXT("Mark a bp_translate session 'complete' once every //[BP] tagged node is implemented or "
+	            "skipped. Walks each blueprint's node map, flags residual TODO markers, and updates the "
+	            "session status. Requires session_id from bp_translate_scaffold. Returns implemented/"
+	            "skipped/remaining counts, pending-node and inconsistency lists, and a verdict "
 	            "('complete' or 'incomplete'). Does not mutate source files.");
 }
 
@@ -29,12 +30,18 @@ TSharedPtr<FJsonObject> ClaireonBlueprintTranslateTool_MarkComplete::GetInputSch
 	Schema->SetStringField(TEXT("type"), TEXT("object"));
 
 	TSharedPtr<FJsonObject> Properties = MakeShared<FJsonObject>();
-	for (const TCHAR* Field : { TEXT("session_id"), TEXT("session_file") })
+	// Explicit per-field declarations, not a name loop: the loop form could
+	// carry no description, so every one of these parameters was undescribed
+	// -- invisible in help and in the MCP schema.
+	auto AddStringParam = [&Properties](const TCHAR* Name, const TCHAR* Description)
 	{
 		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
 		P->SetStringField(TEXT("type"), TEXT("string"));
-		Properties->SetObjectField(Field, P);
-	}
+		P->SetStringField(TEXT("description"), Description);
+		Properties->SetObjectField(Name, P);
+	};
+	AddStringParam(TEXT("session_id"), TEXT("Session ID returned by the scaffold tool."));
+	AddStringParam(TEXT("session_file"), TEXT("Direct path to the session JSON file. Alternative to session_id."));
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	TArray<TSharedPtr<FJsonValue>> Required;

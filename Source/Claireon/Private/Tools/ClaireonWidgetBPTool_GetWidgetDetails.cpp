@@ -46,14 +46,14 @@ FToolResult ClaireonWidgetBPTool_GetWidgetDetails::Execute(const TSharedPtr<FJso
 	}
 
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
-	if (!WBP || !WBP->WidgetTree)
+	if (!IsValid(WBP) || !WBP->WidgetTree)
 	{
 		return MakeErrorResult(TEXT("Widget Blueprint or WidgetTree is no longer valid"));
 	}
 	UWidgetTree* Tree = WBP->WidgetTree;
 
 	UWidget* Widget = ClaireonWidgetHelpers::FindWidgetByName(Tree, FName(*WidgetName));
-	if (!Widget)
+	if (!IsValid(Widget))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Widget '%s' not found"), *WidgetName));
 	}
@@ -63,7 +63,7 @@ FToolResult ClaireonWidgetBPTool_GetWidgetDetails::Execute(const TSharedPtr<FJso
 	Details->SetStringField(TEXT("class"), Widget->GetClass()->GetPathName());
 
 	// Parent info
-	if (UWidget* Parent = Widget->GetParent())
+	if (UWidget* Parent = Widget->GetParent(); IsValid(Parent))
 	{
 		Details->SetStringField(TEXT("parent_name"), Parent->GetName());
 	}
@@ -76,14 +76,14 @@ FToolResult ClaireonWidgetBPTool_GetWidgetDetails::Execute(const TSharedPtr<FJso
 	UPanelWidget* AsPanel = Cast<UPanelWidget>(Widget);
 	Details->SetBoolField(TEXT("is_panel"), AsPanel != nullptr);
 
-	if (AsPanel)
+	if (IsValid(AsPanel))
 	{
 		Details->SetNumberField(TEXT("child_count"), AsPanel->GetChildrenCount());
 
 		TArray<TSharedPtr<FJsonValue>> ChildNames;
 		for (int32 i = 0; i < AsPanel->GetChildrenCount(); ++i)
 		{
-			if (UWidget* Child = AsPanel->GetChildAt(i))
+			if (UWidget* Child = AsPanel->GetChildAt(i); IsValid(Child))
 			{
 				ChildNames.Add(MakeShared<FJsonValueString>(Child->GetName()));
 			}
@@ -92,7 +92,7 @@ FToolResult ClaireonWidgetBPTool_GetWidgetDetails::Execute(const TSharedPtr<FJso
 	}
 
 	// Slot info
-	if (UPanelSlot* Slot = Widget->Slot)
+	if (UPanelSlot* Slot = Widget->Slot; IsValid(Slot))
 	{
 		Details->SetStringField(TEXT("slot_type"), Slot->GetClass()->GetName());
 

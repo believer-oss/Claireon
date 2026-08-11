@@ -33,18 +33,18 @@ namespace ClaireonSkeletonHelpers
 
 		FSoftObjectPath SoftPath(ResolveResult.ResolvedPath.Path);
 		UObject* LoadedObj = SoftPath.TryLoad();
-		if (!LoadedObj)
+		if (!IsValid(LoadedObj))
 		{
 			LoadedObj = LoadObject<USkeleton>(nullptr, *ResolveResult.ResolvedPath.Path);
 		}
-		if (!LoadedObj)
+		if (!IsValid(LoadedObj))
 		{
 			OutError = FString::Printf(TEXT("Failed to load asset at '%s'"), *ResolveResult.ResolvedPath.Path);
 			return nullptr;
 		}
 
 		USkeleton* Skeleton = Cast<USkeleton>(LoadedObj);
-		if (!Skeleton)
+		if (!IsValid(Skeleton))
 		{
 			OutError = FString::Printf(TEXT("Asset '%s' is not a USkeleton (got %s)"),
 				*ResolveResult.ResolvedPath.Path, *LoadedObj->GetClass()->GetName());
@@ -283,7 +283,7 @@ namespace ClaireonSkeletonHelpers
 			{
 				for (UAssetUserData* UD : *UserDataArray)
 				{
-					if (!UD) continue;
+					if (!IsValid(UD)) continue;
 					TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
 					Entry->SetStringField(TEXT("class"), UD->GetClass()->GetPathName());
 					Entry->SetStringField(TEXT("class_name"), UD->GetClass()->GetName());
@@ -331,11 +331,11 @@ namespace ClaireonSkeletonHelpers
 
 	USkeletalMeshSocket* FindSocket(USkeleton* Skeleton, FName SocketName)
 	{
-		return Skeleton ? Skeleton->FindSocket(SocketName) : nullptr;
+		return IsValid(Skeleton) ? Skeleton->FindSocket(SocketName) : nullptr;
 	}
 
 	UBlendProfile* FindBlendProfile(USkeleton* Skeleton, FName ProfileName)
 	{
-		return Skeleton ? Skeleton->GetBlendProfile(ProfileName) : nullptr;
+		return IsValid(Skeleton) ? Skeleton->GetBlendProfile(ProfileName) : nullptr;
 	}
 }

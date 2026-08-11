@@ -22,7 +22,10 @@ FString FClaireonCameraAssetTool_SetNodeProperty::GetOperation() const { return 
 
 FString FClaireonCameraAssetTool_SetNodeProperty::GetDescription() const
 {
-	return TEXT("Write a UPROPERTY on a UCameraNode by dotted property path; wraps the change in a transaction and runs the PostEditChange cascade.");
+	return TEXT("Set a UPROPERTY on a UCameraNode by dotted property_path, parsing value as exported text and running "
+		"the node/rig/asset PostEditChange cascade. Addressed by asset_path, rig_index and node_id. "
+		"Non-session: the asset is addressed by asset_path and the write is transactional; there is no "
+		"camera_asset_open -- persist with camera_asset_save.");
 }
 
 TSharedPtr<FJsonObject> FClaireonCameraAssetTool_SetNodeProperty::GetInputSchema() const
@@ -81,7 +84,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_SetNodeProperty::Execute(con
 	}
 
 	UCameraAsset* Asset = LoadObject<UCameraAsset>(nullptr, *Canon);
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Camera asset not found: %s"), *Canon));
 	}
@@ -94,14 +97,14 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_SetNodeProperty::Execute(con
 			RigIndex, Rigs.Num()));
 	}
 	UCameraRigAsset* Rig = Rigs[RigIndex];
-	if (!Rig)
+	if (!IsValid(Rig))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Rig at index %d is null"), RigIndex));
 	}
 
 	FString ResolveError;
 	UCameraNode* Node = ClaireonCameraAssetHelpers::ResolveNode(Rig, NodeId, ResolveError);
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Failed to resolve node_id '%s': %s"), *NodeId, *ResolveError));

@@ -16,8 +16,10 @@ FString ClaireonTool_MaterialApply::GetOperation() const { return TEXT("apply");
 
 FString ClaireonTool_MaterialApply::GetDescription() const
 {
-	return TEXT("DEPRECATED: dispatches on target.kind. Use the per-kind tools instead: "
-	            "material_apply_to_actor, material_apply_to_blueprint. Stateless / non-session.");
+	return TEXT("Apply a UMaterialInterface to a mesh element on an actor or a Blueprint component, "
+	            "dispatching on target.kind. DEPRECATED: use the per-kind tools instead -- "
+	            "material_apply_to_actor, material_apply_to_blueprint. Stateless / non-session: forwards the "
+	            "arguments to the per-kind tool, which writes the target directly; no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_MaterialApply::GetInputSchema() const

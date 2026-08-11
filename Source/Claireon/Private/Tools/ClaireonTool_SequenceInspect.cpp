@@ -110,13 +110,13 @@ IClaireonTool::FToolResult ClaireonTool_SequenceInspect::Execute(const TSharedPt
 
 	FString Error;
 	ULevelSequence* Sequence = FClaireonSequenceHelpers::LoadLevelSequenceAsset(AssetPath, Error);
-	if (!Sequence)
+	if (!IsValid(Sequence))
 	{
 		return MakeErrorResult(Error);
 	}
 
 	UMovieScene* MovieScene = Sequence->GetMovieScene();
-	if (!MovieScene)
+	if (!IsValid(MovieScene))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Level Sequence %s has no MovieScene"), *AssetPath));
@@ -179,7 +179,7 @@ IClaireonTool::FToolResult ClaireonTool_SequenceInspect::Execute(const TSharedPt
 		if (FMovieScenePossessable* Poss = MovieScene->FindPossessable(Binding.GetObjectGuid()))
 		{
 			Kind = TEXT("Possessable");
-			if (const UClass* Cls = Poss->GetPossessedObjectClass())
+			if (const UClass* Cls = Poss->GetPossessedObjectClass(); IsValid(Cls))
 			{
 				ClassName = Cls->GetName();
 			}
@@ -187,7 +187,7 @@ IClaireonTool::FToolResult ClaireonTool_SequenceInspect::Execute(const TSharedPt
 		else if (FMovieSceneSpawnable* Spawn = MovieScene->FindSpawnable(Binding.GetObjectGuid()))
 		{
 			Kind = TEXT("Spawnable");
-			if (UObject* Template = Spawn->GetObjectTemplate())
+			if (UObject* Template = Spawn->GetObjectTemplate(); IsValid(Template))
 			{
 				ClassName = Template->GetClass()->GetName();
 			}
@@ -201,7 +201,7 @@ IClaireonTool::FToolResult ClaireonTool_SequenceInspect::Execute(const TSharedPt
 		TArray<TSharedPtr<FJsonValue>> TracksArr;
 		for (const UMovieSceneTrack* Track : Binding.GetTracks())
 		{
-			if (!Track)
+			if (!IsValid(Track))
 			{
 				continue;
 			}

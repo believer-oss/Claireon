@@ -6,10 +6,12 @@
 // Corpus harness for tool_search.
 //
 // Reads Private/Tests/Fixtures/tool_search_corpus.json (committed, in-plugin)
-// at run time.  When the file is absent the harness emits an informational
-// skip -- it does NOT fail -- so the build and all other tests are unaffected.
+// at run time.  The fixture is tracked in git, so its absence is a broken
+// checkout and the harness FAILS on it.  It used to log an informational skip
+// and co_return, which Untest scores as a PASS -- the whole harness could go
+// missing without a single red result.
 //
-// Three responsibilities (all gated behind "corpus present"):
+// Four responsibilities:
 //
 //   (a) REDACTION GUARD -- fail any row whose query text resembles a path,
 //       GUID, URL, or e-mail.  Guards against leaked identifiers in the
@@ -21,6 +23,10 @@
 //   (c) BASELINE CAPTURE -- drive ClaireonTool_SearchTools::Execute once per
 //       row via the ranked seam; compute top-1/5/10 hit rates per split and
 //       overall; write corpus/baseline.json.
+//
+//   (d) RELEVANCE FLOOR -- assert those hit rates against committed floors.
+//       This is the gate; without it (c) only proved that a file got written.
+//       Calibration lives at the assertion, at the bottom of the body.
 //
 // v2/Linux hygiene notes:
 //   - file-local discriminator on namespace to avoid anon-NS unity collision
@@ -479,7 +485,7 @@ namespace ClaireonToolSearchCorpusTestsNS
 // the pattern-detection helper itself to keep logic verified independently.
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, ToolSearchCorpus, RedactionGuardDetectsWindowsPath)
+UNTEST_UNIT_OPTS(Claireon, ToolSearchCorpus, RedactionGuardDetectsWindowsPath, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonToolSearchCorpusTestsNS;
 	UNTEST_EXPECT_TRUE(QueryLooksLikeSensitiveIdentifier(TEXT("C:\\Users\\foo\\bar.txt")));
@@ -489,7 +495,7 @@ UNTEST_UNIT(Claireon, ToolSearchCorpus, RedactionGuardDetectsWindowsPath)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, ToolSearchCorpus, RedactionGuardDetectsUNCPath)
+UNTEST_UNIT_OPTS(Claireon, ToolSearchCorpus, RedactionGuardDetectsUNCPath, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonToolSearchCorpusTestsNS;
 	UNTEST_EXPECT_TRUE(QueryLooksLikeSensitiveIdentifier(TEXT("\\\\server\\share")));
@@ -497,7 +503,7 @@ UNTEST_UNIT(Claireon, ToolSearchCorpus, RedactionGuardDetectsUNCPath)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, ToolSearchCorpus, RedactionGuardDetectsGUID)
+UNTEST_UNIT_OPTS(Claireon, ToolSearchCorpus, RedactionGuardDetectsGUID, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonToolSearchCorpusTestsNS;
 	UNTEST_EXPECT_TRUE(QueryLooksLikeSensitiveIdentifier(
@@ -508,7 +514,7 @@ UNTEST_UNIT(Claireon, ToolSearchCorpus, RedactionGuardDetectsGUID)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, ToolSearchCorpus, RedactionGuardDetectsURL)
+UNTEST_UNIT_OPTS(Claireon, ToolSearchCorpus, RedactionGuardDetectsURL, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonToolSearchCorpusTestsNS;
 	UNTEST_EXPECT_TRUE(QueryLooksLikeSensitiveIdentifier(TEXT("https://internal.example.com/path")));
@@ -517,7 +523,7 @@ UNTEST_UNIT(Claireon, ToolSearchCorpus, RedactionGuardDetectsURL)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, ToolSearchCorpus, RedactionGuardDetectsEmail)
+UNTEST_UNIT_OPTS(Claireon, ToolSearchCorpus, RedactionGuardDetectsEmail, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonToolSearchCorpusTestsNS;
 	UNTEST_EXPECT_TRUE(QueryLooksLikeSensitiveIdentifier(TEXT("dev@example.com")));
@@ -526,8 +532,8 @@ UNTEST_UNIT(Claireon, ToolSearchCorpus, RedactionGuardDetectsEmail)
 }
 
 // ===========================================================================
-// Main corpus harness -- all three responsibilities.
-// Skips gracefully when corpus/tool_search_corpus.json is absent.
+// Main corpus harness -- all four responsibilities.
+// FAILS (does not skip) when the committed corpus fixture cannot be loaded.
 // ===========================================================================
 
 UNTEST_UNIT_OPTS(Claireon, ToolSearchCorpus, CorpusHarness, UNTEST_TIMEOUTMS(120000))
@@ -535,26 +541,30 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchCorpus, CorpusHarness, UNTEST_TIMEOUTMS(120
 	using namespace ClaireonToolSearchCorpusTestsNS;
 
 	// ------------------------------------------------------------------
-	// Load corpus -- skip if absent.
+	// Load corpus. The corpus is a COMMITTED in-plugin fixture
+	// (Private/Tests/Fixtures/tool_search_corpus.json), so its absence is a
+	// broken checkout or a moved file, not an expected CI condition -- fail
+	// instead of skipping. Untest has no skip primitive: an early co_return is
+	// scored as a PASS, which is exactly how a whole harness can go missing
+	// unnoticed. The old comment here claimed the file "may not be present at
+	// build/run time"; it is tracked in git and always present.
 	// ------------------------------------------------------------------
 	const TSharedPtr<FJsonObject> CorpusRoot = LoadCorpus();
 	if (!CorpusRoot.IsValid())
 	{
-		// Corpus not present at build/run time -- this is expected during
-		// compilation CI.  Report informational skip, not a failure.
-		UE_LOG(LogTemp, Display,
-			TEXT("[ToolSearchCorpus] corpus not present at '%s' -- skipping harness"),
+		UE_LOG(LogTemp, Error,
+			TEXT("[ToolSearchCorpus] committed corpus fixture missing or malformed at '%s'"),
 			*GetCorpusPath());
-		co_return;
 	}
+	UNTEST_ASSERT_TRUE(CorpusRoot.IsValid());
 
 	const TArray<FCorpusRow> Rows = ParseRows(CorpusRoot);
 	if (Rows.IsEmpty())
 	{
-		UE_LOG(LogTemp, Warning,
+		UE_LOG(LogTemp, Error,
 			TEXT("[ToolSearchCorpus] corpus loaded but contains zero rows"));
-		co_return;
 	}
+	UNTEST_ASSERT_FALSE(Rows.IsEmpty());
 
 	// ------------------------------------------------------------------
 	// Ensure server registry is available (works in commandlet mode).
@@ -730,6 +740,37 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchCorpus, CorpusHarness, UNTEST_TIMEOUTMS(120
 			*GetBaselinePath());
 	}
 	UNTEST_EXPECT_TRUE(bWroteBaseline);
+
+	// ------------------------------------------------------------------
+	// (d) RELEVANCE FLOOR -- the actual gate.
+	//
+	// Until now "wrote baseline.json" was the ONLY assertion in this test, so
+	// relevance could collapse to 0% and the harness would still report PASS.
+	// The floors below are what makes the measurement a regression test.
+	//
+	// Calibration (2026-08-01, run 20260801_093801, 120 corpus rows, hybrid
+	// ranking through ClaireonTool_SearchTools::Execute):
+	//     measured  top-1=72.5%  top-5=92.5%  top-10=96.7%
+	//     floor     top-1=60%    top-5=82%    top-10=88%
+	// Headroom is ~10-13 points, i.e. 12-16 rows of the 120 may regress before
+	// the gate trips. That absorbs ordinary corpus churn and tool renames while
+	// still catching a real relevance collapse (a broken tokenizer, an empty
+	// index, a lost hybrid fusion step all land far below these).
+	// When re-baselining, update BOTH the measured line and the floor, and say
+	// which run the number came from.
+	// ------------------------------------------------------------------
+	// Row-count floor first: percentages over a truncated corpus are
+	// meaningless, so a gutted fixture must fail here rather than sail through
+	// on 3 lucky rows.
+	UNTEST_ASSERT_GE(Overall.Total, 60);
+
+	const double Top1Pct  = 100.0 * Overall.Hit1  / Overall.Total;
+	const double Top5Pct  = 100.0 * Overall.Hit5  / Overall.Total;
+	const double Top10Pct = 100.0 * Overall.Hit10 / Overall.Total;
+
+	UNTEST_EXPECT_GE(Top1Pct, 60.0);
+	UNTEST_EXPECT_GE(Top5Pct, 82.0);
+	UNTEST_EXPECT_GE(Top10Pct, 88.0);
 
 	co_return;
 }

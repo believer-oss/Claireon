@@ -13,10 +13,11 @@ FString ClaireonTool_PCGGraphInspect::GetOperation() const { return TEXT("inspec
 
 FString ClaireonTool_PCGGraphInspect::GetDescription() const
 {
-	return TEXT("Read the structure of a PCG (Procedural Content Generation) graph asset as structured text. "
-				"Displays nodes, pins, connections, and settings properties. "
-				"Use detail_level='summary' for a compact overview, 'full' for complete property details, or 'outline' for node names only. "
-				"Optionally inspect a single node by providing node_id (index, name, or 'input'/'output').");
+	return TEXT("Read the structure of a PCG (Procedural Content Generation) graph asset as structured text: "
+				"nodes, pins, connections, and settings properties. detail_level selects 'summary', 'full' "
+				"(complete property details), or 'outline' (node names only). Optional node_id (index, name, "
+				"or 'input'/'output') inspects a single node. Stateless / read-only / non-session: never "
+				"mutates and requires no open session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PCGGraphInspect::GetInputSchema() const
@@ -82,7 +83,7 @@ IClaireonTool::FToolResult ClaireonTool_PCGGraphInspect::Execute(const TSharedPt
 	// Load asset
 	FString Error;
 	UPCGGraph* Graph = ClaireonPCGGraphHelpers::LoadPCGGraphAsset(AssetPath, Error);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -92,7 +93,7 @@ IClaireonTool::FToolResult ClaireonTool_PCGGraphInspect::Execute(const TSharedPt
 	{
 		int32 NodeIndex;
 		UPCGNode* Node = ClaireonPCGGraphHelpers::FindNodeByIdentifier(Graph, NodeIdStr, NodeIndex);
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Node not found: %s"), *NodeIdStr));
 		}

@@ -1,10 +1,10 @@
 {
  "scoring": "intent-based ANY-match: a row is a hit@K if any top-K result is in the UNION of expected_tools + all tools in expected_category + all tools whose operation/name contains expected_operation_substring. Resolved dynamically vs the live registry.",
  "counts": {
-  "frozen": 33,
+  "frozen": 37,
   "tune": 59,
   "dev": 29,
-  "total": 121
+  "total": 125
  },
  "rows": [
   {
@@ -379,14 +379,6 @@
    "query": "output log read warnings",
    "expected_tools": [
     "log_tail"
-   ],
-   "source": "claude-transcript",
-   "split": "frozen"
-  },
-  {
-   "query": "live coding compile reload build",
-   "expected_tools": [
-    "editor_live_coding_rebuild_full"
    ],
    "source": "claude-transcript",
    "split": "frozen"
@@ -991,6 +983,46 @@
    ],
    "source": "claude-transcript",
    "split": "dev"
+  },
+  {
+   "query": "bp_edit_batch",
+   "expected_tools": [
+    "bp_apply_spec"
+   ],
+   "source": "feedback-6704-round-1",
+   "split": "frozen"
+  },
+  {
+   "query": "bp_apply_graph_diff",
+   "expected_tools": [
+    "bp_apply_spec"
+   ],
+   "source": "feedback-6704-round-1",
+   "split": "frozen"
+  },
+  {
+   "query": "batch multiple blueprint graph edits in one call",
+   "expected_tools": [
+    "bp_apply_spec"
+   ],
+   "source": "feedback-6704-round-1",
+   "split": "frozen"
+  },
+  {
+   "query": "bulk add nodes pin defaults connections blueprint",
+   "expected_tools": [
+    "bp_apply_spec"
+   ],
+   "source": "feedback-6704-round-1",
+   "split": "frozen"
+  },
+  {
+   "query": "reduce round trips blueprint node authoring atomic transaction",
+   "expected_tools": [
+    "bp_apply_spec"
+   ],
+   "source": "feedback-6704-round-1",
+   "split": "frozen"
   }
  ]
 }

@@ -10,7 +10,11 @@ FString FClaireonBehaviorTreeTool_ApplyDelta::GetOperation() const { return TEXT
 
 FString FClaireonBehaviorTreeTool_ApplyDelta::GetDescription() const
 {
-	return TEXT("Atomic batch behaviortree modification. Disconnects, removes, creates, and connects in one transactional call. Counterpart to behaviortree_apply_spec. Execution order: disconnect -> remove -> create -> connect.");
+	return TEXT("Apply an atomic batch of BehaviorTree edits in one transactional call. Execution order: "
+				"disconnect -> remove -> create -> connect; any phase failure cancels the transaction so "
+				"nothing lands. Counterpart to behaviortree_apply_spec. Pass session_id to edit an already "
+				"open behaviortree session (behaviortree_open), or asset_path to open and close a temporary "
+				"session for this call.");
 }
 
 TSharedPtr<FJsonObject> FClaireonBehaviorTreeTool_ApplyDelta::GetInputSchema() const

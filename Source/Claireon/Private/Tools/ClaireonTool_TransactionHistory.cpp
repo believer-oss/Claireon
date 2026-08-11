@@ -27,13 +27,13 @@ TSharedPtr<FJsonObject> ClaireonTool_TransactionHistory::GetInputSchema() const
 
 FToolResult ClaireonTool_TransactionHistory::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("GEditor is not available"));
 	}
 
 	UTransBuffer* TransBuffer = Cast<UTransBuffer>(GEditor->Trans);
-	if (!TransBuffer)
+	if (!IsValid(TransBuffer))
 	{
 		return MakeErrorResult(TEXT("Failed to access transaction buffer"));
 	}

@@ -66,14 +66,14 @@ ULevelSequence* FClaireonSequenceHelpers::LoadLevelSequenceAsset(const FString& 
 	const FString ResolvedPath = ResolveResult.ResolvedPath.Path;
 	FSoftObjectPath SoftPath(ResolvedPath);
 	UObject* LoadedObj = SoftPath.TryLoad();
-	if (!LoadedObj)
+	if (!IsValid(LoadedObj))
 	{
 		OutError = FString::Printf(TEXT("Failed to load asset at path: %s"), *ResolvedPath);
 		return nullptr;
 	}
 
 	ULevelSequence* Sequence = Cast<ULevelSequence>(LoadedObj);
-	if (!Sequence)
+	if (!IsValid(Sequence))
 	{
 		OutError = FString::Printf(TEXT("Asset at %s is not a Level Sequence (actual type: %s)"),
 			*ResolvedPath, *LoadedObj->GetClass()->GetName());
@@ -141,12 +141,12 @@ UClass* FClaireonSequenceHelpers::ResolveTrackClass(const FString& TypeName)
 
 FFrameNumber FClaireonSequenceHelpers::SecondsToFrame(const ULevelSequence* Sequence, double Seconds)
 {
-	if (!Sequence)
+	if (!IsValid(Sequence))
 	{
 		return FFrameNumber(0);
 	}
 	const UMovieScene* MovieScene = Sequence->GetMovieScene();
-	if (!MovieScene)
+	if (!IsValid(MovieScene))
 	{
 		return FFrameNumber(0);
 	}
@@ -159,12 +159,12 @@ FFrameNumber FClaireonSequenceHelpers::SecondsToFrame(const ULevelSequence* Sequ
 
 double FClaireonSequenceHelpers::FrameToSeconds(const ULevelSequence* Sequence, FFrameNumber Frame)
 {
-	if (!Sequence)
+	if (!IsValid(Sequence))
 	{
 		return 0.0;
 	}
 	const UMovieScene* MovieScene = Sequence->GetMovieScene();
-	if (!MovieScene)
+	if (!IsValid(MovieScene))
 	{
 		return 0.0;
 	}
@@ -184,13 +184,13 @@ FString FClaireonSequenceHelpers::FormatBinding(const FMovieSceneBinding& Bindin
 
 	const TCHAR* Kind = TEXT("Binding");
 	FString ClassName;
-	if (MovieScene)
+	if (IsValid(MovieScene))
 	{
 		UMovieScene* MutableMS = const_cast<UMovieScene*>(MovieScene);
 		if (FMovieScenePossessable* Poss = MutableMS->FindPossessable(Guid))
 		{
 			Kind = TEXT("Possessable");
-			if (const UClass* Cls = Poss->GetPossessedObjectClass())
+			if (const UClass* Cls = Poss->GetPossessedObjectClass(); IsValid(Cls))
 			{
 				ClassName = Cls->GetName();
 			}
@@ -198,7 +198,7 @@ FString FClaireonSequenceHelpers::FormatBinding(const FMovieSceneBinding& Bindin
 		else if (FMovieSceneSpawnable* Spawn = MutableMS->FindSpawnable(Guid))
 		{
 			Kind = TEXT("Spawnable");
-			if (UObject* Template = Spawn->GetObjectTemplate())
+			if (UObject* Template = Spawn->GetObjectTemplate(); IsValid(Template))
 			{
 				ClassName = Template->GetClass()->GetName();
 			}
@@ -220,7 +220,7 @@ FString FClaireonSequenceHelpers::FormatBinding(const FMovieSceneBinding& Bindin
 
 FString FClaireonSequenceHelpers::FormatTrack(const UMovieSceneTrack* Track, bool bIncludeSections)
 {
-	if (!Track)
+	if (!IsValid(Track))
 	{
 		return TEXT("  Track: (null)\n");
 	}
@@ -251,7 +251,7 @@ FString FClaireonSequenceHelpers::FormatTrack(const UMovieSceneTrack* Track, boo
 
 FString FClaireonSequenceHelpers::FormatSection(const UMovieSceneSection* Section)
 {
-	if (!Section)
+	if (!IsValid(Section))
 	{
 		return TEXT("Section: (null)\n");
 	}
@@ -316,7 +316,7 @@ namespace ClaireonSequenceHelpersInternal
 // bIncludeKeyframes is set). Walks every channel in the proxy, lists times.
 FString FormatSectionKeyframes(const UMovieSceneSection* Section, const FString& Indent)
 {
-	if (!Section)
+	if (!IsValid(Section))
 	{
 		return FString();
 	}
@@ -361,7 +361,7 @@ FString FormatSectionKeyframes(const UMovieSceneSection* Section, const FString&
 	}
 
 	// Event-track bonus: resolve endpoint function name(s) from event entries.
-	if (const UMovieSceneEventSectionBase* EventSection = Cast<UMovieSceneEventSectionBase>(Section))
+	if (const UMovieSceneEventSectionBase* EventSection = Cast<UMovieSceneEventSectionBase>(Section); IsValid(EventSection))
 	{
 		TArrayView<FMovieSceneEvent> Events = const_cast<UMovieSceneEventSectionBase*>(EventSection)->GetAllEntryPoints();
 		if (Events.Num() > 0)
@@ -371,7 +371,7 @@ FString FormatSectionKeyframes(const UMovieSceneSection* Section, const FString&
 			{
 				const FMovieSceneEvent& Ev = Events[EvIdx];
 				FString EndpointName = TEXT("(unbound)");
-				if (UFunction* Func = Ev.Ptrs.Function.Get())
+				if (UFunction* Func = Ev.Ptrs.Function.Get(); IsValid(Func))
 				{
 					EndpointName = Func->GetName();
 				}
@@ -387,13 +387,13 @@ FString FormatSectionKeyframes(const UMovieSceneSection* Section, const FString&
 
 FString FClaireonSequenceHelpers::FormatSequenceStructure(const ULevelSequence* Sequence, bool bIncludeKeyframes, bool bIncludeSections)
 {
-	if (!Sequence)
+	if (!IsValid(Sequence))
 	{
 		return TEXT("(null Level Sequence)");
 	}
 
 	const UMovieScene* MovieScene = Sequence->GetMovieScene();
-	if (!MovieScene)
+	if (!IsValid(MovieScene))
 	{
 		return FString::Printf(TEXT("=== Level Sequence: %s ===\n(no MovieScene)\n"), *Sequence->GetName());
 	}
@@ -458,11 +458,11 @@ FString FClaireonSequenceHelpers::FormatSequenceStructure(const ULevelSequence* 
 		for (const UMovieSceneTrack* Track : Tracks)
 		{
 			Output += FormatTrack(Track, bIncludeSections);
-			if (bIncludeKeyframes && Track && bIncludeSections)
+			if (bIncludeKeyframes && IsValid(Track) && bIncludeSections)
 			{
 				for (const UMovieSceneSection* Section : Track->GetAllSections())
 				{
-					if (Section)
+					if (IsValid(Section))
 					{
 						Output += ClaireonSequenceHelpersInternal::FormatSectionKeyframes(Section, TEXT("      "));
 					}
@@ -497,7 +497,7 @@ TSharedPtr<FJsonObject> ParseJsonObjectPayload(const FString& JsonPayload)
 bool FClaireonSequenceHelpers::CoerceKeyframeValue(UMovieSceneTrack* Track, const FString& JsonPayload, FFrameNumber Frame, FString& OutError)
 {
 	OutError.Reset();
-	if (!Track)
+	if (!IsValid(Track))
 	{
 		OutError = TEXT("track is null");
 		return false;
@@ -600,13 +600,13 @@ bool FClaireonSequenceHelpers::CoerceKeyframeValue(UMovieSceneTrack* Track, cons
 UBlueprint* FClaireonSequenceHelpers::EnsureDirectorBlueprint(ULevelSequence* Sequence, FString& OutError)
 {
 	OutError.Reset();
-	if (!Sequence)
+	if (!IsValid(Sequence))
 	{
 		OutError = TEXT("sequence is null");
 		return nullptr;
 	}
 
-	if (UBlueprint* Existing = Sequence->GetDirectorBlueprint())
+	if (UBlueprint* Existing = Sequence->GetDirectorBlueprint(); IsValid(Existing))
 	{
 		return Existing;
 	}
@@ -624,7 +624,7 @@ UBlueprint* FClaireonSequenceHelpers::EnsureDirectorBlueprint(ULevelSequence* Se
 		UBlueprintGeneratedClass::StaticClass(),
 		FName(TEXT("Claireon.SequenceEdit.EnsureDirectorBlueprint")));
 
-	if (!NewBP)
+	if (!IsValid(NewBP))
 	{
 		OutError = TEXT("FKismetEditorUtilities::CreateBlueprint returned null for Director");
 		return nullptr;
@@ -642,13 +642,13 @@ namespace ClaireonSequenceHelpersInternal
 // (not a function graph) because UK2Node_CustomEvent is a root event node.
 UEdGraph* FindDirectorUbergraph(UBlueprint* DirectorBP)
 {
-	if (!DirectorBP)
+	if (!IsValid(DirectorBP))
 	{
 		return nullptr;
 	}
 	for (UEdGraph* Page : DirectorBP->UbergraphPages)
 	{
-		if (Page && Page->Schema && Page->Schema->IsChildOf(UEdGraphSchema_K2::StaticClass()))
+		if (IsValid(Page) && IsValid(Page->Schema) && Page->Schema->IsChildOf(UEdGraphSchema_K2::StaticClass()))
 		{
 			return Page;
 		}
@@ -662,7 +662,7 @@ UEdGraph* FindDirectorUbergraph(UBlueprint* DirectorBP)
 UFunction* FClaireonSequenceHelpers::CreateEventEndpointNode(UBlueprint* DirectorBlueprint, FName EndpointName, ESequenceEventEndpointSignature Signature, FString& OutError)
 {
 	OutError.Reset();
-	if (!DirectorBlueprint)
+	if (!IsValid(DirectorBlueprint))
 	{
 		OutError = TEXT("director blueprint is null");
 		return nullptr;
@@ -674,7 +674,7 @@ UFunction* FClaireonSequenceHelpers::CreateEventEndpointNode(UBlueprint* Directo
 	}
 
 	UEdGraph* Graph = ClaireonSequenceHelpersInternal::FindDirectorUbergraph(DirectorBlueprint);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		OutError = TEXT("director blueprint has no K2 ubergraph page");
 		return nullptr;
@@ -684,7 +684,7 @@ UFunction* FClaireonSequenceHelpers::CreateEventEndpointNode(UBlueprint* Directo
 	const FString EndpointStr = EndpointName.ToString();
 	for (UEdGraphNode* Node : Graph->Nodes)
 	{
-		if (const UK2Node_CustomEvent* ExistingEvt = Cast<UK2Node_CustomEvent>(Node))
+		if (const UK2Node_CustomEvent* ExistingEvt = Cast<UK2Node_CustomEvent>(Node); IsValid(ExistingEvt))
 		{
 			if (ExistingEvt->CustomFunctionName == EndpointName)
 			{
@@ -692,7 +692,7 @@ UFunction* FClaireonSequenceHelpers::CreateEventEndpointNode(UBlueprint* Directo
 				return nullptr;
 			}
 		}
-		else if (const UK2Node_FunctionEntry* ExistingEntry = Cast<UK2Node_FunctionEntry>(Node))
+		else if (const UK2Node_FunctionEntry* ExistingEntry = Cast<UK2Node_FunctionEntry>(Node); IsValid(ExistingEntry))
 		{
 			if (ExistingEntry->CustomGeneratedFunctionName == EndpointName)
 			{
@@ -741,14 +741,14 @@ UFunction* FClaireonSequenceHelpers::CreateEventEndpointNode(UBlueprint* Directo
 	}
 
 	UClass* DirectorClass = DirectorBlueprint->GeneratedClass;
-	if (!DirectorClass)
+	if (!IsValid(DirectorClass))
 	{
 		OutError = TEXT("director blueprint has no GeneratedClass after compile");
 		return nullptr;
 	}
 
 	UFunction* Func = DirectorClass->FindFunctionByName(EndpointName);
-	if (!Func)
+	if (!IsValid(Func))
 	{
 		OutError = FString::Printf(TEXT("endpoint '%s' not found on DirectorClass after compile"), *EndpointStr);
 		return nullptr;

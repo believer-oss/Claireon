@@ -14,7 +14,10 @@ FString ClaireonTool_BehaviorTreeInspectBlackboard::GetOperation() const { retur
 FString ClaireonTool_BehaviorTreeInspectBlackboard::GetDescription() const
 {
 	return TEXT("Read a Blackboard Data asset and list all keys with their types, "
-				"sync settings, and parent blackboard references.");
+				"sync settings, and parent blackboard references. Returns own_keys and inherited_keys "
+				"separately (name, type, instance_synced) plus parent_blackboard and a formatted "
+				"structure dump; detail_level='summary' trims that dump. Stateless / read-only / "
+				"non-session: never mutates and requires no open session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_BehaviorTreeInspectBlackboard::GetInputSchema() const
@@ -65,7 +68,7 @@ IClaireonTool::FToolResult ClaireonTool_BehaviorTreeInspectBlackboard::Execute(c
 
 	FString LoadError;
 	UBlackboardData* BlackboardData = ClaireonBehaviorTreeHelpers::LoadBlackboardAsset(AssetPath, LoadError);
-	if (!BlackboardData)
+	if (!IsValid(BlackboardData))
 	{
 		return MakeErrorResult(LoadError);
 	}

@@ -18,9 +18,10 @@ FString ClaireonTool_AnimGraphGetNode::GetOperation() const { return TEXT("get_n
 
 FString ClaireonTool_AnimGraphGetNode::GetDescription() const
 {
-	return TEXT("Deep inspection of a single animation graph node by GUID. Returns ALL runtime FAnimNode "
-		"properties, all pins with full connection details, property bindings with fast path analysis, "
-		"linked layer interface info, bound event functions, editor properties, and sub-graph references.");
+	return TEXT("Get a full dump of a single animation graph node, addressed by asset_path, graph_name, and "
+		"node_guid. Stateless / read-only / non-session: reads the asset directly, no open session required. "
+		"Returns all runtime FAnimNode properties, every pin with connection details, property bindings with "
+		"fast-path analysis, linked-layer interface info, bound event functions, and sub-graph references.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AnimGraphGetNode::GetInputSchema() const
@@ -54,13 +55,13 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphGetNode::Execute(const TSharedP
 
 	FString Error;
 	UAnimBlueprint* AnimBP = ClaireonAnimGraphHelpers::LoadAnimBlueprint(AssetPath, Error);
-	if (!AnimBP)
+	if (!IsValid(AnimBP))
 	{
 		return MakeErrorResult(Error);
 	}
 
 	UEdGraph* Graph = ClaireonAnimGraphHelpers::FindAnimGraphByName(AnimBP, GraphName, Error);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -72,7 +73,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphGetNode::Execute(const TSharedP
 		? ClaireonBlueprintHelpers::FindNodeByGuid(Graph, ParsedGuid)
 		: nullptr;
 
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Node with GUID '%s' not found in graph '%s'"), *NodeGuidStr, *GraphName));
 	}
@@ -81,7 +82,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphGetNode::Execute(const TSharedP
 	TSharedPtr<FJsonObject> Data = ClaireonAnimGraphHelpers::SerializeAnimGraphNode(Node, TEXT("full"), AnimBP);
 
 	// Add runtime FAnimNode properties
-	if (UAnimGraphNode_Base* AnimGraphNode = Cast<UAnimGraphNode_Base>(Node))
+	if (UAnimGraphNode_Base* AnimGraphNode = Cast<UAnimGraphNode_Base>(Node); IsValid(AnimGraphNode))
 	{
 		TSharedPtr<FJsonObject> RuntimeProps = ClaireonAnimGraphHelpers::SerializeAnimNodeProperties(AnimGraphNode);
 		if (RuntimeProps)

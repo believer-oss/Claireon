@@ -42,18 +42,18 @@ namespace Claireon::SequenceEdit
 
 bool ApplyAddPossessable(ULevelSequence* Sequence, FName Label, UClass* ObjectClass, FMovieSceneBinding& OutBinding, FString& OutError)
 {
-	if (!Sequence)
+	if (!IsValid(Sequence))
 	{
 		OutError = TEXT("sequence is null");
 		return false;
 	}
 	UMovieScene* MovieScene = Sequence->GetMovieScene();
-	if (!MovieScene)
+	if (!IsValid(MovieScene))
 	{
 		OutError = TEXT("sequence has no MovieScene");
 		return false;
 	}
-	if (!ObjectClass)
+	if (!IsValid(ObjectClass))
 	{
 		OutError = TEXT("object_class is null");
 		return false;
@@ -78,7 +78,7 @@ bool ApplyAddPossessable(ULevelSequence* Sequence, FName Label, UClass* ObjectCl
 
 bool ApplyRemovePossessable(ULevelSequence* Sequence, const FGuid& Guid, FString& OutError)
 {
-	if (!Sequence || !Sequence->GetMovieScene())
+	if (!IsValid(Sequence) || !IsValid(Sequence->GetMovieScene()))
 	{
 		OutError = TEXT("sequence or MovieScene is null");
 		return false;
@@ -98,12 +98,12 @@ bool ApplyRemovePossessable(ULevelSequence* Sequence, const FGuid& Guid, FString
 
 bool ApplyAddTrack(ULevelSequence* Sequence, const FGuid& BindingGuid, UClass* TrackClass, UMovieSceneTrack*& OutTrack, FString& OutError)
 {
-	if (!Sequence || !Sequence->GetMovieScene())
+	if (!IsValid(Sequence) || !IsValid(Sequence->GetMovieScene()))
 	{
 		OutError = TEXT("sequence or MovieScene is null");
 		return false;
 	}
-	if (!TrackClass || !TrackClass->IsChildOf(UMovieSceneTrack::StaticClass()))
+	if (!IsValid(TrackClass) || !TrackClass->IsChildOf(UMovieSceneTrack::StaticClass()))
 	{
 		OutError = TEXT("track_class is invalid");
 		return false;
@@ -117,7 +117,7 @@ bool ApplyAddTrack(ULevelSequence* Sequence, const FGuid& BindingGuid, UClass* T
 	{
 		OutTrack = MovieScene->AddTrack(TSubclassOf<UMovieSceneTrack>(TrackClass));
 	}
-	if (!OutTrack)
+	if (!IsValid(OutTrack))
 	{
 		OutError = TEXT("AddTrack returned null");
 		return false;
@@ -127,7 +127,7 @@ bool ApplyAddTrack(ULevelSequence* Sequence, const FGuid& BindingGuid, UClass* T
 
 bool ApplyRemoveTrack(ULevelSequence* Sequence, const FGuid& BindingGuid, int32 TrackIndex, FString& OutError)
 {
-	if (!Sequence || !Sequence->GetMovieScene())
+	if (!IsValid(Sequence) || !IsValid(Sequence->GetMovieScene()))
 	{
 		OutError = TEXT("sequence or MovieScene is null");
 		return false;
@@ -172,13 +172,13 @@ bool ApplyRemoveTrack(ULevelSequence* Sequence, const FGuid& BindingGuid, int32 
 
 bool ApplyAddSection(UMovieSceneTrack* Track, FFrameNumber Start, FFrameNumber End, int32 RowIndex, UMovieSceneSection*& OutSection, FString& OutError)
 {
-	if (!Track)
+	if (!IsValid(Track))
 	{
 		OutError = TEXT("track is null");
 		return false;
 	}
 	OutSection = Track->CreateNewSection();
-	if (!OutSection)
+	if (!IsValid(OutSection))
 	{
 		OutError = TEXT("CreateNewSection returned null");
 		return false;
@@ -194,7 +194,7 @@ bool ApplyAddSection(UMovieSceneTrack* Track, FFrameNumber Start, FFrameNumber E
 
 bool ApplyRemoveSection(UMovieSceneTrack* Track, int32 SectionIndex, FString& OutError)
 {
-	if (!Track)
+	if (!IsValid(Track))
 	{
 		OutError = TEXT("track is null");
 		return false;
@@ -227,7 +227,7 @@ TSharedPtr<FJsonObject> ParseJsonObject(const FString& JsonPayload)
 
 bool ApplyAddKeyframe(UMovieSceneSection* Section, FFrameNumber Frame, const FString& ValueJson, FString& OutError)
 {
-	if (!Section)
+	if (!IsValid(Section))
 	{
 		OutError = TEXT("section is null");
 		return false;
@@ -488,7 +488,7 @@ bool ApplyAddKeyframe(UMovieSceneSection* Section, FFrameNumber Frame, const FSt
 
 bool ApplyRemoveKeyframe(UMovieSceneSection* Section, FFrameNumber Frame, FString& OutError)
 {
-	if (!Section)
+	if (!IsValid(Section))
 	{
 		OutError = TEXT("section is null");
 		return false;
@@ -550,7 +550,7 @@ ERichCurveInterpMode InterpolationToRichMode(EMovieSceneKeyInterpolation In)
 bool ApplySetKeyInterpMode(UMovieSceneSection* Section, FFrameNumber Frame,
 	EMovieSceneKeyInterpolation InterpMode, FString& OutError)
 {
-	if (!Section)
+	if (!IsValid(Section))
 	{
 		OutError = TEXT("section is null");
 		return false;
@@ -653,18 +653,18 @@ bool ApplyCreateEventEndpoint(ULevelSequence* Sequence, FName EndpointName,
 {
 	OutDirectorBP = nullptr;
 	OutFunction = nullptr;
-	if (!Sequence)
+	if (!IsValid(Sequence))
 	{
 		OutError = TEXT("sequence is null");
 		return false;
 	}
 	UBlueprint* DirectorBP = FClaireonSequenceHelpers::EnsureDirectorBlueprint(Sequence, OutError);
-	if (!DirectorBP)
+	if (!IsValid(DirectorBP))
 	{
 		return false;
 	}
 	UFunction* Func = FClaireonSequenceHelpers::CreateEventEndpointNode(DirectorBP, EndpointName, Signature, OutError);
-	if (!Func)
+	if (!IsValid(Func))
 	{
 		return false;
 	}
@@ -712,7 +712,7 @@ bool ApplyCreateEventEndpoint(ULevelSequence* Sequence, FName EndpointName,
 bool ApplyRebindActor(ULevelSequence* Sequence, const FGuid& BindingGuid,
     AActor* Actor, bool bClear, FString& OutError)
 {
-    if (!Sequence || !Sequence->GetMovieScene())
+    if (!IsValid(Sequence) || !IsValid(Sequence->GetMovieScene()))
     {
         OutError = TEXT("sequence or MovieScene is null");
         return false;
@@ -747,16 +747,16 @@ bool ApplyRebindActor(ULevelSequence* Sequence, const FGuid& BindingGuid,
         return false;
     }
 
-    if (!bClear && !Actor)
+    if (!bClear && !IsValid(Actor))
     {
         OutError = TEXT("actor is null and clear is false");
         return false;
     }
 
 #if WITH_EDITORONLY_DATA
-    if (!bClear && Actor)
+    if (!bClear && IsValid(Actor))
     {
-        if (const UClass* Required = Possessable->GetPossessedObjectClass())
+        if (const UClass* Required = Possessable->GetPossessedObjectClass(); IsValid(Required))
         {
             if (!Actor->GetClass()->IsChildOf(Required))
             {
@@ -769,8 +769,8 @@ bool ApplyRebindActor(ULevelSequence* Sequence, const FGuid& BindingGuid,
     }
 #endif
 
-    UWorld* ResolutionContext = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-    if (!bClear && !ResolutionContext)
+    UWorld* ResolutionContext = IsValid(GEditor) ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!bClear && !IsValid(ResolutionContext))
     {
         OutError = TEXT("editor world unavailable for binding context");
         return false;

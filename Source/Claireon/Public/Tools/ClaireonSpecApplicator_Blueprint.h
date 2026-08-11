@@ -12,7 +12,7 @@ class UEdGraph;
  * apply_spec applicator for Blueprint graph assets.
  *
  * Spec schema (graph tool pattern):
- * - graph: target graph name (default "EventGraph")
+ * - nodes[].graph: optional per-node target graph name (default: the Blueprint's EventGraph)
  * - nodes[] with id, type, function, position, pin_defaults
  * - connections[] with source_node, source_pin, target_node, target_pin
  * - variables[] with id, name, type, default_value, flags
@@ -38,4 +38,14 @@ private:
 
 	/** Cached reference to the active graph. */
 	TWeakObjectPtr<UEdGraph> ActiveGraph;
+
+	/**
+	 * Spec-id -> the graph that node was actually created in.
+	 *
+	 * Pass 2 resolves node references with FindNodeByGuid, which searches a single
+	 * graph and has no cross-graph fallback. Without this, any node placed in a
+	 * non-default graph by nodes[].graph would be invisible to Pass 2, and its
+	 * connections / pin_defaults would be dropped with only a warning.
+	 */
+	TMap<FString, TWeakObjectPtr<UEdGraph>> IdToGraph;
 };

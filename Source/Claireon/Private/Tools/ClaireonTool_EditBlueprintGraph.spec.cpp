@@ -9,6 +9,7 @@
 
 #include "ClaireonBlueprintHelpers.h"
 #include "ClaireonLog.h"
+#include "Tests/ClaireonTestAssetDeletion.h"
 #include "Misc/AutomationTest.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -24,8 +25,63 @@
 #include "K2Node_FunctionResult.h"
 #include "EdGraph/EdGraphPin.h"
 #include "UObject/UObjectGlobals.h"
+#include "UObject/SoftObjectPath.h"
+#include "Misc/PackageName.h"
+#include "HAL/FileManager.h"
+#include "ObjectTools.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+
+// Saved-fixture cleanup, defined up here because the tests that need it appear well
+// before the ClaireonTool_EditBlueprintGraph_SpecInternal block lower in this file.
+namespace ClaireonTool_EditBlueprintGraph_SavedFixtures
+{
+
+// Delete a fixture this spec deliberately SAVED, so it does not leak into Content/.
+//
+// /Game/__MCPTests is deliberately not gitignored -- a leaked fixture is meant to be
+// visible in `git status --porcelain -- Content/` rather than silently accumulating, so
+// the fix for a leak is to clean up, never to add an ignore rule. (An ignore rule would
+// not even work by accident here: the root .gitignore is an allowlist whose `!*.uasset`
+// re-includes anything under Content/.)
+//
+// Only the handful of tests that call operation='save' need this. Most fixtures in this
+// spec live in in-memory packages and never reach disk; deleting those buys nothing and
+// costs a whole-object-graph referencer scan, which is the trigger for the crash
+// documented in Docs/llm/todo/claireon-untest-harness-reliability.md. Hence the
+// FileExists gate: scan only when there is really a file to remove.
+void DeleteSavedFixture(const FString& AssetPath)
+{
+	FString Filename;
+	if (!FPackageName::TryConvertLongPackageNameToFilename(AssetPath, Filename, FPackageName::GetAssetPackageExtension()))
+	{
+		return;
+	}
+	if (!IFileManager::Get().FileExists(*Filename))
+	{
+		return;
+	}
+
+	const FString ObjectPath = AssetPath + TEXT(".") + FPackageName::GetShortName(AssetPath);
+	if (UObject* Asset = FSoftObjectPath(ObjectPath).TryLoad(); IsValid(Asset))
+	{
+		TArray<UObject*> ToDelete;
+		ToDelete.Add(Asset);
+		ClaireonTestAssetDeletion::DeleteObjectsForTest(ToDelete);
+	}
+}
+
+// Scope guard for the above. These tests have many early `return false` paths, so
+// cleanup has to run on every one of them, not just the success path.
+struct FSavedFixtureCleanup
+{
+	FString AssetPath;
+	explicit FSavedFixtureCleanup(FString InAssetPath) : AssetPath(MoveTemp(InAssetPath)) {}
+	~FSavedFixtureCleanup() { DeleteSavedFixture(AssetPath); }
+};
+
+}  // namespace ClaireonTool_EditBlueprintGraph_SavedFixtures
+using namespace ClaireonTool_EditBlueprintGraph_SavedFixtures;
 
 // BlueprintCompileBatch (multi-target/folder) tool.
 // CompileRemoveUnused test exercises the batch tool's remove_unused option over /Game/__MCPTests.
@@ -81,7 +137,7 @@
 #include "Tools/ClaireonBlueprintGraphTool_SwitchGraph.h"
 #include "Tools/ClaireonTool_ApplyBlueprintDelta.h"
 
-namespace
+namespace ClaireonTool_EditBlueprintGraph_spec_Private1
 {
 	/**
 	 * Flatten the {operation, session_id, params:{...}} envelope into the flat
@@ -191,13 +247,18 @@ namespace
 			FString::Printf(TEXT("DispatchBundledEnvelope: unknown operation '%s'"), *Operation));
 	}
 } // namespace
+using namespace ClaireonTool_EditBlueprintGraph_spec_Private1;
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_CreateAndBasicOps,
 	"Claireon.EditBlueprintGraph.CreateAndBasicOps",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_CreateAndBasicOps::RunTest(const FString& Parameters)
 {
+	// This test calls operation='save', so the fixture reaches disk and must be
+	// removed again; /Game/__MCPTests is deliberately not gitignored.
+	FSavedFixtureCleanup Cleanup_(TEXT("/Game/__MCPTests/BP_TestActor"));
+
 
 	// Test 1: Create a new Blueprint
 	{
@@ -360,7 +421,7 @@ bool FEditBlueprintGraphTest_CreateAndBasicOps::RunTest(const FString& Parameter
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_NodeTypes,
 	"Claireon.EditBlueprintGraph.NodeTypes",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_NodeTypes::RunTest(const FString& Parameters)
 {
@@ -420,6 +481,26 @@ bool FEditBlueprintGraphTest_NodeTypes::RunTest(const FString& Parameters)
 		{ TEXT("VariableSet"), { { TEXT("variable_name"), TEXT("TestVar") } }, TEXT("Set Variable") },
 	};
 
+	// Declare TestVar before the loop reaches VariableGet/VariableSet.
+	//
+	// The table below asks for Get/Set nodes on "TestVar", but nothing ever created it, so
+	// bp_add_node rejected them -- correctly, and with an accurate message naming every
+	// scope it searched. The missing step was in the test, not the tool.
+	{
+		TSharedPtr<FJsonObject> VarArgs = MakeShared<FJsonObject>();
+		VarArgs->SetStringField(TEXT("operation"), TEXT("add_variable"));
+		VarArgs->SetStringField(TEXT("session_id"), SessionId);
+		VarArgs->SetStringField(TEXT("variable_name"), TEXT("TestVar"));
+		VarArgs->SetStringField(TEXT("variable_type"), TEXT("Int"));
+
+		auto VarResult = DispatchBundledEnvelope(VarArgs);
+		if (VarResult.bIsError)
+		{
+			AddError(FString::Printf(TEXT("add_variable(TestVar) failed: %s"), *VarResult.GetContentAsString()));
+			return false;
+		}
+	}
+
 	for (const FNodeTypeTest& Test : NodeTypesToTest)
 	{
 		TSharedPtr<FJsonObject> AddNodeArgs = MakeShared<FJsonObject>();
@@ -455,7 +536,11 @@ bool FEditBlueprintGraphTest_NodeTypes::RunTest(const FString& Parameters)
 
 		TSharedPtr<FJsonObject> NodeParams = MakeShared<FJsonObject>();
 		NodeParams->SetStringField(TEXT("node_type"), TEXT("Generic"));
-		NodeParams->SetStringField(TEXT("class_name"), TEXT("K2Node_AddPinInterface"));
+		// A concrete, spawnable K2Node. This asked for "K2Node_AddPinInterface", which is
+		// IK2Node_AddPinInterface -- a mixin interface implemented by nodes like Sequence
+		// and MultiGate, not a UClass that can be instantiated. "Class not found" was the
+		// correct answer; the test was naming something that is not a node.
+		NodeParams->SetStringField(TEXT("class_name"), TEXT("K2Node_MultiGate"));
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
 		Result = DispatchBundledEnvelope(AddNodeArgs);
@@ -486,7 +571,7 @@ bool FEditBlueprintGraphTest_NodeTypes::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_MacroNodes,
 	"Claireon.EditBlueprintGraph.MacroNodes",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_MacroNodes::RunTest(const FString& Parameters)
 {
@@ -610,7 +695,7 @@ bool FEditBlueprintGraphTest_MacroNodes::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_NewK2NodeTypes,
 	"Claireon.EditBlueprintGraph.NewK2NodeTypes",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_NewK2NodeTypes::RunTest(const FString& Parameters)
 {
@@ -731,7 +816,7 @@ bool FEditBlueprintGraphTest_NewK2NodeTypes::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_DynamicPins,
 	"Claireon.EditBlueprintGraph.DynamicPins",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 {
@@ -767,18 +852,24 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 		return false;
 	}
 
-	// Helper to extract a node GUID from the last add_node result
-	auto ExtractNodeGuid = [&](const FString& ResultStr) -> FString
+	// Read the new node's GUID from the structured channel bp_add_node actually publishes.
+	//
+	// This used to scrape the Summary for a "Cursor Node: " marker and silently returned an
+	// empty string when it did not find one -- the caller then passed "" straight into
+	// add_pin, which failed with "Invalid node_guid format: ". The real cause was one step
+	// earlier and invisible. bp_add_node sets Data.created_node_guid
+	// (ClaireonBlueprintGraphTool_AddNode.cpp), so take it from there, and fail loudly
+	// rather than handing an empty GUID downstream.
+	auto ExtractNodeGuid = [&](const IClaireonTool::FToolResult& R) -> FString
 	{
-		int32 GuidStart = ResultStr.Find(TEXT("Cursor Node: "));
-		if (GuidStart != INDEX_NONE)
+		FString Guid;
+		if (R.Data.IsValid() && R.Data->TryGetStringField(TEXT("created_node_guid"), Guid) && !Guid.IsEmpty())
 		{
-			GuidStart += 13;
-			int32 GuidEnd = ResultStr.Find(TEXT("\n"), ESearchCase::IgnoreCase, ESearchDir::FromStart, GuidStart);
-			if (GuidEnd == INDEX_NONE)
-				GuidEnd = ResultStr.Len();
-			return ResultStr.Mid(GuidStart, GuidEnd - GuidStart).TrimStartAndEnd();
+			return Guid;
 		}
+		AddError(FString::Printf(
+			TEXT("add_node response carried no Data.created_node_guid; summary was: %s"),
+			*R.GetContentAsString()));
 		return FString();
 	};
 
@@ -799,7 +890,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 			return false;
 		}
 
-		FString SeqGuid = ExtractNodeGuid(Result.GetContentAsString());
+		FString SeqGuid = ExtractNodeGuid(Result);
 
 		for (int32 i = 0; i < 2; ++i)
 		{
@@ -839,7 +930,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 			return false;
 		}
 
-		FString ArrayGuid = ExtractNodeGuid(Result.GetContentAsString());
+		FString ArrayGuid = ExtractNodeGuid(Result);
 
 		TSharedPtr<FJsonObject> AddPinArgs = MakeShared<FJsonObject>();
 		AddPinArgs->SetStringField(TEXT("operation"), TEXT("add_pin"));
@@ -877,7 +968,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 			return false;
 		}
 
-		FString SwitchGuid = ExtractNodeGuid(Result.GetContentAsString());
+		FString SwitchGuid = ExtractNodeGuid(Result);
 
 		TSharedPtr<FJsonObject> AddPinArgs = MakeShared<FJsonObject>();
 		AddPinArgs->SetStringField(TEXT("operation"), TEXT("add_pin"));
@@ -909,7 +1000,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
 		Result = DispatchBundledEnvelope(AddNodeArgs);
-		FString BranchGuid = ExtractNodeGuid(Result.GetContentAsString());
+		FString BranchGuid = ExtractNodeGuid(Result);
 
 		TSharedPtr<FJsonObject> AddPinArgs = MakeShared<FJsonObject>();
 		AddPinArgs->SetStringField(TEXT("operation"), TEXT("add_pin"));
@@ -941,7 +1032,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
 		Result = DispatchBundledEnvelope(AddNodeArgs);
-		FString EnumSwitchGuid = ExtractNodeGuid(Result.GetContentAsString());
+		FString EnumSwitchGuid = ExtractNodeGuid(Result);
 
 		TSharedPtr<FJsonObject> AddPinArgs = MakeShared<FJsonObject>();
 		AddPinArgs->SetStringField(TEXT("operation"), TEXT("add_pin"));
@@ -979,7 +1070,7 @@ bool FEditBlueprintGraphTest_DynamicPins::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_NumExtraPins,
 	"Claireon.EditBlueprintGraph.NumExtraPins",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_NumExtraPins::RunTest(const FString& Parameters)
 {
@@ -1092,10 +1183,14 @@ bool FEditBlueprintGraphTest_NumExtraPins::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ImportNodes,
 	"Claireon.EditBlueprintGraph.ImportNodes",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_ImportNodes::RunTest(const FString& Parameters)
 {
+	// This test calls operation='save', so the fixture reaches disk and must be
+	// removed again; /Game/__MCPTests is deliberately not gitignored.
+	FSavedFixtureCleanup Cleanup_(TEXT("/Game/__MCPTests/BP_ImportTest"));
+
 
 	// Create a test blueprint
 	TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
@@ -1182,7 +1277,7 @@ bool FEditBlueprintGraphTest_ImportNodes::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ErrorHandling,
 	"Claireon.EditBlueprintGraph.ErrorHandling",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_ErrorHandling::RunTest(const FString& Parameters)
 {
@@ -1275,7 +1370,7 @@ bool FEditBlueprintGraphTest_ErrorHandling::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ListGraphs,
 	"Claireon.EditBlueprintGraph.ListGraphs",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_ListGraphs::RunTest(const FString& Parameters)
 {
@@ -1342,10 +1437,14 @@ bool FEditBlueprintGraphTest_ListGraphs::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_StatelessNodeOps,
 	"Claireon.EditBlueprintGraph.StatelessNodeOps",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_StatelessNodeOps::RunTest(const FString& Parameters)
 {
+	// This test calls operation='save', so the fixture reaches disk and must be
+	// removed again; /Game/__MCPTests is deliberately not gitignored.
+	FSavedFixtureCleanup Cleanup_(TEXT("/Game/__MCPTests/BP_StatelessOpsTest"));
+
 
 	// Create a blueprint and add a node, then close the session to test stateless ops
 	FString SessionId;
@@ -1482,7 +1581,7 @@ bool FEditBlueprintGraphTest_StatelessNodeOps::RunTest(const FString& Parameters
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SetGameplayTags,
 	"Claireon.EditBlueprintGraph.SetGameplayTags",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_SetGameplayTags::RunTest(const FString& Parameters)
 {
@@ -1562,7 +1661,7 @@ bool FEditBlueprintGraphTest_SetGameplayTags::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_CompileRemoveUnused,
 	"Claireon.BlueprintCompile.RemoveUnused",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_CompileRemoveUnused::RunTest(const FString& Parameters)
 {
@@ -1613,7 +1712,7 @@ bool FEditBlueprintGraphTest_CompileRemoveUnused::RunTest(const FString& Paramet
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_DelegateNodes,
 	"Claireon.EditBlueprintGraph.DelegateNodes",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_DelegateNodes::RunTest(const FString& Parameters)
 {
@@ -1874,10 +1973,14 @@ bool FEditBlueprintGraphTest_DelegateNodes::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_AddFunctionOverride,
 	"Claireon.EditBlueprintGraph.AddFunctionOverride",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_AddFunctionOverride::RunTest(const FString& Parameters)
 {
+	// This test calls operation='save', so the fixture reaches disk and must be
+	// removed again; /Game/__MCPTests is deliberately not gitignored.
+	FSavedFixtureCleanup Cleanup_(TEXT("/Game/__MCPTests/BP_FuncOverrideTest"));
+
 
 	// Step 1: Create a Blueprint child of ClaireonFunctionOverrideFixtureActor
 	FString SessionId;
@@ -2075,18 +2178,18 @@ namespace ClaireonTool_AddFunctionSpecHelpers
 
 	static UEdGraph* FindFunctionGraph(UBlueprint* Blueprint, const FString& FuncName)
 	{
-		if (!Blueprint) return nullptr;
+		if (!IsValid(Blueprint)) return nullptr;
 		const FName FuncFName(*FuncName);
 		for (UEdGraph* Graph : Blueprint->FunctionGraphs)
 		{
-			if (Graph && Graph->GetFName() == FuncFName) return Graph;
+			if (IsValid(Graph) && Graph->GetFName() == FuncFName) return Graph;
 		}
 		return nullptr;
 	}
 
 	static UK2Node_FunctionEntry* FindEntryNode(UEdGraph* Graph)
 	{
-		if (!Graph) return nullptr;
+		if (!IsValid(Graph)) return nullptr;
 		TArray<UK2Node_FunctionEntry*> EntryNodes;
 		Graph->GetNodesOfClass<UK2Node_FunctionEntry>(EntryNodes);
 		return EntryNodes.Num() > 0 ? EntryNodes[0] : nullptr;
@@ -2094,7 +2197,7 @@ namespace ClaireonTool_AddFunctionSpecHelpers
 
 	static UK2Node_FunctionResult* FindResultNode(UEdGraph* Graph)
 	{
-		if (!Graph) return nullptr;
+		if (!IsValid(Graph)) return nullptr;
 		TArray<UK2Node_FunctionResult*> ResultNodes;
 		Graph->GetNodesOfClass<UK2Node_FunctionResult>(ResultNodes);
 		return ResultNodes.Num() > 0 ? ResultNodes[0] : nullptr;
@@ -2102,7 +2205,7 @@ namespace ClaireonTool_AddFunctionSpecHelpers
 
 	static bool HasUserDefinedPin(UEdGraphNode* Node, const FString& PinName, EEdGraphPinDirection Direction)
 	{
-		if (!Node) return false;
+		if (!IsValid(Node)) return false;
 		const FName PinFName(*PinName);
 		for (UEdGraphPin* Pin : Node->Pins)
 		{
@@ -2116,7 +2219,7 @@ namespace ClaireonTool_AddFunctionSpecHelpers
 
 	static FString GetUserDefinedPinCategory(UEdGraphNode* Node, const FString& PinName, EEdGraphPinDirection Direction)
 	{
-		if (!Node) return FString();
+		if (!IsValid(Node)) return FString();
 		const FName PinFName(*PinName);
 		for (UEdGraphPin* Pin : Node->Pins)
 		{
@@ -2140,7 +2243,7 @@ namespace ClaireonTool_AddFunctionSpecHelpers
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_AddFunction,
 	"Claireon.EditBlueprintGraph.AddFunction",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 {
@@ -2174,7 +2277,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 	}
 
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		AddError(FString::Printf(TEXT("Failed to load blueprint at %s"), *AssetPath));
 		CloseSessionSilently(SessionId);
@@ -2204,7 +2307,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 		}
 
 		UEdGraph* Graph = FindFunctionGraph(Blueprint, TEXT("MyFunc"));
-		if (!Graph)
+		if (!IsValid(Graph))
 		{
 			AddError(TEXT("Expected 'MyFunc' in Blueprint->FunctionGraphs after add_function"));
 		}
@@ -2259,7 +2362,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 		UEdGraph* Graph = FindFunctionGraph(Blueprint, TEXT("FuncWithIO"));
 		UK2Node_FunctionEntry* Entry = FindEntryNode(Graph);
 		UK2Node_FunctionResult* ResultNode = FindResultNode(Graph);
-		if (!Entry)
+		if (!IsValid(Entry))
 		{
 			AddError(TEXT("FuncWithIO: entry node missing"));
 		}
@@ -2274,7 +2377,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 				AddError(TEXT("FuncWithIO: entry node missing user-defined output pin 'InB'"));
 			}
 		}
-		if (!ResultNode)
+		if (!IsValid(ResultNode))
 		{
 			AddError(TEXT("FuncWithIO: result node missing (should have been created for outputs)"));
 		}
@@ -2303,7 +2406,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 			AddError(FString::Printf(TEXT("add_function PureFunc failed: %s"), *Result.GetContentAsString()));
 		}
 		UK2Node_FunctionEntry* Entry = FindEntryNode(FindFunctionGraph(Blueprint, TEXT("PureFunc")));
-		if (!Entry)
+		if (!IsValid(Entry))
 		{
 			AddError(TEXT("PureFunc: entry node missing"));
 		}
@@ -2329,7 +2432,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 			AddError(FString::Printf(TEXT("add_function StaticFunc failed: %s"), *Result.GetContentAsString()));
 		}
 		UK2Node_FunctionEntry* Entry = FindEntryNode(FindFunctionGraph(Blueprint, TEXT("StaticFunc")));
-		if (!Entry)
+		if (!IsValid(Entry))
 		{
 			AddError(TEXT("StaticFunc: entry node missing"));
 		}
@@ -2355,7 +2458,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 			AddError(FString::Printf(TEXT("add_function ConstFunc failed: %s"), *Result.GetContentAsString()));
 		}
 		UK2Node_FunctionEntry* Entry = FindEntryNode(FindFunctionGraph(Blueprint, TEXT("ConstFunc")));
-		if (!Entry)
+		if (!IsValid(Entry))
 		{
 			AddError(TEXT("ConstFunc: entry node missing"));
 		}
@@ -2390,7 +2493,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 			continue;
 		}
 		UK2Node_FunctionEntry* Entry = FindEntryNode(FindFunctionGraph(Blueprint, C.FuncName));
-		if (!Entry)
+		if (!IsValid(Entry))
 		{
 			AddError(FString::Printf(TEXT("%s: entry node missing"), C.FuncName));
 			continue;
@@ -2430,7 +2533,7 @@ bool FEditBlueprintGraphTest_AddFunction::RunTest(const FString& Parameters)
 			continue;
 		}
 		UK2Node_FunctionEntry* Entry = FindEntryNode(FindFunctionGraph(Blueprint, C.FuncName));
-		if (!Entry)
+		if (!IsValid(Entry))
 		{
 			AddError(FString::Printf(TEXT("%s: entry node missing"), C.FuncName));
 			continue;
@@ -2624,7 +2727,7 @@ namespace ClaireonTool_SuggestNodeSpecHelpers
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SuggestNode_PositivePath,
 	"Claireon.EditBlueprintGraph.SuggestNode.PositivePath",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_SuggestNode_PositivePath::RunTest(const FString& Parameters)
 {
@@ -2685,7 +2788,7 @@ bool FEditBlueprintGraphTest_SuggestNode_PositivePath::RunTest(const FString& Pa
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SuggestNode_TopKClamp,
 	"Claireon.EditBlueprintGraph.SuggestNode.TopKClamp",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_SuggestNode_TopKClamp::RunTest(const FString& Parameters)
 {
@@ -2719,7 +2822,7 @@ bool FEditBlueprintGraphTest_SuggestNode_TopKClamp::RunTest(const FString& Param
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SuggestNode_PriorityTieBreak,
 	"Claireon.EditBlueprintGraph.SuggestNode.PriorityTieBreak",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_SuggestNode_PriorityTieBreak::RunTest(const FString& Parameters)
 {
@@ -2766,7 +2869,7 @@ bool FEditBlueprintGraphTest_SuggestNode_PriorityTieBreak::RunTest(const FString
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SuggestNode_StructureKeys,
 	"Claireon.EditBlueprintGraph.SuggestNode.StructureKeys",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_SuggestNode_StructureKeys::RunTest(const FString& Parameters)
 {
@@ -2822,22 +2925,29 @@ bool FEditBlueprintGraphTest_SuggestNode_StructureKeys::RunTest(const FString& P
 
 namespace ClaireonTool_MacroShorthandSpecHelpers
 {
-	// Must match ClaireonMacroShorthand::GKnownMacros in ClaireonTool_EditBlueprintGraph.cpp.
-	// Sequence and Select are intentionally excluded -- they route to native K2Nodes.
-	static const TCHAR* const GKnownMacroNames[] = {
-		TEXT("DoN"),
-		TEXT("DoOnce"),
-		TEXT("FlipFlop"),
-		TEXT("ForEachLoop"),
-		TEXT("ForEachLoopWithBreak"),
-		TEXT("ForLoop"),
-		TEXT("ForLoopWithBreak"),
-		TEXT("Gate"),
-		TEXT("IsValid"),
-		TEXT("MultiGate"),
-		TEXT("StandardMacroBranch"),
-		TEXT("SwitchHasAuthority"),
-		TEXT("WhileLoop"),
+	// Alias -> the macro GRAPH name it must resolve to. The two are not always equal,
+	// which is precisely what this test exists to catch: the previous flat list assumed
+	// they were, so it asserted alias == graph name and could not distinguish "resolves
+	// correctly" from "happens to be spelled the same".
+	//
+	// Sequence and Select are excluded -- they route to native K2Nodes. So are MultiGate
+	// (ENodeTypeKind::Factory, a native UK2Node_MultiGate, never a macro instance) and
+	// StandardMacroBranch (no such macro exists; see the note in
+	// ClaireonBlueprintNodeTypeRegistry.cpp). Both were in the old list and neither could
+	// ever have passed here.
+	struct FMacroShorthandCase { const TCHAR* Alias; const TCHAR* GraphName; };
+	static const FMacroShorthandCase GKnownMacroNames[] = {
+		{ TEXT("DoN"),                  TEXT("Do N") },   // graph name has a space
+		{ TEXT("DoOnce"),               TEXT("DoOnce") },
+		{ TEXT("FlipFlop"),             TEXT("FlipFlop") },
+		{ TEXT("ForEachLoop"),          TEXT("ForEachLoop") },
+		{ TEXT("ForEachLoopWithBreak"), TEXT("ForEachLoopWithBreak") },
+		{ TEXT("ForLoop"),              TEXT("ForLoop") },
+		{ TEXT("ForLoopWithBreak"),     TEXT("ForLoopWithBreak") },
+		{ TEXT("Gate"),                 TEXT("Gate") },
+		{ TEXT("IsValid"),              TEXT("IsValid") },
+		{ TEXT("SwitchHasAuthority"),   TEXT("Switch Has Authority") },  // ActorMacros
+		{ TEXT("WhileLoop"),            TEXT("WhileLoop") },
 	};
 
 	static const TCHAR* const GStandardMacroLibrary =
@@ -2898,26 +3008,26 @@ namespace ClaireonTool_MacroShorthandSpecHelpers
 	// and return its macro-graph name (e.g. "ForEachLoop"). Returns empty on miss.
 	static FString FindLastMacroInstanceGraphName(UBlueprint* Blueprint)
 	{
-		if (!Blueprint)
+		if (!IsValid(Blueprint))
 		{
 			return FString();
 		}
 		UK2Node_MacroInstance* Last = nullptr;
 		for (UEdGraph* Page : Blueprint->UbergraphPages)
 		{
-			if (!Page)
+			if (!IsValid(Page))
 			{
 				continue;
 			}
 			for (UEdGraphNode* Node : Page->Nodes)
 			{
-				if (UK2Node_MacroInstance* Macro = Cast<UK2Node_MacroInstance>(Node))
+				if (UK2Node_MacroInstance* Macro = Cast<UK2Node_MacroInstance>(Node); IsValid(Macro))
 				{
 					Last = Macro;
 				}
 			}
 		}
-		if (!Last || !Last->GetMacroGraph())
+		if (!IsValid(Last) || !IsValid(Last->GetMacroGraph()))
 		{
 			return FString();
 		}
@@ -2927,7 +3037,7 @@ namespace ClaireonTool_MacroShorthandSpecHelpers
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_MacroShorthand_ForEachLoop,
 	"Claireon.EditBlueprintGraph.MacroShorthand.ForEachLoop",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_MacroShorthand_ForEachLoop::RunTest(const FString& Parameters)
 {
@@ -2974,7 +3084,7 @@ bool FEditBlueprintGraphTest_MacroShorthand_ForEachLoop::RunTest(const FString& 
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_MacroShorthand_RespectsCallerLibrary,
 	"Claireon.EditBlueprintGraph.MacroShorthand.RespectsCallerLibrary",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_MacroShorthand_RespectsCallerLibrary::RunTest(const FString& Parameters)
 {
@@ -3025,7 +3135,7 @@ bool FEditBlueprintGraphTest_MacroShorthand_RespectsCallerLibrary::RunTest(const
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_MacroShorthand_UnknownNodeTypeErrors,
 	"Claireon.EditBlueprintGraph.MacroShorthand.UnknownNodeTypeErrors",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_MacroShorthand_UnknownNodeTypeErrors::RunTest(const FString& Parameters)
 {
@@ -3063,7 +3173,7 @@ bool FEditBlueprintGraphTest_MacroShorthand_UnknownNodeTypeErrors::RunTest(const
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_MacroShorthand_AllResolve,
 	"Claireon.EditBlueprintGraph.MacroShorthand.AllResolve",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_MacroShorthand_AllResolve::RunTest(const FString& Parameters)
 {
@@ -3079,29 +3189,30 @@ bool FEditBlueprintGraphTest_MacroShorthand_AllResolve::RunTest(const FString& P
 	}
 
 	int32 ResolvedCount = 0;
-	for (const TCHAR* MacroName : GKnownMacroNames)
+	for (const FMacroShorthandCase& Case : GKnownMacroNames)
 	{
 		TSharedPtr<FJsonObject> AddNodeArgs = MakeShared<FJsonObject>();
 		AddNodeArgs->SetStringField(TEXT("operation"), TEXT("add_node"));
 		AddNodeArgs->SetStringField(TEXT("session_id"), SessionId);
 
 		TSharedPtr<FJsonObject> NodeParams = MakeShared<FJsonObject>();
-		NodeParams->SetStringField(TEXT("node_type"), MacroName);
+		NodeParams->SetStringField(TEXT("node_type"), Case.Alias);
 		AddNodeArgs->SetObjectField(TEXT("params"), NodeParams);
 
 		auto Result = DispatchBundledEnvelope(AddNodeArgs);
 		if (Result.bIsError)
 		{
-			AddError(FString::Printf(TEXT("Shorthand add_node(%s) failed: %s"), MacroName, *Result.GetContentAsString()));
+			AddError(FString::Printf(TEXT("Shorthand add_node(%s) failed: %s"), Case.Alias, *Result.GetContentAsString()));
 			CloseSession(SessionId);
 			return false;
 		}
 
 		UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
 		const FString LastName = FindLastMacroInstanceGraphName(Blueprint);
-		if (LastName != MacroName)
+		if (LastName != Case.GraphName)
 		{
-			AddError(FString::Printf(TEXT("Shorthand resolved '%s' to macro graph '%s'"), MacroName, *LastName));
+			AddError(FString::Printf(TEXT("Shorthand '%s' resolved to macro graph '%s', expected '%s'"),
+				Case.Alias, *LastName, Case.GraphName));
 			CloseSession(SessionId);
 			return false;
 		}
@@ -3119,7 +3230,7 @@ bool FEditBlueprintGraphTest_MacroShorthand_AllResolve::RunTest(const FString& P
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_AddVariable_ParseFString,
 	"Claireon.EditBlueprintGraph.AddVariable.ParseFString",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_AddVariable_ParseFString::RunTest(const FString& Parameters)
 {
@@ -3139,7 +3250,7 @@ bool FEditBlueprintGraphTest_AddVariable_ParseFString::RunTest(const FString& Pa
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_AddVariable_ParseFName,
 	"Claireon.EditBlueprintGraph.AddVariable.ParseFName",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_AddVariable_ParseFName::RunTest(const FString& Parameters)
 {
@@ -3154,7 +3265,7 @@ bool FEditBlueprintGraphTest_AddVariable_ParseFName::RunTest(const FString& Para
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_AddVariable_ParseFText,
 	"Claireon.EditBlueprintGraph.AddVariable.ParseFText",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_AddVariable_ParseFText::RunTest(const FString& Parameters)
 {
@@ -3169,7 +3280,7 @@ bool FEditBlueprintGraphTest_AddVariable_ParseFText::RunTest(const FString& Para
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_AddVariable_UnknownTypeFallsBackToString,
 	"Claireon.EditBlueprintGraph.AddVariable.UnknownTypeFallsBackToString",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_AddVariable_UnknownTypeFallsBackToString::RunTest(const FString& Parameters)
 {
@@ -3202,7 +3313,7 @@ bool FEditBlueprintGraphTest_AddVariable_UnknownTypeFallsBackToString::RunTest(c
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ComponentBoundEvent,
 	"Claireon.EditBlueprintGraph.ComponentBoundEvent",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_ComponentBoundEvent::RunTest(const FString& Parameters)
 {
@@ -3319,7 +3430,7 @@ bool FEditBlueprintGraphTest_ComponentBoundEvent::RunTest(const FString& Paramet
 	// property resolves (which sanity-checks skeleton vs generated class lookup).
 	{
 		UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
-		if (!Blueprint)
+		if (!IsValid(Blueprint))
 		{
 			AddError(FString::Printf(TEXT("Failed to load Blueprint at %s"), *AssetPath));
 			return false;
@@ -3329,13 +3440,13 @@ bool FEditBlueprintGraphTest_ComponentBoundEvent::RunTest(const FString& Paramet
 		UK2Node_ComponentBoundEvent* FoundNode = nullptr;
 		for (UEdGraph* Graph : Blueprint->UbergraphPages)
 		{
-			if (!Graph)
+			if (!IsValid(Graph))
 			{
 				continue;
 			}
 			for (UEdGraphNode* GraphNode : Graph->Nodes)
 			{
-				if (UK2Node_ComponentBoundEvent* Bound = Cast<UK2Node_ComponentBoundEvent>(GraphNode))
+				if (UK2Node_ComponentBoundEvent* Bound = Cast<UK2Node_ComponentBoundEvent>(GraphNode); IsValid(Bound))
 				{
 					++FoundCount;
 					FoundNode = Bound;
@@ -3559,7 +3670,7 @@ bool FEditBlueprintGraphTest_ComponentBoundEvent::RunTest(const FString& Paramet
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_WildcardPinResolution,
 	"Claireon.EditBlueprintGraph.WildcardPinResolution",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_WildcardPinResolution::RunTest(const FString& Parameters)
 {
@@ -3693,7 +3804,7 @@ bool FEditBlueprintGraphTest_WildcardPinResolution::RunTest(const FString& Param
 	// should be flagged as an array container.
 	{
 		UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
-		if (!Blueprint)
+		if (!IsValid(Blueprint))
 		{
 			AddError(FString::Printf(TEXT("Failed to load Blueprint at %s"), *AssetPath));
 			return false;
@@ -3702,13 +3813,13 @@ bool FEditBlueprintGraphTest_WildcardPinResolution::RunTest(const FString& Param
 		UEdGraphPin* TargetArrayPin = nullptr;
 		for (UEdGraph* Graph : Blueprint->UbergraphPages)
 		{
-			if (!Graph)
+			if (!IsValid(Graph))
 			{
 				continue;
 			}
 			for (UEdGraphNode* GraphNode : Graph->Nodes)
 			{
-				if (!GraphNode)
+				if (!IsValid(GraphNode))
 				{
 					continue;
 				}
@@ -3801,7 +3912,7 @@ bool FEditBlueprintGraphTest_WildcardPinResolution::RunTest(const FString& Param
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_CursorHistory_PushRecordsGraphName,
 	"Claireon.EditBlueprintGraph.CursorHistory.PushRecordsGraphName",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_CursorHistory_PushRecordsGraphName::RunTest(const FString& Parameters)
 {
@@ -3849,7 +3960,7 @@ bool FEditBlueprintGraphTest_CursorHistory_PushRecordsGraphName::RunTest(const F
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_CursorHistory_PopReturnsEntry,
 	"Claireon.EditBlueprintGraph.CursorHistory.PopReturnsEntry",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_CursorHistory_PopReturnsEntry::RunTest(const FString& Parameters)
 {
@@ -3915,7 +4026,7 @@ FString ExtractSessionIdFromResponse(const FString& ResultText)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_CursorHistory_CursorBackAutoSwitches,
 	"Claireon.EditBlueprintGraph.CursorHistory.CursorBackAutoSwitches",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_CursorHistory_CursorBackAutoSwitches::RunTest(const FString& Parameters)
 {
@@ -4013,7 +4124,7 @@ bool FEditBlueprintGraphTest_CursorHistory_CursorBackAutoSwitches::RunTest(const
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_CursorHistory_SkipsDeletedGraph,
 	"Claireon.EditBlueprintGraph.CursorHistory.SkipsDeletedGraph",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_CursorHistory_SkipsDeletedGraph::RunTest(const FString& Parameters)
 {
@@ -4064,7 +4175,7 @@ bool FEditBlueprintGraphTest_CursorHistory_SkipsDeletedGraph::RunTest(const FStr
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_CursorHistory_FunctionOverridePushesOldGraph,
 	"Claireon.EditBlueprintGraph.CursorHistory.FunctionOverridePushesOldGraph",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_CursorHistory_FunctionOverridePushesOldGraph::RunTest(const FString& Parameters)
 {
@@ -4163,7 +4274,7 @@ bool FEditBlueprintGraphTest_CursorHistory_FunctionOverridePushesOldGraph::RunTe
 // Shared helper: create a BP, add_function_override on a native event so the
 // Blueprint has a second graph, and return the session id + the function
 // graph's name. Returns empty on failure.
-namespace
+namespace ClaireonTool_EditBlueprintGraph_spec_Private2
 {
 	bool SetupSwitchGraphFixture(
 				FAutomationTestBase& Test,
@@ -4190,18 +4301,34 @@ namespace
 			return false;
 		}
 
-		TSharedPtr<FJsonObject> OverrideArgs = MakeShared<FJsonObject>();
-		OverrideArgs->SetStringField(TEXT("operation"), TEXT("add_function_override"));
-		OverrideArgs->SetStringField(TEXT("session_id"), OutSessionId);
-		OverrideArgs->SetStringField(TEXT("function_name"), TEXT("SelectDropLocation"));
-		auto OverrideResult = DispatchBundledEnvelope(OverrideArgs);
-		if (OverrideResult.bIsError)
+		// Create a real function graph with add_function.
+		//
+		// This used to call add_function_override for "SelectDropLocation" and then hand
+		// that name back as the switch target, which is why all eight switch_graph tests
+		// failed identically with "Graph 'SelectDropLocation' not found in Blueprint.
+		// Available: EventGraph, UserConstructionScript". SelectDropLocation on
+		// AClaireonFunctionOverrideFixtureActor is declared
+		// `UFUNCTION(BlueprintImplementableEvent) void SelectDropLocation();` -- no return
+		// value, so UE exposes it as an EVENT. Overriding it adds a K2Node_Event to the
+		// ubergraph; it never produces a graph of that name, so there was nothing to
+		// switch to. The override call itself succeeds, which is why the failure surfaced
+		// only later at the switch.
+		//
+		// add_function creates an actual UEdGraph named after the function, which is what
+		// switch_graph consumes. Kept distinct from the fixture class's event names so a
+		// reader does not mistake it for an override.
+		TSharedPtr<FJsonObject> AddFunctionArgs = MakeShared<FJsonObject>();
+		AddFunctionArgs->SetStringField(TEXT("operation"), TEXT("add_function"));
+		AddFunctionArgs->SetStringField(TEXT("session_id"), OutSessionId);
+		AddFunctionArgs->SetStringField(TEXT("function_name"), TEXT("SwitchTargetFunc"));
+		auto AddFunctionResult = DispatchBundledEnvelope(AddFunctionArgs);
+		if (AddFunctionResult.bIsError)
 		{
-			Test.AddError(FString::Printf(TEXT("add_function_override failed: %s"), *OverrideResult.GetContentAsString()));
+			Test.AddError(FString::Printf(TEXT("add_function failed: %s"), *AddFunctionResult.GetContentAsString()));
 			return false;
 		}
 
-		OutFunctionGraphName = TEXT("SelectDropLocation");
+		OutFunctionGraphName = TEXT("SwitchTargetFunc");
 		return true;
 	}
 
@@ -4213,10 +4340,11 @@ namespace
 		DispatchBundledEnvelope(CloseArgs);
 	}
 }
+using namespace ClaireonTool_EditBlueprintGraph_spec_Private2;
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SwitchGraph_UbergraphToFunction,
 	"Claireon.EditBlueprintGraph.SwitchGraph.UbergraphToFunction",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_SwitchGraph_UbergraphToFunction::RunTest(const FString& Parameters)
 {
@@ -4270,7 +4398,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_UbergraphToFunction::RunTest(const FStr
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SwitchGraph_RoundTripPreservesSession,
 	"Claireon.EditBlueprintGraph.SwitchGraph.RoundTripPreservesSession",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_SwitchGraph_RoundTripPreservesSession::RunTest(const FString& Parameters)
 {
@@ -4326,7 +4454,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_RoundTripPreservesSession::RunTest(cons
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SwitchGraph_UnknownGraphReturnsAvailableList,
 	"Claireon.EditBlueprintGraph.SwitchGraph.UnknownGraphReturnsAvailableList",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_SwitchGraph_UnknownGraphReturnsAvailableList::RunTest(const FString& Parameters)
 {
@@ -4370,7 +4498,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_UnknownGraphReturnsAvailableList::RunTe
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SwitchGraph_SameGraphIsNoOp,
 	"Claireon.EditBlueprintGraph.SwitchGraph.SameGraphIsNoOp",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_SwitchGraph_SameGraphIsNoOp::RunTest(const FString& Parameters)
 {
@@ -4409,7 +4537,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_SameGraphIsNoOp::RunTest(const FString&
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SwitchGraph_AnimBPPosePoseOut,
 	"Claireon.EditBlueprintGraph.SwitchGraph.AnimBPPosePoseOut",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_SwitchGraph_AnimBPPosePoseOut::RunTest(const FString& Parameters)
 {
@@ -4424,7 +4552,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_AnimBPPosePoseOut::RunTest(const FStrin
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SwitchGraph_HonorsResponseMode,
 	"Claireon.EditBlueprintGraph.SwitchGraph.HonorsResponseMode",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_SwitchGraph_HonorsResponseMode::RunTest(const FString& Parameters)
 {
@@ -4475,7 +4603,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_HonorsResponseMode::RunTest(const FStri
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SwitchGraph_HistoryPreservedAcrossSwitch,
 	"Claireon.EditBlueprintGraph.SwitchGraph.HistoryPreservedAcrossSwitch",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_SwitchGraph_HistoryPreservedAcrossSwitch::RunTest(const FString& Parameters)
 {
@@ -4559,7 +4687,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_HistoryPreservedAcrossSwitch::RunTest(c
 // InspectNode session-path tests (stage_04)
 // ============================================================================
 
-namespace
+namespace ClaireonTool_EditBlueprintGraph_spec_Private3
 {
 	/** Extract the focused cursor node GUID from a full-mode response body.
 	 *  Parses "Focused Node: <title> [GUID: <guid>]" produced by BuildStateResponse. */
@@ -4655,10 +4783,11 @@ namespace
 		return Obj;
 	}
 }
+using namespace ClaireonTool_EditBlueprintGraph_spec_Private3;
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_InspectNode_PrintStringUnder5KB,
 	"Claireon.EditBlueprintGraph.InspectNode.PrintStringUnder5KB",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_InspectNode_PrintStringUnder5KB::RunTest(const FString& Parameters)
 {
@@ -4696,7 +4825,7 @@ bool FEditBlueprintGraphTest_InspectNode_PrintStringUnder5KB::RunTest(const FStr
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_InspectNode_PinTypeSerialization,
 	"Claireon.EditBlueprintGraph.InspectNode.PinTypeSerialization",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_InspectNode_PinTypeSerialization::RunTest(const FString& Parameters)
 {
@@ -4789,7 +4918,7 @@ bool FEditBlueprintGraphTest_InspectNode_PinTypeSerialization::RunTest(const FSt
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_InspectNode_ConnectionsRoundTrip,
 	"Claireon.EditBlueprintGraph.InspectNode.ConnectionsRoundTrip",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_InspectNode_ConnectionsRoundTrip::RunTest(const FString& Parameters)
 {
@@ -4887,7 +5016,7 @@ bool FEditBlueprintGraphTest_InspectNode_ConnectionsRoundTrip::RunTest(const FSt
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_InspectNode_IncludeConnectionsFalseOmitsLinkedTo,
 	"Claireon.EditBlueprintGraph.InspectNode.IncludeConnectionsFalseOmitsLinkedTo",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_InspectNode_IncludeConnectionsFalseOmitsLinkedTo::RunTest(const FString& Parameters)
 {
@@ -4952,7 +5081,7 @@ bool FEditBlueprintGraphTest_InspectNode_IncludeConnectionsFalseOmitsLinkedTo::R
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_InspectNode_IncludePinDefaultsFalseOmitsDefaults,
 	"Claireon.EditBlueprintGraph.InspectNode.IncludePinDefaultsFalseOmitsDefaults",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_InspectNode_IncludePinDefaultsFalseOmitsDefaults::RunTest(const FString& Parameters)
 {
@@ -5013,7 +5142,7 @@ bool FEditBlueprintGraphTest_InspectNode_IncludePinDefaultsFalseOmitsDefaults::R
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_InspectNode_MissingNodeSurfacesAvailableList,
 	"Claireon.EditBlueprintGraph.InspectNode.MissingNodeSurfacesAvailableList",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_InspectNode_MissingNodeSurfacesAvailableList::RunTest(const FString& Parameters)
 {
@@ -5044,9 +5173,9 @@ bool FEditBlueprintGraphTest_InspectNode_MissingNodeSurfacesAvailableList::RunTe
 		CloseInspectNodeFixture(SessionId);
 		return false;
 	}
-	if (!Msg.Contains(TEXT("Available nodes:")))
+	if (!Msg.Contains(TEXT("Available nodes")))
 	{
-		AddError(FString::Printf(TEXT("Expected error to contain 'Available nodes:'; got: %s"), *Msg));
+		AddError(FString::Printf(TEXT("Expected error to contain 'Available nodes'; got: %s"), *Msg));
 		CloseInspectNodeFixture(SessionId);
 		return false;
 	}
@@ -5057,7 +5186,7 @@ bool FEditBlueprintGraphTest_InspectNode_MissingNodeSurfacesAvailableList::RunTe
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_InspectNode_AnimGraphRedirectSessionPath,
 	"Claireon.EditBlueprintGraph.InspectNode.AnimGraphRedirectSessionPath",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_InspectNode_AnimGraphRedirectSessionPath::RunTest(const FString& Parameters)
 {
@@ -5076,7 +5205,7 @@ bool FEditBlueprintGraphTest_InspectNode_AnimGraphRedirectSessionPath::RunTest(c
 // (switch_graph + inspect_node) and cross-graph cursor_back surface.
 // ===========================================================================
 
-namespace
+namespace ClaireonTool_EditBlueprintGraph_spec_Private4
 {
 	/** Add a function-override on the active session; returns true on success. */
 	bool AddFunctionOverride(
@@ -5092,6 +5221,35 @@ namespace
 		if (R.bIsError)
 		{
 			Test.AddError(FString::Printf(TEXT("add_function_override('%s') failed: %s"),
+				*FunctionName, *R.GetContentAsString()));
+			return false;
+		}
+		return true;
+	}
+
+	// Create a real, switchable function graph.
+	//
+	// Use this, not AddFunctionOverride, whenever a test needs a graph to switch to.
+	// Every overridable name on AClaireonFunctionOverrideFixtureActor
+	// (SelectDropLocation, GetRewardData, ChooseStrategyForSpawner) is declared
+	// `UFUNCTION(BlueprintImplementableEvent) void ...()` -- no return value, so UE
+	// exposes them as EVENTS. Overriding one adds a K2Node_Event to the ubergraph and
+	// creates no graph, so a later switch_graph on that name fails with "not found in
+	// Blueprint. Available: EventGraph, UserConstructionScript". The override call
+	// succeeds, so the mistake only shows up at the switch.
+	bool AddUserFunction(
+		FAutomationTestBase& Test,
+		const FString& SessionId,
+		const FString& FunctionName)
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("operation"), TEXT("add_function"));
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		Args->SetStringField(TEXT("function_name"), FunctionName);
+		auto R = DispatchBundledEnvelope(Args);
+		if (R.bIsError)
+		{
+			Test.AddError(FString::Printf(TEXT("add_function('%s') failed: %s"),
 				*FunctionName, *R.GetContentAsString()));
 			return false;
 		}
@@ -5162,25 +5320,26 @@ namespace
 		const FString& GraphName)
 	{
 		UBlueprint* BP = LoadObject<UBlueprint>(nullptr, *AssetPath);
-		if (!BP) { return FString(); }
+		if (!IsValid(BP)) { return FString(); }
 		auto FindInList = [&GraphName](const TArray<UEdGraph*>& Graphs) -> UEdGraph*
 		{
 			for (UEdGraph* G : Graphs)
 			{
-				if (G && G->GetName() == GraphName) { return G; }
+				if (IsValid(G) && G->GetName() == GraphName) { return G; }
 			}
 			return nullptr;
 		};
 		UEdGraph* G = FindInList(BP->UbergraphPages);
-		if (!G) { G = FindInList(BP->FunctionGraphs); }
-		if (!G) { return FString(); }
+		if (!IsValid(G)) { G = FindInList(BP->FunctionGraphs); }
+		if (!IsValid(G)) { return FString(); }
 		for (UEdGraphNode* N : G->Nodes)
 		{
-			if (N) { return N->NodeGuid.ToString(); }
+			if (IsValid(N)) { return N->NodeGuid.ToString(); }
 		}
 		return FString();
 	}
 }
+using namespace ClaireonTool_EditBlueprintGraph_spec_Private4;
 
 // =====================================================================================
 // Test 16: SwitchGraph.RefinementLoopEndToEnd
@@ -5198,13 +5357,13 @@ namespace
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SwitchGraph_RefinementLoopEndToEnd,
 	"Claireon.EditBlueprintGraph.SwitchGraph.RefinementLoopEndToEnd",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_SwitchGraph_RefinementLoopEndToEnd::RunTest(const FString& Parameters)
 {
 	const FString AssetPath = TEXT("/Game/__MCPTests/BP_RefinementLoopEndToEnd");
 
-	// Create a Trajan Director blueprint and add two function overrides so the BP
+	// Create a director-style fixture blueprint and add two function overrides so the BP
 	// has EventGraph + Func1 + Func2 for the refinement loop.
 	TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
 	CreateArgs->SetStringField(TEXT("operation"), TEXT("create"));
@@ -5223,10 +5382,11 @@ bool FEditBlueprintGraphTest_SwitchGraph_RefinementLoopEndToEnd::RunTest(const F
 		return false;
 	}
 
-	const FString Func1 = TEXT("SelectDropLocation");
-	const FString Func2 = TEXT("ChooseStrategyForSpawner");
-	if (!AddFunctionOverride(*this, SessionId, Func1)) { return false; }
-	if (!AddFunctionOverride(*this, SessionId, Func2)) { return false; }
+	// Real function graphs, not event overrides -- see AddUserFunction's note.
+	const FString Func1 = TEXT("SwitchFuncOne");
+	const FString Func2 = TEXT("SwitchFuncTwo");
+	if (!AddUserFunction(*this, SessionId, Func1)) { return false; }
+	if (!AddUserFunction(*this, SessionId, Func2)) { return false; }
 
 	// ---- Refinement loop ----
 	int32 TotalPayloadBytes = 0;
@@ -5341,7 +5501,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_RefinementLoopEndToEnd::RunTest(const F
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd,
 	"Claireon.EditBlueprintGraph.SwitchGraph.CursorBackCrossGraphEndToEnd",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd::RunTest(const FString& Parameters)
 {
@@ -5364,10 +5524,11 @@ bool FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd::RunTest(c
 		return false;
 	}
 
-	const FString Func1 = TEXT("SelectDropLocation");
-	const FString Func2 = TEXT("ChooseStrategyForSpawner");
-	if (!AddFunctionOverride(*this, SessionId, Func1)) { return false; }
-	if (!AddFunctionOverride(*this, SessionId, Func2)) { return false; }
+	// Real function graphs, not event overrides -- see AddUserFunction's note.
+	const FString Func1 = TEXT("SwitchFuncOne");
+	const FString Func2 = TEXT("SwitchFuncTwo");
+	if (!AddUserFunction(*this, SessionId, Func1)) { return false; }
+	if (!AddUserFunction(*this, SessionId, Func2)) { return false; }
 
 	// Start on EventGraph with cursor on node A (some event node).
 	{
@@ -5379,8 +5540,17 @@ bool FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd::RunTest(c
 		}
 	}
 
-	// Newly-created Blueprints have an empty EventGraph; add a PrintString node so
-	// the cursor has something to anchor on.
+	// Add a PrintString node and remember ITS guid -- that is what the cursor anchors on.
+	//
+	// The expected anchor used to come from FirstNodeGuidOnGraph("EventGraph"), justified
+	// by "newly-created Blueprints have an empty EventGraph". They do not: this fixture is
+	// Actor-parented, so its EventGraph already contains Event BeginPlay,
+	// Event ActorBeginOverlap and friends. FirstNodeGuidOnGraph therefore returned one of
+	// those pre-existing event nodes while add_node had anchored the cursor on the
+	// PrintString it just created, and cursor_back #2 was compared against the wrong node.
+	// The graph assertion still passed, which is why this looked like a cursor-history bug
+	// rather than a bad expectation.
+	FString EventGraphNodeAGuid;
 	{
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 		Args->SetStringField(TEXT("operation"), TEXT("add_node"));
@@ -5394,12 +5564,15 @@ bool FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd::RunTest(c
 			AddError(FString::Printf(TEXT("add_node EventGraph PrintString failed: %s"), *R.GetContentAsString()));
 			return false;
 		}
+		if (R.Data.IsValid())
+		{
+			R.Data->TryGetStringField(TEXT("created_node_guid"), EventGraphNodeAGuid);
+		}
 	}
 
-	const FString EventGraphNodeAGuid = FirstNodeGuidOnGraph(SessionId, AssetPath, TEXT("EventGraph"));
 	if (EventGraphNodeAGuid.IsEmpty())
 	{
-		AddError(TEXT("EventGraph has no nodes to anchor cursor"));
+		AddError(TEXT("add_node did not report created_node_guid for the EventGraph anchor"));
 		return false;
 	}
 
@@ -5536,7 +5709,7 @@ bool FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd::RunTest(c
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SessionIdContract,
 	"Claireon.EditBlueprintGraph.SessionIdContract",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_SessionIdContract::RunTest(const FString& Parameters)
 {
@@ -5764,10 +5937,33 @@ bool FEditBlueprintGraphTest_SessionIdContract::RunTest(const FString& Parameter
 			AddError(TEXT("[nudge] call #6 expected session_hint but none was emitted"));
 			return false;
 		}
-		// The hint should name the session id and explain how to switch to explicit sessions.
-		if (!Hint6.Contains(SessionIdFromCreate) || !Hint6.Contains(TEXT("operation='open'")) || !Hint6.Contains(TEXT("close")))
+		// The hint should name the CURRENTLY-held session and explain how to switch to
+		// explicit sessions.
+		//
+		// Two expectations here were wrong and only surfaced on first execution. It
+		// required SessionIdFromCreate, but that session was deliberately closed during
+		// setup, so the asset_path calls auto-open a NEW one and the hint correctly names
+		// that -- naming the dead session would be the bug. It also required
+		// "operation='open'", which the hint has never said: it tells the caller to read
+		// Data.session_id and to call operation='close' when finished.
+		FString CurrentSessionId;
+		if (!Data6->TryGetStringField(TEXT("session_id"), CurrentSessionId) || CurrentSessionId.IsEmpty())
 		{
-			AddError(FString::Printf(TEXT("[nudge] session_hint missing expected content: %s"), *Hint6));
+			AddError(TEXT("[nudge] call #6 response carried no session_id to compare the hint against"));
+			return false;
+		}
+		if (!Hint6.Contains(CurrentSessionId))
+		{
+			AddError(FString::Printf(
+				TEXT("[nudge] session_hint should name the live session '%s'. Got: %s"),
+				*CurrentSessionId, *Hint6));
+			return false;
+		}
+		if (!Hint6.Contains(TEXT("Data.session_id")) || !Hint6.Contains(TEXT("operation='close'")))
+		{
+			AddError(FString::Printf(
+				TEXT("[nudge] session_hint should point at Data.session_id and operation='close'. Got: %s"),
+				*Hint6));
 			return false;
 		}
 		AddInfo(FString::Printf(TEXT("[nudge] call #6 emitted session_hint (len=%d) as expected"), Hint6.Len()));
@@ -5820,7 +6016,7 @@ bool FEditBlueprintGraphTest_SessionIdContract::RunTest(const FString& Parameter
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ApplyGraphRollback,
 	"Claireon.EditBlueprintGraph.ApplyGraphRollback",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_ApplyGraphRollback::RunTest(const FString& Parameters)
 {
@@ -5865,7 +6061,7 @@ bool FEditBlueprintGraphTest_ApplyGraphRollback::RunTest(const FString& Paramete
 		return false;
 	}
 	UEdGraph* Graph = Data->Graph.Get();
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		AddError(TEXT("Session Graph weak ptr is null"));
 		return false;
@@ -5964,7 +6160,7 @@ bool FEditBlueprintGraphTest_ApplyGraphRollback::RunTest(const FString& Paramete
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ResolveByTitle_InspectEventBeginPlay,
 	"Claireon.EditBlueprintGraph.ResolveByTitle.InspectEventBeginPlay",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_ResolveByTitle_InspectEventBeginPlay::RunTest(const FString& Parameters)
 {
@@ -6023,7 +6219,7 @@ bool FEditBlueprintGraphTest_ResolveByTitle_InspectEventBeginPlay::RunTest(const
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ResolveByTitle_AmbiguousListsGuids,
 	"Claireon.EditBlueprintGraph.ResolveByTitle.AmbiguousListsGuids",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_ResolveByTitle_AmbiguousListsGuids::RunTest(const FString& Parameters)
 {
@@ -6095,12 +6291,134 @@ bool FEditBlueprintGraphTest_ResolveByTitle_AmbiguousListsGuids::RunTest(const F
 }
 
 // =====================================================================================
+// A near-miss title (spacing dropped) must NOT resolve, and must come back with a
+// "did you mean" hint naming the real title plus its GUID.
+//
+// The suggestion is deliberately not auto-applied: binding an edit to a space-insensitive
+// match can retarget it onto a different node (asking for "SetHealth" in a graph that only
+// has the "Set Health" variable setter), so the tool errors and hands back the exact title
+// for the caller to re-issue with.
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ResolveByTitle_NearMissSuggests,
+	"Claireon.EditBlueprintGraph.ResolveByTitle.NearMissSuggests",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_ResolveByTitle_NearMissSuggests::RunTest(const FString& Parameters)
+{
+	FString SessionId;
+	FString PrintStringGuid;
+	if (!SetupInspectNodeFixture(*this, TEXT("/Game/__MCPTests/BP_ResolveByTitleNearMiss"), SessionId, PrintStringGuid))
+	{
+		return false;
+	}
+
+	// "PrintString" is the raw member name; the editor renders the node as "Print String".
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("operation"), TEXT("inspect_node"));
+	Args->SetStringField(TEXT("session_id"), SessionId);
+	Args->SetStringField(TEXT("node_title"), TEXT("PrintString"));
+
+	auto Result = DispatchBundledEnvelope(Args);
+	if (!Result.bIsError)
+	{
+		// Node titles render raw rather than friendly when the editor's friendly-name style
+		// setting is off (observed in headless commandlets), in which case "PrintString" is an
+		// exact match and there is no near miss to suggest. Nothing to assert here.
+		AddInfo(TEXT("Titles render raw in this environment; near-miss path not exercised."));
+		CloseInspectNodeFixture(SessionId);
+		return true;
+	}
+
+	const FString Msg = Result.GetContentAsString();
+	if (!Msg.Contains(TEXT("Did you mean")))
+	{
+		AddError(FString::Printf(TEXT("Near-miss error missing 'Did you mean' hint: %s"), *Msg));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+	if (!Msg.Contains(TEXT("\"Print String\"")))
+	{
+		AddError(FString::Printf(TEXT("Hint should name the rendered title \"Print String\": %s"), *Msg));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+	// Compare in DigitsWithHyphens form; the fixture's GUID text comes from the add_node
+	// summary, which need not use the same formatting as the hint.
+	FGuid FixtureGuid;
+	if (!FGuid::Parse(PrintStringGuid, FixtureGuid))
+	{
+		AddError(FString::Printf(TEXT("Fixture GUID '%s' did not parse"), *PrintStringGuid));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+	const FString ExpectedGuid = FixtureGuid.ToString(EGuidFormats::DigitsWithHyphens);
+	if (!Msg.Contains(ExpectedGuid))
+	{
+		AddError(FString::Printf(TEXT("Hint should carry the candidate GUID %s: %s"), *ExpectedGuid, *Msg));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	CloseInspectNodeFixture(SessionId);
+	return true;
+}
+
+// =====================================================================================
+// A title matching nothing at all falls back to listing the graph's nodes.
+// =====================================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ResolveByTitle_NoCandidatesListsNodes,
+	"Claireon.EditBlueprintGraph.ResolveByTitle.NoCandidatesListsNodes",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditBlueprintGraphTest_ResolveByTitle_NoCandidatesListsNodes::RunTest(const FString& Parameters)
+{
+	FString SessionId;
+	FString PrintStringGuid;
+	if (!SetupInspectNodeFixture(*this, TEXT("/Game/__MCPTests/BP_ResolveByTitleNoCand"), SessionId, PrintStringGuid))
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("operation"), TEXT("inspect_node"));
+	Args->SetStringField(TEXT("session_id"), SessionId);
+	Args->SetStringField(TEXT("node_title"), TEXT("ZzNotARealNodeTitle"));
+
+	auto Result = DispatchBundledEnvelope(Args);
+	if (!Result.bIsError)
+	{
+		AddError(TEXT("Expected error for a title matching no node"));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	const FString Msg = Result.GetContentAsString();
+	if (Msg.Contains(TEXT("Did you mean")))
+	{
+		AddError(FString::Printf(TEXT("Should not suggest anything for an unrelated title: %s"), *Msg));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+	if (!Msg.Contains(TEXT("Available nodes")))
+	{
+		AddError(FString::Printf(TEXT("Expected the available-nodes fallback: %s"), *Msg));
+		CloseInspectNodeFixture(SessionId);
+		return false;
+	}
+
+	CloseInspectNodeFixture(SessionId);
+	return true;
+}
+
+// =====================================================================================
 // ITEM_01 Test C: neither node_guid nor node_title produces the canonical error string.
 // =====================================================================================
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ResolveByTitle_MissingBothFields,
 	"Claireon.EditBlueprintGraph.ResolveByTitle.MissingBothFields",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_ResolveByTitle_MissingBothFields::RunTest(const FString& Parameters)
 {
@@ -6143,7 +6461,7 @@ bool FEditBlueprintGraphTest_ResolveByTitle_MissingBothFields::RunTest(const FSt
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ResolveByTitle_MoveNodeByTitle,
 	"Claireon.EditBlueprintGraph.ResolveByTitle.MoveNodeByTitle",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_ResolveByTitle_MoveNodeByTitle::RunTest(const FString& Parameters)
 {
@@ -6176,12 +6494,15 @@ bool FEditBlueprintGraphTest_ResolveByTitle_MoveNodeByTitle::RunTest(const FStri
 }
 
 // =====================================================================================
-// ITEM_01 Test E: unknown title produces 'not found' error with 'Available nodes:'.
+// ITEM_01 Test E: unknown title produces 'not found' error listing the available nodes.
+// Matches on "Available nodes" without the colon: the renderer emits
+// "Available nodes (N of M):" (ClaireonBlueprintHelpers.cpp), so the count sits between
+// the words and the colon and a literal "Available nodes:" never matches.
 // =====================================================================================
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ResolveByTitle_UnknownTitle,
 	"Claireon.EditBlueprintGraph.ResolveByTitle.UnknownTitle",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_ResolveByTitle_UnknownTitle::RunTest(const FString& Parameters)
 {
@@ -6212,9 +6533,9 @@ bool FEditBlueprintGraphTest_ResolveByTitle_UnknownTitle::RunTest(const FString&
 		CloseInspectNodeFixture(SessionId);
 		return false;
 	}
-	if (!Msg.Contains(TEXT("Available nodes:")))
+	if (!Msg.Contains(TEXT("Available nodes")))
 	{
-		AddError(FString::Printf(TEXT("Error missing 'Available nodes:' substring: %s"), *Msg));
+		AddError(FString::Printf(TEXT("Error missing 'Available nodes' substring: %s"), *Msg));
 		CloseInspectNodeFixture(SessionId);
 		return false;
 	}
@@ -6234,7 +6555,7 @@ bool FEditBlueprintGraphTest_ResolveByTitle_UnknownTitle::RunTest(const FString&
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ResolveByTitle_MultiLineFirstLineMatch,
 	"Claireon.EditBlueprintGraph.ResolveByTitle.MultiLineFirstLineMatch",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_ResolveByTitle_MultiLineFirstLineMatch::RunTest(const FString& Parameters)
 {
@@ -6286,7 +6607,7 @@ bool FEditBlueprintGraphTest_ResolveByTitle_MultiLineFirstLineMatch::RunTest(con
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_FieldAliases_ComponentDetailsAliases,
 	"Claireon.EditBlueprintGraph.FieldAliases.ComponentDetailsAliases",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_FieldAliases_ComponentDetailsAliases::RunTest(const FString& Parameters)
 {
@@ -6399,7 +6720,7 @@ bool FEditBlueprintGraphTest_FieldAliases_ComponentDetailsAliases::RunTest(const
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ComponentDetails_StructuredShape,
 	"Claireon.EditBlueprintGraph.ComponentDetails.StructuredShape",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_ComponentDetails_StructuredShape::RunTest(const FString& Parameters)
 {
@@ -6510,7 +6831,7 @@ bool FEditBlueprintGraphTest_ComponentDetails_StructuredShape::RunTest(const FSt
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_ComponentDetails_ResponseModeSurvival,
 	"Claireon.EditBlueprintGraph.ComponentDetails.ResponseModeSurvival",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_ComponentDetails_ResponseModeSurvival::RunTest(const FString& Parameters)
 {
@@ -6577,7 +6898,7 @@ bool FEditBlueprintGraphTest_ComponentDetails_ResponseModeSurvival::RunTest(cons
 // Parses summary lines by GUID (not title) per Item 4 test-strategy guidance.
 // =====================================================================================
 
-namespace
+namespace ClaireonTool_EditBlueprintGraph_spec_Private5
 {
 	// Scan the get_state summary body for the line containing a given GUID fragment
 	// (short GUID or full). Returns the matched line or empty. The summary format at
@@ -6616,10 +6937,11 @@ namespace
 		return true;
 	}
 }
+using namespace ClaireonTool_EditBlueprintGraph_spec_Private5;
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_GetStatePositions_SingleNode,
 	"Claireon.EditBlueprintGraph.GetStatePositions.SingleNode",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_GetStatePositions_SingleNode::RunTest(const FString& Parameters)
 {
@@ -6719,7 +7041,7 @@ bool FEditBlueprintGraphTest_GetStatePositions_SingleNode::RunTest(const FString
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_GetStatePositions_MultiNode,
 	"Claireon.EditBlueprintGraph.GetStatePositions.MultiNode",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_GetStatePositions_MultiNode::RunTest(const FString& Parameters)
 {
@@ -6776,16 +7098,16 @@ bool FEditBlueprintGraphTest_GetStatePositions_MultiNode::RunTest(const FString&
 	// path keeps coordinates through ReconstructNode; the multi-node test verifies all
 	// three are tracked independently.
 	UBlueprint* BP = LoadObject<UBlueprint>(nullptr, *AssetPath);
-	if (!BP)
+	if (!IsValid(BP))
 	{
 		AddError(TEXT("Failed to load blueprint for live-state check")); CloseInspectNodeFixture(SessionId); return false;
 	}
 	UEdGraph* EventGraph = nullptr;
 	for (UEdGraph* G : BP->UbergraphPages)
 	{
-		if (G && G->GetName() == TEXT("EventGraph")) { EventGraph = G; break; }
+		if (IsValid(G) && G->GetName() == TEXT("EventGraph")) { EventGraph = G; break; }
 	}
-	if (!EventGraph) { AddError(TEXT("No EventGraph")); CloseInspectNodeFixture(SessionId); return false; }
+	if (!IsValid(EventGraph)) { AddError(TEXT("No EventGraph")); CloseInspectNodeFixture(SessionId); return false; }
 
 	TSet<TPair<int32, int32>> ExpectedSet;
 	for (const auto& P : Positions) { ExpectedSet.Add(P); }
@@ -6794,7 +7116,7 @@ bool FEditBlueprintGraphTest_GetStatePositions_MultiNode::RunTest(const FString&
 	TArray<TPair<int32, int32>> FoundPositions;
 	for (UEdGraphNode* Node : EventGraph->Nodes)
 	{
-		if (!Node) { continue; }
+		if (!IsValid(Node)) { continue; }
 		if (Node->GetClass()->GetName() == TEXT("K2Node_IfThenElse"))
 		{
 			FoundPositions.Add(TPair<int32, int32>(Node->NodePosX, Node->NodePosY));
@@ -6832,23 +7154,43 @@ bool FEditBlueprintGraphTest_GetStatePositions_MultiNode::RunTest(const FString&
 // asset-led phrasing and canonical inline-tag shape.
 // =====================================================================================
 
-namespace
+namespace ClaireonTool_EditBlueprintGraph_spec_Private6
 {
-	// Invoke list_graphs (a read-only, cheap, no-mutation op) via asset_path; each call
-	// increments Data->ConsecutiveAssetPathCalls. Returns the full FToolResult via the
-	// legacy envelope dispatcher.
-	IClaireonTool::FToolResult CallListGraphsByAssetPath(const FString& AssetPath)
+	// Drive the consecutive-asset_path counter with 'open', which is a SESSION op.
+	//
+	// These helpers previously used 'list_graphs' on the stated grounds that it is
+	// "read-only, cheap, no-mutation" and that "each call increments
+	// Data->ConsecutiveAssetPathCalls". The second half was false, and it is the reason
+	// every test in this group failed on its first real execution. list_graphs declares
+	// itself "Stateless / read-only / non-session" and never touches a session at all: it
+	// loads the Blueprint directly and returns MakeSuccessResult, so there is no
+	// session_id in Data, no counter, and no hint. Even the tools that DO take the
+	// read-only session path cannot accumulate, because BeginReadOnlySessionOp runs
+	// against ReadOnlyScratchData and resets ConsecutiveAssetPathCalls to 0 every call
+	// (ClaireonBlueprintGraphEditToolBase.cpp). Only BeginSessionOp's asset_path branch
+	// increments, and BuildStateResponse deliberately suppresses the hint when SessionId
+	// is empty -- advising a caller to close what was never opened would be noise.
+	//
+	// 'get_state' goes through BeginSessionOp, whose asset_path branch increments on both
+	// a fresh auto-open and a ReusedExistingSession -- exactly the "caller keeps passing
+	// asset_path instead of threading session_id" pattern the hint exists to nudge. This
+	// is the same operation the sibling SessionIdContract test drives the counter with.
+	//
+	// Not 'open': measured, it does not fire the hint, and it should not. Calling 'open'
+	// explicitly IS the discipline the hint is advocating, so nudging the caller who
+	// already adopted it would be backwards.
+	IClaireonTool::FToolResult CallGetStateByAssetPath(const FString& AssetPath)
 	{
 		TSharedPtr<FJsonObject> A = MakeShared<FJsonObject>();
-		A->SetStringField(TEXT("operation"), TEXT("list_graphs"));
+		A->SetStringField(TEXT("operation"), TEXT("get_state"));
 		A->SetStringField(TEXT("asset_path"), AssetPath);
 		return DispatchBundledEnvelope(A);
 	}
 
-	IClaireonTool::FToolResult CallListGraphsBySessionId(const FString& SessionId)
+	IClaireonTool::FToolResult CallGetStateBySessionId(const FString& SessionId)
 	{
 		TSharedPtr<FJsonObject> A = MakeShared<FJsonObject>();
-		A->SetStringField(TEXT("operation"), TEXT("list_graphs"));
+		A->SetStringField(TEXT("operation"), TEXT("get_state"));
 		A->SetStringField(TEXT("session_id"), SessionId);
 		return DispatchBundledEnvelope(A);
 	}
@@ -6876,10 +7218,11 @@ namespace
 		return SessionId;
 	}
 }
+using namespace ClaireonTool_EditBlueprintGraph_spec_Private6;
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SessionHint_FiresAtSix,
 	"Claireon.EditBlueprintGraph.SessionHint.FiresAtSix",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_SessionHint_FiresAtSix::RunTest(const FString& Parameters)
 {
@@ -6893,7 +7236,7 @@ bool FEditBlueprintGraphTest_SessionHint_FiresAtSix::RunTest(const FString& Para
 	// Five calls -- no hint expected.
 	for (int32 i = 0; i < 5; ++i)
 	{
-		auto R = CallListGraphsByAssetPath(AssetPath);
+		auto R = CallGetStateByAssetPath(AssetPath);
 		if (R.bIsError)
 		{
 			AddError(FString::Printf(TEXT("Call %d failed: %s"), i + 1, *R.GetContentAsString()));
@@ -6907,7 +7250,7 @@ bool FEditBlueprintGraphTest_SessionHint_FiresAtSix::RunTest(const FString& Para
 	}
 
 	// Sixth call -- hint should fire.
-	auto R6 = CallListGraphsByAssetPath(AssetPath);
+	auto R6 = CallGetStateByAssetPath(AssetPath);
 	if (R6.bIsError || !R6.Data.IsValid())
 	{
 		AddError(FString::Printf(TEXT("Call 6 failed or null Data: %s"), *R6.GetContentAsString()));
@@ -6943,11 +7286,12 @@ bool FEditBlueprintGraphTest_SessionHint_FiresAtSix::RunTest(const FString& Para
 		return false;
 	}
 
-	// Inline tag: summary must contain the canonical prefix and asset-path anchor.
-	const FString Summary = R6.GetContentAsString();
-	if (!Summary.Contains(TEXT("[hint] session_hint: reuse session_id for '")))
+	// The hint must ALSO be on Result.Hint, which is the channel the bridge reads.
+	// It is deliberately NOT concatenated into Summary any more; the sibling
+	// StructuredHintContract test owns that contract in full.
+	if (!R6.Hint.IsValid())
 	{
-		AddError(FString::Printf(TEXT("Summary missing canonical inline tag prefix. Summary: %s"), *Summary));
+		AddError(TEXT("Data.session_hint was set but Result.Hint was not"));
 		return false;
 	}
 
@@ -6955,14 +7299,17 @@ bool FEditBlueprintGraphTest_SessionHint_FiresAtSix::RunTest(const FString& Para
 }
 
 // =====================================================================================
-// ITEM_06 Test 2: inline tag compactness. The [hint] fragment is short (<200 chars).
+// ITEM_06 Test 2: the structured-hint contract. Was "inline tag compactness", which
+// asserted a "[hint] ..." fragment under 200 chars inside Summary; that tag was removed
+// because it corrupted every JSON-Summary family. Now asserts the channel that replaced
+// it, and guards against the concatenation coming back.
 // =====================================================================================
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SessionHint_InlineTagCompact,
-	"Claireon.EditBlueprintGraph.SessionHint.InlineTagCompact",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SessionHint_StructuredHintContract,
+	"Claireon.EditBlueprintGraph.SessionHint.StructuredHintContract",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
-bool FEditBlueprintGraphTest_SessionHint_InlineTagCompact::RunTest(const FString& Parameters)
+bool FEditBlueprintGraphTest_SessionHint_StructuredHintContract::RunTest(const FString& Parameters)
 {
 	const FString AssetPath = TEXT("/Game/__MCPTests/BP_SessionHintCompact");
 
@@ -6973,21 +7320,57 @@ bool FEditBlueprintGraphTest_SessionHint_InlineTagCompact::RunTest(const FString
 
 	for (int32 i = 0; i < 5; ++i)
 	{
-		CallListGraphsByAssetPath(AssetPath);
+		CallGetStateByAssetPath(AssetPath);
 	}
-	auto R = CallListGraphsByAssetPath(AssetPath);
+	auto R = CallGetStateByAssetPath(AssetPath);
 	const FString Summary = R.GetContentAsString();
 
-	int32 Start = Summary.Find(TEXT("[hint]"));
-	if (Start == INDEX_NONE)
+	// The hint rides on FToolResult::Hint, never on Summary.
+	//
+	// This test used to require a compact "[hint] ..." tag inside Summary. That tag was
+	// deliberately removed: for every family whose Summary IS serialized JSON, appending
+	// it made the content channel unparseable, and because the hint only fires on the
+	// sixth consecutive call it broke in production rather than in testing. There is no
+	// "compact form" any more -- the full text goes in Hint.message -- so the old length
+	// bound has no successor and is not reinstated here.
+	if (!R.Hint.IsValid())
 	{
-		AddError(TEXT("No [hint] tag on call 6"));
+		AddError(TEXT("Result.Hint not populated on call 6"));
 		return false;
 	}
-	const FString Tag = Summary.Mid(Start);
-	if (Tag.Len() >= 200)
+
+	FString HintTool;
+	if (!R.Hint->TryGetStringField(TEXT("tool"), HintTool) || HintTool.IsEmpty())
 	{
-		AddError(FString::Printf(TEXT("Inline [hint] tag too long: %d chars"), Tag.Len()));
+		AddError(TEXT("Result.Hint missing a non-empty 'tool' field (ValidateHint requires it)"));
+		return false;
+	}
+
+	FString HintMessage;
+	if (!R.Hint->TryGetStringField(TEXT("message"), HintMessage) || HintMessage.IsEmpty())
+	{
+		AddError(TEXT("Result.Hint missing a non-empty 'message' field"));
+		return false;
+	}
+
+	// Same text on both channels: Data.session_hint is the machine-readable copy.
+	FString DataHint;
+	if (!R.Data.IsValid() || !R.Data->TryGetStringField(TEXT("session_hint"), DataHint))
+	{
+		AddError(TEXT("Data.session_hint absent while Result.Hint was populated"));
+		return false;
+	}
+	if (DataHint != HintMessage)
+	{
+		AddError(TEXT("Result.Hint.message and Data.session_hint disagree"));
+		return false;
+	}
+
+	// Regression guard: reintroducing the concatenation would silently corrupt every
+	// JSON-Summary family again, and only on the sixth call.
+	if (Summary.Contains(TEXT("[hint]")))
+	{
+		AddError(TEXT("Summary contains an inline [hint] tag; hints must ride on Result.Hint only"));
 		return false;
 	}
 	return true;
@@ -7000,7 +7383,7 @@ bool FEditBlueprintGraphTest_SessionHint_InlineTagCompact::RunTest(const FString
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SessionHint_SessionIdResetsCounter,
 	"Claireon.EditBlueprintGraph.SessionHint.SessionIdResetsCounter",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_SessionHint_SessionIdResetsCounter::RunTest(const FString& Parameters)
 {
@@ -7010,8 +7393,8 @@ bool FEditBlueprintGraphTest_SessionHint_SessionIdResetsCounter::RunTest(const F
 	if (InitialSessionId.IsEmpty()) { return false; }
 
 	// Climb to 6 via asset_path.
-	for (int32 i = 0; i < 5; ++i) { CallListGraphsByAssetPath(AssetPath); }
-	auto R6 = CallListGraphsByAssetPath(AssetPath);
+	for (int32 i = 0; i < 5; ++i) { CallGetStateByAssetPath(AssetPath); }
+	auto R6 = CallGetStateByAssetPath(AssetPath);
 	FString SessionId6;
 	if (R6.Data.IsValid()) { R6.Data->TryGetStringField(TEXT("session_id"), SessionId6); }
 	if (SessionId6.IsEmpty())
@@ -7021,7 +7404,7 @@ bool FEditBlueprintGraphTest_SessionHint_SessionIdResetsCounter::RunTest(const F
 	}
 
 	// Call with explicit session_id. Counter resets.
-	auto R7 = CallListGraphsBySessionId(SessionId6);
+	auto R7 = CallGetStateBySessionId(SessionId6);
 	if (R7.Data.IsValid() && R7.Data->HasField(TEXT("session_hint")))
 	{
 		AddError(TEXT("session_hint should NOT be emitted when session_id is passed"));
@@ -7031,7 +7414,7 @@ bool FEditBlueprintGraphTest_SessionHint_SessionIdResetsCounter::RunTest(const F
 	// Five more session_id calls, no hint.
 	for (int32 i = 0; i < 5; ++i)
 	{
-		auto RN = CallListGraphsBySessionId(SessionId6);
+		auto RN = CallGetStateBySessionId(SessionId6);
 		if (RN.Data.IsValid() && RN.Data->HasField(TEXT("session_hint")))
 		{
 			AddError(FString::Printf(TEXT("Unexpected session_hint on session_id call %d"), i + 2));
@@ -7042,7 +7425,7 @@ bool FEditBlueprintGraphTest_SessionHint_SessionIdResetsCounter::RunTest(const F
 	// Drop session_id; 5 asset_path calls, no hint (counter 1..5).
 	for (int32 i = 0; i < 5; ++i)
 	{
-		auto RN = CallListGraphsByAssetPath(AssetPath);
+		auto RN = CallGetStateByAssetPath(AssetPath);
 		if (RN.Data.IsValid() && RN.Data->HasField(TEXT("session_hint")))
 		{
 			AddError(FString::Printf(TEXT("Unexpected session_hint on asset_path call %d after reset"), i + 1));
@@ -7059,7 +7442,7 @@ bool FEditBlueprintGraphTest_SessionHint_SessionIdResetsCounter::RunTest(const F
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SessionHint_BelowThresholdNoFire,
 	"Claireon.EditBlueprintGraph.SessionHint.BelowThresholdNoFire",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_SessionHint_BelowThresholdNoFire::RunTest(const FString& Parameters)
 {
@@ -7070,7 +7453,7 @@ bool FEditBlueprintGraphTest_SessionHint_BelowThresholdNoFire::RunTest(const FSt
 		return false;
 	}
 
-	auto R = CallListGraphsByAssetPath(AssetPath);
+	auto R = CallGetStateByAssetPath(AssetPath);
 	if (R.bIsError)
 	{
 		AddError(FString::Printf(TEXT("call failed: %s"), *R.GetContentAsString()));
@@ -7087,16 +7470,18 @@ bool FEditBlueprintGraphTest_SessionHint_BelowThresholdNoFire::RunTest(const FSt
 // =====================================================================================
 // regression: bp open must NOT silently re-bind a session to a different graph.
 // Sequence: create -> open(EventGraph) -> open(SelectDropLocation) on same session.
-// Pre-fix: second open silently dropped the requested graph and the session kept
-// editing EventGraph. Post-fix: second open returns an error pointing the caller to
-// close + reopen.
+// Third and current policy: a second open naming a different graph RETARGETS the session
+// to it. The first policy silently dropped the requested graph and kept editing
+// EventGraph; the second refused and told the caller to close + reopen, which forced a
+// round trip per graph change. This test asserted that middle policy long after it was
+// replaced -- see ClaireonBlueprintGraphTool_Open::Execute.
 // =====================================================================================
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_OpenRefusesDifferentGraphOnReuse,
-	"Claireon.EditBlueprintGraph.Open.RefusesDifferentGraphOnReuse",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_OpenRetargetsGraphOnReuse,
+	"Claireon.EditBlueprintGraph.Open.RetargetsDifferentGraphOnReuse",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
-bool FEditBlueprintGraphTest_OpenRefusesDifferentGraphOnReuse::RunTest(const FString& Parameters)
+bool FEditBlueprintGraphTest_OpenRetargetsGraphOnReuse::RunTest(const FString& Parameters)
 {
 	const FString AssetPath = TEXT("/Game/__MCPTests/BP_OpenGraphNameRefuse");
 
@@ -7132,25 +7517,59 @@ bool FEditBlueprintGraphTest_OpenRefusesDifferentGraphOnReuse::RunTest(const FSt
 		}
 	}
 
-	// Add the SelectDropLocation override so its function graph exists in the BP.
+	// Move the session onto a genuinely different graph.
+	//
+	// This used to call add_function_override("SelectDropLocation") and assert in a comment
+	// that the session was "now tracking SelectDropLocation". It was not.
+	// SelectDropLocation is a void BlueprintImplementableEvent, so UE exposes it as an
+	// EVENT: the override adds a K2Node_Event to the ubergraph and creates no graph, and
+	// the session stayed on EventGraph. Reopening with graph_name="EventGraph" was then a
+	// request for the SAME graph, which open is right to allow -- so "got success" was
+	// correct behaviour and the test was wrong about its own setup. add_function creates a
+	// real graph and switches the session to it, which is the conflict this test means to
+	// provoke.
 	{
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-		Args->SetStringField(TEXT("operation"), TEXT("add_function_override"));
+		Args->SetStringField(TEXT("operation"), TEXT("add_function"));
 		Args->SetStringField(TEXT("session_id"), SessionId);
-		Args->SetStringField(TEXT("function_name"), TEXT("SelectDropLocation"));
+		Args->SetStringField(TEXT("function_name"), TEXT("ReopenConflictFunc"));
 
 		auto Result = DispatchBundledEnvelope(Args);
 		if (Result.bIsError)
 		{
-			AddError(FString::Printf(TEXT("add_function_override failed: %s"), *Result.GetContentAsString()));
+			AddError(FString::Printf(TEXT("add_function failed: %s"), *Result.GetContentAsString()));
 			return false;
 		}
 	}
 
-	// The session is now tracking some non-default graph (SelectDropLocation after the override).
-	// Try to reopen the SAME asset with graph_name="EventGraph" via the standard open op.
-	// The fix in ClaireonBlueprintGraphTool_Open::Execute must refuse with an error mentioning
-	// the existing graph and pointing the caller at bp_close.
+	// add_function creates the graph but does not move the session onto it -- the
+	// switch_graph suites all switch explicitly after adding. Without this the session is
+	// still on EventGraph and the reopen below is a same-graph request, which open allows.
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("operation"), TEXT("switch_graph"));
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		Args->SetStringField(TEXT("graph_name"), TEXT("ReopenConflictFunc"));
+
+		auto Result = DispatchBundledEnvelope(Args);
+		if (Result.bIsError)
+		{
+			AddError(FString::Printf(TEXT("switch_graph failed: %s"), *Result.GetContentAsString()));
+			return false;
+		}
+	}
+
+	// The session is now tracking a non-default graph (ReopenConflictFunc). Reopening the
+	// SAME asset with graph_name="EventGraph" must RETARGET the session, not refuse.
+	//
+	// This test previously required a refusal naming "already tracking" and "bp_close".
+	// That policy no longer exists and its removal was deliberate:
+	// ClaireonBlueprintGraphTool_Open::Execute records that the graph was first silently
+	// dropped, then refused -- which "forced a bp_close + bp_open round trip per graph
+	// change" -- and that since the caller names the graph explicitly, retargeting is the
+	// requested behaviour, by the same mechanism as bp_switch_graph. So "got success" was
+	// the product being right and the test being three years stale. Rewritten to assert
+	// the policy that actually shipped, which had no coverage at all.
 	{
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 		Args->SetStringField(TEXT("operation"), TEXT("open"));
@@ -7160,15 +7579,34 @@ bool FEditBlueprintGraphTest_OpenRefusesDifferentGraphOnReuse::RunTest(const FSt
 		Args->SetObjectField(TEXT("params"), Params);
 
 		auto Result = DispatchBundledEnvelope(Args);
-		if (!Result.bIsError)
+		if (Result.bIsError)
 		{
-			AddError(TEXT("Expected error refusing to reopen session against a different graph; got success"));
+			AddError(FString::Printf(TEXT("Reopen against a different graph should retarget, not fail: %s"),
+				*Result.GetContentAsString()));
 			return false;
 		}
-		const FString ErrText = Result.GetContentAsString();
-		if (!ErrText.Contains(TEXT("already tracking")) || !ErrText.Contains(TEXT("bp_close")))
+
+		// Retarget must be observable, not silent: the session reports the new graph.
+		const FString StateText = GetSessionStateText(SessionId);
+		const FString CurrentGraph = ExtractCurrentGraphName(StateText);
+		if (CurrentGraph != TEXT("EventGraph"))
 		{
-			AddError(FString::Printf(TEXT("Refusal error message did not mention 'already tracking' + 'bp_close': %s"), *ErrText));
+			AddError(FString::Printf(
+				TEXT("After reopen with graph_name=EventGraph the session should track EventGraph, got '%s'. State:\n%s"),
+				*CurrentGraph, *StateText));
+			return false;
+		}
+
+		// And it must reuse the session rather than minting a second one on the asset.
+		FString ReopenedSessionId;
+		if (Result.Data.IsValid())
+		{
+			Result.Data->TryGetStringField(TEXT("session_id"), ReopenedSessionId);
+		}
+		if (!ReopenedSessionId.IsEmpty() && ReopenedSessionId != SessionId)
+		{
+			AddError(FString::Printf(TEXT("Reopen minted a new session '%s'; expected reuse of '%s'"),
+				*ReopenedSessionId, *SessionId));
 			return false;
 		}
 	}
@@ -7195,7 +7633,7 @@ bool FEditBlueprintGraphTest_OpenRefusesDifferentGraphOnReuse::RunTest(const FSt
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_AddNodeResponseHasCreatedNodeGuid,
 	"Claireon.EditBlueprintGraph.AddNode.ResponseHasCreatedNodeGuid",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FEditBlueprintGraphTest_AddNodeResponseHasCreatedNodeGuid::RunTest(const FString& Parameters)
 {

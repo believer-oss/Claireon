@@ -282,7 +282,7 @@ IClaireonTool::FToolResult ClaireonTool_CommandletRun::Execute(const TSharedPtr<
 	const bool bIsError = (ReturnCode != 0) || bTimedOut;
 
 	FString DeprecationNotice = FString::Printf(
-		TEXT("[DEPRECATED] %s will be removed. Use Scripts/Utilities/Invoke-Commandlet.ps1 instead.\n\n"),
+		TEXT("[DEPRECATED] %s will be removed. Run UnrealEditor-Cmd -run=<Commandlet> directly instead.\n\n"),
 		*GetName());
 	const FString FinalText = DeprecationNotice + Result;
 	return bIsError ? MakeErrorResult(FinalText) : MakeSuccessResult(nullptr, FinalText);

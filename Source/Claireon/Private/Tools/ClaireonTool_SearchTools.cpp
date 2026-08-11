@@ -110,13 +110,11 @@ TArray<FString> ClaireonTool_SearchTools::GetSearchKeywords() const
 
 FString ClaireonTool_SearchTools::GetDescription() const
 {
-	return TEXT("Search and inspect tools. Always call this before invoking a non-trivial tool through python_execute -- "
-		"pass `tool_name=\"<name>\"` to get the tool's exact input schema, parameter tooltips, and example usage. "
-		"Without `tool_name`, returns a flat, globally rank-ordered `tools[]` list matching `query` (hybrid lexical "
-		"bm25 + semantic fused via reciprocal rank fusion, with abbreviation expansion -- understands 'bp' for "
-		"blueprint, 'dt' for data table). Results are best-first. Filter by `category` if you "
-		"already know the area. TRANSPORT: all claireon.* tools listed here are invoked via mcp__claireon__python_execute: "
-		"`import claireon; result = claireon.<tool_name>(arg=value)`.");
+	return TEXT("Search and inspect Claireon tools. Pass `tool_name=\"<name>\"` for that tool's exact input schema, "
+		"parameter tooltips, and example usage -- always do this before invoking a non-trivial tool. "
+		"Otherwise `query` returns a rank-ordered tools[] list (bm25 + semantic, with abbreviation "
+		"expansion: 'bp', 'dt'); narrow with `category`. Stateless and read-only. Tools listed here run "
+		"via python_execute.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_SearchTools::GetInputSchema() const
@@ -250,15 +248,12 @@ bool ClaireonTool_SearchTools::RebuildSearchIndex()
 	const bool bBuilt = FClaireonToolSearchIndex::EnsureBuilt();
 
 	// Rebuild the SEMANTIC index on the SAME trigger as the lexical index so both
-	// stay in sync with the live registry. This re-embeds ~700 tools (ONNX RunSync
-	// is several ms each), but the model + session are cached across rebuilds, so
-	// only the per-tool embed loop is re-paid. When the ORT runtime / model / vocab
-	// are unavailable the rebuild is a graceful no-op (IsReady() stays false;
-	// Execute() falls back to lexical).
-	// PERF FOLLOW-UP: if OnToolsChanged churns often, make this lazy/async (rebuild
-	// on first semantic query after a dirty bit, or off the game thread) rather than
-	// synchronously here. At current churn (tool registration is a one-time startup
-	// burst) the synchronous batched cost is acceptable and easiest to reason about.
+	// stay in sync with the live registry. The first build embeds the full catalog
+	// (~700 tools, ONNX RunSync is several ms each); subsequent rebuilds reuse the
+	// per-tool embedding cache and only re-embed tools whose doc string changed,
+	// so OnToolsChanged churn costs milliseconds, not a full re-embed. When the
+	// ORT runtime / model / vocab are unavailable the rebuild is a graceful no-op
+	// (IsReady() stays false; Execute() falls back to lexical).
 	FClaireonToolEmbeddingIndex::RebuildFromLiveServer();
 
 	if (bBuilt)

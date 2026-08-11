@@ -42,7 +42,7 @@ FToolResult ClaireonStateTreeTool_AddBinding::Execute(const TSharedPtr<FJsonObje
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	FGuid SourceNodeId, TargetNodeId;

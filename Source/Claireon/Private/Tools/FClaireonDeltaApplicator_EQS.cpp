@@ -36,10 +36,10 @@ namespace ClaireonDeltaApplicator_EQS_anon
 	static UClass* EQSDelta_ResolveClass(const FString& ClassName, UClass* BaseClass, const FString& BasePrefix, FString& OutError)
 	{
 		UClass* FoundClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
-		if (FoundClass && FoundClass->IsChildOf(BaseClass)) { return FoundClass; }
+		if (IsValid(FoundClass) && FoundClass->IsChildOf(BaseClass)) { return FoundClass; }
 		const FString Prefixed = BasePrefix + ClassName;
 		FoundClass = FindFirstObject<UClass>(*Prefixed, EFindFirstObjectOptions::NativeFirst);
-		if (FoundClass && FoundClass->IsChildOf(BaseClass)) { return FoundClass; }
+		if (IsValid(FoundClass) && FoundClass->IsChildOf(BaseClass)) { return FoundClass; }
 		OutError = FString::Printf(TEXT("eqs_apply_delta: could not resolve class '%s' (expected subclass of %s)"),
 			*ClassName, *BaseClass->GetName());
 		return nullptr;
@@ -80,7 +80,7 @@ bool FClaireonDeltaApplicator_EQS::OpenOrReuseSession(const TSharedPtr<FJsonObje
 	}
 
 	UEnvQuery* Query = ClaireonBehaviorTreeHelpers::LoadEQSAsset(AssetPathArg, OutError);
-	if (!Query) { return false; }
+	if (!IsValid(Query)) { return false; }
 
 	ClaireonEQSEditToolBase::EnsureDelegateRegistered();
 
@@ -115,7 +115,7 @@ bool FClaireonDeltaApplicator_EQS::ApplyPhase2_Remove(const FString& SessionId, 
 	using namespace ClaireonDeltaApplicator_EQS_anon;
 	(void)SessionId;
 	UEnvQuery* Query = CachedQuery.Get();
-	if (!Query)
+	if (!IsValid(Query))
 	{
 		AddError(TEXT("eqs_apply_delta: query is no longer valid"));
 		return false;
@@ -169,7 +169,7 @@ bool FClaireonDeltaApplicator_EQS::ApplyPhase3_Create(const FString& SessionId, 
 	using namespace ClaireonDeltaApplicator_EQS_anon;
 	(void)SessionId;
 	UEnvQuery* Query = CachedQuery.Get();
-	if (!Query)
+	if (!IsValid(Query))
 	{
 		AddError(TEXT("eqs_apply_delta: query is no longer valid"));
 		return false;
@@ -219,7 +219,7 @@ bool FClaireonDeltaApplicator_EQS::ApplyPhase3_Create(const FString& SessionId, 
 			FString ResolveError;
 			UClass* GeneratorClass = EQSDelta_ResolveClass(GeneratorClassName,
 				UEnvQueryGenerator::StaticClass(), TEXT("EnvQueryGenerator_"), ResolveError);
-			if (!GeneratorClass)
+			if (!IsValid(GeneratorClass))
 			{
 				AddError(FString::Printf(TEXT("eqs_apply_delta: nodes[%d]: %s"), i, *ResolveError));
 				return false;
@@ -241,7 +241,7 @@ bool FClaireonDeltaApplicator_EQS::ApplyPhase3_Create(const FString& SessionId, 
 					FString TestResolveError;
 					UClass* TestClass = EQSDelta_ResolveClass(TestClassName,
 						UEnvQueryTest::StaticClass(), TEXT("EnvQueryTest_"), TestResolveError);
-					if (!TestClass)
+					if (!IsValid(TestClass))
 					{
 						AddWarning(FString::Printf(TEXT("eqs_apply_delta: nodes[%d].tests[%d]: %s"), i, t, *TestResolveError));
 						continue;
@@ -281,7 +281,7 @@ bool FClaireonDeltaApplicator_EQS::ApplyPhase3_Create(const FString& SessionId, 
 			FString ResolveError;
 			UClass* TestClass = EQSDelta_ResolveClass(TestClassName,
 				UEnvQueryTest::StaticClass(), TEXT("EnvQueryTest_"), ResolveError);
-			if (!TestClass)
+			if (!IsValid(TestClass))
 			{
 				AddError(FString::Printf(TEXT("eqs_apply_delta: nodes[%d]: %s"), i, *ResolveError));
 				return false;
@@ -308,7 +308,7 @@ void FClaireonDeltaApplicator_EQS::FinalizeSession(const FString& SessionId)
 {
 	(void)SessionId;
 	UEnvQuery* Query = CachedQuery.Get();
-	if (Query) { Query->MarkPackageDirty(); }
+	if (IsValid(Query)) { Query->MarkPackageDirty(); }
 }
 
 void FClaireonDeltaApplicator_EQS::CloseSessionIfOwned(const FString& SessionId)
@@ -325,12 +325,12 @@ void FClaireonDeltaApplicator_EQS::Phase3CleanupOnFailure(const FString& Session
 	using namespace ClaireonDeltaApplicator_EQS_anon;
 	(void)SessionId;
 	UEnvQuery* Query = CachedQuery.Get();
-	if (!Query) { return; }
+	if (!IsValid(Query)) { return; }
 	TArray<UEnvQueryOption*>& Options = EQSDelta_GetOptionsMutable(Query);
 	for (const TWeakObjectPtr<UEnvQueryOption>& Weak : CreatedOptionsThisCall)
 	{
 		UEnvQueryOption* Opt = Weak.Get();
-		if (Opt) { Options.Remove(Opt); }
+		if (IsValid(Opt)) { Options.Remove(Opt); }
 	}
 	CreatedOptionsThisCall.Reset();
 }

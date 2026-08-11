@@ -5,7 +5,9 @@
 #include "Tools/ClaireonBlueprintGraphTool_Open.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "ClaireonBlueprintHelpers.h"
+#include "ClaireonBridge.h"
 #include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
 #include "Tools/ClaireonSpecApplicator_Blueprint.h"
 #include "Tools/ClaireonBlueprintGraphEditToolBase_Internal.h"
 #include "ClaireonLog.h"
@@ -106,7 +108,7 @@ TArray<FString> ClaireonBlueprintGraphTool_Open::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_Open::GetDescription() const
 {
-    return TEXT("Opens a Blueprint for editing in a session-based per-node cycle. Creates or reuses a session keyed by MCP client and returns session_id plus initial graph state. Most-common pitfall: forgetting to close the session via bp_close, which leaks in-session edit state and prevents other clients from acquiring the same Blueprint.");
+    return TEXT("Open a Blueprint for editing in a session-based per-node cycle. Creates or reuses a session keyed by MCP client and returns session_id plus initial graph state. Most-common pitfall: forgetting to close the session via bp_close, which leaks in-session edit state and prevents other clients from acquiring the same Blueprint.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Open::GetInputSchema() const
@@ -114,7 +116,7 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Open::GetInputSchema() const
     FToolSchemaBuilder Builder;
     Builder.AddString(TEXT("asset_path"), TEXT("Blueprint asset path."), true);
     Builder.AddString(TEXT("graph_name"), TEXT("Optional graph to focus initially; defaults to EventGraph."));
-    Builder.AddNumber(TEXT("timeout_minutes"), TEXT("Session timeout in minutes (default 60)."));
+    Builder.AddNumber(TEXT("timeout_minutes"), TEXT("Session inactivity timeout in minutes (default 10; every operation resets the clock)."));
     return Builder.Build();
 }
 
@@ -154,27 +156,36 @@ FToolResult ClaireonBlueprintGraphTool_Open::Execute(const TSharedPtr<FJsonObjec
 
 	// Load Blueprint
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load Blueprint: %s"), *AssetPath));
 	}
 
 	// Get graph_name (optional, defaults to EventGraph)
 	FString GraphName;
-	if (!Params->TryGetStringField(TEXT("graph_name"), GraphName))
+	const bool bGraphNameExplicit = Params->TryGetStringField(TEXT("graph_name"), GraphName);
+	if (!bGraphNameExplicit)
 	{
 		GraphName = TEXT("EventGraph");
 	}
 
 	// Find the graph
 	UEdGraph* Graph = ClaireonBlueprintHelpers::FindGraphByName(Blueprint, GraphName);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
-		return MakeErrorResult(FString::Printf(TEXT("Graph '%s' not found in Blueprint %s"), *GraphName, *AssetPath));
+		// MacroLibrary/Interface Blueprints have no EventGraph, and a freshly created
+		// one has no graphs at all. Only the DEFAULT graph name is relaxed; an
+		// explicitly named missing graph is still an error.
+		const bool bSupportsEventGraph = Blueprint->BlueprintType == BPTYPE_Normal;
+		if (bGraphNameExplicit || bSupportsEventGraph)
+		{
+			return MakeErrorResult(FString::Printf(TEXT("Graph '%s' not found in Blueprint %s"), *GraphName, *AssetPath));
+		}
+		GraphName.Empty();
 	}
 
 	// Open session via the manager (handles locking)
-	double TimeoutMinutes = 60.0;
+	double TimeoutMinutes = ClaireonDefaultSessionTimeoutMinutes;
 	Params->TryGetNumberField(TEXT("timeout_minutes"), TimeoutMinutes);
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(AssetPath, TEXT("bp"), TimeoutMinutes);
 
@@ -183,11 +194,11 @@ FToolResult ClaireonBlueprintGraphTool_Open::Execute(const TSharedPtr<FJsonObjec
 		const FMCPSession& Blocker = OpenResult.BlockingSession.GetValue();
 		const FTimespan Elapsed = FDateTime::UtcNow() - Blocker.LastAccessTime;
 		return MakeErrorResult(FString::Printf(
-			TEXT("Asset is locked by %s session %s (last activity %dm %ds ago). Close that session first, or use mcp_release_sessions(asset_path='%s') to force-release it."),
+			TEXT("Asset is locked by %s session %s (last activity %dm %ds ago). Close that session first, or call session_release(session_id='%s') to force-release it."),
 			*Blocker.ToolName, *Blocker.SessionId,
 			static_cast<int32>(Elapsed.GetTotalMinutes()),
 			static_cast<int32>(Elapsed.GetTotalSeconds()) % 60,
-			*AssetPath));
+			*Blocker.SessionId));
 	}
 
 	if (OpenResult.Result == EOpenSessionResult::InvalidAssetPath)
@@ -211,20 +222,34 @@ FToolResult ClaireonBlueprintGraphTool_Open::Execute(const TSharedPtr<FJsonObjec
 	}
 	else
 	{
-		// fix: a session was reused, and the caller is now requesting a (possibly
-		// different) graph. Before this fix the requested Graph was silently dropped
-		// and subsequent edits landed in whatever graph the session was already
-		// tracking -- the worst-of-three open-policy outcomes. Refuse with an error
-		// that points the caller at bp_close + reopen if the prior session is tracking
-		// a different graph. This is the "refuse" policy (option (a) of B3); it is
-		// safer than the silent swap and observable to callers.
+		// A session was reused and the caller is requesting a (possibly different)
+		// graph. Historically the requested graph was silently dropped, then the
+		// "refuse" policy forced a bp_close + bp_open round trip per graph change.
+		// Since the caller names the graph explicitly, retargeting is exactly the
+		// requested behavior (same mechanism as bp_switch_graph): observable via
+		// the status line and cursor history, never silent.
 		UEdGraph* ExistingGraph = Data->Graph.Get();
-		if (ExistingGraph && ExistingGraph != Graph)
+		// Requires Graph: reopening a graph-less MacroLibrary/Interface session must not
+		// be treated as a retarget to null and clear a graph the caller still has.
+		if (IsValid(Graph) && IsValid(ExistingGraph) && ExistingGraph != Graph)
 		{
-			return MakeErrorResult(FString::Printf(
-				TEXT("Session '%s' is already tracking graph '%s' on '%s'; cannot reopen with graph_name='%s'. "
-				     "Close the existing session via bp_close (or mcp_release_sessions) and reopen against the desired graph."),
-				*SessionId, *ExistingGraph->GetName(), *Blueprint->GetPathName(), *GraphName));
+			Data->Cursor.PushHistory(Data->Cursor.GraphName);
+			Data->Graph = Graph;
+			Data->Cursor.GraphName = Graph->GetName();
+			Data->Cursor.FocusedNodeGuid.Invalidate();
+			Data->Cursor.FocusedPinName = NAME_None;
+			if (UEdGraphNode* EntryNode = ClaireonBPGraphInternal::SelectEntryNodeForSwitch(Blueprint, Graph); IsValid(EntryNode))
+			{
+				Data->Cursor.FocusedNodeGuid = EntryNode->NodeGuid;
+				if (UEdGraphPin* FirstOutputPin = ClaireonBlueprintHelpers::GetFirstOutputPin(EntryNode))
+				{
+					Data->Cursor.FocusedPinName = FirstOutputPin->PinName;
+					Data->Cursor.FocusedPinDirection = FirstOutputPin->Direction;
+				}
+			}
+			UE_LOG(LogClaireon, Log,
+				TEXT("[EditBlueprintGraph] Session %s retargeted from graph '%s' to '%s' on %s"),
+				*SessionId, *ExistingGraph->GetName(), *Graph->GetName(), *Blueprint->GetPathName());
 		}
 	}
 
@@ -234,7 +259,24 @@ FToolResult ClaireonBlueprintGraphTool_Open::Execute(const TSharedPtr<FJsonObjec
 	Data->ResponseMode = TEXT("full");
 	Data->bSuppressOutput = false;
 
-	return BuildStateResponse(SessionId, Data);
+	FToolResult OpenToolResult = BuildStateResponse(SessionId, Data);
+
+	// Disclose which editor-wide tools this session now blocks, sourced from the live
+	// registry rather than a hand-maintained list, so the roster cannot go stale.
+	if (OpenToolResult.Data.IsValid())
+	{
+		const TArray<FString> BlockedToolNames =
+			FClaireonBridge::GetToolNamesBySessionMode(EClaireonToolSessionMode::EditorWide);
+		TArray<TSharedPtr<FJsonValue>> BlockingScope;
+		BlockingScope.Reserve(BlockedToolNames.Num());
+		for (const FString& ToolName : BlockedToolNames)
+		{
+			BlockingScope.Add(MakeShared<FJsonValueString>(ToolName));
+		}
+		OpenToolResult.Data->SetArrayField(TEXT("blocking_scope"), BlockingScope);
+	}
+
+	return OpenToolResult;
 }
 
 // ----------------------------------------------------------------------------

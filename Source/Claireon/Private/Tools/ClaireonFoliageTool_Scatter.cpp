@@ -98,7 +98,7 @@ FToolResult ClaireonFoliageTool_Scatter::Execute(const TSharedPtr<FJsonObject>& 
 
 	AInstancedFoliageActor* IFA = Data->FoliageActor.Get();
 	UFoliageType* FoliageType = FindFoliageTypeInActor(IFA, TypeName);
-	if (!FoliageType)
+	if (!IsValid(FoliageType))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Foliage type '%s' not found. Call add_foliage_type first."), *TypeName));

@@ -45,7 +45,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_SetNodePosition::Execute(const 
 		return MakeErrorResult(FString::Printf(TEXT("SoundCue session not found: %s"), *SessionId));
 	}
 	USoundCue* Cue = Cast<USoundCue>(Data->Asset.Get());
-	if (!Cue) return MakeErrorResult(TEXT("Session asset is not a SoundCue"));
+	if (!IsValid(Cue)) return MakeErrorResult(TEXT("Session asset is not a SoundCue"));
 
 	int32 NodeIndex = INDEX_NONE;
 	if (!Arguments->TryGetNumberField(TEXT("node_index"), NodeIndex)) return MakeErrorResult(TEXT("Missing node_index"));
@@ -56,7 +56,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_SetNodePosition::Execute(const 
 #if WITH_EDITORONLY_DATA
 	if (!Cue->AllNodes.IsValidIndex(NodeIndex)) return MakeErrorResult(FString::Printf(TEXT("node_index %d out of range"), NodeIndex));
 	USoundNode* Node = Cue->AllNodes[NodeIndex];
-	if (!Node) return MakeErrorResult(FString::Printf(TEXT("node_index %d is null"), NodeIndex));
+	if (!IsValid(Node)) return MakeErrorResult(FString::Printf(TEXT("node_index %d is null"), NodeIndex));
 	if (!Node->GraphNode) return MakeErrorResult(TEXT("Node has no EdGraph counterpart"));
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Set SoundCue Node Position")));

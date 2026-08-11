@@ -47,13 +47,13 @@ TSharedPtr<FJsonObject> ClaireonTool_LandscapeInspect::GetInputSchema() const
 
 IClaireonTool::FToolResult ClaireonTool_LandscapeInspect::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("Editor not available"));
 	}
 
 	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
+	if (!IsValid(World))
 	{
 		return MakeErrorResult(TEXT("No editor world loaded"));
 	}

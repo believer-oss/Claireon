@@ -106,7 +106,7 @@ TArray<FString> ClaireonBlueprintGraphTool_Format::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_Format::GetDescription() const
 {
-    return TEXT("Auto-layouts the current session's graph nodes. Accepts either session_id or asset_path; auto-opens a transient session when asset_path is supplied. Most-common pitfall: using this inside a session when you meant to pass only an asset path -- either form works now.");
+    return TEXT("Format the current session's graph by auto-laying out its nodes. Accepts either session_id or asset_path; auto-opens a transient session when asset_path is supplied. Most-common pitfall: using this inside a session when you meant to pass only an asset path -- either form works now.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Format::GetInputSchema() const
@@ -131,7 +131,7 @@ FToolResult ClaireonBlueprintGraphTool_Format::Execute(const TSharedPtr<FJsonObj
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
 
-	if (!Blueprint || !Graph)
+	if (!IsValid(Blueprint) || !IsValid(Graph))
 	{
 		return MakeErrorResult(TEXT("Blueprint or Graph is no longer valid"));
 	}
@@ -178,7 +178,7 @@ FToolResult ClaireonBlueprintGraphTool_Format::Execute(const TSharedPtr<FJsonObj
 				{
 					for (UEdGraphPin* LinkedPin : ExecPin->LinkedTo)
 					{
-						if (LinkedPin && LinkedPin->GetOwningNode())
+						if (LinkedPin && IsValid(LinkedPin->GetOwningNode()))
 						{
 							UEdGraphNode* LinkedNode = LinkedPin->GetOwningNode();
 							if (!VisitedNodes.Contains(LinkedNode))

@@ -41,10 +41,10 @@ The asset to resave is the one mentioned in the `LoadErrors` line (`/Game/<Asset
 
 3. Verify the resave script exists:
    ```
-   Scripts/Utilities/Invoke-ResaveAssets.ps1
+   Plugins/Claireon/Scripts/Utilities/Invoke-ResaveAssets.ps1
    ```
 4. If the script does not exist:
-   - Output error: "Resave script not found: Scripts/Utilities/Invoke-ResaveAssets.ps1"
+   - Output error: "Resave script not found: Plugins/Claireon/Scripts/Utilities/Invoke-ResaveAssets.ps1"
    - Exit with failure code
 
 ### 2. Parse Log File for Load Errors
@@ -95,7 +95,7 @@ If your project uses Git LFS locks, filter out assets locked by other users befo
 
 1. Call the PowerShell resave script with the asset list:
    ```powershell
-   & "Scripts\Utilities\Invoke-ResaveAssets.ps1" -Assets $AssetList
+   & "Plugins\Claireon\Scripts\Utilities\Invoke-ResaveAssets.ps1" -Assets $AssetList
    ```
 2. Capture the script output and exit code
 3. If the script fails:

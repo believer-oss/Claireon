@@ -15,19 +15,42 @@
 #include "Tools/ClaireonBehaviorTreeEditToolBase.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "EditorAssetLibrary.h"
 #include "BehaviorTree/BehaviorTree.h"
 #include "BehaviorTreeGraph.h"
 #include "BehaviorTreeGraphNode.h"
 
+#include "ClaireonTestAssetDeletion.h"
 namespace ClaireonBehaviorTreeTool_ApplyDeltaTests_anon
 {
-	static const TCHAR* BTDeltaTestAssetPath = TEXT("/Game/BP/AI/BT/BT_CombatAttacking_Default");
+	// The source is READ-ONLY. behaviortree_apply_delta writes through to the
+	// asset, so running these tests against shipping content dirties a tracked
+	// .uasset on every run and leaves it mutated for later readers. Every open
+	// goes to a throwaway duplicate instead; the paired close deletes it.
+	static const TCHAR* BTDeltaSourceAssetPath = TEXT("/Game/BP/AI/BT/BT_CombatAttacking_Default");
+	static const TCHAR* BTDeltaTestAssetPath   = TEXT("/Game/__MCPTests/BT_ApplyDeltaTest");
 
 	static TSharedPtr<FJsonValue> BTDeltaTest_StrVal(const FString& V) { return MakeShared<FJsonValueString>(V); }
 	static TSharedPtr<FJsonValue> BTDeltaTest_ObjVal(const TSharedPtr<FJsonObject>& O) { return MakeShared<FJsonValueObject>(O); }
 
+	static void BTDeltaTest_DeleteDuplicate()
+	{
+		if (UEditorAssetLibrary::DoesAssetExist(BTDeltaTestAssetPath))
+		{
+			ClaireonTestAssetDeletion::DeleteAssetForTest(BTDeltaTestAssetPath);
+		}
+	}
+
 	static FString BTDeltaTest_OpenSession()
 	{
+		// Delete first: /Game/__MCPTests is NOT gitignored and persists between runs,
+		// so a run that died mid-test would otherwise leave a mutated fixture.
+		BTDeltaTest_DeleteDuplicate();
+		if (UEditorAssetLibrary::DuplicateAsset(BTDeltaSourceAssetPath, BTDeltaTestAssetPath) == nullptr)
+		{
+			return FString();
+		}
+
 		ClaireonBehaviorTreeTool_Open OpenTool;
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 		Args->SetStringField(TEXT("asset_path"), BTDeltaTestAssetPath);
@@ -45,6 +68,7 @@ namespace ClaireonBehaviorTreeTool_ApplyDeltaTests_anon
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 		Args->SetStringField(TEXT("session_id"), SessionId);
 		CloseTool.Execute(Args);
+		BTDeltaTest_DeleteDuplicate();
 	}
 
 	static int32 BTDeltaTest_CountNodes(const FString& SessionId)
@@ -52,7 +76,7 @@ namespace ClaireonBehaviorTreeTool_ApplyDeltaTests_anon
 		FBehaviorTreeEditToolData* Data = ClaireonBehaviorTreeEditToolBase::ToolData.Find(SessionId);
 		if (!Data) { return -1; }
 		UBehaviorTreeGraph* Graph = Data->BTGraph.Get();
-		if (!Graph) { return -1; }
+		if (!IsValid(Graph)) { return -1; }
 		return Graph->Nodes.Num();
 	}
 }

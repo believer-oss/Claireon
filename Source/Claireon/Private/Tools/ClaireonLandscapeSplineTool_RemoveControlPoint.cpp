@@ -13,7 +13,7 @@ FString ClaireonLandscapeSplineTool_RemoveControlPoint::GetOperation() const { r
 
 FString ClaireonLandscapeSplineTool_RemoveControlPoint::GetDescription() const
 {
-    return TEXT("Remove a spline control point and all segments connected to it. Session-mode tool: open via landscape_spline_open first.");
+    return TEXT("Remove a spline control point and all segments connected to it. Session-mode tool: open via landscape_spline_spline_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeSplineTool_RemoveControlPoint::GetInputSchema() const
@@ -65,7 +65,7 @@ FToolResult ClaireonLandscapeSplineTool_RemoveControlPoint::Execute(const TShare
 		for (int32 EndIdx = 0; EndIdx < 2; ++EndIdx)
 		{
 			ULandscapeSplineControlPoint* OtherPoint = Segment->Connections[EndIdx].ControlPoint;
-			if (OtherPoint && OtherPoint != PointToRemove)
+			if (IsValid(OtherPoint) && OtherPoint != PointToRemove)
 			{
 				OtherPoint->ConnectedSegments.RemoveAll(
 					[Segment](const FLandscapeSplineConnection& Conn) { return Conn.Segment == Segment; });

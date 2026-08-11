@@ -55,7 +55,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserSetRowResult::Execute(const TShar
 
 	FString Error;
 	UChooserTable* Chooser = ClaireonChooserHelpers::LoadChooserTableAsset(AssetPath, Error);
-	if (!Chooser)
+	if (!IsValid(Chooser))
 	{
 		return MakeErrorResult(Error);
 	}

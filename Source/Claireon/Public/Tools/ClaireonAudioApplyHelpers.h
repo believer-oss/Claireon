@@ -42,3 +42,27 @@ namespace ClaireonAudioApplyHelpers
 	 */
 	void WriteReflectedProperties(class UObject* Target, const TSharedPtr<FJsonObject>& Props, TArray<FString>& OutWarnings);
 }
+
+/**
+ * Schema declaration helpers for the hand-rolled audio tool schemas.
+ *
+ * These tools declare their properties directly rather than through
+ * FToolSchemaBuilder, and the loop-over-field-names idiom they used could not
+ * carry a per-parameter description -- so every one of them was undescribed,
+ * i.e. invisible in help and in the MCP schema. These wrappers make the
+ * description a required argument so the shape cannot regress.
+ */
+namespace ClaireonAudioSchema
+{
+	void AddString(const TSharedPtr<FJsonObject>& Properties, const TCHAR* Name, const TCHAR* Description);
+	void AddBoolean(const TSharedPtr<FJsonObject>& Properties, const TCHAR* Name, const TCHAR* Description);
+	void AddObject(const TSharedPtr<FJsonObject>& Properties, const TCHAR* Name, const TCHAR* Description);
+
+	/**
+	 * A parameter that genuinely accepts several JSON types (a property value
+	 * whose type follows the target property). Declares "type" as the JSON
+	 * Schema type-array form rather than omitting it -- an omitted type reads
+	 * as an authoring mistake and cannot be told apart from one.
+	 */
+	void AddAnyType(const TSharedPtr<FJsonObject>& Properties, const TCHAR* Name, const TCHAR* Description);
+}

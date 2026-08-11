@@ -119,7 +119,7 @@ bool FClaireonEmbeddingModel::Load(const FClaireonEmbedderMeta& InMeta)
 	//    cannot be a UPROPERTY. We root it via TStrongObjectPtr for the lifetime
 	//    of this model (a raw UObject* would be GC'd out from under the runtime).
 	UNNEModelData* RawModelData = NewObject<UNNEModelData>();
-	if (!RawModelData)
+	if (!IsValid(RawModelData))
 	{
 		UE_LOG(LogClaireon, Warning, TEXT("[EmbeddingModel] NewObject<UNNEModelData> failed."));
 		return false;

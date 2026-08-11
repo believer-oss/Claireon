@@ -36,7 +36,7 @@ FToolResult ClaireonFoliageTool_Save::Execute(const TSharedPtr<FJsonObject>& Arg
 
 	AInstancedFoliageActor* IFA = Data->FoliageActor.Get();
 	UPackage* Package = IFA->GetOutermost();
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		return MakeErrorResult(TEXT("Failed to get foliage package"));
 	}

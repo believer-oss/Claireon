@@ -15,7 +15,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-namespace
+namespace ClaireonWidgetBPTool_AddWidget_Private
 {
 	// resolve a JSON value from slot_properties to its string form for WriteSlotProperty.
 	// String values pass through directly. Object values (nested JSON) are rejected with a
@@ -47,6 +47,7 @@ namespace
 		return true;
 	}
 } // namespace
+using namespace ClaireonWidgetBPTool_AddWidget_Private;
 
 FString ClaireonWidgetBPTool_AddWidget::GetOperation() const { return TEXT("add_widget"); }
 
@@ -103,7 +104,7 @@ FToolResult ClaireonWidgetBPTool_AddWidget::Execute(const TSharedPtr<FJsonObject
 
 	// Get WBP and WidgetTree from session
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
-	if (!WBP || !WBP->WidgetTree)
+	if (!IsValid(WBP) || !WBP->WidgetTree)
 	{
 		return MakeErrorResult(TEXT("Widget Blueprint or WidgetTree is no longer valid"));
 	}
@@ -112,7 +113,7 @@ FToolResult ClaireonWidgetBPTool_AddWidget::Execute(const TSharedPtr<FJsonObject
 	// Resolve class
 	FString ClassError;
 	UClass* ResolvedClass = ClaireonWidgetHelpers::ResolveWidgetClass(WidgetClassStr, ClassError);
-	if (!ResolvedClass)
+	if (!IsValid(ResolvedClass))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Could not resolve widget class '%s': %s"), *WidgetClassStr, *ClassError));
 	}
@@ -122,12 +123,12 @@ FToolResult ClaireonWidgetBPTool_AddWidget::Execute(const TSharedPtr<FJsonObject
 	if (!ParentName.IsEmpty())
 	{
 		UWidget* ParentWidget = ClaireonWidgetHelpers::FindWidgetByName(Tree, FName(*ParentName));
-		if (!ParentWidget)
+		if (!IsValid(ParentWidget))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Parent widget '%s' not found"), *ParentName));
 		}
 		ParentPanel = Cast<UPanelWidget>(ParentWidget);
-		if (!ParentPanel)
+		if (!IsValid(ParentPanel))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Parent widget '%s' is not a panel widget"), *ParentName));
 		}
@@ -149,7 +150,7 @@ FToolResult ClaireonWidgetBPTool_AddWidget::Execute(const TSharedPtr<FJsonObject
 
 	// Create the widget
 	UWidget* NewWidget = ClaireonWidgetHelpers::CreateWidget(Tree, ResolvedClass, FinalWidgetName);
-	if (!NewWidget)
+	if (!IsValid(NewWidget))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create widget of class '%s'"), *WidgetClassStr));
 	}
@@ -159,13 +160,13 @@ FToolResult ClaireonWidgetBPTool_AddWidget::Execute(const TSharedPtr<FJsonObject
 	{
 		Tree->RootWidget = NewWidget;
 	}
-	else if (ParentPanel)
+	else if (IsValid(ParentPanel))
 	{
 		// Add to parent panel at specified index or end
 		if (InsertIndex >= 0)
 		{
 			UPanelSlot* Slot = ParentPanel->InsertChildAt(InsertIndex, NewWidget);
-			if (Slot && SlotProperties.IsValid())
+			if (IsValid(Slot) && SlotProperties.IsValid())
 			{
 				for (auto& Pair : SlotProperties->Values)
 				{

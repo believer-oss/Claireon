@@ -21,8 +21,15 @@
 #include "Tools/ClaireonAttenuationTool_SetProperty.h"
 #include "Tools/ClaireonConcurrencyTool_SetProperty.h"
 
+#include "ClaireonStructReflection.h"
+
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+
+#include "EditorAssetLibrary.h"
+#include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphNode.h"
+#include "Misc/ScopeExit.h"
 
 #include "Sound/SoundCue.h"
 #include "Sound/SoundClass.h"
@@ -31,13 +38,65 @@
 #include "Sound/SoundConcurrency.h"
 #include "Sound/SoundNode.h"
 
+#include "ClaireonTestAssetDeletion.h"
 // -----------------------------------------------------------------------------
 // Fixture paths (OVERVIEW.md M2 table)
+//
+// Source* paths are READ-ONLY shipping content. Every write path in this file
+// works on a duplicate under /Game/__MCPTests instead, because the audio
+// set_property tools (soundclass / attenuation / concurrency) call
+// ClaireonAssetUtils::SaveAsset and therefore rewrite the .uasset on disk.
+// Pointing them at shipping content left Content/Audio/Classes/FEL_SC_SFX.uasset
+// and Content/Audio/Concurrency/FEL_SCON_Default.uasset dirty in git after every
+// full-suite run -- and because these tests PASS, failure triage never saw it.
+// The only detector is `git status --porcelain -- Content/` being non-empty
+// after a run; keep it empty.
+//
+// The SoundCue session tests use a duplicate too: soundcue_open calls
+// USoundCue::CreateGraph() when the cue has no editor graph yet, and add_node /
+// remove_node / set_node_position mutate AllNodes and the EdGraph in place.
 // -----------------------------------------------------------------------------
-static const TCHAR* FixturePath_SoundCue      = TEXT("/Game/Audio/SC_TBLIB_COLLAB_Subdued_Alert");
-static const TCHAR* FixturePath_SoundClass    = TEXT("/Game/Audio/Classes/FEL_SC_SFX");
-static const TCHAR* FixturePath_Attenuation   = TEXT("/Game/Audio/AttenuationPresets/ATT_3D_Characters");
-static const TCHAR* FixturePath_Concurrency   = TEXT("/Game/Audio/Concurrency/FEL_SCON_Default");
+static const TCHAR* SourcePath_SoundCue       = TEXT("/Game/Audio/SC_TBLIB_COLLAB_Subdued_Alert");
+static const TCHAR* SourcePath_SoundClass     = TEXT("/Game/Audio/Classes/FEL_SC_SFX");
+// NOTE: /Game/Audio/AttenuationPresets/ATT_3D_Characters is an ObjectRedirector
+// (it was renamed to _Med_cone), so LoadAudioAsset rejects it with
+// "class=ObjectRedirector" and DuplicateAsset faithfully copies the redirector
+// stub. Point at the real SoundAttenuation. Every helper below that treats a
+// missing fixture as a warn-and-pass hid this for as long as the redirector
+// existed -- see the hard assert in AttenuationFixtureIsRealAsset.
+static const TCHAR* SourcePath_Attenuation    = TEXT("/Game/Audio/AttenuationPresets/ATT_3D_Characters_Med_cone");
+static const TCHAR* SourcePath_Concurrency    = TEXT("/Game/Audio/Concurrency/FEL_SCON_Default");
+
+// Writable copies. Names are stable so a crashed run leaves at most one stale copy.
+static const TCHAR* TestPath_SoundCue         = TEXT("/Game/__MCPTests/SC_AudioTest_Cue");
+static const TCHAR* TestPath_SoundClass       = TEXT("/Game/__MCPTests/SC_AudioTest_SoundClass");
+static const TCHAR* TestPath_Attenuation      = TEXT("/Game/__MCPTests/ATT_AudioTest_Attenuation");
+static const TCHAR* TestPath_Concurrency      = TEXT("/Game/__MCPTests/SCON_AudioTest_Concurrency");
+
+namespace ClaireonAudioTestsFixtures
+{
+	// Duplicate SourcePath -> DestPath, deleting any pre-existing DestPath first.
+	//
+	// The leading delete is required, not defensive: /Game/__MCPTests is NOT gitignored
+	// and PERSISTS between runs, so a run that dies mid-test would otherwise hand a
+	// mutated fixture to the next run.
+	static bool EnsureFreshDuplicate(const TCHAR* SourcePath, const TCHAR* DestPath)
+	{
+		if (UEditorAssetLibrary::DoesAssetExist(DestPath))
+		{
+			ClaireonTestAssetDeletion::DeleteAssetForTest(DestPath);
+		}
+		return UEditorAssetLibrary::DuplicateAsset(SourcePath, DestPath) != nullptr;
+	}
+
+	static void DeleteDuplicate(const TCHAR* Path)
+	{
+		if (UEditorAssetLibrary::DoesAssetExist(Path))
+		{
+			ClaireonTestAssetDeletion::DeleteAssetForTest(Path);
+		}
+	}
+}
 
 // ============================================================================
 // ClaireonAudioHelpers
@@ -81,16 +140,53 @@ UNTEST_UNIT_OPTS(Claireon, Audio, ResolveSoundNodeClassInvalid, UNTEST_TIMEOUTMS
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, Audio, IterateSoundClassPropertiesStruct, UNTEST_TIMEOUTMS(5000))
+// Root cause of the rewrite: this test used to walk TFieldIterator itself, guarded
+// by `if (*It)` (a TFieldIterator never yields null while it converts to true, so
+// that branch can never be false), and asserted Count >= 15 on a UE engine struct.
+// It called no Claireon code at all, so no Claireon regression could fail it. It
+// now goes through the reflection entry point the audio property tools depend on
+// (ClaireonStructReflection), and pins the one field the soundclass_set_property
+// test writes. What is "lost" is nothing: the raw engine-struct field count is now
+// asserted via field_count on the Claireon-produced schema.
+UNTEST_UNIT_OPTS(Claireon, Audio, IterateSoundClassPropertiesStruct, UNTEST_TIMEOUTMS(10000))
 {
 	UScriptStruct* SS = FSoundClassProperties::StaticStruct();
-	UNTEST_ASSERT_TRUE(SS != nullptr);
-	int32 Count = 0;
-	for (TFieldIterator<FProperty> It(SS); It; ++It)
+	UNTEST_ASSERT_PTR(SS);
+
+	TSharedPtr<FJsonObject> Schema = ClaireonStructReflection::SerializeStructSchema(SS, /*bIncludeDefaults=*/false, /*bIncludeMetadata=*/false);
+	UNTEST_ASSERT_TRUE(Schema.IsValid());
+
+	FString StructName;
+	UNTEST_EXPECT_TRUE(Schema->TryGetStringField(TEXT("name"), StructName));
+	UNTEST_EXPECT_STREQ(StructName, TEXT("SoundClassProperties"));
+
+	double FieldCount = 0.0;
+	UNTEST_ASSERT_TRUE(Schema->TryGetNumberField(TEXT("field_count"), FieldCount));
+	UNTEST_EXPECT_GE((int32)FieldCount, 15);
+
+	const TArray<TSharedPtr<FJsonValue>>* Fields = nullptr;
+	UNTEST_ASSERT_TRUE(Schema->TryGetArrayField(TEXT("fields"), Fields));
+	UNTEST_EXPECT_TRUE(Fields->Num() == (int32)FieldCount);
+
+	// Volume is the field Audio.EditOpenCloseSoundClass writes; if Claireon stops
+	// surfacing it (or reclassifies it), that write path is unreachable.
+	bool bFoundVolume = false;
+	FString VolumeKind;
+	for (const TSharedPtr<FJsonValue>& FieldVal : *Fields)
 	{
-		if (*It) ++Count;
+		if (!FieldVal.IsValid() || FieldVal->Type != EJson::Object) continue;
+		const TSharedPtr<FJsonObject> FieldObj = FieldVal->AsObject();
+		if (!FieldObj.IsValid()) continue;
+		FString FieldName;
+		if (FieldObj->TryGetStringField(TEXT("name"), FieldName) && FieldName == TEXT("Volume"))
+		{
+			bFoundVolume = true;
+			FieldObj->TryGetStringField(TEXT("kind"), VolumeKind);
+			break;
+		}
 	}
-	UNTEST_EXPECT_TRUE(Count >= 15);
+	UNTEST_EXPECT_TRUE(bFoundVolume);
+	UNTEST_EXPECT_TRUE(VolumeKind == TEXT("Float") || VolumeKind == TEXT("Double"));
 	co_return;
 }
 
@@ -109,10 +205,10 @@ UNTEST_UNIT_OPTS(Claireon, Audio, LoadAudioAsset_SoundClass, UNTEST_TIMEOUTMS(10
 {
 	EClaireonAudioAssetKind Kind = EClaireonAudioAssetKind::Unknown;
 	FString Err;
-	UObject* Obj = ClaireonAudioHelpers::LoadAudioAsset(FixturePath_SoundClass, Kind, Err);
-	if (!Obj)
+	UObject* Obj = ClaireonAudioHelpers::LoadAudioAsset(SourcePath_SoundClass, Kind, Err);
+	if (!IsValid(Obj))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Fixture missing: %s (%s)"), FixturePath_SoundClass, *Err);
+		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Fixture missing: %s (%s)"), SourcePath_SoundClass, *Err);
 		co_return;
 	}
 	UNTEST_EXPECT_TRUE(Kind == EClaireonAudioAssetKind::SoundClass);
@@ -120,14 +216,47 @@ UNTEST_UNIT_OPTS(Claireon, Audio, LoadAudioAsset_SoundClass, UNTEST_TIMEOUTMS(10
 	co_return;
 }
 
+// Guard: the shipping fixtures every Attenuation/Concurrency test depends on must
+// resolve to REAL audio assets, not ObjectRedirector stubs. This is the one test in
+// the family that hard-fails, because all the others treat an unloadable fixture as
+// warn-and-co_return -- which Untest scores as a PASS. ATT_3D_Characters was renamed
+// to ATT_3D_Characters_Med_cone and left a redirector behind; every attenuation test
+// then "passed" while covering nothing, and EditAttenuationProperty duplicated the
+// redirector and failed downstream on a null load. Fail here instead.
+UNTEST_UNIT_OPTS(Claireon, Audio, FixturesAreRealAssetsNotRedirectors, UNTEST_TIMEOUTMS(10000))
+{
+	EClaireonAudioAssetKind AttKind = EClaireonAudioAssetKind::Unknown;
+	FString AttErr;
+	UObject* AttObj = ClaireonAudioHelpers::LoadAudioAsset(SourcePath_Attenuation, AttKind, AttErr);
+	if (!IsValid(AttObj))
+	{
+		UE_LOG(LogTemp, Error, TEXT("[Claireon.Audio] Attenuation fixture unusable: %s (%s)"),
+			SourcePath_Attenuation, *AttErr);
+	}
+	UNTEST_EXPECT_PTR(AttObj);
+	UNTEST_EXPECT_TRUE(AttKind == EClaireonAudioAssetKind::Attenuation);
+
+	EClaireonAudioAssetKind ConKind = EClaireonAudioAssetKind::Unknown;
+	FString ConErr;
+	UObject* ConObj = ClaireonAudioHelpers::LoadAudioAsset(SourcePath_Concurrency, ConKind, ConErr);
+	if (!IsValid(ConObj))
+	{
+		UE_LOG(LogTemp, Error, TEXT("[Claireon.Audio] Concurrency fixture unusable: %s (%s)"),
+			SourcePath_Concurrency, *ConErr);
+	}
+	UNTEST_EXPECT_PTR(ConObj);
+	UNTEST_EXPECT_TRUE(ConKind == EClaireonAudioAssetKind::Concurrency);
+	co_return;
+}
+
 UNTEST_UNIT_OPTS(Claireon, Audio, LoadAudioAsset_Attenuation, UNTEST_TIMEOUTMS(10000))
 {
 	EClaireonAudioAssetKind Kind = EClaireonAudioAssetKind::Unknown;
 	FString Err;
-	UObject* Obj = ClaireonAudioHelpers::LoadAudioAsset(FixturePath_Attenuation, Kind, Err);
-	if (!Obj)
+	UObject* Obj = ClaireonAudioHelpers::LoadAudioAsset(SourcePath_Attenuation, Kind, Err);
+	if (!IsValid(Obj))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Fixture missing: %s (%s)"), FixturePath_Attenuation, *Err);
+		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Fixture missing: %s (%s)"), SourcePath_Attenuation, *Err);
 		co_return;
 	}
 	UNTEST_EXPECT_TRUE(Kind == EClaireonAudioAssetKind::Attenuation);
@@ -139,10 +268,10 @@ UNTEST_UNIT_OPTS(Claireon, Audio, LoadAudioAsset_Concurrency, UNTEST_TIMEOUTMS(1
 {
 	EClaireonAudioAssetKind Kind = EClaireonAudioAssetKind::Unknown;
 	FString Err;
-	UObject* Obj = ClaireonAudioHelpers::LoadAudioAsset(FixturePath_Concurrency, Kind, Err);
-	if (!Obj)
+	UObject* Obj = ClaireonAudioHelpers::LoadAudioAsset(SourcePath_Concurrency, Kind, Err);
+	if (!IsValid(Obj))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Fixture missing: %s (%s)"), FixturePath_Concurrency, *Err);
+		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Fixture missing: %s (%s)"), SourcePath_Concurrency, *Err);
 		co_return;
 	}
 	UNTEST_EXPECT_TRUE(Kind == EClaireonAudioAssetKind::Concurrency);
@@ -177,11 +306,11 @@ UNTEST_UNIT_OPTS(Claireon, Audio, InspectSoundClass, UNTEST_TIMEOUTMS(10000))
 {
 	FClaireonTool_AudioInspect Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("asset_path"), FixturePath_SoundClass);
+	Args->SetStringField(TEXT("asset_path"), SourcePath_SoundClass);
 	auto Result = Tool.Execute(Args);
 	if (Result.bIsError)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Fixture missing: %s (%s)"), FixturePath_SoundClass, *Result.ErrorMessage);
+		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Fixture missing: %s (%s)"), SourcePath_SoundClass, *Result.ErrorMessage);
 		co_return;
 	}
 	UNTEST_ASSERT_TRUE(Result.Data.IsValid());
@@ -195,11 +324,11 @@ UNTEST_UNIT_OPTS(Claireon, Audio, InspectAttenuation, UNTEST_TIMEOUTMS(10000))
 {
 	FClaireonTool_AudioInspect Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("asset_path"), FixturePath_Attenuation);
+	Args->SetStringField(TEXT("asset_path"), SourcePath_Attenuation);
 	auto Result = Tool.Execute(Args);
 	if (Result.bIsError)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Fixture missing: %s (%s)"), FixturePath_Attenuation, *Result.ErrorMessage);
+		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Fixture missing: %s (%s)"), SourcePath_Attenuation, *Result.ErrorMessage);
 		co_return;
 	}
 	UNTEST_ASSERT_TRUE(Result.Data.IsValid());
@@ -213,23 +342,29 @@ UNTEST_UNIT_OPTS(Claireon, Audio, InspectConcurrency_EnumIsString, UNTEST_TIMEOU
 {
 	FClaireonTool_AudioInspect Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("asset_path"), FixturePath_Concurrency);
+	Args->SetStringField(TEXT("asset_path"), SourcePath_Concurrency);
 	auto Result = Tool.Execute(Args);
 	if (Result.bIsError)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Fixture missing: %s (%s)"), FixturePath_Concurrency, *Result.ErrorMessage);
+		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Fixture missing: %s (%s)"), SourcePath_Concurrency, *Result.ErrorMessage);
 		co_return;
 	}
 	UNTEST_ASSERT_TRUE(Result.Data.IsValid());
-	const TSharedPtr<FJsonObject> Settings = Result.Data->GetObjectField(TEXT("settings"));
-	if (Settings.IsValid())
-	{
-		TSharedPtr<FJsonValue> RuleVal = Settings->TryGetField(TEXT("ResolutionRule"));
-		if (RuleVal.IsValid())
-		{
-			UNTEST_EXPECT_TRUE(RuleVal->Type == EJson::String);
-		}
-	}
+	// Root cause: this used to be `if (Settings.IsValid()) if (RuleVal.IsValid())`,
+	// so it caught an enum-as-number regression but silently passed if the settings
+	// object or the ResolutionRule field disappeared entirely -- the more likely
+	// failure. Assert each level before descending.
+	const TSharedPtr<FJsonObject>* SettingsPtr = nullptr;
+	UNTEST_ASSERT_TRUE(Result.Data->TryGetObjectField(TEXT("settings"), SettingsPtr));
+	UNTEST_ASSERT_TRUE(SettingsPtr && (*SettingsPtr).IsValid());
+
+	const TSharedPtr<FJsonValue> RuleVal = (*SettingsPtr)->TryGetField(TEXT("ResolutionRule"));
+	UNTEST_ASSERT_TRUE(RuleVal.IsValid());
+	UNTEST_ASSERT_TRUE(RuleVal->Type == EJson::String);
+	// A string is only useful if it is the enumerator name, not a stringified int.
+	const FString RuleStr = RuleVal->AsString();
+	UNTEST_EXPECT_FALSE(RuleStr.IsEmpty());
+	UNTEST_EXPECT_TRUE(RuleStr.Contains(TEXT("Stop")) || RuleStr.Contains(TEXT("Prevent")));
 	co_return;
 }
 
@@ -302,39 +437,66 @@ UNTEST_UNIT_OPTS(Claireon, Audio, EditListNodeTypes, UNTEST_TIMEOUTMS(5000))
 }
 
 // Row 17: SoundClass is stateless (no _open).
-// Replacement: soundclass_set_property round-trip on the SoundClass fixture.
-UNTEST_UNIT_OPTS(Claireon, Audio, EditOpenCloseSoundClass, UNTEST_TIMEOUTMS(15000))
+// Replacement: soundclass_set_property round-trip on a COPY of the SoundClass fixture.
+//
+// Two root causes fixed here:
+//  1. soundclass_set_property saves the asset, so writing to the shipping fixture
+//     left Content/Audio/Classes/FEL_SC_SFX.uasset modified after every run.
+//  2. the test asserted only !bIsError and never read the value back, so a write
+//     that silently did nothing still passed.
+UNTEST_UNIT_OPTS(Claireon, Audio, EditOpenCloseSoundClass, UNTEST_TIMEOUTMS(30000))
 {
-	EClaireonAudioAssetKind K = EClaireonAudioAssetKind::Unknown;
-	FString LoadErr;
-	UObject* Cls = ClaireonAudioHelpers::LoadAudioAsset(FixturePath_SoundClass, K, LoadErr);
-	if (!Cls)
+	if (!ClaireonAudioTestsFixtures::EnsureFreshDuplicate(SourcePath_SoundClass, TestPath_SoundClass))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Fixture missing: %s (%s)"), FixturePath_SoundClass, *LoadErr);
+		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Could not duplicate fixture %s -> %s; skipping."),
+			SourcePath_SoundClass, TestPath_SoundClass);
 		co_return;
 	}
+	ON_SCOPE_EXIT { ClaireonAudioTestsFixtures::DeleteDuplicate(TestPath_SoundClass); };
+
+	EClaireonAudioAssetKind K = EClaireonAudioAssetKind::Unknown;
+	FString LoadErr;
+	USoundClass* Cls = Cast<USoundClass>(ClaireonAudioHelpers::LoadAudioAsset(TestPath_SoundClass, K, LoadErr));
+	UNTEST_ASSERT_PTR(Cls);
+
+	// 0.85 must differ from whatever the fixture ships with, otherwise the read-back
+	// below would pass even if the write never happened. Do NOT replace this with
+	// "write back the value you just read" -- that idiom makes the test unfalsifiable.
+	const float Target = 0.85f;
+	const float Before = Cls->Properties.Volume;
+	UNTEST_ASSERT_FALSE(FMath::IsNearlyEqual(Before, Target));
+
 	FClaireonSoundClassTool_SetProperty Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("asset_path"), FixturePath_SoundClass);
-	Args->SetStringField(TEXT("field_name"), TEXT("Volume"));
-	Args->SetNumberField(TEXT("value"), 0.85);
+	Args->SetStringField(TEXT("asset_path"), TestPath_SoundClass);
+	Args->SetStringField(TEXT("property_path"), TEXT("Volume"));
+	Args->SetNumberField(TEXT("value"), Target);
 	auto Res = Tool.Execute(Args);
-	UNTEST_EXPECT_FALSE(Res.bIsError);
+	UNTEST_ASSERT_FALSE(Res.bIsError);
+
+	// Read the property back off the live object: a success envelope is not proof of a write.
+	UNTEST_EXPECT_NEAR(Cls->Properties.Volume, Target, KINDA_SMALL_NUMBER);
 	co_return;
 }
 
 // Row 18: I1/D3=B mutual exclusion - second SoundCue open on the same path returns error.
-UNTEST_UNIT_OPTS(Claireon, Audio, EditDoubleOpenBlocks, UNTEST_TIMEOUTMS(15000))
+// Runs on a COPY: soundcue_open calls USoundCue::CreateGraph() when the cue has no
+// editor graph yet, which mutates shipping content as a side effect of "just opening".
+UNTEST_UNIT_OPTS(Claireon, Audio, EditDoubleOpenBlocks, UNTEST_TIMEOUTMS(30000))
 {
-	auto Open1 = ClaireonAudioTestsImpl::OpenSoundCue(FixturePath_SoundCue);
-	if (Open1.bIsError)
+	if (!ClaireonAudioTestsFixtures::EnsureFreshDuplicate(SourcePath_SoundCue, TestPath_SoundCue))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Fixture missing: %s (%s)"), FixturePath_SoundCue, *Open1.ErrorMessage);
+		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Could not duplicate fixture %s -> %s; skipping."),
+			SourcePath_SoundCue, TestPath_SoundCue);
 		co_return;
 	}
+	ON_SCOPE_EXIT { ClaireonAudioTestsFixtures::DeleteDuplicate(TestPath_SoundCue); };
+
+	auto Open1 = ClaireonAudioTestsImpl::OpenSoundCue(TestPath_SoundCue);
+	UNTEST_ASSERT_FALSE(Open1.bIsError);
 	const FString Id1 = ClaireonAudioTestsImpl::ExtractSessionId(Open1);
 
-	auto Open2 = ClaireonAudioTestsImpl::OpenSoundCue(FixturePath_SoundCue);
+	auto Open2 = ClaireonAudioTestsImpl::OpenSoundCue(TestPath_SoundCue);
 	UNTEST_EXPECT_TRUE(Open2.bIsError);
 	UNTEST_EXPECT_TRUE(Open2.ErrorMessage.Contains(TEXT("locked")));
 
@@ -342,37 +504,43 @@ UNTEST_UNIT_OPTS(Claireon, Audio, EditDoubleOpenBlocks, UNTEST_TIMEOUTMS(15000))
 	co_return;
 }
 
-// Row 19: open + add_node + remove_node + close on a SoundCue.
-UNTEST_UNIT_OPTS(Claireon, Audio, EditSoundCue_AddRemoveNode, UNTEST_TIMEOUTMS(20000))
+// Row 19: open + add_node + remove_node + close on a COPY of the SoundCue fixture
+// (add_node/remove_node mutate AllNodes and the EdGraph of the loaded cue in place).
+UNTEST_UNIT_OPTS(Claireon, Audio, EditSoundCue_AddRemoveNode, UNTEST_TIMEOUTMS(30000))
 {
-	auto Open = ClaireonAudioTestsImpl::OpenSoundCue(FixturePath_SoundCue);
-	if (Open.bIsError)
+	if (!ClaireonAudioTestsFixtures::EnsureFreshDuplicate(SourcePath_SoundCue, TestPath_SoundCue))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Fixture missing: %s (%s)"), FixturePath_SoundCue, *Open.ErrorMessage);
+		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Could not duplicate fixture %s -> %s; skipping."),
+			SourcePath_SoundCue, TestPath_SoundCue);
 		co_return;
 	}
+	ON_SCOPE_EXIT { ClaireonAudioTestsFixtures::DeleteDuplicate(TestPath_SoundCue); };
+
+	auto Open = ClaireonAudioTestsImpl::OpenSoundCue(TestPath_SoundCue);
+	UNTEST_ASSERT_FALSE(Open.bIsError);
 	const FString Id = ClaireonAudioTestsImpl::ExtractSessionId(Open);
+
+	// Baseline the two collections BEFORE the add. The old assertion was
+	// Nodes.Num() >= AllNodes.Num(), which stays true when add_node appends to
+	// AllNodes and forgets the EdGraph -- i.e. it could not fail for the exact
+	// desync it was named after.
+	FString CuePath;
+	UNTEST_ASSERT_TRUE(Open.Data.IsValid() && Open.Data->TryGetStringField(TEXT("asset_path"), CuePath));
+	USoundCue* Cue = LoadObject<USoundCue>(nullptr, *CuePath);
+	UNTEST_ASSERT_PTR(Cue);
+	const int32 BeforeAllNodes = Cue->AllNodes.Num();
+#if WITH_EDITORONLY_DATA
+	// soundcue_open guarantees a graph exists.
+	UNTEST_ASSERT_PTR(Cue->SoundCueGraph.Get());
+	const int32 BeforeGraphNodes = Cue->SoundCueGraph->Nodes.Num();
+#endif
 
 	FClaireonSoundCueTool_AddNode AddTool;
 	TSharedPtr<FJsonObject> AddArgs = MakeShared<FJsonObject>();
 	AddArgs->SetStringField(TEXT("session_id"), Id);
 	AddArgs->SetStringField(TEXT("node_class"), TEXT("mixer"));
 	auto Add = AddTool.Execute(AddArgs);
-	UNTEST_EXPECT_FALSE(Add.bIsError);
-
-	// invariant: AllNodes and EdGraph stay in sync after the decomposed call.
-	FString CuePath;
-	Open.Data->TryGetStringField(TEXT("asset_path"), CuePath);
-	USoundCue* Cue = LoadObject<USoundCue>(nullptr, *CuePath);
-	if (Cue)
-	{
-#if WITH_EDITORONLY_DATA
-		if (Cue->SoundCueGraph)
-		{
-			UNTEST_EXPECT_TRUE(Cue->SoundCueGraph->Nodes.Num() >= Cue->AllNodes.Num());
-		}
-#endif
-	}
+	UNTEST_ASSERT_FALSE(Add.bIsError);
 
 	int32 AddedIdx = -1;
 	if (Add.Data.IsValid())
@@ -381,6 +549,19 @@ UNTEST_UNIT_OPTS(Claireon, Audio, EditSoundCue_AddRemoveNode, UNTEST_TIMEOUTMS(2
 		if (Add.Data->TryGetNumberField(TEXT("node_index"), N)) AddedIdx = (int32)N;
 	}
 	UNTEST_ASSERT_TRUE(AddedIdx >= 0);
+
+	// invariant: AllNodes and EdGraph stay in sync after the decomposed call.
+	// Exactly one sound node and exactly one graph node were added, and the new
+	// sound node's graph node is actually reachable from the graph.
+	UNTEST_EXPECT_EQ(Cue->AllNodes.Num(), BeforeAllNodes + 1);
+#if WITH_EDITORONLY_DATA
+	UNTEST_EXPECT_EQ(Cue->SoundCueGraph->Nodes.Num(), BeforeGraphNodes + 1);
+	UNTEST_ASSERT_TRUE(Cue->AllNodes.IsValidIndex(AddedIdx));
+	USoundNode* AddedNode = Cue->AllNodes[AddedIdx];
+	UNTEST_ASSERT_PTR(AddedNode);
+	UNTEST_EXPECT_PTR(AddedNode->GraphNode.Get());
+	UNTEST_EXPECT_TRUE(Cue->SoundCueGraph->Nodes.Contains(AddedNode->GraphNode));
+#endif
 
 	FClaireonSoundCueTool_RemoveNode RmTool;
 	TSharedPtr<FJsonObject> RmArgs = MakeShared<FJsonObject>();
@@ -393,15 +574,20 @@ UNTEST_UNIT_OPTS(Claireon, Audio, EditSoundCue_AddRemoveNode, UNTEST_TIMEOUTMS(2
 	co_return;
 }
 
-// Row 20: open + add_node + set_node_position on a SoundCue.
-UNTEST_UNIT_OPTS(Claireon, Audio, EditSoundCue_SetNodePosition, UNTEST_TIMEOUTMS(20000))
+// Row 20: open + add_node + set_node_position on a COPY of the SoundCue fixture
+// (the node add and the position write both mutate the loaded cue in place).
+UNTEST_UNIT_OPTS(Claireon, Audio, EditSoundCue_SetNodePosition, UNTEST_TIMEOUTMS(30000))
 {
-	auto Open = ClaireonAudioTestsImpl::OpenSoundCue(FixturePath_SoundCue);
-	if (Open.bIsError)
+	if (!ClaireonAudioTestsFixtures::EnsureFreshDuplicate(SourcePath_SoundCue, TestPath_SoundCue))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Fixture missing: %s (%s)"), FixturePath_SoundCue, *Open.ErrorMessage);
+		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Could not duplicate fixture %s -> %s; skipping."),
+			SourcePath_SoundCue, TestPath_SoundCue);
 		co_return;
 	}
+	ON_SCOPE_EXIT { ClaireonAudioTestsFixtures::DeleteDuplicate(TestPath_SoundCue); };
+
+	auto Open = ClaireonAudioTestsImpl::OpenSoundCue(TestPath_SoundCue);
+	UNTEST_ASSERT_FALSE(Open.bIsError);
 	const FString Id = ClaireonAudioTestsImpl::ExtractSessionId(Open);
 
 	FClaireonSoundCueTool_AddNode AddTool;
@@ -437,42 +623,56 @@ UNTEST_UNIT_OPTS(Claireon, Audio, EditSoundCue_SetNodePosition, UNTEST_TIMEOUTMS
 	co_return;
 }
 
-// Row 21: stateless attenuation property write.
-UNTEST_UNIT_OPTS(Claireon, Audio, EditAttenuationProperty, UNTEST_TIMEOUTMS(15000))
+// Row 21: stateless attenuation property write, on a COPY.
+// attenuation_set_property calls SaveAsset, so this used to rewrite the shipping
+// ATT_3D_Characters.uasset on every run.
+UNTEST_UNIT_OPTS(Claireon, Audio, EditAttenuationProperty, UNTEST_TIMEOUTMS(30000))
 {
-	EClaireonAudioAssetKind K = EClaireonAudioAssetKind::Unknown;
-	FString LoadErr;
-	UObject* Att = ClaireonAudioHelpers::LoadAudioAsset(FixturePath_Attenuation, K, LoadErr);
-	if (!Att)
+	if (!ClaireonAudioTestsFixtures::EnsureFreshDuplicate(SourcePath_Attenuation, TestPath_Attenuation))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Fixture missing: %s (%s)"), FixturePath_Attenuation, *LoadErr);
+		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Could not duplicate fixture %s -> %s; skipping."),
+			SourcePath_Attenuation, TestPath_Attenuation);
 		co_return;
 	}
+	ON_SCOPE_EXIT { ClaireonAudioTestsFixtures::DeleteDuplicate(TestPath_Attenuation); };
+
+	EClaireonAudioAssetKind K = EClaireonAudioAssetKind::Unknown;
+	FString LoadErr;
+	UObject* Att = ClaireonAudioHelpers::LoadAudioAsset(TestPath_Attenuation, K, LoadErr);
+	UNTEST_ASSERT_PTR(Att);
+
 	FClaireonAttenuationTool_SetProperty Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("asset_path"), FixturePath_Attenuation);
-	Args->SetStringField(TEXT("field_name"), TEXT("bAttenuate"));
+	Args->SetStringField(TEXT("asset_path"), TestPath_Attenuation);
+	Args->SetStringField(TEXT("property_path"), TEXT("bAttenuate"));
 	Args->SetBoolField(TEXT("value"), true);
 	auto Res = Tool.Execute(Args);
 	UNTEST_EXPECT_FALSE(Res.bIsError);
 	co_return;
 }
 
-// Row 22: stateless concurrency property write with enum-by-name coercion.
-UNTEST_UNIT_OPTS(Claireon, Audio, EditConcurrencyEnumByName, UNTEST_TIMEOUTMS(15000))
+// Row 22: stateless concurrency property write with enum-by-name coercion, on a COPY.
+// concurrency_set_property calls SaveAsset, so this used to leave
+// Content/Audio/Concurrency/FEL_SCON_Default.uasset dirty in git after every run.
+UNTEST_UNIT_OPTS(Claireon, Audio, EditConcurrencyEnumByName, UNTEST_TIMEOUTMS(30000))
 {
-	EClaireonAudioAssetKind K = EClaireonAudioAssetKind::Unknown;
-	FString LoadErr;
-	UObject* Con = ClaireonAudioHelpers::LoadAudioAsset(FixturePath_Concurrency, K, LoadErr);
-	if (!Con)
+	if (!ClaireonAudioTestsFixtures::EnsureFreshDuplicate(SourcePath_Concurrency, TestPath_Concurrency))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Fixture missing: %s (%s)"), FixturePath_Concurrency, *LoadErr);
+		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Could not duplicate fixture %s -> %s; skipping."),
+			SourcePath_Concurrency, TestPath_Concurrency);
 		co_return;
 	}
+	ON_SCOPE_EXIT { ClaireonAudioTestsFixtures::DeleteDuplicate(TestPath_Concurrency); };
+
+	EClaireonAudioAssetKind K = EClaireonAudioAssetKind::Unknown;
+	FString LoadErr;
+	UObject* Con = ClaireonAudioHelpers::LoadAudioAsset(TestPath_Concurrency, K, LoadErr);
+	UNTEST_ASSERT_PTR(Con);
+
 	FClaireonConcurrencyTool_SetProperty Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("asset_path"), FixturePath_Concurrency);
-	Args->SetStringField(TEXT("field_name"), TEXT("ResolutionRule"));
+	Args->SetStringField(TEXT("asset_path"), TestPath_Concurrency);
+	Args->SetStringField(TEXT("property_path"), TEXT("ResolutionRule"));
 	Args->SetStringField(TEXT("value"), TEXT("StopOldest"));
 	auto Res = Tool.Execute(Args);
 	UNTEST_EXPECT_FALSE(Res.bIsError);
@@ -501,14 +701,14 @@ UNTEST_UNIT_OPTS(Claireon, Audio, ApplySpec_DuplicateId_Error, UNTEST_TIMEOUTMS(
 	{
 		TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
 		E->SetStringField(TEXT("id"), TEXT("dup"));
-		E->SetStringField(TEXT("asset_path"), FixturePath_Attenuation);
+		E->SetStringField(TEXT("asset_path"), SourcePath_Attenuation);
 		E->SetStringField(TEXT("kind"), TEXT("attenuation"));
 		Entries.Add(MakeShared<FJsonValueObject>(E));
 	}
 	{
 		TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
 		E->SetStringField(TEXT("id"), TEXT("dup"));
-		E->SetStringField(TEXT("asset_path"), FixturePath_Concurrency);
+		E->SetStringField(TEXT("asset_path"), SourcePath_Concurrency);
 		E->SetStringField(TEXT("kind"), TEXT("concurrency"));
 		Entries.Add(MakeShared<FJsonValueObject>(E));
 	}
@@ -560,10 +760,10 @@ UNTEST_UNIT_OPTS(Claireon, Audio, ApplySpec_PureLinkOnly, UNTEST_TIMEOUTMS(15000
 {
 	EClaireonAudioAssetKind K = EClaireonAudioAssetKind::Unknown;
 	FString Err;
-	UObject* Att = ClaireonAudioHelpers::LoadAudioAsset(FixturePath_Attenuation, K, Err);
-	UObject* Con = ClaireonAudioHelpers::LoadAudioAsset(FixturePath_Concurrency, K, Err);
-	UObject* Cls = ClaireonAudioHelpers::LoadAudioAsset(FixturePath_SoundClass, K, Err);
-	if (!Att || !Con || !Cls)
+	UObject* Att = ClaireonAudioHelpers::LoadAudioAsset(SourcePath_Attenuation, K, Err);
+	UObject* Con = ClaireonAudioHelpers::LoadAudioAsset(SourcePath_Concurrency, K, Err);
+	UObject* Cls = ClaireonAudioHelpers::LoadAudioAsset(SourcePath_SoundClass, K, Err);
+	if (!IsValid(Att) || !IsValid(Con) || !IsValid(Cls))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] One or more link-only fixtures missing; skipping."));
 		co_return;
@@ -580,9 +780,9 @@ UNTEST_UNIT_OPTS(Claireon, Audio, ApplySpec_PureLinkOnly, UNTEST_TIMEOUTMS(15000
 		E->SetStringField(TEXT("kind"), Kind);
 		Entries.Add(MakeShared<FJsonValueObject>(E));
 	};
-	Mk(TEXT("att"), FixturePath_Attenuation, TEXT("attenuation"));
-	Mk(TEXT("con"), FixturePath_Concurrency, TEXT("concurrency"));
-	Mk(TEXT("cls"), FixturePath_SoundClass, TEXT("sound_class"));
+	Mk(TEXT("att"), SourcePath_Attenuation, TEXT("attenuation"));
+	Mk(TEXT("con"), SourcePath_Concurrency, TEXT("concurrency"));
+	Mk(TEXT("cls"), SourcePath_SoundClass, TEXT("sound_class"));
 	Spec->SetArrayField(TEXT("entries"), Entries);
 
 	FString Summary, ErrOut;
@@ -597,25 +797,42 @@ UNTEST_UNIT_OPTS(Claireon, Audio, ApplySpec_PureLinkOnly, UNTEST_TIMEOUTMS(15000
 // the same path under the literal "audio_edit" lock string.
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, Audio, LockStringMutex_SoundCueVsMetaSound, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, Audio, LockStringMutex_SoundCueVsMetaSound, UNTEST_TIMEOUTMS(30000))
 {
-	auto Open1 = ClaireonAudioTestsImpl::OpenSoundCue(FixturePath_SoundCue);
-	if (Open1.bIsError)
+	if (!ClaireonAudioTestsFixtures::EnsureFreshDuplicate(SourcePath_SoundCue, TestPath_SoundCue))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Fixture missing: %s (%s)"), FixturePath_SoundCue, *Open1.ErrorMessage);
+		UE_LOG(LogTemp, Warning, TEXT("[Claireon.Audio] Could not duplicate fixture %s -> %s; skipping."),
+			SourcePath_SoundCue, TestPath_SoundCue);
 		co_return;
 	}
+	ON_SCOPE_EXIT { ClaireonAudioTestsFixtures::DeleteDuplicate(TestPath_SoundCue); };
+
+	auto Open1 = ClaireonAudioTestsImpl::OpenSoundCue(TestPath_SoundCue);
+	UNTEST_ASSERT_FALSE(Open1.bIsError);
 	const FString Id1 = ClaireonAudioTestsImpl::ExtractSessionId(Open1);
 
 	FClaireonMetaSoundTool_Open MSOpen;
 	TSharedPtr<FJsonObject> MSArgs = MakeShared<FJsonObject>();
-	MSArgs->SetStringField(TEXT("asset_path"), FixturePath_SoundCue);
+	MSArgs->SetStringField(TEXT("asset_path"), TestPath_SoundCue);
 	auto MSResult = MSOpen.Execute(MSArgs);
-	// Either the MetaSound open is rejected because the asset isn't a MetaSoundSource,
-	// OR (if a MetaSound builder API is available and asset kind validation passes) it
-	// is rejected because the asset is locked. Both prove the I1 guarantee that we
-	// don't end up with two simultaneously-open sessions on the same path.
-	UNTEST_EXPECT_TRUE(MSResult.bIsError);
+
+	// Root cause of the previous vacuity: handing metasound_open a USoundCue path
+	// makes it fail its own kind validation (or the builder-API compile gate) long
+	// before it reaches the shared "audio_edit" lock, so the old bare
+	// EXPECT_TRUE(bIsError) passed for the wrong reason -- and the comment said so.
+	// Pin the two messages that path can legitimately produce so this cannot start
+	// passing for a third, unrelated reason (bad args, missing asset, ...).
+	//
+	// Coverage gap, deliberately not papered over: cross-cohort lock contention
+	// (a real UMetaSoundSource open contending with a SoundCue session on the same
+	// path) needs a MetaSound fixture in the test project, which does not exist yet.
+	// Same-cohort contention on the "audio_edit" lock IS covered by
+	// Claireon.Audio.EditDoubleOpenBlocks.
+	UNTEST_ASSERT_TRUE(MSResult.bIsError);
+	const bool bRejectedOnKind = MSResult.ErrorMessage.Contains(TEXT("not a MetaSoundSource or MetaSoundPatch"));
+	const bool bBuilderApiAbsent = MSResult.ErrorMessage.Contains(TEXT("MetaSound builder API not available"));
+	UNTEST_EXPECT_TRUE(bRejectedOnKind || bBuilderApiAbsent);
+	UNTEST_EXPECT_FALSE(MSResult.ErrorMessage.Contains(TEXT("Missing required parameter")));
 
 	ClaireonAudioTestsImpl::CloseSoundCue(Id1);
 	co_return;

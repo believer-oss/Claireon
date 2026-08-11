@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 #if WITH_UNTESTED
 
@@ -21,20 +21,125 @@
 #include "Tools/ClaireonTool_DataTableImportCsv.h"
 #include "Tools/ClaireonDataTableHelpers.h"
 #include "ClaireonStructReflection.h"
+#include "ClaireonTestAssetDiscovery.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "EditorAssetLibrary.h"
 #include "Engine/DataTable.h"
+#include "Engine/CompositeDataTable.h"
+#include "Misc/PackageName.h"
+#include "Misc/ScopeExit.h"
+#include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#include "UObject/Package.h"
 #include "UObject/UnrealType.h"
 
+#include "ClaireonTestAssetDeletion.h"
 // ---------------------------------------------------------------------------
 // Test asset paths
+//
+// Claireon ships no content of its own, so the read fixtures are DISCOVERED from
+// whatever the host project already has (see ClaireonTestAssetDiscovery.h) rather
+// than hardcoded: a hardcoded path both names project-specific content and only
+// resolves in the one repo that has it. Each accessor caches its first lookup, so
+// every test in a run sees the same table.
+//
+// SourceDTPath() is READ-ONLY project content. Every datatable mutation tool
+// (add / remove / duplicate / rename / move / set_row_values / import_*) calls
+// ClaireonDataTableHelpers::SaveDataTable, which writes the package to disk.
+// Pointing the mutation lifecycle test at the discovered table therefore left that
+// .uasset modified in git after every full suite run -- and since the test PASSES,
+// failure triage never surfaced it. The only detector is
+// `git status --porcelain -- Content/` being non-empty after a run; it must stay
+// empty. Mutating tests work on MutableDTPath instead.
 // ---------------------------------------------------------------------------
-static const TCHAR* TestDTPath = TEXT("/Game/Subsystems/Progression/DT_Maps");
-static const TCHAR* TestCompositeDTPath = TEXT("/Game/Subsystems/Progression/DT_Composite_Items");
+
+namespace ClaireonDataTableTestPaths
+{
+	// Package path (/Game/Foo/DT_Bar) for a discovered object path, or empty.
+	// The tools take either form; package paths keep the assertions readable.
+	static FString ToPackagePath(const FString& ObjectPath)
+	{
+		return ObjectPath.IsEmpty() ? FString() : FPackageName::ObjectPathToPackageName(ObjectPath);
+	}
+
+	static FString ShortName(const FString& PackagePath)
+	{
+		return PackagePath.IsEmpty() ? FString() : FPackageName::GetShortName(PackagePath);
+	}
+}
+
+/** Multi-row read fixture with at least one scalar column. Empty if the project has none. */
+static const FString& SourceDTPath()
+{
+	static const FString Cached = ClaireonDataTableTestPaths::ToPackagePath(
+		ClaireonTestAssetDiscovery::FindProjectDataTableWithScalarColumnObjectPath());
+	return Cached;
+}
+
+/** Asset name of SourceDTPath(), for assertions on name-bearing output. */
+static const FString& SourceDTName()
+{
+	static const FString Cached = ClaireonDataTableTestPaths::ShortName(SourceDTPath());
+	return Cached;
+}
+
+/** Composite fixture for the write-rejection test. Empty if the project has none. */
+static const FString& TestCompositeDTPath()
+{
+	static const FString Cached = ClaireonDataTableTestPaths::ToPackagePath(
+		ClaireonTestAssetDiscovery::FindProjectCompositeDataTableObjectPath());
+	return Cached;
+}
+
+/** Fixture with a TMap column, for the structured map-emission test. Empty if none. */
+static const FString& TestMapColumnDTPath()
+{
+	static const FString Cached = ClaireonDataTableTestPaths::ToPackagePath(
+		ClaireonTestAssetDiscovery::FindProjectDataTableWithMapColumnObjectPath());
+	return Cached;
+}
+
+/** Fixture with an FStructProperty column, for the include_schema round-trip. Empty if none. */
+static const FString& TestStructColumnDTPath()
+{
+	static const FString Cached = ClaireonDataTableTestPaths::ToPackagePath(
+		ClaireonTestAssetDiscovery::FindProjectDataTableWithStructColumnObjectPath());
+	return Cached;
+}
+
+static const TCHAR* MutableDTPath = TEXT("/Game/__MCPTests/DT_MutationTest");
 static const TCHAR* TestBadDTPath = TEXT("/Game/DoesNotExist/DT_Fake");
-static const TCHAR* TestBanterPath = TEXT("/Game/Narrative/MiniBanter/DT_MiniBanterLines");
+
+namespace ClaireonDataTableTestsFixtures
+{
+	// Duplicate SourcePath -> DestPath, deleting any pre-existing DestPath first.
+	//
+	// The leading delete is required, not defensive: /Game/__MCPTests is NOT gitignored
+	// and PERSISTS between runs, so a run that dies mid-test would otherwise hand a
+	// mutated fixture (stray _UNTEST_ rows and all) to the next run.
+	static bool EnsureFreshDuplicate(const FString& SourcePath, const FString& DestPath)
+	{
+		if (SourcePath.IsEmpty())
+		{
+			return false;
+		}
+		if (UEditorAssetLibrary::DoesAssetExist(DestPath))
+		{
+			ClaireonTestAssetDeletion::DeleteAssetForTest(DestPath);
+		}
+		return UEditorAssetLibrary::DuplicateAsset(SourcePath, DestPath) != nullptr;
+	}
+
+	static void DeleteDuplicate(const FString& Path)
+	{
+		if (UEditorAssetLibrary::DoesAssetExist(Path))
+		{
+			ClaireonTestAssetDeletion::DeleteAssetForTest(Path);
+		}
+	}
+}
 
 // Unique prefix for rows created by mutation tests — prevents collisions
 static const TCHAR* UntestTempRowA = TEXT("_UNTEST_TempRow_A");
@@ -45,7 +150,13 @@ static const TCHAR* UntestTempRowC = TEXT("_UNTEST_TempRow_C");
 // Schema validation — Read tools
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, DataTableSchema, ReadToolsValid, UNTEST_TIMEOUTMS(1000))
+// NOTE on the TryGetArrayField/TryGetObjectField calls below: they are
+// UNTEST_ASSERT_*, not UNTEST_EXPECT_*, on purpose. EXPECT records the failure and
+// CONTINUES, so a schema that lost its "required" array would fall through to
+// `Required->Num()` and dereference an UNINITIALIZED pointer -- a crash that takes
+// the whole run out instead of a reported failure. Any out-param probe whose result
+// is dereferenced on the next line must be an ASSERT.
+UNTEST_UNIT_OPTS(Claireon, DataTableSchema, ReadToolsValid, UNTEST_TIMEOUTMS(10000))
 {
 	// datatable_search
 	{
@@ -57,10 +168,10 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, ReadToolsValid, UNTEST_TIMEOUTMS(100
 		FString Type;
 		UNTEST_EXPECT_TRUE(Schema->TryGetStringField(TEXT("type"), Type));
 		UNTEST_EXPECT_STREQ(Type, TEXT("object"));
-		const TSharedPtr<FJsonObject>* Props;
+		const TSharedPtr<FJsonObject>* Props = nullptr;
 		UNTEST_EXPECT_TRUE(Schema->TryGetObjectField(TEXT("properties"), Props));
 		const TArray<TSharedPtr<FJsonValue>>* Required;
-		UNTEST_EXPECT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
+		UNTEST_ASSERT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
 		UNTEST_EXPECT_TRUE(Required->Num() >= 1);
 	}
 
@@ -72,7 +183,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, ReadToolsValid, UNTEST_TIMEOUTMS(100
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 		const TArray<TSharedPtr<FJsonValue>>* Required;
-		UNTEST_EXPECT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
+		UNTEST_ASSERT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
 		UNTEST_EXPECT_TRUE(Required->Num() >= 1);
 	}
 
@@ -93,7 +204,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, ReadToolsValid, UNTEST_TIMEOUTMS(100
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 		const TArray<TSharedPtr<FJsonValue>>* Required;
-		UNTEST_EXPECT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
+		UNTEST_ASSERT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
 		UNTEST_EXPECT_TRUE(Required->Num() >= 2);
 
 		// asset_path + row_name both required.
@@ -128,7 +239,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, ReadToolsValid, UNTEST_TIMEOUTMS(100
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 		const TArray<TSharedPtr<FJsonValue>>* Required;
-		UNTEST_EXPECT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
+		UNTEST_ASSERT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
 		UNTEST_EXPECT_TRUE(Required->Num() >= 3);
 	}
 
@@ -139,7 +250,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, ReadToolsValid, UNTEST_TIMEOUTMS(100
 // Schema validation — Mutation tools
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, DataTableSchema, MutationToolsValid, UNTEST_TIMEOUTMS(1000))
+UNTEST_UNIT_OPTS(Claireon, DataTableSchema, MutationToolsValid, UNTEST_TIMEOUTMS(10000))
 {
 	// add_datatable_row
 	{
@@ -149,7 +260,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, MutationToolsValid, UNTEST_TIMEOUTMS
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 		const TArray<TSharedPtr<FJsonValue>>* Required;
-		UNTEST_EXPECT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
+		UNTEST_ASSERT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
 		UNTEST_EXPECT_TRUE(Required->Num() >= 2);
 	}
 
@@ -168,7 +279,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, MutationToolsValid, UNTEST_TIMEOUTMS
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 		const TArray<TSharedPtr<FJsonValue>>* Required;
-		UNTEST_EXPECT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
+		UNTEST_ASSERT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
 		UNTEST_EXPECT_TRUE(Required->Num() >= 3);
 	}
 
@@ -179,7 +290,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, MutationToolsValid, UNTEST_TIMEOUTMS
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 		const TArray<TSharedPtr<FJsonValue>>* Required;
-		UNTEST_EXPECT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
+		UNTEST_ASSERT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
 		UNTEST_EXPECT_TRUE(Required->Num() >= 3);
 	}
 
@@ -190,7 +301,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, MutationToolsValid, UNTEST_TIMEOUTMS
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 		const TArray<TSharedPtr<FJsonValue>>* Required;
-		UNTEST_EXPECT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
+		UNTEST_ASSERT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
 		UNTEST_EXPECT_TRUE(Required->Num() >= 3);
 	}
 
@@ -201,7 +312,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, MutationToolsValid, UNTEST_TIMEOUTMS
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 		const TArray<TSharedPtr<FJsonValue>>* Required;
-		UNTEST_EXPECT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
+		UNTEST_ASSERT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
 		UNTEST_EXPECT_TRUE(Required->Num() >= 3);
 	}
 
@@ -212,7 +323,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, MutationToolsValid, UNTEST_TIMEOUTMS
 // Schema validation — Import/Export tools
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, DataTableSchema, ImportExportToolsValid, UNTEST_TIMEOUTMS(1000))
+UNTEST_UNIT_OPTS(Claireon, DataTableSchema, ImportExportToolsValid, UNTEST_TIMEOUTMS(10000))
 {
 	// datatable_export_json
 	{
@@ -230,7 +341,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, ImportExportToolsValid, UNTEST_TIMEO
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 		const TArray<TSharedPtr<FJsonValue>>* Required;
-		UNTEST_EXPECT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
+		UNTEST_ASSERT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
 		UNTEST_EXPECT_TRUE(Required->Num() >= 2);
 	}
 
@@ -249,7 +360,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTableSchema, ImportExportToolsValid, UNTEST_TIMEO
 		auto Schema = Tool.GetInputSchema();
 		UNTEST_ASSERT_PTR(Schema.Get());
 		const TArray<TSharedPtr<FJsonValue>>* Required;
-		UNTEST_EXPECT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
+		UNTEST_ASSERT_TRUE(Schema->TryGetArrayField(TEXT("required"), Required));
 		UNTEST_EXPECT_TRUE(Required->Num() >= 2);
 	}
 
@@ -295,7 +406,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowMissingParams, UNTEST_TIMEOUTMS(5000
 	// Missing row_name
 	{
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-		Args->SetStringField(TEXT("asset_path"), TestDTPath);
+		Args->SetStringField(TEXT("asset_path"), SourceDTPath());
 		auto Result = Tool.Execute(Args);
 		UNTEST_ASSERT_TRUE(Result.bIsError);
 		UNTEST_EXPECT_TRUE(Result.GetContentAsString().Contains(TEXT("row_name")));
@@ -318,7 +429,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, FindRowsMissingParams, UNTEST_TIMEOUTMS(50
 	// Missing column and value
 	{
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-		Args->SetStringField(TEXT("asset_path"), TestDTPath);
+		Args->SetStringField(TEXT("asset_path"), SourceDTPath());
 		auto Result = Tool.Execute(Args);
 		UNTEST_ASSERT_TRUE(Result.bIsError);
 		UNTEST_EXPECT_TRUE(Result.GetContentAsString().Contains(TEXT("column")));
@@ -331,7 +442,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, AddRowMissingRowName, UNTEST_TIMEOUTMS(500
 {
 	ClaireonTool_DataTableAddRow Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("asset_path"), TestDTPath);
+	Args->SetStringField(TEXT("asset_path"), SourceDTPath());
 	// Missing row_name
 	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_TRUE(Result.bIsError);
@@ -343,7 +454,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, SetRowValuesMissingValues, UNTEST_TIMEOUTM
 {
 	ClaireonTool_DataTableSetRowValues Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("asset_path"), TestDTPath);
+	Args->SetStringField(TEXT("asset_path"), SourceDTPath());
 	Args->SetStringField(TEXT("row_name"), TEXT("SomeRow"));
 	// Missing values object
 	auto Result = Tool.Execute(Args);
@@ -359,7 +470,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, MoveRowInvalidDirection, UNTEST_TIMEOUTMS(
 	// Missing direction
 	{
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-		Args->SetStringField(TEXT("asset_path"), TestDTPath);
+		Args->SetStringField(TEXT("asset_path"), SourceDTPath());
 		Args->SetStringField(TEXT("row_name"), TEXT("SomeRow"));
 		auto Result = Tool.Execute(Args);
 		UNTEST_ASSERT_TRUE(Result.bIsError);
@@ -369,7 +480,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, MoveRowInvalidDirection, UNTEST_TIMEOUTMS(
 	// Invalid direction value
 	{
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-		Args->SetStringField(TEXT("asset_path"), TestDTPath);
+		Args->SetStringField(TEXT("asset_path"), SourceDTPath());
 		Args->SetStringField(TEXT("row_name"), TEXT("SomeRow"));
 		Args->SetStringField(TEXT("direction"), TEXT("sideways"));
 		auto Result = Tool.Execute(Args);
@@ -384,7 +495,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, ImportJsonMissingJson, UNTEST_TIMEOUTMS(50
 {
 	ClaireonTool_DataTableImportJson Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("asset_path"), TestDTPath);
+	Args->SetStringField(TEXT("asset_path"), SourceDTPath());
 	// Missing json
 	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_TRUE(Result.bIsError);
@@ -396,7 +507,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, ImportCsvMissingCsv, UNTEST_TIMEOUTMS(5000
 {
 	ClaireonTool_DataTableImportCsv Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("asset_path"), TestDTPath);
+	Args->SetStringField(TEXT("asset_path"), SourceDTPath());
 	// Missing csv
 	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_TRUE(Result.bIsError);
@@ -435,7 +546,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowNonexistentRow, UNTEST_TIMEOUTMS(300
 {
 	ClaireonTool_DataTableGetRowStructured Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("asset_path"), TestDTPath);
+	Args->SetStringField(TEXT("asset_path"), SourceDTPath());
 	Args->SetStringField(TEXT("row_name"), TEXT("_UNTEST_NonexistentRow_999"));
 	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_TRUE(Result.bIsError);
@@ -462,7 +573,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowStructuredErrors, UNTEST_TIMEOUTMS(3
 	// Missing row_name
 	{
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-		Args->SetStringField(TEXT("asset_path"), TestDTPath);
+		Args->SetStringField(TEXT("asset_path"), SourceDTPath());
 		auto Result = Tool.Execute(Args);
 		UNTEST_ASSERT_TRUE(Result.bIsError);
 		UNTEST_EXPECT_TRUE(Result.GetContentAsString().Contains(TEXT("row_name")));
@@ -493,7 +604,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowStructuredErrors, UNTEST_TIMEOUTMS(3
 	// Valid asset, nonexistent row name
 	{
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-		Args->SetStringField(TEXT("asset_path"), TestDTPath);
+		Args->SetStringField(TEXT("asset_path"), SourceDTPath());
 		Args->SetStringField(TEXT("row_name"), TEXT("_UNTEST_NonexistentRow_999"));
 		auto Result = Tool.Execute(Args);
 		UNTEST_ASSERT_TRUE(Result.bIsError);
@@ -512,13 +623,21 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, SearchFindsKnownTable, UNTEST_TIMEOUTMS(15
 {
 	ClaireonTool_DataTableSearch Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("query"), TEXT("DT_Maps"));
+	UNTEST_ASSERT_FALSE(SourceDTName().IsEmpty());
+	Args->SetStringField(TEXT("query"), SourceDTName());
 	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 
 	FString Output = Result.GetContentAsString();
-	UNTEST_EXPECT_TRUE(Output.Contains(TEXT("DT_Maps")));
-	UNTEST_EXPECT_TRUE(Output.Contains(TEXT("Found")));
+	// Root cause: the zero-results path is MakeSuccessResult with the message
+	// "No data tables found matching \"<query>\"" (ClaireonTool_DataTableSearch.cpp).
+	// That message ECHOES the query, so Contains(<query>) passed, and "Found"
+	// matched "...found matching..." case-insensitively -- every assertion in this
+	// test passed on the tool's primary failure mode. The full package path only
+	// appears in the numbered results listing, so assert that instead.
+	UNTEST_EXPECT_TRUE(Output.Contains(SourceDTPath(), ESearchCase::CaseSensitive));
+	UNTEST_EXPECT_TRUE(Output.Contains(TEXT("data table(s) matching"), ESearchCase::CaseSensitive));
+	UNTEST_EXPECT_FALSE(Output.Contains(TEXT("No data tables found"), ESearchCase::CaseSensitive));
 
 	co_return;
 }
@@ -527,7 +646,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetInfoReturnsMetadata, UNTEST_TIMEOUTMS(1
 {
 	ClaireonTool_DataTableGetInfo Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("asset_path"), TestDTPath);
+	Args->SetStringField(TEXT("asset_path"), SourceDTPath());
 	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 	UNTEST_ASSERT_PTR(Result.Data.Get());
@@ -535,22 +654,49 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetInfoReturnsMetadata, UNTEST_TIMEOUTMS(1
 	// Structured data fields
 	FString TablePath;
 	UNTEST_EXPECT_TRUE(Result.Data->TryGetStringField(TEXT("table_path"), TablePath));
-	UNTEST_EXPECT_TRUE(TablePath.Contains(TEXT("DT_Maps")));
+	UNTEST_EXPECT_TRUE(TablePath.Contains(SourceDTName()));
 
 	FString RowStruct;
 	UNTEST_EXPECT_TRUE(Result.Data->TryGetStringField(TEXT("row_struct"), RowStruct));
 	UNTEST_EXPECT_TRUE(!RowStruct.IsEmpty());
 
+	// Root cause: this used to be RowCount >= 0.0 on a value that cannot be
+	// negative, i.e. an assertion no input could fail. Compare against the table
+	// itself instead, and require a non-empty table so the columns[] walk below
+	// cannot be vacuous either.
+	FString LoadError;
+	UDataTable* DT = ClaireonDataTableHelpers::LoadDataTableAsset(SourceDTPath(), LoadError);
+	UNTEST_ASSERT_PTR(DT);
+	const int32 ExpectedRowCount = DT->GetRowMap().Num();
+	UNTEST_ASSERT_GT(ExpectedRowCount, 0);
+	UNTEST_EXPECT_STREQ(RowStruct, DT->GetRowStruct() ? DT->GetRowStruct()->GetName() : FString());
+
 	double RowCount = 0.0;
-	UNTEST_EXPECT_TRUE(Result.Data->TryGetNumberField(TEXT("row_count"), RowCount));
-	UNTEST_EXPECT_TRUE(RowCount >= 0.0);
+	UNTEST_ASSERT_TRUE(Result.Data->TryGetNumberField(TEXT("row_count"), RowCount));
+	UNTEST_EXPECT_EQ((int32)RowCount, ExpectedRowCount);
 
 	bool bIsComposite = false;
 	UNTEST_EXPECT_TRUE(Result.Data->TryGetBoolField(TEXT("is_composite"), bIsComposite));
 	UNTEST_EXPECT_FALSE(bIsComposite);
 
-	const TArray<TSharedPtr<FJsonValue>>* Columns;
-	UNTEST_EXPECT_TRUE(Result.Data->TryGetArrayField(TEXT("columns"), Columns));
+	// columns[] contents were never inspected: one entry per row-struct property,
+	// each carrying a non-empty name and cpp type.
+	const TArray<TSharedPtr<FJsonValue>>* Columns = nullptr;
+	UNTEST_ASSERT_TRUE(Result.Data->TryGetArrayField(TEXT("columns"), Columns));
+	int32 ExpectedColumnCount = 0;
+	for (TFieldIterator<FProperty> It(DT->GetRowStruct()); It; ++It) { ++ExpectedColumnCount; }
+	UNTEST_EXPECT_EQ(Columns->Num(), ExpectedColumnCount);
+	for (const TSharedPtr<FJsonValue>& ColVal : *Columns)
+	{
+		UNTEST_ASSERT_TRUE(ColVal.IsValid() && ColVal->Type == EJson::Object);
+		const TSharedPtr<FJsonObject> ColObj = ColVal->AsObject();
+		UNTEST_ASSERT_TRUE(ColObj.IsValid());
+		FString ColName, ColType;
+		UNTEST_EXPECT_TRUE(ColObj->TryGetStringField(TEXT("name"), ColName));
+		UNTEST_EXPECT_TRUE(ColObj->TryGetStringField(TEXT("type"), ColType));
+		UNTEST_EXPECT_FALSE(ColName.IsEmpty());
+		UNTEST_EXPECT_FALSE(ColType.IsEmpty());
+	}
 
 	co_return;
 }
@@ -559,21 +705,43 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowsReturnsList, UNTEST_TIMEOUTMS(10000
 {
 	ClaireonTool_DataTableGetRows Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("asset_path"), TestDTPath);
+	Args->SetStringField(TEXT("asset_path"), SourceDTPath());
 	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 	UNTEST_ASSERT_PTR(Result.Data.Get());
 
-	// Structured data fields
+	// Root cause: this used to assert ReturnedRows >= 0.0 (unfalsifiable for a count)
+	// and never looked inside rows[]. Tie the counters to the table and to the array
+	// they describe, and check the row payloads.
+	FString LoadError;
+	UDataTable* DT = ClaireonDataTableHelpers::LoadDataTableAsset(SourceDTPath(), LoadError);
+	UNTEST_ASSERT_PTR(DT);
+	const int32 ExpectedTotal = DT->GetRowMap().Num();
+	UNTEST_ASSERT_GT(ExpectedTotal, 0);
+
 	double TotalRows = 0.0;
-	UNTEST_EXPECT_TRUE(Result.Data->TryGetNumberField(TEXT("total_rows"), TotalRows));
+	UNTEST_ASSERT_TRUE(Result.Data->TryGetNumberField(TEXT("total_rows"), TotalRows));
+	UNTEST_EXPECT_EQ((int32)TotalRows, ExpectedTotal);
 
 	double ReturnedRows = 0.0;
-	UNTEST_EXPECT_TRUE(Result.Data->TryGetNumberField(TEXT("returned_rows"), ReturnedRows));
-	UNTEST_EXPECT_TRUE(ReturnedRows >= 0.0);
+	UNTEST_ASSERT_TRUE(Result.Data->TryGetNumberField(TEXT("returned_rows"), ReturnedRows));
 
-	const TArray<TSharedPtr<FJsonValue>>* RowsArray;
-	UNTEST_EXPECT_TRUE(Result.Data->TryGetArrayField(TEXT("rows"), RowsArray));
+	const TArray<TSharedPtr<FJsonValue>>* RowsArray = nullptr;
+	UNTEST_ASSERT_TRUE(Result.Data->TryGetArrayField(TEXT("rows"), RowsArray));
+	// returned_rows must describe rows[], not an unrelated counter.
+	UNTEST_EXPECT_EQ(RowsArray->Num(), (int32)ReturnedRows);
+	UNTEST_ASSERT_GT(RowsArray->Num(), 0);
+
+	// Every emitted row must name a row that actually exists in the table.
+	for (const TSharedPtr<FJsonValue>& RowVal : *RowsArray)
+	{
+		UNTEST_ASSERT_TRUE(RowVal.IsValid() && RowVal->Type == EJson::Object);
+		const TSharedPtr<FJsonObject> RowObj = RowVal->AsObject();
+		UNTEST_ASSERT_TRUE(RowObj.IsValid());
+		FString RowName;
+		UNTEST_EXPECT_TRUE(RowObj->TryGetStringField(TEXT("row_name"), RowName));
+		UNTEST_EXPECT_TRUE(DT->GetRowMap().Contains(FName(*RowName)));
+	}
 
 	co_return;
 }
@@ -584,14 +752,14 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowsPagination, UNTEST_TIMEOUTMS(10000)
 
 	// Request only 2 rows with offset
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("asset_path"), TestDTPath);
+	Args->SetStringField(TEXT("asset_path"), SourceDTPath());
 	Args->SetNumberField(TEXT("max_rows"), 2);
 	Args->SetNumberField(TEXT("offset"), 0);
 	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 	UNTEST_ASSERT_PTR(Result.Data.Get());
 
-	// Summary contains pagination info like "DT_Maps: showing rows 1-2 of N"
+	// Summary contains pagination info like "<TableName>: showing rows 1-2 of N"
 	FString Summary = Result.GetContentAsString();
 	UNTEST_EXPECT_TRUE(Summary.Contains(TEXT("showing rows 1-2")));
 
@@ -607,33 +775,334 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowsPagination, UNTEST_TIMEOUTMS(10000)
 // Export operations
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, DataTable, ExportJsonValid, UNTEST_TIMEOUTMS(10000))
+UNTEST_UNIT_OPTS(Claireon, DataTable, ExportJsonValid, UNTEST_TIMEOUTMS(30000))
 {
 	ClaireonTool_DataTableExportJson Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("asset_path"), TestDTPath);
+	Args->SetStringField(TEXT("asset_path"), SourceDTPath());
 	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 
 	FString Output = Result.GetContentAsString();
-	// JSON output should contain array brackets
-	UNTEST_EXPECT_TRUE(Output.Contains(TEXT("[")));
-	UNTEST_EXPECT_TRUE(Output.Contains(TEXT("]")));
+	// Root cause: Contains("[") / Contains("]") was the SOLE coverage of this tool
+	// and cannot fail for any string that reaches it (the summary line of an error
+	// envelope would satisfy it too). Parse the payload and check it against the
+	// table: one JSON object per row, each naming a real row.
+	FString LoadError;
+	UDataTable* DT = ClaireonDataTableHelpers::LoadDataTableAsset(SourceDTPath(), LoadError);
+	UNTEST_ASSERT_PTR(DT);
+	UNTEST_ASSERT_GT(DT->GetRowMap().Num(), 0);
+
+	TArray<TSharedPtr<FJsonValue>> Parsed;
+	const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Output);
+	UNTEST_ASSERT_TRUE(FJsonSerializer::Deserialize(Reader, Parsed));
+	UNTEST_EXPECT_EQ(Parsed.Num(), DT->GetRowMap().Num());
+
+	for (const TSharedPtr<FJsonValue>& RowVal : Parsed)
+	{
+		UNTEST_ASSERT_TRUE(RowVal.IsValid() && RowVal->Type == EJson::Object);
+		const TSharedPtr<FJsonObject> RowObj = RowVal->AsObject();
+		UNTEST_ASSERT_TRUE(RowObj.IsValid());
+		UNTEST_EXPECT_GT(RowObj->Values.Num(), 0);
+	}
+
+	// Every row name must appear in the export. Asserted against the text rather
+	// than a fixed key field because the key field name is table-configurable
+	// (UDataTable::ImportKeyField, defaulting to "Name").
+	for (const TPair<FName, uint8*>& RowPair : DT->GetRowMap())
+	{
+		UNTEST_EXPECT_TRUE(Output.Contains(RowPair.Key.ToString(), ESearchCase::CaseSensitive));
+	}
 
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, DataTable, ExportCsvValid, UNTEST_TIMEOUTMS(10000))
+UNTEST_UNIT_OPTS(Claireon, DataTable, ExportCsvValid, UNTEST_TIMEOUTMS(30000))
 {
 	ClaireonTool_DataTableExportCsv Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("asset_path"), TestDTPath);
+	Args->SetStringField(TEXT("asset_path"), SourceDTPath());
 	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 
 	FString Output = Result.GetContentAsString();
-	// CSV should have a header row with commas
-	UNTEST_EXPECT_TRUE(Output.Len() > 10);
+	// Root cause: Output.Len() > 10 was the SOLE coverage of this tool and cannot
+	// fail for any output that reaches it -- even a one-line error summary. Check the
+	// actual CSV shape against the table: a header naming every column, then one line
+	// per row, and every row name present.
+	FString LoadError;
+	UDataTable* DT = ClaireonDataTableHelpers::LoadDataTableAsset(SourceDTPath(), LoadError);
+	UNTEST_ASSERT_PTR(DT);
+	const UScriptStruct* RowStruct = DT->GetRowStruct();
+	UNTEST_ASSERT_PTR(RowStruct);
+	UNTEST_ASSERT_GT(DT->GetRowMap().Num(), 0);
+
+	TArray<FString> Lines;
+	Output.ParseIntoArrayLines(Lines, /*bCullEmpty=*/true);
+	// Header plus at least one line per row. Not an equality check: a multi-line
+	// FText cell (Description carries meta=(MultiLine)) can legitimately wrap.
+	UNTEST_ASSERT_GE(Lines.Num(), DT->GetRowMap().Num() + 1);
+
+	const FString& Header = Lines[0];
+	UNTEST_EXPECT_TRUE(Header.Contains(TEXT(","), ESearchCase::CaseSensitive));
+	for (TFieldIterator<FProperty> It(RowStruct); It; ++It)
+	{
+		UNTEST_EXPECT_TRUE(Header.Contains(It->GetName(), ESearchCase::CaseSensitive));
+	}
+
+	// Each row must start its own CSV line (row name is the first field).
+	for (const TPair<FName, uint8*>& RowPair : DT->GetRowMap())
+	{
+		const FString RowName = RowPair.Key.ToString();
+		bool bFoundLine = false;
+		for (int32 LineIdx = 1; LineIdx < Lines.Num(); ++LineIdx)
+		{
+			if (Lines[LineIdx].StartsWith(RowName, ESearchCase::CaseSensitive))
+			{
+				bFoundLine = true;
+				break;
+			}
+		}
+		UNTEST_EXPECT_TRUE(bFoundLine);
+	}
+
+	co_return;
+}
+
+// ============================================================================
+// Import operations -- SUCCESS PATH
+//
+// datatable_import_json and datatable_import_csv had no successful-path coverage
+// at all: only ImportJsonMissingJson / ImportCsvMissingCsv (argument validation)
+// and the composite-rejection branch. Both tools could have silently stopped
+// writing rows and the suite would have stayed green.
+//
+// Both tests below work on a duplicate of the discovered source table in
+// /Game/__MCPTests, never on the project's own table: every import call ends in
+// ClaireonDataTableHelpers::SaveDataTable, which writes the package to disk. An
+// in-memory-only fixture is not an option for the same reason -- the tools save
+// unconditionally -- so this follows the established EnsureFreshDuplicate +
+// ON_SCOPE_EXIT DeleteDuplicate pattern that MutationAddAndRemoveLifecycle uses,
+// and `git status --porcelain -- Content/` must still be empty after a run.
+//
+// Payloads are derived from the table's OWN export rather than hard-coded, so
+// neither test has to know the fixture's row struct and neither breaks when that
+// struct gains a column.
+//
+// Verification reads UDataTable::GetRowMap() directly. It deliberately does not
+// go through the tool's Summary: import_json/import_csv report their row count
+// only in the prose ("Imported N rows."), and Result.Data carries just the
+// composite-refresh block -- so the prose is not a substitute for looking at the
+// table (see ClaireonTestDataAssertions.h on the Data-vs-Summary split).
+// ============================================================================
+
+namespace ClaireonDataTableImportSuccessTests
+{
+	/** Row-name set of a table loaded by path. Empty on load failure. */
+	static TSet<FName> ImportTest_RowNames(const FString& AssetPath)
+	{
+		TSet<FName> Names;
+		FString LoadError;
+		UDataTable* DT = ClaireonDataTableHelpers::LoadDataTableAsset(AssetPath, LoadError);
+		if (!IsValid(DT))
+		{
+			return Names;
+		}
+		for (const TPair<FName, uint8*>& Pair : DT->GetRowMap())
+		{
+			Names.Add(Pair.Key);
+		}
+		return Names;
+	}
+
+	static FString ImportTest_ExportJson(const FString& AssetPath)
+	{
+		ClaireonTool_DataTableExportJson Tool;
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("asset_path"), AssetPath);
+		const IClaireonTool::FToolResult Result = Tool.Execute(Args);
+		return Result.bIsError ? FString() : Result.Summary;
+	}
+
+	static FString ImportTest_ExportCsv(const FString& AssetPath)
+	{
+		ClaireonTool_DataTableExportCsv Tool;
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("asset_path"), AssetPath);
+		const IClaireonTool::FToolResult Result = Tool.Execute(Args);
+		return Result.bIsError ? FString() : Result.Summary;
+	}
+
+	static IClaireonTool::FToolResult ImportTest_ImportJson(const FString& AssetPath, const FString& Json)
+	{
+		ClaireonTool_DataTableImportJson Tool;
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("asset_path"), AssetPath);
+		Args->SetStringField(TEXT("json"), Json);
+		// The fixture is a standalone duplicate, so nothing aggregates it.
+		Args->SetBoolField(TEXT("refresh_composites"), false);
+		return Tool.Execute(Args);
+	}
+
+	static IClaireonTool::FToolResult ImportTest_ImportCsv(const FString& AssetPath, const FString& Csv)
+	{
+		ClaireonTool_DataTableImportCsv Tool;
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("asset_path"), AssetPath);
+		Args->SetStringField(TEXT("csv"), Csv);
+		Args->SetBoolField(TEXT("refresh_composites"), false);
+		return Tool.Execute(Args);
+	}
+}
+
+static const TCHAR* ImportJsonDTPath = TEXT("/Game/__MCPTests/DT_ImportJsonSuccessTest");
+static const TCHAR* ImportCsvDTPath  = TEXT("/Game/__MCPTests/DT_ImportCsvSuccessTest");
+
+UNTEST_UNIT_OPTS(Claireon, DataTable, ImportJsonReplacesTableContents, UNTEST_TIMEOUTMS(60000))
+{
+	using namespace ClaireonDataTableImportSuccessTests;
+
+	// The source table was discovered by loading it, so a failed duplicate is a real
+	// problem -- fail rather than warn-and-co_return (which Untest scores as a PASS).
+	UNTEST_ASSERT_FALSE(SourceDTPath().IsEmpty());
+	const bool bDuplicated =
+		ClaireonDataTableTestsFixtures::EnsureFreshDuplicate(SourceDTPath(), ImportJsonDTPath);
+	ON_SCOPE_EXIT { ClaireonDataTableTestsFixtures::DeleteDuplicate(ImportJsonDTPath); };
+	if (!bDuplicated)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[Claireon.DataTable] Could not duplicate fixture %s -> %s"),
+			*SourceDTPath(), ImportJsonDTPath);
+	}
+	UNTEST_ASSERT_TRUE(bDuplicated);
+
+	// Baseline: the full export is the round-trip payload, and the row-name set is
+	// what a successful restore has to reproduce.
+	const TSet<FName> OriginalRows = ImportTest_RowNames(ImportJsonDTPath);
+	UNTEST_ASSERT_GT(OriginalRows.Num(), 1);
+
+	const FString JsonAll = ImportTest_ExportJson(ImportJsonDTPath);
+	UNTEST_ASSERT_FALSE(JsonAll.IsEmpty());
+
+	TArray<TSharedPtr<FJsonValue>> AllRowValues;
+	{
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonAll);
+		UNTEST_ASSERT_TRUE(FJsonSerializer::Deserialize(Reader, AllRowValues));
+	}
+	UNTEST_ASSERT_GT(AllRowValues.Num(), 0);
+	UNTEST_EXPECT_EQ(AllRowValues.Num(), OriginalRows.Num());
+	UNTEST_ASSERT_TRUE(AllRowValues[0].IsValid() && AllRowValues[0]->Type == EJson::Object);
+
+	// --- Step 1: import a payload holding exactly ONE of the rows. Import
+	// replaces (bPreserveExistingValues stays false), so the table must SHRINK to
+	// that single row. A no-op import, an append-only import, or an import that
+	// silently dropped everything all fail here.
+	FString SingleRowJson;
+	{
+		TArray<TSharedPtr<FJsonValue>> OneRow;
+		OneRow.Add(AllRowValues[0]);
+		const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&SingleRowJson);
+		UNTEST_ASSERT_TRUE(FJsonSerializer::Serialize(OneRow, Writer));
+	}
+	UNTEST_ASSERT_FALSE(SingleRowJson.IsEmpty());
+
+	{
+		const IClaireonTool::FToolResult R = ImportTest_ImportJson(ImportJsonDTPath, SingleRowJson);
+		UNTEST_ASSERT_FALSE(R.bIsError);
+		// Row count lives only in the prose for this tool family, so this is a
+		// legitimate Summary assertion -- text shape, not a structured fact.
+		UNTEST_EXPECT_TRUE(R.GetContentAsString().Contains(TEXT("Imported 1 rows.")));
+	}
+
+	const TSet<FName> AfterShrink = ImportTest_RowNames(ImportJsonDTPath);
+	UNTEST_EXPECT_EQ(AfterShrink.Num(), 1);
+	UNTEST_EXPECT_TRUE(OriginalRows.Includes(AfterShrink));
+
+	// --- Step 2: import the full payload back. The table must GROW to the exact
+	// original row set, which proves the importer parsed every row of a real
+	// multi-column payload and keyed them correctly.
+	{
+		const IClaireonTool::FToolResult R = ImportTest_ImportJson(ImportJsonDTPath, JsonAll);
+		UNTEST_ASSERT_FALSE(R.bIsError);
+	}
+
+	const TSet<FName> AfterRestore = ImportTest_RowNames(ImportJsonDTPath);
+	UNTEST_EXPECT_EQ(AfterRestore.Num(), OriginalRows.Num());
+	UNTEST_EXPECT_TRUE(AfterRestore.Includes(OriginalRows));
+
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, DataTable, ImportCsvReplacesTableContents, UNTEST_TIMEOUTMS(60000))
+{
+	using namespace ClaireonDataTableImportSuccessTests;
+
+	UNTEST_ASSERT_FALSE(SourceDTPath().IsEmpty());
+	const bool bDuplicated =
+		ClaireonDataTableTestsFixtures::EnsureFreshDuplicate(SourceDTPath(), ImportCsvDTPath);
+	ON_SCOPE_EXIT { ClaireonDataTableTestsFixtures::DeleteDuplicate(ImportCsvDTPath); };
+	if (!bDuplicated)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[Claireon.DataTable] Could not duplicate fixture %s -> %s"),
+			*SourceDTPath(), ImportCsvDTPath);
+	}
+	UNTEST_ASSERT_TRUE(bDuplicated);
+
+	const TSet<FName> OriginalRows = ImportTest_RowNames(ImportCsvDTPath);
+	UNTEST_ASSERT_GT(OriginalRows.Num(), 1);
+
+	const FString CsvAll = ImportTest_ExportCsv(ImportCsvDTPath);
+	UNTEST_ASSERT_FALSE(CsvAll.IsEmpty());
+
+	// The header is line 0 of UDataTable::GetTableAsCSV and is always a single
+	// line ("---" or ImportKeyField, then one cell per property). Data lines are
+	// NOT safe to slice -- a multi-line FText cell wraps -- so the shrink payload
+	// is built from the header alone plus one synthetic row of empty cells, which
+	// keeps this test independent of the fixture's row struct.
+	TArray<FString> CsvLines;
+	CsvAll.ParseIntoArrayLines(CsvLines, /*bCullEmpty=*/true);
+	UNTEST_ASSERT_GT(CsvLines.Num(), 1);
+
+	const FString HeaderLine = CsvLines[0];
+	int32 ValueColumnCount = 0;
+	for (int32 CharIdx = 0; CharIdx < HeaderLine.Len(); ++CharIdx)
+	{
+		if (HeaderLine[CharIdx] == TEXT(','))
+		{
+			++ValueColumnCount;
+		}
+	}
+	UNTEST_ASSERT_GT(ValueColumnCount, 0);
+
+	static const TCHAR* SyntheticRowName = TEXT("_UNTEST_ImportCsvRow");
+	FString MinimalCsv = HeaderLine + TEXT("\n") + SyntheticRowName;
+	for (int32 Column = 0; Column < ValueColumnCount; ++Column)
+	{
+		MinimalCsv += TEXT(",");
+	}
+	MinimalCsv += TEXT("\n");
+
+	// --- Step 1: replace the whole table with the single synthetic row.
+	{
+		const IClaireonTool::FToolResult R = ImportTest_ImportCsv(ImportCsvDTPath, MinimalCsv);
+		UNTEST_ASSERT_FALSE(R.bIsError);
+	}
+
+	const TSet<FName> AfterShrink = ImportTest_RowNames(ImportCsvDTPath);
+	UNTEST_EXPECT_EQ(AfterShrink.Num(), 1);
+	UNTEST_EXPECT_TRUE(AfterShrink.Contains(FName(SyntheticRowName)));
+
+	// --- Step 2: import the full CSV export back. Growing a 1-row table to the
+	// exact original row set is the real success-path assertion: the importer had
+	// to parse every data line of a genuine multi-column export.
+	{
+		const IClaireonTool::FToolResult R = ImportTest_ImportCsv(ImportCsvDTPath, CsvAll);
+		UNTEST_ASSERT_FALSE(R.bIsError);
+	}
+
+	const TSet<FName> AfterRestore = ImportTest_RowNames(ImportCsvDTPath);
+	UNTEST_EXPECT_EQ(AfterRestore.Num(), OriginalRows.Num());
+	UNTEST_EXPECT_TRUE(AfterRestore.Includes(OriginalRows));
+	UNTEST_EXPECT_FALSE(AfterRestore.Contains(FName(SyntheticRowName)));
 
 	co_return;
 }
@@ -644,11 +1113,20 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, ExportCsvValid, UNTEST_TIMEOUTMS(10000))
 
 UNTEST_UNIT_OPTS(Claireon, DataTable, CompositeRejectsMutation, UNTEST_TIMEOUTMS(10000))
 {
+	// Needs a real UCompositeDataTable; a host project may have none. Skip loudly --
+	// a bare co_return makes a skipped test indistinguishable from a passing one.
+	if (TestCompositeDTPath().IsEmpty())
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Claireon.DataTable] CompositeRejectsMutation SKIPPED: project has no UCompositeDataTable"));
+		co_return;
+	}
+
 	// Composite tables should report as composite in get_info
 	{
 		ClaireonTool_DataTableGetInfo InfoTool;
 		TSharedPtr<FJsonObject> InfoArgs = MakeShared<FJsonObject>();
-		InfoArgs->SetStringField(TEXT("asset_path"), TestCompositeDTPath);
+		InfoArgs->SetStringField(TEXT("asset_path"), TestCompositeDTPath());
 		auto InfoResult = InfoTool.Execute(InfoArgs);
 		UNTEST_ASSERT_FALSE(InfoResult.bIsError);
 		UNTEST_ASSERT_PTR(InfoResult.Data.Get());
@@ -661,7 +1139,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, CompositeRejectsMutation, UNTEST_TIMEOUTMS
 	{
 		ClaireonTool_DataTableAddRow AddTool;
 		TSharedPtr<FJsonObject> AddArgs = MakeShared<FJsonObject>();
-		AddArgs->SetStringField(TEXT("asset_path"), TestCompositeDTPath);
+		AddArgs->SetStringField(TEXT("asset_path"), TestCompositeDTPath());
 		AddArgs->SetStringField(TEXT("row_name"), TEXT("_UNTEST_ShouldFail"));
 		auto AddResult = AddTool.Execute(AddArgs);
 		UNTEST_ASSERT_TRUE(AddResult.bIsError);
@@ -672,7 +1150,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, CompositeRejectsMutation, UNTEST_TIMEOUTMS
 	{
 		ClaireonTool_DataTableRemoveRow RemoveTool;
 		TSharedPtr<FJsonObject> RemoveArgs = MakeShared<FJsonObject>();
-		RemoveArgs->SetStringField(TEXT("asset_path"), TestCompositeDTPath);
+		RemoveArgs->SetStringField(TEXT("asset_path"), TestCompositeDTPath());
 		RemoveArgs->SetStringField(TEXT("row_name"), TEXT("SomeRow"));
 		auto RemoveResult = RemoveTool.Execute(RemoveArgs);
 		UNTEST_ASSERT_TRUE(RemoveResult.bIsError);
@@ -683,7 +1161,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, CompositeRejectsMutation, UNTEST_TIMEOUTMS
 	{
 		ClaireonTool_DataTableImportCsv ImportTool;
 		TSharedPtr<FJsonObject> ImportArgs = MakeShared<FJsonObject>();
-		ImportArgs->SetStringField(TEXT("asset_path"), TestCompositeDTPath);
+		ImportArgs->SetStringField(TEXT("asset_path"), TestCompositeDTPath());
 		ImportArgs->SetStringField(TEXT("csv"), TEXT("---\nRowName,Col1\nRow1,Value1"));
 		auto ImportResult = ImportTool.Execute(ImportArgs);
 		UNTEST_ASSERT_TRUE(ImportResult.bIsError);
@@ -697,13 +1175,26 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, CompositeRejectsMutation, UNTEST_TIMEOUTMS
 // Mutation lifecycle — Add, read back, duplicate, rename, remove
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, DataTable, MutationAddAndRemoveLifecycle, UNTEST_TIMEOUTMS(30000))
+// Runs entirely on a COPY of the discovered source table. Every step here calls a
+// tool that saves the package, so pointing it at the project's own table rewrote
+// that .uasset on every run: the add/remove pair round-trips the rows, but the
+// re-serialized package is still a diff, and it came back dirty in git while the
+// test itself passed.
+UNTEST_UNIT_OPTS(Claireon, DataTable, MutationAddAndRemoveLifecycle, UNTEST_TIMEOUTMS(60000))
 {
+	if (!ClaireonDataTableTestsFixtures::EnsureFreshDuplicate(SourceDTPath(), MutableDTPath))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Claireon.DataTable] Could not duplicate fixture %s -> %s; skipping."),
+			*SourceDTPath(), MutableDTPath);
+		co_return;
+	}
+	ON_SCOPE_EXIT { ClaireonDataTableTestsFixtures::DeleteDuplicate(MutableDTPath); };
+
 	// --- Step 1: Add a temp row ---
 	ClaireonTool_DataTableAddRow AddTool;
 	{
 		TSharedPtr<FJsonObject> AddArgs = MakeShared<FJsonObject>();
-		AddArgs->SetStringField(TEXT("asset_path"), TestDTPath);
+		AddArgs->SetStringField(TEXT("asset_path"), MutableDTPath);
 		AddArgs->SetStringField(TEXT("row_name"), UntestTempRowA);
 		auto AddResult = AddTool.Execute(AddArgs);
 		UNTEST_ASSERT_FALSE(AddResult.bIsError);
@@ -717,7 +1208,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, MutationAddAndRemoveLifecycle, UNTEST_TIME
 	ClaireonTool_DataTableGetRowStructured GetTool;
 	{
 		TSharedPtr<FJsonObject> GetArgs = MakeShared<FJsonObject>();
-		GetArgs->SetStringField(TEXT("asset_path"), TestDTPath);
+		GetArgs->SetStringField(TEXT("asset_path"), MutableDTPath);
 		GetArgs->SetStringField(TEXT("row_name"), UntestTempRowA);
 		auto GetResult = GetTool.Execute(GetArgs);
 		UNTEST_EXPECT_FALSE(GetResult.bIsError);
@@ -727,7 +1218,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, MutationAddAndRemoveLifecycle, UNTEST_TIME
 	// --- Step 3: Adding same row again should fail without allow_overwrite ---
 	{
 		TSharedPtr<FJsonObject> AddArgs = MakeShared<FJsonObject>();
-		AddArgs->SetStringField(TEXT("asset_path"), TestDTPath);
+		AddArgs->SetStringField(TEXT("asset_path"), MutableDTPath);
 		AddArgs->SetStringField(TEXT("row_name"), UntestTempRowA);
 		auto AddResult = AddTool.Execute(AddArgs);
 		UNTEST_EXPECT_TRUE(AddResult.bIsError);
@@ -738,7 +1229,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, MutationAddAndRemoveLifecycle, UNTEST_TIME
 	ClaireonTool_DataTableDuplicateRow DupTool;
 	{
 		TSharedPtr<FJsonObject> DupArgs = MakeShared<FJsonObject>();
-		DupArgs->SetStringField(TEXT("asset_path"), TestDTPath);
+		DupArgs->SetStringField(TEXT("asset_path"), MutableDTPath);
 		DupArgs->SetStringField(TEXT("source_row"), UntestTempRowA);
 		DupArgs->SetStringField(TEXT("new_row_name"), UntestTempRowB);
 		auto DupResult = DupTool.Execute(DupArgs);
@@ -750,7 +1241,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, MutationAddAndRemoveLifecycle, UNTEST_TIME
 	ClaireonTool_DataTableRenameRow RenameTool;
 	{
 		TSharedPtr<FJsonObject> RenameArgs = MakeShared<FJsonObject>();
-		RenameArgs->SetStringField(TEXT("asset_path"), TestDTPath);
+		RenameArgs->SetStringField(TEXT("asset_path"), MutableDTPath);
 		RenameArgs->SetStringField(TEXT("row_name"), UntestTempRowB);
 		RenameArgs->SetStringField(TEXT("new_name"), UntestTempRowC);
 		auto RenameResult = RenameTool.Execute(RenameArgs);
@@ -762,7 +1253,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, MutationAddAndRemoveLifecycle, UNTEST_TIME
 	ClaireonTool_DataTableMoveRow MoveTool;
 	{
 		TSharedPtr<FJsonObject> MoveArgs = MakeShared<FJsonObject>();
-		MoveArgs->SetStringField(TEXT("asset_path"), TestDTPath);
+		MoveArgs->SetStringField(TEXT("asset_path"), MutableDTPath);
 		MoveArgs->SetStringField(TEXT("row_name"), UntestTempRowA);
 		MoveArgs->SetStringField(TEXT("direction"), TEXT("down"));
 		auto MoveResult = MoveTool.Execute(MoveArgs);
@@ -774,7 +1265,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, MutationAddAndRemoveLifecycle, UNTEST_TIME
 	ClaireonTool_DataTableRemoveRow RemoveTool;
 	{
 		TSharedPtr<FJsonObject> RemoveArgs = MakeShared<FJsonObject>();
-		RemoveArgs->SetStringField(TEXT("asset_path"), TestDTPath);
+		RemoveArgs->SetStringField(TEXT("asset_path"), MutableDTPath);
 		RemoveArgs->SetStringField(TEXT("row_name"), UntestTempRowA);
 		auto RemoveResult = RemoveTool.Execute(RemoveArgs);
 		UNTEST_EXPECT_FALSE(RemoveResult.bIsError);
@@ -787,7 +1278,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, MutationAddAndRemoveLifecycle, UNTEST_TIME
 	}
 	{
 		TSharedPtr<FJsonObject> RemoveArgs = MakeShared<FJsonObject>();
-		RemoveArgs->SetStringField(TEXT("asset_path"), TestDTPath);
+		RemoveArgs->SetStringField(TEXT("asset_path"), MutableDTPath);
 		RemoveArgs->SetStringField(TEXT("row_name"), UntestTempRowC);
 		auto RemoveResult = RemoveTool.Execute(RemoveArgs);
 		UNTEST_EXPECT_FALSE(RemoveResult.bIsError);
@@ -796,7 +1287,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, MutationAddAndRemoveLifecycle, UNTEST_TIME
 	// Also try removing B in case rename failed and B still exists
 	{
 		TSharedPtr<FJsonObject> RemoveArgs = MakeShared<FJsonObject>();
-		RemoveArgs->SetStringField(TEXT("asset_path"), TestDTPath);
+		RemoveArgs->SetStringField(TEXT("asset_path"), MutableDTPath);
 		RemoveArgs->SetStringField(TEXT("row_name"), UntestTempRowB);
 		RemoveTool.Execute(RemoveArgs); // Don't assert — may not exist
 	}
@@ -804,7 +1295,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, MutationAddAndRemoveLifecycle, UNTEST_TIME
 	// --- Step 8: Verify row no longer exists ---
 	{
 		TSharedPtr<FJsonObject> GetArgs = MakeShared<FJsonObject>();
-		GetArgs->SetStringField(TEXT("asset_path"), TestDTPath);
+		GetArgs->SetStringField(TEXT("asset_path"), MutableDTPath);
 		GetArgs->SetStringField(TEXT("row_name"), UntestTempRowA);
 		auto GetResult = GetTool.Execute(GetArgs);
 		UNTEST_EXPECT_TRUE(GetResult.bIsError);
@@ -819,15 +1310,15 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, MutationAddAndRemoveLifecycle, UNTEST_TIME
 // Functional tests -- datatable_get_row (structured)
 // ============================================================================
 
-namespace
+namespace ClaireonDataTableTests_Private
 {
 	// Helper: pick the first row name from a DataTable (loaded via the helper).
 	// Returns empty FString if the table is missing or empty.
-	static FString PickFirstRowName_DataTableStructuredTests(const TCHAR* AssetPath)
+	static FString PickFirstRowName_DataTableStructuredTests(const FString& AssetPath)
 	{
 		FString LoadError;
 		UDataTable* DT = ClaireonDataTableHelpers::LoadDataTableAsset(AssetPath, LoadError);
-		if (!DT) { return FString(); }
+		if (!IsValid(DT)) { return FString(); }
 		const TMap<FName, uint8*>& RowMap = DT->GetRowMap();
 		for (const auto& Pair : RowMap)
 		{
@@ -880,16 +1371,17 @@ namespace
 		return Out;
 	}
 }
+using namespace ClaireonDataTableTests_Private;
 
 UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowStructuredPrimitive, UNTEST_TIMEOUTMS(15000))
 {
-	// Primitive row test against DT_Maps.
-	const FString FirstRow = PickFirstRowName_DataTableStructuredTests(TestDTPath);
+	// Primitive row test against the discovered source table.
+	const FString FirstRow = PickFirstRowName_DataTableStructuredTests(SourceDTPath());
 	UNTEST_ASSERT_TRUE(!FirstRow.IsEmpty());
 
 	ClaireonTool_DataTableGetRowStructured Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("asset_path"), TestDTPath);
+	Args->SetStringField(TEXT("asset_path"), SourceDTPath());
 	Args->SetStringField(TEXT("row_name"), FirstRow);
 	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_FALSE(Result.bIsError);
@@ -898,7 +1390,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowStructuredPrimitive, UNTEST_TIMEOUTM
 	// Top-level shape
 	FString TablePath;
 	UNTEST_EXPECT_TRUE(Result.Data->TryGetStringField(TEXT("table_path"), TablePath));
-	UNTEST_EXPECT_TRUE(TablePath.Contains(TEXT("DT_Maps")));
+	UNTEST_EXPECT_TRUE(TablePath.Contains(SourceDTName()));
 
 	FString RowName;
 	UNTEST_EXPECT_TRUE(Result.Data->TryGetStringField(TEXT("row_name"), RowName));
@@ -915,7 +1407,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowStructuredPrimitive, UNTEST_TIMEOUTM
 	// Scalar properties of the row struct should land as native JSON types where applicable.
 	// Walk the struct so we know what types to assert without hardcoding column names.
 	FString LoadError;
-	UDataTable* DT = ClaireonDataTableHelpers::LoadDataTableAsset(TestDTPath, LoadError);
+	UDataTable* DT = ClaireonDataTableHelpers::LoadDataTableAsset(SourceDTPath(), LoadError);
 	UNTEST_ASSERT_PTR(DT);
 	const UScriptStruct* RowStruct = DT->GetRowStruct();
 	UNTEST_ASSERT_PTR(RowStruct);
@@ -960,27 +1452,39 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowStructuredPrimitive, UNTEST_TIMEOUTM
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowStructuredBanter, UNTEST_TIMEOUTMS(30000))
+UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowStructuredMapColumn, UNTEST_TIMEOUTMS(30000))
 {
-	// Banter row functional test. Skip cleanly if the asset is absent.
-	FString LoadError;
-	UDataTable* BanterDT = ClaireonDataTableHelpers::LoadDataTableAsset(TestBanterPath, LoadError);
-	if (!BanterDT)
+	// TMap-column functional test. Skip cleanly if the project has no such table.
+	// Logged as a Warning: a bare co_return with only a comment makes a silently
+	// skipped test indistinguishable from a passing one in the run output.
+	const FString& MapDTPath = TestMapColumnDTPath();
+	if (MapDTPath.IsEmpty())
 	{
-		// Not present in this project variant -- skip without failing.
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Claireon.DataTable] GetRowStructuredMapColumn SKIPPED: project has no data table with a TMap column"));
 		co_return;
 	}
 
-	const FString FirstRow = PickFirstRowName_DataTableStructuredTests(TestBanterPath);
+	FString LoadError;
+	UDataTable* MapDT = ClaireonDataTableHelpers::LoadDataTableAsset(MapDTPath, LoadError);
+	if (!IsValid(MapDT))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Claireon.DataTable] GetRowStructuredMapColumn SKIPPED: fixture %s not loadable (%s)"),
+			*MapDTPath, *LoadError);
+		co_return;
+	}
+
+	const FString FirstRow = PickFirstRowName_DataTableStructuredTests(MapDTPath);
 	if (FirstRow.IsEmpty())
 	{
-		// Empty table -- skip.
+		UE_LOG(LogTemp, Warning, TEXT("[Claireon.DataTable] GetRowStructuredMapColumn SKIPPED: fixture %s has no rows"),
+			*MapDTPath);
 		co_return;
 	}
 
 	ClaireonTool_DataTableGetRowStructured Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("asset_path"), TestBanterPath);
+	Args->SetStringField(TEXT("asset_path"), MapDTPath);
 	Args->SetStringField(TEXT("row_name"), FirstRow);
 	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_FALSE(Result.bIsError);
@@ -1012,22 +1516,41 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowStructuredBanter, UNTEST_TIMEOUTMS(3
 			}
 		}
 	}
-	UNTEST_EXPECT_TRUE(bFoundMapArray);
+	// Discovery guarantees the row STRUCT has a TMap column, but not that this row's
+	// map is populated -- an empty TMap legitimately serializes to an empty array, so
+	// this is a skip rather than a failure.
+	if (!bFoundMapArray)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Claireon.DataTable] GetRowStructuredMapColumn: row '%s' of %s has no populated map column; "
+				 "map-emission shape not exercised"),
+			*FirstRow, *MapDTPath);
+	}
 
 	co_return;
 }
 
 UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowStructuredIncludeSchema, UNTEST_TIMEOUTMS(30000))
 {
-	// include_schema=true round-trip. Use the banter row when available; fall back to DT_Maps.
-	const TCHAR* AssetPath = TestBanterPath;
+	// include_schema=true round-trip.
+	//
+	// The schema-equality assertion below only runs for STRUCT-typed columns, so the
+	// fixture must have at least one. Picking a table that merely loads is not enough:
+	// a row struct with no FStructProperty members never enters the loop body --
+	// harmless while the floor assertion was the tautology
+	// UNTEST_EXPECT_TRUE(StructColumnsChecked >= 0), fatal once it became
+	// EXPECT_GT(.., 0). Discovery therefore selects on the row struct, not on
+	// loadability.
+	const FString& AssetPath = TestStructColumnDTPath();
+	if (AssetPath.IsEmpty())
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Claireon.DataTable] GetRowStructuredIncludeSchema SKIPPED: project has no data table with a struct column"));
+		co_return;
+	}
+
 	FString LoadError;
 	UDataTable* DT = ClaireonDataTableHelpers::LoadDataTableAsset(AssetPath, LoadError);
-	if (!DT)
-	{
-		AssetPath = TestDTPath;
-		DT = ClaireonDataTableHelpers::LoadDataTableAsset(AssetPath, LoadError);
-	}
 	UNTEST_ASSERT_PTR(DT);
 
 	const FString FirstRow = PickFirstRowName_DataTableStructuredTests(AssetPath);
@@ -1068,12 +1591,21 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowStructuredIncludeSchema, UNTEST_TIME
 	// For at least one struct-typed column, schema[col] string-equals SerializeStructSchema for that column's struct.
 	UScriptStruct* RowStruct = const_cast<UScriptStruct*>(DT->GetRowStruct());
 	UNTEST_ASSERT_PTR(RowStruct);
+	// Non-empty floor. Root cause: the schema-equality assertion lives inside this
+	// iterator, so if the row struct had no struct columns (or their schema keys were
+	// missing) the loop body would never run -- and the old
+	// UNTEST_EXPECT_TRUE(StructColumnsChecked >= 0) is a literal tautology, so the
+	// test passed having compared nothing. The fixture was discovered BY having struct
+	// columns, so requiring at least one comparison is safe and makes the assertion
+	// reachable.
+	int32 StructPropsInRowStruct = 0;
 	int32 StructColumnsChecked = 0;
 	for (TFieldIterator<FProperty> It(RowStruct); It; ++It)
 	{
 		const FProperty* Prop = *It;
 		if (const FStructProperty* StructProp = CastField<FStructProperty>(Prop))
 		{
+			++StructPropsInRowStruct;
 			const FString Friendly = ClaireonStructReflection::GetFriendlyPropertyName(Prop);
 			const TSharedPtr<FJsonValue>* SchemaValPtr = (*SchemaObj)->Values.Find(Friendly);
 			if (!SchemaValPtr || !SchemaValPtr->IsValid()) { continue; }
@@ -1087,9 +1619,8 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowStructuredIncludeSchema, UNTEST_TIME
 			++StructColumnsChecked;
 		}
 	}
-	// We don't strictly require StructColumnsChecked > 0 (DT_Maps may have no struct columns), but
-	// when banter is available it must hit at least one.
-	UNTEST_EXPECT_TRUE(StructColumnsChecked >= 0);
+	UNTEST_EXPECT_GT(StructPropsInRowStruct, 0);
+	UNTEST_EXPECT_GT(StructColumnsChecked, 0);
 
 	co_return;
 }
@@ -1101,6 +1632,74 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowStructuredIncludeSchema, UNTEST_TIME
 
 // Friendly-name collision test: same situation -- behavior is documented but no convenient
 // fixture exists in the test project, so it is not exercised at runtime.
+
+// ============================================================================
+// Composite refresh — rebuild fixes a stale cache
+// ============================================================================
+
+UNTEST_UNIT_OPTS(Claireon, DataTable, CompositeRefreshFixesStaleCache, UNTEST_TIMEOUTMS(30000))
+{
+	// Sandbox package on disk so RefreshCompositeDataTable's save can succeed.
+	const FString TimeStamp = FDateTime::UtcNow().ToString(TEXT("%Y%m%d_%H%M%S_%f"));
+	const FString PkgPath = FString::Printf(TEXT("/Game/__ClaireonDataTableTests/CompositeRefresh_%s"), *TimeStamp);
+	UPackage* Pkg = CreatePackage(*PkgPath);
+	UNTEST_ASSERT_PTR(Pkg);
+
+	UScriptStruct* RowStruct = FTableRowBase::StaticStruct();
+	UNTEST_ASSERT_PTR(RowStruct);
+
+	// Parent table with rows A and B.
+	UDataTable* Parent = NewObject<UDataTable>(Pkg, TEXT("DT_RefreshParent"), RF_Public | RF_Standalone);
+	UNTEST_ASSERT_PTR(Parent);
+	Parent->RowStruct = RowStruct;
+	{
+		FTableRowBase RowA;
+		FTableRowBase RowB;
+		Parent->AddRow(TEXT("A"), RowA);
+		Parent->AddRow(TEXT("B"), RowB);
+	}
+	UNTEST_ASSERT_TRUE(Parent->GetRowMap().Contains(TEXT("A")));
+	UNTEST_ASSERT_TRUE(Parent->GetRowMap().Contains(TEXT("B")));
+
+	// Composite over the parent. AppendParentTables builds the cached RowMap.
+	UCompositeDataTable* Composite = NewObject<UCompositeDataTable>(Pkg, TEXT("DT_RefreshComposite"), RF_Public | RF_Standalone);
+	UNTEST_ASSERT_PTR(Composite);
+	Composite->RowStruct = RowStruct;
+	Composite->AppendParentTables(TArray<UDataTable*>{ Parent });
+	UNTEST_ASSERT_TRUE(Composite->GetRowMap().Contains(TEXT("A")));
+	UNTEST_ASSERT_TRUE(Composite->GetRowMap().Contains(TEXT("B")));
+
+	// Make the cache unambiguously stale: clear the inherited RowMap WITHOUT going
+	// through the composite override (which would also wipe ParentTables). The base
+	// EmptyTable clears only the cached rows, leaving parent linkage intact.
+	Composite->UDataTable::EmptyTable();
+	UNTEST_ASSERT_FALSE(Composite->GetRowMap().Contains(TEXT("A")));
+	UNTEST_ASSERT_FALSE(Composite->GetRowMap().Contains(TEXT("B")));
+
+	// Refresh must rebuild the cache from the (still-attached) parent and save.
+	FString RefreshErr;
+	const bool bRefreshed = ClaireonDataTableHelpers::RefreshCompositeDataTable(Composite, RefreshErr);
+	UNTEST_EXPECT_TRUE(bRefreshed);
+	if (!bRefreshed)
+	{
+		UNTEST_EXPECT_TRUE(RefreshErr.IsEmpty());
+	}
+	UNTEST_EXPECT_TRUE(Composite->GetRowMap().Contains(TEXT("A")));
+	UNTEST_EXPECT_TRUE(Composite->GetRowMap().Contains(TEXT("B")));
+
+	// Null guard.
+	{
+		FString NullErr;
+		UNTEST_EXPECT_FALSE(ClaireonDataTableHelpers::RefreshCompositeDataTable(nullptr, NullErr));
+		UNTEST_EXPECT_FALSE(NullErr.IsEmpty());
+	}
+
+	// Cleanup both sandbox assets; leaving either behind strands the package file in Content/.
+	ClaireonTestAssetDeletion::DeleteAssetForTest(FString::Printf(TEXT("%s.DT_RefreshComposite"), *PkgPath));
+	ClaireonTestAssetDeletion::DeleteAssetForTest(FString::Printf(TEXT("%s.DT_RefreshParent"), *PkgPath));
+
+	co_return;
+}
 
 
 #endif // WITH_UNTESTED

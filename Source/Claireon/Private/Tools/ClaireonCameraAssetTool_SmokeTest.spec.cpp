@@ -15,6 +15,8 @@
 #include "Tools/ClaireonCameraAssetTool_Save.h"
 #include "Tools/ClaireonCameraAssetTool_SetNodeProperty.h"
 
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetRegistry/IAssetRegistry.h"
 #include "Core/CameraAsset.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -23,21 +25,42 @@
 #include "PackageTools.h"
 #include "UObject/Package.h"
 
-namespace
+#include "Tests/ClaireonTestAssetDeletion.h"
+namespace ClaireonCameraAssetTool_SmokeTest_spec_Private
 {
 	/** Best-effort cleanup of a /Game/Tests/<X> asset; ignores absence. */
 	void CASmokeSpec_DeleteIfExists(const FString& Path)
 	{
 		if (UEditorAssetLibrary::DoesAssetExist(Path))
 		{
-			UEditorAssetLibrary::DeleteAsset(Path);
+			ClaireonTestAssetDeletion::DeleteAssetForTest(Path);
 		}
+	}
+
+	/** First non-scratch UCameraAsset in the project (object path), or empty if none.
+	 *  Claireon ships no camera content, so the smoke test discovers a subject rather
+	 *  than hardcoding a project asset. */
+	FString CASmokeSpec_FindProjectCameraAssetPath()
+	{
+		FAssetRegistryModule& ARM = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+		TArray<FAssetData> Assets;
+		ARM.Get().GetAssetsByClass(UCameraAsset::StaticClass()->GetClassPathName(), Assets, /*bSearchSubClasses*/ false);
+		for (const FAssetData& A : Assets)
+		{
+			const FString Pkg = A.PackageName.ToString();
+			if (Pkg.StartsWith(TEXT("/Game/__MCPTests")) || Pkg.StartsWith(TEXT("/Game/Tests")))
+			{
+				continue;
+			}
+			return A.GetSoftObjectPath().ToString();
+		}
+		return FString();
 	}
 
 	/** Unload the in-memory package so subsequent LoadObject re-pulls from disk. */
 	bool CASmokeSpec_UnloadPackage(FAutomationTestBase& Test, const FString& Path)
 	{
-		if (UPackage* Pkg = FindPackage(nullptr, *Path))
+		if (UPackage* Pkg = FindPackage(nullptr, *Path); IsValid(Pkg))
 		{
 			FText UnloadErr;
 			const bool bUnloaded = UPackageTools::UnloadPackages({ Pkg }, UnloadErr, /*bUnloadDirtyPackages=*/true);
@@ -155,6 +178,7 @@ namespace
 		return FMath::IsNearlyEqual(Numeric, Target, /*Tolerance=*/1e-3f);
 	}
 } // namespace
+using namespace ClaireonCameraAssetTool_SmokeTest_spec_Private;
 
 // =====================================================================================
 // Test: SmokeTest_SyntheticFixtureRoundTrip
@@ -164,10 +188,32 @@ namespace
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetSmokeTest_SyntheticFixtureRoundTrip,
 	"Claireon.CameraAsset.SmokeTest.SyntheticFixtureRoundTrip",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FCameraAssetSmokeTest_SyntheticFixtureRoundTrip::RunTest(const FString& /*Parameters*/)
 {
+
+	// Declare the engine's save-time validation errors as expected.
+	//
+	// Saving a camera asset runs UCameraAsset validation, which logs at Error verbosity --
+	// and the automation framework turns any captured Error into a failure. Both messages
+	// are correct and neither is fixable from the test:
+	//
+	//   "Camera has no director set"  -- on 5.7+ camera_asset_add_rig installs a
+	//     USingleCameraDirector on demand, but on UE 5.5/5.6 hosts AddRig
+	//     takes the pre-5.7 AddCameraRig() path which installs no director at all. No
+	//     camera_asset tool can set one on this version.
+	//
+	// Only the director error is declared here. This test populates a root node, so the
+	// sibling "has no root node" error never fires -- and an expectation that does not
+	// occur is itself a failure, which is the framework being right: a declaration is a
+	// claim about what happens, not a blanket mute.
+	//
+	// This test is about round-tripping the asset, not about producing a runnable camera,
+	// so the right move is to declare the error rather than suppress LogCameraSystem
+	// wholesale: anything else it reports still fails the test.
+	AddExpectedError(TEXT("Camera has no director set"),
+		EAutomationExpectedErrorFlags::Contains, /*Occurrences=*/0);
 	const FString Path = TEXT("/Game/Tests/CA_Synth_Fixture");
 	const FString ChildId = TEXT("Root.Children[0]");
 	const FString PropName = TEXT("FieldOfView.Value");
@@ -302,27 +348,32 @@ bool FCameraAssetSmokeTest_SyntheticFixtureRoundTrip::RunTest(const FString& /*P
 
 // =====================================================================================
 // Test: SmokeTest_DuplicatePrototypeAndAddNode
-// Tied to real content (CA_FD_Player_Prototype_Ranged). If the prototype isn't in this
-// worktree, AddWarning + pass — the synthetic test is the hard guarantee.
+//
+// Duplicates an existing UCameraAsset, adds a node, sets a property, and verifies the
+// result. The source is auto-discovered from the project (Claireon ships no camera
+// content), so the test runs wherever a UCameraAsset exists and skips otherwise.
+//
+// EXECUTION CAVEAT: this file uses IMPLEMENT_SIMPLE_AUTOMATION_TEST, not UNTEST_UNIT*.
+// The Unreal-automation tests here were historically not discovered by the runner
+// (tracked as Docs/llm/todo/claireon-test-suite-debt.md item 1, which is where the
+// CommandletContext flag below comes from).
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetSmokeTest_DuplicatePrototypeAndAddNode,
 	"Claireon.CameraAsset.SmokeTest.DuplicatePrototypeAndAddNode",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FCameraAssetSmokeTest_DuplicatePrototypeAndAddNode::RunTest(const FString& /*Parameters*/)
 {
-	const FString SourcePath = TEXT("/Game/Tests/CA_Smoke_SourcePrototype");
+	const FString SourcePath = CASmokeSpec_FindProjectCameraAssetPath();
 	const FString DupPath = TEXT("/Game/Tests/CA_Smoke_Prototype");
 	const FString PropName = TEXT("FieldOfView.Value");
 	const FString TargetValue = TEXT("7.5");
 
-	// 1. Verify prototype exists; if not, soft-pass with warning.
-	if (!UEditorAssetLibrary::DoesAssetExist(SourcePath))
+	// 1. Auto-discovered source. If the project has no UCameraAsset (e.g. a bare host),
+	//    there is nothing to exercise -- skip rather than fail.
+	if (SourcePath.IsEmpty())
 	{
-		AddWarning(FString::Printf(
-			TEXT("Prototype not found at %s; skipping prototype-duplicate smoke test "
-				 "(synthetic-fixture test still covers the round-trip)."),
-			*SourcePath));
+		AddInfo(TEXT("No UCameraAsset present in the project; skipping camera duplicate smoke test."));
 		return true;
 	}
 

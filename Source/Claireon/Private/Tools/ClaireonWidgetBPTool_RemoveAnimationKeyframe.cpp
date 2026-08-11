@@ -51,7 +51,7 @@ FToolResult ClaireonWidgetBPTool_RemoveAnimationKeyframe::Execute(const TSharedP
         return BeginError;
     }
     UWidgetBlueprint* WBP = Data ? Data->WidgetBlueprint.Get() : nullptr;
-    if (!WBP)
+    if (!IsValid(WBP))
     {
         return MakeErrorResult(TEXT("widget blueprint unavailable on session"));
     }
@@ -73,12 +73,12 @@ FToolResult ClaireonWidgetBPTool_RemoveAnimationKeyframe::Execute(const TSharedP
     }
 
     UWidgetAnimation* Anim = Claireon::WidgetAnimation::FindWidgetAnimationByName(WBP, AnimationName);
-    if (!Anim)
+    if (!IsValid(Anim))
     {
         return MakeErrorResult(FString::Printf(TEXT("animation '%s' not found on %s"), *AnimationName, *WBP->GetName()));
     }
     UMovieScene* MS = Anim->GetMovieScene();
-    if (!MS)
+    if (!IsValid(MS))
     {
         return MakeErrorResult(TEXT("animation has no MovieScene"));
     }
@@ -110,19 +110,19 @@ FToolResult ClaireonWidgetBPTool_RemoveAnimationKeyframe::Execute(const TSharedP
         const FName WantedFName(*Wanted);
         for (UMovieSceneTrack* T : MSBinding->GetTracks())
         {
-            if (!T) { continue; }
+            if (!IsValid(T)) { continue; }
             if (Wanted.IsEmpty() || T->GetTrackName() == WantedFName || T->GetClass()->GetName() == Wanted)
             {
                 Track = T;
                 break;
             }
         }
-        if (!Track && MSBinding->GetTracks().Num() > 0)
+        if (!IsValid(Track) && MSBinding->GetTracks().Num() > 0)
         {
             Track = MSBinding->GetTracks()[0];
         }
     }
-    if (!Track)
+    if (!IsValid(Track))
     {
         return MakeErrorResult(TEXT("no track resolved for remove_animation_keyframe"));
     }

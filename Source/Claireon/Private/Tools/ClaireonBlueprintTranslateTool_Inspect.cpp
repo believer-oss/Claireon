@@ -19,8 +19,9 @@ FString ClaireonBlueprintTranslateTool_Inspect::GetOperation() const { return TE
 
 FString ClaireonBlueprintTranslateTool_Inspect::GetDescription() const
 {
-	return TEXT("Read-only: inspect the current state of one //[BP] tagged node region inside a translation "
-	            "session created by blueprint_translate_scaffold. Returns the current code, the node's status "
+	return TEXT("Read the current state of one //[BP] tagged node region inside a translation session created "
+	            "by bp_translate_scaffold. Read-only: never mutates the generated source. Requires session_id, "
+	            "blueprint, and node_guid; returns the region's current code, the node's status "
 	            "(pending/implemented/skipped), and a map of sibling nodes' statuses.");
 }
 
@@ -30,12 +31,20 @@ TSharedPtr<FJsonObject> ClaireonBlueprintTranslateTool_Inspect::GetInputSchema()
 	Schema->SetStringField(TEXT("type"), TEXT("object"));
 
 	TSharedPtr<FJsonObject> Properties = MakeShared<FJsonObject>();
-	for (const TCHAR* Field : { TEXT("session_id"), TEXT("session_file"), TEXT("blueprint"), TEXT("node_guid") })
+	// Explicit per-field declarations, not a name loop: the loop form could
+	// carry no description, so every one of these parameters was undescribed
+	// -- invisible in help and in the MCP schema.
+	auto AddStringParam = [&Properties](const TCHAR* Name, const TCHAR* Description)
 	{
 		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
 		P->SetStringField(TEXT("type"), TEXT("string"));
-		Properties->SetObjectField(Field, P);
-	}
+		P->SetStringField(TEXT("description"), Description);
+		Properties->SetObjectField(Name, P);
+	};
+	AddStringParam(TEXT("session_id"), TEXT("Session ID returned by the scaffold tool."));
+	AddStringParam(TEXT("session_file"), TEXT("Direct path to the session JSON file. Alternative to session_id."));
+	AddStringParam(TEXT("blueprint"), TEXT("Blueprint asset path within the session."));
+	AddStringParam(TEXT("node_guid"), TEXT("GUID of the node to operate on."));
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	TArray<TSharedPtr<FJsonValue>> Required;

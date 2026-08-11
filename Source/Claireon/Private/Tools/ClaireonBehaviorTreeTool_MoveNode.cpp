@@ -43,7 +43,7 @@ FToolResult ClaireonBehaviorTreeTool_MoveNode::Execute(const TSharedPtr<FJsonObj
 	}
 
 	UBehaviorTreeGraph* Graph = ClaireonBehaviorTreeHelpers::GetBTGraph(Data->BehaviorTree.Get(), Error);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -63,16 +63,16 @@ FToolResult ClaireonBehaviorTreeTool_MoveNode::Execute(const TSharedPtr<FJsonObj
 	Arguments->TryGetNumberField(TEXT("child_index"), ChildIndex);
 
 	UBehaviorTreeGraphNode* GraphNode = ClaireonBehaviorTreeHelpers::FindGraphNodeByGuid(Graph, NodeGuid);
-	if (!GraphNode)
+	if (!IsValid(GraphNode))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Node not found: %s"), *NodeGuid.ToString(EGuidFormats::DigitsWithHyphensLower)));
 	}
 
 	UBehaviorTreeGraphNode* NewParentNode = ClaireonBehaviorTreeHelpers::FindGraphNodeByGuid(Graph, NewParentGuid);
-	if (!NewParentNode)
+	if (!IsValid(NewParentNode))
 	{
 		UBehaviorTreeGraphNode_Root* RootNode = ClaireonBehaviorTreeHelpers::FindRootGraphNode(Graph);
-		if (RootNode && RootNode->NodeGuid == NewParentGuid)
+		if (IsValid(RootNode) && RootNode->NodeGuid == NewParentGuid)
 		{
 			NewParentNode = RootNode;
 		}

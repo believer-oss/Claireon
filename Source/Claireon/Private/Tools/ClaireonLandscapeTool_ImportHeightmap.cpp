@@ -81,13 +81,13 @@ TSharedPtr<FJsonObject> ClaireonLandscapeTool_ImportHeightmap::GetInputSchema() 
 
 IClaireonTool::FToolResult ClaireonLandscapeTool_ImportHeightmap::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("Editor not available"));
 	}
 
 	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
+	if (!IsValid(World))
 	{
 		return MakeErrorResult(TEXT("No editor world loaded"));
 	}
@@ -171,7 +171,7 @@ IClaireonTool::FToolResult ClaireonLandscapeTool_ImportHeightmap::Execute(const 
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 		ALandscape* NewLandscape = World->SpawnActor<ALandscape>(SpawnParams);
 
-		if (!NewLandscape)
+		if (!IsValid(NewLandscape))
 		{
 			return MakeErrorResult(TEXT("Failed to spawn ALandscape actor"));
 		}

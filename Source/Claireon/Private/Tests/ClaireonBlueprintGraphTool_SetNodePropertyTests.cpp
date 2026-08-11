@@ -33,7 +33,8 @@
 #include "UObject/SoftObjectPath.h"
 #include "UObject/UnrealType.h"
 
-namespace
+#include "ClaireonTestAssetDeletion.h"
+namespace ClaireonBlueprintGraphTool_SetNodePropertyTests_Private
 {
 	static const TCHAR* TestBPPath_WriteAndReconstruct = TEXT("/Game/__MCPTests/BP_SetNodeProperty_WriteAndReconstruct");
 	static const TCHAR* TestBPPath_ReconstructFalse    = TEXT("/Game/__MCPTests/BP_SetNodeProperty_ReconstructFalse");
@@ -43,24 +44,24 @@ namespace
 	void CleanupSetNodePropTestAsset(const FString& AssetPath)
 	{
 		const FString ObjectPath = AssetPath + TEXT(".") + FPackageName::GetShortName(AssetPath);
-		if (UObject* Asset = FSoftObjectPath(ObjectPath).TryLoad())
+		if (UObject* Asset = FSoftObjectPath(ObjectPath).TryLoad(); IsValid(Asset))
 		{
 			TArray<UObject*> AssetsToDelete;
 			AssetsToDelete.Add(Asset);
-			ObjectTools::ForceDeleteObjects(AssetsToDelete, false);
+			ClaireonTestAssetDeletion::DeleteObjectsForTest(AssetsToDelete);
 		}
 	}
 
 	UBlueprint* CreateSetNodePropTestActorBP(const FString& AssetPath)
 	{
 		const FString ObjectPath = AssetPath + TEXT(".") + FPackageName::GetShortName(AssetPath);
-		if (UBlueprint* Existing = Cast<UBlueprint>(FSoftObjectPath(ObjectPath).TryLoad()))
+		if (UBlueprint* Existing = Cast<UBlueprint>(FSoftObjectPath(ObjectPath).TryLoad()); IsValid(Existing))
 		{
 			return Existing;
 		}
 
 		UPackage* Package = CreatePackage(*AssetPath);
-		if (!Package) return nullptr;
+		if (!IsValid(Package)) return nullptr;
 
 		const FString AssetName = FPackageName::GetShortName(AssetPath);
 		UBlueprint* BP = FKismetEditorUtilities::CreateBlueprint(
@@ -71,7 +72,7 @@ namespace
 			UBlueprint::StaticClass(),
 			UBlueprintGeneratedClass::StaticClass(),
 			NAME_None);
-		if (!BP) return nullptr;
+		if (!IsValid(BP)) return nullptr;
 
 		FAssetRegistryModule::AssetCreated(BP);
 		BP->MarkPackageDirty();
@@ -89,7 +90,7 @@ namespace
 	{
 		for (UEdGraph* G : BP->UbergraphPages)
 		{
-			if (G) return G;
+			if (IsValid(G)) return G;
 		}
 		return nullptr;
 	}
@@ -99,7 +100,7 @@ namespace
 	UK2Node_DynamicCast* AddSetNodePropTestDynamicCast(UBlueprint* BP, UClass* InitialTargetType)
 	{
 		UEdGraph* EventGraph = FindSetNodePropTestEventGraph(BP);
-		if (!EventGraph) return nullptr;
+		if (!IsValid(EventGraph)) return nullptr;
 
 		UK2Node_DynamicCast* Node = NewObject<UK2Node_DynamicCast>(EventGraph);
 		Node->TargetType = InitialTargetType;
@@ -128,6 +129,7 @@ namespace
 		return Args;
 	}
 }
+using namespace ClaireonBlueprintGraphTool_SetNodePropertyTests_Private;
 
 // ============================================================================
 // Test 1: Writing TargetType on a K2Node_DynamicCast updates the field and

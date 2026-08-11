@@ -31,7 +31,7 @@ FString ClaireonAnimGraphTool_AddVariable::GetOperation() const { return TEXT("a
 
 FString ClaireonAnimGraphTool_AddVariable::GetDescription() const
 {
-    return TEXT("Add a new variable to the Animation Blueprint in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Add a new variable to the Animation Blueprint in the open anim_graph session. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_AddVariable::GetInputSchema() const
@@ -88,7 +88,7 @@ FToolResult ClaireonAnimGraphTool_AddVariable::Execute(const TSharedPtr<FJsonObj
 	{
 		// Local variable
 		UEdGraph* FuncGraph = ClaireonBlueprintHelpers::FindGraphByName(AnimBP, FunctionName);
-		if (!FuncGraph)
+		if (!IsValid(FuncGraph))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Function '%s' not found"), *FunctionName));
 		}
@@ -157,7 +157,7 @@ FString ClaireonAnimGraphTool_RemoveVariable::GetOperation() const { return TEXT
 
 FString ClaireonAnimGraphTool_RemoveVariable::GetDescription() const
 {
-    return TEXT("Remove a variable from the Animation Blueprint in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Remove a variable from the Animation Blueprint in the open anim_graph session. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_RemoveVariable::GetInputSchema() const
@@ -191,11 +191,11 @@ FToolResult ClaireonAnimGraphTool_RemoveVariable::Execute(const TSharedPtr<FJson
 	if (!FunctionName.IsEmpty())
 	{
 		UEdGraph* FuncGraph = ClaireonBlueprintHelpers::FindGraphByName(AnimBP, FunctionName);
-		if (!FuncGraph)
+		if (!IsValid(FuncGraph))
 			return MakeErrorResult(FString::Printf(TEXT("Function '%s' not found"), *FunctionName));
 
-		UStruct* Scope = AnimBP->SkeletonGeneratedClass ? Cast<UStruct>(AnimBP->SkeletonGeneratedClass->FindFunctionByName(FName(*FunctionName))) : nullptr;
-		if (!Scope)
+		UStruct* Scope = IsValid(AnimBP->SkeletonGeneratedClass) ? Cast<UStruct>(AnimBP->SkeletonGeneratedClass->FindFunctionByName(FName(*FunctionName))) : nullptr;
+		if (!IsValid(Scope))
 			return MakeErrorResult(FString::Printf(TEXT("Could not find scope for function '%s'"), *FunctionName));
 
 		FBlueprintEditorUtils::RemoveLocalVariable(AnimBP, Scope, FName(*VarName));
@@ -219,7 +219,7 @@ FString ClaireonAnimGraphTool_SetVariableProperties::GetOperation() const { retu
 
 FString ClaireonAnimGraphTool_SetVariableProperties::GetDescription() const
 {
-    return TEXT("Set properties on an existing Animation Blueprint variable (category, tooltip, flags, metadata). Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Set properties on an existing Animation Blueprint variable (category, tooltip, flags, metadata). Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_SetVariableProperties::GetInputSchema() const
@@ -258,8 +258,8 @@ FToolResult ClaireonAnimGraphTool_SetVariableProperties::Execute(const TSharedPt
 	const UStruct* LocalScope = nullptr;
 	if (!FunctionName.IsEmpty())
 	{
-		LocalScope = AnimBP->SkeletonGeneratedClass ? Cast<UStruct>(AnimBP->SkeletonGeneratedClass->FindFunctionByName(FName(*FunctionName))) : nullptr;
-		if (!LocalScope)
+		LocalScope = IsValid(AnimBP->SkeletonGeneratedClass) ? Cast<UStruct>(AnimBP->SkeletonGeneratedClass->FindFunctionByName(FName(*FunctionName))) : nullptr;
+		if (!IsValid(LocalScope))
 			return MakeErrorResult(FString::Printf(TEXT("Could not find scope for function '%s'"), *FunctionName));
 	}
 
@@ -328,7 +328,7 @@ FString ClaireonAnimGraphTool_AddFunction::GetOperation() const { return TEXT("a
 
 FString ClaireonAnimGraphTool_AddFunction::GetDescription() const
 {
-    return TEXT("Add a new function to the Animation Blueprint in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Add a new function to the Animation Blueprint in the open anim_graph session. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_AddFunction::GetInputSchema() const
@@ -363,7 +363,7 @@ FToolResult ClaireonAnimGraphTool_AddFunction::Execute(const TSharedPtr<FJsonObj
 
 	// Create the function graph
 	UEdGraph* NewGraph = FBlueprintEditorUtils::CreateNewGraph(AnimBP, FName(*FuncName), UEdGraph::StaticClass(), UEdGraphSchema_K2::StaticClass());
-	if (!NewGraph)
+	if (!IsValid(NewGraph))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create function graph '%s'"), *FuncName));
 	}
@@ -376,14 +376,14 @@ FToolResult ClaireonAnimGraphTool_AddFunction::Execute(const TSharedPtr<FJsonObj
 	UK2Node_FunctionEntry* EntryNode = EntryNodes.Num() > 0 ? EntryNodes[0] : nullptr;
 
 	// Set thread safety metadata if requested
-	if (bThreadSafe && EntryNode)
+	if (bThreadSafe && IsValid(EntryNode))
 	{
 		EntryNode->MetaData.bThreadSafe = true;
 	}
 
 	// Add input parameters (appear as output pins on the entry node)
 	const TArray<TSharedPtr<FJsonValue>>* InputsArray = nullptr;
-	if (EntryNode && Arguments->TryGetArrayField(TEXT("inputs"), InputsArray))
+	if (IsValid(EntryNode) && Arguments->TryGetArrayField(TEXT("inputs"), InputsArray))
 	{
 		for (const TSharedPtr<FJsonValue>& InputVal : *InputsArray)
 		{
@@ -415,7 +415,7 @@ FToolResult ClaireonAnimGraphTool_AddFunction::Execute(const TSharedPtr<FJsonObj
 	if (Arguments->TryGetArrayField(TEXT("outputs"), OutputsArray) && OutputsArray->Num() > 0)
 	{
 		UK2Node_FunctionResult* ResultNode = FBlueprintEditorUtils::FindOrCreateFunctionResultNode(EntryNode);
-		if (ResultNode)
+		if (IsValid(ResultNode))
 		{
 			for (const TSharedPtr<FJsonValue>& OutputVal : *OutputsArray)
 			{
@@ -459,9 +459,10 @@ FString ClaireonAnimGraphTool_AddFunctionOverride::GetOperation() const { return
 
 FString ClaireonAnimGraphTool_AddFunctionOverride::GetDescription() const
 {
-	return TEXT("Override a parent class function (BlueprintNativeEvent or BlueprintImplementableEvent). "
-		"Creates an event override node in the EventGraph. Use for BlueprintThreadSafeUpdateAnimation, "
-		"BlueprintUpdateAnimation, etc.");
+	return TEXT("Add an override of a parent-class function (BlueprintNativeEvent or BlueprintImplementableEvent) "
+		"to the open Animation Blueprint session. Session-mode tool: open via animbp_open first, then pass "
+		"session_id plus function_name. A BlueprintNativeEvent becomes an event override node in the EventGraph. "
+		"Use for BlueprintThreadSafeUpdateAnimation, BlueprintUpdateAnimation, etc.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_AddFunctionOverride::GetInputSchema() const
@@ -486,13 +487,13 @@ FToolResult ClaireonAnimGraphTool_AddFunctionOverride::Execute(const TSharedPtr<
 		return MakeErrorResult(TEXT("Missing required field: function_name"));
 
 	UClass* ParentClass = AnimBP->ParentClass;
-	if (!ParentClass)
+	if (!IsValid(ParentClass))
 		return MakeErrorResult(TEXT("Blueprint has no parent class"));
 
 	// Resolve the function on the parent class
 	ClaireonNameResolver::FNameResolveResult FuncResult;
 	UFunction* TargetFunc = ClaireonNameResolver::ResolveFunctionName(ParentClass, FunctionName, FuncResult);
-	if (!TargetFunc)
+	if (!IsValid(TargetFunc))
 	{
 		return MakeErrorResult(FuncResult.Error.IsEmpty()
 			? FString::Printf(TEXT("Function '%s' not found on parent class '%s'"), *FunctionName, *ParentClass->GetName())
@@ -515,7 +516,7 @@ FToolResult ClaireonAnimGraphTool_AddFunctionOverride::Execute(const TSharedPtr<
 		// Check for existing event override
 		UK2Node_Event* ExistingOverride = FBlueprintEditorUtils::FindOverrideForFunction(
 			AnimBP, ParentClass, TargetFunc->GetFName());
-		if (ExistingOverride)
+		if (IsValid(ExistingOverride))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Event override for '%s' already exists (GUID: %s)"),
 				*TargetFunc->GetName(), *ExistingOverride->NodeGuid.ToString()));
@@ -526,7 +527,7 @@ FToolResult ClaireonAnimGraphTool_AddFunctionOverride::Execute(const TSharedPtr<
 		{
 			EventGraph = AnimBP->UbergraphPages[0];
 		}
-		if (!EventGraph)
+		if (!IsValid(EventGraph))
 		{
 			return MakeErrorResult(TEXT("No EventGraph found"));
 		}
@@ -551,7 +552,7 @@ FToolResult ClaireonAnimGraphTool_AddFunctionOverride::Execute(const TSharedPtr<
 	{
 		// Check for existing function graph with same name
 		UEdGraph* ExistingGraph = ClaireonBlueprintHelpers::FindGraphByName(AnimBP, TargetFunc->GetName());
-		if (ExistingGraph)
+		if (IsValid(ExistingGraph))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Function override for '%s' already exists as a graph"), *TargetFunc->GetName()));
 		}
@@ -562,7 +563,7 @@ FToolResult ClaireonAnimGraphTool_AddFunctionOverride::Execute(const TSharedPtr<
 			UEdGraph::StaticClass(),
 			UEdGraphSchema_K2::StaticClass());
 
-		if (!NewGraph)
+		if (!IsValid(NewGraph))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Failed to create function graph for '%s'"), *FunctionName));
 		}
@@ -587,7 +588,7 @@ FString ClaireonAnimGraphTool_RemoveFunction::GetOperation() const { return TEXT
 
 FString ClaireonAnimGraphTool_RemoveFunction::GetDescription() const
 {
-    return TEXT("Remove a function from the Animation Blueprint in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Remove a function from the Animation Blueprint in the open anim_graph session. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_RemoveFunction::GetInputSchema() const
@@ -612,7 +613,7 @@ FToolResult ClaireonAnimGraphTool_RemoveFunction::Execute(const TSharedPtr<FJson
 		return MakeErrorResult(TEXT("Missing required field: function_name"));
 
 	UEdGraph* FuncGraph = ClaireonBlueprintHelpers::FindGraphByName(AnimBP, FuncName);
-	if (!FuncGraph)
+	if (!IsValid(FuncGraph))
 		return MakeErrorResult(FString::Printf(TEXT("Function '%s' not found"), *FuncName));
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Remove Function")));
@@ -633,7 +634,7 @@ FString ClaireonAnimGraphTool_AddInterface::GetOperation() const { return TEXT("
 
 FString ClaireonAnimGraphTool_AddInterface::GetDescription() const
 {
-    return TEXT("Add an interface implementation to the Animation Blueprint in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Add an interface implementation to the Animation Blueprint in the open anim_graph session. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_AddInterface::GetInputSchema() const
@@ -659,7 +660,7 @@ FToolResult ClaireonAnimGraphTool_AddInterface::Execute(const TSharedPtr<FJsonOb
 
 	ClaireonNameResolver::FNameResolveResult ResolveResult;
 	UClass* InterfaceClass = ClaireonNameResolver::ResolveClassName(InterfaceClassName, nullptr, ResolveResult);
-	if (!InterfaceClass)
+	if (!IsValid(InterfaceClass))
 		return MakeErrorResult(FString::Printf(TEXT("Failed to resolve interface class '%s': %s"), *InterfaceClassName, *ResolveResult.Error));
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Add Interface")));
@@ -689,7 +690,7 @@ FString ClaireonAnimGraphTool_RemoveInterface::GetOperation() const { return TEX
 
 FString ClaireonAnimGraphTool_RemoveInterface::GetDescription() const
 {
-    return TEXT("Remove an interface implementation from the Animation Blueprint in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Remove an interface implementation from the Animation Blueprint in the open anim_graph session. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_RemoveInterface::GetInputSchema() const
@@ -715,7 +716,7 @@ FToolResult ClaireonAnimGraphTool_RemoveInterface::Execute(const TSharedPtr<FJso
 
 	ClaireonNameResolver::FNameResolveResult ResolveResult;
 	UClass* InterfaceClass = ClaireonNameResolver::ResolveClassName(InterfaceClassName, nullptr, ResolveResult);
-	if (!InterfaceClass)
+	if (!IsValid(InterfaceClass))
 		return MakeErrorResult(FString::Printf(TEXT("Failed to resolve interface class '%s': %s"), *InterfaceClassName, *ResolveResult.Error));
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Remove Interface")));

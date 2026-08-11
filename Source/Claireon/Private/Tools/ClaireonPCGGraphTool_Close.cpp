@@ -44,7 +44,7 @@ FToolResult ClaireonPCGGraphTool_Close::Execute(const TSharedPtr<FJsonObject>& A
 	if (bSave && Data->IsValid())
 	{
 		UPackage* Package = Data->PCGGraph->GetOutermost();
-		if (Package)
+		if (IsValid(Package))
 		{
 			FString PackageFilename;
 			if (FPackageName::DoesPackageExist(Package->GetName(), &PackageFilename))

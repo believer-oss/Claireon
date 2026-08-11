@@ -23,7 +23,8 @@ FString FClaireonAudioTool_PlaceAmbientSound::GetDescription() const
 {
 	return TEXT("Spawn an AAmbientSound actor in the current editor world at the supplied transform, "
 	            "binding the named USoundBase asset. Optional 'auto_activate' (default true) controls the AudioComponent. "
-	            "Optional 'label' renames the actor. Wrapped in FScopedTransaction so editor undo works.");
+	            "Optional 'label' renames the actor. Stateless / non-session: edits the editor world directly "
+	            "inside an FScopedTransaction (editor undo works), so no open session is required.");
 }
 
 TSharedPtr<FJsonObject> FClaireonAudioTool_PlaceAmbientSound::GetInputSchema() const
@@ -33,22 +34,10 @@ TSharedPtr<FJsonObject> FClaireonAudioTool_PlaceAmbientSound::GetInputSchema() c
 
 	TSharedPtr<FJsonObject> Properties = MakeShared<FJsonObject>();
 
-	for (const TCHAR* Field : { TEXT("sound_asset_path"), TEXT("label") })
-	{
-		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
-		P->SetStringField(TEXT("type"), TEXT("string"));
-		Properties->SetObjectField(Field, P);
-	}
-	{
-		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
-		P->SetStringField(TEXT("type"), TEXT("boolean"));
-		Properties->SetObjectField(TEXT("auto_activate"), P);
-	}
-	{
-		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
-		P->SetStringField(TEXT("type"), TEXT("object"));
-		Properties->SetObjectField(TEXT("transform"), P);
-	}
+	ClaireonAudioSchema::AddString(Properties, TEXT("sound_asset_path"), TEXT("Sound asset to place or attach (e.g. /Game/Audio/S_Ambient)."));
+	ClaireonAudioSchema::AddString(Properties, TEXT("label"), TEXT("Actor label to give the placed actor."));
+	ClaireonAudioSchema::AddBoolean(Properties, TEXT("auto_activate"), TEXT("Whether the created audio component auto-activates."));
+	ClaireonAudioSchema::AddObject(Properties, TEXT("transform"), TEXT("Placement transform as {location, rotation, scale}."));
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
@@ -62,7 +51,7 @@ TSharedPtr<FJsonObject> FClaireonAudioTool_PlaceAmbientSound::GetInputSchema() c
 
 FToolResult FClaireonAudioTool_PlaceAmbientSound::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor || !GEditor->GetEditorWorldContext().World())
+	if (!IsValid(GEditor) || !IsValid(GEditor->GetEditorWorldContext().World()))
 	{
 		return MakeErrorResult(TEXT("place_ambient_sound requires an active editor world"));
 	}
@@ -80,7 +69,7 @@ FToolResult FClaireonAudioTool_PlaceAmbientSound::Execute(const TSharedPtr<FJson
 	}
 	FString LoadError;
 	USoundBase* Sound = ClaireonAudioApplyHelpers::LoadSoundBase(SoundPath, LoadError);
-	if (!Sound) return MakeErrorResult(LoadError);
+	if (!IsValid(Sound)) return MakeErrorResult(LoadError);
 
 	FTransform Xform;
 	FString XformError;
@@ -97,12 +86,12 @@ FToolResult FClaireonAudioTool_PlaceAmbientSound::Execute(const TSharedPtr<FJson
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	AAmbientSound* Actor = World->SpawnActor<AAmbientSound>(AAmbientSound::StaticClass(),
 		Xform.GetLocation(), Xform.GetRotation().Rotator(), Params);
-	if (!Actor) return MakeErrorResult(TEXT("Failed to spawn AAmbientSound"));
+	if (!IsValid(Actor)) return MakeErrorResult(TEXT("Failed to spawn AAmbientSound"));
 
 	Actor->SetActorScale3D(Xform.GetScale3D());
 	if (!Label.IsEmpty()) Actor->SetActorLabel(Label, /*bMarkDirty=*/true);
 
-	if (UAudioComponent* AC = Actor->GetAudioComponent())
+	if (UAudioComponent* AC = Actor->GetAudioComponent(); IsValid(AC))
 	{
 		AC->SetSound(Sound);
 		AC->bAutoActivate = bAutoActivate;

@@ -141,7 +141,10 @@ namespace DecomposedToolsSmokeHelpers
 	}
 }
 
-UNTEST_UNIT(Claireon, DecomposedToolsSmoke, TransactionToolsExposeDiscoverableSurface)
+// Budget: the bare UNTEST_UNIT default is 0.50ms (FUntestUnitFixture::DefaultTimeoutMs),
+// which is not a deliberate perf assertion. Too tight now that the tool registry is
+// populated process-wide and this test does real work -- do not restore the default.
+UNTEST_UNIT_OPTS(Claireon, DecomposedToolsSmoke, TransactionToolsExposeDiscoverableSurface, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace DecomposedToolsSmokeHelpers;
 	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonTool_TransactionUndo>(TEXT("transaction_undo")));
@@ -153,7 +156,7 @@ UNTEST_UNIT(Claireon, DecomposedToolsSmoke, TransactionToolsExposeDiscoverableSu
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, DecomposedToolsSmoke, BlackboardToolsExposeDiscoverableSurface)
+UNTEST_UNIT_OPTS(Claireon, DecomposedToolsSmoke, BlackboardToolsExposeDiscoverableSurface, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace DecomposedToolsSmokeHelpers;
 	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonBlackboardTool_Open>(TEXT("blackboard_open")));
@@ -169,7 +172,7 @@ UNTEST_UNIT(Claireon, DecomposedToolsSmoke, BlackboardToolsExposeDiscoverableSur
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, DecomposedToolsSmoke, ApplySpecToolsExposeDiscoverableSurface)
+UNTEST_UNIT_OPTS(Claireon, DecomposedToolsSmoke, ApplySpecToolsExposeDiscoverableSurface, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace DecomposedToolsSmokeHelpers;
 	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonBehaviorTreeTool_ApplySpec>(TEXT("behaviortree_apply_spec")));
@@ -182,7 +185,7 @@ UNTEST_UNIT(Claireon, DecomposedToolsSmoke, ApplySpecToolsExposeDiscoverableSurf
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, DecomposedToolsSmoke, WidgetBPCoreLifecycleToolsExposeDiscoverableSurface)
+UNTEST_UNIT_OPTS(Claireon, DecomposedToolsSmoke, WidgetBPCoreLifecycleToolsExposeDiscoverableSurface, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace DecomposedToolsSmokeHelpers;
 	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonWidgetBPTool_Create>(TEXT("widgetbp_create")));
@@ -194,14 +197,14 @@ UNTEST_UNIT(Claireon, DecomposedToolsSmoke, WidgetBPCoreLifecycleToolsExposeDisc
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, DecomposedToolsSmoke, BlueprintGraphCreateExposesDiscoverableSurface)
+UNTEST_UNIT_OPTS(Claireon, DecomposedToolsSmoke, BlueprintGraphCreateExposesDiscoverableSurface, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace DecomposedToolsSmokeHelpers;
 	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonBlueprintGraphTool_Create>(TEXT("bp_create")));
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, DecomposedToolsSmoke, ChooserDecomposedToolsExposeDiscoverableSurface)
+UNTEST_UNIT_OPTS(Claireon, DecomposedToolsSmoke, ChooserDecomposedToolsExposeDiscoverableSurface, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace DecomposedToolsSmokeHelpers;
 	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonTool_ChooserSetResultType>(TEXT("chooser_set_result_type")));
@@ -213,7 +216,7 @@ UNTEST_UNIT(Claireon, DecomposedToolsSmoke, ChooserDecomposedToolsExposeDiscover
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, DecomposedToolsSmoke, ProxyAssetDecomposedToolsExposeDiscoverableSurface)
+UNTEST_UNIT_OPTS(Claireon, DecomposedToolsSmoke, ProxyAssetDecomposedToolsExposeDiscoverableSurface, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace DecomposedToolsSmokeHelpers;
 	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonTool_ProxyAssetSetType>(TEXT("proxyasset_set_type")));
@@ -224,7 +227,7 @@ UNTEST_UNIT(Claireon, DecomposedToolsSmoke, ProxyAssetDecomposedToolsExposeDisco
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, DecomposedToolsSmoke, ProxyTableDecomposedToolsExposeDiscoverableSurface)
+UNTEST_UNIT_OPTS(Claireon, DecomposedToolsSmoke, ProxyTableDecomposedToolsExposeDiscoverableSurface, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace DecomposedToolsSmokeHelpers;
 	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonTool_ProxyTableAddInherit>(TEXT("proxytable_add_inherit")));
@@ -232,7 +235,7 @@ UNTEST_UNIT(Claireon, DecomposedToolsSmoke, ProxyTableDecomposedToolsExposeDisco
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, DecomposedToolsSmoke, WidgetBPAnimationToolsExposeDiscoverableSurface)
+UNTEST_UNIT_OPTS(Claireon, DecomposedToolsSmoke, WidgetBPAnimationToolsExposeDiscoverableSurface, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace DecomposedToolsSmokeHelpers;
 	UNTEST_EXPECT_TRUE(ValidateTool<ClaireonWidgetBPTool_CreateAnimation>(TEXT("widgetbp_create_animation")));

@@ -36,7 +36,7 @@ TSharedPtr<FJsonObject> ClaireonTool_TraceGetTopScopes::GetInputSchema() const
 	// sessionId - required
 	TSharedPtr<FJsonObject> SessionIdProp = MakeShared<FJsonObject>();
 	SessionIdProp->SetStringField(TEXT("type"), TEXT("string"));
-	SessionIdProp->SetStringField(TEXT("description"), TEXT("The session ID returned by editor.trace.open"));
+	SessionIdProp->SetStringField(TEXT("description"), TEXT("The session ID returned by trace_open"));
 	Properties->SetObjectField(TEXT("sessionId"), SessionIdProp);
 
 	// startTime / endTime - optional (time range in seconds)
@@ -75,14 +75,24 @@ TSharedPtr<FJsonObject> ClaireonTool_TraceGetTopScopes::GetInputSchema() const
 	Properties->SetObjectField(TEXT("includeGpu"), IncludeGpuProp);
 
 	// sortBy - optional
+	//
+	// C4 hardening: the enum used to also declare "totalExclusive" and "maxInclusive".
+	// This tool's aggregation (FScopeEntry) never tracks an exclusive-time or a
+	// max-inclusive column at all -- only total (inclusive) and call count -- so those
+	// two values used to be accepted by the schema and then silently sorted by
+	// totalInclusive instead, which is a wrong-order result dressed as a success. The
+	// enum below now names only what is actually honored; Execute() also rejects any
+	// other value outright (belt and suspenders for callers that do not validate
+	// against the schema).
 	TSharedPtr<FJsonObject> SortByProp = MakeShared<FJsonObject>();
 	SortByProp->SetStringField(TEXT("type"), TEXT("string"));
-	SortByProp->SetStringField(TEXT("description"), TEXT("Sort column (default: 'totalInclusive')"));
+	SortByProp->SetStringField(TEXT("description"),
+		TEXT("Sort column (default: 'totalInclusive'). Only these two values are implemented -- ")
+		TEXT("totalExclusive and maxInclusive are not aggregated by this tool and are rejected with ")
+		TEXT("an error rather than silently sorting by totalInclusive."));
 	{
 		TArray<TSharedPtr<FJsonValue>> EnumValues;
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("totalInclusive")));
-		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("totalExclusive")));
-		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("maxInclusive")));
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("count")));
 		SortByProp->SetArrayField(TEXT("enum"), EnumValues);
 	}
@@ -128,6 +138,20 @@ IClaireonTool::FToolResult ClaireonTool_TraceGetTopScopes::Execute(const TShared
 	Arguments->TryGetStringField(TEXT("threadFilter"), ThreadFilter);
 	Arguments->TryGetBoolField(TEXT("includeGpu"), bIncludeGpu);
 
+	// C4 hardening: reject anything the tool cannot actually honor instead of silently
+	// sorting by totalInclusive. FScopeEntry below has no exclusive-time or max-inclusive
+	// column, so "totalExclusive" / "maxInclusive" (and any other unrecognized value) used
+	// to fall through to the totalInclusive sort with no signal to the caller that their
+	// requested order was not applied. Fail fast, before running the (potentially
+	// expensive) aggregation below.
+	if (SortBy != TEXT("totalInclusive") && SortBy != TEXT("count"))
+	{
+		return MakeErrorResult(FString::Printf(
+			TEXT("Unsupported sortBy '%s'. This tool only aggregates and sorts by 'totalInclusive' ")
+			TEXT("(default) or 'count'; totalExclusive and maxInclusive are not tracked by this tool."),
+			*SortBy));
+	}
+
 	// Aggregate timing data from the timing profiler provider
 	struct FScopeEntry
 	{
@@ -138,6 +162,10 @@ IClaireonTool::FToolResult ClaireonTool_TraceGetTopScopes::Execute(const TShared
 	};
 
 	TArray<FScopeEntry> Scopes;
+
+	// P0-6b disclosure state, filled inside the read scope below.
+	uint64 GpuEventCount = 0;
+	bool bGpuTimelinesPresent = false;
 
 	if (Session->AnalysisSession.IsValid())
 	{
@@ -212,6 +240,30 @@ IClaireonTool::FToolResult ClaireonTool_TraceGetTopScopes::Execute(const TShared
 				Params.CpuThreadFilter = [](uint32) -> bool { return true; };
 			}
 
+			// P0-6b: GPU presence must come from event counts, not from
+			// GetGpuTimelineIndex.
+			//
+			// The engine's fixed GPU timeline slots exist even when the capture
+			// carries no GPU data, and GetGpuTimelineIndex just hands back the slot
+			// index and unconditionally returns true (TimingProfiler.cpp:189-195) --
+			// it is not a presence check. So aggregation with includeGpu=true added
+			// zero rows and nothing reported why: the output was byte-identical to
+			// includeGpu=false, which reads as "GPU work is free" rather than
+			// "this capture has no GPU data".
+			//
+			// Made worse by pie_trace_start's default channels (cpu,frame,bookmark --
+			// no gpu), so every Claireon-default capture is guaranteed to hit this.
+			uint32 GpuTimelineIndex = 0;
+			if (TimingProvider->GetGpuTimelineIndex(GpuTimelineIndex))
+			{
+				TimingProvider->ReadTimeline(GpuTimelineIndex,
+					[&GpuEventCount](const TraceServices::ITimingProfilerProvider::Timeline& Timeline)
+					{
+						GpuEventCount = Timeline.GetEventCount();
+					});
+			}
+			bGpuTimelinesPresent = GpuEventCount > 0;
+
 			TraceServices::ITable<TraceServices::FTimingProfilerAggregatedStats>* AggTable = TimingProvider->CreateAggregation(Params);
 			if (AggTable)
 			{
@@ -239,17 +291,24 @@ IClaireonTool::FToolResult ClaireonTool_TraceGetTopScopes::Execute(const TShared
 		}
 	}
 
-	// Sort
+	// Sort. SortBy is validated above to be exactly "count" or "totalInclusive", so the
+	// else branch below is unconditionally the totalInclusive case, not a silent catch-all.
 	if (SortBy == TEXT("count"))
 	{
 		Scopes.Sort([](const FScopeEntry& A, const FScopeEntry& B) { return A.CallCount > B.CallCount; });
 	}
-	else // totalInclusive / total_time (default)
+	else // totalInclusive (default)
 	{
 		Scopes.Sort([](const FScopeEntry& A, const FScopeEntry& B) { return A.TotalMs > B.TotalMs; });
 	}
 
-	if (Scopes.Num() > MaxResults)
+	// P0-6b: truncation must be visible. A GPU scope that exists but ranks below
+	// the cut was previously indistinguishable from a GPU scope that does not
+	// exist -- the same absence-versus-cheap confusion that makes a missing
+	// scope invert a conclusion.
+	const int32 TotalScopesBeforeTruncation = Scopes.Num();
+	const bool bTruncated = TotalScopesBeforeTruncation > MaxResults;
+	if (bTruncated)
 	{
 		Scopes.SetNum(MaxResults);
 	}
@@ -269,6 +328,10 @@ IClaireonTool::FToolResult ClaireonTool_TraceGetTopScopes::Execute(const TShared
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("session_id"), SessionId);
 	Data->SetArrayField(TEXT("scopes"), ScopesArray);
+	Data->SetBoolField(TEXT("truncated"), bTruncated);
+	Data->SetNumberField(TEXT("total_scopes_before_truncation"), TotalScopesBeforeTruncation);
+	Data->SetBoolField(TEXT("gpu_timelines_present"), bGpuTimelinesPresent);
+	Data->SetNumberField(TEXT("gpu_event_count"), static_cast<double>(GpuEventCount));
 
 	FString TopScopeName = ScopesArray.Num() > 0
 		? ScopesArray[0]->AsObject()->GetStringField(TEXT("name"))
@@ -280,5 +343,26 @@ IClaireonTool::FToolResult ClaireonTool_TraceGetTopScopes::Execute(const TShared
 	const FString Summary = FString::Printf(TEXT("Top %d scopes: %s (%.1fms avg)"),
 		ScopesArray.Num(), *TopScopeName, TopAvgMs);
 
-	return MakeSuccessResult(Data, Summary);
+	FToolResult Result = MakeSuccessResult(Data, Summary);
+
+	// The whole point of the item: a caller who asked for GPU data and got none
+	// must be told the capture had none, rather than reading an identical
+	// payload as evidence that GPU work is cheap.
+	if (bIncludeGpu && !bGpuTimelinesPresent)
+	{
+		Result.Warnings.Add(TEXT(
+			"includeGpu=true but this capture contains no GPU timeline events, so the result is "
+			"identical to includeGpu=false. Capture with the 'gpu' trace channel enabled "
+			"(pie_trace_start defaults to cpu,frame,bookmark -- no gpu)."));
+	}
+
+	if (bTruncated)
+	{
+		Result.Warnings.Add(FString::Printf(
+			TEXT("Truncated to the top %d of %d scopes by maxResults. Scopes below the cut are "
+			     "absent from this result, which is not evidence that they do not exist."),
+			MaxResults, TotalScopesBeforeTruncation));
+	}
+
+	return Result;
 }

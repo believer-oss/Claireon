@@ -59,7 +59,7 @@ FToolResult ClaireonEQSTool_AddTest::Execute(const TSharedPtr<FJsonObject>& Argu
 	}
 
 	UClass* TestClass = ResolveEQSClass(TestClassName, UEnvQueryTest::StaticClass(), TEXT("EnvQueryTest_"), Error);
-	if (!TestClass)
+	if (!IsValid(TestClass))
 	{
 		return MakeErrorResult(Error);
 	}

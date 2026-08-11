@@ -90,19 +90,19 @@ NNN-final-validation.md  — End-to-end validation of the complete implementatio
 4. **Each stage must leave the project buildable**: No stage should introduce compile errors that the next stage is expected to fix. If a stub needs a return value, provide a sensible default.
 
 5. **Test type and thoroughness scale with risk**:
-   - **CPP changes** → Almost always require a build verification; prefer `Scripts\Utilities\Invoke-RemoteBuildVerification.ps1` (90-minute timeout, falls back to local `Invoke-EditorBuild.ps1` on timeout)
+   - **CPP changes** → Almost always require a build verification; prefer your project's remote/CI build hook if it has one, falling back to a local build (`Plugins\Claireon\Scripts\Utilities\Invoke-EditorBuild.ps1`)
    - **Comment-only or doc-only changes** → If the next stage also requires recompiling, skip the redundant build; instead, do a quick regex/grep check on the diffs for formatting correctness
-   - **Blueprint or asset changes** → Use `Invoke-CompileBlueprints.ps1` or `Invoke-ValidateAssets.ps1`
-   - **Functional behavior changes** → Use `Invoke-UntestTests.ps1` with appropriate `-TestFilter`
+   - **Blueprint or asset changes** → Use a Blueprint-compile pass (e.g. `UnrealEditor-Cmd <project> -run=CompileAllBlueprints`) or `Plugins\Claireon\Scripts\Utilities\Invoke-ValidateAssets.ps1`
+   - **Functional behavior changes** → Run your project's automation test runner with an appropriate filter
    - **MCP tools or externally-callable systems** → Call the tool directly via the MCP server with real project data. Exercise all operations, test error paths, verify round-trip persistence. Untested tests are insufficient here because the tool's external interface (JSON schema, error format, session lifecycle) is the contract being tested, not just internal logic.
-   - **Full integration** → Use `Test-EditorBuildAndPlay.ps1` for end-to-end smoke tests
-   - **Formatting** → Use `Invoke-ClangFormat.ps1 -Check` on changed files
+   - **Full integration** → Use your project's build + PIE smoke test for end-to-end coverage
+   - **Formatting** → Run clang-format in check mode on changed files
 
 6. **Each test stage ends with a commit** following the {{PROJECT_NAME}} commit message format:
    ```
    <type>(<scope>): <description>
    ```
-   Do NOT include CI tags (`[ci]`, `[ci:linux]`, etc.) on implementation-stage commits. `[ci:linux]` is added automatically at staging time (Stage 8) on the squash-rebased commit.
+   Do NOT include CI trigger tags (e.g. `[ci]`) on implementation-stage commits. If your project uses one, it is added at staging time (Stage 8) on the squash-rebased commit.
 
 7. **The pattern is flexible**: The skeleton-test-(implement-test)+ structure is the default, but stages can be freely reordered, combined, or restructured to fit the specific work. For example:
    - Multiple small implementation stages might share a single test stage
@@ -143,25 +143,25 @@ Include exact file paths, class names, and code patterns where possible.
 How to verify this stage succeeded before moving on.
 Reference the appropriate script(s):
 
-- **Build check**: `Scripts\Utilities\Invoke-EditorBuild.ps1`
-- **Untested tests**: `Scripts\Testing\Invoke-UntestTests.ps1 -TestFilter "<relevant-filter>"`
-- **Blueprint compile**: `Scripts\Utilities\Invoke-CompileBlueprints.ps1`
-- **Asset validation**: `Scripts\Utilities\Invoke-ValidateAssets.ps1`
-- **Smoke test**: `Scripts\Testing\Test-EditorBuildAndPlay.ps1 -SkipBuild`
-- **Format check**: `Scripts\Utilities\Invoke-ClangFormat.ps1 -Check -Files "<changed-files>"`
+- **Build check**: `Plugins\Claireon\Scripts\Utilities\Invoke-EditorBuild.ps1`
+- **Unit tests**: Your project's automation test runner with a relevant filter
+- **Blueprint compile**: e.g. `UnrealEditor-Cmd <project> -run=CompileAllBlueprints`
+- **Asset validation**: `Plugins\Claireon\Scripts\Utilities\Invoke-ValidateAssets.ps1`
+- **Smoke test**: Your project's build + PIE smoke test
+- **Format check**: clang-format in check mode on changed files
 - **Diff regex**: Quick grep/regex on staged diffs for non-compile stages
 
 For the **final validation stage** (the last test stage in the breakdown), also include:
 - A code-reading checklist of architectural properties that runtime tests cannot catch: memory safety patterns, lock discipline (acquire/release/touch), transaction scoping, null-safety on weak pointers, TODO comment cleanup, API contract compliance
 - Verification that no test artifacts remain in the working tree
-- Blueprint compilation check (`Invoke-CompileBlueprints.ps1`) to catch dependency-related breakage
+- A Blueprint compilation check to catch dependency-related breakage
 
 ## Commit
 Commit message for this stage (only for test stages or stages that produce committed work):
 ```
 <type>(<scope>): <description>
 ```
-Note: Do NOT include CI tags (`[ci]`, `[ci:linux]`, etc.) on stage commits. `[ci:linux]` is added automatically at staging time (Stage 8) on the squash-rebased commit.
+Note: Do NOT include CI trigger tags (e.g. `[ci]`) on stage commits. If your project uses one, it is added at staging time (Stage 8) on the squash-rebased commit.
 
 ## Notes
 Any caveats, known issues, or things the implementer should watch for.
@@ -263,18 +263,16 @@ Created via [begin-work](claireon://instructions/begin-work).
 
 ## Scripts Reference
 
-These scripts are available and should be invoked as specified in each stage:
+These plugin-shipped scripts are available and should be invoked as specified in each stage:
 
 | Script | Purpose | Example |
 |--------|---------|---------|
-| `Scripts\Utilities\Invoke-EditorBuild.ps1` | Build the editor (waits for UBT by default) | `-SkipWaitForUBT` |
-| `Scripts\Testing\Invoke-UntestTests.ps1` | Run Untested framework tests | `-TestFilter "MySystem"` |
-| `Scripts\Testing\Test-EditorBuildAndPlay.ps1` | Full smoke test (build + PIE) | `-SkipBuild` |
-| `Scripts\Utilities\Invoke-CompileBlueprints.ps1` | Compile all blueprints | |
-| `Scripts\Utilities\Invoke-ValidateAssets.ps1` | Validate asset integrity | |
-| `Scripts\Utilities\Invoke-ClangFormat.ps1` | Check/apply code formatting | `-Check -Files "..."` |
-| `Scripts\Utilities\Invoke-CleanProject.ps1` | Clean build artifacts | `-IncludePlugins` |
-| `Scripts\Utilities\Invoke-FixupRedirectors.ps1` | Fix asset redirectors | |
+| `Plugins\Claireon\Scripts\Utilities\Invoke-EditorBuild.ps1` | Build the editor (waits for UBT by default) | `-SkipWaitForUBT` |
+| `Plugins\Claireon\Scripts\Utilities\Invoke-ValidateAssets.ps1` | Validate asset integrity | |
+| `Plugins\Claireon\Scripts\Utilities\Invoke-CleanProject.ps1` | Clean build artifacts | `-IncludePlugins` |
+| `Plugins\Claireon\Scripts\Utilities\Invoke-FixupRedirectors.ps1` | Fix asset redirectors | |
+
+Test runners, smoke tests, Blueprint-compile passes, and format checkers are project-specific — substitute your project's equivalents (e.g. `UnrealEditor-Cmd <project> -run=CompileAllBlueprints`, clang-format in check mode).
 
 ## Tracking Work
 
@@ -291,7 +289,7 @@ Follow the {{PROJECT_NAME}} commit message format:
 
 - **type**: `feat` (new functionality), `fix` (bug fix), `chore` (maintenance)
 - **scope**: Primary module affected
-- **[ci:linux]**: Do NOT include CI tags on stage commits. `[ci:linux]` is added automatically at staging time (Stage 8) on the squash-rebased commit
+- **CI trigger tags**: Do NOT include CI tags on stage commits. If your project uses one, it is added at staging time (Stage 8) on the squash-rebased commit
 - **description**: Terse, passive voice, no trailing period
 ```
 
@@ -322,7 +320,7 @@ Follow the {{PROJECT_NAME}} commit message format:
 - **Stage files are living documents**: The implementer or reviewer may revise stages after initial authoring. The breakdown is a plan, not a contract.
 - **Each stage must be independently understandable**: An implementer reading stage 005 should be able to understand what to do without re-reading stages 001-004 (though they should reference prerequisites).
 - **Prefer more stages over fewer**: Smaller stages are easier to validate, review, and roll back. A stage that takes more than ~30 minutes to implement is probably too large.
-- **Reference existing scripts, never re-implement**: Build via `Invoke-EditorBuild.ps1`, test via `Invoke-UntestTests.ps1`, etc. Do not inline build commands or test logic into stage documents.
+- **Reference existing scripts, never re-implement**: Build via `Plugins\Claireon\Scripts\Utilities\Invoke-EditorBuild.ps1`, test via your project's test runner, etc. Do not inline build commands or test logic into stage documents.
 - **The 000 file is the entry point**: An implementer starting from scratch reads 000 first, then proceeds through the stages. It must be self-sufficient as a starting guide.
 - **Test stages for interactive systems are not build wrappers**: A test stage that only runs `Invoke-EditorBuild.ps1` is appropriate after skeleton stages. For stages implementing MCP tools, APIs, or any system with external callers, the test stage must call the system with real inputs, verify real outputs, test error paths, and verify round-trip correctness for persistent operations. A test stage that doesn't exercise the implementation's behavior provides false confidence and defeats the purpose of the test-after-implement pattern.
 

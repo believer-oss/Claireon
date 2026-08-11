@@ -44,7 +44,7 @@ FToolResult ClaireonPCGGraphTool_Save::Execute(const TSharedPtr<FJsonObject>& Ar
 	}
 
 	UPackage* Package = Data->PCGGraph->GetOutermost();
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		return MakeErrorResult(TEXT("Could not find package for PCG Graph"));
 	}

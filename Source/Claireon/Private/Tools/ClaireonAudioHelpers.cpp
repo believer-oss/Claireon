@@ -48,7 +48,7 @@
 // Local helpers
 // -----------------------------------------------------------------------------
 
-namespace
+namespace ClaireonAudioHelpers_Private
 {
 	FString AudioHelpers_ToSnakeCase(const FString& In)
 	{
@@ -224,6 +224,7 @@ namespace
 		return Out;
 	}
 }
+using namespace ClaireonAudioHelpers_Private;
 
 // -----------------------------------------------------------------------------
 // Kind <-> string round-trip

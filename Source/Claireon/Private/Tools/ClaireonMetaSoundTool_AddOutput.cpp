@@ -22,7 +22,7 @@
 #endif
 
 #if CLAIREON_HAS_METASOUND_BUILDER_API
-namespace
+namespace ClaireonMetaSoundTool_AddOutput_Private
 {
 	bool MSAddOutput_BuildLiteralFromJson(FName DataType, const TSharedPtr<FJsonValue>& Value, FMetasoundFrontendLiteral& Out)
 	{
@@ -61,6 +61,7 @@ namespace
 		return false;
 	}
 }
+using namespace ClaireonMetaSoundTool_AddOutput_Private;
 #endif
 
 FString FClaireonMetaSoundTool_AddOutput::GetCategory() const { return TEXT("metasound"); }

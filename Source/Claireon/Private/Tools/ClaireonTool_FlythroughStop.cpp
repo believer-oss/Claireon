@@ -16,6 +16,10 @@ TSharedPtr<FJsonObject> ClaireonTool_FlythroughStop::GetInputSchema() const
 {
 	TSharedPtr<FJsonObject> Schema = MakeShared<FJsonObject>();
 	Schema->SetStringField(TEXT("type"), TEXT("object"));
+	// Parameterless, but the empty properties object is not decoration: the
+	// argument gate stays permissive for a schema with no "properties" at all,
+	// so omitting it opts this tool out of undeclared-argument rejection.
+	Schema->SetObjectField(TEXT("properties"), MakeShared<FJsonObject>());
 	return Schema;
 }
 

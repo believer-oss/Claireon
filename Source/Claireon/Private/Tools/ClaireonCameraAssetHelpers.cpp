@@ -34,7 +34,7 @@ namespace ClaireonCameraAssetHelpers
 	TArray<UCameraRigAsset*> GetCameraRigs(const UCameraAsset* Asset)
 	{
 		TArray<UCameraRigAsset*> Out;
-		if (!Asset)
+		if (!IsValid(Asset))
 		{
 			return Out;
 		}
@@ -69,7 +69,7 @@ namespace ClaireonCameraAssetHelpers
 
 	UCameraNode* ResolveNode(UCameraRigAsset* Rig, const FString& NodeId, FString& OutError)
 	{
-		if (!Rig)
+		if (!IsValid(Rig))
 		{
 			OutError = TEXT("Null rig");
 			return nullptr;
@@ -128,11 +128,11 @@ namespace ClaireonCameraAssetHelpers
 
 		UObject* Obj = ObjProp->GetObjectPropertyValue(ValuePtr);
 		UCameraNode* AsNode = Cast<UCameraNode>(Obj);
-		if (!AsNode)
+		if (!IsValid(AsNode))
 		{
 			OutError = FString::Printf(TEXT("'%s' resolves to %s, not UCameraNode"),
 				*NodeId,
-				Obj ? *Obj->GetClass()->GetName() : TEXT("nullptr"));
+				IsValid(Obj) ? *Obj->GetClass()->GetName() : TEXT("nullptr"));
 			return nullptr;
 		}
 		return AsNode;
@@ -141,11 +141,11 @@ namespace ClaireonCameraAssetHelpers
 	UClass* ResolveNodeClass(const FString& Name)
 	{
 		UClass* Cls = UClass::TryFindTypeSlow<UClass>(Name);
-		if (!Cls)
+		if (!IsValid(Cls))
 		{
 			Cls = UClass::TryFindTypeSlow<UClass>(TEXT("U") + Name);
 		}
-		if (Cls && !Cls->IsChildOf(UCameraNode::StaticClass()))
+		if (IsValid(Cls) && !Cls->IsChildOf(UCameraNode::StaticClass()))
 		{
 			return nullptr;
 		}
@@ -193,7 +193,7 @@ namespace ClaireonCameraAssetHelpers
 			}
 			Entry->SetStringField(TEXT("severity"), SeverityStr);
 			Entry->SetStringField(TEXT("text"), Msg.Text.ToString());
-			Entry->SetStringField(TEXT("object"), Msg.Object ? Msg.Object->GetPathName() : FString());
+			Entry->SetStringField(TEXT("object"), IsValid(Msg.Object) ? Msg.Object->GetPathName() : FString());
 
 			Messages.Add(MakeShared<FJsonValueObject>(Entry));
 		}
@@ -204,11 +204,11 @@ namespace ClaireonCameraAssetHelpers
 
 	void CloseEditorToolkitForAsset(UCameraAsset* Asset)
 	{
-		if (!Asset || !GEditor)
+		if (!IsValid(Asset) || !IsValid(GEditor))
 		{
 			return;
 		}
-		if (UAssetEditorSubsystem* Sys = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>())
+		if (UAssetEditorSubsystem* Sys = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>(); IsValid(Sys))
 		{
 			Sys->CloseAllEditorsForAsset(Asset);
 		}

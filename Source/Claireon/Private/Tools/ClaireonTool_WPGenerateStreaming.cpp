@@ -20,16 +20,11 @@
 FString ClaireonTool_WPGenerateStreaming::GetDescription() const
 {
 	return TEXT(
-		"Runs UWorldPartition::GenerateStreaming on the editor world's WorldPartition, "
-		"then walks the resulting runtime cells and returns their DataLayers + actor "
-		"package lists. In editor (non-PIE) mode, RuntimeStreamingData is normally empty "
-		"-- this tool triggers a one-shot build via the same code path cook uses so the "
-		"cell layout can be inspected without launching PIE. Pairs with wp_actor_desc_inspect: "
-		"descs answer 'is the actor tagged?', this tool answers 'did the cell builder "
-		"honor the tag, or did the actor land in an empty-DataLayers always-loaded cell?'. "
-		"FlushStreaming() is called automatically at the end so the editor returns to its "
-		"normal state. Use actor_filter to find which cell(s) contain a particular actor "
-		"by package-name substring (e.g. 'BP_Onboarding_FlowManager' or a uasset GUID).");
+		"Run UWorldPartition::GenerateStreaming on the editor world, then walk the resulting "
+		"runtime cells and return their DataLayers plus actor package lists. Outside PIE "
+		"RuntimeStreamingData is empty, so this builds it one-shot via the cook path, then "
+		"FlushStreaming() restores editor state. actor_filter finds cells by package-name "
+		"substring. Needs a map open; non-session.");
 }
 
 TArray<FString> ClaireonTool_WPGenerateStreaming::GetSearchKeywords() const
@@ -97,7 +92,7 @@ IClaireonTool::FToolResult ClaireonTool_WPGenerateStreaming::Execute(const TShar
 		}
 		if (!WorldNameFilter.IsEmpty())
 		{
-			const FString WPPath = WP->GetPackage() ? WP->GetPackage()->GetName() : WP->GetName();
+			const FString WPPath = IsValid(WP->GetPackage()) ? WP->GetPackage()->GetName() : WP->GetName();
 			if (!WPPath.Contains(WorldNameFilter, ESearchCase::IgnoreCase))
 			{
 				continue;
@@ -107,7 +102,7 @@ IClaireonTool::FToolResult ClaireonTool_WPGenerateStreaming::Execute(const TShar
 		break;
 	}
 
-	if (!TargetWP)
+	if (!IsValid(TargetWP))
 	{
 		return MakeErrorResult(WorldNameFilter.IsEmpty()
 			? TEXT("No UWorldPartition found in loaded objects.")
@@ -154,12 +149,12 @@ IClaireonTool::FToolResult ClaireonTool_WPGenerateStreaming::Execute(const TShar
 	};
 	TArray<FCellSummary> Cells;
 
-	if (UWorldPartitionRuntimeHash* RuntimeHash = TargetWP->RuntimeHash)
+	if (UWorldPartitionRuntimeHash* RuntimeHash = TargetWP->RuntimeHash; IsValid(RuntimeHash))
 	{
 		RuntimeHash->ForEachStreamingCells([&Cells, &ActorFilter, MaxPackagesPerCell, bIncludeFullPackages]
 			(const UWorldPartitionRuntimeCell* Cell) -> bool
 		{
-			if (!Cell)
+			if (!IsValid(Cell))
 			{
 				return true;
 			}
@@ -175,7 +170,7 @@ IClaireonTool::FToolResult ClaireonTool_WPGenerateStreaming::Execute(const TShar
 
 			// Only level-streaming cells expose their full Packages array
 			if (const UWorldPartitionRuntimeLevelStreamingCell* LSCell =
-				Cast<UWorldPartitionRuntimeLevelStreamingCell>(Cell))
+				Cast<UWorldPartitionRuntimeLevelStreamingCell>(Cell); IsValid(LSCell))
 			{
 				const TArray<FWorldPartitionRuntimeCellObjectMapping>& CellPkgs = LSCell->GetPackages();
 				bool bAnyMatched = false;

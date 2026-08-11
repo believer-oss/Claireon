@@ -48,7 +48,7 @@ FToolResult ClaireonWidgetBPTool_AddAnimationTrack::Execute(const TSharedPtr<FJs
         return BeginError;
     }
     UWidgetBlueprint* WBP = Data ? Data->WidgetBlueprint.Get() : nullptr;
-    if (!WBP)
+    if (!IsValid(WBP))
     {
         return MakeErrorResult(TEXT("widget blueprint unavailable on session"));
     }
@@ -72,7 +72,7 @@ FToolResult ClaireonWidgetBPTool_AddAnimationTrack::Execute(const TSharedPtr<FJs
     Params->TryGetStringField(TEXT("track_type"), TrackType);
 
     UWidgetAnimation* Anim = Claireon::WidgetAnimation::FindWidgetAnimationByName(WBP, AnimationName);
-    if (!Anim)
+    if (!IsValid(Anim))
     {
         return MakeErrorResult(FString::Printf(TEXT("animation '%s' not found on %s"), *AnimationName, *WBP->GetName()));
     }

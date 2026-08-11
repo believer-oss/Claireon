@@ -11,6 +11,7 @@
 #include "Engine/DataAsset.h"
 #include "Engine/DeveloperSettings.h"
 #include "Kismet/BlueprintAsyncActionBase.h"
+#include "GameplayTask.h"
 #include "ClaireonTestTypes.generated.h"
 
 // Holder UCLASS used to verify CreateInstancedArrayElement rejects an array
@@ -40,6 +41,11 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "Test")
 	TSoftObjectPtr<UObject> Speaker;
+
+	// Hard counterpart to Speaker, so the object-ref canonicalization contract can be
+	// pinned for both soft and hard refs against the same fixture.
+	UPROPERTY(EditAnywhere, Category = "Test")
+	TObjectPtr<UObject> HardSpeaker;
 };
 
 // Minimal developer-settings fixture for the data_asset dev-settings tool spec. A
@@ -184,6 +190,156 @@ public:
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Test")
 	void ChooseStrategyForSpawner();
+};
+
+// ---- Native-event fixture (add_function_override parent-body warning tests) ----
+// Deliberately BlueprintNativeEvent, not BlueprintImplementableEvent: a BNE carries
+// FUNC_Native and a companion _Implementation, which is exactly the "parent has a
+// body an event override would shadow" case. The sibling
+// AClaireonFunctionOverrideFixtureActor stays BIE-only for the no-warning case.
+UCLASS()
+class AClaireonNativeEventOverrideFixtureActor : public AActor
+{
+	GENERATED_BODY()
+public:
+	/** Non-trivial _Implementation body lives in ClaireonTestTypes.cpp. */
+	UFUNCTION(BlueprintNativeEvent, Category = "Test")
+	void ApplyNativeDefault();
+
+	/** BNE with a return value, so the override lands as a function graph. */
+	UFUNCTION(BlueprintNativeEvent, Category = "Test")
+	int32 ComputeNativeValue();
+
+	UPROPERTY()
+	int32 NativeCounter = 0;
+};
+
+// ---- Editability fixture (bp_set_property gate tests, P1-8) ----
+// One property per outcome of the shared DescribeEditorAccess rule, so the gate
+// can be tested without depending on which specifiers some engine class happens
+// to use this version. bp_set_property writes CDOs and SCS templates, i.e. the
+// DEFAULTS context -- so EditDefaultsOnly must be writable through it. The old
+// gate rejected exactly that set.
+UCLASS()
+class AClaireonEditabilityFixtureActor : public AActor
+{
+	GENERATED_BODY()
+public:
+	/** DescribeEditorAccess -> "edit". Writable. */
+	UPROPERTY(EditDefaultsOnly, Category = "Test")
+	bool bEditDefaultsOnlyFlag = false;
+
+	/** DescribeEditorAccess -> "edit". Writable. */
+	UPROPERTY(EditAnywhere, Category = "Test")
+	int32 EditAnywhereNumber = 0;
+
+	/** DescribeEditorAccess -> "edit_const". Refused without allow_non_editable. */
+	UPROPERTY(VisibleAnywhere, Category = "Test")
+	int32 VisibleOnlyNumber = 0;
+};
+
+// ---- CDO fixture (bp_set_cdo_property tests) ----
+// The set_blueprint_cdo_property suite needs a Blueprint whose CDO carries several
+// specific shapes: a TArray<struct> with at least one element and a writable primitive
+// member (to pin the "<array>[0].<Member>" path the tool builds), a top-level
+// user-editable bool, and a TArray<FName> with at least three elements.
+//
+// Every one of those used to be DISCOVERED by scanning the first 50-100 project
+// Blueprints. That was both order-dependent (the window's contents shift as tests
+// create fixtures, so whether a qualifying Blueprint appeared was luck) and invasive --
+// the discovered asset belongs to the user, and the tests wrote to its CDO and cleared
+// its package dirty flag. Parent a throwaway Blueprint to this class instead: the
+// constructor populates everything, so the CDO always qualifies.
+//
+// Only Blueprint-level constructs (SCS components, a child Blueprint) are still built
+// test-side, in ClaireonTool_SetBlueprintCDOPropertyTests.cpp -- a native class cannot
+// carry an SCS node.
+USTRUCT()
+struct FClaireonTestCDOStructElem
+{
+	GENERATED_BODY()
+
+	// One member per exact-comparable primitive kind the test accepts. Float/double are
+	// deliberately absent: their ExportText form is not byte-comparable on read-back.
+	UPROPERTY(EditAnywhere, Category = "Test")
+	bool bFlag = false;
+
+	UPROPERTY(EditAnywhere, Category = "Test")
+	int32 Count = 0;
+
+	UPROPERTY(EditAnywhere, Category = "Test")
+	FName Tag;
+
+	UPROPERTY(EditAnywhere, Category = "Test")
+	FString Label;
+};
+
+UCLASS()
+class AClaireonTestCDOStructArrayActor : public AActor
+{
+	GENERATED_BODY()
+public:
+	AClaireonTestCDOStructArrayActor()
+	{
+		// At least one element so FScriptArrayHelper::Num() >= 1 on the CDO.
+		FClaireonTestCDOStructElem Elem;
+		Elem.bFlag = false;
+		Elem.Count = 0;
+		Elem.Tag = FName(TEXT("ClaireonTestTag"));
+		Elem.Label = TEXT("ClaireonTestValue");
+		StructArray.Add(Elem);
+
+		// PrimitiveArrayLeaf_WriteByIndex writes element [2] and then asserts [0] and
+		// [1] are untouched, so three is the minimum count that makes it mean anything.
+		// Distinct values so a write that hit the wrong index is detectable.
+		NameArray.Add(FName(TEXT("ClaireonTestName0")));
+		NameArray.Add(FName(TEXT("ClaireonTestName1")));
+		NameArray.Add(FName(TEXT("ClaireonTestName2")));
+	}
+
+	UPROPERTY(EditAnywhere, Category = "Test")
+	TArray<FClaireonTestCDOStructElem> StructArray;
+
+	// Top-level user-editable bool for FindBlueprintWithBoolCDOProperty.
+	// EditAnywhere (not VisibleAnywhere) so the property carries CPF_Edit, which is what
+	// that helper filters on -- only CPF_Edit properties participate reliably in the
+	// editor's Modify/undo flow. Deliberately the ONLY bool declared directly on this
+	// class, so the helper can NAME it instead of taking whatever a TFieldIterator
+	// happens to hand back first (which would otherwise include AActor's own bools,
+	// whose order is a UHT layout detail).
+	UPROPERTY(EditAnywhere, Category = "Test")
+	bool bClaireonTestBool = false;
+
+	// TArray<FName> for PrimitiveArrayLeaf_WriteByIndex. FName rather than FString
+	// because ClaireonPropertyUtils::ReadPropertyByPath exports with PPF_None, so FName
+	// round-trips undelimited and the read-back compares exactly.
+	UPROPERTY(EditAnywhere, Category = "Test")
+	TArray<FName> NameArray;
+};
+
+// ---- GameplayTask fixture (latent-node alias / CallFunction promotion tests) ----
+// UClaireonTestAsyncAction below is a UBlueprintAsyncActionBase and therefore cannot
+// exercise the LatentGameplayTaskCall branch. This one derives from UGameplayTask so
+// PickK2NodeClassForFunction's UGameplayTask check has something real to promote.
+// Deliberately NOT a UAbilityTask: constructing one standalone wants a live
+// UAbilitySystemComponent, and the UGameplayTask base is enough to cover the split's
+// "other UGameplayTask" side.
+UCLASS()
+class UClaireonTestGameplayTask : public UGameplayTask
+{
+	GENERATED_BODY()
+public:
+	/** Latent factory: return type drives the node-class promotion. */
+	UFUNCTION(BlueprintCallable, Category = "Test", meta = (BlueprintInternalUseOnly = "true"))
+	static UClaireonTestGameplayTask* ClaireonTestWaitForThing(UObject* WorldContextObject, float Duration);
+
+	/** Spawn-flavored latent factory. The TSubclassOf parameter named 'Class'
+	 *  gives K2Node_LatentGameplayTaskCall its Class pin, which is what drives
+	 *  the class-pin -> spawn-param-pin refresh under test (the BeginSpawningActor
+	 *  pair is a compile-time concern only, so this fixture omits it). Never
+	 *  executed at runtime. */
+	UFUNCTION(BlueprintCallable, Category = "Test", meta = (BlueprintInternalUseOnly = "true"))
+	static UClaireonTestGameplayTask* ClaireonTestSpawnThing(UObject* WorldContextObject, TSubclassOf<AActor> Class);
 };
 
 // ---- Async-action fixture (apply_blueprint_delta async-node tests) ----

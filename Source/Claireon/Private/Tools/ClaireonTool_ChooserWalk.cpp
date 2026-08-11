@@ -9,16 +9,16 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-namespace
+namespace ClaireonTool_ChooserWalk_Private
 {
 	int32 CountRowSubChoosers(UChooserTable* Chooser)
 	{
-		if (!Chooser) { return 0; }
+		if (!IsValid(Chooser)) { return 0; }
 		int32 Fanout = 0;
 #if WITH_EDITORONLY_DATA
 		for (int32 i = 0; i < Chooser->ResultsStructs.Num(); ++i)
 		{
-			if (ClaireonChooserGraphHelpers::GetRowSubChooser(Chooser, i)) { ++Fanout; }
+			if (IsValid(ClaireonChooserGraphHelpers::GetRowSubChooser(Chooser, i))) { ++Fanout; }
 		}
 #endif
 		return Fanout;
@@ -33,7 +33,7 @@ namespace
 		// different parents. UE permits FName collisions across outers, so
 		// "Stand Stopped" can exist as a direct child of root AND as a child
 		// of "Stand Sprints" — same GetName(), different GetOuter()->GetName().
-		if (UObject* Outer = Chooser->GetOuter())
+		if (UObject* Outer = Chooser->GetOuter(); IsValid(Outer))
 		{
 			Node->SetStringField(TEXT("outer_path"), Outer->GetPathName());
 			Node->SetStringField(TEXT("outer_name"), Outer->GetName());
@@ -61,19 +61,17 @@ namespace
 		return Node;
 	}
 }
+using namespace ClaireonTool_ChooserWalk_Private;
 
 FString ClaireonTool_ChooserWalk::GetCategory() const { return TEXT("chooser"); }
 FString ClaireonTool_ChooserWalk::GetOperation() const { return TEXT("walk"); }
 
 FString ClaireonTool_ChooserWalk::GetDescription() const
 {
-	return TEXT("Walk a ChooserTable's reachable sub-chooser graph in a single call. Discovery is "
-		"via row-result references (FNestedChooser / FEvaluateChooser) — this is the true asset "
-		"structure, so depth and parent_path/parent_row_index are meaningful. Each node carries "
-		"outer_path/outer_name to disambiguate same-named sub-objects with different parents. "
-		"Sub-objects in the asset's flat NestedChoosers registry that are NOT reached via row-result "
-		"traversal are emitted in a separate 'orphans' array — these are dead-code sub-choosers. "
-		"Use chooser_traverse for row-by-row inspection of the dispatcher chain.");
+	return TEXT("Walk a ChooserTable's reachable sub-chooser graph in one call. Discovery follows row-result "
+		"references (FNestedChooser / FEvaluateChooser), so depth and parent_path/parent_row_index reflect "
+		"real asset structure, and outer_path/outer_name disambiguate same-named nodes. Sub-objects never "
+		"reached are returned as orphans (dead code). Read-only / non-session: no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ChooserWalk::GetInputSchema() const
@@ -105,7 +103,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserWalk::Execute(const TSharedPtr<FJ
 
 	FString Error;
 	UChooserTable* Root = ClaireonChooserHelpers::LoadChooserTableAsset(RootPath, Error);
-	if (!Root)
+	if (!IsValid(Root))
 	{
 		return MakeErrorResult(Error);
 	}

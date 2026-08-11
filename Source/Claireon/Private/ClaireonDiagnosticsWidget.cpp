@@ -37,6 +37,11 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+// TCondensedJsonPrintPolicy is declared only here -- neither JsonWriter.h nor JsonSerializer.h
+// pulls it in. This translation unit compiled anyway only because a unity-build sibling happened
+// to include it; adding or removing a .cpp in this module re-partitions the blobs and the
+// dependency evaporates. Include it directly.
+#include "Policies/CondensedJsonPrintPolicy.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformFileManager.h"
@@ -343,7 +348,7 @@ void SClaireonDiagnosticsWidget::Construct(const FArguments& InArgs)
 			if (!bSpillWarningShown)
 			{
 				const UClaireonSettings* SpillSettings = UClaireonSettings::Get();
-				if (SpillSettings && !SpillSettings->bKeepResultSpills
+				if (IsValid(SpillSettings) && !SpillSettings->bKeepResultSpills
 					&& SpillSettings->ResultSpillRetentionDays > 0)
 				{
 					bSpillWarningShown = true;
@@ -359,7 +364,7 @@ void SClaireonDiagnosticsWidget::Construct(const FArguments& InArgs)
 
 	// REPL widget (Chat tab) - only constructed when bEnableREPLChat is set
 	const UClaireonSettings* Settings = UClaireonSettings::Get();
-	if (Settings && Settings->bEnableREPLChat)
+	if (IsValid(Settings) && Settings->bEnableREPLChat)
 	{
 		SAssignNew(REPLWidget, SClaireonREPLWidget, Module.GetServer());
 	}
@@ -446,7 +451,7 @@ SClaireonDiagnosticsWidget::~SClaireonDiagnosticsWidget()
 TSharedRef<SWidget> SClaireonDiagnosticsWidget::BuildTabBar()
 {
 	const UClaireonSettings* Settings = UClaireonSettings::Get();
-	const bool bShowChat = Settings && Settings->bEnableREPLChat;
+	const bool bShowChat = IsValid(Settings) && Settings->bEnableREPLChat;
 
 	return SNew(SBorder)
 		.BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))

@@ -32,7 +32,7 @@
 #include "Metasound.h" // UMetaSoundPatch
 #endif
 
-namespace
+namespace ClaireonSpecApplicator_Audio_Private1
 {
 	UClass* SpecApplicatorAudio_GetUClassForKind(EClaireonAudioAssetKind Kind)
 	{
@@ -105,6 +105,7 @@ namespace
 		return Out;
 	}
 }
+using namespace ClaireonSpecApplicator_Audio_Private1;
 
 bool FClaireonSpecApplicator_Audio::Apply(const TSharedPtr<FJsonObject>& Spec, FString& OutSummary, FString& OutError)
 {
@@ -389,7 +390,7 @@ bool FClaireonSpecApplicator_Audio::Apply(const TSharedPtr<FJsonObject>& Spec, F
 // referenced assets (use the entries-based legacy Apply for create-then-wire).
 // -----------------------------------------------------------------------------
 
-namespace
+namespace ClaireonSpecApplicator_Audio_Private2
 {
 	bool SpecApplicatorAudio_LoadOrCreateForCohort(const FString& AssetPath, EClaireonAudioAssetKind Cohort,
 		bool bAllowCreate, UObject*& OutAsset, bool& bOutCreated, FString& OutError)
@@ -439,8 +440,9 @@ namespace
 		return true;
 	}
 }
+using namespace ClaireonSpecApplicator_Audio_Private2;
 
-namespace
+namespace ClaireonSpecApplicator_Audio_Private3
 {
 	// Generic single-cohort apply_spec impl shared by ApplyAttenuationSpec / ApplyConcurrencySpec /
 	// (other reflection-only cohorts to follow). The bundled apply_spec keeps the entries-based
@@ -534,6 +536,7 @@ namespace
 		return true;
 	}
 }
+using namespace ClaireonSpecApplicator_Audio_Private3;
 
 bool FClaireonSpecApplicator_Audio::ApplyAttenuationSpec(const TSharedPtr<FJsonObject>& Spec, FString& OutSummary, FString& OutError)
 {
@@ -650,7 +653,7 @@ bool FClaireonSpecApplicator_Audio::ApplySoundCueSpec(const TSharedPtr<FJsonObje
 #include "MetasoundBuilderSubsystem.h"
 #include "MetasoundFrontendLiteral.h"
 
-namespace
+namespace ClaireonSpecApplicator_Audio_Private4
 {
 	// File-local discriminator (MSApplySpec_) avoids unity-batch name collisions.
 	bool MSApplySpec_BuildLiteralFromJson(FName DataType, const TSharedPtr<FJsonValue>& Value, FMetasoundFrontendLiteral& Out)
@@ -690,6 +693,7 @@ namespace
 		return false;
 	}
 }
+using namespace ClaireonSpecApplicator_Audio_Private4;
 #endif
 
 bool FClaireonSpecApplicator_Audio::ApplyMetaSoundSpec(const TSharedPtr<FJsonObject>& Spec, FString& OutSummary, FString& OutError)

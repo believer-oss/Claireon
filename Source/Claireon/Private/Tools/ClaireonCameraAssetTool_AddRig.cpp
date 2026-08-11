@@ -26,7 +26,10 @@ FString FClaireonCameraAssetTool_AddRig::GetOperation() const { return TEXT("add
 
 FString FClaireonCameraAssetTool_AddRig::GetDescription() const
 {
-	return TEXT("Append a new UCameraRigAsset (with null root node) to a UCameraAsset; returns the new rig index.");
+	return TEXT("Add a new UCameraRigAsset (named rig_name, with a null root node) to the UCameraAsset at asset_path "
+		"and return its rig index for use by the other camera_asset tools. Non-session: the asset is "
+		"addressed by asset_path and the write is transactional; there is no camera_asset_open -- persist "
+		"with camera_asset_save.");
 }
 
 TSharedPtr<FJsonObject> FClaireonCameraAssetTool_AddRig::GetInputSchema() const
@@ -61,7 +64,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_AddRig::Execute(const TShare
 	}
 
 	UCameraAsset* Asset = LoadObject<UCameraAsset>(nullptr, *Canon);
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Camera asset not found: %s"), *Canon));
 	}
@@ -79,7 +82,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_AddRig::Execute(const TShare
 		Asset,
 		NAME_None,
 		RF_Transactional | RF_Public);
-	if (!NewRig)
+	if (!IsValid(NewRig))
 	{
 		return MakeErrorResult(TEXT("NewObject<UCameraRigAsset> returned null"));
 	}

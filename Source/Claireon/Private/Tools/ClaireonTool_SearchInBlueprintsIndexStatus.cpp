@@ -8,6 +8,14 @@
 #include "FindInBlueprintManager.h"
 #include "Dom/JsonObject.h"
 
+// Defined in ClaireonTool_SearchInBlueprints.cpp (same module). Session-scoped
+// marker set once a bp_search stream search has run to completion. Keep this
+// declaration in sync with the definition there.
+namespace ClaireonSearchWait
+{
+	bool HasAnySearchCompletedThisSession();
+}
+
 FString ClaireonTool_SearchInBlueprintsIndexStatus::GetCategory() const { return kBPCategory; }
 FString ClaireonTool_SearchInBlueprintsIndexStatus::GetOperation() const { return TEXT("search_index_status"); }
 
@@ -18,7 +26,11 @@ TArray<FString> ClaireonTool_SearchInBlueprintsIndexStatus::GetSearchKeywords() 
 
 FString ClaireonTool_SearchInBlueprintsIndexStatus::GetDescription() const
 {
-	return TEXT("Probe Find-in-Blueprints (FiB) index readiness. Use this before bp_search when the index might still be building after editor startup; the bp_search tool blocks on the index and can timeout twice if you do not check first. Stateless / read-only / non-session. Returns {ready, indexed_assets, unindexed_assets, uncached_assets, cache_progress, asset_discovery_in_progress}.");
+	return TEXT("Check Find-in-Blueprints index readiness before bp_search. Returns {ready, unindexed_assets, "
+		"uncached_assets, cache_progress, cache_in_progress, asset_discovery_in_progress, "
+		"first_search_may_index_full_corpus}. CAVEAT: ready=true does NOT bound the first search's cost; "
+		"first_search_may_index_full_corpus=true means the next bp_search may index the whole corpus. "
+		"Stateless / read-only.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_SearchInBlueprintsIndexStatus::GetInputSchema() const
@@ -39,9 +51,18 @@ IClaireonTool::FToolResult ClaireonTool_SearchInBlueprintsIndexStatus::Execute(c
 
 	// "Ready" means: no async cache running, no asset discovery pending, no unindexed
 	// or uncached assets queued. Callers that just want a green light should check
-	// ready==true; if false, indexed_assets / cache_progress show partial state.
+	// ready==true; if false, unindexed/uncached counts and cache_progress show
+	// partial state.
+	//
+	// LIMITATION: the counters above do NOT see the manager's deferred-indexing
+	// backlog (AssetsToIndexOnFirstSearch / PendingAssets are private with no
+	// accessor), which is only flushed once the first search runs. ready==true
+	// therefore does not bound the cost of the first bp_search this session; we
+	// surface that as first_search_may_index_full_corpus below.
 	const bool bReady = !bCacheInProgress && !bAssetDiscoveryInProgress
 		&& UnindexedAssets == 0 && UncachedAssets == 0;
+
+	const bool bFirstSearchMayIndexFullCorpus = !ClaireonSearchWait::HasAnySearchCompletedThisSession();
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetBoolField(TEXT("ready"), bReady);
@@ -50,11 +71,16 @@ IClaireonTool::FToolResult ClaireonTool_SearchInBlueprintsIndexStatus::Execute(c
 	Data->SetNumberField(TEXT("cache_progress"), CacheProgress);
 	Data->SetBoolField(TEXT("cache_in_progress"), bCacheInProgress);
 	Data->SetBoolField(TEXT("asset_discovery_in_progress"), bAssetDiscoveryInProgress);
+	Data->SetBoolField(TEXT("first_search_may_index_full_corpus"), bFirstSearchMayIndexFullCorpus);
 
 	FString Summary;
 	if (bReady)
 	{
 		Summary = TEXT("FiB index ready (no pending cache or unindexed assets).");
+		if (bFirstSearchMayIndexFullCorpus)
+		{
+			Summary += TEXT(" NOTE: no bp_search has completed this session; the first search may still trigger deferred indexing of the full corpus (ready does not bound its cost).");
+		}
 	}
 	else
 	{

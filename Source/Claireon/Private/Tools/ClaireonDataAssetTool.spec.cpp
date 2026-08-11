@@ -13,7 +13,8 @@
 #include "UObject/Object.h"
 #include "UObject/UObjectGlobals.h"
 
-namespace
+#include "Tests/ClaireonTestAssetDeletion.h"
+namespace ClaireonDataAssetTool_spec_Private
 {
 	// DataAssetSpec_: discriminator-prefixed anon-NS helpers (CLAUDE.md unity-collision guideline).
 
@@ -21,7 +22,7 @@ namespace
 	{
 		if (UEditorAssetLibrary::DoesAssetExist(Path))
 		{
-			UEditorAssetLibrary::DeleteAsset(Path);
+			ClaireonTestAssetDeletion::DeleteAssetForTest(Path);
 		}
 	}
 
@@ -57,13 +58,14 @@ namespace
 		return Tool.Execute(Args);
 	}
 } // namespace
+using namespace ClaireonDataAssetTool_spec_Private;
 
 // =====================================================================================
 // Test: Create_HappyPath
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDataAsset_Create_HappyPath,
 	"Claireon.DataAssetTool.Create_HappyPath",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonDataAsset_Create_HappyPath::RunTest(const FString& /*Parameters*/)
 {
@@ -79,7 +81,7 @@ bool FClaireonDataAsset_Create_HappyPath::RunTest(const FString& /*Parameters*/)
 	}
 
 	UObject* Asset = LoadObject<UObject>(nullptr, *Path);
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		AddError(TEXT("Asset not found after Create"));
 		DataAssetSpec_DeleteIfExists(Path);
@@ -102,7 +104,7 @@ bool FClaireonDataAsset_Create_HappyPath::RunTest(const FString& /*Parameters*/)
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDataAsset_Create_BareClassName,
 	"Claireon.DataAssetTool.Create_BareClassName",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonDataAsset_Create_BareClassName::RunTest(const FString& /*Parameters*/)
 {
@@ -118,7 +120,7 @@ bool FClaireonDataAsset_Create_BareClassName::RunTest(const FString& /*Parameter
 	}
 
 	UObject* Asset = LoadObject<UObject>(nullptr, *Path);
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		AddError(TEXT("Asset not found after Create"));
 		DataAssetSpec_DeleteIfExists(Path);
@@ -134,7 +136,7 @@ bool FClaireonDataAsset_Create_BareClassName::RunTest(const FString& /*Parameter
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDataAsset_Create_WithProperties,
 	"Claireon.DataAssetTool.Create_WithProperties",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonDataAsset_Create_WithProperties::RunTest(const FString& /*Parameters*/)
 {
@@ -173,7 +175,7 @@ bool FClaireonDataAsset_Create_WithProperties::RunTest(const FString& /*Paramete
 	}
 
 	UObject* Asset = LoadObject<UObject>(nullptr, *Path);
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		AddError(TEXT("Asset not found after Create"));
 		DataAssetSpec_DeleteIfExists(Path);
@@ -203,7 +205,7 @@ bool FClaireonDataAsset_Create_WithProperties::RunTest(const FString& /*Paramete
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDataAsset_Create_WithSoftRef,
 	"Claireon.DataAssetTool.Create_WithSoftRef",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonDataAsset_Create_WithSoftRef::RunTest(const FString& /*Parameters*/)
 {
@@ -222,7 +224,7 @@ bool FClaireonDataAsset_Create_WithSoftRef::RunTest(const FString& /*Parameters*
 	}
 
 	UObject* Asset = LoadObject<UObject>(nullptr, *Path);
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		AddError(TEXT("Asset not found after Create"));
 		DataAssetSpec_DeleteIfExists(Path);
@@ -252,7 +254,7 @@ bool FClaireonDataAsset_Create_WithSoftRef::RunTest(const FString& /*Parameters*
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDataAsset_Create_DuplicatePathError,
 	"Claireon.DataAssetTool.Create_DuplicatePathError",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonDataAsset_Create_DuplicatePathError::RunTest(const FString& /*Parameters*/)
 {
@@ -290,7 +292,7 @@ bool FClaireonDataAsset_Create_DuplicatePathError::RunTest(const FString& /*Para
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDataAsset_Create_NonDataAssetClass,
 	"Claireon.DataAssetTool.Create_NonDataAssetClass",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonDataAsset_Create_NonDataAssetClass::RunTest(const FString& /*Parameters*/)
 {
@@ -320,7 +322,7 @@ bool FClaireonDataAsset_Create_NonDataAssetClass::RunTest(const FString& /*Param
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDataAsset_Create_UnresolvableClass,
 	"Claireon.DataAssetTool.Create_UnresolvableClass",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonDataAsset_Create_UnresolvableClass::RunTest(const FString& /*Parameters*/)
 {
@@ -349,7 +351,7 @@ bool FClaireonDataAsset_Create_UnresolvableClass::RunTest(const FString& /*Param
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDataAsset_Create_PropertyWriteFailureRollback,
 	"Claireon.DataAssetTool.Create_PropertyWriteFailureRollback",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonDataAsset_Create_PropertyWriteFailureRollback::RunTest(const FString& /*Parameters*/)
 {
@@ -395,7 +397,7 @@ bool FClaireonDataAsset_Create_PropertyWriteFailureRollback::RunTest(const FStri
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonAssetExists_Positive,
 	"Claireon.DataAssetTool.AssetExists_Positive",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonAssetExists_Positive::RunTest(const FString& /*Parameters*/)
 {
@@ -440,7 +442,7 @@ bool FClaireonAssetExists_Positive::RunTest(const FString& /*Parameters*/)
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonAssetExists_Negative,
 	"Claireon.DataAssetTool.AssetExists_Negative",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonAssetExists_Negative::RunTest(const FString& /*Parameters*/)
 {
@@ -473,7 +475,7 @@ bool FClaireonAssetExists_Negative::RunTest(const FString& /*Parameters*/)
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonAssetExists_InvalidPath,
 	"Claireon.DataAssetTool.AssetExists_InvalidPath",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonAssetExists_InvalidPath::RunTest(const FString& /*Parameters*/)
 {
@@ -496,7 +498,7 @@ bool FClaireonAssetExists_InvalidPath::RunTest(const FString& /*Parameters*/)
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDevSettings_Get_ClaireonSpecDeveloperSettings,
 	"Claireon.DataAssetTool.DevSettings_Get_ClaireonSpecDeveloperSettings",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonDevSettings_Get_ClaireonSpecDeveloperSettings::RunTest(const FString& /*Parameters*/)
 {
@@ -549,7 +551,7 @@ bool FClaireonDevSettings_Get_ClaireonSpecDeveloperSettings::RunTest(const FStri
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonDevSettings_Get_NotDeveloperSettings,
 	"Claireon.DataAssetTool.DevSettings_Get_NotDeveloperSettings",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonDevSettings_Get_NotDeveloperSettings::RunTest(const FString& /*Parameters*/)
 {

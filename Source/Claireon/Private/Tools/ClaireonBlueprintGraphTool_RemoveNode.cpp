@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -149,7 +149,7 @@ FToolResult ClaireonBlueprintGraphTool_RemoveNode::RemoveNode_Impl(const FString
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
 
-	if (!Blueprint || !Graph)
+	if (!IsValid(Blueprint) || !IsValid(Graph))
 	{
 		return MakeErrorResult(TEXT("Blueprint or Graph is no longer valid"));
 	}
@@ -161,31 +161,27 @@ FToolResult ClaireonBlueprintGraphTool_RemoveNode::RemoveNode_Impl(const FString
 		return MakeErrorResult(TEXT("Missing required field: node_guid"));
 	}
 
-	FGuid NodeGuid;
-	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
+	// Find the node (full GUID or >=8-hex prefix)
+	FString ResolveError;
+	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperationStr(Graph, NodeGuidStr, Data, ResolveError);
+	if (!IsValid(Node))
 	{
-		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
+		return MakeErrorResult(ResolveError);
 	}
 
-	// Find the node
-	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperation(Graph, NodeGuid, Data);
-	if (!Node)
-	{
-		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
-		return MakeErrorResult(FString::Printf(TEXT("Node not found with GUID: %s in graph '%s'.\n%s"),
-			*NodeGuidStr, *Graph->GetName(), *AvailableNodes));
-	}
-
+	const FGuid NodeGuid = Node->NodeGuid;
 	FString NodeTitle = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();
 
-	// Capture exec-connected neighbors BEFORE removing (they change after BreakAllPinLinks)
+	// Capture connected neighbors BEFORE removing (they change after BreakAllPinLinks).
+	// All pin categories count: data-linked neighbors lose a connection too, and a
+	// changed-mode response with an empty affected set trips the handler diagnostic.
 	for (UEdGraphPin* RemPin : Node->Pins)
 	{
-		if (RemPin && RemPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec)
+		if (RemPin)
 		{
 			for (UEdGraphPin* LinkedRemPin : RemPin->LinkedTo)
 			{
-				if (LinkedRemPin && LinkedRemPin->GetOwningNode())
+				if (LinkedRemPin && IsValid(LinkedRemPin->GetOwningNode()))
 				{
 					Data->LastOperationAffectedNodes.Add(LinkedRemPin->GetOwningNode()->NodeGuid);
 				}
@@ -238,23 +234,18 @@ FToolResult ClaireonBlueprintGraphTool_RemoveNode::RemoveNodeStateless_Impl(cons
 		return MakeErrorResult(ValidationError);
 
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load Blueprint: %s"), *AssetPath));
 
 	UEdGraph* Graph = ClaireonBlueprintHelpers::FindGraphByName(Blueprint, GraphName);
-	if (!Graph)
+	if (!IsValid(Graph))
 		return MakeErrorResult(FString::Printf(TEXT("Graph '%s' not found"), *GraphName));
 
-	FGuid NodeGuid;
-	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
-		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
-
-	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperation(Graph, NodeGuid, nullptr);
-	if (!Node)
+	FString ResolveError;
+	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperationStr(Graph, NodeGuidStr, nullptr, ResolveError);
+	if (!IsValid(Node))
 	{
-		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
-		return MakeErrorResult(FString::Printf(TEXT("Node not found with GUID: %s in graph '%s'.\n%s"),
-			*NodeGuidStr, *Graph->GetName(), *AvailableNodes));
+		return MakeErrorResult(ResolveError);
 	}
 
 	FString NodeTitle = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();

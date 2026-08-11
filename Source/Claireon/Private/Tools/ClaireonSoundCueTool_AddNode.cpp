@@ -13,12 +13,12 @@
 #include "ScopedTransaction.h"
 #include "Dom/JsonObject.h"
 
-namespace
+namespace ClaireonSoundCueTool_AddNode_Private
 {
 	USoundNode* AddNode_NodeAt(USoundCue* Cue, int32 Index)
 	{
 #if WITH_EDITORONLY_DATA
-		if (!Cue || !Cue->AllNodes.IsValidIndex(Index)) return nullptr;
+		if (!IsValid(Cue) || !Cue->AllNodes.IsValidIndex(Index)) return nullptr;
 		return Cue->AllNodes[Index];
 #else
 		return nullptr;
@@ -27,7 +27,7 @@ namespace
 	int32 AddNode_IndexOfNode(USoundCue* Cue, const USoundNode* Node)
 	{
 #if WITH_EDITORONLY_DATA
-		if (!Cue || !Node) return INDEX_NONE;
+		if (!IsValid(Cue) || !IsValid(Node)) return INDEX_NONE;
 		for (int32 i = 0; i < Cue->AllNodes.Num(); ++i)
 		{
 			if (Cue->AllNodes[i] == Node) return i;
@@ -36,6 +36,7 @@ namespace
 		return INDEX_NONE;
 	}
 }
+using namespace ClaireonSoundCueTool_AddNode_Private;
 
 FString FClaireonSoundCueTool_AddNode::GetCategory() const { return TEXT("soundcue"); }
 FString FClaireonSoundCueTool_AddNode::GetOperation() const { return TEXT("add_node"); }
@@ -76,7 +77,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_AddNode::Execute(const TSharedP
 		return MakeErrorResult(FString::Printf(TEXT("SoundCue session not found: %s"), *SessionId));
 	}
 	USoundCue* Cue = Cast<USoundCue>(Data->Asset.Get());
-	if (!Cue) return MakeErrorResult(TEXT("Session asset is not a SoundCue"));
+	if (!IsValid(Cue)) return MakeErrorResult(TEXT("Session asset is not a SoundCue"));
 
 	FString ClassShort;
 	if (!Arguments->TryGetStringField(TEXT("node_class"), ClassShort) || ClassShort.IsEmpty())
@@ -84,7 +85,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_AddNode::Execute(const TSharedP
 		return MakeErrorResult(TEXT("Missing node_class (short name, e.g. 'wave_player', 'mixer')"));
 	}
 	UClass* NodeClass = ClaireonAudioHelpers::ResolveSoundNodeClass(FName(*ClassShort));
-	if (!NodeClass)
+	if (!IsValid(NodeClass))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Unknown sound node class '%s' (use list_node_types)"), *ClassShort));
 	}
@@ -99,7 +100,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_AddNode::Execute(const TSharedP
 	}
 	if (!bHasExplicitPos)
 	{
-		if (USoundNode* Focus = AddNode_NodeAt(Cue, Data->FocusedNodeIndex))
+		if (USoundNode* Focus = AddNode_NodeAt(Cue, Data->FocusedNodeIndex); IsValid(Focus))
 		{
 			if (Focus->GraphNode)
 			{
@@ -119,7 +120,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_AddNode::Execute(const TSharedP
 #endif
 
 	USoundNode* NewNode = Cue->ConstructSoundNode<USoundNode>(NodeClass, /*bSelectNewNode=*/false);
-	if (!NewNode)
+	if (!IsValid(NewNode))
 	{
 		Transaction.Cancel();
 		return MakeErrorResult(TEXT("ConstructSoundNode returned null"));

@@ -22,7 +22,7 @@ TSharedPtr<FJsonObject> ClaireonTool_TraceClose::GetInputSchema() const
 
 	TSharedPtr<FJsonObject> SessionIdProp = MakeShared<FJsonObject>();
 	SessionIdProp->SetStringField(TEXT("type"), TEXT("string"));
-	SessionIdProp->SetStringField(TEXT("description"), TEXT("The session ID returned by editor.trace.open"));
+	SessionIdProp->SetStringField(TEXT("description"), TEXT("The session ID returned by trace_open"));
 	Properties->SetObjectField(TEXT("sessionId"), SessionIdProp);
 
 	Schema->SetObjectField(TEXT("properties"), Properties);

@@ -44,7 +44,7 @@ FToolResult ClaireonMaterialTool_RemoveExpression::Execute(const TSharedPtr<FJso
 	UMaterial* Material = Data->Material.Get();
 	int32 OutIndex = INDEX_NONE;
 	UMaterialExpression* Expr = ClaireonMaterialHelpers::FindExpressionByIdentifier(Material, Identifier, OutIndex);
-	if (!Expr)
+	if (!IsValid(Expr))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Expression not found: '%s'"), *Identifier));
 	}

@@ -55,7 +55,7 @@ FToolResult ClaireonLevelSequenceTool_RemoveKeyframe::Execute(const TSharedPtr<F
 	}
 
 	UMovieSceneSection* Section = ClaireonLevelSequenceInternal::ResolveFocusedSection(Data, SectionIndex, Error);
-	if (!Section)
+	if (!IsValid(Section))
 	{
 		return MakeErrorResult(Error);
 	}
