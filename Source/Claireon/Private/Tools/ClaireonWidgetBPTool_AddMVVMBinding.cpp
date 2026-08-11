@@ -52,7 +52,7 @@ FToolResult ClaireonWidgetBPTool_AddMVVMBinding::Execute(const TSharedPtr<FJsonO
         return Error;
     }
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
-	if (!WBP)
+	if (!IsValid(WBP))
 	{
 		return MakeErrorResult(TEXT("Widget Blueprint is no longer valid"));
 	}
@@ -93,7 +93,7 @@ FToolResult ClaireonWidgetBPTool_AddMVVMBinding::Execute(const TSharedPtr<FJsonO
 
 	// Validate MVVM view exists
 	UMVVMBlueprintView* View = ClaireonWidgetHelpers::GetOrCreateMVVMBlueprintView(WBP);
-	if (!View)
+	if (!IsValid(View))
 	{
 		return MakeErrorResult(TEXT("Failed to get or create MVVM Blueprint View"));
 	}
@@ -107,7 +107,7 @@ FToolResult ClaireonWidgetBPTool_AddMVVMBinding::Execute(const TSharedPtr<FJsonO
 
 	// Validate widget exists
 	UWidget* Widget = ClaireonWidgetHelpers::FindWidgetByName(WBP->WidgetTree, FName(*WidgetNameStr));
-	if (!Widget)
+	if (!IsValid(Widget))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Widget '%s' not found in the widget tree"), *WidgetNameStr));
 	}
@@ -122,7 +122,7 @@ FToolResult ClaireonWidgetBPTool_AddMVVMBinding::Execute(const TSharedPtr<FJsonO
 	{
 		FString PathError;
 		UClass* VMClass = VMContext->GetViewModelClass();
-		if (!VMClass)
+		if (!IsValid(VMClass))
 		{
 			View->RemoveBinding(&NewBinding);
 			return MakeErrorResult(TEXT("ViewModel class is null"));
@@ -157,7 +157,7 @@ FToolResult ClaireonWidgetBPTool_AddMVVMBinding::Execute(const TSharedPtr<FJsonO
 	{
 		FString ConvError;
 		const UFunction* ConvFunc = ClaireonWidgetBPInternal::ResolveConversionFunction(WBP, ConversionFunctionStr, ConvError);
-		if (!ConvFunc)
+		if (!IsValid(ConvFunc))
 		{
 			View->RemoveBinding(&NewBinding);
 			return MakeErrorResult(FString::Printf(TEXT("Failed to resolve conversion function '%s': %s"), *ConversionFunctionStr, *ConvError));

@@ -12,8 +12,10 @@ FString ClaireonTool_TransactionBeginGroup::GetOperation() const { return TEXT("
 
 FString ClaireonTool_TransactionBeginGroup::GetDescription() const
 {
-	return TEXT("Start a transaction group. All subsequent tool calls are grouped into a single undo step. "
-		"Call transaction_end_group to finalize or transaction_rollback_group to cancel.");
+	return TEXT("Start a transaction group so every subsequent Claireon tool call collapses into one named undo "
+		"step. Args: label (required; a [Claireon] prefix is added). Call transaction_end_group to finalize "
+		"or transaction_rollback_group to cancel; only one group may be open at a time. Editor-wide and "
+		"transactional -- independent of per-asset editing sessions.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_TransactionBeginGroup::GetInputSchema() const
@@ -27,7 +29,7 @@ TSharedPtr<FJsonObject> ClaireonTool_TransactionBeginGroup::GetInputSchema() con
 
 FToolResult ClaireonTool_TransactionBeginGroup::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("GEditor is not available"));
 	}

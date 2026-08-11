@@ -32,7 +32,7 @@ The script should:
    - If no changes and no unmerged commits exist, exit with informational message
 4. Capture the git user identifier using the utility script:
    ```powershell
-   Scripts\Utilities\Get-GitUsername.ps1
+   Plugins\Claireon\Scripts\Utilities\Get-GitUsername.ps1
    ```
    - Returns the username portion of git user.email (e.g., `<user>` from `you@example.com`)
 5. Get the worktree name from the current directory basename
@@ -45,7 +45,7 @@ The script should:
 ### 3. Create New Branch from Current State
 
 1. Generate branch name in format: `llm/<git_user>/<worktree>/<generated-name>`
-   - `<git_user>`: Output from `Scripts\Utilities\Get-GitUsername.ps1` (e.g., "<user>")
+   - `<git_user>`: Output from `Plugins\Claireon\Scripts\Utilities\Get-GitUsername.ps1` (e.g., "<user>")
    - `<worktree>`: Current worktree directory name, lowercased
    - `<generated-name>`: Short descriptive name based on changed files/modules
      - If changes affect single module/component, use that name
@@ -71,9 +71,9 @@ The script should:
 
 ### 5. Generate Commit Message (if uncommitted changes exist)
 
-If there are staged changes to commit, analyze them to create a commit message following this format:
+If there are staged changes to commit, analyze them to create a commit message following this format (append your project's CI trigger tag to the subject if it requires one):
 ```
-<type>(<scope>) [ci:linux]: <description>
+<type>(<scope>): <description>
 ```
 
 **Type** (choose one):
@@ -86,11 +86,11 @@ If there are staged changes to commit, analyze them to create a commit message f
 - If multiple modules: use parent module name or "multi"
 - Examples: `auth`, `api`, `ui`, `config`, `deps`
 
-**[ci:linux] flag**:
-- Do NOT include CI tags (`[ci]`, `[ci:linux]`, etc.) on intermediate work-in-progress commits
-- Include `[ci:linux]` ONLY on the final commit before squash-rebase for PR, and on the squash-rebased commit itself
-- For mid-implementation build verification, use `Scripts\Utilities\Invoke-RemoteBuildVerification.ps1`
-- Omit `[ci:linux]` entirely if only non-source files changed (documentation, config, scripts, etc.)
+**CI trigger tags** (if your project uses commit-message CI tags, e.g. `[ci]`):
+- Do NOT include CI tags on intermediate work-in-progress commits
+- Include them ONLY on the final commit before squash-rebase for PR, and on the squash-rebased commit itself
+- For mid-implementation build verification, use your project's remote/CI build hook
+- Omit CI tags entirely if only non-source files changed (documentation, config, scripts, etc.)
 
 **Description**:
 - Terse, passive voice, no period at end
@@ -208,7 +208,7 @@ Result:
   New branch: llm/<user>/<workspace>/auth-fixes
   Commits moved: 3
   Latest commit: abc1234
-  Message: fix(auth): token validation logic corrected [ci:linux]
+  Message: fix(auth): token validation logic corrected
   Remote: https://github.com/user/repo/tree/llm/<user>/<workspace>/auth-fixes
 ```
 

@@ -75,7 +75,7 @@ UEdGraphPin* FindStackFunctionInputOverridePin(UNiagaraNodeFunctionCall& StackFu
 	if (FuncInputPin && FuncInputPin->LinkedTo.Num() == 1)
 	{
 		UEdGraphNode* OverrideNode = FuncInputPin->LinkedTo[0]->GetOwningNode();
-		if (OverrideNode)
+		if (IsValid(OverrideNode))
 		{
 			// Search the override node's input pins for one matching the aliased handle name
 			for (UEdGraphPin* Pin : OverrideNode->Pins)
@@ -108,14 +108,14 @@ UNiagaraSystem* ClaireonNiagaraHelpers::LoadNiagaraSystemAsset(const FString& As
 
 	FSoftObjectPath SoftPath(ResolvedPath);
 	UObject* LoadedObj = SoftPath.TryLoad();
-	if (!LoadedObj)
+	if (!IsValid(LoadedObj))
 	{
 		OutError = FString::Printf(TEXT("Failed to load asset at path: %s"), *ResolvedPath);
 		return nullptr;
 	}
 
 	UNiagaraSystem* System = Cast<UNiagaraSystem>(LoadedObj);
-	if (!System)
+	if (!IsValid(System))
 	{
 		OutError = FString::Printf(TEXT("Asset at %s is not a Niagara System (actual type: %s)"), *ResolvedPath, *LoadedObj->GetClass()->GetName());
 		return nullptr;
@@ -130,7 +130,7 @@ UNiagaraSystem* ClaireonNiagaraHelpers::LoadNiagaraSystemAsset(const FString& As
 
 FString ClaireonNiagaraHelpers::FormatObjectProperties(const UObject* Object, const FString& Indent)
 {
-	if (!Object)
+	if (!IsValid(Object))
 	{
 		return FString();
 	}
@@ -174,7 +174,7 @@ FString ClaireonNiagaraHelpers::FormatObjectProperties(const UObject* Object, co
 
 FString ClaireonNiagaraHelpers::GetRendererTypeName(const UNiagaraRendererProperties* Renderer)
 {
-	if (!Renderer)
+	if (!IsValid(Renderer))
 	{
 		return TEXT("Unknown");
 	}
@@ -205,7 +205,7 @@ FString ClaireonNiagaraHelpers::GetRendererTypeName(const UNiagaraRendererProper
 
 FString ClaireonNiagaraHelpers::FormatRendererProperties(const UNiagaraRendererProperties* Renderer, int32 RendererIndex, const FString& Indent)
 {
-	if (!Renderer)
+	if (!IsValid(Renderer))
 	{
 		return FString();
 	}
@@ -263,7 +263,7 @@ FString ClaireonNiagaraHelpers::FormatEmitterStructure(const UNiagaraSystem* Sys
 	Output += FString::Printf(TEXT("  Local Space: %s\n"), EmitterData->bLocalSpace ? TEXT("true") : TEXT("false"));
 
 	// Module stacks
-	if (System)
+	if (IsValid(System))
 	{
 		Output += TEXT("  Stacks:\n");
 
@@ -324,7 +324,7 @@ FString ClaireonNiagaraHelpers::FormatEmitterStructure(const UNiagaraSystem* Sys
 	{
 		// EmitterData is a struct, not a UObject — format properties from the UNiagaraEmitter instead
 		UNiagaraEmitter* Emitter = EmitterHandle.GetInstance().Emitter;
-		if (Emitter)
+		if (IsValid(Emitter))
 		{
 			FString ExtraProps = FormatObjectProperties(Emitter, TEXT("    "));
 			if (!ExtraProps.IsEmpty())
@@ -341,7 +341,7 @@ FString ClaireonNiagaraHelpers::FormatEmitterStructure(const UNiagaraSystem* Sys
 
 FString ClaireonNiagaraHelpers::FormatUserParameters(const UNiagaraSystem* System)
 {
-	if (!System)
+	if (!IsValid(System))
 	{
 		return FString();
 	}
@@ -403,7 +403,7 @@ FString ClaireonNiagaraHelpers::FormatUserParameters(const UNiagaraSystem* Syste
 
 FString ClaireonNiagaraHelpers::FormatNiagaraSystemStructure(const UNiagaraSystem* System, bool bFullDetail)
 {
-	if (!System)
+	if (!IsValid(System))
 	{
 		return TEXT("(null Niagara System)");
 	}
@@ -456,7 +456,7 @@ UClass* ClaireonNiagaraHelpers::ResolveRendererClass(const FString& TypeName, FS
 		{
 			ClaireonNameResolver::FNameResolveResult ShorthandResult;
 			UClass* FoundClass = ClaireonNameResolver::ResolveClassName(Pair.Value, UNiagaraRendererProperties::StaticClass(), ShorthandResult);
-			if (FoundClass)
+			if (IsValid(FoundClass))
 			{
 				return FoundClass;
 			}
@@ -466,7 +466,7 @@ UClass* ClaireonNiagaraHelpers::ResolveRendererClass(const FString& TypeName, FS
 	// Try the raw input as a class name via the core resolver
 	ClaireonNameResolver::FNameResolveResult NameResult;
 	UClass* FoundClass = ClaireonNameResolver::ResolveClassName(TypeName, UNiagaraRendererProperties::StaticClass(), NameResult);
-	if (FoundClass)
+	if (IsValid(FoundClass))
 	{
 		return FoundClass;
 	}
@@ -483,7 +483,7 @@ UClass* ClaireonNiagaraHelpers::ResolveRendererClass(const FString& TypeName, FS
 
 bool ClaireonNiagaraHelpers::SetObjectProperty(UObject* Object, const FString& PropertyName, const FString& PropertyValue, FString& OutError)
 {
-	if (!Object)
+	if (!IsValid(Object))
 	{
 		OutError = TEXT("Object is null");
 		return false;
@@ -545,7 +545,7 @@ bool ClaireonNiagaraHelpers::ResolveStackName(const FString& StackName, ENiagara
 
 UNiagaraNodeOutput* ClaireonNiagaraHelpers::GetStackOutputNode(UNiagaraSystem* System, int32 EmitterIndex, ENiagaraScriptUsage Usage, FString& OutError)
 {
-	if (!System)
+	if (!IsValid(System))
 	{
 		OutError = TEXT("System is null");
 		return nullptr;
@@ -567,21 +567,21 @@ UNiagaraNodeOutput* ClaireonNiagaraHelpers::GetStackOutputNode(UNiagaraSystem* S
 	}
 
 	UNiagaraScriptSource* ScriptSource = Cast<UNiagaraScriptSource>(EmitterData->GraphSource);
-	if (!ScriptSource)
+	if (!IsValid(ScriptSource))
 	{
 		OutError = FString::Printf(TEXT("Emitter %d ('%s') has no script source (GraphSource is null or not UNiagaraScriptSource)"), EmitterIndex, *Handle.GetName().ToString());
 		return nullptr;
 	}
 
 	UNiagaraGraph* Graph = ScriptSource->NodeGraph;
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		OutError = FString::Printf(TEXT("Emitter %d ('%s') script source has no NodeGraph"), EmitterIndex, *Handle.GetName().ToString());
 		return nullptr;
 	}
 
 	UNiagaraNodeOutput* OutputNode = Graph->FindEquivalentOutputNode(Usage, FGuid());
-	if (!OutputNode)
+	if (!IsValid(OutputNode))
 	{
 		OutError = FString::Printf(TEXT("Emitter %d ('%s') has no output node for the specified stack usage"), EmitterIndex, *Handle.GetName().ToString());
 		return nullptr;
@@ -593,7 +593,7 @@ UNiagaraNodeOutput* ClaireonNiagaraHelpers::GetStackOutputNode(UNiagaraSystem* S
 bool ClaireonNiagaraHelpers::GetOrderedModuleNodes(UNiagaraSystem* System, int32 EmitterIndex, ENiagaraScriptUsage Usage, TArray<UNiagaraNodeFunctionCall*>& OutModuleNodes, FString& OutError)
 {
 	UNiagaraNodeOutput* OutputNode = GetStackOutputNode(System, EmitterIndex, Usage, OutError);
-	if (!OutputNode)
+	if (!IsValid(OutputNode))
 	{
 		return false;
 	}
@@ -604,19 +604,19 @@ bool ClaireonNiagaraHelpers::GetOrderedModuleNodes(UNiagaraSystem* System, int32
 	// which is not exported from NiagaraEditor.
 	OutModuleNodes.Reset();
 	UNiagaraNode* PreviousNode = OutputNode;
-	while (PreviousNode)
+	while (IsValid(PreviousNode))
 	{
 		UEdGraphPin* InputPin = ClaireonNiagaraHelpersInternal::FindParameterMapInputPin(*PreviousNode);
 		if (InputPin && InputPin->LinkedTo.Num() == 1)
 		{
 			UNiagaraNode* CurrentNode = Cast<UNiagaraNode>(InputPin->LinkedTo[0]->GetOwningNode());
-			if (!CurrentNode)
+			if (!IsValid(CurrentNode))
 			{
 				break;
 			}
 
 			UNiagaraNodeFunctionCall* ModuleNode = Cast<UNiagaraNodeFunctionCall>(CurrentNode);
-			if (ModuleNode)
+			if (IsValid(ModuleNode))
 			{
 				OutModuleNodes.Insert(ModuleNode, 0);
 			}
@@ -643,14 +643,14 @@ UNiagaraScript* ClaireonNiagaraHelpers::ResolveModuleScript(const FString& Modul
 	{
 		FSoftObjectPath SoftPath(ModuleNameOrPath);
 		UObject* LoadedObj = SoftPath.TryLoad();
-		if (!LoadedObj)
+		if (!IsValid(LoadedObj))
 		{
 			OutError = FString::Printf(TEXT("Failed to load module at path: %s"), *ModuleNameOrPath);
 			return nullptr;
 		}
 
 		UNiagaraScript* Script = Cast<UNiagaraScript>(LoadedObj);
-		if (!Script)
+		if (!IsValid(Script))
 		{
 			OutError = FString::Printf(TEXT("Asset at %s is not a UNiagaraScript (actual type: %s)"), *ModuleNameOrPath, *LoadedObj->GetClass()->GetName());
 			return nullptr;
@@ -675,7 +675,7 @@ UNiagaraScript* ClaireonNiagaraHelpers::ResolveModuleScript(const FString& Modul
 		if (Asset.AssetName.ToString().Equals(ModuleNameOrPath, ESearchCase::IgnoreCase))
 		{
 			UNiagaraScript* Script = Cast<UNiagaraScript>(Asset.GetAsset());
-			if (Script)
+			if (IsValid(Script))
 			{
 				return Script;
 			}
@@ -696,7 +696,7 @@ UNiagaraScript* ClaireonNiagaraHelpers::ResolveModuleScript(const FString& Modul
 			if (AssetName.Len() < BestMatchLen)
 			{
 				UNiagaraScript* Script = Cast<UNiagaraScript>(Asset.GetAsset());
-				if (Script)
+				if (IsValid(Script))
 				{
 					BestMatch = Script;
 					BestMatchName = AssetName;
@@ -706,7 +706,7 @@ UNiagaraScript* ClaireonNiagaraHelpers::ResolveModuleScript(const FString& Modul
 		}
 	}
 
-	if (BestMatch)
+	if (IsValid(BestMatch))
 	{
 		return BestMatch;
 	}
@@ -717,7 +717,7 @@ UNiagaraScript* ClaireonNiagaraHelpers::ResolveModuleScript(const FString& Modul
 
 FString ClaireonNiagaraHelpers::FormatModuleInfo(UNiagaraNodeFunctionCall* ModuleNode, bool bIncludeInputs)
 {
-	if (!ModuleNode)
+	if (!IsValid(ModuleNode))
 	{
 		return TEXT("(null module node)");
 	}
@@ -802,7 +802,7 @@ FString ClaireonNiagaraHelpers::FormatModuleInfo(UNiagaraNodeFunctionCall* Modul
 // User Parameter helpers
 // ============================================================================
 
-namespace
+namespace ClaireonNiagaraHelpers_Private
 {
 	FString ClaireonNiagaraHelpers_NormalizeUserParamName(const FString& In)
 	{
@@ -813,6 +813,7 @@ namespace
 		return TEXT("User.") + In;
 	}
 }
+using namespace ClaireonNiagaraHelpers_Private;
 
 bool ClaireonNiagaraHelpers::ResolveUserParameterTypeDef(const FString& TypeStr, FNiagaraTypeDefinition& OutTypeDef, FString& OutError)
 {
@@ -855,7 +856,7 @@ bool ClaireonNiagaraHelpers::AddOrUpdateUserParameter(
 	FString& OutNormalizedName,
 	FString& OutError)
 {
-	if (!System)
+	if (!IsValid(System))
 	{
 		OutError = TEXT("AddOrUpdateUserParameter: null system");
 		return false;
@@ -883,7 +884,7 @@ bool ClaireonNiagaraHelpers::RemoveUserParameter(
 	FString& OutNormalizedName,
 	FString& OutError)
 {
-	if (!System)
+	if (!IsValid(System))
 	{
 		OutError = TEXT("RemoveUserParameter: null system");
 		return false;

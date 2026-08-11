@@ -52,13 +52,13 @@ FToolResult ClaireonStateTreeTool_Open::Execute(const TSharedPtr<FJsonObject>& A
 
 	FString Error;
 	UStateTree* StateTree = ClaireonStateTreeHelpers::LoadStateTreeAsset(AssetPath, Error);
-	if (!StateTree)
+	if (!IsValid(StateTree))
 	{
 		return MakeErrorResult(Error);
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeHelpers::GetEditorData(StateTree, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 	{
 		return MakeErrorResult(Error);
 	}

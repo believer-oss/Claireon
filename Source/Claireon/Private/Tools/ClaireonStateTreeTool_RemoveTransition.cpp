@@ -39,7 +39,7 @@ FToolResult ClaireonStateTreeTool_RemoveTransition::Execute(const TSharedPtr<FJs
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	FGuid StateId, TransitionId;
@@ -49,7 +49,7 @@ FToolResult ClaireonStateTreeTool_RemoveTransition::Execute(const TSharedPtr<FJs
 		return MakeErrorResult(Error);
 
 	UStateTreeState* State = ClaireonStateTreeHelpers::FindStateById(EditorData, StateId);
-	if (!State)
+	if (!IsValid(State))
 		return MakeErrorResult(TEXT("State not found"));
 
 	int32 Index = State->Transitions.IndexOfByPredicate([&TransitionId](const FStateTreeTransition& T)

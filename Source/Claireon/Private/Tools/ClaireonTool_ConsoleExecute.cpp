@@ -3,11 +3,13 @@
 
 #include "Tools/ClaireonTool_ConsoleExecute.h"
 #include "ClaireonLog.h"
+#include "ClaireonLogCapture.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Editor.h"
 #include "Engine/Engine.h"
+#include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "Misc/OutputDeviceHelper.h"
 
@@ -32,15 +34,63 @@ namespace ClaireonToolConsoleExecuteInternal
 		OutVerbosity = Parts[2];
 		return true;
 	}
+
+	// The FOutputDevice handed to Exec. Collects only what a handler writes to
+	// `Ar` -- deliberately NOT attached to GLog, so it stays the return channel
+	// and the log capture stays a separate channel.
+	// File-local discriminator to avoid anon-NS name collisions under unity batching.
+	class FCl625ConsoleExec_ReturnChannel : public FOutputDevice
+	{
+	public:
+		FString Output;
+		virtual void Serialize(const TCHAR* V, ELogVerbosity::Type Verbosity, const FName& Category) override
+		{
+			if (!Output.IsEmpty())
+				Output += TEXT("\n");
+			Output += V;
+		}
+	};
+}
+
+ClaireonTool_ConsoleExecute::FConsoleDispatchOutput ClaireonTool_ConsoleExecute::DispatchInWorld(
+	UWorld* World, const FString& Command, bool bCaptureLog)
+{
+	FConsoleDispatchOutput Out;
+	if (!IsValid(GEngine))
+	{
+		return Out;
+	}
+
+	if (!bCaptureLog)
+	{
+		ClaireonToolConsoleExecuteInternal::FCl625ConsoleExec_ReturnChannel Device;
+		GEngine->Exec(World, *Command, Device);
+		Out.ReturnChannel = Device.Output;
+		return Out;
+	}
+
+	// Log floor, NOT the FClaireonLogCapture default of Warning: console command
+	// handlers report at Display/Log, so a Warning floor captures nothing from
+	// them and the fix would look like it had not worked.
+	FClaireonLogCapture Capture(ELogVerbosity::Log);
+	{
+		ClaireonToolConsoleExecuteInternal::FCl625ConsoleExec_ReturnChannel Device;
+		GEngine->Exec(World, *Command, Device);
+		Out.ReturnChannel = Device.Output;
+	}
+	Out.LogOutput = Capture.GetCapturedOutput();
+	return Out;
 }
 
 FString ClaireonTool_ConsoleExecute::GetDescription() const
 {
-	return TEXT("Execute an Unreal console command and return its output. "
-				"In PIE context, commands route through APlayerController::ConsoleCommand so "
-				"cheat manager commands (e.g. God, Slomo, custom exec functions) work correctly. "
-				"Bypass-mode tool: the bridge will refuse this call if any other Claireon session "
-				"(per-asset or editor-wide) is currently held. Call session_release first if needed.");
+	// Kept under the description lint's 400-char budget
+	// (ClaireonDescriptionLintTests AllP5CategoriesConformToTemplate).
+	return TEXT("Execute an Unreal console command. Returns 'output' (the command's return "
+				"channel) and 'log_output' (what it wrote to the log). 'stat dumpframe' and "
+				"'obj list' report only via the log; capture_log=false skips that capture. "
+				"In PIE, routes through APlayerController::ConsoleCommand so cheat manager "
+				"commands work. Bypass-mode: refused while any Claireon session is held.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ConsoleExecute::GetInputSchema() const
@@ -80,6 +130,16 @@ TSharedPtr<FJsonObject> ClaireonTool_ConsoleExecute::GetInputSchema() const
 	PlayerIndexProp->SetNumberField(TEXT("default"), 0);
 	Properties->SetObjectField(TEXT("playerIndex"), PlayerIndexProp);
 
+	// capture_log - optional
+	TSharedPtr<FJsonObject> CaptureLogProp = MakeShared<FJsonObject>();
+	CaptureLogProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	CaptureLogProp->SetStringField(TEXT("description"),
+		TEXT("Capture log output emitted while the command runs and return it in 'log_output' "
+			 "(default: true). Everything logged during the call is captured, including "
+			 "unrelated engine chatter. Set false for the return channel only."));
+	CaptureLogProp->SetBoolField(TEXT("default"), true);
+	Properties->SetObjectField(TEXT("capture_log"), CaptureLogProp);
+
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	TArray<TSharedPtr<FJsonValue>> Required;
@@ -97,7 +157,7 @@ IClaireonTool::FToolResult ClaireonTool_ConsoleExecute::Execute(const TSharedPtr
 		return MakeErrorResult(TEXT("Missing required field: command"));
 	}
 
-	if (!GEngine)
+	if (!IsValid(GEngine))
 	{
 		return MakeErrorResult(TEXT("GEngine not available"));
 	}
@@ -115,6 +175,9 @@ IClaireonTool::FToolResult ClaireonTool_ConsoleExecute::Execute(const TSharedPtr
 		PlayerIndex = static_cast<int32>(Arguments->GetNumberField(TEXT("playerIndex")));
 	}
 
+	bool bCaptureLog = true;
+	Arguments->TryGetBoolField(TEXT("capture_log"), bCaptureLog);
+
 	// --- Try PIE path: route through PlayerController::ConsoleCommand ---
 	// This dispatches through ProcessConsoleExec -> UCheatManager::ProcessConsoleExec,
 	// so cheat manager Exec UFUNCTIONs fire correctly.
@@ -124,14 +187,14 @@ IClaireonTool::FToolResult ClaireonTool_ConsoleExecute::Execute(const TSharedPtr
 		UWorld* PIEWorld = nullptr;
 		for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
 		{
-			if (WorldContext.WorldType == EWorldType::PIE && WorldContext.World())
+			if (WorldContext.WorldType == EWorldType::PIE && IsValid(WorldContext.World()))
 			{
 				PIEWorld = WorldContext.World();
 				break;
 			}
 		}
 
-		if (PIEWorld)
+		if (IsValid(PIEWorld))
 		{
 			// Find player controller at the requested index
 			APlayerController* TargetPC = nullptr;
@@ -139,7 +202,7 @@ IClaireonTool::FToolResult ClaireonTool_ConsoleExecute::Execute(const TSharedPtr
 			for (auto It = PIEWorld->GetPlayerControllerIterator(); It; ++It)
 			{
 				APlayerController* PC = It->Get();
-				if (PC && CurrentIndex == PlayerIndex)
+				if (IsValid(PC) && CurrentIndex == PlayerIndex)
 				{
 					TargetPC = PC;
 					break;
@@ -147,7 +210,7 @@ IClaireonTool::FToolResult ClaireonTool_ConsoleExecute::Execute(const TSharedPtr
 				CurrentIndex++;
 			}
 
-			if (!TargetPC)
+			if (!IsValid(TargetPC))
 			{
 				if (ContextMode == TEXT("pie"))
 				{
@@ -161,11 +224,26 @@ IClaireonTool::FToolResult ClaireonTool_ConsoleExecute::Execute(const TSharedPtr
 			{
 				// ConsoleCommand routes through the full dispatch chain:
 				// APlayerController::ConsoleCommand -> ProcessConsoleExec -> UCheatManager::ProcessConsoleExec
-				const FString Output = TargetPC->ConsoleCommand(Command);
+				// It returns only what the handler wrote to its output device, so
+				// bracket it with a log capture for the handlers that report via UE_LOG.
+				FString Output;
+				FString LogOutput;
+				if (bCaptureLog)
+				{
+					FClaireonLogCapture Capture(ELogVerbosity::Log);
+					Output = TargetPC->ConsoleCommand(Command);
+					LogOutput = Capture.GetCapturedOutput();
+				}
+				else
+				{
+					Output = TargetPC->ConsoleCommand(Command);
+				}
 
 				TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 				Data->SetStringField(TEXT("command"), Command);
 				Data->SetStringField(TEXT("output"), Output);
+				Data->SetStringField(TEXT("log_output"), LogOutput);
+				Data->SetBoolField(TEXT("capture_log"), bCaptureLog);
 				Data->SetBoolField(TEXT("success"), true);
 				Data->SetStringField(TEXT("usedContext"), TEXT("pie"));
 				Data->SetNumberField(TEXT("playerIndex"), PlayerIndex);
@@ -185,26 +263,13 @@ IClaireonTool::FToolResult ClaireonTool_ConsoleExecute::Execute(const TSharedPtr
 
 	// --- Editor path: use GEngine::Exec ---
 
-	// Capture output via an output device that records the text
-	class FStringOutputDevice : public FOutputDevice
-	{
-	public:
-		FString Output;
-		virtual void Serialize(const TCHAR* V, ELogVerbosity::Type Verbosity, const FName& Category) override
-		{
-			if (!Output.IsEmpty())
-				Output += TEXT("\n");
-			Output += V;
-		}
-	};
-
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("Editor is not available. Wait for the editor to finish initializing."));
 	}
 
 	UWorld* EditorWorld = GEditor->GetEditorWorldContext().World();
-	if (!EditorWorld)
+	if (!IsValid(EditorWorld))
 	{
 		return MakeErrorResult(TEXT("No world loaded. Use open_map to load a map first."));
 	}
@@ -219,8 +284,7 @@ IClaireonTool::FToolResult ClaireonTool_ConsoleExecute::Execute(const TSharedPtr
 		ClaireonToolConsoleExecuteInternal::Cl625ConsoleExec_ParseLogVerbosityCommand(
 			Command, LogVerbosityCat, LogVerbosityLevel);
 
-	FStringOutputDevice OutputDevice;
-	GEngine->Exec(EditorWorld, *Command, OutputDevice);
+	FConsoleDispatchOutput Dispatch = DispatchInWorld(EditorWorld, Command, bCaptureLog);
 
 	// also apply to the PIE world if one is active. `Log <Cat> <Verbosity>`
 	// is world-scoped at the GLog redirector level, but exec dispatch goes through
@@ -231,20 +295,23 @@ IClaireonTool::FToolResult ClaireonTool_ConsoleExecute::Execute(const TSharedPtr
 		UWorld* PIEWorldForLog = nullptr;
 		for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
 		{
-			if (WorldContext.WorldType == EWorldType::PIE && WorldContext.World())
+			if (WorldContext.WorldType == EWorldType::PIE && IsValid(WorldContext.World()))
 			{
 				PIEWorldForLog = WorldContext.World();
 				break;
 			}
 		}
-		if (PIEWorldForLog)
+		if (IsValid(PIEWorldForLog))
 		{
-			FStringOutputDevice PIEDev;
-			GEngine->Exec(PIEWorldForLog, *Command, PIEDev);
-			if (!PIEDev.Output.IsEmpty())
+			const FConsoleDispatchOutput PIEDispatch = DispatchInWorld(PIEWorldForLog, Command, bCaptureLog);
+			if (!PIEDispatch.ReturnChannel.IsEmpty())
 			{
-				if (!OutputDevice.Output.IsEmpty()) { OutputDevice.Output += TEXT("\n"); }
-				OutputDevice.Output += PIEDev.Output;
+				if (!Dispatch.ReturnChannel.IsEmpty()) { Dispatch.ReturnChannel += TEXT("\n"); }
+				Dispatch.ReturnChannel += PIEDispatch.ReturnChannel;
+			}
+			if (!PIEDispatch.LogOutput.IsEmpty())
+			{
+				Dispatch.LogOutput += PIEDispatch.LogOutput;
 			}
 		}
 
@@ -253,13 +320,15 @@ IClaireonTool::FToolResult ClaireonTool_ConsoleExecute::Execute(const TSharedPtr
 		// without this echo the result looks like the command had no effect.
 		const FString EchoLine = FString::Printf(TEXT("Log: %s -> %s"),
 			*LogVerbosityCat, *LogVerbosityLevel);
-		if (!OutputDevice.Output.IsEmpty()) { OutputDevice.Output += TEXT("\n"); }
-		OutputDevice.Output += EchoLine;
+		if (!Dispatch.ReturnChannel.IsEmpty()) { Dispatch.ReturnChannel += TEXT("\n"); }
+		Dispatch.ReturnChannel += EchoLine;
 	}
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("command"), Command);
-	Data->SetStringField(TEXT("output"), OutputDevice.Output);
+	Data->SetStringField(TEXT("output"), Dispatch.ReturnChannel);
+	Data->SetStringField(TEXT("log_output"), Dispatch.LogOutput);
+	Data->SetBoolField(TEXT("capture_log"), bCaptureLog);
 	Data->SetBoolField(TEXT("success"), true);
 	Data->SetStringField(TEXT("usedContext"), TEXT("editor"));
 	if (bIsLogVerbosityCmd)

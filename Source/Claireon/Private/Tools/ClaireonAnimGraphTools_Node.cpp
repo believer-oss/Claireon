@@ -42,7 +42,7 @@ UEdGraphNode* FindNodeByGuidOrTitle(UEdGraph* Graph, const FString& Identifier, 
 	if (FGuid::Parse(Identifier, ParsedGuid) && ParsedGuid.IsValid())
 	{
 		UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, ParsedGuid);
-		if (Node) return Node;
+		if (IsValid(Node)) return Node;
 	}
 
 	// Fall back to title match
@@ -51,13 +51,9 @@ UEdGraphNode* FindNodeByGuidOrTitle(UEdGraph* Graph, const FString& Identifier, 
 	{
 		return Matches[0];
 	}
-	if (Matches.Num() > 1)
-	{
-		OutError = FString::Printf(TEXT("Multiple nodes match title '%s' — use GUID instead"), *Identifier);
-		return nullptr;
-	}
 
-	OutError = FString::Printf(TEXT("Node '%s' not found in graph '%s'"), *Identifier, *Graph->GetName());
+	OutError = ClaireonBlueprintHelpers::FormatTitleMatchFailure(
+		Graph, Identifier, Matches, TEXT("a node GUID"));
 	return nullptr;
 }
 
@@ -104,9 +100,10 @@ FString ClaireonAnimGraphTool_AddNode::GetOperation() const { return TEXT("add_n
 
 FString ClaireonAnimGraphTool_AddNode::GetDescription() const
 {
-	return TEXT("Add an animation graph node by class name. Use node_properties to set properties "
-		"BEFORE pin allocation (critical for SequencePlayer, BlendSpace, etc. where pins depend on the asset). "
-		"Class name is fuzzy-matched (e.g., 'SequencePlayer' → AnimGraphNode_SequencePlayer).");
+	return TEXT("Add an animation graph node by class name to the graph focused in the open Animation Blueprint "
+		"session. Session-mode tool: open via animbp_open first and pass its session_id. Use node_properties to "
+		"set properties BEFORE pin allocation (critical for SequencePlayer, BlendSpace, etc. where pins depend on "
+		"the asset). node_class is fuzzy-matched ('SequencePlayer' -> AnimGraphNode_SequencePlayer).");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_AddNode::GetInputSchema() const
@@ -140,12 +137,12 @@ FToolResult ClaireonAnimGraphTool_AddNode::Execute(const TSharedPtr<FJsonObject>
 	// Resolve class name — try UAnimGraphNode_Base first, then UK2Node for K2 nodes (PropertyAccess, etc.)
 	ClaireonNameResolver::FNameResolveResult ResolveResult;
 	UClass* NodeClass = ClaireonNameResolver::ResolveClassName(NodeClassName, UAnimGraphNode_Base::StaticClass(), ResolveResult);
-	if (!NodeClass)
+	if (!IsValid(NodeClass))
 	{
 		// Try UK2Node base (supports K2Node_PropertyAccess, K2Node_CallFunction, etc.)
 		ClaireonNameResolver::FNameResolveResult K2ResolveResult;
 		NodeClass = ClaireonNameResolver::ResolveClassName(NodeClassName, UK2Node::StaticClass(), K2ResolveResult);
-		if (NodeClass)
+		if (IsValid(NodeClass))
 		{
 			ResolveResult = K2ResolveResult;
 		}
@@ -175,7 +172,7 @@ FToolResult ClaireonAnimGraphTool_AddNode::Execute(const TSharedPtr<FJsonObject>
 	Graph->Modify();
 
 	UEdGraphNode* NewNode = NewObject<UEdGraphNode>(Graph, NodeClass);
-	if (!NewNode)
+	if (!IsValid(NewNode))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create node of class: %s"), *NodeClass->GetName()));
 	}
@@ -220,11 +217,11 @@ FToolResult ClaireonAnimGraphTool_AddNode::Execute(const TSharedPtr<FJsonObject>
 	if (bAutoConnect && Data->Cursor.FocusedNodeGuid.IsValid())
 	{
 		UEdGraphNode* CursorNode = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, Data->Cursor.FocusedNodeGuid);
-		if (CursorNode)
+		if (IsValid(CursorNode))
 		{
 			// Try to auto-wire: find compatible pose pins
 			const UEdGraphSchema* Schema = Graph->GetSchema();
-			if (Schema)
+			if (IsValid(Schema))
 			{
 				NewNode->AutowireNewNode(nullptr);
 
@@ -288,7 +285,7 @@ FString ClaireonAnimGraphTool_RemoveNode::GetOperation() const { return TEXT("re
 
 FString ClaireonAnimGraphTool_RemoveNode::GetDescription() const
 {
-    return TEXT("Remove an animation graph node by GUID. Breaks all pin connections first. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Remove an animation graph node by GUID. Breaks all pin connections first. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_RemoveNode::GetInputSchema() const
@@ -317,7 +314,7 @@ FToolResult ClaireonAnimGraphTool_RemoveNode::Execute(const TSharedPtr<FJsonObje
 
 	FString FindError;
 	UEdGraphNode* Node = ClaireonAnimGraphTools_NodeInternal::FindNodeByGuidOrTitle(Graph, NodeGuidStr, FindError);
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return MakeErrorResult(FindError);
 	}
@@ -330,7 +327,7 @@ FToolResult ClaireonAnimGraphTool_RemoveNode::Execute(const TSharedPtr<FJsonObje
 		if (!Pin) continue;
 		for (UEdGraphPin* Linked : Pin->LinkedTo)
 		{
-			if (Linked && Linked->GetOwningNode())
+			if (Linked && IsValid(Linked->GetOwningNode()))
 			{
 				Data->LastOperationAffectedNodes.Add(Linked->GetOwningNode()->NodeGuid);
 			}
@@ -369,7 +366,7 @@ FString ClaireonAnimGraphTool_MoveNode::GetOperation() const { return TEXT("move
 
 FString ClaireonAnimGraphTool_MoveNode::GetDescription() const
 {
-    return TEXT("Move an animation graph node to a new position in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Move an animation graph node to a new position in the open anim_graph session. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_MoveNode::GetInputSchema() const
@@ -408,7 +405,7 @@ FToolResult ClaireonAnimGraphTool_MoveNode::Execute(const TSharedPtr<FJsonObject
 
 	FString FindError;
 	UEdGraphNode* Node = ClaireonAnimGraphTools_NodeInternal::FindNodeByGuidOrTitle(Graph, NodeGuidStr, FindError);
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return MakeErrorResult(FindError);
 	}
@@ -435,9 +432,10 @@ FString ClaireonAnimGraphTool_SetNodeProperty::GetOperation() const { return TEX
 
 FString ClaireonAnimGraphTool_SetNodeProperty::GetDescription() const
 {
-	return TEXT("Set a property on an animation graph node. Works on both editor-level properties "
-		"and inner FAnimNode runtime struct properties (via dot-path, e.g., 'Node.bLoopAnimation'). "
-		"Calls ReconstructNode() if pin layout may change.");
+	return TEXT("Set a property on an animation graph node in the open Animation Blueprint session. Session-mode "
+		"tool: open via animbp_open first, then pass session_id, node_guid, property_path, and value. Works on "
+		"editor-level properties and on inner FAnimNode runtime struct properties via dot-path "
+		"('Node.bLoopAnimation'). Calls ReconstructNode() when the pin layout may change.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_SetNodeProperty::GetInputSchema() const
@@ -471,7 +469,7 @@ FToolResult ClaireonAnimGraphTool_SetNodeProperty::Execute(const TSharedPtr<FJso
 
 	FString FindError;
 	UEdGraphNode* Node = ClaireonAnimGraphTools_NodeInternal::FindNodeByGuidOrTitle(Graph, NodeGuidStr, FindError);
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return MakeErrorResult(FindError);
 	}
@@ -522,8 +520,10 @@ FString ClaireonAnimGraphTool_ConnectPins::GetOperation() const { return TEXT("c
 
 FString ClaireonAnimGraphTool_ConnectPins::GetDescription() const
 {
-	return TEXT("Connect two pins between animation graph nodes. Uses the animation graph schema "
-		"(not K2 schema) for pose pin validation. Nodes can be identified by GUID or title.");
+	return TEXT("Connect two pins between animation graph nodes in the open Animation Blueprint session. "
+		"Session-mode tool: open via animbp_open first, then pass session_id with source_node, source_pin, "
+		"target_node, and target_pin. Uses the animation graph schema (not the K2 schema) so pose pins validate "
+		"correctly. Nodes may be identified by GUID or by node title.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_ConnectPins::GetInputSchema() const
@@ -560,10 +560,10 @@ FToolResult ClaireonAnimGraphTool_ConnectPins::Execute(const TSharedPtr<FJsonObj
 	// Find nodes
 	FString FindError;
 	UEdGraphNode* SourceNode = ClaireonAnimGraphTools_NodeInternal::FindNodeByGuidOrTitle(Graph, SourceNodeStr, FindError);
-	if (!SourceNode) return MakeErrorResult(FindError);
+	if (!IsValid(SourceNode)) return MakeErrorResult(FindError);
 
 	UEdGraphNode* TargetNode = ClaireonAnimGraphTools_NodeInternal::FindNodeByGuidOrTitle(Graph, TargetNodeStr, FindError);
-	if (!TargetNode) return MakeErrorResult(FindError);
+	if (!IsValid(TargetNode)) return MakeErrorResult(FindError);
 
 	// Find pins
 	UEdGraphPin* SourcePin = ClaireonAnimGraphTools_NodeInternal::FindPinByName(SourceNode, SourcePinStr, FindError);
@@ -574,7 +574,7 @@ FToolResult ClaireonAnimGraphTool_ConnectPins::Execute(const TSharedPtr<FJsonObj
 
 	// Use the animation graph schema for validation (NOT K2Schema)
 	const UEdGraphSchema* Schema = Graph->GetSchema();
-	if (!Schema)
+	if (!IsValid(Schema))
 	{
 		return MakeErrorResult(TEXT("Graph has no schema"));
 	}
@@ -625,7 +625,7 @@ FString ClaireonAnimGraphTool_DisconnectPin::GetOperation() const { return TEXT(
 
 FString ClaireonAnimGraphTool_DisconnectPin::GetDescription() const
 {
-    return TEXT("Disconnect a pin on an animation graph node in the open anim_graph session. Optionally target a specific connection by providing target_node_guid. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Disconnect a pin on an animation graph node in the open anim_graph session. Optionally target a specific connection by providing target_node_guid. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_DisconnectPin::GetInputSchema() const
@@ -656,7 +656,7 @@ FToolResult ClaireonAnimGraphTool_DisconnectPin::Execute(const TSharedPtr<FJsonO
 
 	FString FindError;
 	UEdGraphNode* Node = ClaireonAnimGraphTools_NodeInternal::FindNodeByGuidOrTitle(Graph, NodeGuidStr, FindError);
-	if (!Node) return MakeErrorResult(FindError);
+	if (!IsValid(Node)) return MakeErrorResult(FindError);
 
 	UEdGraphPin* Pin = ClaireonAnimGraphTools_NodeInternal::FindPinByName(Node, PinName, FindError);
 	if (!Pin) return MakeErrorResult(FindError);
@@ -667,7 +667,7 @@ FToolResult ClaireonAnimGraphTool_DisconnectPin::Execute(const TSharedPtr<FJsonO
 	// Track affected nodes before disconnecting
 	for (UEdGraphPin* Linked : Pin->LinkedTo)
 	{
-		if (Linked && Linked->GetOwningNode())
+		if (Linked && IsValid(Linked->GetOwningNode()))
 		{
 			Data->LastOperationAffectedNodes.Add(Linked->GetOwningNode()->NodeGuid);
 		}
@@ -684,7 +684,7 @@ FToolResult ClaireonAnimGraphTool_DisconnectPin::Execute(const TSharedPtr<FJsonO
 		for (int32 i = Pin->LinkedTo.Num() - 1; i >= 0; --i)
 		{
 			UEdGraphPin* Linked = Pin->LinkedTo[i];
-			if (Linked && Linked->GetOwningNode() && Linked->GetOwningNode()->NodeGuid == TargetGuid)
+			if (Linked && IsValid(Linked->GetOwningNode()) && Linked->GetOwningNode()->NodeGuid == TargetGuid)
 			{
 				Pin->BreakLinkTo(Linked);
 				BrokenCount++;

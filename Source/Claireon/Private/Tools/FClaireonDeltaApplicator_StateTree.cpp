@@ -39,15 +39,15 @@ namespace ClaireonDeltaApplicator_StateTree_anon
 	 */
 	static void STDelta_WalkStates(UStateTreeEditorData* ED, TFunctionRef<bool(UStateTreeState*)> Visit)
 	{
-		if (!ED) { return; }
+		if (!IsValid(ED)) { return; }
 		TArray<UStateTreeState*> Stack;
-		for (UStateTreeState* Root : ED->SubTrees) { if (Root) { Stack.Add(Root); } }
+		for (UStateTreeState* Root : ED->SubTrees) { if (IsValid(Root)) { Stack.Add(Root); } }
 		while (Stack.Num() > 0)
 		{
 			UStateTreeState* S = Stack.Pop(EAllowShrinking::No);
-			if (!S) { continue; }
+			if (!IsValid(S)) { continue; }
 			if (!Visit(S)) { return; }
-			for (UStateTreeState* Child : S->Children) { if (Child) { Stack.Add(Child); } }
+			for (UStateTreeState* Child : S->Children) { if (IsValid(Child)) { Stack.Add(Child); } }
 		}
 	}
 
@@ -194,7 +194,7 @@ bool FClaireonDeltaApplicator_StateTree::OpenOrReuseSession(const TSharedPtr<FJs
 		UStateTree* ST = Data->StateTree.Get();
 		FString GetEDError;
 		UStateTreeEditorData* ED = ClaireonStateTreeHelpers::GetEditorData(ST, GetEDError);
-		if (!ED)
+		if (!IsValid(ED))
 		{
 			OutError = GetEDError;
 			return false;
@@ -213,9 +213,9 @@ bool FClaireonDeltaApplicator_StateTree::OpenOrReuseSession(const TSharedPtr<FJs
 	}
 
 	UStateTree* ST = ClaireonStateTreeHelpers::LoadStateTreeAsset(AssetPathArg, OutError);
-	if (!ST) { return false; }
+	if (!IsValid(ST)) { return false; }
 	UStateTreeEditorData* ED = ClaireonStateTreeHelpers::GetEditorData(ST, OutError);
-	if (!ED) { return false; }
+	if (!IsValid(ED)) { return false; }
 
 	ClaireonStateTreeEditToolBase::EnsureDelegateRegistered();
 
@@ -251,7 +251,7 @@ bool FClaireonDeltaApplicator_StateTree::ApplyPhase1_Disconnect(const FString& S
 	using namespace ClaireonDeltaApplicator_StateTree_anon;
 	(void)SessionId;
 	UStateTreeEditorData* ED = CachedEditorData.Get();
-	if (!ED)
+	if (!IsValid(ED))
 	{
 		AddError(TEXT("statetree_apply_delta: editor data is no longer valid"));
 		return false;
@@ -300,7 +300,7 @@ bool FClaireonDeltaApplicator_StateTree::ApplyPhase2_Remove(const FString& Sessi
 	using namespace ClaireonDeltaApplicator_StateTree_anon;
 	(void)SessionId;
 	UStateTreeEditorData* ED = CachedEditorData.Get();
-	if (!ED)
+	if (!IsValid(ED))
 	{
 		AddError(TEXT("statetree_apply_delta: editor data is no longer valid"));
 		return false;
@@ -331,13 +331,13 @@ bool FClaireonDeltaApplicator_StateTree::ApplyPhase2_Remove(const FString& Sessi
 		if (Kind == TEXT("state"))
 		{
 			UStateTreeState* State = ClaireonStateTreeHelpers::FindStateById(ED, Guid);
-			if (!State)
+			if (!IsValid(State))
 			{
 				AddError(FString::Printf(TEXT("statetree_apply_delta: remove_nodes[%d]: state '%s' not found"), i, *IdStr));
 				return false;
 			}
 			UStateTreeState* Parent = Cast<UStateTreeState>(State->GetOuter());
-			if (Parent) { Parent->Children.Remove(State); }
+			if (IsValid(Parent)) { Parent->Children.Remove(State); }
 			else { ED->SubTrees.Remove(State); }
 			MarkRemoved();
 			RecordAffected(Resolved);
@@ -380,7 +380,7 @@ bool FClaireonDeltaApplicator_StateTree::ApplyPhase3_Create(const FString& Sessi
 	using namespace ClaireonDeltaApplicator_StateTree_anon;
 	(void)SessionId;
 	UStateTreeEditorData* ED = CachedEditorData.Get();
-	if (!ED)
+	if (!IsValid(ED))
 	{
 		AddError(TEXT("statetree_apply_delta: editor data is no longer valid"));
 		return false;
@@ -413,7 +413,7 @@ bool FClaireonDeltaApplicator_StateTree::ApplyPhase3_Create(const FString& Sessi
 			if (bHasParent)
 			{
 				ParentState = STDelta_ResolveState(ED, ResolveLocalId(ParentId));
-				if (!ParentState)
+				if (!IsValid(ParentState))
 				{
 					AddError(FString::Printf(TEXT("statetree_apply_delta: nodes[%d]: parent_id '%s' not found"), i, *ParentId));
 					return false;
@@ -421,7 +421,7 @@ bool FClaireonDeltaApplicator_StateTree::ApplyPhase3_Create(const FString& Sessi
 			}
 
 			FGuid NewGuid;
-			if (ParentState)
+			if (IsValid(ParentState))
 			{
 				UStateTreeState& NewState = ParentState->AddChildState(FName(*Name));
 				NewGuid = NewState.ID;
@@ -450,7 +450,7 @@ bool FClaireonDeltaApplicator_StateTree::ApplyPhase3_Create(const FString& Sessi
 			}
 			FString ResolveError;
 			UScriptStruct* NodeStruct = ClaireonStateTreeHelpers::ResolveNodeStruct(Type, ResolveError);
-			if (!NodeStruct)
+			if (!IsValid(NodeStruct))
 			{
 				AddError(FString::Printf(TEXT("statetree_apply_delta: nodes[%d]: %s"), i, *ResolveError));
 				return false;
@@ -492,7 +492,7 @@ bool FClaireonDeltaApplicator_StateTree::ApplyPhase4_Connect(const FString& Sess
 	using namespace ClaireonDeltaApplicator_StateTree_anon;
 	(void)SessionId;
 	UStateTreeEditorData* ED = CachedEditorData.Get();
-	if (!ED)
+	if (!IsValid(ED))
 	{
 		AddError(TEXT("statetree_apply_delta: editor data is no longer valid"));
 		return false;
@@ -519,13 +519,13 @@ bool FClaireonDeltaApplicator_StateTree::ApplyPhase4_Connect(const FString& Sess
 			return false;
 		}
 		UStateTreeState* FromState = STDelta_ResolveState(ED, ResolveLocalId(FromRef));
-		if (!FromState)
+		if (!IsValid(FromState))
 		{
 			AddError(FString::Printf(TEXT("statetree_apply_delta: connections[%d]: from_state '%s' not found"), i, *FromRef));
 			return false;
 		}
 		UStateTreeState* ToState = STDelta_ResolveState(ED, ResolveLocalId(ToRef));
-		if (!ToState)
+		if (!IsValid(ToState))
 		{
 			AddError(FString::Printf(TEXT("statetree_apply_delta: connections[%d]: to_state '%s' not found"), i, *ToRef));
 			return false;
@@ -572,7 +572,7 @@ void FClaireonDeltaApplicator_StateTree::Phase3CleanupOnFailure(const FString& S
 	using namespace ClaireonDeltaApplicator_StateTree_anon;
 	(void)SessionId;
 	UStateTreeEditorData* ED = CachedEditorData.Get();
-	if (!ED) { return; }
+	if (!IsValid(ED)) { return; }
 
 	// Remove transitions first (children of states), then states, then evaluators / global tasks.
 	for (const FGuid& Id : CreatedTransitionIdsThisCall)
@@ -582,9 +582,9 @@ void FClaireonDeltaApplicator_StateTree::Phase3CleanupOnFailure(const FString& S
 	for (const FGuid& Id : CreatedStateIdsThisCall)
 	{
 		UStateTreeState* State = ClaireonStateTreeHelpers::FindStateById(ED, Id);
-		if (!State) { continue; }
+		if (!IsValid(State)) { continue; }
 		UStateTreeState* Parent = Cast<UStateTreeState>(State->GetOuter());
-		if (Parent) { Parent->Children.Remove(State); }
+		if (IsValid(Parent)) { Parent->Children.Remove(State); }
 		else { ED->SubTrees.Remove(State); }
 	}
 	for (const FGuid& Id : CreatedEvaluatorIdsThisCall)

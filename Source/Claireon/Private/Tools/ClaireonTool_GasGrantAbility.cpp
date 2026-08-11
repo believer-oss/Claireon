@@ -17,10 +17,10 @@ FString ClaireonTool_GasGrantAbility::GetOperation() const { return TEXT("grant_
 
 FString ClaireonTool_GasGrantAbility::GetDescription() const
 {
-	return TEXT("Grant a GameplayAbility to a live PIE actor's ASC (requires the server/authoritative "
-		"world -- GiveAbility is authority-only). Identify the GA by ability_class_path or ability_name. "
-		"Optional level (default 1) and activate (default false). Returns spec_handle_id for "
-		"gas_activate_ability. Requires PIE.");
+	return TEXT("Add (grant) a GameplayAbility to a live PIE actor's ASC. Identify the GA by ability_class_path or "
+		"ability_name. Optional level (default 1) and activate (default false). Requires a live PIE session "
+		"and the server/authoritative world -- GiveAbility is authority-only. Returns spec_handle_id for "
+		"gas_activate_ability. Non-session.");
 }
 
 EClaireonToolSessionMode ClaireonTool_GasGrantAbility::GetSessionMode() const
@@ -86,7 +86,7 @@ IClaireonTool::FToolResult ClaireonTool_GasGrantAbility::Execute(const TSharedPt
 	}
 
 	TSubclassOf<UGameplayAbility> AbilityClass = ClaireonGasToolCommon::ResolveAbilityClass(Arguments, Error);
-	if (!AbilityClass)
+	if (!IsValid(AbilityClass))
 	{
 		return MakeErrorResult(Error);
 	}

@@ -86,14 +86,14 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeInspect::Execute(const TSharedP
 
 	FString LoadError;
 	UStateTree* StateTree = ClaireonStateTreeHelpers::LoadStateTreeAsset(AssetPath, LoadError);
-	if (!StateTree)
+	if (!IsValid(StateTree))
 	{
 		return MakeErrorResult(LoadError);
 	}
 
 	FString EditorError;
 	UStateTreeEditorData* EditorData = ClaireonStateTreeHelpers::GetEditorData(StateTree, EditorError);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 	{
 		return MakeErrorResult(EditorError);
 	}
@@ -129,7 +129,7 @@ IClaireonTool::FToolResult ClaireonTool_StateTreeInspect::Execute(const TSharedP
 	{
 		for (UStateTreeState* State : States)
 		{
-			if (!State)
+			if (!IsValid(State))
 			{
 				continue;
 			}

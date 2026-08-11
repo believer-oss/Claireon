@@ -54,7 +54,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserCreate::Execute(const TSharedPtr<
 	UChooserTable* Chooser = NewObject<UChooserTable>(Package, FName(*AssetName),
 		RF_Public | RF_Standalone | RF_Transactional | RF_LoadCompleted);
 
-	if (!Chooser)
+	if (!IsValid(Chooser))
 	{
 		return MakeErrorResult(TEXT("Failed to create ChooserTable asset"));
 	}
@@ -78,11 +78,11 @@ IClaireonTool::FToolResult ClaireonTool_ChooserCreate::Execute(const TSharedPtr<
 	if (Arguments->TryGetStringField(TEXT("output_class"), OutputClassStr) && !OutputClassStr.IsEmpty())
 	{
 		UClass* OutputClass = FindObject<UClass>(nullptr, *OutputClassStr);
-		if (!OutputClass)
+		if (!IsValid(OutputClass))
 		{
 			OutputClass = LoadObject<UClass>(nullptr, *OutputClassStr);
 		}
-		if (OutputClass)
+		if (IsValid(OutputClass))
 		{
 			Chooser->OutputObjectType = OutputClass;
 		}
@@ -137,7 +137,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserDuplicate::Execute(const TSharedP
 
 	FString Error;
 	UChooserTable* Source = ClaireonChooserHelpers::LoadChooserTableAsset(SourcePath, Error);
-	if (!Source)
+	if (!IsValid(Source))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -153,7 +153,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserDuplicate::Execute(const TSharedP
 
 	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
 	UObject* NewAsset = AssetTools.DuplicateAsset(DestName, DestFolder, Source);
-	if (!NewAsset)
+	if (!IsValid(NewAsset))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to duplicate ChooserTable to '%s'"), *DestCanon));
 	}

@@ -17,8 +17,9 @@ FString ClaireonLevelSequenceTool_AddEventKey::GetOperation() const { return TEX
 
 FString ClaireonLevelSequenceTool_AddEventKey::GetDescription() const
 {
-	return TEXT("Bind a free event-section entry point to a Director Blueprint endpoint function. "
-				"Endpoint must already exist (see level_sequence_create_event_endpoint).");
+	return TEXT("Bind a free event-section entry point at the given frame to a Director Blueprint endpoint "
+				"function named by endpoint_name. The endpoint must already exist -- create it first with "
+				"level_sequence_create_event_endpoint. Session-mode tool: open via level_sequence_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_AddEventKey::GetInputSchema() const
@@ -56,10 +57,10 @@ FToolResult ClaireonLevelSequenceTool_AddEventKey::Execute(const TSharedPtr<FJso
 	}
 
 	ULevelSequence* Sequence = Data->Sequence.Get();
-	UBlueprint* DirectorBP = Sequence ? Sequence->GetDirectorBlueprint() : nullptr;
-	UClass* DirectorClass = DirectorBP ? Cast<UClass>(DirectorBP->GeneratedClass) : nullptr;
-	UFunction* EndpointFunc = DirectorClass ? DirectorClass->FindFunctionByName(FName(*EndpointName)) : nullptr;
-	if (!EndpointFunc)
+	UBlueprint* DirectorBP = IsValid(Sequence) ? Sequence->GetDirectorBlueprint() : nullptr;
+	UClass* DirectorClass = IsValid(DirectorBP) ? Cast<UClass>(DirectorBP->GeneratedClass) : nullptr;
+	UFunction* EndpointFunc = IsValid(DirectorClass) ? DirectorClass->FindFunctionByName(FName(*EndpointName)) : nullptr;
+	if (!IsValid(EndpointFunc))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Event endpoint '%s' not found on Director class. Create it first (level_sequence_create_event_endpoint)."),
@@ -67,12 +68,12 @@ FToolResult ClaireonLevelSequenceTool_AddEventKey::Execute(const TSharedPtr<FJso
 	}
 
 	UMovieSceneSection* Section = ClaireonLevelSequenceInternal::ResolveFocusedSection(Data, -1, Error);
-	if (!Section)
+	if (!IsValid(Section))
 	{
 		return MakeErrorResult(Error);
 	}
 	UMovieSceneEventSectionBase* EventSection = Cast<UMovieSceneEventSectionBase>(Section);
-	if (!EventSection)
+	if (!IsValid(EventSection))
 	{
 		return MakeErrorResult(TEXT("focused section is not an event section"));
 	}

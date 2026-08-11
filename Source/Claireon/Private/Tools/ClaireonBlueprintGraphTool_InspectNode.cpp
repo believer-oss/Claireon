@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -67,6 +67,7 @@
 #include "EdGraphUtilities.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#include "Policies/PrettyJsonPrintPolicy.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "Engine/SimpleConstructionScript.h"
@@ -112,6 +113,8 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_InspectNode::GetInputSchema()
     Builder.AddString(TEXT("node_title"), TEXT("Title of the target node."));
     Builder.AddString(TEXT("node_guid"), TEXT("GUID of the target node (alternative to node_title)."));
     Builder.AddString(TEXT("response_mode"), TEXT("Response verbosity: 'full' | 'changed' | 'status' (default 'changed')."));
+    Builder.AddBoolean(TEXT("include_connections"), TEXT("Include per-pin connection info (linked node GUIDs/pins) in the serialized node. Default: true."));
+    Builder.AddBoolean(TEXT("include_pin_defaults"), TEXT("Include pin default values in the serialized node. Default: true."));
     return Builder.Build();
 }
 
@@ -126,7 +129,7 @@ FToolResult ClaireonBlueprintGraphTool_InspectNode::Execute(const TSharedPtr<FJs
         return Error;
     }
 	UEdGraph* Graph = Data->Graph.Get();
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(TEXT("Graph is no longer valid"));
 	}
@@ -150,10 +153,27 @@ FToolResult ClaireonBlueprintGraphTool_InspectNode::Execute(const TSharedPtr<FJs
 	bool bIncludePinDefaults = true;
 	Params->TryGetBoolField(TEXT("include_pin_defaults"), bIncludePinDefaults);
 
-	const FString Payload = ClaireonBlueprintNodeSerializer::SerializeNodeToString(
+	// Serialize once to a structured object so it can ride in result Data:
+	// ClaireonBridge's BuildResultEnvelope substitutes {} for a null Data
+	// object, so summary-only results read as empty to programmatic callers.
+	const TSharedPtr<FJsonObject> NodeJson = ClaireonBlueprintNodeSerializer::SerializeNodeToJson(
 		Node, bIncludeConnections, bIncludePinDefaults);
+	if (!NodeJson.IsValid())
+	{
+		return MakeErrorResult(FString::Printf(
+			TEXT("Failed to serialize node %s in graph '%s'"),
+			*Node->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens),
+			*Graph->GetName()));
+	}
 
-	return MakeSuccessResult(nullptr, Payload);
+	// Keep the human summary string identical to the previous
+	// SerializeNodeToString output (pretty-printed JSON of the same object).
+	FString Payload;
+	TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> PayloadWriter =
+		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&Payload);
+	FJsonSerializer::Serialize(NodeJson.ToSharedRef(), PayloadWriter);
+
+	return MakeSuccessResult(NodeJson, Payload);
 }
 
 #undef LOCTEXT_NAMESPACE

@@ -16,6 +16,19 @@ enum class EOpenSessionResult : uint8
 	InvalidAssetPath
 };
 
+/**
+ * Default session inactivity timeout, in minutes.
+ *
+ * Every tool operation resolves its session through FindSession, which
+ * Touch()es it, so the clock only runs while a session sits genuinely idle --
+ * no single operation approaches this bound. 10 minutes keeps abandoned
+ * sessions from blocking editor-wide tools for the better part of an hour
+ * (the previous 60-minute default; see Work #6704 friction 5).
+ * `inline constexpr` (not `static constexpr` class member) per the v2/Linux
+ * header rules.
+ */
+inline constexpr double ClaireonDefaultSessionTimeoutMinutes = 10.0;
+
 /** Represents an active MCP editing session. The session IS the lock. */
 struct FMCPSession
 {
@@ -24,7 +37,7 @@ struct FMCPSession
 	FString AssetPath;
 	FDateTime CreatedTime;
 	FDateTime LastAccessTime;
-	double TimeoutMinutes = 60.0;
+	double TimeoutMinutes = ClaireonDefaultSessionTimeoutMinutes;
 
 	bool IsExpired() const
 	{
@@ -78,10 +91,19 @@ public:
 	 * Open a new session or reuse an existing one for the same tool on the same asset.
 	 * @param AssetPath Asset path (will be canonicalized internally)
 	 * @param ToolName Tool identifier, must follow "claireon.<category>_<action>" convention (matches MCP tool name)
-	 * @param TimeoutMinutes Session timeout (default 60 minutes)
+	 * @param TimeoutMinutes Session inactivity timeout (default 10 minutes; every
+	 *        operation on the session resets the clock via Touch)
+	 * @param bAllowUnsavedWorldPackage Pass true ONLY when AssetPath identifies the CURRENT EDITOR
+	 *        WORLD's own package/level (e.g. World->GetOutermost()->GetName() or
+	 *        World->PersistentLevel->GetPathName()), not a /Game/ asset. An unsaved level (File >
+	 *        New Level) lives at /Temp/Untitled_N until its first save; without this, every
+	 *        world-locking tool errors immediately on a fresh level with no recovery but saving
+	 *        first. Default false so every other caller keeps rejecting non-/Game/ paths unchanged.
 	 * @return Result with session ID and optional blocking session info
 	 */
-	FMCPOpenSessionResult OpenSession(const FString& AssetPath, const FString& ToolName, double TimeoutMinutes = 60.0);
+	FMCPOpenSessionResult OpenSession(const FString& AssetPath, const FString& ToolName,
+		double TimeoutMinutes = ClaireonDefaultSessionTimeoutMinutes,
+		bool bAllowUnsavedWorldPackage = false);
 
 	/**
 	 * Open the editor-wide session. Returns BlockedByOtherTool (with BlockingSession
@@ -91,7 +113,8 @@ public:
 	 * Acquire-time policy is FAIL-FAST: no queue, no wait, no force-release.
 	 * Operators can call session_release on the blocking session id to recover.
 	 */
-	FMCPOpenSessionResult OpenEditorWideSession(const FString& ToolName, double TimeoutMinutes = 60.0);
+	FMCPOpenSessionResult OpenEditorWideSession(const FString& ToolName,
+		double TimeoutMinutes = ClaireonDefaultSessionTimeoutMinutes);
 
 	/** Close the editor-wide session by id. Returns true if the supplied id matched the active editor-wide session. */
 	bool CloseEditorWideSession(const FString& SessionId);
@@ -129,8 +152,16 @@ public:
 	/** Access the session-closed delegate. */
 	FOnMCPSessionClosed& OnSessionClosed();
 
-	/** Canonicalize an asset path (collapse //, normalize backslashes, strip suffixes). Returns empty string for invalid paths. */
-	static FString CanonicalizePath(const FString& InPath);
+	/**
+	 * Canonicalize an asset path (collapse //, normalize backslashes, strip suffixes).
+	 * Returns empty string for invalid paths.
+	 * @param bAllowUnsavedWorldPackage Explicit, opt-in allowance for a /Temp/ path (in addition to
+	 *        /Game/) -- see OpenSession's parameter of the same name for when to pass true. This is
+	 *        NOT a blanket relaxation of the /Game/ requirement for other asset types: a /Temp/
+	 *        path is accepted only when the caller has explicitly identified it as the world
+	 *        package being locked.
+	 */
+	static FString CanonicalizePath(const FString& InPath, bool bAllowUnsavedWorldPackage = false);
 
 private:
 	FClaireonSessionManager();

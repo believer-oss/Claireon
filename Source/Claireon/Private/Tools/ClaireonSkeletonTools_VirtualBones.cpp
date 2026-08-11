@@ -7,7 +7,7 @@
 #include "ScopedTransaction.h"
 #include "Dom/JsonObject.h"
 
-namespace
+namespace ClaireonSkeletonTools_VirtualBones_Private
 {
 	/** Report helper: return a state_view-like snapshot after an edit. */
 	TSharedPtr<FJsonObject> BuildVirtualBoneSnapshot(const USkeleton* Skeleton, const FString& LastOperation)
@@ -18,6 +18,7 @@ namespace
 		return Out;
 	}
 }
+using namespace ClaireonSkeletonTools_VirtualBones_Private;
 
 // ============================================================================
 // skeleton_add_virtual_bone
@@ -27,9 +28,9 @@ FString ClaireonSkeletonTool_AddVirtualBone::GetOperation() const { return TEXT(
 
 FString ClaireonSkeletonTool_AddVirtualBone::GetDescription() const
 {
-	return TEXT("Add a virtual bone between two existing bones on the skeleton. "
-				"If virtual_bone_name is omitted the engine generates a name from source+target (auto-prefixed with 'VB '). "
-				"If provided, the name is auto-prefixed with 'VB ' if not already.");
+	return TEXT("Add a virtual bone between two existing bones (source_bone, target_bone) on a skeleton. If virtual_bone_name is omitted the engine generates a name "
+				"from source+target; either way the name is auto-prefixed with 'VB ' when missing. Returns created_virtual_bone_name. Stateless / non-session: "
+				"writes the skeleton directly by skeleton_path in one transaction, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_AddVirtualBone::GetInputSchema() const
@@ -47,7 +48,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_AddVirtualBone::Execute(const TS
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString SourceBoneStr, TargetBoneStr, VBNameStr;
 	if (!Arguments->TryGetStringField(TEXT("source_bone"), SourceBoneStr) || SourceBoneStr.IsEmpty())
@@ -110,8 +111,9 @@ FString ClaireonSkeletonTool_RemoveVirtualBones::GetOperation() const { return T
 
 FString ClaireonSkeletonTool_RemoveVirtualBones::GetDescription() const
 {
-	return TEXT("Remove one or more virtual bones by name. Batch-safe: pass an array of names. "
-				"Also refreshes any blend-profile entries that referenced the removed bones.");
+	return TEXT("Remove one or more virtual bones from a skeleton. virtual_bone_names is an array of names including the 'VB ' prefix; every name must exist or the "
+				"whole call fails. Blend-profile entries that referenced the removed bones are refreshed. Stateless / non-session: writes the skeleton directly by "
+				"skeleton_path in one transaction, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RemoveVirtualBones::GetInputSchema() const
@@ -128,7 +130,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RemoveVirtualBones::Execute(cons
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	const TArray<TSharedPtr<FJsonValue>>* RawArr = nullptr;
 	if (!Arguments->TryGetArrayField(TEXT("virtual_bone_names"), RawArr) || !RawArr || RawArr->Num() == 0)
@@ -188,8 +190,9 @@ FString ClaireonSkeletonTool_RenameVirtualBone::GetOperation() const { return TE
 
 FString ClaireonSkeletonTool_RenameVirtualBone::GetDescription() const
 {
-	return TEXT("Rename a virtual bone. The new name will be auto-prefixed with 'VB ' if missing. "
-				"Any other virtual bones that referenced this one as their source will be updated accordingly.");
+	return TEXT("Rename a virtual bone on a skeleton from old_name to new_name; new_name is auto-prefixed with 'VB ' if missing, and any other virtual bones that "
+				"referenced this one as their source are updated accordingly. Stateless / non-session: writes the skeleton directly by skeleton_path in one "
+				"transaction, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RenameVirtualBone::GetInputSchema() const
@@ -206,7 +209,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RenameVirtualBone::Execute(const
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString OldStr, NewStr;
 	if (!Arguments->TryGetStringField(TEXT("old_name"), OldStr) || OldStr.IsEmpty())

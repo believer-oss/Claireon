@@ -19,6 +19,10 @@
 #include "K2Node_CallDataTableFunction.h"
 #include "K2Node_CallMaterialParameterCollectionFunction.h"
 #include "K2Node_CommutativeAssociativeBinaryOperator.h"
+#include "K2Node_FunctionEntry.h"
+#include "K2Node_MakeContainer.h"
+#include "GameplayTask.h"
+#include "Abilities/Tasks/AbilityTask.h"
 #include "Kismet/BlueprintAsyncActionBase.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -42,7 +46,9 @@ FScopedBlueprintEditor::FScopedBlueprintEditor(UBlueprint* InBlueprint, bool bIn
 	, bWasAlreadyOpen(false)
 	, bCloseOnDestroy(bInCloseOnDestroy)
 {
-	if (!InBlueprint)
+	// ::IsValid is qualified throughout this type's members: FScopedBlueprintEditor declares its
+	// own 0-arg IsValid() (ClaireonBlueprintHelpers.h:47), which otherwise wins name lookup here.
+	if (!::IsValid(InBlueprint))
 	{
 		UE_LOG(LogClaireon, Warning, TEXT("[FScopedBlueprintEditor] Null Blueprint provided"));
 		return;
@@ -50,7 +56,7 @@ FScopedBlueprintEditor::FScopedBlueprintEditor(UBlueprint* InBlueprint, bool bIn
 
 	// Check if the Blueprint is already open
 	UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
-	if (!AssetEditorSubsystem)
+	if (!::IsValid(AssetEditorSubsystem))
 	{
 		UE_LOG(LogClaireon, Error, TEXT("[FScopedBlueprintEditor] Failed to get AssetEditorSubsystem"));
 		return;
@@ -91,7 +97,7 @@ FScopedBlueprintEditor::~FScopedBlueprintEditor()
 	if (bCloseOnDestroy && !bWasAlreadyOpen && Blueprint.IsValid())
 	{
 		UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
-		if (AssetEditorSubsystem)
+		if (::IsValid(AssetEditorSubsystem))
 		{
 			AssetEditorSubsystem->CloseAllEditorsForAsset(Blueprint.Get());
 			UE_LOG(LogClaireon, Verbose, TEXT("[FScopedBlueprintEditor] Closed Blueprint %s"), *Blueprint->GetPathName());
@@ -101,7 +107,7 @@ FScopedBlueprintEditor::~FScopedBlueprintEditor()
 
 TSharedPtr<SGraphEditor> FScopedBlueprintEditor::GetGraphEditor(UEdGraph* Graph)
 {
-	if (!BlueprintEditor.IsValid() || !Graph)
+	if (!BlueprintEditor.IsValid() || !::IsValid(Graph))
 	{
 		return nullptr;
 	}
@@ -125,7 +131,7 @@ namespace ClaireonBlueprintHelpers
 	{
 		TArray<UEdGraphPin*> ExecPins;
 
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			return ExecPins;
 		}
@@ -151,7 +157,7 @@ namespace ClaireonBlueprintHelpers
 
 	bool HasExecInputPins(UEdGraphNode* Node)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			return false;
 		}
@@ -169,7 +175,7 @@ namespace ClaireonBlueprintHelpers
 
 	bool HasExecOutputPins(UEdGraphNode* Node)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			return false;
 		}
@@ -189,7 +195,7 @@ namespace ClaireonBlueprintHelpers
 	{
 		TArray<UEdGraphNode*> RootNodes;
 
-		if (!Graph)
+		if (!IsValid(Graph))
 		{
 			return RootNodes;
 		}
@@ -198,7 +204,7 @@ namespace ClaireonBlueprintHelpers
 		// These are typically Event nodes or entry points
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
-			if (Node && HasExecOutputPins(Node) && !HasExecInputPins(Node))
+			if (IsValid(Node) && HasExecOutputPins(Node) && !HasExecInputPins(Node))
 			{
 				RootNodes.Add(Node);
 			}
@@ -220,7 +226,7 @@ namespace ClaireonBlueprintHelpers
 
 	UEdGraphNode* FindNodeByGuid(const UEdGraph* Graph, const FGuid& NodeGuid, FGuid* OutCorrectedGuid)
 	{
-		if (!Graph || !NodeGuid.IsValid())
+		if (!IsValid(Graph) || !NodeGuid.IsValid())
 		{
 			return nullptr;
 		}
@@ -228,7 +234,7 @@ namespace ClaireonBlueprintHelpers
 		// Exact match
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
-			if (Node && Node->NodeGuid == NodeGuid)
+			if (IsValid(Node) && Node->NodeGuid == NodeGuid)
 			{
 				return Node;
 			}
@@ -243,14 +249,14 @@ namespace ClaireonBlueprintHelpers
 		int32 AFieldMatchCount = 0;
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
-			if (Node && Node->NodeGuid.A == NodeGuid.A)
+			if (IsValid(Node) && Node->NodeGuid.A == NodeGuid.A)
 			{
 				AFieldMatch = Node;
 				++AFieldMatchCount;
 			}
 		}
 
-		if (AFieldMatchCount == 1 && AFieldMatch)
+		if (AFieldMatchCount == 1 && IsValid(AFieldMatch))
 		{
 			UE_LOG(LogClaireon, Warning,
 				TEXT("[FindNodeByGuid] Exact GUID match failed — recovered via A-field fallback. ")
@@ -267,6 +273,265 @@ namespace ClaireonBlueprintHelpers
 		}
 
 		return nullptr;
+	}
+
+	bool ResolveNodeGuidString(const UEdGraph* Graph, const FString& GuidStr, UEdGraphNode*& OutNode,
+	                           FString& OutError, const TCHAR* FieldNameForErrors, FGuid* OutCorrectedFullGuid)
+	{
+		OutNode = nullptr;
+		if (OutCorrectedFullGuid)
+		{
+			*OutCorrectedFullGuid = FGuid();
+		}
+
+		if (!IsValid(Graph))
+		{
+			OutError = TEXT("ResolveNodeGuidString: Graph is null");
+			return false;
+		}
+
+		const TCHAR* FieldName = FieldNameForErrors ? FieldNameForErrors : TEXT("node_guid");
+
+		// 1. Full-GUID parse first. Preserves the A-field recompile-recovery path
+		//    (and its correction out-param) that FindNodeByGuid provides.
+		FGuid ParsedGuid;
+		if (FGuid::Parse(GuidStr, ParsedGuid) && ParsedGuid.IsValid())
+		{
+			FGuid CorrectedGuid;
+			if (UEdGraphNode* Found = FindNodeByGuid(Graph, ParsedGuid, &CorrectedGuid); IsValid(Found))
+			{
+				OutNode = Found;
+				if (CorrectedGuid.IsValid() && OutCorrectedFullGuid)
+				{
+					*OutCorrectedFullGuid = CorrectedGuid;
+				}
+				return true;
+			}
+			OutError = FString::Printf(
+				TEXT("Node %s not found in graph '%s'. Available nodes: %s"),
+				*GuidStr, *Graph->GetName(), *FormatAvailableNodes(const_cast<UEdGraph*>(Graph)));
+			return false;
+		}
+
+		// 2. Full parse failed: a valid hex prefix is 8..32 hex chars once hyphens
+		//    are stripped. Anything shorter or non-hex is genuinely malformed input.
+		FString HexPrefix = GuidStr.Replace(TEXT("-"), TEXT(""));
+		bool bValidHexPrefix = HexPrefix.Len() >= 8 && HexPrefix.Len() <= 32;
+		if (bValidHexPrefix)
+		{
+			for (int32 I = 0; I < HexPrefix.Len(); ++I)
+			{
+				if (!FChar::IsHexDigit(HexPrefix[I]))
+				{
+					bValidHexPrefix = false;
+					break;
+				}
+			}
+		}
+		if (!bValidHexPrefix)
+		{
+			OutError = FString::Printf(TEXT("Invalid %s format: %s"), FieldName, *GuidStr);
+			return false;
+		}
+		HexPrefix = HexPrefix.ToUpper();
+
+		// 3. Prefix-match against every node's hyphen-free Digits GUID.
+		TArray<UEdGraphNode*> Matches;
+		for (UEdGraphNode* Node : Graph->Nodes)
+		{
+			if (IsValid(Node) && Node->NodeGuid.ToString(EGuidFormats::Digits).StartsWith(HexPrefix, ESearchCase::IgnoreCase))
+			{
+				Matches.Add(Node);
+			}
+		}
+
+		if (Matches.Num() == 1)
+		{
+			OutNode = Matches[0];
+			return true;
+		}
+		if (Matches.Num() == 0)
+		{
+			OutError = FString::Printf(
+				TEXT("No node with GUID prefix '%s' found in graph '%s'. Available nodes: %s"),
+				*GuidStr, *Graph->GetName(), *FormatAvailableNodes(const_cast<UEdGraph*>(Graph)));
+			return false;
+		}
+
+		// Shares FormatAmbiguousNodeMatch with the title path: same answer shape, and the
+		// candidate list now carries titles alongside GUIDs rather than bare GUIDs, which
+		// is what lets the caller tell the candidates apart.
+		OutError = FormatAmbiguousNodeMatch(
+			const_cast<UEdGraph*>(Graph), TEXT("GUID prefix"), GuidStr, Matches,
+			TEXT("Provide more characters or the full GUID."));
+		return false;
+	}
+
+	void PropagateWildcardTypesViaLinks(TArray<UEdGraphNode*> SeedNodes, int32 MaxIterations)
+	{
+		// Extracted verbatim from ClaireonBlueprintGraphTool_ConnectPins so the literal-write
+		// path in SetPinValue can run the same forward propagation after promoting a pin.
+		//
+		// TryCreateConnection's K2 schema path resolves wildcards on UK2Node_CallArrayFunction /
+		// UK2Node_Select / UK2Node_MakeArray, but generic wildcard pins on tunnels/knots/macro
+		// instances can survive with category "wildcard" after the link is made. Fixed-point
+		// loop: for each wildcard pin still holding category=wildcard, if its linked neighbors
+		// have a resolved category, propagate the neighbor's type onto the pin.
+		// NotifyPinConnectionListChanged on the owner lets the K2 node re-coerce sibling pins.
+		// The iteration cap guards against pathological cycles in macro graphs.
+		const FName WildcardCat = UEdGraphSchema_K2::PC_Wildcard;
+		auto IsWildcard = [&WildcardCat](const UEdGraphPin* Pin) -> bool
+		{
+			return Pin && Pin->PinType.PinCategory == WildcardCat;
+		};
+
+		for (int32 Iter = 0; Iter < MaxIterations; ++Iter)
+		{
+			bool bChangedAny = false;
+
+			TArray<UEdGraphNode*> NodesToScan;
+			for (UEdGraphNode* Seed : SeedNodes)
+			{
+				if (IsValid(Seed)) { NodesToScan.AddUnique(Seed); }
+			}
+			// Expand to include any node touched by our seeds' current links.
+			for (UEdGraphNode* Seed : SeedNodes)
+			{
+				if (!IsValid(Seed)) { continue; }
+				for (UEdGraphPin* Pin : Seed->Pins)
+				{
+					if (!Pin) { continue; }
+					for (UEdGraphPin* Linked : Pin->LinkedTo)
+					{
+						if (Linked) { NodesToScan.AddUnique(Linked->GetOwningNodeUnchecked()); }
+					}
+				}
+			}
+
+			for (UEdGraphNode* N : NodesToScan)
+			{
+				if (!IsValid(N)) { continue; }
+				for (UEdGraphPin* WildPin : N->Pins)
+				{
+					if (!IsWildcard(WildPin) || WildPin->LinkedTo.Num() == 0) { continue; }
+					// Find a linked neighbor whose category is resolved.
+					const UEdGraphPin* ResolvedNeighbor = nullptr;
+					for (UEdGraphPin* Linked : WildPin->LinkedTo)
+					{
+						if (Linked && Linked->PinType.PinCategory != WildcardCat)
+						{
+							ResolvedNeighbor = Linked;
+							break;
+						}
+					}
+					if (!ResolvedNeighbor) { continue; }
+
+					// Copy the neighbor's pin type (preserves container kind: Array / Set / Map
+					// / Single). This is the same propagation pattern UK2Node_CallArrayFunction
+					// uses internally.
+					WildPin->PinType = ResolvedNeighbor->PinType;
+					if (UEdGraphNode* Owner = WildPin->GetOwningNodeUnchecked(); IsValid(Owner))
+					{
+						// NotifyPinConnectionListChanged is K2-specific; UEdGraphNode base class
+						// doesn't expose it. Cast first; if not a K2Node, fall back to graph-level
+						// notification which UK2Node's override also routes through.
+						if (UK2Node* K2Owner = Cast<UK2Node>(Owner); IsValid(K2Owner))
+						{
+							K2Owner->NotifyPinConnectionListChanged(WildPin);
+						}
+						else if (UEdGraph* OwnerGraph = Owner->GetGraph(); IsValid(OwnerGraph))
+						{
+							OwnerGraph->NotifyGraphChanged();
+						}
+					}
+					bChangedAny = true;
+				}
+			}
+
+			if (!bChangedAny)
+			{
+				break;
+			}
+		}
+	}
+
+	void PromoteWildcardContainerElementPin(UEdGraphPin* ElementPin, const FEdGraphPinType& InferredType)
+	{
+		if (!ElementPin)
+		{
+			return;
+		}
+
+		// The pin's own container kind is authoritative -- element pins are always
+		// EPinContainerType::None and the inferred type never carries a meaningful one.
+		const EPinContainerType PreservedContainer = ElementPin->PinType.ContainerType;
+		ElementPin->PinType = InferredType;
+		ElementPin->PinType.ContainerType = PreservedContainer;
+
+		UEdGraphNode* Node = ElementPin->GetOwningNodeUnchecked();
+		if (!IsValid(Node))
+		{
+			return;
+		}
+
+		if (UK2Node_MakeContainer* MakeNode = Cast<UK2Node_MakeContainer>(Node); IsValid(MakeNode))
+		{
+			// Mirror what UK2Node_MakeContainer::NotifyPinConnectionListChanged does for the
+			// linked case, invoked directly because there is no link to trigger the hook.
+			TArray<UEdGraphPin*> KeyPins;
+			TArray<UEdGraphPin*> ValuePins;
+			MakeNode->GetKeyAndValuePins(KeyPins, ValuePins);
+			const bool bIsValuePin = ValuePins.Contains(ElementPin);
+
+			if (UEdGraphPin* OutputPin = MakeNode->GetOutputPin())
+			{
+				if (bIsValuePin)
+				{
+					// Map value half lives in PinValueType, not the pin type proper.
+					if (OutputPin->PinType.PinValueType.TerminalCategory == UEdGraphSchema_K2::PC_Wildcard)
+					{
+						OutputPin->PinType.PinValueType.TerminalCategory = InferredType.PinCategory;
+						OutputPin->PinType.PinValueType.TerminalSubCategory = InferredType.PinSubCategory;
+						OutputPin->PinType.PinValueType.TerminalSubCategoryObject = InferredType.PinSubCategoryObject;
+					}
+				}
+				else if (OutputPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Wildcard)
+				{
+					// Preserve the output's container kind (Array / Set / Map).
+					OutputPin->PinType.PinCategory = InferredType.PinCategory;
+					OutputPin->PinType.PinSubCategory = InferredType.PinSubCategory;
+					OutputPin->PinType.PinSubCategoryObject = InferredType.PinSubCategoryObject;
+				}
+			}
+
+			// Sibling propagation: other still-wildcard element pins of the same half
+			// (key vs value) take the promoted type too. New behavior -- the engine only
+			// promotes siblings in response to a real connection.
+			const TArray<UEdGraphPin*>& Siblings = bIsValuePin ? ValuePins : KeyPins;
+			for (UEdGraphPin* Sibling : Siblings)
+			{
+				if (!Sibling || Sibling == ElementPin) { continue; }
+				if (Sibling->PinType.PinCategory != UEdGraphSchema_K2::PC_Wildcard) { continue; }
+				const EPinContainerType SiblingContainer = Sibling->PinType.ContainerType;
+				Sibling->PinType = InferredType;
+				Sibling->PinType.ContainerType = SiblingContainer;
+			}
+		}
+
+		// Deliberately NOT calling NotifyPinConnectionListChanged here. On an unlinked
+		// pin it takes the reset-to-wildcard branch (K2Node_MakeContainer.cpp:265), whose
+		// PinsInUse check is driven by DoesDefaultValueMatchAutogenerated(). The caller
+		// has not written the literal yet at this point, so the default still matches and
+		// the node would undo the promotion we just made. The pin types above are set
+		// directly, which is what that hook would have done for a linked pin anyway.
+		if (UEdGraph* OwnerGraph = Node->GetGraph(); IsValid(OwnerGraph))
+		{
+			OwnerGraph->NotifyGraphChanged();
+		}
+
+		// The now-typed pin may sit on a node with other links elsewhere in the graph
+		// that still need forward propagation.
+		PropagateWildcardTypesViaLinks({Node});
 	}
 
 	namespace ClaireonBlueprintHelpers_FindNodesByTitle_Internal
@@ -292,6 +557,41 @@ namespace ClaireonBlueprintHelpers
 			FString First = (NewlineIdx == INDEX_NONE) ? In : In.Left(NewlineIdx);
 			return First.TrimStartAndEnd();
 		}
+
+		/** Fold a title for suggestion matching. NameToDisplayString only ever inserts spaces
+		 *  at case/digit boundaries, turns '_' into a space, and adjusts case, so stripping the
+		 *  spaces and comparing case-insensitively nets out to: ignore spaces, underscores, and
+		 *  case. That covers the friendly-vs-raw rendering split ("Print String"/"PrintString")
+		 *  without depending on which side produced which form. */
+		FString NormalizedForMatch(const FString& In)
+		{
+			return FName::NameToDisplayString(In, /*bIsBool=*/false).Replace(TEXT(" "), TEXT(""));
+		}
+
+		/** "<guid> (<class>)" -- the minimum a caller needs to re-issue the call by GUID. */
+		FString DescribeNodeForHint(const UEdGraphNode* Node)
+		{
+			return FString::Printf(TEXT("%s (%s)"),
+				*Node->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens),
+				*Node->GetClass()->GetName());
+		}
+
+		/** Join node descriptions, capping the list so a large graph cannot flood the response. */
+		FString JoinNodeDescriptions(const TArray<UEdGraphNode*>& Nodes, int32 MaxListed = 10)
+		{
+			TArray<FString> Parts;
+			const int32 Listed = FMath::Min(Nodes.Num(), MaxListed);
+			for (int32 Idx = 0; Idx < Listed; ++Idx)
+			{
+				Parts.Add(DescribeNodeForHint(Nodes[Idx]));
+			}
+			FString Joined = FString::Join(Parts, TEXT(", "));
+			if (Nodes.Num() > Listed)
+			{
+				Joined += FString::Printf(TEXT(", ... and %d more"), Nodes.Num() - Listed);
+			}
+			return Joined;
+		}
 	}
 
 	TArray<UEdGraphNode*> FindNodesByTitle(UEdGraph* Graph, const FString& NodeTitle, bool bExactMatch)
@@ -299,7 +599,7 @@ namespace ClaireonBlueprintHelpers
 		using namespace ClaireonBlueprintHelpers_FindNodesByTitle_Internal;
 		TArray<UEdGraphNode*> MatchingNodes;
 
-		if (!Graph || NodeTitle.IsEmpty())
+		if (!IsValid(Graph) || NodeTitle.IsEmpty())
 		{
 			return MatchingNodes;
 		}
@@ -311,7 +611,7 @@ namespace ClaireonBlueprintHelpers
 
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
-			if (!Node)
+			if (!IsValid(Node))
 			{
 				continue;
 			}
@@ -342,9 +642,144 @@ namespace ClaireonBlueprintHelpers
 		return MatchingNodes;
 	}
 
+	TArray<UEdGraphNode*> FindNodesByNormalizedTitle(UEdGraph* Graph, const FString& NodeTitle, bool bAllowPartial)
+	{
+		using namespace ClaireonBlueprintHelpers_FindNodesByTitle_Internal;
+		TArray<UEdGraphNode*> MatchingNodes;
+
+		if (!IsValid(Graph) || NodeTitle.IsEmpty())
+		{
+			return MatchingNodes;
+		}
+
+		const FString SearchNormalized = NormalizedForMatch(FirstLineTrimmed(NodeTitle));
+		if (SearchNormalized.IsEmpty())
+		{
+			return MatchingNodes;
+		}
+
+		for (UEdGraphNode* Node : Graph->Nodes)
+		{
+			if (!IsValid(Node))
+			{
+				continue;
+			}
+
+			const FString CurrentNormalized =
+				NormalizedForMatch(FirstLineTrimmed(Node->GetNodeTitle(ENodeTitleType::ListView).ToString()));
+
+			const bool bMatches = bAllowPartial
+				? CurrentNormalized.Contains(SearchNormalized, ESearchCase::IgnoreCase)
+				: CurrentNormalized.Equals(SearchNormalized, ESearchCase::IgnoreCase);
+
+			if (bMatches)
+			{
+				MatchingNodes.Add(Node);
+			}
+		}
+
+		return MatchingNodes;
+	}
+
+	FString FormatTitleSuggestions(UEdGraph* Graph, const FString& RequestedTitle, const FString& DisambiguationParam)
+	{
+		using namespace ClaireonBlueprintHelpers_FindNodesByTitle_Internal;
+
+		// Prefer whole-title candidates; only fall back to the partial pass (which catches
+		// truncations such as "PrintStr") when nothing folds to the same normalized title.
+		TArray<UEdGraphNode*> Candidates = FindNodesByNormalizedTitle(Graph, RequestedTitle, /*bAllowPartial=*/false);
+		bool bPartial = false;
+		if (Candidates.Num() == 0)
+		{
+			Candidates = FindNodesByNormalizedTitle(Graph, RequestedTitle, /*bAllowPartial=*/true);
+			bPartial = Candidates.Num() > 0;
+		}
+
+		if (Candidates.Num() == 0)
+		{
+			return FString();
+		}
+
+		// Group by the title as rendered, so six identical "Branch" nodes read as one
+		// suggestion with six GUIDs rather than six near-identical lines.
+		TArray<FString> OrderedTitles;
+		TMap<FString, TArray<UEdGraphNode*>> ByTitle;
+		for (UEdGraphNode* Node : Candidates)
+		{
+			const FString Title = FirstLineTrimmed(Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
+			TArray<UEdGraphNode*>& Bucket = ByTitle.FindOrAdd(Title);
+			if (Bucket.Num() == 0)
+			{
+				OrderedTitles.Add(Title);
+			}
+			Bucket.Add(Node);
+		}
+
+		TArray<FString> Suggestions;
+		for (const FString& Title : OrderedTitles)
+		{
+			Suggestions.Add(FString::Printf(TEXT("\"%s\" [%s]"),
+				*Title, *JoinNodeDescriptions(ByTitle[Title])));
+		}
+
+		return FString::Printf(
+			TEXT("Did you mean: %s? (Suggestions match %s ignoring spaces, underscores, and case -- ")
+			TEXT("re-issue with the exact title above, or pass %s.)"),
+			*FString::Join(Suggestions, TEXT(", ")),
+			bPartial ? TEXT("partially") : TEXT("exactly"),
+			*DisambiguationParam);
+	}
+
+	FString FormatAmbiguousNodeMatch(
+		UEdGraph* Graph,
+		const FString& LookupKind,
+		const FString& RequestedValue,
+		const TArray<UEdGraphNode*>& Matches,
+		const FString& Remedy)
+	{
+		using namespace ClaireonBlueprintHelpers_FindNodesByTitle_Internal;
+
+		const FString GraphName = IsValid(Graph) ? Graph->GetName() : TEXT("<null>");
+
+		return FString::Printf(
+			TEXT("Ambiguous %s '%s' in graph '%s' -- %d matches: %s. %s"),
+			*LookupKind, *RequestedValue, *GraphName, Matches.Num(),
+			*JoinNodeDescriptions(Matches), *Remedy);
+	}
+
+	FString FormatTitleMatchFailure(
+		UEdGraph* Graph,
+		const FString& RequestedTitle,
+		const TArray<UEdGraphNode*>& ExactMatches,
+		const FString& DisambiguationParam)
+	{
+		using namespace ClaireonBlueprintHelpers_FindNodesByTitle_Internal;
+
+		const FString GraphName = IsValid(Graph) ? Graph->GetName() : TEXT("<null>");
+
+		if (ExactMatches.Num() > 1)
+		{
+			return FormatAmbiguousNodeMatch(
+				Graph, TEXT("node title"), RequestedTitle, ExactMatches,
+				FString::Printf(TEXT("Pass %s to disambiguate."), *DisambiguationParam));
+		}
+
+		// No exact match. Offer normalized candidates before dumping the whole graph: the
+		// caller almost always wants the one title it got the spacing or case wrong on.
+		const FString Suggestions = FormatTitleSuggestions(Graph, RequestedTitle, DisambiguationParam);
+		if (!Suggestions.IsEmpty())
+		{
+			return FString::Printf(TEXT("Node not found by title '%s' in graph '%s'. %s"),
+				*RequestedTitle, *GraphName, *Suggestions);
+		}
+
+		return FString::Printf(TEXT("Node not found by title '%s' in graph '%s'. %s"),
+			*RequestedTitle, *GraphName, *FormatAvailableNodes(Graph));
+	}
+
 	UEdGraph* FindGraphByName(UBlueprint* Blueprint, const FString& GraphName)
 	{
-		if (!Blueprint)
+		if (!IsValid(Blueprint))
 		{
 			return nullptr;
 		}
@@ -352,7 +787,7 @@ namespace ClaireonBlueprintHelpers
 		// Check UbergraphPages (EventGraph)
 		for (UEdGraph* Graph : Blueprint->UbergraphPages)
 		{
-			if (Graph && Graph->GetName() == GraphName)
+			if (IsValid(Graph) && Graph->GetName() == GraphName)
 			{
 				return Graph;
 			}
@@ -361,7 +796,7 @@ namespace ClaireonBlueprintHelpers
 		// Check FunctionGraphs
 		for (UEdGraph* Graph : Blueprint->FunctionGraphs)
 		{
-			if (Graph && Graph->GetName() == GraphName)
+			if (IsValid(Graph) && Graph->GetName() == GraphName)
 			{
 				return Graph;
 			}
@@ -370,7 +805,7 @@ namespace ClaireonBlueprintHelpers
 		// Check MacroGraphs
 		for (UEdGraph* Graph : Blueprint->MacroGraphs)
 		{
-			if (Graph && Graph->GetName() == GraphName)
+			if (IsValid(Graph) && Graph->GetName() == GraphName)
 			{
 				return Graph;
 			}
@@ -379,9 +814,23 @@ namespace ClaireonBlueprintHelpers
 		// Check DelegateSignatureGraphs
 		for (UEdGraph* Graph : Blueprint->DelegateSignatureGraphs)
 		{
-			if (Graph && Graph->GetName() == GraphName)
+			if (IsValid(Graph) && Graph->GetName() == GraphName)
 			{
 				return Graph;
+			}
+		}
+
+		// Composite (collapsed-graph) subgraphs live in their parent graph's
+		// SubGraphs array, recursively. GetAllGraphs collects them all.
+		{
+			TArray<UEdGraph*> AllGraphs;
+			Blueprint->GetAllGraphs(AllGraphs);
+			for (UEdGraph* Graph : AllGraphs)
+			{
+				if (IsValid(Graph) && Graph->GetName() == GraphName)
+				{
+					return Graph;
+				}
 			}
 		}
 
@@ -392,13 +841,13 @@ namespace ClaireonBlueprintHelpers
 	{
 		TArray<UEdGraphPin*> CompatiblePins;
 
-		if (!Node || !Pin)
+		if (!IsValid(Node) || !Pin)
 		{
 			return CompatiblePins;
 		}
 
 		const UEdGraphSchema_K2* Schema = Cast<UEdGraphSchema_K2>(Node->GetSchema());
-		if (!Schema)
+		if (!IsValid(Schema))
 		{
 			return CompatiblePins;
 		}
@@ -422,7 +871,7 @@ namespace ClaireonBlueprintHelpers
 		return CompatiblePins;
 	}
 
-	namespace
+	namespace ClaireonBlueprintHelpers_Private
 	{
 		// Returns true if TypeString begins with Prefix (case-insensitive) and either
 		// ends immediately at Prefix.Len() or continues with characters (used for StartsWith tests).
@@ -520,7 +969,7 @@ namespace ClaireonBlueprintHelpers
 			}
 			// FindObject supports module-scoped paths with dotted segments. Try direct first.
 			UFunction* Fn = FindObject<UFunction>(nullptr, *Path);
-			if (Fn)
+			if (IsValid(Fn))
 			{
 				return Fn;
 			}
@@ -531,7 +980,7 @@ namespace ClaireonBlueprintHelpers
 		// Populate delegate signature members on PinType from a resolved UFunction.
 		void SetDelegateSignature(FEdGraphPinType& PinType, UFunction* SignatureFn)
 		{
-			if (!SignatureFn)
+			if (!IsValid(SignatureFn))
 			{
 				return;
 			}
@@ -553,7 +1002,7 @@ namespace ClaireonBlueprintHelpers
 			}
 			ClaireonNameResolver::FNameResolveResult Resolve;
 			UClass* Cls = ClaireonNameResolver::ResolveClassName(Trimmed, nullptr, Resolve);
-			if (!Cls)
+			if (!IsValid(Cls))
 			{
 				Result.Error = FString::Printf(TEXT("Could not resolve class '%s' for soft reference: %s"), *Trimmed, *Resolve.Error);
 				return Result;
@@ -576,11 +1025,11 @@ namespace ClaireonBlueprintHelpers
 				return Result;
 			}
 			UClass* Cls = FindObject<UClass>(nullptr, *Trimmed);
-			if (!Cls)
+			if (!IsValid(Cls))
 			{
 				Cls = LoadObject<UClass>(nullptr, *Trimmed);
 			}
-			if (!Cls)
+			if (!IsValid(Cls))
 			{
 				Result.Error = FString::Printf(TEXT("Could not resolve class path '%s' for soft reference"), *Trimmed);
 				return Result;
@@ -606,7 +1055,7 @@ namespace ClaireonBlueprintHelpers
 			}
 			ClaireonNameResolver::FNameResolveResult Resolve;
 			UScriptStruct* InnerStruct = ClaireonNameResolver::ResolveStructName(Trimmed, Resolve);
-			if (!InnerStruct)
+			if (!IsValid(InnerStruct))
 			{
 				Result.Error = FString::Printf(TEXT("Could not resolve struct '%s' for InstancedStruct<>: %s"), *Trimmed, *Resolve.Error);
 				return Result;
@@ -623,6 +1072,7 @@ namespace ClaireonBlueprintHelpers
 			return Result;
 		}
 	} // namespace
+	using namespace ClaireonBlueprintHelpers_Private;
 
 	FParseVariableTypeResult ParseVariableTypeChecked(const FString& TypeString)
 	{
@@ -819,6 +1269,24 @@ namespace ClaireonBlueprintHelpers
 			Result.bSucceeded = true;
 			return Result;
 		}
+		if (TryStripAngleForm(TEXT("Class"), 5, GenericInner))
+		{
+			// Hard class reference: Class<X> -> PC_Class bound to the resolved class.
+			// bp_get_properties emits this form for class-typed variables (incl. map
+			// key/value terminals); without this branch the round trip fails.
+			ClaireonNameResolver::FNameResolveResult ClassResult;
+			UClass* MetaClass = ClaireonNameResolver::ResolveClassName(GenericInner.TrimStartAndEnd(), nullptr, ClassResult);
+			if (!IsValid(MetaClass))
+			{
+				Result.Error = FString::Printf(TEXT("Class<X> parse failed: %s"), *ClassResult.Error);
+				return Result;
+			}
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Class;
+			PinType.PinSubCategoryObject = MetaClass;
+			Result.ResolutionNote = ClassResult.ResolutionNote;
+			Result.bSucceeded = true;
+			return Result;
+		}
 		if (TryStripAngleForm(TEXT("SoftClass"), 9, GenericInner) || TryStripAngleForm(TEXT("SoftClassReference"), 18, GenericInner))
 		{
 			return ParseSoftRefClass(GenericInner, /*bSoftClass=*/true);
@@ -836,7 +1304,7 @@ namespace ClaireonBlueprintHelpers
 		{
 			ClaireonNameResolver::FNameResolveResult ClassResult;
 			UClass* Class = ClaireonNameResolver::ResolveClassName(TypeString, nullptr, ClassResult);
-			if (Class)
+			if (IsValid(Class))
 			{
 				PinType.PinCategory = UEdGraphSchema_K2::PC_Object;
 				PinType.PinSubCategoryObject = Class;
@@ -848,7 +1316,7 @@ namespace ClaireonBlueprintHelpers
 		{
 			ClaireonNameResolver::FNameResolveResult StructResult;
 			UScriptStruct* Struct = ClaireonNameResolver::ResolveStructName(TypeString, StructResult);
-			if (Struct)
+			if (IsValid(Struct))
 			{
 				PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
 				PinType.PinSubCategoryObject = Struct;
@@ -860,7 +1328,7 @@ namespace ClaireonBlueprintHelpers
 		{
 			ClaireonNameResolver::FNameResolveResult EnumResult;
 			UEnum* Enum = ClaireonNameResolver::ResolveEnumName(TypeString, EnumResult);
-			if (Enum)
+			if (IsValid(Enum))
 			{
 				PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
 				PinType.PinSubCategoryObject = Enum;
@@ -907,7 +1375,7 @@ namespace ClaireonBlueprintHelpers
 				return Result;
 			}
 			UFunction* SigFn = ResolveSignatureFunction(SignatureFnPath);
-			if (!SigFn)
+			if (!IsValid(SigFn))
 			{
 				Result.Error = FString::Printf(TEXT("signature_function '%s' could not be resolved to a UFunction"), *SignatureFnPath);
 				return Result;
@@ -961,9 +1429,13 @@ namespace ClaireonBlueprintHelpers
 		if (!Local.bSucceeded)
 		{
 			UE_LOG(LogClaireon, Warning,
-				TEXT("[ParseVariableType] legacy-path parse failed for '%s': %s"),
+				TEXT("[ParseVariableType] legacy-path parse failed for '%s': %s -- falling back to String."),
 				*TypeString, *Local.Error);
-			return FEdGraphPinType();
+			// Lenient contract: unknown types fall back to String (a default-constructed pin
+			// type is PC_None, which callers of this non-checked path shouldn't have to handle).
+			FEdGraphPinType Fallback;
+			Fallback.PinCategory = UEdGraphSchema_K2::PC_String;
+			return Fallback;
 		}
 		return Local.PinType;
 	}
@@ -1136,9 +1608,10 @@ namespace ClaireonBlueprintHelpers
 		return Flags;
 	}
 
-	void CreateBlueprint(const FString& AssetPath, UClass* ParentClass, FCreateBlueprintResult& OutResult)
+	void CreateBlueprint(const FString& AssetPath, UClass* ParentClass, FCreateBlueprintResult& OutResult,
+	                     EBlueprintType BlueprintType)
 	{
-		if (!ParentClass)
+		if (!IsValid(ParentClass))
 		{
 			OutResult.Error = TEXT("ParentClass is null");
 			return;
@@ -1173,7 +1646,7 @@ namespace ClaireonBlueprintHelpers
 		}
 
 		UPackage* Package = CreatePackage(*PackageName);
-		if (!Package)
+		if (!IsValid(Package))
 		{
 			OutResult.Error = FString::Printf(TEXT("Failed to create package: %s"), *PackageName);
 			return;
@@ -1185,12 +1658,12 @@ namespace ClaireonBlueprintHelpers
 
 		UBlueprint* BP = FKismetEditorUtilities::CreateBlueprint(
 			ParentClass, Package, FName(*AssetName),
-			BPTYPE_Normal,
+			BlueprintType,
 			UBlueprint::StaticClass(),
 			UBlueprintGeneratedClass::StaticClass(),
 			NAME_None);
 
-		if (!BP)
+		if (!IsValid(BP))
 		{
 			OutResult.Error = FString::Printf(TEXT("Failed to create Blueprint at %s"), *AssetPath);
 			return;
@@ -1231,7 +1704,7 @@ namespace ClaireonBlueprintHelpers
 
 	void ApplyVariableProperties(UBlueprint* Blueprint, FName VarName, const TSharedPtr<FJsonObject>& Params, FApplyVariableResult* OutResult)
 	{
-		if (!Blueprint || !Params.IsValid())
+		if (!IsValid(Blueprint) || !Params.IsValid())
 		{
 			return;
 		}
@@ -1315,7 +1788,7 @@ namespace ClaireonBlueprintHelpers
 				if (Params->TryGetStringField(TEXT("replication_condition"), ReplicationCondition))
 				{
 					const UEnum* CondEnum = StaticEnum<ELifetimeCondition>();
-					if (CondEnum)
+					if (IsValid(CondEnum))
 					{
 						int64 CondValue = CondEnum->GetValueByNameString(ReplicationCondition);
 						if (CondValue != INDEX_NONE)
@@ -1464,7 +1937,7 @@ namespace ClaireonBlueprintHelpers
 	                            FApplyVariableResult* OutResult,
 	                            FString& OutError)
 	{
-		if (!Blueprint)
+		if (!IsValid(Blueprint))
 		{
 			OutError = TEXT("Blueprint is null");
 			return false;
@@ -1504,6 +1977,49 @@ namespace ClaireonBlueprintHelpers
 			return false;
 		}
 
+		// Standalone container_type param ('array' | 'set' | 'map'): schema-advertised
+		// alternative to the Array<T>/Set<T>/Map<K,V> angle forms. Silently dropping it
+		// created scalar variables from Set/Array requests (GA 'Hit Actors' repro).
+		FString ContainerTypeStr;
+		if (Params->TryGetStringField(TEXT("container_type"), ContainerTypeStr) && !ContainerTypeStr.IsEmpty()
+			&& !ContainerTypeStr.Equals(TEXT("none"), ESearchCase::IgnoreCase))
+		{
+			if (ParseResult.PinType.ContainerType != EPinContainerType::None)
+			{
+				// Angle form already set a container; the explicit param must agree.
+				const TCHAR* Existing =
+					ParseResult.PinType.ContainerType == EPinContainerType::Array ? TEXT("array") :
+					ParseResult.PinType.ContainerType == EPinContainerType::Set ? TEXT("set") : TEXT("map");
+				if (!ContainerTypeStr.Equals(Existing, ESearchCase::IgnoreCase))
+				{
+					OutError = FString::Printf(
+						TEXT("container_type '%s' conflicts with the '%s' container already expressed by the variable type"),
+						*ContainerTypeStr, Existing);
+					return false;
+				}
+			}
+			else if (ContainerTypeStr.Equals(TEXT("array"), ESearchCase::IgnoreCase))
+			{
+				ParseResult.PinType.ContainerType = EPinContainerType::Array;
+			}
+			else if (ContainerTypeStr.Equals(TEXT("set"), ESearchCase::IgnoreCase))
+			{
+				ParseResult.PinType.ContainerType = EPinContainerType::Set;
+			}
+			else if (ContainerTypeStr.Equals(TEXT("map"), ESearchCase::IgnoreCase))
+			{
+				// A map needs a value terminal; a bare container_type='map' cannot supply
+				// one, so require the Map<K,V> form instead of guessing.
+				OutError = TEXT("container_type 'map' requires the Map<K,V> variable_type form (the value type cannot be inferred)");
+				return false;
+			}
+			else
+			{
+				OutError = FString::Printf(TEXT("Unknown container_type '%s' (expected 'none', 'array', 'set', or 'map')"), *ContainerTypeStr);
+				return false;
+			}
+		}
+
 		for (const FBPVariableDescription& Existing : Blueprint->NewVariables)
 		{
 			if (Existing.VarName == FName(*VarName))
@@ -1515,10 +2031,21 @@ namespace ClaireonBlueprintHelpers
 
 		FBPVariableDescription NewVar;
 		NewVar.VarName = FName(*VarName);
+		NewVar.VarGuid = FGuid::NewGuid();
 		NewVar.VarType = ParseResult.PinType;
 		NewVar.FriendlyName = VarName;
 		NewVar.Category = FText::FromString(TEXT("Default"));
 		NewVar.PropertyFlags = CPF_Edit | CPF_BlueprintVisible;
+
+		// Event dispatchers need the dispatcher flags (CallDelegate/AddDelegate/
+		// ClearDelegate nodes reject non-assignable delegates at compile) and a
+		// delegate signature graph -- the same setup the editor's 'Add Event
+		// Dispatcher' action performs.
+		const bool bIsMulticastDelegate = (NewVar.VarType.PinCategory == UEdGraphSchema_K2::PC_MCDelegate);
+		if (bIsMulticastDelegate)
+		{
+			NewVar.PropertyFlags |= CPF_BlueprintAssignable | CPF_BlueprintCallable;
+		}
 
 		const TArray<TSharedPtr<FJsonValue>>* FlagsArray = nullptr;
 		if (Params->TryGetArrayField(TEXT("flags"), FlagsArray) && FlagsArray)
@@ -1539,6 +2066,54 @@ namespace ClaireonBlueprintHelpers
 
 		Blueprint->NewVariables.Add(NewVar);
 
+		// Dispatcher signature graph (SMyBlueprint::OnAddNewDelegate idiom). When the
+		// caller supplied a signature_function, mirror its parameters onto the entry
+		// node so the compiled '<Var>__DelegateSignature' matches the requested shape.
+		if (bIsMulticastDelegate && !FindObject<UEdGraph>(Blueprint, *VarName))
+		{
+			UEdGraph* SignatureGraph = FBlueprintEditorUtils::CreateNewGraph(
+				Blueprint, FName(*VarName), UEdGraph::StaticClass(), UEdGraphSchema_K2::StaticClass());
+			if (IsValid(SignatureGraph))
+			{
+				SignatureGraph->bEditable = false;
+				const UEdGraphSchema_K2* K2Schema = GetDefault<UEdGraphSchema_K2>();
+				K2Schema->CreateDefaultNodesForGraph(*SignatureGraph);
+				K2Schema->CreateFunctionGraphTerminators(*SignatureGraph, (UClass*)nullptr);
+				K2Schema->AddExtraFunctionFlags(SignatureGraph, (FUNC_BlueprintCallable | FUNC_BlueprintEvent | FUNC_Public));
+				K2Schema->MarkFunctionEntryAsEditable(SignatureGraph, true);
+				Blueprint->DelegateSignatureGraphs.Add(SignatureGraph);
+
+				// Copy parameters from the resolved signature function, if any.
+				UFunction* SigFn = FMemberReference::ResolveSimpleMemberReference<UFunction>(
+					NewVar.VarType.PinSubCategoryMemberReference, Blueprint->GeneratedClass);
+				if (IsValid(SigFn))
+				{
+					UK2Node_FunctionEntry* SigEntry = nullptr;
+					for (UEdGraphNode* Node : SignatureGraph->Nodes)
+					{
+						if (UK2Node_FunctionEntry* AsEntry = Cast<UK2Node_FunctionEntry>(Node); IsValid(AsEntry))
+						{
+							SigEntry = AsEntry;
+							break;
+						}
+					}
+					if (IsValid(SigEntry))
+					{
+						const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
+						for (TFieldIterator<FProperty> ParamIt(SigFn); ParamIt && (ParamIt->PropertyFlags & CPF_Parm); ++ParamIt)
+						{
+							if (ParamIt->PropertyFlags & CPF_ReturnParm) continue;
+							FEdGraphPinType ParamPinType;
+							if (Schema->ConvertPropertyToPinType(*ParamIt, ParamPinType))
+							{
+								SigEntry->CreateUserDefinedPin(ParamIt->GetFName(), ParamPinType, EGPD_Output);
+							}
+						}
+					}
+				}
+			}
+		}
+
 		ApplyVariableProperties(Blueprint, FName(*VarName), Params, OutResult);
 
 		return true;
@@ -1546,7 +2121,7 @@ namespace ClaireonBlueprintHelpers
 
 	UEdGraphPin* GetFirstOutputPin(UEdGraphNode* Node)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			return nullptr;
 		}
@@ -1564,7 +2139,7 @@ namespace ClaireonBlueprintHelpers
 
 	FString FormatAvailableNodes(UEdGraph* Graph, int32 MaxCount)
 	{
-		if (!Graph)
+		if (!IsValid(Graph))
 			return TEXT("");
 
 		FString Result;
@@ -1573,7 +2148,7 @@ namespace ClaireonBlueprintHelpers
 
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
-			if (!Node)
+			if (!IsValid(Node))
 				continue;
 			if (Count >= MaxCount)
 				break;
@@ -1596,7 +2171,7 @@ namespace ClaireonBlueprintHelpers
 
 	FString FormatAvailablePins(UEdGraphNode* Node)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 			return TEXT("");
 
 		FString Result;
@@ -1613,12 +2188,12 @@ namespace ClaireonBlueprintHelpers
 	TArray<UEdGraphNode*> FindNodesByClassAndTitle(UEdGraph* Graph, const FString& ClassName, const FString& Title)
 	{
 		TArray<UEdGraphNode*> Results;
-		if (!Graph)
+		if (!IsValid(Graph))
 			return Results;
 
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
-			if (!Node)
+			if (!IsValid(Node))
 				continue;
 
 			bool bClassMatch = ClassName.IsEmpty() || Node->GetClass()->GetName().Contains(ClassName);
@@ -1639,9 +2214,28 @@ namespace ClaireonBlueprintHelpers
 			|| ClassName == TEXT("WidgetBlueprint");
 	}
 
+	/**
+	 * Resolve an editor-only K2Node class by short name, without linking its module.
+	 *
+	 * UK2Node_LatentAbilityCall (GameplayAbilitiesEditor) and
+	 * UK2Node_LatentGameplayTaskCall (GameplayTasksEditor) are needed only as UClass
+	 * pointers; including their headers would add editor-module dependencies to
+	 * Claireon.Build.cs for no other benefit. Returns null when the module is not
+	 * loaded, so callers can fall back.
+	 */
+	static UClass* FindLatentTaskNodeClassByName(const TCHAR* ShortClassName)
+	{
+		if (UClass* Direct = FindFirstObject<UClass>(ShortClassName, EFindFirstObjectOptions::NativeFirst); IsValid(Direct))
+		{
+			return Direct;
+		}
+		ClaireonNameResolver::FNameResolveResult Result;
+		return ClaireonNameResolver::ResolveClassName(ShortClassName, UEdGraphNode::StaticClass(), Result);
+	}
+
 	UClass* PickK2NodeClassForFunction(const UFunction* Function)
 	{
-		if (!Function)
+		if (!IsValid(Function))
 		{
 			return UK2Node_CallFunction::StaticClass();
 		}
@@ -1654,10 +2248,8 @@ namespace ClaireonBlueprintHelpers
 
 		// AsyncAction detection: mirror UK2Node_AsyncAction::GetMenuActions filter.
 		// Functions whose owning class carries HasDedicatedAsyncNode metadata fall
-		// through to the plain UK2Node_CallFunction path (today's behavior). Routing
-		// those to dedicated nodes (e.g. UK2Node_LatentAbilityCall) is a follow-up;
-		// tracked in proposal R3.
-		if (const UClass* OwnerClass = Function->GetOwnerClass())
+		// through to the plain UK2Node_CallFunction path (today's behavior).
+		if (const UClass* OwnerClass = Function->GetOwnerClass(); IsValid(OwnerClass))
 		{
 			if (OwnerClass->IsChildOf(UBlueprintAsyncActionBase::StaticClass())
 				&& !OwnerClass->HasMetaData(TEXT("HasDedicatedAsyncNode")))
@@ -1669,6 +2261,30 @@ namespace ClaireonBlueprintHelpers
 					{
 						return UK2Node_AsyncAction::StaticClass();
 					}
+				}
+			}
+		}
+
+		// GameplayTask factories get their dedicated latent node instead of a plain
+		// CallFunction, which is what the editor's own menu produces and what the
+		// generated graph needs to compile. UAbilityTask is the narrower case:
+		// UK2Node_LatentAbilityCall derives from UK2Node_LatentGameplayTaskCall.
+		//
+		// Both node classes live in editor-only modules (GameplayAbilitiesEditor /
+		// GameplayTasksEditor) that Claireon deliberately does not depend on, so they
+		// are resolved by name -- no #include, no new Build.cs edge. A name that does
+		// not resolve simply falls through to the CallFunction default.
+		if (const FObjectProperty* ReturnProp = CastField<FObjectProperty>(Function->GetReturnProperty()))
+		{
+			UClass* ReturnClass = ReturnProp->PropertyClass;
+			if (IsValid(ReturnClass) && ReturnClass->IsChildOf(UGameplayTask::StaticClass()))
+			{
+				const TCHAR* DesiredNodeClassName = ReturnClass->IsChildOf(UAbilityTask::StaticClass())
+					? TEXT("K2Node_LatentAbilityCall")
+					: TEXT("K2Node_LatentGameplayTaskCall");
+				if (UClass* LatentNodeClass = FindLatentTaskNodeClassByName(DesiredNodeClassName); IsValid(LatentNodeClass))
+				{
+					return LatentNodeClass;
 				}
 			}
 		}

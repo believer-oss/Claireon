@@ -18,7 +18,7 @@
 #include "Core/CameraRigAsset.h"
 #include "Core/ObjectChildrenView.h"
 
-namespace
+namespace ClaireonCameraAssetTool_ListNodes_Private
 {
 	/**
 	 * Find which UPROPERTY on Parent points at Child, returning a path segment
@@ -27,7 +27,7 @@ namespace
 	 */
 	FString CALN_ResolveChildSegment(UCameraNode* Parent, UCameraNode* Child, int32 FallbackIndex)
 	{
-		if (!Parent || !Child)
+		if (!IsValid(Parent) || !IsValid(Child))
 		{
 			return FString::Printf(TEXT("Children[%d]"), FallbackIndex);
 		}
@@ -87,7 +87,7 @@ namespace
 		int32 ChildIndex,
 		TArray<TSharedPtr<FJsonValue>>& Out)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			return;
 		}
@@ -119,12 +119,15 @@ namespace
 		}
 	}
 } // namespace
+using namespace ClaireonCameraAssetTool_ListNodes_Private;
 
 FString FClaireonCameraAssetTool_ListNodes::GetOperation() const { return TEXT("list_nodes"); }
 
 FString FClaireonCameraAssetTool_ListNodes::GetDescription() const
 {
-	return TEXT("Recursively walk a UCameraRigAsset's node tree and return node_id, class, parent, and a property summary for each node.");
+	return TEXT("List every UCameraNode in one rig of a UCameraAsset by walking the node tree recursively, returning "
+		"node_id, class, parent, and a property summary per node. Read-only / non-session: addressed by "
+		"asset_path plus rig_index (default 0); opens no session.");
 }
 
 TSharedPtr<FJsonObject> FClaireonCameraAssetTool_ListNodes::GetInputSchema() const
@@ -163,7 +166,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_ListNodes::Execute(const TSh
 	}
 
 	UCameraAsset* Asset = LoadObject<UCameraAsset>(nullptr, *Canon);
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Camera asset not found: %s"), *Canon));
 	}
@@ -177,7 +180,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_ListNodes::Execute(const TSh
 	}
 
 	UCameraRigAsset* Rig = Rigs[RigIndex];
-	if (!Rig)
+	if (!IsValid(Rig))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Rig at index %d is null"), RigIndex));
 	}

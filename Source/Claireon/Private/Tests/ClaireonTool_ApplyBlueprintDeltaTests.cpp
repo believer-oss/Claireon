@@ -23,24 +23,62 @@
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraphSchema_K2.h"
 #include "K2Node_AsyncAction.h"
+#include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "ObjectTools.h"
 
+#include "ClaireonTestAssetDeletion.h"
 // ---------------------------------------------------------------------------
 // Test asset path + helpers
 // ---------------------------------------------------------------------------
 static const TCHAR* ApplyBPDeltaPinsTestPath = TEXT("/Game/__MCPTests/BP_ApplyBlueprintGraphPinsTest");
 
-namespace
+namespace ClaireonTool_ApplyBlueprintDeltaTests_Private
 {
+
+// True only when the fixture actually has a .uasset on disk.
+//
+// This suite's fixture is built by bp_create, whose creation path
+// (ClaireonBlueprintHelpers::CreateBlueprint) never saves, and none of the tools
+// the tests invoke (bp_open, bp_add_variable, bp_apply_delta) saves either -- only
+// bp_save / bp_close_all reach CompileAndSaveSession, and these tests never call
+// them. So the fixture normally lives in an in-memory package only. Deleting an
+// in-memory fixture buys nothing, and every ObjectTools::ForceDeleteObjects call
+// runs a whole-object-graph referencer scan, which is the trigger for the
+// nondeterministic Niagara-serialization crash documented in
+// Docs/llm/todo/claireon-untest-harness-reliability.md item 1. This file alone had
+// 16 such call sites per run.
+//
+// The check is kept rather than dropping the delete outright because
+// /Game/__MCPTests is deliberately NOT gitignored: a stale .uasset left by an
+// older build or a crashed run must still be cleaned so `git status --porcelain
+// -- Content/` stays empty.
+bool ApplyGraphTests_HasFileOnDisk(const FString& AssetOrPackagePath)
+{
+	const FString PackageName = FPackageName::ObjectPathToPackageName(AssetOrPackagePath);
+	FString FileName;
+	if (!FPackageName::TryConvertLongPackageNameToFilename(
+			PackageName, FileName, FPackageName::GetAssetPackageExtension()))
+	{
+		return false;
+	}
+	return FPaths::FileExists(FileName);
+}
 
 void ApplyGraphTests_CleanupTestAsset(const FString& AssetPath)
 {
+	// In-memory fixture: nothing on disk, nothing to clean, no referencer scan.
+	if (!ApplyGraphTests_HasFileOnDisk(AssetPath))
+	{
+		return;
+	}
+
 	UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *AssetPath);
-	if (Asset)
+	if (IsValid(Asset))
 	{
 		TArray<UObject*> AssetsToDelete;
 		AssetsToDelete.Add(Asset);
-		ObjectTools::ForceDeleteObjects(AssetsToDelete, false);
+		ClaireonTestAssetDeletion::DeleteObjectsForTest(AssetsToDelete);
 	}
 }
 
@@ -100,7 +138,7 @@ UEdGraphNode* ResolveCreatedNode(const IClaireonTool::FToolResult& Result, const
 	FBlueprintEditToolData* Data = ClaireonBlueprintGraphEditToolBase::FindToolData(SessionId);
 	if (!Data) return nullptr;
 	UEdGraph* Graph = Data->Graph.Get();
-	if (!Graph) return nullptr;
+	if (!IsValid(Graph)) return nullptr;
 
 	return ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
 }
@@ -108,7 +146,7 @@ UEdGraphNode* ResolveCreatedNode(const IClaireonTool::FToolResult& Result, const
 // True if a pin matching PinName (case-insensitive) exists on Node.
 bool NodeHasPin(UEdGraphNode* Node, const TCHAR* PinName)
 {
-	if (!Node) return false;
+	if (!IsValid(Node)) return false;
 	for (UEdGraphPin* Pin : Node->Pins)
 	{
 		if (Pin && Pin->PinName.ToString().Equals(PinName, ESearchCase::IgnoreCase))
@@ -119,7 +157,8 @@ bool NodeHasPin(UEdGraphNode* Node, const TCHAR* PinName)
 	return false;
 }
 
-} // anonymous namespace
+} // namespace ClaireonTool_ApplyBlueprintDeltaTests_Private
+using namespace ClaireonTool_ApplyBlueprintDeltaTests_Private;
 
 // ============================================================================
 // KismetSystemLibrary.PrintString -- classic canary: a standard static helper

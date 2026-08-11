@@ -40,7 +40,7 @@ FToolResult ClaireonStateTreeTool_RemoveBinding::Execute(const TSharedPtr<FJsonO
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	FGuid TargetNodeId;

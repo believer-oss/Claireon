@@ -21,8 +21,10 @@ FString ClaireonTool_PIETestAbility::GetOperation() const { return TEXT("test_ab
 
 FString ClaireonTool_PIETestAbility::GetDescription() const
 {
-	return TEXT("Test whether a gameplay ability can be activated on an actor. "
-		"Does NOT actually activate the ability Ã¢Â€Â” only checks activation requirements.");
+	return TEXT("Test whether a gameplay ability can be activated on a PIE actor without activating it -- only the "
+		"activation requirements are checked. Args: actorId (from pie_register_actor) and abilityName, "
+		"matched against the actor's granted specs. Requires a live PIE session; read-only and opens no "
+		"editing session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PIETestAbility::GetInputSchema() const
@@ -71,7 +73,7 @@ IClaireonTool::FToolResult ClaireonTool_PIETestAbility::Execute(const TSharedPtr
 		return MakeErrorResult(TEXT("Missing required argument: abilityName"));
 	}
 
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("GEditor is not available"));
 	}
@@ -80,14 +82,14 @@ IClaireonTool::FToolResult ClaireonTool_PIETestAbility::Execute(const TSharedPtr
 	UWorld* PIEWorld = nullptr;
 	for (const FWorldContext& Context : GEngine->GetWorldContexts())
 	{
-		if (Context.WorldType == EWorldType::PIE && Context.World())
+		if (Context.WorldType == EWorldType::PIE && IsValid(Context.World()))
 		{
 			PIEWorld = Context.World();
 			break;
 		}
 	}
 
-	if (!PIEWorld)
+	if (!IsValid(PIEWorld))
 	{
 		return MakeErrorResult(TEXT("No active PIE session"));
 	}
@@ -95,7 +97,7 @@ IClaireonTool::FToolResult ClaireonTool_PIETestAbility::Execute(const TSharedPtr
 	// Resolve the actor
 	FClaireonPIEManager& PIEManager = FClaireonPIEManager::Get();
 	AActor* Actor = PIEManager.ResolveActorId(ActorId, PIEWorld);
-	if (!Actor)
+	if (!IsValid(Actor))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Actor not found for ID: %s"), *ActorId));
 	}
@@ -109,7 +111,7 @@ IClaireonTool::FToolResult ClaireonTool_PIETestAbility::Execute(const TSharedPtr
 	}
 
 	UAbilitySystemComponent* ASC = ASCInterface->GetAbilitySystemComponent();
-	if (!ASC)
+	if (!IsValid(ASC))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Actor %s has no AbilitySystemComponent"), *Actor->GetName()));

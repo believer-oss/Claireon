@@ -42,7 +42,7 @@ FToolResult ClaireonBehaviorTreeTool_AddDecorator::Execute(const TSharedPtr<FJso
 	}
 
 	UBehaviorTreeGraph* Graph = ClaireonBehaviorTreeHelpers::GetBTGraph(Data->BehaviorTree.Get(), Error);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -60,14 +60,14 @@ FToolResult ClaireonBehaviorTreeTool_AddDecorator::Execute(const TSharedPtr<FJso
 	}
 
 	UBehaviorTreeGraphNode* ParentGraphNode = ClaireonBehaviorTreeHelpers::FindGraphNodeByGuid(Graph, NodeGuid);
-	if (!ParentGraphNode)
+	if (!IsValid(ParentGraphNode))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Node not found: %s"), *NodeGuid.ToString(EGuidFormats::DigitsWithHyphensLower)));
 	}
 
 	ClaireonNameResolver::FNameResolveResult DecoratorNameResult;
 	UClass* DecoratorClass = ClaireonNameResolver::ResolveClassName(DecoratorClassName, UBTDecorator::StaticClass(), DecoratorNameResult);
-	if (!DecoratorClass)
+	if (!IsValid(DecoratorClass))
 	{
 		return MakeErrorResult(DecoratorNameResult.Error);
 	}
@@ -79,7 +79,7 @@ FToolResult ClaireonBehaviorTreeTool_AddDecorator::Execute(const TSharedPtr<FJso
 
 	UBehaviorTreeGraphNode* DecoratorGraphNode = ClaireonBehaviorTreeHelpers::CreateGraphNodeForClass(Graph, DecoratorClass,
 		FVector2D(ParentGraphNode->NodePosX, ParentGraphNode->NodePosY - 50), Error);
-	if (!DecoratorGraphNode)
+	if (!IsValid(DecoratorGraphNode))
 	{
 		return MakeErrorResult(Error);
 	}

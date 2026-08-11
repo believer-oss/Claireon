@@ -20,7 +20,10 @@
 // "AActor" is the C++ name; UE internal name is "Actor". The resolver should
 // handle this transparently -- stripping A/U prefix at exact-match time so the
 // caller never knows the difference.
-UNTEST_UNIT(Claireon, NameResolver, Class_ExactMatch)
+// Budget: the bare UNTEST_UNIT default is 0.50ms (FUntestUnitFixture::DefaultTimeoutMs),
+// which is not a deliberate perf assertion. Too tight now that the tool registry is
+// populated process-wide and this test does real work -- do not restore the default.
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Class_ExactMatch, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UClass* Found = ClaireonNameResolver::ResolveClassName(TEXT("AActor"), nullptr, Result);
@@ -33,7 +36,7 @@ UNTEST_UNIT(Claireon, NameResolver, Class_ExactMatch)
 }
 
 // Internal name "Actor" should also work as exact match.
-UNTEST_UNIT(Claireon, NameResolver, Class_ExactMatchInternalName)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Class_ExactMatchInternalName, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UClass* Found = ClaireonNameResolver::ResolveClassName(TEXT("Actor"), nullptr, Result);
@@ -57,7 +60,7 @@ UNTEST_UNIT_OPTS(Claireon, NameResolver, Class_CaseInsensitive, UNTEST_TIMEOUTMS
 }
 
 // "StaticMeshComponent" is the UE internal name -- should be exact match.
-UNTEST_UNIT(Claireon, NameResolver, Class_AddUPrefix)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Class_AddUPrefix, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UClass* Found = ClaireonNameResolver::ResolveClassName(TEXT("StaticMeshComponent"), nullptr, Result);
@@ -69,7 +72,7 @@ UNTEST_UNIT(Claireon, NameResolver, Class_AddUPrefix)
 }
 
 // "PlayerController" is the UE internal name -- should be exact match.
-UNTEST_UNIT(Claireon, NameResolver, Class_AddAPrefix)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Class_AddAPrefix, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UClass* Found = ClaireonNameResolver::ResolveClassName(TEXT("PlayerController"), nullptr, Result);
@@ -81,7 +84,7 @@ UNTEST_UNIT(Claireon, NameResolver, Class_AddAPrefix)
 
 // "Audio" should find UAudioComponent via Component suffix step,
 // since there is no class named just "Audio".
-UNTEST_UNIT(Claireon, NameResolver, Class_ComponentSuffix)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Class_ComponentSuffix, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UClass* Found = ClaireonNameResolver::ResolveClassName(TEXT("Audio"), nullptr, Result);
@@ -91,7 +94,7 @@ UNTEST_UNIT(Claireon, NameResolver, Class_ComponentSuffix)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, NameResolver, Class_RequiredBaseClassPass)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Class_RequiredBaseClassPass, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UClass* Found = ClaireonNameResolver::ResolveClassName(TEXT("AActor"), AActor::StaticClass(), Result);
@@ -121,7 +124,7 @@ UNTEST_UNIT_OPTS(Claireon, NameResolver, Class_UnknownClass, UNTEST_TIMEOUTMS(50
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, NameResolver, Class_EmptyInput)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Class_EmptyInput, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UClass* Found = ClaireonNameResolver::ResolveClassName(TEXT(""), nullptr, Result);
@@ -193,7 +196,7 @@ UK2Node_CallFunction* CreateTestCallFunctionNode(UEdGraph*& OutGraph, UBlueprint
 	OutBlueprint->ParentClass = AActor::StaticClass();
 	OutGraph = FBlueprintEditorUtils::CreateNewGraph(
 		OutBlueprint, TEXT("TestGraph"), UEdGraph::StaticClass(), UEdGraphSchema_K2::StaticClass());
-	if (!OutGraph)
+	if (!IsValid(OutGraph))
 	{
 		return nullptr;
 	}
@@ -206,7 +209,10 @@ UK2Node_CallFunction* CreateTestCallFunctionNode(UEdGraph*& OutGraph, UBlueprint
 
 }  // namespace ClaireonNameResolverTestsHelpers
 
-UNTEST_UNIT(Claireon, NameResolver, Pin_ExactMatch)
+// Budget: the bare UNTEST_UNIT default is 0.50ms (FUntestUnitFixture::DefaultTimeoutMs),
+// which is not a deliberate perf assertion. Too tight now that the tool registry is
+// populated process-wide and this test does real work -- do not restore the default.
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Pin_ExactMatch, UNTEST_TIMEOUTMS(10000))
 {
 	UEdGraph* Graph = nullptr;
 	UBlueprint* BP = nullptr;
@@ -225,7 +231,7 @@ UNTEST_UNIT(Claireon, NameResolver, Pin_ExactMatch)
 }
 
 // FName-based FindPin is case-insensitive, so "newlocation" matches as exact.
-UNTEST_UNIT(Claireon, NameResolver, Pin_CaseInsensitive)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Pin_CaseInsensitive, UNTEST_TIMEOUTMS(10000))
 {
 	UEdGraph* Graph = nullptr;
 	UBlueprint* BP = nullptr;
@@ -240,7 +246,10 @@ UNTEST_UNIT(Claireon, NameResolver, Pin_CaseInsensitive)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, NameResolver, Pin_AliasExec)
+// Budget: the bare UNTEST_UNIT default is 0.50ms (FUntestUnitFixture::DefaultTimeoutMs),
+// which is not a deliberate perf assertion. Too tight now that the tool registry is
+// populated process-wide and this test does real work -- do not restore the default.
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Pin_AliasExec, UNTEST_TIMEOUTMS(10000))
 {
 	UEdGraph* Graph = nullptr;
 	UBlueprint* BP = nullptr;
@@ -257,7 +266,7 @@ UNTEST_UNIT(Claireon, NameResolver, Pin_AliasExec)
 
 // The output exec pin in K2Node_CallFunction may be named "then" which would
 // match as exact. Either way, resolution should succeed and return an output pin.
-UNTEST_UNIT(Claireon, NameResolver, Pin_AliasThen)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Pin_AliasThen, UNTEST_TIMEOUTMS(10000))
 {
 	UEdGraph* Graph = nullptr;
 	UBlueprint* BP = nullptr;
@@ -274,7 +283,7 @@ UNTEST_UNIT(Claireon, NameResolver, Pin_AliasThen)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, NameResolver, Pin_AliasSelf)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Pin_AliasSelf, UNTEST_TIMEOUTMS(10000))
 {
 	UEdGraph* Graph = nullptr;
 	UBlueprint* BP = nullptr;
@@ -288,7 +297,7 @@ UNTEST_UNIT(Claireon, NameResolver, Pin_AliasSelf)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, NameResolver, Pin_SubstringUnique)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Pin_SubstringUnique, UNTEST_TIMEOUTMS(10000))
 {
 	UEdGraph* Graph = nullptr;
 	UBlueprint* BP = nullptr;
@@ -305,7 +314,7 @@ UNTEST_UNIT(Claireon, NameResolver, Pin_SubstringUnique)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, NameResolver, Pin_NullNode)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Pin_NullNode, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UEdGraphPin* Found = ClaireonNameResolver::ResolvePinName(nullptr, TEXT("test"), EGPD_MAX, Result);
@@ -319,7 +328,7 @@ UNTEST_UNIT(Claireon, NameResolver, Pin_NullNode)
 // Function Name Resolution Tests
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, NameResolver, Function_ExactMatch)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Function_ExactMatch, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UFunction* Found =
@@ -330,7 +339,7 @@ UNTEST_UNIT(Claireon, NameResolver, Function_ExactMatch)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, NameResolver, Function_K2PrefixAdd)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Function_K2PrefixAdd, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UFunction* Found =
@@ -342,7 +351,7 @@ UNTEST_UNIT(Claireon, NameResolver, Function_K2PrefixAdd)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, NameResolver, Function_EventAliasBeginPlay)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Function_EventAliasBeginPlay, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UFunction* Found =
@@ -354,7 +363,7 @@ UNTEST_UNIT(Claireon, NameResolver, Function_EventAliasBeginPlay)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, NameResolver, Function_EventAliasTick)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Function_EventAliasTick, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UFunction* Found = ClaireonNameResolver::ResolveFunctionName(AActor::StaticClass(), TEXT("Tick"), Result);
@@ -366,7 +375,7 @@ UNTEST_UNIT(Claireon, NameResolver, Function_EventAliasTick)
 }
 
 // FName is case-insensitive so "k2_setactorlocation" matches exactly.
-UNTEST_UNIT(Claireon, NameResolver, Function_CaseInsensitive)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Function_CaseInsensitive, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UFunction* Found =
@@ -377,7 +386,7 @@ UNTEST_UNIT(Claireon, NameResolver, Function_CaseInsensitive)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, NameResolver, Function_UnknownFunction)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Function_UnknownFunction, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UFunction* Found =
@@ -388,7 +397,7 @@ UNTEST_UNIT(Claireon, NameResolver, Function_UnknownFunction)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, NameResolver, Function_NullClass)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Function_NullClass, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UFunction* Found = ClaireonNameResolver::ResolveFunctionName(nullptr, TEXT("test"), Result);
@@ -402,7 +411,10 @@ UNTEST_UNIT(Claireon, NameResolver, Function_NullClass)
 // Property Name Resolution Tests
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, NameResolver, Property_ExactMatch)
+// Budget: the bare UNTEST_UNIT default is 0.50ms (FUntestUnitFixture::DefaultTimeoutMs),
+// which is not a deliberate perf assertion. Too tight now that the tool registry is
+// populated process-wide and this test does real work -- do not restore the default.
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Property_ExactMatch, UNTEST_TIMEOUTMS(10000))
 {
 	// AActor has a well-known property "bHidden"
 	ClaireonNameResolver::FNameResolveResult Result;
@@ -414,7 +426,7 @@ UNTEST_UNIT(Claireon, NameResolver, Property_ExactMatch)
 }
 
 // FName is case-insensitive so "bhidden" matches as exact.
-UNTEST_UNIT(Claireon, NameResolver, Property_CaseInsensitive)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Property_CaseInsensitive, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	FProperty* Found = ClaireonNameResolver::ResolvePropertyName(AActor::StaticClass(), TEXT("bhidden"), Result);
@@ -424,7 +436,7 @@ UNTEST_UNIT(Claireon, NameResolver, Property_CaseInsensitive)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, NameResolver, Property_BoolBPrefixAdd)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Property_BoolBPrefixAdd, UNTEST_TIMEOUTMS(10000))
 {
 	// "Hidden" should find "bHidden" via the b-prefix addition step
 	ClaireonNameResolver::FNameResolveResult Result;
@@ -435,7 +447,7 @@ UNTEST_UNIT(Claireon, NameResolver, Property_BoolBPrefixAdd)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, NameResolver, Property_UnknownProperty)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Property_UnknownProperty, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	FProperty* Found =
@@ -446,7 +458,7 @@ UNTEST_UNIT(Claireon, NameResolver, Property_UnknownProperty)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, NameResolver, Property_NullStruct)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Property_NullStruct, UNTEST_TIMEOUTMS(10000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	FProperty* Found = ClaireonNameResolver::ResolvePropertyName(nullptr, TEXT("test"), Result);
@@ -462,7 +474,7 @@ UNTEST_UNIT(Claireon, NameResolver, Property_NullStruct)
 
 // "FVector" is the C++ name; the resolver strips the F prefix to find UE's
 // internal name "Vector". This should still appear as exact match.
-UNTEST_UNIT(Claireon, NameResolver, Struct_ExactMatch)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Struct_ExactMatch, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UScriptStruct* Found = ClaireonNameResolver::ResolveStructName(TEXT("FVector"), Result);
@@ -474,7 +486,7 @@ UNTEST_UNIT(Claireon, NameResolver, Struct_ExactMatch)
 }
 
 // "Vector" is the UE internal name -- also exact match.
-UNTEST_UNIT(Claireon, NameResolver, Struct_ExactMatchInternalName)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Struct_ExactMatchInternalName, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UScriptStruct* Found = ClaireonNameResolver::ResolveStructName(TEXT("Vector"), Result);
@@ -508,7 +520,7 @@ UNTEST_UNIT_OPTS(Claireon, NameResolver, Struct_UnknownStruct, UNTEST_TIMEOUTMS(
 // Enum Name Resolution Tests
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, NameResolver, Enum_ExactMatch)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Enum_ExactMatch, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UEnum* Found = ClaireonNameResolver::ResolveEnumName(TEXT("EObjectTypeQuery"), Result);
@@ -518,7 +530,7 @@ UNTEST_UNIT(Claireon, NameResolver, Enum_ExactMatch)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, NameResolver, Enum_EPrefixAdd)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Enum_EPrefixAdd, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UEnum* Found = ClaireonNameResolver::ResolveEnumName(TEXT("ObjectTypeQuery"), Result);
@@ -529,7 +541,7 @@ UNTEST_UNIT(Claireon, NameResolver, Enum_EPrefixAdd)
 }
 
 // FName is case-insensitive so "eobjecttypequery" matches as exact.
-UNTEST_UNIT(Claireon, NameResolver, Enum_CaseInsensitive)
+UNTEST_UNIT_OPTS(Claireon, NameResolver, Enum_CaseInsensitive, UNTEST_TIMEOUTMS(5000))
 {
 	ClaireonNameResolver::FNameResolveResult Result;
 	UEnum* Found = ClaireonNameResolver::ResolveEnumName(TEXT("eobjecttypequery"), Result);

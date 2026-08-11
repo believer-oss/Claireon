@@ -27,13 +27,10 @@ FString ClaireonLevelSequenceTool_AddTrack::GetDescription() const
     // `binding_context` from level_sequence_list_track_types.
     // The new track is NOT focused automatically; call focus_track to make
     // subsequent section/keyframe ops target it.
-    return TEXT("Add a track of the given type. Root-context tracks (event, camera_cut, audio) "
-                "are added at sequence root and do not require a focused binding; "
-                "binding-context tracks (transform, visibility, float, color, margin, "
-                "2d_transform, widget_material) require focus_binding first. See "
-                "level_sequence_list_track_types for the binding_context of each type. "
-                "Note: the new track is NOT auto-focused -- call focus_track to make "
-                "subsequent section/keyframe ops target it. "
+    return TEXT("Add a track of the given type. Root-context tracks (event, camera_cut, audio) go at "
+                "sequence root, needing no focused binding; the rest (transform, visibility, float, "
+                "color, margin, 2d_transform, widget_material) require focus_binding first -- see "
+                "level_sequence_list_track_types. New tracks are NOT auto-focused: call focus_track. "
                 "Session-mode tool: open via level_sequence_open first.");
 }
 
@@ -65,7 +62,7 @@ FToolResult ClaireonLevelSequenceTool_AddTrack::Execute(const TSharedPtr<FJsonOb
 		return MakeErrorResult(TEXT("Missing required parameter: track_type"));
 	}
 	UClass* TrackClass = FClaireonSequenceHelpers::ResolveTrackClass(TrackType);
-	if (!TrackClass)
+	if (!IsValid(TrackClass))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Unknown track_type: %s"), *TrackType));
 	}

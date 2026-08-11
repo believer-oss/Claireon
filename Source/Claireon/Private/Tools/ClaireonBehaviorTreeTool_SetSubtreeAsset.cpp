@@ -42,7 +42,7 @@ FToolResult ClaireonBehaviorTreeTool_SetSubtreeAsset::Execute(const TSharedPtr<F
 	}
 
 	UBehaviorTreeGraph* Graph = ClaireonBehaviorTreeHelpers::GetBTGraph(Data->BehaviorTree.Get(), Error);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -60,19 +60,19 @@ FToolResult ClaireonBehaviorTreeTool_SetSubtreeAsset::Execute(const TSharedPtr<F
 	}
 
 	UBehaviorTreeGraphNode* GraphNode = ClaireonBehaviorTreeHelpers::FindGraphNodeByGuid(Graph, NodeGuid);
-	if (!GraphNode)
+	if (!IsValid(GraphNode))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Node not found: %s"), *NodeGuid.ToString(EGuidFormats::DigitsWithHyphensLower)));
 	}
 
 	UBTTask_RunBehavior* RunBehaviorNode = Cast<UBTTask_RunBehavior>(GraphNode->NodeInstance);
-	if (!RunBehaviorNode)
+	if (!IsValid(RunBehaviorNode))
 	{
 		return MakeErrorResult(TEXT("Node is not a BTTask_RunBehavior - set_subtree_asset only works on RunBehavior task nodes"));
 	}
 
 	UBehaviorTree* SubtreeBT = ClaireonBehaviorTreeHelpers::LoadBehaviorTreeAsset(SubtreePath, Error);
-	if (!SubtreeBT)
+	if (!IsValid(SubtreeBT))
 	{
 		return MakeErrorResult(Error);
 	}

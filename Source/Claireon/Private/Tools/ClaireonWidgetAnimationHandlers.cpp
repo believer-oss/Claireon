@@ -30,14 +30,14 @@ namespace Claireon::WidgetAnimation
 
 UWidgetAnimation* FindWidgetAnimationByName(UWidgetBlueprint* WBP, const FString& AnimationName)
 {
-	if (!WBP || AnimationName.IsEmpty())
+	if (!IsValid(WBP) || AnimationName.IsEmpty())
 	{
 		return nullptr;
 	}
 	const FName Target(*AnimationName);
 	for (UWidgetAnimation* Anim : WBP->Animations)
 	{
-		if (Anim && Anim->GetFName() == Target)
+		if (IsValid(Anim) && Anim->GetFName() == Target)
 		{
 			return Anim;
 		}
@@ -50,7 +50,7 @@ bool ApplyCreateAnimation(UWidgetBlueprint* WBP, const FString& AnimationName, f
 {
 	OutAnim = nullptr;
 	OutError.Reset();
-	if (!WBP)
+	if (!IsValid(WBP))
 	{
 		OutError = TEXT("widget blueprint is null");
 		return false;
@@ -69,7 +69,7 @@ bool ApplyCreateAnimation(UWidgetBlueprint* WBP, const FString& AnimationName, f
 
 	// Engine pattern mirrors AnimationTabSummoner.cpp:258-268 commit path.
 	UWidgetAnimation* NewAnim = NewObject<UWidgetAnimation>(WBP, UWidgetAnimation::StaticClass(), NAME_None, RF_Transactional);
-	if (!NewAnim)
+	if (!IsValid(NewAnim))
 	{
 		OutError = TEXT("NewObject<UWidgetAnimation> returned null");
 		return false;
@@ -103,13 +103,13 @@ bool ApplyCreateAnimation(UWidgetBlueprint* WBP, const FString& AnimationName, f
 bool ApplyDeleteAnimation(UWidgetBlueprint* WBP, const FString& AnimationName, FString& OutError)
 {
 	OutError.Reset();
-	if (!WBP)
+	if (!IsValid(WBP))
 	{
 		OutError = TEXT("widget blueprint is null");
 		return false;
 	}
 	UWidgetAnimation* Anim = FindWidgetAnimationByName(WBP, AnimationName);
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		OutError = FString::Printf(TEXT("animation '%s' not found on %s"), *AnimationName, *WBP->GetName());
 		return false;
@@ -129,7 +129,7 @@ bool ApplyDeleteAnimation(UWidgetBlueprint* WBP, const FString& AnimationName, F
 bool ApplyRenameAnimation(UWidgetBlueprint* WBP, const FString& OldName, const FString& NewName, FString& OutError)
 {
 	OutError.Reset();
-	if (!WBP)
+	if (!IsValid(WBP))
 	{
 		OutError = TEXT("widget blueprint is null");
 		return false;
@@ -140,7 +140,7 @@ bool ApplyRenameAnimation(UWidgetBlueprint* WBP, const FString& OldName, const F
 		return false;
 	}
 	UWidgetAnimation* Anim = FindWidgetAnimationByName(WBP, OldName);
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		OutError = FString::Printf(TEXT("animation '%s' not found on %s"), *OldName, *WBP->GetName());
 		return false;
@@ -161,7 +161,7 @@ bool ApplyRenameAnimation(UWidgetBlueprint* WBP, const FString& OldName, const F
 	// already know the new name.
 	ClaireonWidgetHelpers::NotifyVariableRenamed(WBP, OldFName, NewFName);
 
-	if (UMovieScene* MS = Anim->GetMovieScene())
+	if (UMovieScene* MS = Anim->GetMovieScene(); IsValid(MS))
 	{
 		MS->Modify();
 		MS->Rename(*NewName, nullptr, REN_DontCreateRedirectors);
@@ -180,18 +180,18 @@ bool ApplyAddAnimationBinding(UWidgetAnimation* Anim, UWidget* Widget, const FSt
 {
 	OutError.Reset();
 	OutGuid.Invalidate();
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		OutError = TEXT("animation is null");
 		return false;
 	}
-	if (!Widget)
+	if (!IsValid(Widget))
 	{
 		OutError = TEXT("widget is null");
 		return false;
 	}
 	UMovieScene* MS = Anim->GetMovieScene();
-	if (!MS)
+	if (!IsValid(MS))
 	{
 		OutError = TEXT("animation has no MovieScene");
 		return false;
@@ -219,20 +219,20 @@ bool ApplyAddAnimationTrack(UWidgetAnimation* Anim, const FGuid& BindingGuid, co
 {
 	OutError.Reset();
 	OutTrack = nullptr;
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		OutError = TEXT("animation is null");
 		return false;
 	}
 	UMovieScene* MS = Anim->GetMovieScene();
-	if (!MS)
+	if (!IsValid(MS))
 	{
 		OutError = TEXT("animation has no MovieScene");
 		return false;
 	}
 	const FString ResolvedType = TrackType.IsEmpty() ? FString(TEXT("float")) : TrackType;
 	UClass* TrackClass = FClaireonSequenceHelpers::ResolveTrackClass(ResolvedType);
-	if (!TrackClass)
+	if (!IsValid(TrackClass))
 	{
 		OutError = FString::Printf(
 			TEXT("unknown track type '%s'; known: float, double, bool, visibility, transform, 2d_transform, margin, widget_material, color, event, audio"),
@@ -240,19 +240,19 @@ bool ApplyAddAnimationTrack(UWidgetAnimation* Anim, const FGuid& BindingGuid, co
 		return false;
 	}
 	UMovieSceneTrack* Track = MS->AddTrack(TrackClass, BindingGuid);
-	if (!Track)
+	if (!IsValid(Track))
 	{
 		OutError = FString::Printf(TEXT("track type '%s' not supported on widget animations"), *ResolvedType);
 		return false;
 	}
-	if (UMovieScenePropertyTrack* PropertyTrack = Cast<UMovieScenePropertyTrack>(Track))
+	if (UMovieScenePropertyTrack* PropertyTrack = Cast<UMovieScenePropertyTrack>(Track); IsValid(PropertyTrack))
 	{
 		if (!PropertyName.IsEmpty())
 		{
 			PropertyTrack->SetPropertyNameAndPath(FName(*PropertyName), PropertyName);
 		}
 	}
-	if (UMovieSceneSection* Section = Track->CreateNewSection())
+	if (UMovieSceneSection* Section = Track->CreateNewSection(); IsValid(Section))
 	{
 		Section->SetRange(MS->GetPlaybackRange());
 		Track->AddSection(*Section);
@@ -265,13 +265,13 @@ bool ApplyRemoveAnimationTrack(UWidgetAnimation* Anim, const FGuid& BindingGuid,
 	const FString& TrackNameOrProperty, FString& OutError)
 {
 	OutError.Reset();
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		OutError = TEXT("animation is null");
 		return false;
 	}
 	UMovieScene* MS = Anim->GetMovieScene();
-	if (!MS)
+	if (!IsValid(MS))
 	{
 		OutError = TEXT("animation has no MovieScene");
 		return false;
@@ -292,7 +292,7 @@ bool ApplyRemoveAnimationTrack(UWidgetAnimation* Anim, const FGuid& BindingGuid,
 	const FName Wanted(*TrackNameOrProperty);
 	for (UMovieSceneTrack* T : Binding->GetTracks())
 	{
-		if (!T) { continue; }
+		if (!IsValid(T)) { continue; }
 		if (T->GetTrackName() == Wanted
 			|| T->GetClass()->GetName() == TrackNameOrProperty
 			|| T->GetClass()->GetName().Equals(TrackNameOrProperty, ESearchCase::IgnoreCase))
@@ -301,7 +301,7 @@ bool ApplyRemoveAnimationTrack(UWidgetAnimation* Anim, const FGuid& BindingGuid,
 			break;
 		}
 	}
-	if (!Found)
+	if (!IsValid(Found))
 	{
 		OutError = FString::Printf(TEXT("track '%s' not found on binding"), *TrackNameOrProperty);
 		return false;

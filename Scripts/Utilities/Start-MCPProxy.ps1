@@ -231,5 +231,5 @@ Write-Host @"
 "@
 Write-Host 'Editor-less surface: proxy meta-tool (status/launch_editor/read_log/...) and file-backed'
 Write-Host 'prompts (prompts/list, prompts/get). tool_search and python_execute need a running editor;'
-Write-Host "start one later with proxy(command='launch_editor') or Invoke-EditorBuildAndLaunch.ps1."
+Write-Host "start one later with proxy(command='launch_editor')."
 exit 0

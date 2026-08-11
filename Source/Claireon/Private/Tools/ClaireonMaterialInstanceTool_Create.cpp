@@ -45,7 +45,7 @@ FToolResult ClaireonMaterialInstanceTool_Create::Execute(const TSharedPtr<FJsonO
 
 	const FString FullObjectPath = FString::Printf(TEXT("%s/%s.%s"), *PackagePath, *AssetName, *AssetName);
 	FSoftObjectPath SoftPath(FullObjectPath);
-	if (SoftPath.TryLoad())
+	if (IsValid(SoftPath.TryLoad()))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset already exists at path: %s. Use 'open' instead."), *FullObjectPath));
 	}
@@ -56,7 +56,7 @@ FToolResult ClaireonMaterialInstanceTool_Create::Execute(const TSharedPtr<FJsonO
 	{
 		FSoftObjectPath ParentSoft(ParentPath);
 		InitialParent = Cast<UMaterialInterface>(ParentSoft.TryLoad());
-		if (!InitialParent)
+		if (!IsValid(InitialParent))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Failed to load parent material '%s'"), *ParentPath));
 		}
@@ -64,14 +64,14 @@ FToolResult ClaireonMaterialInstanceTool_Create::Execute(const TSharedPtr<FJsonO
 
 	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
 	UMaterialInstanceConstantFactoryNew* Factory = NewObject<UMaterialInstanceConstantFactoryNew>();
-	if (InitialParent)
+	if (IsValid(InitialParent))
 	{
 		Factory->InitialParent = InitialParent;
 	}
 
 	UObject* NewAsset = AssetTools.CreateAsset(AssetName, PackagePath, UMaterialInstanceConstant::StaticClass(), Factory);
 	UMaterialInstanceConstant* NewInstance = Cast<UMaterialInstanceConstant>(NewAsset);
-	if (!NewInstance)
+	if (!IsValid(NewInstance))
 	{
 		return MakeErrorResult(TEXT("Failed to create UMaterialInstanceConstant via AssetTools.CreateAsset"));
 	}
@@ -84,6 +84,21 @@ FToolResult ClaireonMaterialInstanceTool_Create::Execute(const TSharedPtr<FJsonO
 	{
 		const FMCPSession& Blocker = OpenResult.BlockingSession.GetValue();
 		return MakeErrorResult(FString::Printf(TEXT("Asset is locked by %s session %s"), *Blocker.ToolName, *Blocker.SessionId));
+	}
+	// Defect guard: this used to handle only BlockedByOtherTool. On
+	// InvalidAssetPath (OpenSession's CanonicalizePath rejected the path, e.g. a
+	// path outside /Game/) SessionId is empty, and falling through returned a
+	// SUCCESS response carrying an empty session_id -- an unusable handle with no
+	// error. Every non-success result must produce an error here.
+	if (OpenResult.Result == EOpenSessionResult::InvalidAssetPath)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Invalid asset path: %s"), *ResolvedPath));
+	}
+	if (OpenResult.Result != EOpenSessionResult::Success && OpenResult.Result != EOpenSessionResult::ReusedExistingSession)
+	{
+		return MakeErrorResult(FString::Printf(
+			TEXT("Failed to open a session for %s (unexpected OpenSession result %d)"),
+			*ResolvedPath, static_cast<int32>(OpenResult.Result)));
 	}
 	const FString SessionId = OpenResult.SessionId;
 

@@ -53,7 +53,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEGetPlayerPawn::Execute(const TSharedP
 {
 	UE_LOG(LogClaireon, Display, TEXT("[MCP] editor.pie.getPlayerPawnByPlayerIndex"));
 
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("Editor is not available"));
 	}
@@ -83,14 +83,14 @@ IClaireonTool::FToolResult ClaireonTool_PIEGetPlayerPawn::Execute(const TSharedP
 	UWorld* PIEWorld = nullptr;
 	for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
 	{
-		if (WorldContext.WorldType == EWorldType::PIE && WorldContext.World())
+		if (WorldContext.WorldType == EWorldType::PIE && IsValid(WorldContext.World()))
 		{
 			PIEWorld = WorldContext.World();
 			break;
 		}
 	}
 
-	if (!PIEWorld)
+	if (!IsValid(PIEWorld))
 	{
 		return MakeErrorResult(TEXT("PIE world not found. PIE may still be initializing — use editor.pie.waitFor with condition 'pieReady'"));
 	}
@@ -101,7 +101,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEGetPlayerPawn::Execute(const TSharedP
 	for (auto It = PIEWorld->GetPlayerControllerIterator(); It; ++It)
 	{
 		APlayerController* PC = It->Get();
-		if (PC && CurrentIndex == PlayerIndex)
+		if (IsValid(PC) && CurrentIndex == PlayerIndex)
 		{
 			TargetPC = PC;
 			break;
@@ -109,7 +109,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEGetPlayerPawn::Execute(const TSharedP
 		CurrentIndex++;
 	}
 
-	if (!TargetPC)
+	if (!IsValid(TargetPC))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("No player controller found at index %d. Found %d controller(s) in PIE world."),
@@ -118,7 +118,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEGetPlayerPawn::Execute(const TSharedP
 
 	// Get the pawn
 	APawn* Pawn = TargetPC->GetPawn();
-	if (!Pawn)
+	if (!IsValid(Pawn))
 	{
 		// Player controller exists but no pawn yet — might still be spawning
 		FString Output;
@@ -165,7 +165,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEGetPlayerPawn::Execute(const TSharedP
 		Output += TEXT("components:\n");
 		for (const UActorComponent* Component : Components)
 		{
-			if (Component)
+			if (IsValid(Component))
 			{
 				Output += FString::Printf(TEXT("  - %s (%s)\n"),
 					*Component->GetName(), *Component->GetClass()->GetName());

@@ -60,7 +60,7 @@ FToolResult ClaireonNiagaraTool_AddRenderer::Execute(const TSharedPtr<FJsonObjec
 	}
 
 	UClass* RendererClass = ClaireonNiagaraHelpers::ResolveRendererClass(RendererType, Error);
-	if (!RendererClass)
+	if (!IsValid(RendererClass))
 	{
 		return MakeErrorResult(Error);
 	}

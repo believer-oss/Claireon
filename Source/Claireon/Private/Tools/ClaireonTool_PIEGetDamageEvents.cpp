@@ -14,8 +14,10 @@ FString ClaireonTool_PIEGetDamageEvents::GetOperation() const { return TEXT("get
 
 FString ClaireonTool_PIEGetDamageEvents::GetDescription() const
 {
-	return TEXT("Get recorded damage events from a registered damage listener. "
-		"Optionally clears the event buffer after retrieval.");
+	return TEXT("Get the damage events recorded by a listener from pie_register_damage_listener, addressed by "
+		"listenerId: per-event timestamp, damage, and instigator plus an event count and damage total. Pass "
+		"clear=true to empty the buffer after retrieval. Requires a live PIE session; opens no editing "
+		"session and mutates no assets.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PIEGetDamageEvents::GetInputSchema() const
@@ -29,7 +31,7 @@ TSharedPtr<FJsonObject> ClaireonTool_PIEGetDamageEvents::GetInputSchema() const
 	TSharedPtr<FJsonObject> ListenerIdProp = MakeShared<FJsonObject>();
 	ListenerIdProp->SetStringField(TEXT("type"), TEXT("string"));
 	ListenerIdProp->SetStringField(TEXT("description"),
-		TEXT("The listener ID returned by editor.pie.registerDamageListener"));
+		TEXT("The listener ID returned by pie_register_damage_listener"));
 	Properties->SetObjectField(TEXT("listenerId"), ListenerIdProp);
 
 	// clear - optional, default false
@@ -54,7 +56,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEGetDamageEvents::Execute(const TShare
 {
 	UE_LOG(LogClaireon, Display, TEXT("[MCP] editor.pie.getDamageEvents"));
 
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("Editor is not available"));
 	}

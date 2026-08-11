@@ -12,7 +12,7 @@
 #include "HAL/PlatformTime.h"
 #include "Misc/PackageName.h"
 
-namespace
+namespace ClaireonTool_AssetCheckInnerNameInvariant_Private
 {
 	// AssetCheckInnerNameInvariant_*: discriminator-prefixed file-local
 	// helpers to avoid unity-batch collisions with similarly-named
@@ -20,6 +20,7 @@ namespace
 
 	static constexpr int32 AssetCheckInnerNameInvariant_MaxResults = 500;
 }
+using namespace ClaireonTool_AssetCheckInnerNameInvariant_Private;
 
 FString ClaireonTool_AssetCheckInnerNameInvariant::GetCategory() const
 {
@@ -33,7 +34,10 @@ FString ClaireonTool_AssetCheckInnerNameInvariant::GetOperation() const
 
 FString ClaireonTool_AssetCheckInnerNameInvariant::GetDescription() const
 {
-	return TEXT("Stateless read-only audit: walks the asset registry and reports packages whose on-disk short-name disagrees with the inner top-level UObject's name. Optional contentPath (default /Game) and includePlugins (default false). Returns {scanned_count, mismatch_count, elapsed_ms, mismatches[], truncated}.");
+	return TEXT("Scan the Asset Registry and report packages whose on-disk short name disagrees with the "
+				"inner top-level UObject's name. Optional contentPath (default /Game) and includePlugins "
+				"(default false). Returns {scanned_count, mismatch_count, elapsed_ms, mismatches[], truncated}. "
+				"Stateless / read-only / non-session: loads no asset and opens no session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AssetCheckInnerNameInvariant::GetInputSchema() const

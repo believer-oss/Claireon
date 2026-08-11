@@ -18,7 +18,10 @@ FString ClaireonTool_PIERegisterActor::GetOperation() const { return TEXT("regis
 
 FString ClaireonTool_PIERegisterActor::GetDescription() const
 {
-	return TEXT("Resolve a PIE UObject path (e.g. '/Game/Maps/UEDPIE_0_MyMap.MyMap:PersistentLevel.BP_FSAIController_C_1') to a stable actor_id usable with statetree_runtime_inspect and other pie_* tools. Errors out when called outside PIE or when the path does not resolve. Read-only.");
+	return TEXT("Register a PIE UObject path (e.g. "
+		"'/Game/Maps/UEDPIE_0_MyMap.MyMap:PersistentLevel.BP_FSAIController_C_1') as a stable actor_id for "
+		"statetree_runtime_inspect and the other pie_* tools. Requires a live PIE session and errors when "
+		"the path does not resolve. Read-only with respect to assets; opens no editing session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_PIERegisterActor::GetInputSchema() const
@@ -51,7 +54,7 @@ IClaireonTool::FToolResult ClaireonTool_PIERegisterActor::Execute(const TSharedP
 		return MakeErrorResult(TEXT("Missing required parameter: actor_path"));
 	}
 
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("Editor is not available"));
 	}
@@ -66,13 +69,13 @@ IClaireonTool::FToolResult ClaireonTool_PIERegisterActor::Execute(const TSharedP
 	UWorld* PIEWorld = nullptr;
 	for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
 	{
-		if (WorldContext.WorldType == EWorldType::PIE && WorldContext.World())
+		if (WorldContext.WorldType == EWorldType::PIE && IsValid(WorldContext.World()))
 		{
 			PIEWorld = WorldContext.World();
 			break;
 		}
 	}
-	if (!PIEWorld)
+	if (!IsValid(PIEWorld))
 	{
 		return MakeErrorResult(TEXT("PIE world not found. PIE may still be initializing -- use pie_wait_for with condition 'pieReady'."));
 	}
@@ -81,7 +84,7 @@ IClaireonTool::FToolResult ClaireonTool_PIERegisterActor::Execute(const TSharedP
 	// form "/Game/.../UEDPIE_0_<Map>.<Map>:PersistentLevel.<ActorName>", which
 	// ClaireonPathResolver does not handle, so we go straight to FindObject.
 	AActor* Actor = FindObject<AActor>(nullptr, *ActorPath);
-	if (!Actor)
+	if (!IsValid(Actor))
 	{
 		// Fall back to scanning the PIE world's actor list and matching against the
 		// full path. Some PIE actor names contain characters FindObject parses
@@ -90,14 +93,14 @@ IClaireonTool::FToolResult ClaireonTool_PIERegisterActor::Execute(const TSharedP
 		for (TActorIterator<AActor> It(PIEWorld); It; ++It)
 		{
 			AActor* Candidate = *It;
-			if (Candidate && Candidate->GetPathName() == ActorPath)
+			if (IsValid(Candidate) && Candidate->GetPathName() == ActorPath)
 			{
 				Actor = Candidate;
 				break;
 			}
 		}
 	}
-	if (!Actor)
+	if (!IsValid(Actor))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Actor not found at path: %s"), *ActorPath));
 	}

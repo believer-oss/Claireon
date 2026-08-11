@@ -40,7 +40,7 @@ IClaireonTool::FToolResult ClaireonTool_ProxyAssetSetType::Execute(const TShared
 
 	FString Error;
 	UProxyAsset* ProxyAsset = ClaireonProxyTableHelpers::LoadProxyAsset(AssetPath, Error);
-	if (!ProxyAsset)
+	if (!IsValid(ProxyAsset))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -49,8 +49,8 @@ IClaireonTool::FToolResult ClaireonTool_ProxyAssetSetType::Execute(const TShared
 	ProxyAsset->Modify();
 
 	UClass* TypeClass = FindObject<UClass>(nullptr, *TypeStr);
-	if (!TypeClass) TypeClass = LoadObject<UClass>(nullptr, *TypeStr);
-	if (!TypeClass)
+	if (!IsValid(TypeClass)) TypeClass = LoadObject<UClass>(nullptr, *TypeStr);
+	if (!IsValid(TypeClass))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Could not find class: %s"), *TypeStr));
 	}

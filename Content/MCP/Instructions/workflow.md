@@ -32,7 +32,7 @@ The Creation Workflow has 9 stages:
 5. Sequencing        — Turn the plan into ordered implementation stages (skeleton → test → implement → ...)
 6. Implementing      — Execute the sequenced stages as commits
 7. Testing           — Verify all tests pass on rebased branch, debug failures
-8. Staging           — Rebase+squash on latest main, write final commit message with [ci:linux], force-push, create PR
+8. Staging           — Rebase+squash on latest main, write final commit message (with your project's CI trigger tag, if any), force-push, create PR
 9. Review Gate       — Human reviews and approves the PR; PR merges directly
 ```
 
@@ -572,14 +572,9 @@ If conflicts arise, resolve them. This is part of the "test" — the implementat
 
 #### 7.2 Build Verification
 
-Prefer remote build verification:
+If your project provides a remote/CI build-verification hook, prefer it — it exercises the same targets as CI. Otherwise build locally:
 ```powershell
-Scripts\Utilities\Invoke-RemoteBuildVerification.ps1 -Wait
-```
-
-This has a 90-minute timeout. If the remote build does not complete in time (e.g., network issues or a stalled remote queue), fall back to a local build:
-```powershell
-Scripts\Utilities\Invoke-EditorBuild.ps1
+Plugins\Claireon\Scripts\Utilities\Invoke-EditorBuild.ps1
 ```
 
 Fix any build errors.
@@ -587,10 +582,10 @@ Fix any build errors.
 #### 7.3 Run All Relevant Tests
 
 Execute the test suites appropriate for the changes:
-- `Scripts\Testing\Invoke-UntestTests.ps1` with relevant filters
-- `Scripts\Utilities\Invoke-CompileBlueprints.ps1`
-- `Scripts\Utilities\Invoke-ValidateAssets.ps1`
-- `Scripts\Testing\Test-EditorBuildAndPlay.ps1` for smoke tests
+- Your project's automation test runner with relevant filters
+- Blueprint compilation (e.g. `UnrealEditor-Cmd <project> -run=CompileAllBlueprints`)
+- `Plugins\Claireon\Scripts\Utilities\Invoke-ValidateAssets.ps1`
+- Your project's build + PIE smoke test, if it has one
 
 #### 7.4 Debug and Fix Failures
 
@@ -600,7 +595,7 @@ For each test failure:
 3. Re-run the failing test
 4. Ensure the fix doesn't break other tests
 
-Use the `debug-agent` sub-agent for complex failures. Use the `testing-agent` for test analysis.
+If your environment provides specialized sub-agents, use a debugging-focused one for complex failures and a testing-focused one for test analysis.
 
 - If a failure appears only on a stricter Linux CI target while the standard Linux and Windows builds pass, run a static-analysis triage pass on the diff before iterating. Common strict-Linux-clang failure classes include: duplicate `.cpp` basenames, non-static free functions colliding across translation units, coroutine `promise_type` mismatches, and other Linux-clang-strict patterns. A static read of the diff for these patterns is usually faster than a blind rebuild loop.
 
@@ -615,7 +610,7 @@ Commit any fixes as additional commits (they'll be squashed in staging).
 ## Stage 8: Staging
 
 **Entry condition**: `stage == "staging"`
-**Goal**: Rebase+squash on latest main, write the final commit with `[ci:linux]`, force-push the merge-ready branch, create the PR
+**Goal**: Rebase+squash on latest main, write the final commit (with your project's CI trigger tag, if any), force-push the merge-ready branch, create the PR
 
 Workflow documents live in `Saved/Claireon/Workflow/<task-name>/` and were never committed to the branch, so there is nothing to archive or delete from git. Only the implementation commits need to be staged.
 
@@ -659,7 +654,7 @@ moved significantly since implementation began.
 The squashed commit message MUST follow this format:
 
 ```
-<type>(<scope>) [ci:linux]: <description>
+<type>(<scope>): <description>
 
 <optional body>
 
@@ -667,44 +662,46 @@ Co-Authored-By: {{MODEL_NAME}} <noreply@anthropic.com>
 ```
 
 Format requirements:
-- `<type>(<scope>) [ci:linux]: <description>` is REQUIRED on the title line
-- `[ci:linux]` is REQUIRED unless the entire diff is asset-only with zero C++
-  changes. Verify by running:
+- `<type>(<scope>): <description>` is REQUIRED on the title line
+- If your project requires a commit-message CI trigger tag (e.g. `[ci]`) for
+  full CI coverage, include it on the title line whenever the diff contains
+  source changes. Verify by running:
   ```bash
   git -C <repo> diff --name-only origin/main...HEAD -- '*.cpp' '*.h'
   ```
-  If this produces output, `[ci:linux]` is required.
+  If this produces output, the CI trigger tag is required.
 - `Co-Authored-By` trailer is required in the body
 - Description should be concise but descriptive
 
 Example:
 ```
-feat(spawning) [ci:linux]: spawn system with wave management and point-based placement
+feat(spawning): spawn system with wave management and point-based placement
 
 Co-Authored-By: {{MODEL_NAME}} <noreply@anthropic.com>
 ```
 
-#### 8.4 Pre-flight [ci:linux] Verification (Defensive)
+#### 8.4 Pre-flight CI-Tag Verification (Defensive)
 
-Before force-pushing, verify the squashed commit's subject contains
-`[ci:linux]`. This is the last-chance catch before the finalized commit
+Skip this step if your project has no commit-message CI trigger tag.
+Otherwise, before force-pushing, verify the squashed commit's subject
+contains the tag. This is the last-chance catch before the finalized commit
 leaves the local machine.
 
 1. Read the HEAD commit subject:
    ```bash
    git -C <repo> log -1 --pretty=%s
    ```
-   If the subject contains the literal string `[ci:linux]`, proceed to 8.5.
+   If the subject contains the CI trigger tag, proceed to 8.5.
 
 2. Check if C++ files were changed on this branch:
    ```bash
    git -C <repo> diff --name-only origin/main...HEAD -- '*.cpp' '*.h'
    ```
-   If the command produces no output, proceed to 8.7 -- non-C++ changes do
-   not need Linux CI.
+   If the command produces no output, proceed to 8.7 -- non-source changes
+   do not need the extra CI coverage.
 
-3. Amend HEAD to insert `[ci:linux]`: read the full commit message with
-   `git -C <repo> log -1 --pretty=%B`, insert `[ci:linux]` at the end of
+3. Amend HEAD to insert the tag: read the full commit message with
+   `git -C <repo> log -1 --pretty=%B`, insert the tag at the end of
    the subject line (before any blank line separating it from the body),
    then amend:
    ```bash
@@ -759,7 +756,7 @@ After PR creation:
   Branch:    <branch-name>
   PR:        <pr-url>
   Workspace: Saved/Claireon/Workflow/<task-name>/
-  Commit:    <type>(<scope>) [ci:linux]: <description>
+  Commit:    <type>(<scope>): <description>
 
   The squashed merge-ready commit has been pushed and the PR is open
   for human review.
@@ -786,9 +783,9 @@ When the workflow is invoked at this stage, check the PR status:
 gh pr view <pr-number> --json state,reviewDecision,statusCheckRollup --repo <owner/repo>
 ```
 
-Alternatively, use `Scripts\Utilities\Wait-PRTests.ps1` to monitor CI:
-```powershell
-Scripts\Utilities\Wait-PRTests.ps1 -PRNumber <pr-number>
+Alternatively, monitor CI until checks settle:
+```bash
+gh pr checks <pr-number> --watch --repo <owner/repo>
 ```
 
 #### 9.2 Status Reporting
@@ -875,7 +872,7 @@ This orchestrator delegates to existing Scripts/Instructions/ documents where th
 | 2A (Refine) | `claireon://instructions/refine-proposal` | As one of several refinement tools |
 | 2A (Refine) | `claireon://instructions/architecture-viz` | Optional visualization |
 | 5 (Sequencing) | `claireon://instructions/sequencing` | Primary sequencing engine |
-| 9 (Review Gate) | `Scripts\Utilities\Wait-PRTests.ps1` | CI monitoring during review (project-specific) |
+| 9 (Review Gate) | `gh pr checks --watch` | CI monitoring during review |
 
 Stages 3 (Singletonize), 4 (Loss Checking), 6 (Implementing), 7 (Testing), and 9 (Review Gate) do not yet have standalone instruction documents. Their logic is defined entirely within this orchestrator. If standardized scripts are later created for these stages, this document should be updated to delegate to them.
 

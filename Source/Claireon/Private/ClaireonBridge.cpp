@@ -2,8 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 #include "ClaireonBridge.h"
+#include "ClaireonJsonSanitize.h"
 #include "ClaireonLog.h"
 #include "ClaireonServer.h"
+#include "IClaireonToolProvider.h"
+#include "Features/IModularFeatures.h"
 #include "ClaireonOutputGate.h"
 #include "ClaireonSafeExec.h"
 #include "ClaireonSessionManager.h"
@@ -39,6 +42,17 @@ TSharedPtr<FJsonObject> FClaireonBridge::BuildResultEnvelope(
 {
 	TSharedPtr<FJsonObject> Envelope = MakeShared<FJsonObject>();
 
+	// P0-1: the in-process Python path deliberately bypasses the output gate,
+	// so the gate's non-finite guard never runs for it. Without this, every
+	// python_execute result carrying a non-finite number stays exposed even
+	// though the MCP wire is covered.
+	//
+	// Mutates the pointee through a const reference by design: Result is about
+	// to be discarded by the caller, and sanitizing the shared object keeps the
+	// envelope and the source in agreement.
+	TArray<FString> PoisonedFieldPaths;
+	ClaireonJsonSanitize::SanitizeNonFiniteNumbers(Result.Data, PoisonedFieldPaths);
+
 	if (Result.Data.IsValid())
 	{
 		Envelope->SetObjectField(TEXT("data"), Result.Data);
@@ -48,9 +62,14 @@ TSharedPtr<FJsonObject> FClaireonBridge::BuildResultEnvelope(
 		Envelope->SetObjectField(TEXT("data"), MakeShared<FJsonObject>());
 	}
 
-	if (Result.Hint.IsValid())
+	FString HintShapeError;
+	if (Result.Hint.IsValid() && IClaireonTool::ValidateHint(Result.Hint, HintShapeError))
 	{
 		Envelope->SetObjectField(TEXT("hint"), Result.Hint);
+	}
+	else if (Result.Hint.IsValid())
+	{
+		UE_LOG(LogClaireon, Warning, TEXT("[MCP Bridge] Dropping malformed hint: %s"), *HintShapeError);
 	}
 
 	Envelope->SetStringField(TEXT("summary"), Result.Summary);
@@ -59,6 +78,13 @@ TSharedPtr<FJsonObject> FClaireonBridge::BuildResultEnvelope(
 	for (const FString& Warning : Result.Warnings)
 	{
 		WarningsArray.Add(MakeShared<FJsonValueString>(Warning));
+	}
+	// Result is const, so the sanitizer's disclosures are appended here rather
+	// than to Result.Warnings. A replaced value the caller is never told about
+	// is the same confident-wrong-data failure, just quieter.
+	for (const FString& FieldPath : PoisonedFieldPaths)
+	{
+		WarningsArray.Add(MakeShared<FJsonValueString>(ClaireonJsonSanitize::DescribeReplacement(FieldPath)));
 	}
 	Envelope->SetArrayField(TEXT("warnings"), WarningsArray);
 
@@ -225,6 +251,73 @@ const FString& FClaireonBridge::GetCurrentConversationId()
 	return GCurrentConversationId;
 }
 
+// WI-16: session-conflict errors must name EVERY blocker at once so a caller
+// can close them in a single pass instead of one retry per session.
+//
+// These two helpers carry external linkage (not static, not in an anonymous
+// namespace) so ClaireonSessionConflictReportTests.cpp can extern-declare and
+// unit-test the exact wire text without going through the Python entry point.
+//
+// Contract: the FIRST line keeps the legacy single-blocker format verbatim --
+// existing retry logic parses it. When more than one session blocks, the full
+// set (id + tool + asset path each) is appended, one per line.
+FString ClaireonBridge_FormatSessionBlockedError(
+	const FString& ToolName,
+	const FMCPSession& FirstBlocker,
+	const TArray<FMCPSession>& AllBlockers)
+{
+	const FTimespan Elapsed = FDateTime::UtcNow() - FirstBlocker.LastAccessTime;
+	FString Message = FString::Printf(
+		TEXT("Tool '%s' blocked: %s session %s holds the lock (last activity %dm %ds ago). Close that session first, or call session_release with session_id='%s'."),
+		*ToolName, *FirstBlocker.ToolName, *FirstBlocker.SessionId,
+		static_cast<int32>(Elapsed.GetTotalMinutes()),
+		static_cast<int32>(Elapsed.GetTotalSeconds()) % 60,
+		*FirstBlocker.SessionId);
+
+	// Order the full set with FirstBlocker pinned to the front; AllBlockers
+	// typically contains FirstBlocker, so deduplicate by session id.
+	TArray<const FMCPSession*> OrderedBlockers;
+	OrderedBlockers.Add(&FirstBlocker);
+	for (const FMCPSession& Session : AllBlockers)
+	{
+		if (Session.SessionId != FirstBlocker.SessionId)
+		{
+			OrderedBlockers.Add(&Session);
+		}
+	}
+
+	if (OrderedBlockers.Num() > 1)
+	{
+		Message += FString::Printf(
+			TEXT("\nAll blocking sessions (%d) -- close every id below via session_release, then retry:"),
+			OrderedBlockers.Num());
+		for (const FMCPSession* Session : OrderedBlockers)
+		{
+			Message += FString::Printf(TEXT("\n- %s session %s on '%s'"),
+				*Session->ToolName, *Session->SessionId, *Session->AssetPath);
+		}
+	}
+	return Message;
+}
+
+// Returns every held session that blocks a Bypass-mode tool (i.e. every
+// session held by a DIFFERENT tool), preserving input order. External linkage
+// for the same test reason as above.
+TArray<FMCPSession> ClaireonBridge_CollectBypassBlockers(
+	const FString& ToolName,
+	const TArray<FMCPSession>& HeldSessions)
+{
+	TArray<FMCPSession> Blockers;
+	for (const FMCPSession& Session : HeldSessions)
+	{
+		if (Session.ToolName != ToolName)
+		{
+			Blockers.Add(Session);
+		}
+	}
+	return Blockers;
+}
+
 PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 {
 	const char* ToolNameUtf8 = nullptr;
@@ -286,17 +379,38 @@ PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 		}
 	}
 
-	// Helper: build a BlockedByOtherTool error result with the same shape as the
-	// per-asset template at Tools/ClaireonBlueprintGraphTool_Open.cpp:184-194.
-	auto MakeBlockedResult = [&ToolName](const FMCPSession& Blocker) -> IClaireonTool::FToolResult
+	// Helper: build a BlockedByOtherTool error result. The first line keeps the
+	// same shape as the per-asset template at
+	// Tools/ClaireonBlueprintGraphTool_Open.cpp:184-194; additional blockers are
+	// appended one per line (see ClaireonBridge_FormatSessionBlockedError) and
+	// mirrored into structured Data so programmatic callers can close every
+	// blocker in one pass without parsing text.
+	auto MakeBlockedResult = [&ToolName](const FMCPSession& FirstBlocker, const TArray<FMCPSession>& AllBlockers) -> IClaireonTool::FToolResult
 	{
-		const FTimespan Elapsed = FDateTime::UtcNow() - Blocker.LastAccessTime;
-		return IClaireonTool::MakeErrorResult(FString::Printf(
-			TEXT("Tool '%s' blocked: %s session %s holds the lock (last activity %dm %ds ago). Close that session first, or call session_release with session_id='%s'."),
-			*ToolName, *Blocker.ToolName, *Blocker.SessionId,
-			static_cast<int32>(Elapsed.GetTotalMinutes()),
-			static_cast<int32>(Elapsed.GetTotalSeconds()) % 60,
-			*Blocker.SessionId));
+		IClaireonTool::FToolResult BlockedResult = IClaireonTool::MakeErrorResult(
+			ClaireonBridge_FormatSessionBlockedError(ToolName, FirstBlocker, AllBlockers));
+
+		TArray<TSharedPtr<FJsonValue>> BlockingArray;
+		auto AppendBlocker = [&BlockingArray](const FMCPSession& Session)
+		{
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("session_id"), Session.SessionId);
+			Entry->SetStringField(TEXT("tool"), Session.ToolName);
+			Entry->SetStringField(TEXT("asset_path"), Session.AssetPath);
+			BlockingArray.Add(MakeShared<FJsonValueObject>(Entry));
+		};
+		AppendBlocker(FirstBlocker);
+		for (const FMCPSession& Session : AllBlockers)
+		{
+			if (Session.SessionId != FirstBlocker.SessionId)
+			{
+				AppendBlocker(Session);
+			}
+		}
+		TSharedPtr<FJsonObject> BlockedData = MakeShared<FJsonObject>();
+		BlockedData->SetArrayField(TEXT("blocking_sessions"), BlockingArray);
+		BlockedResult.Data = BlockedData;
+		return BlockedResult;
 	};
 
 	// Session-mode dispatch. See EClaireonToolSessionMode in IClaireonTool.h.
@@ -330,20 +444,14 @@ PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 
 		case EClaireonToolSessionMode::Bypass:
 		{
-			// Refuse if any session (per-asset or editor-wide) is held by a different tool.
+			// Refuse if any session (per-asset or editor-wide) is held by a
+			// different tool. Collect EVERY conflicting session -- not just the
+			// first -- so the error names them all in a single pass.
 			const TArray<FMCPSession> Held = FClaireonSessionManager::Get().ListSessions();
-			const FMCPSession* Conflicting = nullptr;
-			for (const FMCPSession& S : Held)
+			const TArray<FMCPSession> Blockers = ClaireonBridge_CollectBypassBlockers(ToolName, Held);
+			if (Blockers.Num() > 0)
 			{
-				if (S.ToolName != ToolName)
-				{
-					Conflicting = &S;
-					break;
-				}
-			}
-			if (Conflicting)
-			{
-				Result = MakeBlockedResult(*Conflicting);
+				Result = MakeBlockedResult(Blockers[0], Blockers);
 				bExecuted = true;
 			}
 			break;
@@ -354,8 +462,25 @@ PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 			FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenEditorWideSession(ToolName);
 			if (OpenResult.Result == EOpenSessionResult::BlockedByOtherTool)
 			{
-				const FMCPSession& Blocker = OpenResult.BlockingSession.GetValue();
-				Result = MakeBlockedResult(Blocker);
+				if (OpenResult.BlockingSession.IsSet())
+				{
+					// OpenResult carries only the FIRST blocker (struct shape is
+					// shared with per-asset OpenSession); EVERY held session
+					// blocks an editor-wide acquire, so enumerate them all for
+					// the error. MCP calls are serialized per-client, so this
+					// listing cannot race a concurrent open/close.
+					const FMCPSession& Blocker = OpenResult.BlockingSession.GetValue();
+					const TArray<FMCPSession> AllHeld = FClaireonSessionManager::Get().ListSessions();
+					Result = MakeBlockedResult(Blocker, AllHeld);
+				}
+				else
+				{
+					// Fail loudly instead of dereferencing an unset optional:
+					// the manager reported a block but named no blocker.
+					Result = IClaireonTool::MakeErrorResult(FString::Printf(
+						TEXT("Tool '%s' blocked: a session holds the editor-wide lock, but the session manager returned no blocker details. Call session_list to enumerate and session_release to recover."),
+						*ToolName));
+				}
 				bExecuted = true;
 			}
 			else if (OpenResult.Result == EOpenSessionResult::Success)
@@ -402,9 +527,14 @@ PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 			ErrorEnvelope->SetObjectField(TEXT("data"), MakeShared<FJsonObject>());
 		}
 
-		if (Result.Hint.IsValid())
+		FString HintShapeError;
+		if (Result.Hint.IsValid() && IClaireonTool::ValidateHint(Result.Hint, HintShapeError))
 		{
 			ErrorEnvelope->SetObjectField(TEXT("hint"), Result.Hint);
+		}
+		else if (Result.Hint.IsValid())
+		{
+			UE_LOG(LogClaireon, Warning, TEXT("[MCP Bridge] Dropping malformed hint: %s"), *HintShapeError);
 		}
 
 		ErrorEnvelope->SetStringField(TEXT("summary"), Result.Summary);
@@ -772,6 +902,12 @@ void FClaireonBridge::BuildAndRunBootstrap()
 		"        func_code += f'    \"\"\"{safe_doc}\"\"\"\\n'\n"
 		"        func_code += f'    _all = {dict_expr}\\n'\n"
 		"        func_code += '    payload = {k: v for k, v in _all.items() if v is not _UNSET}\\n'\n"
+		// **kwargs is forwarded verbatim on purpose -- it is what lets a caller
+		// reach a parameter the generated signature does not name. Until P1-2 that
+		// was also the silent-no-op hole: an undeclared or misspelled key was
+		// forwarded here and simply never read on the C++ side. It is now rejected
+		// with an actionable error by ClaireonSafeExec::ValidateArgumentsAgainstSchema,
+		// so this line stays as-is and the enforcement lives at the funnel.
 		"        func_code += '    payload.update(kwargs)\\n'\n"
 		"        func_code += f'    return json.loads(_u._mcp_call_tool({dispatch_key!r}, json.dumps(payload)))\\n'\n"
 		"        namespace = {'_UNSET': _UNSET, '_u': _u, 'json': json}\n"
@@ -823,6 +959,47 @@ void FClaireonBridge::BuildAndRunBootstrap()
 
 	PyRun_SimpleString(TCHAR_TO_UTF8(*BootstrapCode));
 	UE_LOG(LogClaireon, Display, TEXT("[MCP Bootstrap] Claireon Python module bootstrap executed (%d namespaces)"), NamespaceEntries.Num());
+}
+
+TArray<FString> FClaireonBridge::GetToolNamesBySessionMode(EClaireonToolSessionMode Mode)
+{
+	TArray<FString> Names;
+
+	// Prefer the live server registry when one is wired up.
+	if (GServerInstance)
+	{
+		for (const auto& Pair : GServerInstance->GetTools())
+		{
+			const TSharedPtr<IClaireonTool>& Tool = Pair.Value;
+			if (Tool.IsValid() && Tool->GetSessionMode() == Mode)
+			{
+				Names.Add(Tool->GetName());
+			}
+		}
+	}
+	else
+	{
+		// No server (headless commandlets, or before the Python bridge is wired).
+		// The modular-feature providers are the same source the server collects
+		// from, so the roster is identical.
+		const TArray<IClaireonToolProvider*> Providers = IModularFeatures::Get()
+			.GetModularFeatureImplementations<IClaireonToolProvider>(IClaireonToolProvider::FeatureName);
+		for (IClaireonToolProvider* Provider : Providers)
+		{
+			if (!Provider) { continue; }
+			for (const TSharedPtr<IClaireonTool>& Tool : Provider->GetTools())
+			{
+				if (Tool.IsValid() && Tool->GetSessionMode() == Mode)
+				{
+					Names.AddUnique(Tool->GetName());
+				}
+			}
+		}
+	}
+
+	// Stable order so callers can compare responses across calls.
+	Names.Sort();
+	return Names;
 }
 
 void FClaireonBridge::RebuildClaireonModule()
@@ -906,14 +1083,17 @@ TArray<FClaireonDeferredAction> FClaireonBridge::DrainDeferredActions()
 	return Actions;
 }
 
-void FClaireonBridge::RunWorldTransitionBarrier()
+// The world-transition purge script.
+//
+// This is a MULTI-STATEMENT script, so it requires
+// EPythonCommandExecutionMode::ExecuteFile (CPython Py_file_input). Under
+// ExecuteStatement (Py_single_input) it is a compile-time SyntaxError on the leading
+// import, which is exactly how this purge silently never ran. Exposed as a named
+// accessor so the regression test can assert it still compiles under ExecuteFile
+// without needing a real map transition.
+FString FClaireonBridge::GetWorldTransitionPurgeScript()
 {
-	UE_LOG(LogClaireon, Log, TEXT("[MCP Bridge] Running world-transition barrier"));
-
-	if (IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get())
-	{
-		FPythonCommandEx PurgeCommand;
-		PurgeCommand.Command = TEXT(
+	return TEXT(
 			"import gc, sys, unreal\n"
 			"\n"
 			"# Build a set of dict ids that belong to infrastructure and must\n"
@@ -962,10 +1142,63 @@ void FClaireonBridge::RunWorldTransitionBarrier()
 			"gc.collect()\n"
 			"gc.collect()\n"
 			"gc.collect()\n"
+			"print('[claireon-barrier] nulled=%d' % _nulled)\n"
 			"del _protected, _nulled\n");
-		PurgeCommand.ExecutionMode = EPythonCommandExecutionMode::ExecuteStatement;
+}
+
+void FClaireonBridge::RunWorldTransitionBarrier()
+{
+	UE_LOG(LogClaireon, Log, TEXT("[MCP Bridge] Running world-transition barrier"));
+
+	if (IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get())
+	{
+		FPythonCommandEx PurgeCommand;
+		PurgeCommand.Command = GetWorldTransitionPurgeScript();
+		// ExecuteFile maps to CPython's Py_file_input, which accepts the multi-statement
+		// script above. ExecuteStatement is Py_single_input and rejects it at compile time,
+		// which is why this purge had never run: it failed on the leading import before any
+		// cleanup executed, leaving only the CollectGarbage below. Note ExecutionMode already
+		// DEFAULTS to ExecuteFile -- the old line overrode a correct default with a broken one.
+		// ClaireonTool_ExecutePython uses ExecuteFile for this same class of script.
+		PurgeCommand.ExecutionMode = EPythonCommandExecutionMode::ExecuteFile;
 		PurgeCommand.Flags = EPythonCommandFlags::Unattended;
-		PythonPlugin->ExecPythonCommandEx(PurgeCommand);
+
+		// Unattended suppresses surfacing, so discarding this return is precisely how the
+		// failure above stayed invisible. Always inspect the result.
+		if (!PythonPlugin->ExecPythonCommandEx(PurgeCommand))
+		{
+			UE_LOG(LogClaireon, Warning,
+				TEXT("[MCP Bridge] World-transition Python purge FAILED -- retained PIE-world "
+					 "references were NOT released, so a later PIE start on this map may hit the "
+					 "CurrentGWorld assert. CommandResult: %s"),
+				PurgeCommand.CommandResult.IsEmpty() ? TEXT("<empty>") : *PurgeCommand.CommandResult);
+			for (const FPythonLogOutputEntry& Entry : PurgeCommand.LogOutput)
+			{
+				UE_LOG(LogClaireon, Warning, TEXT("[MCP Bridge]   python %s: %s"),
+					LexToString(Entry.Type), *Entry.Output);
+			}
+		}
+		else
+		{
+			// The script reports what it nulled. Logged at Log while this path is newly live
+			// so its blast radius is observable; drop to Verbose once the count is boring.
+			const FString NulledMarker = TEXT("[claireon-barrier] nulled=");
+			int32 NulledCount = 0;
+			for (const FPythonLogOutputEntry& Entry : PurgeCommand.LogOutput)
+			{
+				const int32 MarkerAt = Entry.Output.Find(NulledMarker);
+				if (MarkerAt != INDEX_NONE)
+				{
+					NulledCount = FCString::Atoi(*Entry.Output.RightChop(MarkerAt + NulledMarker.Len()));
+					break;
+				}
+			}
+			UE_CLOG(NulledCount > 0, LogClaireon, Log,
+				TEXT("[MCP Bridge] World-transition purge nulled %d retained Python reference(s)"),
+				NulledCount);
+			UE_CLOG(NulledCount == 0, LogClaireon, Verbose,
+				TEXT("[MCP Bridge] World-transition purge found no retained Python references"));
+		}
 	}
 
 	// Unreal GC pass to finalize objects Python just released
@@ -995,8 +1228,8 @@ bool FClaireonBridge::EnsureNoLeakedWorlds(TArray<FClaireonLeakedWorld>& OutRema
 	// Identify the editor world's outer package once -- streaming
 	// sublevels of the active map share that package and must NOT
 	// be flagged as leaks.
-	UWorld* EditorWorld = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-	UPackage* EditorWorldPackage = EditorWorld ? EditorWorld->GetOutermost() : nullptr;
+	UWorld* EditorWorld = IsValid(GEditor) ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UPackage* EditorWorldPackage = IsValid(EditorWorld) ? EditorWorld->GetOutermost() : nullptr;
 
 	// Walk every loaded World and decide skip vs. candidate-for-unload.
 	// Exclude Unreachable/Garbage objects: this runs immediately after a GC
@@ -1031,10 +1264,10 @@ bool FClaireonBridge::EnsureNoLeakedWorlds(TArray<FClaireonLeakedWorld>& OutRema
 		// Skip Worlds whose outer package IS the editor world's
 		// package (streaming sublevels of the active map).
 		UPackage* WP = W->GetOutermost();
-		if (WP && WP == EditorWorldPackage) { continue; }
+		if (IsValid(WP) && WP == EditorWorldPackage) { continue; }
 
 		// Skip transient Worlds (parity with EditorServer.cpp Map_Load).
-		if (WP == GetTransientPackage() || !WP) { continue; }
+		if (WP == GetTransientPackage() || !IsValid(WP)) { continue; }
 
 		// Guard the outer package too: a world can survive the IsValid(W)
 		// check while its outermost is mid-teardown, and GetName() below
@@ -1104,7 +1337,7 @@ bool FClaireonBridge::EnsureNoLeakedWorlds(TArray<FClaireonLeakedWorld>& OutRema
 				|| Type == EWorldType::GamePreview
 				|| Type == EWorldType::EditorPreview) { continue; }
 			UPackage* WP = W->GetOutermost();
-			if (!WP || WP == EditorWorldPackage || WP == GetTransientPackage()) { continue; }
+			if (!IsValid(WP) || WP == EditorWorldPackage || WP == GetTransientPackage()) { continue; }
 			if (!ensureMsgf(IsValid(WP),
 				TEXT("[MCP Guard] UWorld has an invalid outer package post-GC; skipping"))) { continue; }
 			StillLoadedNames.Add(WP->GetName());
@@ -1174,7 +1407,7 @@ bool FClaireonBridge::EnsureNoUnsavedWork(TArray<FClaireonUnsavedPackage>& OutDi
 
 	for (UPackage* Pkg : DirtyPackages)
 	{
-		if (!Pkg) { continue; }
+		if (!IsValid(Pkg)) { continue; }
 		if (Pkg == GetTransientPackage()) { continue; }
 		const FString PackageName = Pkg->GetName();
 		if (!ClaireonBridgeUnsavedWorkFilter::ShouldKeepPackageName(PackageName))

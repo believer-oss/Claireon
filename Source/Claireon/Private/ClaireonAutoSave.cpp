@@ -11,10 +11,15 @@
 double FClaireonAutoSave::LastSaveTimeSeconds = 0.0;
 bool FClaireonAutoSave::bCrashFlag = false;
 
-int32 FClaireonAutoSave::SaveIfNeeded(bool bIsPythonExecution)
+int32 FClaireonAutoSave::SaveIfNeeded(bool bIsPythonExecution, TArray<FString>* OutSavedPackageNames)
 {
+	if (OutSavedPackageNames)
+	{
+		OutSavedPackageNames->Reset();
+	}
+
 	const UClaireonSettings* Settings = UClaireonSettings::Get();
-	if (!Settings)
+	if (!IsValid(Settings))
 	{
 		return 0;
 	}
@@ -43,7 +48,7 @@ int32 FClaireonAutoSave::SaveIfNeeded(bool bIsPythonExecution)
 	}
 
 	// Skip during PIE to avoid in-flight state corruption
-	if (GEditor && GEditor->IsPlaySessionInProgress())
+	if (IsValid(GEditor) && GEditor->IsPlaySessionInProgress())
 	{
 		return 0;
 	}
@@ -75,6 +80,25 @@ int32 FClaireonAutoSave::SaveIfNeeded(bool bIsPythonExecution)
 	{
 		LastSaveTimeSeconds = FPlatformTime::Seconds();
 		UE_LOG(LogClaireon, Log, TEXT("[AutoSave] Saved %d package(s) successfully."), DirtyPackages.Num());
+
+		// P0-7: report WHICH packages were written, not just how many.
+		//
+		// Both call sites used to discard the count entirely and the only trace
+		// was the log line above, so a temp edit persisted into a tracked LFS
+		// umap with nothing in the result envelope to show for it. Names are
+		// captured here, at the one place that knows them.
+		if (OutSavedPackageNames)
+		{
+			OutSavedPackageNames->Reserve(DirtyPackages.Num());
+			for (const UPackage* Package : DirtyPackages)
+			{
+				if (Package)
+				{
+					OutSavedPackageNames->Add(Package->GetName());
+				}
+			}
+		}
+
 		return DirtyPackages.Num();
 	}
 

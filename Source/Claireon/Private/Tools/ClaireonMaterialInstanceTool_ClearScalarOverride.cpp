@@ -12,7 +12,7 @@ FString ClaireonMaterialInstanceTool_ClearScalarOverride::GetOperation() const {
 
 FString ClaireonMaterialInstanceTool_ClearScalarOverride::GetDescription() const
 {
-    return TEXT("Clear a scalar parameter override on a UMaterialInstanceConstant; the parameter falls through to the parent material. Session-mode tool: open via material_instance_open first.");
+    return TEXT("Clear a scalar parameter override on a UMaterialInstanceConstant; the parameter falls through to the parent material. Session-mode tool: open via material_instance_instance_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialInstanceTool_ClearScalarOverride::GetInputSchema() const

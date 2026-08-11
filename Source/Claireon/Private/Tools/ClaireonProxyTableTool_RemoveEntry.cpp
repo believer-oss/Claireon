@@ -41,7 +41,7 @@ IClaireonTool::FToolResult ClaireonTool_ProxyTableRemoveEntry::Execute(const TSh
 
 	FString Error;
 	UProxyTable* ProxyTable = ClaireonProxyTableHelpers::LoadProxyTableAsset(AssetPath, Error);
-	if (!ProxyTable)
+	if (!IsValid(ProxyTable))
 	{
 		return MakeErrorResult(Error);
 	}

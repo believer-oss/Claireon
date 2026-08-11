@@ -14,7 +14,7 @@ FString ClaireonLandscapeSplineTool_Save::GetOperation() const { return TEXT("sp
 
 FString ClaireonLandscapeSplineTool_Save::GetDescription() const
 {
-    return TEXT("Save the landscape actor's package to disk for the current spline session. Session-mode tool: open via landscape_spline_open first.");
+    return TEXT("Save the landscape actor's package to disk for the current spline session. Session-mode tool: open via landscape_spline_spline_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLandscapeSplineTool_Save::GetInputSchema() const
@@ -35,13 +35,13 @@ FToolResult ClaireonLandscapeSplineTool_Save::Execute(const TSharedPtr<FJsonObje
 	}
 
 	ALandscapeProxy* Proxy = Data->LandscapeProxy.Get();
-	if (!Proxy)
+	if (!IsValid(Proxy))
 	{
 		return MakeErrorResult(TEXT("Landscape proxy no longer valid"));
 	}
 
 	UPackage* Package = Proxy->GetOutermost();
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		return MakeErrorResult(TEXT("Failed to get landscape package"));
 	}

@@ -65,7 +65,7 @@ TSharedPtr<FJsonObject> ClaireonTool_PIECheckInitState::GetInputSchema() const
 }
 
 #if WITH_LYRA_GAME
-namespace
+namespace ClaireonTool_PIECheckInitState_Private
 {
 	/** Map a user-friendly state string to the corresponding gameplay tag. */
 	FGameplayTag ResolveInitStateTag(const FString& StateName)
@@ -93,7 +93,7 @@ namespace
 	 *  Checks from highest to lowest and returns the first match. */
 	FString DetermineCurrentInitState(const ULyraPawnExtensionComponent* PawnExt)
 	{
-		// Check in descending order Ã¢Â€Â” return the highest reached state
+		// Check in descending order - return the highest reached state
 		if (PawnExt->HasReachedInitState(LyraGameplayTags::InitState_GameplayReady))
 		{
 			return TEXT("InitState.GameplayReady");
@@ -113,6 +113,7 @@ namespace
 		return TEXT("(none)");
 	}
 }
+using namespace ClaireonTool_PIECheckInitState_Private;
 #endif // WITH_LYRA_GAME
 
 IClaireonTool::FToolResult ClaireonTool_PIECheckInitState::Execute(const TSharedPtr<FJsonObject>& Arguments)
@@ -122,7 +123,7 @@ IClaireonTool::FToolResult ClaireonTool_PIECheckInitState::Execute(const TShared
 #else
 	UE_LOG(LogClaireon, Display, TEXT("[MCP] editor.pie.checkInitState"));
 
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("Editor is not available"));
 	}
@@ -149,14 +150,14 @@ IClaireonTool::FToolResult ClaireonTool_PIECheckInitState::Execute(const TShared
 	UWorld* PIEWorld = nullptr;
 	for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
 	{
-		if (WorldContext.WorldType == EWorldType::PIE && WorldContext.World())
+		if (WorldContext.WorldType == EWorldType::PIE && IsValid(WorldContext.World()))
 		{
 			PIEWorld = WorldContext.World();
 			break;
 		}
 	}
 
-	if (!PIEWorld)
+	if (!IsValid(PIEWorld))
 	{
 		return MakeErrorResult(TEXT("PIE world not found. PIE may still be initializing."));
 	}
@@ -165,7 +166,7 @@ IClaireonTool::FToolResult ClaireonTool_PIECheckInitState::Execute(const TShared
 	FClaireonPIEManager& PIEManager = FClaireonPIEManager::Get();
 	AActor* Actor = PIEManager.ResolveActorId(ActorId, PIEWorld);
 
-	if (!Actor)
+	if (!IsValid(Actor))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Actor '%s' not found or has been destroyed."), *ActorId));
@@ -173,7 +174,7 @@ IClaireonTool::FToolResult ClaireonTool_PIECheckInitState::Execute(const TShared
 
 	// Find PawnExtensionComponent — this is the Lyra component that implements init state
 	ULyraPawnExtensionComponent* PawnExt = ULyraPawnExtensionComponent::FindPawnExtensionComponent(Actor);
-	if (!PawnExt)
+	if (!IsValid(PawnExt))
 	{
 		// Actor does not have a PawnExtensionComponent — init state system not applicable
 		FString Output;
@@ -190,7 +191,7 @@ IClaireonTool::FToolResult ClaireonTool_PIECheckInitState::Execute(const TShared
 		bool bFoundAny = false;
 		for (UActorComponent* Component : Components)
 		{
-			if (Component && Cast<IGameFrameworkInitStateInterface>(Component))
+			if (IsValid(Component) && Cast<IGameFrameworkInitStateInterface>(Component))
 			{
 				if (!bFoundAny)
 				{

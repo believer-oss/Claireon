@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonTool_TraceOpen.h"
 #include "ClaireonLog.h"
+#include "ClaireonTraceCaptureManifest.h"
 #include "ClaireonTraceSession.h"
 #include "TraceServices/Model/AnalysisSession.h"
 #include "TraceServices/Model/Frames.h"
@@ -60,6 +61,7 @@ IClaireonTool::FToolResult ClaireonTool_TraceOpen::Execute(const TSharedPtr<FJso
 	// Get frame count and duration from the frame provider
 	int32 FrameCount = 0;
 	double DurationMs = 0.0;
+	TSharedPtr<FJsonObject> CaptureManifest;
 
 	if (Session->AnalysisSession.IsValid())
 	{
@@ -75,9 +77,17 @@ IClaireonTool::FToolResult ClaireonTool_TraceOpen::Execute(const TSharedPtr<FJso
 			const TraceServices::FFrame* LastFrame = FrameProvider->GetFrame(TraceFrameType_Game, FrameCount - 1);
 			if (FirstFrame && LastFrame)
 			{
+				// LastFrame->EndTime is +inf while that frame is still open, which is
+				// how this field used to emit the bare token `inf` and make the whole
+				// result unparseable. The result-boundary guard now turns it into
+				// null; unterminated_frames on trace_get_frame_stats says why.
 				DurationMs = (LastFrame->EndTime - FirstFrame->StartTime) * 1000.0;
 			}
 		}
+
+		// P0-6c: built inside the same read scope, so the manifest costs no extra
+		// locking on top of the frame reads above.
+		CaptureManifest = ClaireonTraceCaptureManifest::Build(*Session->AnalysisSession);
 	}
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
@@ -85,6 +95,10 @@ IClaireonTool::FToolResult ClaireonTool_TraceOpen::Execute(const TSharedPtr<FJso
 	Data->SetStringField(TEXT("trace_file"), FilePath);
 	Data->SetNumberField(TEXT("duration_ms"), DurationMs);
 	Data->SetNumberField(TEXT("frame_count"), FrameCount);
+	if (CaptureManifest.IsValid())
+	{
+		Data->SetObjectField(TEXT("capture_manifest"), CaptureManifest);
+	}
 
 	const FString Summary = FString::Printf(TEXT("Opened trace: %d frames, %.0fms"),
 		FrameCount, DurationMs);

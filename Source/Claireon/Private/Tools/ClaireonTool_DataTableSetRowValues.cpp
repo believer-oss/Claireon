@@ -45,6 +45,12 @@ TSharedPtr<FJsonObject> ClaireonTool_DataTableSetRowValues::GetInputSchema() con
 	ValuesProp->SetStringField(TEXT("description"), TEXT("Property name to value pairs (ImportText format)"));
 	Properties->SetObjectField(TEXT("values"), ValuesProp);
 
+	// refresh_composites - optional
+	TSharedPtr<FJsonObject> RefreshCompositesProp = MakeShared<FJsonObject>();
+	RefreshCompositesProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	RefreshCompositesProp->SetStringField(TEXT("description"), TEXT("After saving, refresh any composite data tables that aggregate this table (default: true). Set false for batch edits; follow with an explicit datatable_composite_refresh."));
+	Properties->SetObjectField(TEXT("refresh_composites"), RefreshCompositesProp);
+
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	TArray<TSharedPtr<FJsonValue>> Required;
@@ -83,9 +89,15 @@ IClaireonTool::FToolResult ClaireonTool_DataTableSetRowValues::Execute(const TSh
 	}
 	const TSharedPtr<FJsonObject> Values = *ValuesPtr;
 
+	bool bRefreshComposites = true;
+	if (Arguments->HasField(TEXT("refresh_composites")))
+	{
+		bRefreshComposites = Arguments->GetBoolField(TEXT("refresh_composites"));
+	}
+
 	FString LoadError;
 	UDataTable* DataTable = ClaireonDataTableHelpers::LoadDataTableAsset(AssetPath, LoadError);
-	if (!DataTable)
+	if (!IsValid(DataTable))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -114,7 +126,7 @@ IClaireonTool::FToolResult ClaireonTool_DataTableSetRowValues::Execute(const TSh
 	{
 		const FString Key(*Pair.Key);
 
-		const FProperty* Prop = RowStruct ? RowStruct->FindPropertyByName(FName(*Key)) : nullptr;
+		const FProperty* Prop = IsValid(RowStruct) ? RowStruct->FindPropertyByName(FName(*Key)) : nullptr;
 		if (!Prop)
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Property '%s' not found in row struct"), *Key));
@@ -161,8 +173,10 @@ IClaireonTool::FToolResult ClaireonTool_DataTableSetRowValues::Execute(const TSh
 	Data->SetObjectField(TEXT("old_values"), OldValues);
 	Data->SetObjectField(TEXT("new_values"), NewValues);
 
+	const FString RefreshSuffix = ClaireonDataTableHelpers::RefreshDependentCompositesResult(DataTable, bRefreshComposites, Data);
+
 	const FString Summary = FString::Printf(TEXT("Updated %d fields on row '%s'"),
-		UpdatedFields.Num(), *RowNameStr);
+		UpdatedFields.Num(), *RowNameStr) + RefreshSuffix;
 
 	return MakeSuccessResult(Data, Summary);
 }

@@ -36,7 +36,7 @@ FToolResult ClaireonInputTool_Open::Execute(const TSharedPtr<FJsonObject>& Argum
 
 	FString LoadError;
 	UObject* Asset = ClaireonEnhancedInputHelpers::LoadInputAsset(AssetPath, LoadError);
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -59,12 +59,12 @@ FToolResult ClaireonInputTool_Open::Execute(const TSharedPtr<FJsonObject>& Argum
 	FInputEditToolData NewData;
 	NewData.LastOperationStatus = TEXT("Session opened");
 
-	if (UInputAction* IA = Cast<UInputAction>(Asset))
+	if (UInputAction* IA = Cast<UInputAction>(Asset); IsValid(IA))
 	{
 		NewData.AssetType = EInputAssetType::InputAction;
 		NewData.InputAction = IA;
 	}
-	else if (UInputMappingContext* IMC = Cast<UInputMappingContext>(Asset))
+	else if (UInputMappingContext* IMC = Cast<UInputMappingContext>(Asset); IsValid(IMC))
 	{
 		NewData.AssetType = EInputAssetType::MappingContext;
 		NewData.MappingContext = IMC;

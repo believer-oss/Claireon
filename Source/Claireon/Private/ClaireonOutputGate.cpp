@@ -3,6 +3,7 @@
 
 #include "ClaireonOutputGate.h"
 
+#include "ClaireonJsonSanitize.h"
 #include "ClaireonLog.h"
 #include "ClaireonPythonAuditLog.h"
 #include "ClaireonSettings.h"
@@ -146,6 +147,39 @@ namespace ClaireonOutputGateInternal
 			--Cut;
 		}
 		return FString(FUTF8ToTCHAR(reinterpret_cast<const ANSICHAR*>(Data), Cut));
+	}
+
+	/**
+	 * UTF-8-boundary-safe suffix of at most MaxBytes -- the tail-preserving
+	 * counterpart of Utf8PrefixSafe.  Given a byte buffer already validated as
+	 * UTF-8, returns the largest suffix <= MaxBytes that starts on a codepoint
+	 * boundary.  Used by the error-path gate (WI-14) to keep the traceback
+	 * tail inline: the exception line sits at the END of a Python traceback.
+	 */
+	static FString Utf8SuffixSafe(const uint8* Data, int32 Len, int32 MaxBytes)
+	{
+		if (!Data || Len <= 0 || MaxBytes <= 0)
+		{
+			return FString();
+		}
+		if (Len <= MaxBytes)
+		{
+			return FString(FUTF8ToTCHAR(reinterpret_cast<const ANSICHAR*>(Data), Len));
+		}
+
+		int32 Start = Len - MaxBytes;
+		while (Start < Len && (Data[Start] & 0xC0) == 0x80)
+		{
+			++Start;
+		}
+		return FString(FUTF8ToTCHAR(reinterpret_cast<const ANSICHAR*>(Data + Start), Len - Start));
+	}
+
+	/** UTF-8 encoded byte length of a string (no BOM). */
+	static int32 Utf8ByteLen(const FString& In)
+	{
+		FTCHARToUTF8 Converter(*In);
+		return Converter.Length();
 	}
 
 	/** Hex-encode up to 256 bytes as "0x..." for a binary preview. */
@@ -344,11 +378,31 @@ IClaireonTool::FToolResult FClaireonOutputGate::RouteResult(
 {
 	using namespace ClaireonOutputGateInternal;
 
+	// P0-1: UE's JSON writer prints doubles with %.17g, so a non-finite number
+	// reaches the wire as the bare token `inf` / `nan` -- which no JSON parser
+	// accepts, taking out the whole result rather than one field. The engine
+	// seeds every open trace frame with EndTime = +inf, so any capture stopped
+	// mid-frame produces exactly that.
+	//
+	// This sits above BOTH the force_inline early-out below and every spill
+	// decision, so the HTTP wire and any spill file carry legal JSON. Moving it
+	// lower silently re-opens the hole for force-inlined results.
+	{
+		TArray<FString> PoisonedFieldPaths;
+		if (ClaireonJsonSanitize::SanitizeNonFiniteNumbers(Result.Data, PoisonedFieldPaths))
+		{
+			for (const FString& FieldPath : PoisonedFieldPaths)
+			{
+				Result.Warnings.Add(ClaireonJsonSanitize::DescribeReplacement(FieldPath));
+			}
+		}
+	}
+
 	const UClaireonSettings* Settings = UClaireonSettings::Get();
-	const int64 Threshold = Settings
+	const int64 Threshold = IsValid(Settings)
 		? static_cast<int64>(Settings->ResultSpillThresholdBytes)
 		: 8192;
-	const int64 Ceiling = Settings
+	const int64 Ceiling = IsValid(Settings)
 		? static_cast<int64>(Settings->ResultSpillMaxBytes)
 		: 52428800;
 
@@ -406,6 +460,30 @@ IClaireonTool::FToolResult FClaireonOutputGate::RouteResult(
 			{
 				Inputs.Add(MoveTemp(UELogInput));
 			}
+		}
+	}
+
+	// Error-path gating (WI-14): a failing result's ErrorMessage is subject to
+	// the same inline cap as the log streams.  python_execute copies the entire
+	// stdout into ErrorMessage on failure, which previously bypassed the gate:
+	// Logs was spilled + cleared but the very same bytes went back onto the
+	// wire inline via ErrorMessage, and the caller was never told a spill file
+	// existed.  Over-threshold error text now spills as an "error" stream; the
+	// inline ErrorMessage keeps the traceback TAIL (the exception line is at
+	// the end of a Python traceback) up to the cap, prefixed with the spill
+	// path.  Applies to every stream set -- an under-threshold ErrorMessage is
+	// untouched, so small errors keep their exact current wire shape.
+	// TODO(WI-14): Public/ClaireonOutputGate.h's FClaireonSpillStream::Name doc
+	// comment ("data" | "stdout" | "uelog") should also mention the "error"
+	// stream; that header is outside this work item's file ownership.
+	if (Result.bIsError && !Result.ErrorMessage.IsEmpty())
+	{
+		FStreamInput ErrorInput;
+		ErrorInput.Name = TEXT("error");
+		ErrorInput.Bytes = StringToUtf8Bytes(Result.ErrorMessage);
+		if (ErrorInput.Bytes.Num() > 0)
+		{
+			Inputs.Add(MoveTemp(ErrorInput));
 		}
 	}
 
@@ -543,6 +621,27 @@ IClaireonTool::FToolResult FClaireonOutputGate::RouteResult(
 		{
 			Result.UELog.Empty();
 			InlineOmittedJson.Add(MakeShared<FJsonValueString>(TEXT("uelog")));
+		}
+		else if (Stream.Name == TEXT("error"))
+		{
+			if (!Stream.bWriteFailed && !Stream.AbsolutePath.IsEmpty())
+			{
+				// Keep the exception/traceback tail inline up to the spill
+				// threshold; the full text lives on disk at the spill path.
+				const TArray<uint8> FullErrorBytes = StringToUtf8Bytes(Result.ErrorMessage);
+				const FString SpillNotice = FString::Printf(
+					TEXT("[SPILLED -> %s] Full error output (%lld bytes) was written to that file; inline traceback tail follows:\n"),
+					*Stream.AbsolutePath,
+					Stream.SizeBytes);
+				const int32 NoticeBytes = Utf8ByteLen(SpillNotice);
+				const int32 TailBudgetBytes = FMath::Max(0, static_cast<int32>(Threshold) - NoticeBytes);
+				Result.ErrorMessage = SpillNotice
+					+ Utf8SuffixSafe(FullErrorBytes.GetData(), FullErrorBytes.Num(), TailBudgetBytes);
+				InlineOmittedJson.Add(MakeShared<FJsonValueString>(TEXT("error_message")));
+			}
+			// On write failure the full ErrorMessage stays inline: truncating
+			// without a spill file on disk would silently destroy the only copy
+			// of the error text.
 		}
 	}
 

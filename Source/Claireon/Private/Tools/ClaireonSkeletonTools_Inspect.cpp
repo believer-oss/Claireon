@@ -14,9 +14,9 @@ FString ClaireonSkeletonTool_Inspect::GetOperation() const { return TEXT("inspec
 
 FString ClaireonSkeletonTool_Inspect::GetDescription() const
 {
-	return TEXT("Inspect a USkeleton asset. Default 'overview' returns counts for bones/virtual bones/sockets/blend profiles/blend masks/metadata. "
-				"Use focus='bones' | 'virtual_bones' | 'sockets' | 'metadata' | 'blend_profiles' | 'blend_masks' to drill into one section. "
-				"Metadata covers three subsystems: skeleton-level animation notify names, curve metadata (linked bones/LOD/flags), and asset user data.");
+	return TEXT("Inspect a USkeleton by skeleton_path. Default focus='overview' returns counts for every section; "
+				"focus='bones'|'virtual_bones'|'sockets'|'metadata'|'blend_profiles'|'blend_masks' returns that one section in full. Metadata covers notify names, "
+				"curve metadata (linked bones/LOD/flags), and asset user data. Stateless / read-only / non-session: never mutates and needs no open session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_Inspect::GetInputSchema() const
@@ -35,7 +35,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_Inspect::Execute(const TSharedPt
 
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton)
+	if (!IsValid(Skeleton))
 	{
 		return MakeErrorResult(LoadError);
 	}

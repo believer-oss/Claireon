@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -124,7 +124,7 @@ FToolResult ClaireonBlueprintGraphTool_CursorBack::Execute(const TSharedPtr<FJso
         return Error;
     }
 	UBlueprint* Blueprint = Data->Blueprint.Get();
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
 	}
@@ -152,7 +152,7 @@ FToolResult ClaireonBlueprintGraphTool_CursorBack::Execute(const TSharedPtr<FJso
 		{
 			TargetGraph = ClaireonBlueprintHelpers::FindGraphByName(Blueprint, Entry.GraphName);
 		}
-		if (!TargetGraph)
+		if (!IsValid(TargetGraph))
 		{
 			// Graph was deleted; try the next entry.
 			continue;
@@ -160,7 +160,7 @@ FToolResult ClaireonBlueprintGraphTool_CursorBack::Execute(const TSharedPtr<FJso
 
 		// Resolve node within the target graph.
 		PreviousNode = ClaireonBlueprintHelpers::FindNodeByGuid(TargetGraph, Entry.NodeGuid);
-		if (!PreviousNode)
+		if (!IsValid(PreviousNode))
 		{
 			// Node was deleted; try the next entry.
 			continue;

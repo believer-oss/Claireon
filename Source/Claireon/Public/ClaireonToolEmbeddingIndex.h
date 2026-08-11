@@ -100,6 +100,28 @@ private:
 	static TArray<FString> GToolNames;
 	static TArray<FString> GToolCategories;
 
+	/**
+	 * One cached per-tool embedding: CityHash64 of the semantic doc string the
+	 * vector was computed from, plus the vector itself.
+	 */
+	struct FCachedToolEmbedding
+	{
+		uint64 DocHash = 0;
+		TArray<float> Vec;
+	};
+
+	/**
+	 * Per-tool embedding cache keyed by tool name. RebuildFromLiveServer()
+	 * reuses a cached vector when the doc hash and dimension still match, so
+	 * registry churn (a tool registered/renamed) re-embeds only the changed
+	 * tools instead of paying ~700 ONNX inferences for the full catalog.
+	 * Rebuilt to exactly the live tool set on every rebuild (stale entries are
+	 * evicted) and dropped wholesale whenever the model/tokenizer state is torn
+	 * down (Clear / SetModelForTest / ResetModelForTest) since vectors from a
+	 * different model are not comparable.
+	 */
+	static TMap<FString, FCachedToolEmbedding> GEmbedCache;
+
 	/** Guards all static storage. */
 	static FCriticalSection GLock;
 

@@ -17,10 +17,10 @@ FString ClaireonTool_GasSetAttribute::GetOperation() const { return TEXT("set_at
 
 FString ClaireonTool_GasSetAttribute::GetDescription() const
 {
-	return TEXT("Set a gameplay attribute's base or current value on a live PIE actor's ASC (e.g. drop "
-		"Health to test a threshold aspect). Args: attribute (name matched against the ASC's attributes), "
-		"value (number), mode ('base' or 'current', default base). Defaults to the server world. Returns "
-		"old_value and new_value. Requires PIE.");
+	return TEXT("Set a gameplay attribute's base or current value on a live PIE actor's ASC (e.g. drop Health to "
+		"test a threshold aspect). Args: attribute (name matched against the ASC's attributes), value "
+		"(number), mode ('base' or 'current', default base). Requires a live PIE session; net_mode defaults "
+		"to the server world. Returns old_value and new_value.");
 }
 
 EClaireonToolSessionMode ClaireonTool_GasSetAttribute::GetSessionMode() const

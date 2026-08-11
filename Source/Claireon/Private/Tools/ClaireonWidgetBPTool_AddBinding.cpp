@@ -60,14 +60,14 @@ FToolResult ClaireonWidgetBPTool_AddBinding::Execute(const TSharedPtr<FJsonObjec
 	}
 
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
-	if (!WBP || !WBP->WidgetTree)
+	if (!IsValid(WBP) || !WBP->WidgetTree)
 	{
 		return MakeErrorResult(TEXT("Widget Blueprint or WidgetTree is no longer valid"));
 	}
 
 	// Validate the widget exists
 	UWidget* Widget = ClaireonWidgetHelpers::FindWidgetByName(WBP->WidgetTree, FName(*WidgetNameStr));
-	if (!Widget)
+	if (!IsValid(Widget))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Widget '%s' not found"), *WidgetNameStr));
 	}

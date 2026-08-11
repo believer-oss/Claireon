@@ -41,7 +41,7 @@ TSharedPtr<FJsonObject> ClaireonAnimGraphTool_Open::GetInputSchema() const
 	S.AddString(TEXT("asset_path"), TEXT("Path to the Animation Blueprint to open"), true);
 	S.AddString(TEXT("graph_name"), TEXT("Initial graph to focus on (default: root AnimGraph)"));
 	S.AddString(TEXT("response_mode"), TEXT("Response verbosity: 'changed' (default), 'full', or 'status'"));
-	S.AddNumber(TEXT("timeout_minutes"), TEXT("Session timeout in minutes (default: 60)"));
+	S.AddNumber(TEXT("timeout_minutes"), TEXT("Session inactivity timeout in minutes (default: 10; every operation resets the clock)"));
 	return S.Build();
 }
 
@@ -56,7 +56,7 @@ FToolResult ClaireonAnimGraphTool_Open::Execute(const TSharedPtr<FJsonObject>& A
 	// Load AnimBP
 	FString LoadError;
 	UAnimBlueprint* AnimBP = ClaireonAnimGraphHelpers::LoadAnimBlueprint(AssetPath, LoadError);
-	if (!AnimBP)
+	if (!IsValid(AnimBP))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -65,7 +65,7 @@ FToolResult ClaireonAnimGraphTool_Open::Execute(const TSharedPtr<FJsonObject>& A
 	EnsureDelegateRegistered();
 
 	// Open session
-	double TimeoutMinutes = 60.0;
+	double TimeoutMinutes = ClaireonDefaultSessionTimeoutMinutes;
 	Arguments->TryGetNumberField(TEXT("timeout_minutes"), TimeoutMinutes);
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
 		AnimBP->GetPathName(), AnimGraphSessionToolName, TimeoutMinutes);
@@ -97,7 +97,7 @@ FToolResult ClaireonAnimGraphTool_Open::Execute(const TSharedPtr<FJsonObject>& A
 	{
 		FString GraphError;
 		InitialGraph = ClaireonAnimGraphHelpers::FindAnimGraphByName(AnimBP, GraphName, GraphError);
-		if (!InitialGraph)
+		if (!IsValid(InitialGraph))
 		{
 			FClaireonSessionManager::Get().CloseSession(SessionId);
 			return MakeErrorResult(GraphError);
@@ -117,7 +117,7 @@ FToolResult ClaireonAnimGraphTool_Open::Execute(const TSharedPtr<FJsonObject>& A
 		}
 	}
 
-	if (!InitialGraph)
+	if (!IsValid(InitialGraph))
 	{
 		FClaireonSessionManager::Get().CloseSession(SessionId);
 		return MakeErrorResult(TEXT("No AnimGraph found in this Animation Blueprint"));
@@ -144,7 +144,7 @@ FToolResult ClaireonAnimGraphTool_Open::Execute(const TSharedPtr<FJsonObject>& A
 	// Focus cursor on output pose node (if present)
 	for (UEdGraphNode* Node : InitialGraph->Nodes)
 	{
-		if (!Node) continue;
+		if (!IsValid(Node)) continue;
 		FString Category = ClaireonAnimGraphHelpers::GetAnimNodeCategory(Node);
 		if (Category == TEXT("output_pose"))
 		{
@@ -211,7 +211,7 @@ FString ClaireonAnimGraphTool_Save::GetOperation() const { return TEXT("save"); 
 
 FString ClaireonAnimGraphTool_Save::GetDescription() const
 {
-    return TEXT("Compile and save the Animation Blueprint to disk for the active anim_graph session. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Compile and save the Animation Blueprint to disk for the active anim_graph session. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_Save::GetInputSchema() const
@@ -229,7 +229,7 @@ FToolResult ClaireonAnimGraphTool_Save::Execute(const TSharedPtr<FJsonObject>& A
 	if (!RequireSession(Arguments, SessionId, Data, Error)) return Error;
 
 	UAnimBlueprint* AnimBP = Data->AnimBlueprint.Get();
-	if (!AnimBP)
+	if (!IsValid(AnimBP))
 	{
 		return MakeErrorResult(TEXT("AnimBP no longer valid"));
 	}
@@ -276,7 +276,7 @@ FString ClaireonAnimGraphTool_Compile::GetOperation() const { return TEXT("compi
 
 FString ClaireonAnimGraphTool_Compile::GetDescription() const
 {
-    return TEXT("Compile the Animation Blueprint of the current session and report any warnings or errors. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Compile the Animation Blueprint of the current session and report any warnings or errors. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_Compile::GetInputSchema() const
@@ -294,7 +294,7 @@ FToolResult ClaireonAnimGraphTool_Compile::Execute(const TSharedPtr<FJsonObject>
 	if (!RequireSession(Arguments, SessionId, Data, Error)) return Error;
 
 	UAnimBlueprint* AnimBP = Data->AnimBlueprint.Get();
-	if (!AnimBP)
+	if (!IsValid(AnimBP))
 	{
 		return MakeErrorResult(TEXT("AnimBP no longer valid"));
 	}
@@ -324,7 +324,7 @@ FString ClaireonAnimGraphTool_SwitchGraph::GetOperation() const { return TEXT("s
 
 FString ClaireonAnimGraphTool_SwitchGraph::GetDescription() const
 {
-    return TEXT("Switch the active graph within the current Animation Blueprint session, then return the new active-graph state. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Switch the active graph within the current Animation Blueprint session, then return the new active-graph state. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_SwitchGraph::GetInputSchema() const
@@ -360,10 +360,10 @@ FToolResult ClaireonAnimGraphTool_SwitchGraph::Execute(const TSharedPtr<FJsonObj
 		TArray<ClaireonAnimGraphHelpers::FAnimGraphInfo> AllGraphs = ClaireonAnimGraphHelpers::CollectAllGraphs(Data->AnimBlueprint.Get());
 		for (const auto& GraphInfo : AllGraphs)
 		{
-			if (!GraphInfo.Graph) continue;
+			if (!IsValid(GraphInfo.Graph)) continue;
 			for (UEdGraphNode* Node : GraphInfo.Graph->Nodes)
 			{
-				if (Node && Node->NodeGuid == ParsedGuid)
+				if (IsValid(Node) && Node->NodeGuid == ParsedGuid)
 				{
 					// Found the parent node — get its sub-graphs
 					TArray<UEdGraph*> SubGraphs = Node->GetSubGraphs();
@@ -381,17 +381,17 @@ FToolResult ClaireonAnimGraphTool_SwitchGraph::Execute(const TSharedPtr<FJsonObj
 							NewGraph = Cast<UEdGraph>(BoundGraphProp->GetObjectPropertyValue_InContainer(Node));
 						}
 					}
-					if (!NewGraph)
+					if (!IsValid(NewGraph))
 					{
 						return MakeErrorResult(FString::Printf(TEXT("Node %s has no sub-graph"), *ParentNodeGuid));
 					}
 					break;
 				}
 			}
-			if (NewGraph) break;
+			if (IsValid(NewGraph)) break;
 		}
 
-		if (!NewGraph)
+		if (!IsValid(NewGraph))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Node not found with GUID: %s"), *ParentNodeGuid));
 		}
@@ -406,7 +406,7 @@ FToolResult ClaireonAnimGraphTool_SwitchGraph::Execute(const TSharedPtr<FJsonObj
 
 		FString GraphError;
 		NewGraph = ClaireonAnimGraphHelpers::FindAnimGraphByName(Data->AnimBlueprint.Get(), GraphName, GraphError);
-		if (!NewGraph)
+		if (!IsValid(NewGraph))
 		{
 			return MakeErrorResult(GraphError);
 		}
@@ -421,7 +421,7 @@ FToolResult ClaireonAnimGraphTool_SwitchGraph::Execute(const TSharedPtr<FJsonObj
 	// Focus on first relevant node
 	for (UEdGraphNode* Node : NewGraph->Nodes)
 	{
-		if (!Node) continue;
+		if (!IsValid(Node)) continue;
 		FString Category = ClaireonAnimGraphHelpers::GetAnimNodeCategory(Node);
 		if (Category == TEXT("output_pose") || Category == TEXT("state_entry"))
 		{
@@ -445,7 +445,7 @@ FString ClaireonAnimGraphTool_GetState::GetOperation() const { return TEXT("get_
 
 FString ClaireonAnimGraphTool_GetState::GetDescription() const
 {
-    return TEXT("Get the full current state of the animation graph editing session (active graph, node count, focus). Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Get the full current state of the animation graph editing session (active graph, node count, focus). Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_GetState::GetInputSchema() const

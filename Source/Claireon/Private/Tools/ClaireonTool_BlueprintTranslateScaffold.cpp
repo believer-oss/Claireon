@@ -42,7 +42,7 @@ namespace ScaffoldInternal
 	// Get class prefix (A for actors, U for UObjects, F for structs)
 	FString GetClassCppName(const UClass* Class)
 	{
-		if (!Class)
+		if (!IsValid(Class))
 		{
 			return TEXT("UObject");
 		}
@@ -52,7 +52,7 @@ namespace ScaffoldInternal
 	// Get parent header include path heuristic
 	FString InferParentIncludePath(const UClass* ParentClass)
 	{
-		if (!ParentClass)
+		if (!IsValid(ParentClass))
 		{
 			return TEXT("UObject/Object.h");
 		}
@@ -141,20 +141,20 @@ namespace ScaffoldInternal
 	TSet<FName> GetParentSCSVariableNames(const UBlueprint* BP)
 	{
 		TSet<FName> ParentVarNames;
-		UBlueprint* ParentBP = BP->ParentClass ? Cast<UBlueprint>(BP->ParentClass->ClassGeneratedBy) : nullptr;
-		while (ParentBP)
+		UBlueprint* ParentBP = IsValid(BP->ParentClass) ? Cast<UBlueprint>(BP->ParentClass->ClassGeneratedBy) : nullptr;
+		while (IsValid(ParentBP))
 		{
 			if (ParentBP->SimpleConstructionScript)
 			{
 				for (const USCS_Node* Node : ParentBP->SimpleConstructionScript->GetAllNodes())
 				{
-					if (Node)
+					if (IsValid(Node))
 					{
 						ParentVarNames.Add(Node->GetVariableName());
 					}
 				}
 			}
-			ParentBP = ParentBP->ParentClass ? Cast<UBlueprint>(ParentBP->ParentClass->ClassGeneratedBy) : nullptr;
+			ParentBP = IsValid(ParentBP->ParentClass) ? Cast<UBlueprint>(ParentBP->ParentClass->ClassGeneratedBy) : nullptr;
 		}
 		return ParentVarNames;
 	}
@@ -195,7 +195,7 @@ namespace ScaffoldInternal
 			TArray<TPair<const UEdGraphNode*, int32>> Queue;
 			for (UEdGraphPin* LinkedPin : ExecPin->LinkedTo)
 			{
-				if (LinkedPin && LinkedPin->GetOwningNode())
+				if (LinkedPin && IsValid(LinkedPin->GetOwningNode()))
 				{
 					Queue.Add(TPair<const UEdGraphNode*, int32>(LinkedPin->GetOwningNode(), 1));
 				}
@@ -209,7 +209,7 @@ namespace ScaffoldInternal
 				int32 Dist = Queue[QueueIdx].Value;
 				++QueueIdx;
 
-				if (!Current || Seen.Contains(Current)) continue;
+				if (!IsValid(Current) || Seen.Contains(Current)) continue;
 				Seen.Add(Current);
 				PerBranchReachable[BranchIdx].Add(Current, Dist);
 
@@ -221,7 +221,7 @@ namespace ScaffoldInternal
 					{
 						for (UEdGraphPin* Linked : Pin->LinkedTo)
 						{
-							if (Linked && Linked->GetOwningNode() && !Seen.Contains(Linked->GetOwningNode()))
+							if (Linked && IsValid(Linked->GetOwningNode()) && !Seen.Contains(Linked->GetOwningNode()))
 							{
 								Queue.Add(TPair<const UEdGraphNode*, int32>(Linked->GetOwningNode(), Dist + 1));
 							}
@@ -322,7 +322,7 @@ namespace ScaffoldInternal
 	void FEmitScopeContext::EmitScope(const UEdGraphNode* Node, int32 IndentLevel,
 		const UEdGraphNode* StopAt, const UEdGraphPin* ArrivalPin)
 	{
-		if (!Node || Node == StopAt || Visited.Contains(Node))
+		if (!IsValid(Node) || Node == StopAt || Visited.Contains(Node))
 		{
 			return;
 		}
@@ -384,7 +384,7 @@ namespace ScaffoldInternal
 				{
 					for (const UEdGraphPin* LinkedPin : Branch.ExecPin->LinkedTo)
 					{
-						if (LinkedPin && LinkedPin->GetOwningNode() && LinkedPin->GetOwningNode() != JoinNode)
+						if (LinkedPin && IsValid(LinkedPin->GetOwningNode()) && LinkedPin->GetOwningNode() != JoinNode)
 						{
 							bBranchHasContent = true;
 							break;
@@ -445,7 +445,7 @@ namespace ScaffoldInternal
 						TargetArrivalPin = Branch.ExecPin->LinkedTo[0];
 					}
 
-					if (BranchTarget && BranchTarget != JoinNode)
+					if (IsValid(BranchTarget) && BranchTarget != JoinNode)
 					{
 						EmitScope(BranchTarget, IndentLevel + 1, JoinNode, TargetArrivalPin);
 					}
@@ -456,7 +456,7 @@ namespace ScaffoldInternal
 			Result.SourceCode += FString::Printf(TEXT("%s}\n"), *Indent);
 
 			// Continue from the join node at the original indent level
-			if (JoinNode && JoinNode != StopAt)
+			if (IsValid(JoinNode) && JoinNode != StopAt)
 			{
 				EmitScope(JoinNode, IndentLevel, StopAt);
 			}
@@ -477,7 +477,7 @@ namespace ScaffoldInternal
 					BranchTarget = Branch.ExecPin->LinkedTo[0]->GetOwningNode();
 					TargetArrivalPin = Branch.ExecPin->LinkedTo[0];
 				}
-				if (BranchTarget)
+				if (IsValid(BranchTarget))
 				{
 					EmitScope(BranchTarget, IndentLevel + 1, StopAt, TargetArrivalPin);
 				}
@@ -504,7 +504,7 @@ namespace ScaffoldInternal
 				{
 					for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
 					{
-						if (LinkedPin && LinkedPin->GetOwningNode())
+						if (LinkedPin && IsValid(LinkedPin->GetOwningNode()))
 						{
 							const UEdGraphNode* NextNode = LinkedPin->GetOwningNode();
 							if (NextNode != StopAt)
@@ -559,7 +559,7 @@ namespace ScaffoldInternal
 			while (Stack.Num() > 0)
 			{
 				const UEdGraphNode* Current = Stack.Pop();
-				if (!Current || Reachable.Contains(Current)) continue;
+				if (!IsValid(Current) || Reachable.Contains(Current)) continue;
 				Reachable.Add(Current);
 				for (UEdGraphPin* Pin : Current->Pins)
 				{
@@ -568,7 +568,7 @@ namespace ScaffoldInternal
 					{
 						for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
 						{
-							if (LinkedPin && LinkedPin->GetOwningNode())
+							if (LinkedPin && IsValid(LinkedPin->GetOwningNode()))
 							{
 								Stack.Add(LinkedPin->GetOwningNode());
 							}
@@ -615,7 +615,7 @@ namespace ScaffoldInternal
 			while (Queue.Num() > 0)
 			{
 				const UEdGraphNode* Current = Queue.Pop();
-				if (!Current || Assigned.Contains(Current) || !SharedNodes.Contains(Current)) continue;
+				if (!IsValid(Current) || Assigned.Contains(Current) || !SharedNodes.Contains(Current)) continue;
 				Assigned.Add(Current);
 				Subgraph.Nodes.Add(Current);
 				for (UEdGraphPin* Pin : Current->Pins)
@@ -625,7 +625,7 @@ namespace ScaffoldInternal
 					{
 						for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
 						{
-							if (LinkedPin && LinkedPin->GetOwningNode()
+							if (LinkedPin && IsValid(LinkedPin->GetOwningNode())
 								&& SharedNodes.Contains(LinkedPin->GetOwningNode()))
 							{
 								Queue.Add(LinkedPin->GetOwningNode());
@@ -651,7 +651,7 @@ namespace ScaffoldInternal
 					{
 						for (const UEdGraphPin* LinkedPin : Pin->LinkedTo)
 						{
-							if (LinkedPin && LinkedPin->GetOwningNode()
+							if (LinkedPin && IsValid(LinkedPin->GetOwningNode())
 								&& !SharedNodeSet.Contains(LinkedPin->GetOwningNode()))
 							{
 								Subgraph.EntryNode = Node;
@@ -659,13 +659,13 @@ namespace ScaffoldInternal
 							}
 						}
 					}
-					if (Subgraph.EntryNode) break;
+					if (IsValid(Subgraph.EntryNode)) break;
 				}
-				if (Subgraph.EntryNode) break;
+				if (IsValid(Subgraph.EntryNode)) break;
 			}
 
 			// Fallback: pick first node with exec output connections within the shared set
-			if (!Subgraph.EntryNode)
+			if (!IsValid(Subgraph.EntryNode))
 			{
 				for (const UEdGraphNode* Node : Subgraph.Nodes)
 				{
@@ -679,12 +679,12 @@ namespace ScaffoldInternal
 							break;
 						}
 					}
-					if (Subgraph.EntryNode) break;
+					if (IsValid(Subgraph.EntryNode)) break;
 				}
 			}
 
 			// Last resort: first node in the subgraph
-			if (!Subgraph.EntryNode)
+			if (!IsValid(Subgraph.EntryNode))
 			{
 				Subgraph.EntryNode = Subgraph.Nodes[0];
 			}
@@ -730,7 +730,7 @@ namespace ScaffoldInternal
 		for (const auto& Pair : NodeToEntry)
 		{
 			const UEdGraphNode* Node = Pair.Key;
-			if (!Node) continue;
+			if (!IsValid(Node)) continue;
 			for (UEdGraphPin* Pin : Node->Pins)
 			{
 				if (!Pin || Pin->Direction != EGPD_Output) continue;
@@ -738,7 +738,7 @@ namespace ScaffoldInternal
 
 				for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
 				{
-					if (!LinkedPin || !LinkedPin->GetOwningNode()) continue;
+					if (!LinkedPin || !IsValid(LinkedPin->GetOwningNode())) continue;
 					const FString* DestEntry = NodeToEntry.Find(LinkedPin->GetOwningNode());
 					if (!DestEntry || *DestEntry == Pair.Value) continue;
 
@@ -784,7 +784,7 @@ namespace ScaffoldInternal
 
 		for (UEdGraph* Graph : Graphs)
 		{
-			if (!Graph)
+			if (!IsValid(Graph))
 			{
 				continue;
 			}
@@ -792,7 +792,7 @@ namespace ScaffoldInternal
 			for (UEdGraphNode* Node : Graph->Nodes)
 			{
 				// Custom events (must be checked BEFORE UK2Node_Event since UK2Node_CustomEvent derives from it)
-				if (UK2Node_CustomEvent* CustomEvent = Cast<UK2Node_CustomEvent>(Node))
+				if (UK2Node_CustomEvent* CustomEvent = Cast<UK2Node_CustomEvent>(Node); IsValid(CustomEvent))
 				{
 					FRootNode Root;
 					Root.Node = CustomEvent;
@@ -829,7 +829,7 @@ namespace ScaffoldInternal
 				}
 
 				// Event nodes
-				if (UK2Node_Event* EventNode = Cast<UK2Node_Event>(Node))
+				if (UK2Node_Event* EventNode = Cast<UK2Node_Event>(Node); IsValid(EventNode))
 				{
 					FRootNode Root;
 					Root.Node = EventNode;
@@ -837,7 +837,7 @@ namespace ScaffoldInternal
 					Root.ReturnType = TEXT("void");
 					Root.bIsVirtualOverride = IsVirtualOverride(Root.FunctionName);
 					Root.bIsConstructor = false;
-					if (UFunction* EventFunc = EventNode->FindEventSignatureFunction())
+					if (UFunction* EventFunc = EventNode->FindEventSignatureFunction(); IsValid(EventFunc))
 					{
 						Root.FunctionFlags = EventFunc->FunctionFlags;
 					}
@@ -864,7 +864,7 @@ namespace ScaffoldInternal
 				}
 
 				// Function entry nodes
-				if (UK2Node_FunctionEntry* EntryNode = Cast<UK2Node_FunctionEntry>(Node))
+				if (UK2Node_FunctionEntry* EntryNode = Cast<UK2Node_FunctionEntry>(Node); IsValid(EntryNode))
 				{
 					FRootNode Root;
 					Root.Node = EntryNode;
@@ -874,11 +874,11 @@ namespace ScaffoldInternal
 					Root.bIsConstructor = Graph->GetName().Contains(TEXT("ConstructionScript"));
 
 					// Get function flags from the generated class function
-					if (UBlueprint* OwnerBP = Cast<UBlueprint>(Graph->GetOuter()))
+					if (UBlueprint* OwnerBP = Cast<UBlueprint>(Graph->GetOuter()); IsValid(OwnerBP))
 					{
-						if (OwnerBP->GeneratedClass)
+						if (IsValid(OwnerBP->GeneratedClass))
 						{
-							if (UFunction* Func = OwnerBP->GeneratedClass->FindFunctionByName(*Graph->GetName()))
+							if (UFunction* Func = OwnerBP->GeneratedClass->FindFunctionByName(*Graph->GetName()); IsValid(Func))
 							{
 								Root.FunctionFlags = Func->FunctionFlags;
 							}
@@ -904,7 +904,7 @@ namespace ScaffoldInternal
 					// Find return type from FunctionResult nodes in this graph
 					for (UEdGraphNode* GNode : Graph->Nodes)
 					{
-						if (UK2Node_FunctionResult* ResultNode = Cast<UK2Node_FunctionResult>(GNode))
+						if (UK2Node_FunctionResult* ResultNode = Cast<UK2Node_FunctionResult>(GNode); IsValid(ResultNode))
 						{
 							for (UEdGraphPin* Pin : ResultNode->Pins)
 							{
@@ -933,9 +933,11 @@ FString ClaireonTool_BlueprintTranslateScaffold::GetOperation() const { return T
 
 FString ClaireonTool_BlueprintTranslateScaffold::GetDescription() const
 {
-	return TEXT("Generate annotated C++ skeleton files from Blueprint graphs. Phase 1 of the BP-to-C++ "
-		"translation pipeline. Extracts class hierarchy, properties, components, and function graphs "
-		"into .h/.cpp pairs with //[BP] metadata tags for interactive Phase 2 implementation. Immediate-mode tool: no session required.");
+	return TEXT("Create annotated C++ .h/.cpp skeletons from Blueprint graphs -- phase 1 of the BP-to-C++ "
+		"translation pipeline. Extracts class hierarchy, properties, components, and function graphs, "
+		"tagging node regions with //[BP] metadata. Immediate-mode: needs no open session; writes a "
+		"translate session file and returns its session_id for the phase-2 bp_translate_* tools. "
+		"Errors if the target dir has one.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_BlueprintTranslateScaffold::GetInputSchema() const
@@ -1023,9 +1025,9 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 
 	// target_directory normalization. Accept three input shapes:
 	//   1. Relative to project root: "Source/MyModule/Translated"
-	//   2. Absolute path INSIDE the project: "W:/sable/Source/MyModule/Translated"
+	//   2. Absolute path INSIDE the project: "C:/MyProject/Source/MyModule/Translated"
 	//   3. Absolute path OUTSIDE the project: error.
-	// Case 2 must be normalized to avoid "W:/sable/W:/sable/..." double-prefix paths.
+	// Case 2 must be normalized to avoid "C:/MyProject/C:/MyProject/..." double-prefix paths.
 	FString AbsTargetDir;
 	const FString ProjectDirAbs = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 	{
@@ -1081,7 +1083,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 		AssetPaths.Add(AssetPath);
 
 		UBlueprint* BP = LoadObject<UBlueprint>(nullptr, *AssetPath);
-		if (!BP)
+		if (!IsValid(BP))
 		{
 			return MakeErrorResult(FString::Printf(
 				TEXT("LoadObject<UBlueprint> returned nullptr for path: %s"), *AssetPath));
@@ -1155,11 +1157,11 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 
 		// Get the C++ class name with prefix
 		FString CppClassName;
-		if (GeneratedClass)
+		if (IsValid(GeneratedClass))
 		{
 			CppClassName = FString::Printf(TEXT("%s%s"), GeneratedClass->GetPrefixCPP(), *ClassName);
 		}
-		else if (ParentClass && ParentClass->IsChildOf<AActor>())
+		else if (IsValid(ParentClass) && ParentClass->IsChildOf<AActor>())
 		{
 			CppClassName = FString::Printf(TEXT("A%s"), *ClassName);
 		}
@@ -1178,7 +1180,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 		bool bHasContent = false;
 		for (UEdGraph* Graph : AllGraphs)
 		{
-			if (Graph && Graph->Nodes.Num() > 0)
+			if (IsValid(Graph) && Graph->Nodes.Num() > 0)
 			{
 				bHasContent = true;
 				break;
@@ -1202,10 +1204,10 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 		TArray<TPair<FString, FString>> ComponentDelegateBindings; // ComponentName->Delegate, HandlerName
 		for (UEdGraph* Graph : AllGraphs)
 		{
-			if (!Graph) continue;
+			if (!IsValid(Graph)) continue;
 			for (UEdGraphNode* Node : Graph->Nodes)
 			{
-				if (UK2Node_ComponentBoundEvent* CompEvent = Cast<UK2Node_ComponentBoundEvent>(Node))
+				if (UK2Node_ComponentBoundEvent* CompEvent = Cast<UK2Node_ComponentBoundEvent>(Node); IsValid(CompEvent))
 				{
 					FString CompName = CompEvent->ComponentPropertyName.ToString();
 					FString DelegateName = CompEvent->DelegatePropertyName.ToString();
@@ -1426,7 +1428,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 		// These were resolved during expression evaluation but not tracked by EmitScope
 		for (const UEdGraphNode* InlinedNode : NodeMapper.GetInlinedPureNodes())
 		{
-			if (!InlinedNode) continue;
+			if (!IsValid(InlinedNode)) continue;
 			FString InlinedGuid = InlinedNode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphensInBraces);
 			if (!AllNodes.Contains(InlinedGuid))
 			{
@@ -1444,10 +1446,10 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 		{
 			for (UEdGraph* Graph : AllGraphs)
 			{
-				if (!Graph) continue;
+				if (!IsValid(Graph)) continue;
 				for (UEdGraphNode* Node : Graph->Nodes)
 				{
-					if (Node && Node->NodeGuid.ToString(EGuidFormats::DigitsWithHyphensInBraces) == Pair.Key)
+					if (IsValid(Node) && Node->NodeGuid.ToString(EGuidFormats::DigitsWithHyphensInBraces) == Pair.Key)
 					{
 						VisitedNodes.Add(Node);
 					}
@@ -1461,10 +1463,10 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 		TSet<const UEdGraphNode*> PureOrphans;
 		for (UEdGraph* Graph : AllGraphs)
 		{
-			if (!Graph) continue;
+			if (!IsValid(Graph)) continue;
 			for (UEdGraphNode* Node : Graph->Nodes)
 			{
-				if (!Node || VisitedNodes.Contains(Node)) continue;
+				if (!IsValid(Node) || VisitedNodes.Contains(Node)) continue;
 				// Check if this node has any connections
 				bool bHasConnections = false;
 				for (UEdGraphPin* Pin : Node->Pins)
@@ -1647,7 +1649,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 		{
 			for (const USCS_Node* SCSNode : BP->SimpleConstructionScript->GetAllNodes())
 			{
-				if (SCSNode && SCSNode->ComponentClass)
+				if (IsValid(SCSNode) && SCSNode->ComponentClass)
 				{
 					FString CompInclude = SCSNode->ComponentClass->GetMetaData(TEXT("ModuleRelativePath"));
 					if (!CompInclude.IsEmpty())
@@ -1666,7 +1668,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 		// P1-10: Collect includes from interface types
 		for (const FBPInterfaceDescription& Interface : BP->ImplementedInterfaces)
 		{
-			if (Interface.Interface)
+			if (IsValid(Interface.Interface))
 			{
 				FString IntfInclude = Interface.Interface->GetMetaData(TEXT("ModuleRelativePath"));
 				if (!IntfInclude.IsEmpty())
@@ -1687,7 +1689,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 			const TArray<USCS_Node*>& SCSNodes = BP->SimpleConstructionScript->GetAllNodes();
 			for (const USCS_Node* SCSNode : SCSNodes)
 			{
-				if (!SCSNode || !SCSNode->ComponentClass)
+				if (!IsValid(SCSNode) || !SCSNode->ComponentClass)
 				{
 					continue;
 				}
@@ -1704,7 +1706,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 		// P5-26: Collect interfaces, filtering those already on ancestor C++ classes
 		FString InterfaceFilterComments;
 		TSet<UClass*> AncestorInterfaces;
-		for (UClass* Ancestor = ParentClass; Ancestor; Ancestor = Ancestor->GetSuperClass())
+		for (UClass* Ancestor = ParentClass; IsValid(Ancestor); Ancestor = Ancestor->GetSuperClass())
 		{
 			for (const FImplementedInterface& AncIf : Ancestor->Interfaces)
 			{
@@ -1715,7 +1717,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 		TArray<FString> InterfaceNames;
 		for (const FBPInterfaceDescription& Interface : BP->ImplementedInterfaces)
 		{
-			if (Interface.Interface)
+			if (IsValid(Interface.Interface))
 			{
 				// Skip if already on ancestor C++ class
 				if (AncestorInterfaces.Contains(Interface.Interface))
@@ -1890,7 +1892,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 			const TArray<USCS_Node*>& SCSNodes = BP->SimpleConstructionScript->GetAllNodes();
 			for (const USCS_Node* SCSNode : SCSNodes)
 			{
-				if (!SCSNode || !SCSNode->ComponentClass) continue;
+				if (!IsValid(SCSNode) || !SCSNode->ComponentClass) continue;
 				if (ParentSCSNames.Contains(SCSNode->GetVariableName())) continue; // P5-24: Skip inherited
 				FString CompCppType = GetClassCppName(SCSNode->ComponentClass);
 				FString CompVarName = SCSNode->GetVariableName().ToString();
@@ -1903,7 +1905,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 			const USCS_Node* DefaultSceneRoot = nullptr;
 			for (const USCS_Node* SCSNode : SCSNodes)
 			{
-				if (SCSNode && SCSNode->IsRootNode() && !ParentSCSNames.Contains(SCSNode->GetVariableName()))
+				if (IsValid(SCSNode) && SCSNode->IsRootNode() && !ParentSCSNames.Contains(SCSNode->GetVariableName()))
 				{
 					DefaultSceneRoot = SCSNode;
 					FString VarName = SCSNode->GetVariableName().ToString();
@@ -1915,10 +1917,10 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 			TMap<FName, FName> ChildToParentVarName;
 			for (const USCS_Node* ParentSCSNode : SCSNodes)
 			{
-				if (!ParentSCSNode) continue;
+				if (!IsValid(ParentSCSNode)) continue;
 				for (const USCS_Node* ChildSCSNode : ParentSCSNode->ChildNodes)
 				{
-					if (ChildSCSNode)
+					if (IsValid(ChildSCSNode))
 					{
 						ChildToParentVarName.Add(ChildSCSNode->GetVariableName(), ParentSCSNode->GetVariableName());
 					}
@@ -1926,14 +1928,14 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 			}
 			for (const USCS_Node* SCSNode : SCSNodes)
 			{
-				if (!SCSNode || SCSNode == DefaultSceneRoot) continue;
+				if (!IsValid(SCSNode) || SCSNode == DefaultSceneRoot) continue;
 				if (ParentSCSNames.Contains(SCSNode->GetVariableName())) continue; // P5-24: Skip inherited
 				FString ChildName = SCSNode->GetVariableName().ToString();
 				if (const FName* ParentVarName = ChildToParentVarName.Find(SCSNode->GetVariableName()))
 				{
 					SourceContent += FString::Printf(TEXT("\t%s->SetupAttachment(%s);\n"), *ChildName, *ParentVarName->ToString());
 				}
-				else if (DefaultSceneRoot)
+				else if (IsValid(DefaultSceneRoot))
 				{
 					SourceContent += FString::Printf(TEXT("\t%s->SetupAttachment(RootComponent);\n"), *ChildName);
 				}
@@ -1942,19 +1944,19 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 			// P5-25: Emit component template defaults for non-default values
 			for (const USCS_Node* SCSNode : SCSNodes)
 			{
-				if (!SCSNode || !SCSNode->ComponentClass || !SCSNode->ComponentTemplate) continue;
+				if (!IsValid(SCSNode) || !SCSNode->ComponentClass || !SCSNode->ComponentTemplate) continue;
 				if (ParentSCSNames.Contains(SCSNode->GetVariableName())) continue;
 
 				FString VarName = SCSNode->GetVariableName().ToString();
 				UObject* Template = SCSNode->ComponentTemplate;
 				UObject* CDO = SCSNode->ComponentClass->GetDefaultObject();
-				if (!CDO) continue;
+				if (!IsValid(CDO)) continue;
 
 				// Check common SceneComponent properties
-				if (USceneComponent* SceneTemplate = Cast<USceneComponent>(Template))
+				if (USceneComponent* SceneTemplate = Cast<USceneComponent>(Template); IsValid(SceneTemplate))
 				{
 					USceneComponent* SceneCDO = Cast<USceneComponent>(CDO);
-					if (SceneCDO)
+					if (IsValid(SceneCDO))
 					{
 						if (!SceneTemplate->GetRelativeLocation().Equals(SceneCDO->GetRelativeLocation(), 0.01f))
 						{
@@ -1989,10 +1991,10 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 				}
 
 				// Check PrimitiveComponent collision profile
-				if (UPrimitiveComponent* PrimTemplate = Cast<UPrimitiveComponent>(Template))
+				if (UPrimitiveComponent* PrimTemplate = Cast<UPrimitiveComponent>(Template); IsValid(PrimTemplate))
 				{
 					UPrimitiveComponent* PrimCDO = Cast<UPrimitiveComponent>(CDO);
-					if (PrimCDO)
+					if (IsValid(PrimCDO))
 					{
 						FName ProfileName = PrimTemplate->GetCollisionProfileName();
 						FName CDOProfile = PrimCDO->GetCollisionProfileName();
@@ -2132,13 +2134,13 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 		// V3-5/V3-6: Emit callback function bodies for Timeline and AsyncAction nodes
 		for (UEdGraph* Graph : AllGraphs)
 		{
-			if (!Graph) continue;
+			if (!IsValid(Graph)) continue;
 			for (UEdGraphNode* Node : Graph->Nodes)
 			{
-				if (!Node) continue;
+				if (!IsValid(Node)) continue;
 
 				// Timeline callbacks
-				if (UK2Node_Timeline* TimelineNode = Cast<UK2Node_Timeline>(Node))
+				if (UK2Node_Timeline* TimelineNode = Cast<UK2Node_Timeline>(Node); IsValid(TimelineNode))
 				{
 					FString TimelineName = TimelineNode->TimelineName.ToString();
 					for (UEdGraphPin* Pin : Node->Pins)
@@ -2156,7 +2158,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 							FEmitScopeContext CallbackCtx(NodeMapper);
 							for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
 							{
-								if (LinkedPin && LinkedPin->GetOwningNode())
+								if (LinkedPin && IsValid(LinkedPin->GetOwningNode()))
 								{
 									CallbackCtx.EmitScope(LinkedPin->GetOwningNode(), 1, nullptr, LinkedPin);
 								}
@@ -2168,7 +2170,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 				}
 
 				// Async action callbacks
-				if (UK2Node_BaseAsyncTask* AsyncNode = Cast<UK2Node_BaseAsyncTask>(Node))
+				if (UK2Node_BaseAsyncTask* AsyncNode = Cast<UK2Node_BaseAsyncTask>(Node); IsValid(AsyncNode))
 				{
 					UClass* ProxyClassPtr = nullptr;
 					if (const FObjectPropertyBase* ProxyClassProp = CastField<FObjectPropertyBase>(
@@ -2176,7 +2178,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 					{
 						ProxyClassPtr = Cast<UClass>(ProxyClassProp->GetObjectPropertyValue_InContainer(AsyncNode));
 					}
-					FString ActionTypeName = ProxyClassPtr ? ProxyClassPtr->GetName() : TEXT("AsyncTask");
+					FString ActionTypeName = IsValid(ProxyClassPtr) ? ProxyClassPtr->GetName() : TEXT("AsyncTask");
 					ActionTypeName.RemoveFromStart(TEXT("AbilityAsync_"));
 					ActionTypeName.RemoveFromStart(TEXT("AbilityTask_"));
 
@@ -2201,7 +2203,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 						FEmitScopeContext CallbackCtx(NodeMapper);
 						for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
 						{
-							if (LinkedPin && LinkedPin->GetOwningNode())
+							if (LinkedPin && IsValid(LinkedPin->GetOwningNode()))
 							{
 								CallbackCtx.EmitScope(LinkedPin->GetOwningNode(), 1, nullptr, LinkedPin);
 							}
@@ -2212,9 +2214,9 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 				}
 
 				// Latent K2Node_CallFunction callbacks
-				if (const UK2Node_CallFunction* CallNode = Cast<UK2Node_CallFunction>(Node))
+				if (const UK2Node_CallFunction* CallNode = Cast<UK2Node_CallFunction>(Node); IsValid(CallNode))
 				{
-					if (const UFunction* TargetFunc = CallNode->GetTargetFunction())
+					if (const UFunction* TargetFunc = CallNode->GetTargetFunction(); IsValid(TargetFunc))
 					{
 						bool bIsLatent = false;
 						for (TFieldIterator<FProperty> It(TargetFunc); It; ++It)
@@ -2249,7 +2251,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintTranslateScaffold::Execute(cons
 								FEmitScopeContext CallbackCtx(NodeMapper);
 								for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
 								{
-									if (LinkedPin && LinkedPin->GetOwningNode())
+									if (LinkedPin && IsValid(LinkedPin->GetOwningNode()))
 									{
 										CallbackCtx.EmitScope(LinkedPin->GetOwningNode(), 1, nullptr, LinkedPin);
 									}

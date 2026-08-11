@@ -34,7 +34,7 @@
 // ---------------------------------------------------------------------------
 // File-local helpers (anon-namespace names prefixed to avoid unity collisions)
 // ---------------------------------------------------------------------------
-namespace
+namespace ClaireonChooserOutputStructTests_Private
 {
 	// Construct a transient UChooserTable with a single output struct context
 	// parameter (FVector). Returns the chooser by pointer (rooted by transient
@@ -79,7 +79,7 @@ namespace
 		TArrayView<const FInstancedStruct> ContextData)
 	{
 		const UScriptStruct* ColStructType = ColumnStruct.GetScriptStruct();
-		if (!ColStructType) return;
+		if (!IsValid(ColStructType)) return;
 
 		const FStructProperty* InputValueProp = CastField<FStructProperty>(ColStructType->FindPropertyByName(TEXT("InputValue")));
 		if (!InputValueProp || InputValueProp->Struct != TBaseStructure<FInstancedStruct>::Get()) return;
@@ -88,7 +88,7 @@ namespace
 		if (!InputValuePtr || !InputValuePtr->IsValid()) return;
 
 		const UScriptStruct* ParamStruct = InputValuePtr->GetScriptStruct();
-		if (!ParamStruct) return;
+		if (!IsValid(ParamStruct)) return;
 
 		const FProperty* BindingProp = ParamStruct->FindPropertyByName(TEXT("Binding"));
 		if (!BindingProp) return;
@@ -121,6 +121,7 @@ namespace
 		}
 	}
 } // namespace
+using namespace ClaireonChooserOutputStructTests_Private;
 
 // ============================================================================
 // Case 1: OutputStruct happy path -- empty PropertyChain, context_index=0

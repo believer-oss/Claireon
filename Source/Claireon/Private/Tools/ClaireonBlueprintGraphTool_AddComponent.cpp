@@ -111,7 +111,7 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddComponent::GetInputSchema(
     Builder.AddString(TEXT("asset_path"), TEXT("Blueprint asset path (alternative to session_id)."), false);
     Builder.AddString(TEXT("component_class"), TEXT("Component class path (e.g. /Script/Engine.StaticMeshComponent)."), true);
     Builder.AddString(TEXT("component_name"), TEXT("Name for the new component."), true);
-    Builder.AddString(TEXT("parent_name"), TEXT("Optional parent component name; defaults to root."));
+    Builder.AddString(TEXT("parent_name"), TEXT("Optional parent component name; defaults to root. 'parent_component' is accepted as a back-compat alias. Errors if the named parent is not found (the component is never silently rooted)."));
     Builder.AddString(TEXT("response_mode"), TEXT("Response verbosity: 'full' | 'changed' | 'status' (default 'changed')."));
     return Builder.Build();
 }
@@ -128,7 +128,7 @@ FToolResult ClaireonBlueprintGraphTool_AddComponent::Execute(const TSharedPtr<FJ
     }
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
 	}
@@ -148,7 +148,7 @@ FToolResult ClaireonBlueprintGraphTool_AddComponent::Execute(const TSharedPtr<FJ
 	TArray<FString> ResolutionWarnings;
 	ClaireonNameResolver::FNameResolveResult CompClassResult;
 	UClass* CompClass = ClaireonNameResolver::ResolveClassName(ComponentClass, UActorComponent::StaticClass(), CompClassResult);
-	if (!CompClass)
+	if (!IsValid(CompClass))
 	{
 		return MakeErrorResult(CompClassResult.Error);
 	}
@@ -164,22 +164,51 @@ FToolResult ClaireonBlueprintGraphTool_AddComponent::Execute(const TSharedPtr<FJ
 
 	// Get or create SimpleConstructionScript
 	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
-	if (!SCS)
+	if (!IsValid(SCS))
 	{
 		return MakeErrorResult(TEXT("Blueprint does not have a SimpleConstructionScript (not an Actor Blueprint?)"));
 	}
 
-	// Get optional parent component
+	// Get optional parent component. The schema advertises 'parent_name';
+	// 'parent_component' is kept as a back-compat alias -- earlier builds read
+	// only the alias, silently re-rooting every parent_name attachment.
 	FString ParentComponentName;
 	USCS_Node* ParentNode = nullptr;
-	if (Params->TryGetStringField(TEXT("parent_component"), ParentComponentName))
+	if (Params->TryGetStringField(TEXT("parent_name"), ParentComponentName)
+		|| Params->TryGetStringField(TEXT("parent_component"), ParentComponentName))
 	{
 		// Find parent component node
 		ParentNode = SCS->FindSCSNode(FName(*ParentComponentName));
 
-		if (!ParentNode)
+		if (!IsValid(ParentNode))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Parent component not found: %s"), *ParentComponentName));
+		}
+	}
+
+	// Replaying an explicit 'DefaultSceneRoot' scene root: a fresh Actor BP already
+	// reserves that name for its placeholder root node, so CreateNode below would
+	// silently suffix the new node (DefaultSceneRoot1); the placeholder is then
+	// dropped on the next structural regen and children that name 'DefaultSceneRoot'
+	// as their parent fail to attach. Adopt the placeholder instead -- the same
+	// materialization the SCS editor performs when a child is dropped onto it.
+	if (!IsValid(ParentNode)
+		&& CompClass == USceneComponent::StaticClass()
+		&& FName(*ComponentName) == USceneComponent::GetDefaultSceneRootVariableName())
+	{
+		if (USCS_Node* DefaultRoot = SCS->GetDefaultSceneRootNode(); IsValid(DefaultRoot))
+		{
+			Data->Cursor.LastOperationStatus = FString::Printf(
+				TEXT("Adopted existing default scene root as component: %s"), *ComponentName);
+			FToolResult AdoptResult = BuildStateResponse(SessionId, Data);
+			if (AdoptResult.Data.IsValid())
+			{
+				AdoptResult.Data->SetStringField(TEXT("component_guid"), DefaultRoot->VariableGuid.ToString());
+				AdoptResult.Data->SetStringField(TEXT("component_name"), DefaultRoot->GetVariableName().ToString());
+				AdoptResult.Data->SetBoolField(TEXT("adopted_default_scene_root"), true);
+			}
+			AdoptResult.Warnings.Append(ResolutionWarnings);
+			return AdoptResult;
 		}
 	}
 
@@ -190,13 +219,13 @@ FToolResult ClaireonBlueprintGraphTool_AddComponent::Execute(const TSharedPtr<FJ
 
 	// Create new SCS node
 	USCS_Node* NewNode = SCS->CreateNode(CompClass, FName(*ComponentName));
-	if (!NewNode)
+	if (!IsValid(NewNode))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create component node: %s"), *ComponentName));
 	}
 
 	// Add to SCS
-	if (ParentNode)
+	if (IsValid(ParentNode))
 	{
 		ParentNode->AddChildNode(NewNode);
 	}
@@ -219,6 +248,15 @@ FToolResult ClaireonBlueprintGraphTool_AddComponent::Execute(const TSharedPtr<FJ
 	{
 		AddCompResult.Data->SetStringField(TEXT("component_guid"), NewNode->VariableGuid.ToString());
 		AddCompResult.Data->SetStringField(TEXT("component_name"), NewNode->GetVariableName().ToString());
+	}
+	// A taken name is silently suffixed by SCS->CreateNode; downstream callers that
+	// address the component by the requested name (parent attachment, variable
+	// bindings) will miss, so surface the rename loudly.
+	if (NewNode->GetVariableName() != FName(*ComponentName))
+	{
+		AddCompResult.Warnings.Add(FString::Printf(
+			TEXT("Requested component name '%s' was unavailable; component created as '%s'"),
+			*ComponentName, *NewNode->GetVariableName().ToString()));
 	}
 	AddCompResult.Warnings.Append(ResolutionWarnings);
 	return AddCompResult;

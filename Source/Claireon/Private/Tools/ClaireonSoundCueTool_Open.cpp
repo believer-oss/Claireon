@@ -45,7 +45,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_Open::Execute(const TSharedPtr<
 	const EClaireonAudioAssetKind ResolvedKind = ResolveAudioAssetKindFromPath(AssetPath, LoadError);
 	EClaireonAudioAssetKind Kind = EClaireonAudioAssetKind::Unknown;
 	UObject* Asset = ClaireonAudioHelpers::LoadAudioAsset(AssetPath, Kind, LoadError);
-	if (!Asset) return MakeErrorResult(LoadError);
+	if (!IsValid(Asset)) return MakeErrorResult(LoadError);
 	if (Kind != EClaireonAudioAssetKind::SoundCue)
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset is not a SoundCue: %s"), *AssetPath));
@@ -82,7 +82,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_Open::Execute(const TSharedPtr<
 	Entry->FocusedNodeIndex = INDEX_NONE;
 
 #if WITH_EDITOR
-	if (USoundCue* Cue = Cast<USoundCue>(Asset))
+	if (USoundCue* Cue = Cast<USoundCue>(Asset); IsValid(Cue))
 	{
 		if (!Cue->SoundCueGraph)
 		{

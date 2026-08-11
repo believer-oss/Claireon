@@ -104,6 +104,16 @@ public:
 	 * Returns the live Server pointer (guaranteed non-null on success).
 	 */
 	FClaireonServer* EnsureServerForTest();
+
+	/**
+	 * Test-only seam.  Merges ONE provider into the registry through the exact
+	 * boot-time path (collision check included), so a test can register a second
+	 * provider without a running editor.  EnsureServerForTest() only ever wires
+	 * the builtin provider, and the OnModularFeatureRegistered subscription lives
+	 * behind StartupModule()'s commandlet guard -- so without this seam no test
+	 * can observe what happens when two providers claim the same tool name.
+	 */
+	void CollectToolsFromProviderForTest(IClaireonToolProvider* Provider) { CollectToolsFromProvider(Provider); }
 #endif // WITH_UNTESTED
 
 private:

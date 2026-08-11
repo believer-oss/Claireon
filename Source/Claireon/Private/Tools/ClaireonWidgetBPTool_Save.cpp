@@ -39,7 +39,7 @@ FToolResult ClaireonWidgetBPTool_Save::Execute(const TSharedPtr<FJsonObject>& Ar
         return Error;
     }
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
-	if (!WBP)
+	if (!IsValid(WBP))
 	{
 		return MakeErrorResult(TEXT("Widget Blueprint is no longer valid"));
 	}

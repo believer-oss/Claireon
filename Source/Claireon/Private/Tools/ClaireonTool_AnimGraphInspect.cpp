@@ -18,9 +18,10 @@ TArray<FString> ClaireonTool_AnimGraphInspect::GetSearchKeywords() const
 
 FString ClaireonTool_AnimGraphInspect::GetDescription() const
 {
-	return TEXT("Blueprint-level overview of an Animation Blueprint. Returns class settings (parent class, "
-		"skeleton, interfaces), variables, functions (with thread safety flags), all graphs enumerated "
-		"(AnimGraph, state machines, state graphs, transitions), and a warning summary.");
+	return TEXT("Inspect an Animation Blueprint at the Blueprint level and start here before the other animbp "
+		"tools. Stateless / read-only / non-session: loads the asset by asset_path, no open session required. "
+		"Returns class settings (parent class, skeleton, interfaces), variables, functions with thread-safety "
+		"flags, every graph enumerated (AnimGraph, state machines, state graphs, transitions), and warnings.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AnimGraphInspect::GetInputSchema() const
@@ -45,7 +46,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimGraphInspect::Execute(const TSharedP
 
 	FString Error;
 	UAnimBlueprint* AnimBP = ClaireonAnimGraphHelpers::LoadAnimBlueprint(AssetPath, Error);
-	if (!AnimBP)
+	if (!IsValid(AnimBP))
 	{
 		return MakeErrorResult(Error);
 	}

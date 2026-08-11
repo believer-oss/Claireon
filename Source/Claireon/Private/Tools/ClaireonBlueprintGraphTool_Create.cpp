@@ -76,6 +76,8 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "ScopedTransaction.h"
 #include "Animation/AnimBlueprint.h"
+#include "Animation/AnimInstance.h"
+#include "Blueprint/UserWidget.h"
 #include "AnimationGraph.h"
 #include "AnimGraphNode_Base.h"
 #include "AnimGraphNode_Root.h"
@@ -101,7 +103,7 @@ FString ClaireonBlueprintGraphTool_Create::GetOperation() const { return TEXT("c
 
 FString ClaireonBlueprintGraphTool_Create::GetDescription() const
 {
-    return TEXT("Create a new blueprint asset at asset_path and open a session for editing. Returns session_id; pair with bp_close to release the session, or let it expire on idle timeout. Auto-opens a session as a side effect of creation. Common pitfall: parent_class must be a Blueprintable native class; the package directory portion of asset_path must already exist. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+    return TEXT("Create a new Blueprint asset at asset_path and open an editing session on it. Returns the session_id other bp_* tools take; release it with bp_close, or let it expire on idle timeout. Common pitfall: parent_class must be a Blueprintable native class, and the package directory portion of asset_path must already exist.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Create::GetInputSchema() const
@@ -109,8 +111,8 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Create::GetInputSchema() cons
     FToolSchemaBuilder Builder;
     Builder.AddString(TEXT("asset_path"), TEXT("New Blueprint asset path."), true);
     Builder.AddString(TEXT("parent_class"), TEXT("Parent class path (e.g. /Script/Engine.Actor)."), true);
-    Builder.AddString(TEXT("blueprint_type"), TEXT("Optional: 'Normal', 'MacroLibrary', 'Interface', 'LevelScript' (default 'Normal')."));
-    Builder.AddNumber(TEXT("timeout_minutes"), TEXT("Session timeout in minutes (default 60)."));
+    Builder.AddString(TEXT("blueprint_type"), TEXT("Optional: 'Normal' (default), 'MacroLibrary', or 'Interface'. MacroLibrary and Interface Blueprints have no EventGraph -- the session opens with no active graph until bp_add_macro or bp_add_function creates one. parent_class defaults to Actor, or Interface for blueprint_type='Interface'."));
+    Builder.AddNumber(TEXT("timeout_minutes"), TEXT("Session inactivity timeout in minutes (default 10; every operation resets the clock)."));
     return Builder.Build();
 }
 
@@ -140,17 +142,53 @@ FToolResult ClaireonBlueprintGraphTool_Create::Execute(const TSharedPtr<FJsonObj
 		return MakeErrorResult(ValidationError);
 	}
 
-	// Get parent_class (optional, defaults to Actor)
+	// blueprint_type. Advertised since forever but never read, so every asset came out
+	// BPTYPE_Normal regardless. LevelScript is rejected by name rather than silently
+	// downgraded: level script Blueprints are inner objects of a ULevel, not standalone
+	// package assets, so this tool's create-a-package flow cannot produce one.
+	EBlueprintType BPType = BPTYPE_Normal;
+	FString BlueprintTypeName;
+	if (Params->TryGetStringField(TEXT("blueprint_type"), BlueprintTypeName) && !BlueprintTypeName.IsEmpty())
+	{
+		if (BlueprintTypeName.Equals(TEXT("Normal"), ESearchCase::IgnoreCase))
+		{
+			BPType = BPTYPE_Normal;
+		}
+		else if (BlueprintTypeName.Equals(TEXT("MacroLibrary"), ESearchCase::IgnoreCase))
+		{
+			BPType = BPTYPE_MacroLibrary;
+		}
+		else if (BlueprintTypeName.Equals(TEXT("Interface"), ESearchCase::IgnoreCase))
+		{
+			BPType = BPTYPE_Interface;
+		}
+		else if (BlueprintTypeName.Equals(TEXT("LevelScript"), ESearchCase::IgnoreCase))
+		{
+			return MakeErrorResult(TEXT(
+				"blueprint_type 'LevelScript' is not supported: level script Blueprints are inner "
+				"objects of a ULevel, not standalone package assets, so they cannot be created at an "
+				"asset_path. Use 'Normal', 'MacroLibrary', or 'Interface'."));
+		}
+		else
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("Unknown blueprint_type '%s'. Valid values: 'Normal', 'MacroLibrary', 'Interface'."),
+				*BlueprintTypeName));
+		}
+	}
+
+	// Get parent_class. Defaults follow the editor's own factories:
+	// UBlueprintMacroFactory uses AActor, UBlueprintInterfaceFactory uses UInterface.
 	FString ParentClassName;
 	if (!Params->TryGetStringField(TEXT("parent_class"), ParentClassName))
 	{
-		ParentClassName = TEXT("Actor");
+		ParentClassName = (BPType == BPTYPE_Interface) ? TEXT("Interface") : TEXT("Actor");
 	}
 
 	// Find parent class
 	ClaireonNameResolver::FNameResolveResult ParentClassResult;
 	UClass* ParentClass = ClaireonNameResolver::ResolveClassName(ParentClassName, nullptr, ParentClassResult);
-	if (!ParentClass)
+	if (!IsValid(ParentClass))
 	{
 		return MakeErrorResult(ParentClassResult.Error);
 	}
@@ -160,11 +198,39 @@ FToolResult ClaireonBlueprintGraphTool_Create::Execute(const TSharedPtr<FJsonObj
 		ResolutionWarnings.Add(ParentClassResult.ResolutionNote);
 	}
 
+	// UserWidget / AnimInstance parents need a specialized Blueprint asset class
+	// (UWidgetBlueprint / UAnimBlueprint). CreateBlueprint below would silently
+	// produce a plain UBlueprint -- no widget tree, no anim-graph host -- and
+	// anim-node authoring into such an asset cast-fatals. Refuse loudly.
+	if (ParentClass->IsChildOf(UUserWidget::StaticClass()))
+	{
+		return MakeErrorResult(FString::Printf(
+			TEXT("Parent class '%s' derives from UserWidget: a plain Blueprint asset would have no widget tree. Use widgetbp_create instead."),
+			*ParentClassName));
+	}
+	if (ParentClass->IsChildOf(UAnimInstance::StaticClass()))
+	{
+		return MakeErrorResult(FString::Printf(
+			TEXT("Parent class '%s' derives from AnimInstance: a plain Blueprint asset cannot host an anim graph. Use animbp_create instead."),
+			*ParentClassName));
+	}
+	// ControlRig parents need UControlRigBlueprint (RigVM-hosted graphs). Guard by
+	// name walk: the ControlRig module is not a Claireon dependency.
+	for (const UClass* Cls = ParentClass; IsValid(Cls); Cls = Cls->GetSuperClass())
+	{
+		if (Cls->GetFName() == FName(TEXT("ControlRig")))
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("Parent class '%s' derives from ControlRig: a plain Blueprint asset cannot host a RigVM graph. Control Rig authoring is not supported by the bp_* tools."),
+				*ParentClassName));
+		}
+	}
+
 	// Route package + Blueprint creation through the shared helper. The helper handles
 	// asset-path splitting, existing-file deletion, package creation, blueprint creation,
 	// externally-referenceable flag, asset-registry notification, and EventGraph capture.
 	ClaireonBlueprintHelpers::FCreateBlueprintResult BPCreateResult;
-	ClaireonBlueprintHelpers::CreateBlueprint(AssetPath, ParentClass, BPCreateResult);
+	ClaireonBlueprintHelpers::CreateBlueprint(AssetPath, ParentClass, BPCreateResult, BPType);
 	if (!BPCreateResult.IsOk())
 	{
 		return MakeErrorResult(BPCreateResult.Error);
@@ -175,7 +241,11 @@ FToolResult ClaireonBlueprintGraphTool_Create::Execute(const TSharedPtr<FJsonObj
 	}
 	UBlueprint* Blueprint = BPCreateResult.Blueprint;
 	UEdGraph* EventGraph = BPCreateResult.EventGraph;
-	if (!EventGraph)
+	// MacroLibrary and Interface Blueprints get no ubergraph at all
+	// (FBlueprintEditorUtils::DoesSupportEventGraphs is false for both), so a missing
+	// EventGraph is only a failure for BPTYPE_Normal. The session opens with no active
+	// graph until bp_add_macro (or bp_add_function) creates one.
+	if (!IsValid(EventGraph) && BPType == BPTYPE_Normal)
 	{
 		return MakeErrorResult(TEXT("Failed to find EventGraph in newly created Blueprint"));
 	}
@@ -188,7 +258,7 @@ FToolResult ClaireonBlueprintGraphTool_Create::Execute(const TSharedPtr<FJsonObj
 	}
 
 	// Open session via the manager (handles locking)
-	double TimeoutMinutes = 60.0;
+	double TimeoutMinutes = ClaireonDefaultSessionTimeoutMinutes;
 	Params->TryGetNumberField(TEXT("timeout_minutes"), TimeoutMinutes);
 	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(Blueprint->GetPathName(), TEXT("bp"), TimeoutMinutes);
 
@@ -197,11 +267,11 @@ FToolResult ClaireonBlueprintGraphTool_Create::Execute(const TSharedPtr<FJsonObj
 		const FMCPSession& Blocker = OpenResult.BlockingSession.GetValue();
 		const FTimespan Elapsed = FDateTime::UtcNow() - Blocker.LastAccessTime;
 		return MakeErrorResult(FString::Printf(
-			TEXT("Asset is locked by %s session %s (last activity %dm %ds ago). Close that session first, or use mcp_release_sessions(asset_path='%s') to force-release it."),
+			TEXT("Asset is locked by %s session %s (last activity %dm %ds ago). Close that session first, or call session_release(session_id='%s') to force-release it."),
 			*Blocker.ToolName, *Blocker.SessionId,
 			static_cast<int32>(Elapsed.GetTotalMinutes()),
 			static_cast<int32>(Elapsed.GetTotalSeconds()) % 60,
-			*Blueprint->GetPathName()));
+			*Blocker.SessionId));
 	}
 
 	if (OpenResult.Result == EOpenSessionResult::InvalidAssetPath)
@@ -215,11 +285,14 @@ FToolResult ClaireonBlueprintGraphTool_Create::Execute(const TSharedPtr<FJsonObj
 	FBlueprintEditToolData NewData;
 	NewData.Blueprint = Blueprint;
 	NewData.Graph = EventGraph;
-	NewData.Cursor.GraphName = EventGraph->GetName();
+	// Null for MacroLibrary/Interface, which have no ubergraph at all.
+	NewData.Cursor.GraphName = IsValid(EventGraph) ? EventGraph->GetName() : FString();
 	NewData.Cursor.ViewportCenter = FVector2D(0.0f, 0.0f);
 
 	// Find first event node to focus cursor
-	TArray<UEdGraphNode*> RootNodes = ClaireonBlueprintHelpers::FindRootNodes(EventGraph);
+	TArray<UEdGraphNode*> RootNodes = IsValid(EventGraph)
+		? ClaireonBlueprintHelpers::FindRootNodes(EventGraph)
+		: TArray<UEdGraphNode*>();
 	if (RootNodes.Num() > 0)
 	{
 		UEdGraphNode* FirstNode = RootNodes[0];

@@ -44,6 +44,12 @@ TSharedPtr<FJsonObject> ClaireonTool_DataTableDuplicateRow::GetInputSchema() con
 	NewRowNameProp->SetStringField(TEXT("description"), TEXT("Name for the duplicated row (must be a valid FName and not already exist)"));
 	Properties->SetObjectField(TEXT("new_row_name"), NewRowNameProp);
 
+	// refresh_composites - optional
+	TSharedPtr<FJsonObject> RefreshCompositesProp = MakeShared<FJsonObject>();
+	RefreshCompositesProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	RefreshCompositesProp->SetStringField(TEXT("description"), TEXT("After saving, refresh any composite data tables that aggregate this table (default: true). Set false for batch edits; follow with an explicit datatable_composite_refresh."));
+	Properties->SetObjectField(TEXT("refresh_composites"), RefreshCompositesProp);
+
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	TArray<TSharedPtr<FJsonValue>> Required;
@@ -82,6 +88,12 @@ IClaireonTool::FToolResult ClaireonTool_DataTableDuplicateRow::Execute(const TSh
 		return MakeErrorResult(TEXT("Missing required parameter: new_row_name"));
 	}
 
+	bool bRefreshComposites = true;
+	if (Arguments->HasField(TEXT("refresh_composites")))
+	{
+		bRefreshComposites = Arguments->GetBoolField(TEXT("refresh_composites"));
+	}
+
 	// 2. Validate new row name
 	FString ValidateError;
 	if (!ClaireonDataTableHelpers::ValidateRowName(NewRowName, ValidateError))
@@ -92,7 +104,7 @@ IClaireonTool::FToolResult ClaireonTool_DataTableDuplicateRow::Execute(const TSh
 	// 3. Load and validate table
 	FString Error;
 	UDataTable* Table = ClaireonDataTableHelpers::LoadDataTableAsset(AssetPath, Error);
-	if (!Table)
+	if (!IsValid(Table))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -127,12 +139,17 @@ IClaireonTool::FToolResult ClaireonTool_DataTableDuplicateRow::Execute(const TSh
 	FString SaveError;
 	bool bSaved = ClaireonDataTableHelpers::SaveDataTable(Table, SaveError);
 
+	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	FString Output = FString::Printf(TEXT("Row '%s' duplicated to '%s' in '%s'."), *SourceRow, *NewRowName, *AssetPath);
 	if (!bSaved)
 	{
 		Output += FString::Printf(TEXT("\nWarning: %s"), *SaveError);
 	}
+	else
+	{
+		Output += ClaireonDataTableHelpers::RefreshDependentCompositesResult(Table, bRefreshComposites, Data);
+	}
 
 	UE_LOG(LogClaireon, Display, TEXT("[MCP] editor.datatable.duplicate_row: %s"), *Output);
-	return MakeSuccessResult(nullptr, Output);
+	return MakeSuccessResult(Data, Output);
 }

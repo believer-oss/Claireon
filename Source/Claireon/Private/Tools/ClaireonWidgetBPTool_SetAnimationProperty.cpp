@@ -47,7 +47,7 @@ FToolResult ClaireonWidgetBPTool_SetAnimationProperty::Execute(const TSharedPtr<
         return BeginError;
     }
     UWidgetBlueprint* WBP = Data ? Data->WidgetBlueprint.Get() : nullptr;
-    if (!WBP)
+    if (!IsValid(WBP))
     {
         return MakeErrorResult(TEXT("widget blueprint unavailable on session"));
     }
@@ -57,7 +57,7 @@ FToolResult ClaireonWidgetBPTool_SetAnimationProperty::Execute(const TSharedPtr<
         return MakeErrorResult(TEXT("animation_name is required"));
     }
     UWidgetAnimation* Anim = Claireon::WidgetAnimation::FindWidgetAnimationByName(WBP, AnimationName);
-    if (!Anim)
+    if (!IsValid(Anim))
     {
         return MakeErrorResult(FString::Printf(TEXT("animation '%s' not found on %s"), *AnimationName, *WBP->GetName()));
     }
@@ -81,7 +81,7 @@ FToolResult ClaireonWidgetBPTool_SetAnimationProperty::Execute(const TSharedPtr<
     }
 
     UMovieScene* MS = Anim->GetMovieScene();
-    if (!MS)
+    if (!IsValid(MS))
     {
         return MakeErrorResult(TEXT("animation has no MovieScene"));
     }

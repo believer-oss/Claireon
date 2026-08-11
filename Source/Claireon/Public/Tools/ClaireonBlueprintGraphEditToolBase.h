@@ -54,6 +54,23 @@ protected:
 	FToolResult BuildStateResponse(const FString& SessionId, FBlueprintEditToolData* Data);
 
 	/**
+	 * Scrub trashed pin links, compile, and save the session's Blueprint package.
+	 *
+	 * Shared by bp_save and bp_close_all so the two cannot drift. Builds no response --
+	 * the caller owns its own status text and result shape.
+	 *
+	 * @param Data                 Session tool data; its Blueprint must still be valid.
+	 * @param OutSavedPathOrError  On success, the saved package filename; on failure, the
+	 *                             caller-facing error text.
+	 * @param OutWarnings          Appended to (not cleared): scrub notices worth surfacing.
+	 * @return True when the package saved.
+	 */
+	bool CompileAndSaveSession(
+		FBlueprintEditToolData* Data,
+		FString& OutSavedPathOrError,
+		TArray<FString>& OutWarnings);
+
+	/**
 	 * Shared pre-op wrapping used by every session-requiring decomposed tool.
 	 * Handles: params unwrap (legacy nested "params"), suppress_output/response_mode
 	 * parsing, ResolveOrOpenSession, TouchSession, PreOpPinConnections snapshot,
@@ -73,12 +90,60 @@ protected:
 	 */
 	FToolResult CheckMutationAffectedNodes(const FString& OpName, FBlueprintEditToolData* Data, const FToolResult& Result);
 
+	/**
+	 * Read-only counterpart to BeginSessionOp: resolves the asset WITHOUT registering a
+	 * blocking session, so an inspector does not lock a Blueprint it never mutates.
+	 *
+	 * A registered session makes the bridge refuse every bypass-mode tool (console_execute
+	 * and friends) for as long as it is open. A self-described read-only tool acquiring one
+	 * is a pure liability, and it was reported as exactly that.
+	 *
+	 * An explicit session_id still goes through BeginSessionOp unchanged: the caller owns
+	 * that session, reusing it is correct, and the response must keep reporting the session
+	 * state they are tracking. Only the asset_path path -- where this tool would be the one
+	 * opening the session -- avoids doing so.
+	 *
+	 * On the no-session path, OutSessionId is EMPTY and OutData points at per-tool scratch
+	 * storage that is not in the ToolData map. Callers pass both to BuildStateResponse as
+	 * usual; it reports read_only and omits session-scoped fields that would be lies.
+	 */
+	bool BeginReadOnlySessionOp(
+		const TSharedPtr<FJsonObject>& Arguments,
+		const FString& OperationName,
+		TSharedPtr<FJsonObject>& OutParams,
+		FString& OutSessionId,
+		FBlueprintEditToolData*& OutData,
+		FToolResult& OutError);
+
 	bool ResolveOrOpenSession(
 		const TSharedPtr<FJsonObject>& Params,
 		const FString& OperationName,
 		FString& OutSessionId,
 		FBlueprintEditToolData*& OutData,
 		FToolResult& OutError);
+
+	/**
+	 * Canonicalize asset_path, load the Blueprint, and pick the target graph.
+	 *
+	 * The one place this happens, so the session-opening path and the read-only path
+	 * cannot drift in either resolution behavior or error wording. A null OutGraph is a
+	 * legitimate success for a MacroLibrary/Interface Blueprint that has no EventGraph.
+	 *
+	 * @param InOutAssetPath  In: caller-supplied path. Out: canonicalized path.
+	 */
+	bool ResolveBlueprintAndGraph(
+		const TSharedPtr<FJsonObject>& Params,
+		FString& InOutAssetPath,
+		UBlueprint*& OutBlueprint,
+		UEdGraph*& OutGraph,
+		FToolResult& OutError);
+
+	/**
+	 * Backing store for BeginReadOnlySessionOp's no-session path. Per tool object rather
+	 * than static: tools are singletons in the registry and execute on the game thread,
+	 * so one slot per tool is enough and keeps two tools from clobbering each other.
+	 */
+	FBlueprintEditToolData ReadOnlyScratchData;
 
 	void InitToolDataForSession(const FString& SessionId, UBlueprint* Blueprint, UEdGraph* Graph);
 

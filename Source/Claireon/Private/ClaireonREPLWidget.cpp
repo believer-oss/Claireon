@@ -188,7 +188,7 @@ SClaireonREPLWidget::~SClaireonREPLWidget()
 	{
 		Server->OnUserStopChanged.Remove(UserStopDelegateHandle);
 	}
-	if (UClaireonSettings* Settings = GetMutableDefault<UClaireonSettings>())
+	if (UClaireonSettings* Settings = GetMutableDefault<UClaireonSettings>(); IsValid(Settings))
 	{
 		Settings->OnSettingsChanged.Remove(SettingsChangedHandle);
 	}
@@ -913,7 +913,7 @@ void SClaireonREPLWidget::SetProcessingState(bool bProcessing)
 void SClaireonREPLWidget::CheckApiKeyAndSwitchView()
 {
 	const UClaireonSettings* Settings = UClaireonSettings::Get();
-	bool bHasKey = Settings && Settings->HasAnthropicApiKey();
+	bool bHasKey = IsValid(Settings) && Settings->HasAnthropicApiKey();
 	if (RootSwitcher.IsValid())
 	{
 		RootSwitcher->SetActiveWidgetIndex(bHasKey ? 1 : 0);

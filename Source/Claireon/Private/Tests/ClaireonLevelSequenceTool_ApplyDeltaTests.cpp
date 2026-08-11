@@ -33,10 +33,10 @@ namespace ClaireonLevelSequenceTool_ApplyDeltaTests_anon
 			GetTransientPackage(),
 			FName(TEXT("LS_ClaireonDeltaFixture")),
 			RF_Transient | RF_Transactional);
-		if (!Seq) { return nullptr; }
+		if (!IsValid(Seq)) { return nullptr; }
 		Seq->Initialize();
 		UMovieScene* MS = Seq->GetMovieScene();
-		if (!MS) { return nullptr; }
+		if (!IsValid(MS)) { return nullptr; }
 		MS->AddPossessable(TEXT("Hero"), AActor::StaticClass());
 		return Seq;
 	}

@@ -34,7 +34,7 @@
 // File-scope helpers
 // ============================================================================
 
-namespace
+namespace ClaireonAnimTools_BlendSpace_Private
 {
 	bool AnimToolsBlendSpace_ValidateNewBlendSpacePath(const FString& InPath, FString& OutCanonPath, FString& OutAssetName, FString& OutError)
 	{
@@ -44,7 +44,7 @@ namespace
 			OutError = TEXT("Invalid asset path. Must start with /Game/.");
 			return false;
 		}
-		if (StaticFindObject(nullptr, nullptr, *OutCanonPath))
+		if (IsValid(StaticFindObject(nullptr, nullptr, *OutCanonPath)))
 		{
 			OutError = FString::Printf(TEXT("Asset already exists at '%s'"), *OutCanonPath);
 			return false;
@@ -81,14 +81,14 @@ namespace
 
 		FSoftObjectPath SoftPath(ResolveResult.ResolvedPath.Path);
 		UObject* LoadedObj = SoftPath.TryLoad();
-		if (!LoadedObj)
+		if (!IsValid(LoadedObj))
 		{
 			OutError = FString::Printf(TEXT("Failed to load asset at '%s'"), *ResolveResult.ResolvedPath.Path);
 			return nullptr;
 		}
 
 		UBlendSpace* BlendSpace = Cast<UBlendSpace>(LoadedObj);
-		if (!BlendSpace)
+		if (!IsValid(BlendSpace))
 		{
 			OutError = FString::Printf(TEXT("Asset '%s' is not a BlendSpace (got %s)"), *ResolveResult.ResolvedPath.Path, *LoadedObj->GetClass()->GetName());
 			return nullptr;
@@ -182,7 +182,7 @@ namespace
 		Result += FString::Printf(TEXT("Path: %s\n"), *BlendSpace->GetPathName());
 
 		USkeleton* Skeleton = BlendSpace->GetSkeleton();
-		Result += FString::Printf(TEXT("Skeleton: %s\n"), Skeleton ? *Skeleton->GetPathName() : TEXT("(none)"));
+		Result += FString::Printf(TEXT("Skeleton: %s\n"), IsValid(Skeleton) ? *Skeleton->GetPathName() : TEXT("(none)"));
 
 		// Axes (with per-axis interpolation inline)
 		Result += TEXT("\n--- Axes ---\n");
@@ -267,7 +267,7 @@ namespace
 		// BlendSpace1D-specific
 		{
 			const UBlendSpace1D* BS1D = Cast<const UBlendSpace1D>(BlendSpace);
-			if (BS1D)
+			if (IsValid(BS1D))
 			{
 				Result += FString::Printf(TEXT("  Scale Animation: %s\n"), BS1D->bScaleAnimation ? TEXT("Yes") : TEXT("No"));
 			}
@@ -319,6 +319,7 @@ namespace
 		return EFilterInterpolationType::BSIT_Average;
 	}
 }
+using namespace ClaireonAnimTools_BlendSpace_Private;
 
 // ============================================================================
 // blendspace_create
@@ -334,8 +335,8 @@ FString ClaireonAnimTool_BlendSpaceCreate::GetDescription() const
 TSharedPtr<FJsonObject> ClaireonAnimTool_BlendSpaceCreate::GetInputSchema() const
 {
 	FToolSchemaBuilder S;
-	S.AddString(TEXT("path"), TEXT("Target asset path (e.g. /Game/Char/STELLA/Anim/BS_Locomotion)"), true);
-	S.AddString(TEXT("skeleton"), TEXT("Skeleton asset path (e.g. /Game/Char/STELLA/STELLA_Skeleton)"), true);
+	S.AddString(TEXT("path"), TEXT("Target asset path (e.g. /Game/Characters/Hero/Anim/BS_Locomotion)"), true);
+	S.AddString(TEXT("skeleton"), TEXT("Skeleton asset path (e.g. /Game/Characters/Hero/SK_Hero_Skeleton)"), true);
 	S.AddEnum(TEXT("type"), TEXT("Type of blend space to create"),
 		{TEXT("BlendSpace"), TEXT("BlendSpace1D"), TEXT("AimOffset"), TEXT("AimOffset1D")}, true);
 	S.AddEnum(TEXT("notify_trigger_mode"), TEXT("Notify trigger mode (default: AllAnimations)"),
@@ -372,7 +373,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceCreate::Execute(const TSha
 
 	// Load skeleton
 	USkeleton* Skeleton = LoadObject<USkeleton>(nullptr, *SkeletonPath);
-	if (!Skeleton)
+	if (!IsValid(Skeleton))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load skeleton at '%s'"), *SkeletonPath));
 	}
@@ -420,7 +421,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceCreate::Execute(const TSha
 		return MakeErrorResult(FString::Printf(TEXT("Invalid type '%s'. Must be BlendSpace, BlendSpace1D, AimOffset, or AimOffset1D"), *TypeStr));
 	}
 
-	if (!NewBlendSpace)
+	if (!IsValid(NewBlendSpace))
 	{
 		return MakeErrorResult(TEXT("Factory failed to create blend space"));
 	}
@@ -456,7 +457,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceCreate::Execute(const TSha
 
 			ClaireonNameResolver::FNameResolveResult NameResult;
 			UClass* MetaDataClass = ClaireonNameResolver::ResolveClassName(ClassName, UAnimMetaData::StaticClass(), NameResult);
-			if (!MetaDataClass)
+			if (!IsValid(MetaDataClass))
 			{
 				// Non-fatal: warn but continue
 				UE_LOG(LogClaireon, Warning, TEXT("BlendSpace create: could not resolve metadata class '%s': %s"), *ClassName, *NameResult.Error);
@@ -464,7 +465,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceCreate::Execute(const TSha
 			}
 
 			UAnimMetaData* NewMetaData = NewObject<UAnimMetaData>(NewBlendSpace, MetaDataClass);
-			if (NewMetaData)
+			if (IsValid(NewMetaData))
 			{
 				NewBlendSpace->AddMetaData(NewMetaData);
 			}
@@ -530,7 +531,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceDuplicate::Execute(const T
 	// Load source
 	FString LoadError;
 	UBlendSpace* SourceBS = LoadBlendSpace(SourcePath, LoadError);
-	if (!SourceBS)
+	if (!IsValid(SourceBS))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -543,7 +544,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceDuplicate::Execute(const T
 	}
 
 	// Check dest doesn't already exist
-	if (StaticFindObject(nullptr, nullptr, *DestPath))
+	if (IsValid(StaticFindObject(nullptr, nullptr, *DestPath)))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset already exists at '%s'"), *DestPath));
 	}
@@ -555,7 +556,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceDuplicate::Execute(const T
 	// Duplicate via engine AssetTools
 	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
 	UObject* NewAsset = AssetTools.DuplicateAsset(DestName, DestFolder, SourceBS);
-	if (!NewAsset)
+	if (!IsValid(NewAsset))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Engine failed to duplicate asset to '%s/%s'"), *DestFolder, *DestName));
 	}
@@ -613,7 +614,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceDelete::Execute(const TSha
 	// Load the blend space to verify it exists and is the right type
 	FString LoadError;
 	UBlendSpace* BlendSpace = LoadBlendSpace(AssetPath, LoadError);
-	if (!BlendSpace)
+	if (!IsValid(BlendSpace))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -680,7 +681,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceInspect::Execute(const TSh
 
 	FString LoadError;
 	UBlendSpace* BlendSpace = LoadBlendSpace(AssetPath, LoadError);
-	if (!BlendSpace)
+	if (!IsValid(BlendSpace))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -745,7 +746,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceAddSample::Execute(const T
 	// Load blend space
 	FString LoadError;
 	UBlendSpace* BlendSpace = LoadBlendSpace(AssetPath, LoadError);
-	if (!BlendSpace)
+	if (!IsValid(BlendSpace))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -757,7 +758,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceAddSample::Execute(const T
 		return MakeErrorResult(AnimResolve.Error);
 	}
 	UAnimSequence* AnimSeq = LoadObject<UAnimSequence>(nullptr, *AnimResolve.ResolvedPath.Path);
-	if (!AnimSeq)
+	if (!IsValid(AnimSeq))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load AnimSequence at '%s'"), *AnimResolve.ResolvedPath.Path));
 	}
@@ -851,7 +852,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceRemoveSample::Execute(cons
 	// Load blend space
 	FString LoadError;
 	UBlendSpace* BlendSpace = LoadBlendSpace(AssetPath, LoadError);
-	if (!BlendSpace)
+	if (!IsValid(BlendSpace))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -931,7 +932,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceEditSample::Execute(const 
 	// Load blend space
 	FString LoadError;
 	UBlendSpace* BlendSpace = LoadBlendSpace(AssetPath, LoadError);
-	if (!BlendSpace)
+	if (!IsValid(BlendSpace))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -1005,7 +1006,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceEditSample::Execute(const 
 				return MakeErrorResult(AnimResolve.Error);
 			}
 			UAnimSequence* NewAnim = LoadObject<UAnimSequence>(nullptr, *AnimResolve.ResolvedPath.Path);
-			if (!NewAnim)
+			if (!IsValid(NewAnim))
 			{
 				return MakeErrorResult(FString::Printf(TEXT("Failed to load AnimSequence at '%s'"), *AnimResolve.ResolvedPath.Path));
 			}
@@ -1100,7 +1101,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceSetAxis::Execute(const TSh
 	// Load blend space
 	FString LoadError;
 	UBlendSpace* BlendSpace = LoadBlendSpace(AssetPath, LoadError);
-	if (!BlendSpace)
+	if (!IsValid(BlendSpace))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -1238,7 +1239,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceSetInterpolation::Execute(
 	// Load blend space
 	FString LoadError;
 	UBlendSpace* BlendSpace = LoadBlendSpace(AssetPath, LoadError);
-	if (!BlendSpace)
+	if (!IsValid(BlendSpace))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -1341,7 +1342,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceSetProperty::Execute(const
 	// Load blend space
 	FString LoadError;
 	UBlendSpace* BlendSpace = LoadBlendSpace(AssetPath, LoadError);
-	if (!BlendSpace)
+	if (!IsValid(BlendSpace))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -1488,7 +1489,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceSetProperty::Execute(const
 	if (Properties->TryGetBoolField(TEXT("scale_animation"), bScaleAnim))
 	{
 		UBlendSpace1D* BS1D = Cast<UBlendSpace1D>(BlendSpace);
-		if (BS1D)
+		if (IsValid(BS1D))
 		{
 			BS1D->bScaleAnimation = bScaleAnim;
 			Changes.Add(FString::Printf(TEXT("scale_animation -> %s"), bScaleAnim ? TEXT("true") : TEXT("false")));
@@ -1565,7 +1566,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceAddMetadata::Execute(const
 	// Load blend space
 	FString LoadError;
 	UBlendSpace* BlendSpace = LoadBlendSpace(AssetPath, LoadError);
-	if (!BlendSpace)
+	if (!IsValid(BlendSpace))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -1573,7 +1574,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceAddMetadata::Execute(const
 	// Resolve metadata class
 	ClaireonNameResolver::FNameResolveResult NameResult;
 	UClass* MetaDataClass = ClaireonNameResolver::ResolveClassName(ClassName, UAnimMetaData::StaticClass(), NameResult);
-	if (!MetaDataClass)
+	if (!IsValid(MetaDataClass))
 	{
 		return MakeErrorResult(NameResult.Error);
 	}
@@ -1587,7 +1588,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceAddMetadata::Execute(const
 	BlendSpace->Modify();
 
 	UAnimMetaData* NewMetaData = NewObject<UAnimMetaData>(BlendSpace, MetaDataClass);
-	if (!NewMetaData)
+	if (!IsValid(NewMetaData))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create metadata of class %s"), *ClassName));
 	}
@@ -1645,7 +1646,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceRemoveMetadata::Execute(co
 	// Load blend space
 	FString LoadError;
 	UBlendSpace* BlendSpace = LoadBlendSpace(AssetPath, LoadError);
-	if (!BlendSpace)
+	if (!IsValid(BlendSpace))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -1658,7 +1659,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_BlendSpaceRemoveMetadata::Execute(co
 	}
 
 	UAnimMetaData* MetaDataObj = MetaDataArray[MetadataIndex];
-	if (!MetaDataObj)
+	if (!IsValid(MetaDataObj))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Metadata at index %d is null"), MetadataIndex));
 	}

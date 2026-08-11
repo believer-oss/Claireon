@@ -53,8 +53,8 @@ FToolResult ClaireonMaterialTool_ConnectExpressions::Execute(const TSharedPtr<FJ
 	int32 FromIdx = INDEX_NONE, ToIdx = INDEX_NONE;
 	UMaterialExpression* FromExpr = ClaireonMaterialHelpers::FindExpressionByIdentifier(Material, FromIdent, FromIdx);
 	UMaterialExpression* ToExpr = ClaireonMaterialHelpers::FindExpressionByIdentifier(Material, ToIdent, ToIdx);
-	if (!FromExpr) return MakeErrorResult(FString::Printf(TEXT("from_identifier not found: '%s'"), *FromIdent));
-	if (!ToExpr)   return MakeErrorResult(FString::Printf(TEXT("to_identifier not found: '%s'"), *ToIdent));
+	if (!IsValid(FromExpr)) return MakeErrorResult(FString::Printf(TEXT("from_identifier not found: '%s'"), *FromIdent));
+	if (!IsValid(ToExpr))   return MakeErrorResult(FString::Printf(TEXT("to_identifier not found: '%s'"), *ToIdent));
 
 	FString ConnErr;
 	if (!ClaireonMaterialHelpers::ConnectExpressions(Material, FromExpr, FromOutput, ToExpr, ToInput, ConnErr))

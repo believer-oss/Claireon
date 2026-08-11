@@ -62,14 +62,14 @@ FToolResult ClaireonInputTool_Create::Execute(const TSharedPtr<FJsonObject>& Arg
 	AssetPath = ResolveResult.ResolvedPath.Path;
 
 	FSoftObjectPath SoftPath(AssetPath);
-	if (SoftPath.TryLoad())
+	if (IsValid(SoftPath.TryLoad()))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset already exists at path: %s. Use 'open' instead."), *AssetPath));
 	}
 
 	const FString& PackagePath = ResolveResult.ResolvedPath.PackagePath;
 	UPackage* Package = CreatePackage(*PackagePath);
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create package: %s"), *PackagePath));
 	}
@@ -81,7 +81,7 @@ FToolResult ClaireonInputTool_Create::Execute(const TSharedPtr<FJsonObject>& Arg
 	if (bIsIA)
 	{
 		UInputAction* IA = NewObject<UInputAction>(Package, *ShortName, RF_Public | RF_Standalone);
-		if (!IA)
+		if (!IsValid(IA))
 		{
 			return MakeErrorResult(TEXT("Failed to create Input Action"));
 		}
@@ -91,7 +91,7 @@ FToolResult ClaireonInputTool_Create::Execute(const TSharedPtr<FJsonObject>& Arg
 	else
 	{
 		UInputMappingContext* IMC = NewObject<UInputMappingContext>(Package, *ShortName, RF_Public | RF_Standalone);
-		if (!IMC)
+		if (!IsValid(IMC))
 		{
 			return MakeErrorResult(TEXT("Failed to create Input Mapping Context"));
 		}
@@ -117,6 +117,21 @@ FToolResult ClaireonInputTool_Create::Execute(const TSharedPtr<FJsonObject>& Arg
 	{
 		const FMCPSession& Blocker = OpenResult.BlockingSession.GetValue();
 		return MakeErrorResult(FString::Printf(TEXT("Asset is locked by %s session %s"), *Blocker.ToolName, *Blocker.SessionId));
+	}
+	// Defect guard: this used to handle only BlockedByOtherTool. On
+	// InvalidAssetPath (OpenSession's CanonicalizePath rejected the path, e.g. a
+	// path outside /Game/) SessionId is empty, and falling through returned a
+	// SUCCESS state response carrying an empty session_id -- an unusable handle
+	// with no error. Every non-success result must produce an error here.
+	if (OpenResult.Result == EOpenSessionResult::InvalidAssetPath)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Invalid asset path: %s"), *ResolvedAssetPath));
+	}
+	if (OpenResult.Result != EOpenSessionResult::Success && OpenResult.Result != EOpenSessionResult::ReusedExistingSession)
+	{
+		return MakeErrorResult(FString::Printf(
+			TEXT("Failed to open a session for %s (unexpected OpenSession result %d)"),
+			*ResolvedAssetPath, static_cast<int32>(OpenResult.Result)));
 	}
 	const FString SessionId = OpenResult.SessionId;
 

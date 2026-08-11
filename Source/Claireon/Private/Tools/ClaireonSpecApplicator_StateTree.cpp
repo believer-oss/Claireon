@@ -19,7 +19,7 @@
 #include "StateTreeCompilerLog.h"
 #include "GameplayTagContainer.h"
 
-namespace
+namespace ClaireonSpecApplicator_StateTree_Private
 {
 	// Reads optional transition fields from a spec JSON object and applies them to NewTransition.
 	// Mirrors ClaireonStateTreeTool_AddTransition's parsing and additionally handles
@@ -60,6 +60,7 @@ namespace
 		}
 	}
 }
+using namespace ClaireonSpecApplicator_StateTree_Private;
 
 bool FClaireonSpecApplicator_StateTree::ValidateToolSpec(const TSharedPtr<FJsonObject>& Spec, TArray<FString>& OutErrors)
 {
@@ -177,13 +178,13 @@ bool FClaireonSpecApplicator_StateTree::OpenOrCreateAsset(const FString& AssetPa
 	const FString ResolvedPath = ResolveResult.ResolvedPath.Path;
 
 	UStateTree* ST = ClaireonStateTreeHelpers::LoadStateTreeAsset(ResolvedPath, OutError);
-	if (!ST)
+	if (!IsValid(ST))
 	{
 		return false;
 	}
 
 	UStateTreeEditorData* ED = ClaireonStateTreeHelpers::GetEditorData(ST, OutError);
-	if (!ED)
+	if (!IsValid(ED))
 	{
 		return false;
 	}
@@ -215,7 +216,7 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass1_CreateEntities(const FString&
 {
 	UStateTree* ST = StateTree.Get();
 	UStateTreeEditorData* ED = EditorData.Get();
-	if (!ST || !ED)
+	if (!IsValid(ST) || !IsValid(ED))
 	{
 		AddError(TEXT("StateTree or EditorData is no longer valid"));
 		return false;
@@ -281,7 +282,7 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass1_CreateEntities(const FString&
 					FGuid ParentGuid;
 					FGuid::Parse(ParentActualId, ParentGuid);
 					ParentState = ClaireonStateTreeHelpers::FindStateById(ED, ParentGuid);
-					if (!ParentState)
+					if (!IsValid(ParentState))
 					{
 						RecordEntryFailure(StateId, FString::Printf(TEXT("Parent state not found in editor data")));
 						continue;
@@ -294,7 +295,7 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass1_CreateEntities(const FString&
 					{
 						ParentState = ClaireonStateTreeHelpers::FindStateById(ED, ParentGuid);
 					}
-					if (!ParentState)
+					if (!IsValid(ParentState))
 					{
 						RecordEntryFailure(StateId, FString::Printf(
 							TEXT("parent '%s' is neither in spec id_map nor in the existing tree"),
@@ -304,7 +305,7 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass1_CreateEntities(const FString&
 				}
 			}
 
-			if (ParentState)
+			if (IsValid(ParentState))
 			{
 				UStateTreeState& NewState = ParentState->AddChildState(FName(*StateName));
 				FString GuidStr = NewState.ID.ToString(EGuidFormats::DigitsWithHyphensLower);
@@ -344,7 +345,7 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass1_CreateEntities(const FString&
 
 			FString Error;
 			UScriptStruct* NodeStruct = ClaireonStateTreeHelpers::ResolveNodeStruct(NodeType, Error);
-			if (!NodeStruct)
+			if (!IsValid(NodeStruct))
 			{
 				RecordEntryFailure(SpecId, Error);
 				continue;
@@ -379,7 +380,7 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass1_CreateEntities(const FString&
 
 			FString Error;
 			UScriptStruct* NodeStruct = ClaireonStateTreeHelpers::ResolveNodeStruct(NodeType, Error);
-			if (!NodeStruct)
+			if (!IsValid(NodeStruct))
 			{
 				RecordEntryFailure(SpecId, Error);
 				continue;
@@ -406,7 +407,7 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass2_WireRelationships(const FStri
 {
 	UStateTree* ST = StateTree.Get();
 	UStateTreeEditorData* ED = EditorData.Get();
-	if (!ST || !ED)
+	if (!IsValid(ST) || !IsValid(ED))
 	{
 		AddError(TEXT("StateTree or EditorData is no longer valid"));
 		return false;
@@ -432,7 +433,7 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass2_WireRelationships(const FStri
 		FGuid StateGuid;
 		FGuid::Parse(StateGuidStr, StateGuid);
 		UStateTreeState* State = ClaireonStateTreeHelpers::FindStateById(ED, StateGuid);
-		if (!State) continue;
+		if (!IsValid(State)) continue;
 
 		// --- Tasks ---
 		const TArray<TSharedPtr<FJsonValue>>* TasksArray = nullptr;
@@ -449,7 +450,7 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass2_WireRelationships(const FStri
 
 				FString Error;
 				UScriptStruct* NodeStruct = ClaireonStateTreeHelpers::ResolveNodeStruct(TaskType, Error);
-				if (!NodeStruct)
+				if (!IsValid(NodeStruct))
 				{
 					RecordEntryFailure(TaskId, Error);
 					continue;
@@ -480,7 +481,7 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass2_WireRelationships(const FStri
 				FString NodeGuidStr = NewNode.ID.ToString(EGuidFormats::DigitsWithHyphensLower);
 
 				const UStateTreeSchema* Schema = ST->GetSchema();
-				if (Schema && !Schema->AllowMultipleTasks())
+				if (IsValid(Schema) && !Schema->AllowMultipleTasks())
 				{
 					State->SingleTask = MoveTemp(NewNode);
 				}
@@ -509,7 +510,7 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass2_WireRelationships(const FStri
 
 				FString Error;
 				UScriptStruct* NodeStruct = ClaireonStateTreeHelpers::ResolveNodeStruct(CondType, Error);
-				if (!NodeStruct)
+				if (!IsValid(NodeStruct))
 				{
 					RecordEntryFailure(CondId, Error);
 					continue;
@@ -564,7 +565,7 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass2_WireRelationships(const FStri
 						FGuid TargetGuid;
 						FGuid::Parse(TargetGuidStr, TargetGuid);
 						UStateTreeState* TargetState = ClaireonStateTreeHelpers::FindStateById(ED, TargetGuid);
-						if (TargetState)
+						if (IsValid(TargetState))
 						{
 							NewTransition.State = TargetState->GetLinkToState();
 						}
@@ -661,7 +662,7 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass2_WireRelationships(const FStri
 			FGuid FromGuid;
 			FGuid::Parse(FromGuidStr, FromGuid);
 			UStateTreeState* FromState = ClaireonStateTreeHelpers::FindStateById(ED, FromGuid);
-			if (!FromState)
+			if (!IsValid(FromState))
 			{
 				AddWarning(FString::Printf(TEXT("transitions[%d]: source state '%s' resolved but not found in tree"), tr, *FromSpecId));
 				continue;
@@ -688,7 +689,7 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass2_WireRelationships(const FStri
 				FString ToGuidStr = ResolveId(ToSpecId);
 				FGuid ToGuid;
 				FGuid::Parse(ToGuidStr, ToGuid);
-				if (UStateTreeState* TargetState = ClaireonStateTreeHelpers::FindStateById(ED, ToGuid))
+				if (UStateTreeState* TargetState = ClaireonStateTreeHelpers::FindStateById(ED, ToGuid); IsValid(TargetState))
 				{
 					NewTransition.State = TargetState->GetLinkToState();
 				}
@@ -713,7 +714,7 @@ bool FClaireonSpecApplicator_StateTree::ApplyPass2_WireRelationships(const FStri
 bool FClaireonSpecApplicator_StateTree::CompileAsset(const FString& SessionId, FString& OutError)
 {
 	UStateTree* ST = StateTree.Get();
-	if (!ST)
+	if (!IsValid(ST))
 	{
 		OutError = TEXT("StateTree is no longer valid");
 		return false;
@@ -733,7 +734,7 @@ bool FClaireonSpecApplicator_StateTree::CompileAsset(const FString& SessionId, F
 bool FClaireonSpecApplicator_StateTree::SaveAsset(const FString& SessionId, FString& OutError)
 {
 	UStateTree* ST = StateTree.Get();
-	if (!ST)
+	if (!IsValid(ST))
 	{
 		OutError = TEXT("StateTree is no longer valid");
 		return false;

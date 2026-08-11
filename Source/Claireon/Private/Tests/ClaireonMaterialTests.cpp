@@ -21,6 +21,7 @@
 #include "Tools/ClaireonMaterialInstanceTool_ApplySpec.h"
 #include "Tools/ClaireonTool_MaterialApply.h"
 #include "Tools/ClaireonMaterialHelpers.h"
+#include "ClaireonLog.h"
 #include "ClaireonSessionManager.h"
 
 #include "Dom/JsonObject.h"
@@ -40,9 +41,12 @@
 #include "Components/StaticMeshComponent.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Editor.h"
+#include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "UObject/SoftObjectPath.h"
 #include "UObject/ConstructorHelpers.h"
 
+#include "ClaireonTestAssetDeletion.h"
 // ---------------------------------------------------------------------------
 // Test asset paths
 // ---------------------------------------------------------------------------
@@ -83,13 +87,49 @@ namespace ClaireonMaterialTestsImpl
 		return SessionId;
 	}
 
+	/**
+	 * True only when the asset actually has a .uasset on disk.
+	 *
+	 * Every fixture in this suite is created in a package from CreatePackage() (or
+	 * by material_create / material_instance_create, neither of which saves) and
+	 * nothing here ever writes it out: the decomposed material tools have no save
+	 * call at all, the only savers are material_save / material_instance_save
+	 * (never used here) and the apply_spec applicators, which save solely when the
+	 * spec sets save_at_end -- and both parity tests set it to false explicitly.
+	 * So these fixtures live in memory only.
+	 *
+	 * UEditorAssetLibrary::DoesAssetExist answers from the asset registry, which
+	 * includes in-memory assets, so it used to send every fixture through
+	 * DeleteAsset. DeleteAsset checks referencers first, and that
+	 * whole-object-graph referencer scan is the trigger for the nondeterministic
+	 * Niagara-serialization crash documented in
+	 * Docs/llm/todo/claireon-untest-harness-reliability.md item 1.
+	 *
+	 * The check is kept rather than dropping the delete outright so a stale
+	 * .uasset left on disk by an older build or a crashed run is still cleaned and
+	 * `git status --porcelain -- Content/` stays empty.
+	 */
+	static bool MaterialTests_HasFileOnDisk(const FString& AssetOrPackagePath)
+	{
+		const FString PackageName = FPackageName::ObjectPathToPackageName(AssetOrPackagePath);
+		FString FileName;
+		if (!FPackageName::TryConvertLongPackageNameToFilename(
+				PackageName, FileName, FPackageName::GetAssetPackageExtension()))
+		{
+			return false;
+		}
+		return FPaths::FileExists(FileName);
+	}
+
 	/** Best-effort cleanup of a created asset (suppresses prompts). */
 	static void TryDeleteAsset(const FString& ObjectPath)
 	{
 		if (ObjectPath.IsEmpty()) return;
+		// In-memory fixture: nothing on disk, nothing to clean, no referencer scan.
+		if (!MaterialTests_HasFileOnDisk(ObjectPath)) return;
 		if (UEditorAssetLibrary::DoesAssetExist(ObjectPath))
 		{
-			UEditorAssetLibrary::DeleteAsset(ObjectPath);
+			ClaireonTestAssetDeletion::DeleteAssetForTest(ObjectPath);
 		}
 	}
 
@@ -267,12 +307,12 @@ UNTEST_UNIT_OPTS(Claireon, Material, MaterialEdit_Lifecycle, UNTEST_TIMEOUTMS(45
 		FString Err;
 		UMaterial* Loaded = ClaireonMaterialHelpers::LoadMaterialAsset(FullObjectPath, Err);
 		UNTEST_EXPECT_TRUE(Loaded != nullptr);
-		if (Loaded)
+		if (IsValid(Loaded))
 		{
 			bool bFound = false;
 			for (UMaterialExpression* Expr : Loaded->GetExpressions())
 			{
-				if (Expr && Expr->HasAParameterName() && Expr->GetParameterName() == FName(TEXT("Brightness")))
+				if (IsValid(Expr) && Expr->HasAParameterName() && Expr->GetParameterName() == FName(TEXT("Brightness")))
 				{
 					bFound = true;
 					break;
@@ -413,7 +453,7 @@ UNTEST_UNIT_OPTS(Claireon, Material, MaterialEdit_ApplySpec_Parity, UNTEST_TIMEO
 		{
 			for (UMaterialExpression* Expr : M->GetExpressions())
 			{
-				if (Expr && Expr->HasAParameterName() && Expr->GetParameterName() == FName(TEXT("Bright")))
+				if (IsValid(Expr) && Expr->HasAParameterName() && Expr->GetParameterName() == FName(TEXT("Bright")))
 				{
 					return true;
 				}
@@ -477,7 +517,7 @@ UNTEST_UNIT_OPTS(Claireon, Material, MaterialInstanceEdit_Create, UNTEST_TIMEOUT
 		FString Err;
 		UMaterialInstanceConstant* Loaded = ClaireonMaterialHelpers::LoadMaterialInstanceAsset(MicObj, Err);
 		UNTEST_EXPECT_TRUE(Loaded != nullptr);
-		if (Loaded && Loaded->Parent)
+		if (IsValid(Loaded) && Loaded->Parent)
 		{
 			UNTEST_EXPECT_TRUE(Loaded->Parent->GetPathName().EndsWith(TEXT("M_BlendMaster")));
 		}
@@ -544,12 +584,20 @@ UNTEST_UNIT_OPTS(Claireon, Material, MaterialInstanceEdit_ParentCycle, UNTEST_TI
 
 UNTEST_UNIT_OPTS(Claireon, Material, MaterialApply_Actor, UNTEST_TIMEOUTMS(30000))
 {
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		UNTEST_ASSERT_TRUE(false);
 	}
 	UWorld* World = GEditor->GetEditorWorldContext().World();
 	UNTEST_ASSERT_TRUE(World != nullptr);
+
+	// material_apply_to_actor locks the editor world's package
+	// (World->GetOutermost()->GetName()) via FClaireonScopedAssetLock with
+	// bAllowUnsavedWorldPackage=true, so this now runs on the unsaved placeholder
+	// map an Untest commandlet has ("/Temp/Untitled_0") as well as a saved /Game/
+	// map (C5 hardening -- previously CanonicalizePath rejected anything outside
+	// /Game/ and this test had to skip via early co_return whenever the editor
+	// world was not a real map, which is a vacuous PASS under Untest, not a skip).
 
 	// Spawn a temporary StaticMeshActor.
 	FActorSpawnParameters SpawnParams;
@@ -589,7 +637,7 @@ UNTEST_UNIT_OPTS(Claireon, Material, MaterialApply_Actor, UNTEST_TIMEOUTMS(30000
 	{
 		UMaterialInterface* AppliedMat = SMC->GetMaterial(0);
 		UNTEST_EXPECT_TRUE(AppliedMat != nullptr);
-		if (AppliedMat)
+		if (IsValid(AppliedMat))
 		{
 			UNTEST_EXPECT_TRUE(AppliedMat->GetPathName().EndsWith(TEXT("M_BlendMaster")));
 		}
@@ -635,8 +683,8 @@ UNTEST_UNIT_OPTS(Claireon, Material, MaterialApply_Blueprint, UNTEST_TIMEOUTMS(6
 	// Find the inherited StaticMeshComponent SCS node name (variable name).
 	// AStaticMeshActor has a StaticMeshComponent named "StaticMeshComponent0".
 	// Look up the inherited component via the CDO.
-	AStaticMeshActor* CDO = Cast<AStaticMeshActor>(BP->GeneratedClass ? BP->GeneratedClass->GetDefaultObject() : nullptr);
-	UStaticMeshComponent* InheritedSMC = CDO ? CDO->GetStaticMeshComponent() : nullptr;
+	AStaticMeshActor* CDO = Cast<AStaticMeshActor>(IsValid(BP->GeneratedClass) ? BP->GeneratedClass->GetDefaultObject() : nullptr);
+	UStaticMeshComponent* InheritedSMC = IsValid(CDO) ? CDO->GetStaticMeshComponent() : nullptr;
 	UNTEST_ASSERT_TRUE(InheritedSMC != nullptr);
 
 	// Inherited components are not SCS nodes; the apply tool's blueprint branch
@@ -650,7 +698,7 @@ UNTEST_UNIT_OPTS(Claireon, Material, MaterialApply_Blueprint, UNTEST_TIMEOUTMS(6
 	// Give the SCS template an asset so it has a material slot.
 	UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
 	UNTEST_ASSERT_TRUE(Mesh != nullptr);
-	if (UStaticMeshComponent* Template = Cast<UStaticMeshComponent>(NewNode->ComponentTemplate))
+	if (UStaticMeshComponent* Template = Cast<UStaticMeshComponent>(NewNode->ComponentTemplate); IsValid(Template))
 	{
 		Template->SetStaticMesh(Mesh);
 	}
@@ -672,7 +720,7 @@ UNTEST_UNIT_OPTS(Claireon, Material, MaterialApply_Blueprint, UNTEST_TIMEOUTMS(6
 	if (!Result.bIsError)
 	{
 		// Verify the SCS template was updated.
-		if (UStaticMeshComponent* Template = Cast<UStaticMeshComponent>(NewNode->ComponentTemplate))
+		if (UStaticMeshComponent* Template = Cast<UStaticMeshComponent>(NewNode->ComponentTemplate); IsValid(Template))
 		{
 			UMaterialInterface* AppliedMat = Template->GetMaterial(0);
 			UNTEST_EXPECT_TRUE(AppliedMat != nullptr);

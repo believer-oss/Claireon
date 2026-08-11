@@ -58,19 +58,19 @@ IClaireonTool::FToolResult ClaireonTool_IsAssetEditorOpen::Execute(const TShared
 	}
 	AssetPath = ResolveResult.ResolvedPath.Path;
 
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("Editor not available"));
 	}
 	UAssetEditorSubsystem* Subsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
-	if (!Subsystem)
+	if (!IsValid(Subsystem))
 	{
 		return MakeErrorResult(TEXT("AssetEditorSubsystem not available"));
 	}
 
 	UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
 	bool bIsOpen = false;
-	if (Asset)
+	if (IsValid(Asset))
 	{
 		bIsOpen = Subsystem->FindEditorForAsset(Asset, /*bFocusIfOpen=*/ false) != nullptr;
 	}

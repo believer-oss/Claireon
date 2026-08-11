@@ -88,7 +88,7 @@ TSharedPtr<FJsonObject> ClaireonTool_FlythroughStart::GetInputSchema() const
 	return Schema;
 }
 
-namespace
+namespace ClaireonTool_FlythroughStart_Private
 {
 	bool FlythroughStart_ParseVector(const TSharedPtr<FJsonObject>& Obj, FVector& Out)
 	{
@@ -114,10 +114,11 @@ namespace
 		return true;
 	}
 }
+using namespace ClaireonTool_FlythroughStart_Private;
 
 IClaireonTool::FToolResult ClaireonTool_FlythroughStart::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor || !GEditor->IsPlaySessionInProgress())
+	if (!IsValid(GEditor) || !GEditor->IsPlaySessionInProgress())
 	{
 		return MakeErrorResult(TEXT("PIE is not running. Start a PIE session first with editor.pie.start"));
 	}

@@ -19,13 +19,13 @@ TArray<TPair<ULandscapeInfo*, ALandscapeProxy*>> FindLandscapeInWorld(UWorld* Wo
 {
 	TArray<TPair<ULandscapeInfo*, ALandscapeProxy*>> Result;
 
-	if (!World)
+	if (!IsValid(World))
 	{
 		return Result;
 	}
 
 	ULandscapeInfoMap* InfoMap = ULandscapeInfoMap::FindLandscapeInfoMap(World);
-	if (!InfoMap)
+	if (!IsValid(InfoMap))
 	{
 		return Result;
 	}
@@ -33,13 +33,13 @@ TArray<TPair<ULandscapeInfo*, ALandscapeProxy*>> FindLandscapeInWorld(UWorld* Wo
 	for (auto& Pair : InfoMap->Map)
 	{
 		ULandscapeInfo* LandscapeInfo = Pair.Value;
-		if (!LandscapeInfo)
+		if (!IsValid(LandscapeInfo))
 		{
 			continue;
 		}
 
 		ALandscapeProxy* Proxy = LandscapeInfo->GetLandscapeProxy();
-		if (!Proxy)
+		if (!IsValid(Proxy))
 		{
 			UE_LOG(LogClaireon, Warning, TEXT("FindLandscapeInWorld: ULandscapeInfo entry has null proxy (GUID: %s)"), *Pair.Key.ToString());
 			continue;
@@ -62,7 +62,7 @@ TArray<TPair<ULandscapeInfo*, ALandscapeProxy*>> FindLandscapeInWorld(UWorld* Wo
 
 AInstancedFoliageActor* GetOrCreateFoliageActor(UWorld* World, FString& OutError)
 {
-	if (!World)
+	if (!IsValid(World))
 	{
 		OutError = TEXT("World is null");
 		return nullptr;
@@ -70,7 +70,7 @@ AInstancedFoliageActor* GetOrCreateFoliageActor(UWorld* World, FString& OutError
 
 #if WITH_EDITOR
 	AInstancedFoliageActor* IFA = AInstancedFoliageActor::Get(World, true);
-	if (!IFA)
+	if (!IsValid(IFA))
 	{
 		OutError = TEXT("Failed to create AInstancedFoliageActor");
 		return nullptr;
@@ -84,13 +84,13 @@ AInstancedFoliageActor* GetOrCreateFoliageActor(UWorld* World, FString& OutError
 
 TSharedPtr<FJsonObject> BuildLandscapeInfoJson(ULandscapeInfo* LandscapeInfo, const FString& DetailLevel)
 {
-	if (!LandscapeInfo)
+	if (!IsValid(LandscapeInfo))
 	{
 		return nullptr;
 	}
 
 	ALandscapeProxy* Proxy = LandscapeInfo->GetLandscapeProxy();
-	if (!Proxy)
+	if (!IsValid(Proxy))
 	{
 		return nullptr;
 	}
@@ -168,7 +168,7 @@ TSharedPtr<FJsonObject> BuildLandscapeInfoJson(ULandscapeInfo* LandscapeInfo, co
 		// Splines
 		ULandscapeSplinesComponent* SplinesComponent = Proxy->GetSplinesComponent();
 		TSharedPtr<FJsonObject> Splines = MakeShared<FJsonObject>();
-		if (SplinesComponent)
+		if (IsValid(SplinesComponent))
 		{
 			Splines->SetNumberField(TEXT("control_point_count"), SplinesComponent->GetControlPoints().Num());
 			Splines->SetNumberField(TEXT("segment_count"), SplinesComponent->GetSegments().Num());

@@ -18,8 +18,9 @@ TArray<FString> ClaireonTool_ProxyAssetInspect::GetSearchKeywords() const
 
 FString ClaireonTool_ProxyAssetInspect::GetDescription() const
 {
-	return TEXT("Inspect a ProxyAsset. Returns the proxy's type, result type, GUID, "
-		"and context data parameters (input/output structs and classes).");
+	return TEXT("Inspect the ProxyAsset at asset_path, returning its type, result type, GUID, and context data "
+		"parameters (the input/output structs and classes it exposes). Read-only / non-session: loads the "
+		"asset directly by path, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ProxyAssetInspect::GetInputSchema() const
@@ -39,7 +40,7 @@ IClaireonTool::FToolResult ClaireonTool_ProxyAssetInspect::Execute(const TShared
 
 	FString Error;
 	UProxyAsset* ProxyAsset = ClaireonProxyTableHelpers::LoadProxyAsset(AssetPath, Error);
-	if (!ProxyAsset)
+	if (!IsValid(ProxyAsset))
 	{
 		return MakeErrorResult(Error);
 	}

@@ -30,7 +30,7 @@ namespace ClaireonBlueprintDiffSpec
 			IFileManager::Get().Delete(*FilePath, false, true);
 		}
 		UPackage* Package = CreatePackage(*PackageName);
-		if (!Package)
+		if (!IsValid(Package))
 		{
 			return nullptr;
 		}
@@ -42,7 +42,7 @@ namespace ClaireonBlueprintDiffSpec
 			UBlueprint::StaticClass(),
 			UBlueprintGeneratedClass::StaticClass(),
 			NAME_None);
-		if (BP)
+		if (IsValid(BP))
 		{
 			FAssetRegistryModule::AssetCreated(BP);
 		}
@@ -53,7 +53,7 @@ namespace ClaireonBlueprintDiffSpec
 	static UEdGraphNode* AddBranchNode(UBlueprint* BP)
 	{
 		UEdGraph* Graph = ClaireonBlueprintHelpers::FindGraphByName(BP, TEXT("EventGraph"));
-		if (!Graph)
+		if (!IsValid(Graph))
 		{
 			return nullptr;
 		}
@@ -104,7 +104,7 @@ namespace ClaireonBlueprintDiffSpec
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBlueprintDiffSpec_EmptySpec_MatchesEmptyGraph,
 	"Claireon.BlueprintDiff.EmptySpecMatchesEmptyGraph",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FBlueprintDiffSpec_EmptySpec_MatchesEmptyGraph::RunTest(const FString& Parameters)
 {
@@ -150,7 +150,7 @@ bool FBlueprintDiffSpec_EmptySpec_MatchesEmptyGraph::RunTest(const FString& Para
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBlueprintDiffSpec_NodeInSpecNotInAsset_AppearsAsAdded,
 	"Claireon.BlueprintDiff.NodeAddedDetection",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FBlueprintDiffSpec_NodeInSpecNotInAsset_AppearsAsAdded::RunTest(const FString& Parameters)
 {
@@ -185,7 +185,7 @@ bool FBlueprintDiffSpec_NodeInSpecNotInAsset_AppearsAsAdded::RunTest(const FStri
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBlueprintDiffSpec_NodeInAssetNotInSpec_AppearsAsRemoved,
 	"Claireon.BlueprintDiff.NodeRemovedDetection",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FBlueprintDiffSpec_NodeInAssetNotInSpec_AppearsAsRemoved::RunTest(const FString& Parameters)
 {
@@ -219,7 +219,7 @@ bool FBlueprintDiffSpec_NodeInAssetNotInSpec_AppearsAsRemoved::RunTest(const FSt
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBlueprintDiffSpec_MalformedSpec_ReturnsStructuredError,
 	"Claireon.BlueprintDiff.MalformedSpecError",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FBlueprintDiffSpec_MalformedSpec_ReturnsStructuredError::RunTest(const FString& Parameters)
 {

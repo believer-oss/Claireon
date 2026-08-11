@@ -155,7 +155,7 @@ IClaireonTool::FToolResult ClaireonTool_ComponentTickInspect::Execute(const TSha
 	FString NameFilter;
 	Arguments->TryGetStringField(TEXT("componentName"), NameFilter);
 
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("GEditor is not available"));
 	}
@@ -163,21 +163,21 @@ IClaireonTool::FToolResult ClaireonTool_ComponentTickInspect::Execute(const TSha
 	UWorld* PIEWorld = nullptr;
 	for (const FWorldContext& Context : GEngine->GetWorldContexts())
 	{
-		if (Context.WorldType == EWorldType::PIE && Context.World())
+		if (Context.WorldType == EWorldType::PIE && IsValid(Context.World()))
 		{
 			PIEWorld = Context.World();
 			break;
 		}
 	}
 
-	if (!PIEWorld)
+	if (!IsValid(PIEWorld))
 	{
 		return MakeErrorResult(TEXT("No active PIE session"));
 	}
 
 	FClaireonPIEManager& PIEManager = FClaireonPIEManager::Get();
 	AActor* Actor = PIEManager.ResolveActorId(ActorId, PIEWorld);
-	if (!Actor)
+	if (!IsValid(Actor))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Actor not found for ID: %s"), *ActorId));
 	}
@@ -197,7 +197,7 @@ IClaireonTool::FToolResult ClaireonTool_ComponentTickInspect::Execute(const TSha
 	int32 MatchedCount = 0;
 	for (UActorComponent* Component : Components)
 	{
-		if (!Component)
+		if (!IsValid(Component))
 		{
 			continue;
 		}
@@ -223,7 +223,7 @@ IClaireonTool::FToolResult ClaireonTool_ComponentTickInspect::Execute(const TSha
 		// Skeletal-mesh-specific extras. VisibilityBasedAnimTickOption and bDisableMorphTarget are
 		// declared on the parent USkinnedMeshComponent (SkinnedMeshComponent.h:694, :750) but
 		// inherited by USkeletalMeshComponent.
-		if (USkeletalMeshComponent* SkelMesh = Cast<USkeletalMeshComponent>(Component))
+		if (USkeletalMeshComponent* SkelMesh = Cast<USkeletalMeshComponent>(Component); IsValid(SkelMesh))
 		{
 			TSharedPtr<FJsonObject> SkelExtras = MakeShared<FJsonObject>();
 			SkelExtras->SetStringField(TEXT("visibilityBasedAnimTickOption"),

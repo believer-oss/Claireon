@@ -40,7 +40,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_SetFocusedNode::Execute(const T
 		return MakeErrorResult(FString::Printf(TEXT("SoundCue session not found: %s"), *SessionId));
 	}
 	USoundCue* Cue = Cast<USoundCue>(Data->Asset.Get());
-	if (!Cue) return MakeErrorResult(TEXT("Session asset is not a SoundCue"));
+	if (!IsValid(Cue)) return MakeErrorResult(TEXT("Session asset is not a SoundCue"));
 
 	int32 NodeIndex = INDEX_NONE;
 	if (!Arguments->TryGetNumberField(TEXT("node_index"), NodeIndex))

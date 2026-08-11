@@ -96,7 +96,7 @@ FToolResult ClaireonMaterialTool_ApplyToBlueprint::Execute(const TSharedPtr<FJso
 
 	FString LoadError;
 	UMaterialInterface* Material = ClaireonMaterialApplyHelpers::LoadMaterialByPath(MaterialPath, LoadError);
-	if (!Material) return MakeErrorResult(LoadError);
+	if (!IsValid(Material)) return MakeErrorResult(LoadError);
 
 	FClaireonScopedAssetLock Lock(BlueprintPath, GetName());
 	if (!Lock.IsAcquired())
@@ -105,17 +105,17 @@ FToolResult ClaireonMaterialTool_ApplyToBlueprint::Execute(const TSharedPtr<FJso
 	}
 
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		FSoftObjectPath SoftBP(BlueprintPath);
 		Blueprint = Cast<UBlueprint>(SoftBP.TryLoad());
 	}
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load blueprint '%s'"), *BlueprintPath));
 	}
 	UMeshComponent* MeshComponent = ClaireonMaterialApplyHelpers::FindMeshComponentOnBlueprint(Blueprint, ComponentName);
-	if (!MeshComponent)
+	if (!IsValid(MeshComponent))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("UMeshComponent SCS node '%s' not found on blueprint '%s'"),
 			*ComponentName, *BlueprintPath));

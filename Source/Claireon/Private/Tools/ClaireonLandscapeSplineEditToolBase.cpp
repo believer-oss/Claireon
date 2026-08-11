@@ -139,7 +139,7 @@ FToolResult ClaireonLandscapeSplineEditToolBase::BuildStateResponse(const FStrin
 		{
 			ULandscapeSplineControlPoint* ConnPoint = Seg->Connections[EndIdx].ControlPoint;
 			int32 CPIndex = INDEX_NONE;
-			if (ConnPoint)
+			if (IsValid(ConnPoint))
 			{
 				CPIndex = ControlPoints.Find(ConnPoint);
 			}
@@ -157,11 +157,11 @@ FToolResult ClaireonLandscapeSplineEditToolBase::BuildStateResponse(const FStrin
 	ResultData->SetNumberField(TEXT("focused_control_point_index"), Data->FocusedControlPointIndex);
 
 	const FString SplineProxyPath = Data->LandscapeProxy.IsValid() ? Data->LandscapeProxy->GetPathName() : FString();
-	FString SessionHintSummaryTag;
-	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResultData, Data->ConsecutiveAssetPathCalls, SplineProxyPath, SessionId, SessionHintSummaryTag);
+	TSharedPtr<FJsonObject> SessionHint;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResultData, Data->ConsecutiveAssetPathCalls, SplineProxyPath, SessionId, GetName(), SessionHint);
 
 	const FString Summary = FString::Printf(
 		TEXT("Session %s: %d control points, %d segments -- %s"),
 		*SessionId, ControlPoints.Num(), Segments.Num(), *Data->LastOperationStatus);
-	return MakeSuccessResult(ResultData, Summary + SessionHintSummaryTag);
+	return MakeSuccessResultWithHint(ResultData, Summary, SessionHint);
 }

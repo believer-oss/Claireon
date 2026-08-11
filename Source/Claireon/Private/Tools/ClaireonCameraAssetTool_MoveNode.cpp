@@ -22,7 +22,10 @@ FString FClaireonCameraAssetTool_MoveNode::GetOperation() const { return TEXT("m
 
 FString FClaireonCameraAssetTool_MoveNode::GetDescription() const
 {
-	return TEXT("Re-parent or re-order a UCameraNode under a UArrayCameraNode parent within the same rig.");
+	return TEXT("Move a UCameraNode to a different UArrayCameraNode parent, or to a new sibling position under the "
+		"same parent, within one rig; addressed by node_id, new_parent_id and optional after_child_node_id. "
+		"Non-session: the asset is addressed by asset_path and the write is transactional; there is no "
+		"camera_asset_open -- persist with camera_asset_save.");
 }
 
 TSharedPtr<FJsonObject> FClaireonCameraAssetTool_MoveNode::GetInputSchema() const
@@ -78,7 +81,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_MoveNode::Execute(const TSha
 	}
 
 	UCameraAsset* Asset = LoadObject<UCameraAsset>(nullptr, *Canon);
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Camera asset not found: %s"), *Canon));
 	}
@@ -91,21 +94,21 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_MoveNode::Execute(const TSha
 			RigIndex, Rigs.Num()));
 	}
 	UCameraRigAsset* Rig = Rigs[RigIndex];
-	if (!Rig)
+	if (!IsValid(Rig))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Rig at index %d is null"), RigIndex));
 	}
 
 	FString ResolveError;
 	UCameraNode* Node = ClaireonCameraAssetHelpers::ResolveNode(Rig, NodeId, ResolveError);
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Failed to resolve node_id '%s': %s"), *NodeId, *ResolveError));
 	}
 
 	UCameraNode* NewParent = ClaireonCameraAssetHelpers::ResolveNode(Rig, NewParentId, ResolveError);
-	if (!NewParent)
+	if (!IsValid(NewParent))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Failed to resolve new_parent_id '%s': %s"),
@@ -113,7 +116,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_MoveNode::Execute(const TSha
 	}
 
 	UArrayCameraNode* NewArrayParent = Cast<UArrayCameraNode>(NewParent);
-	if (!NewArrayParent)
+	if (!IsValid(NewArrayParent))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("new_parent class %s is not UArrayCameraNode; named-slot mutation goes through set_node_property"),
@@ -150,7 +153,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_MoveNode::Execute(const TSha
 
 		FString CurParentError;
 		UCameraNode* CurParent = ClaireonCameraAssetHelpers::ResolveNode(Rig, CurParentPath, CurParentError);
-		if (!CurParent)
+		if (!IsValid(CurParent))
 		{
 			Transaction.Cancel();
 			return MakeErrorResult(FString::Printf(
@@ -158,7 +161,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_MoveNode::Execute(const TSha
 				*CurParentPath, *CurParentError));
 		}
 		UArrayCameraNode* CurArrayParent = Cast<UArrayCameraNode>(CurParent);
-		if (!CurArrayParent)
+		if (!IsValid(CurArrayParent))
 		{
 			Transaction.Cancel();
 			return MakeErrorResult(FString::Printf(

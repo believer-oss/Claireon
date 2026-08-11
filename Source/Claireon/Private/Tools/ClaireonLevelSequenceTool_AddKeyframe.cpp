@@ -22,14 +22,11 @@ FString ClaireonLevelSequenceTool_AddKeyframe::GetDescription() const
 	// Payload shape depends on the section's channel layout (introspect via the
 	// focused track's section in the structure dump). 3D Transform (9-channel) sections
 	// accept both compact-array and per-axis forms.
-	return TEXT("Insert a keyframe on the focused section. Payload shape depends on channel type:\n"
-				"  - Float channel: number, or {\"value\": <float>}\n"
-				"  - Bool channel: true/false, or {\"value\": <bool>}\n"
-				"  - Vector2D/Vector (2 or 3 double channels): [x,y[,z]], {x:..,y:..[,z:..]}, or {\"value\":[..]}\n"
-				"  - 3D Transform (6 or 9 double channels): compact {\"location\":[x,y,z],\"rotation\":[p,y,r],\"scale\":[sx,sy,sz]}, "
-				"OR per-axis {\"translation_x\":.., \"translation_y\":.., \"translation_z\":.., "
-				"\"rotation_x\":.., \"rotation_y\":.., \"rotation_z\":.., \"scale_x\":.., \"scale_y\":.., \"scale_z\":..}. "
-				"Per-axis keys allow writing a single sub-channel; scale fields are accepted only on 9-channel sections.");
+	return TEXT("Add a keyframe at 'frame' (tick units, not display rate) on the focused track's section. "
+				"'value' shape depends on channel layout: float/bool: scalar or {\"value\":..}; "
+				"Vector2D/Vector: [x,y[,z]]; 3D Transform: {\"location\":[..],\"rotation\":[..],"
+				"\"scale\":[..]} or per-axis translation_/rotation_/scale_ x|y|z keys (scale only on "
+				"9-channel sections). Session-mode: open via level_sequence_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_AddKeyframe::GetInputSchema() const
@@ -107,7 +104,7 @@ FToolResult ClaireonLevelSequenceTool_AddKeyframe::Execute(const TSharedPtr<FJso
 	}
 
 	UMovieSceneSection* Section = ClaireonLevelSequenceInternal::ResolveFocusedSection(Data, SectionIndex, Error);
-	if (!Section)
+	if (!IsValid(Section))
 	{
 		return MakeErrorResult(Error);
 	}

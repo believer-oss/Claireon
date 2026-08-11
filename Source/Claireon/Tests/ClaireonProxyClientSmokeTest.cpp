@@ -9,7 +9,11 @@
 //   3. Lock-file attach path (gated on vendored Python).
 //
 // Category: Game target, "Claireon.ProxyClient.Smoke.*".
-// Filter:   EAutomationTestFlags::EditorContext | EngineFilter.
+// Filter:   EAutomationTestFlags::EditorContext | CommandletContext | EngineFilter.
+//           CommandletContext is required for Scripts/Testing/Invoke-UntestTests.ps1
+//           to see these at all: it runs -run=UntestRunTests, and a commandlet is
+//           NOT EditorContext (Core/Private/Misc/AutomationTest.cpp computes
+//           bRunningEditor = GIsEditor && !IsRunningCommandlet()).
 //
 // The suite is intentionally minimal: it exercises the public surface of
 // FClaireonProxyClient without relying on the full editor MCP server
@@ -145,7 +149,7 @@ namespace ClaireonProxyClientSmokeTest
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FClaireonProxyClientStaticsSmoke,
 	"Claireon.ProxyClient.Smoke.Statics",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonProxyClientStaticsSmoke::RunTest(const FString& /*Parameters*/)
 {
@@ -181,7 +185,7 @@ bool FClaireonProxyClientStaticsSmoke::RunTest(const FString& /*Parameters*/)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FClaireonProxyClientSkipWhenPythonMissing,
 	"Claireon.ProxyClient.Smoke.SkipWhenPythonMissing",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonProxyClientSkipWhenPythonMissing::RunTest(const FString& /*Parameters*/)
 {
@@ -212,7 +216,7 @@ bool FClaireonProxyClientSkipWhenPythonMissing::RunTest(const FString& /*Paramet
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FClaireonProxyClientRoundTripSmoke,
 	"Claireon.ProxyClient.Smoke.RoundTrip",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonProxyClientRoundTripSmoke::RunTest(const FString& /*Parameters*/)
 {
@@ -288,17 +292,34 @@ bool FClaireonProxyClientRoundTripSmoke::RunTest(const FString& /*Parameters*/)
 }
 
 // ----------------------------------------------------------------------------
-// Lock-file attach path. Gated on vendored Python.
+// Attach path. Gated on vendored Python.
 // After the round-trip above leaves a live proxy behind, a fresh client's
-// EnsureProxyRunning must take the cheap-attach path without spawning a
-// second process. We verify "did not spawn" by sampling proxy.lock's PID
-// before and after; it must not change.
+// EnsureProxyRunning must take the cheap-attach path without spawning a second
+// process. "Did not spawn" is verified by sampling the proxy's own pid, from
+// /admin/health, before and after the attach.
+//
+// It is deliberately NOT verified through proxy.lock. That file is written per
+// worktree (claireon_proxy.py::proxy_lock_path -> <worktree_root>/Saved/Claireon/
+// proxy.lock) while PROXY_REG_PORT is the fixed 43017 for the whole machine, and
+// EnsureProxyRunning's attach branch returns true as soon as anything answers
+// GET /health on that port -- logging "Attached to existing proxy". So on a
+// machine running several worktrees, a proxy owned by a sibling checkout
+// satisfies both EnsureProxyRunning and WaitForProxyListening while this
+// worktree holds no lock at all, and the old assertion failed for a reason that
+// had nothing to do with the attach path. ClaireonProxyClient.h already
+// documents that a proxy on 43017 may not own this worktree's SHA port -- which
+// is exactly why EnsureWorktreeBound exists -- so the inference from "something
+// is listening" to "this worktree has a lock" was never sound.
+//
+// The pid is the right observable: it is a property of whichever proxy owns the
+// port, so it answers "was a second process spawned" identically whether the
+// live proxy belongs to this worktree or another one.
 // ----------------------------------------------------------------------------
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FClaireonProxyClientLockAttachSmoke,
 	"Claireon.ProxyClient.Smoke.LockAttach",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonProxyClientLockAttachSmoke::RunTest(const FString& /*Parameters*/)
 {
@@ -310,16 +331,12 @@ bool FClaireonProxyClientLockAttachSmoke::RunTest(const FString& /*Parameters*/)
 		return true;
 	}
 
-	const FString LockPath = FPaths::ConvertRelativePathToFull(
-		FPaths::ProjectSavedDir() / TEXT("Claireon/proxy.lock"));
-
-	// Make sure a proxy is running so the lock file is current. If the
-	// round-trip test ran before us it will already be up; otherwise spawn
-	// one now.
+	// Make sure some proxy owns PROXY_REG_PORT. If the round-trip test ran before
+	// us it will already be up; otherwise spawn one now.
 	FClaireonProxyClient Bootstrap;
 	if (!Bootstrap.EnsureProxyRunning())
 	{
-		AddError(TEXT("EnsureProxyRunning failed during lock-attach bootstrap."));
+		AddError(TEXT("EnsureProxyRunning failed during attach bootstrap."));
 		return false;
 	}
 	if (!WaitForProxyListening(/*DeadlineSeconds=*/ 5.0))
@@ -328,32 +345,43 @@ bool FClaireonProxyClientLockAttachSmoke::RunTest(const FString& /*Parameters*/)
 		return false;
 	}
 
-	if (!FPaths::FileExists(LockPath))
+	// Identity before the attach. PingProxyHealth caches the pid the proxy reports
+	// from /admin/health, and only returns true for a response carrying the
+	// Claireon shape -- so a non-Claireon occupant of 43017 fails here rather than
+	// being mistaken for a proxy.
+	if (!Bootstrap.PingProxyHealth())
 	{
-		AddError(FString::Printf(
-			TEXT("Expected proxy.lock at %s after a live proxy was confirmed."),
-			*LockPath));
+		AddError(TEXT("/admin/health did not answer with a Claireon proxy response after a live proxy was confirmed."));
 		return false;
 	}
-
-	FString LockBefore;
-	TestTrue(TEXT("Read proxy.lock before attach"),
-		FFileHelper::LoadFileToString(LockBefore, *LockPath));
+	const uint32 PidBefore = Bootstrap.GetCachedProxyPid();
+	if (PidBefore == 0)
+	{
+		AddError(TEXT("/admin/health answered but reported no pid, so 'did not respawn' cannot be established."));
+		return false;
+	}
 
 	// Fresh client -- must take the attach path without spawning.
 	FClaireonProxyClient Attach;
 	const bool bAttached = Attach.EnsureProxyRunning();
 	TestTrue(TEXT("Second EnsureProxyRunning attaches successfully"), bAttached);
 
-	FString LockAfter;
-	TestTrue(TEXT("Read proxy.lock after attach"),
-		FFileHelper::LoadFileToString(LockAfter, *LockPath));
+	if (!Attach.PingProxyHealth())
+	{
+		AddError(TEXT("/admin/health stopped answering after the attach, so the attach did not leave a live proxy."));
+		return false;
+	}
+	const uint32 PidAfter = Attach.GetCachedProxyPid();
 
-	// If a second process had been spawned, the existing proxy would have
-	// exited cleanly (idempotent startup) OR the new proxy would have taken
-	// over the lock -- both produce content changes. An unchanged lock file
-	// proves we took the cheap attach branch.
-	TestEqual(TEXT("proxy.lock is unchanged (no respawn)"), LockAfter, LockBefore);
+	// The invariant: a spawn would have produced a different process. Whether the
+	// newcomer won the port or the incumbent kept it under idempotent startup, the
+	// reported pid would move.
+	if (PidAfter != PidBefore)
+	{
+		AddError(FString::Printf(
+			TEXT("Proxy pid changed across the attach (%u -> %u), so EnsureProxyRunning spawned rather than attached."),
+			PidBefore, PidAfter));
+	}
 
 	return true;
 }

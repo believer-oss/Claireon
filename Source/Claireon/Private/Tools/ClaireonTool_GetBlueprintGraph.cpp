@@ -5,6 +5,7 @@
 #include "Tools/ClaireonBlueprintGraphEditToolBase.h" // kBPCategory
 #include "ClaireonPathResolver.h"
 #include "ClaireonBlueprintHelpers.h"
+#include "ClaireonNameResolver.h"
 #include "ClaireonLog.h"
 #include "Engine/Blueprint.h"
 #include "EdGraph/EdGraph.h"
@@ -13,6 +14,7 @@
 #include "EdGraphSchema_K2.h"
 #include "K2Node.h" // UK2Node cast at line 484 (N7 pure-call subgraph traversal)
 #include "EdGraphUtilities.h"
+#include "ClaireonBlueprintNodeSerializer.h"
 #include "Animation/AnimBlueprint.h"
 #include "AnimationGraphSchema.h"
 #include "WidgetBlueprint.h"
@@ -34,15 +36,15 @@ FString ClaireonTool_GetBlueprintGraph::GetDescription() const
 FString ClaireonTool_GetBlueprintGraph::GetFullDescription() const
 {
 	return TEXT("Read the internal graph structure of a Blueprint.\n"
-				"Default output: JSON summary at 'exec' detail level Ã¢Â€Â” node titles, classes, GUIDs, positions, exec-pin connections, and compact data-pin counts. Suitable for surveying large graphs without token overflow.\n\n"
+				"Default output: JSON summary at 'exec' detail level - node titles, classes, GUIDs, positions, exec-pin connections, and compact data-pin counts. Suitable for surveying large graphs without token overflow.\n\n"
 				"Parameters:\n"
 				"  asset_path (required): Unreal content path of the Blueprint (e.g., /Game/Characters/BP_PlayerCharacter).\n"
 				"  graph_name (optional): Name of a specific graph to export (e.g., 'EventGraph', 'TakeDamage'). Omit to export all graphs.\n"
 				"  format (optional, default='json'): 'json' for structured summary, 't3d' for Unreal text export (clipboard copy/paste), 'both' for both. T3D is opt-in.\n"
 				"  node_detail_level (optional, default='exec'):\n"
-				"    'exec' Ã¢Â€Â” compact view: title, class, GUID, position, exec-pin connections, and compact data-pin count. Best for large graphs.\n"
-				"    'full' Ã¢Â€Â” all pin details and defaults.\n"
-				"    'summary' Ã¢Â€Â” node types and connections only (no pin defaults).\n"
+				"    'exec' - compact view: title, class, GUID, position, exec-pin connections, and compact data-pin count. Best for large graphs.\n"
+				"    'full' - all pin details and defaults.\n"
+				"    'summary' - node types and connections only (no pin defaults).\n"
 				"    'outline' - one line per node, parseable by a single regex. No embedded newlines.\n"
 				"      Grammar: '<index>. <node_class> <guid8>  <clean_title>  @ (x, y)'\n"
 				"      Regex:   ^\\s*(\\d+)\\.\\s+(\\w+)\\s+([0-9a-fA-F]{8})\\s{2}(.+?)\\s{2}@\\s+\\((-?\\d+),\\s*(-?\\d+)\\)\\s*$\n"
@@ -50,13 +52,22 @@ FString ClaireonTool_GetBlueprintGraph::GetFullDescription() const
 				"      <clean_title> uses ENodeTitleType::ListView; embedded newlines replaced with spaces.\n"
 				"    At 'full' detail the JSON payload additionally includes an optional 'node_subtitle' field\n"
 				"      (e.g. 'Target is Kismet System Library') when the node FullTitle has a second line.\n"
-				"  include_pin_defaults (optional): Include default values for unconnected pins. Ignored in 'exec' mode. In 'summary' mode defaults to false.\n"
+				"  include_pin_defaults (optional, default=true): Include default values for unconnected pins at 'full' and 'summary' detail. Pass false to suppress. 'exec'/'outline' never emit defaults.\n"
 				"  max_nodes (optional, default=0 unlimited): Maximum nodes to include. 0 means all nodes. Capped at 50 when anchor_node_guid is used.\n"
 				"  anchor_node_guid (optional): GUID of a node to anchor BFS traversal. When provided, returns only nodes reachable via exec connections from this node (up to 50). "
 				"Use node_detail_level='exec' on the full graph first to get GUIDs, then anchor + node_detail_level='full' to drill into a specific section.\n"
-				"  traversal_depth (optional, default=-1): BFS hop limit when anchor_node_guid is set. 0=anchor only, 1=anchor+direct neighbors, 2=two hops, -1=unlimited.\n\n"
+				"  exec_only (optional, default=false): When true, suppress pure-subgraph expansion even when anchor_node_guid would otherwise default it on. The specialist walk (see include_pure_subgraph) never runs. Anchored calls include pure feeder nodes by default; pass exec_only=true for the exec chain alone.\n"
+				"  traversal_depth (optional, default=-1): BFS hop limit when anchor_node_guid is set. 0=anchor only, 1=anchor+direct neighbors, 2=two hops, -1=unlimited.\n"
+				"  filter_class (optional): Server-side class filter, e.g. 'K2Node_CallFunction'. Matches subclasses too.\n"
+				"  filter_title_contains (optional): Case-insensitive substring match against node_title.\n"
+				"  offset (optional, default=0): Skip this many nodes of the filtered set before applying max_nodes. Ignored when anchor_node_guid is set.\n\n"
+				"Payload contracts:\n"
+				"- All node GUIDs in the payload (nodes[].node_id, connections[].from_node/to_node, pins[].linked_to[].node_id) use ONE format: digits with hyphens (e.g. A1B2C3D4-...). They string-match each other directly.\n"
+				"- At 'full' and 'exec' detail each connected pin carries linked_to: [{node_id, pin_name}] listing its actual endpoints.\n"
+				"- connections[] never drops edges: when max_nodes/anchor truncation leaves an edge's other node outside the returned set, the edge is kept and flagged target_in_set:false (outgoing) or source_in_set:false (incoming). Absence of the flag means both endpoints are in nodes[].\n"
+				"- Each graph object carries total_filtered: the number of nodes passing node_filter/filter_class/filter_title_contains BEFORE offset/max_nodes windowing. Page with offset until offset >= total_filtered.\n\n"
 				"Navigation workflow: Call with defaults to get a compact exec-level overview and node GUIDs. Then use anchor_node_guid=<guid> with node_detail_level='full' to inspect a specific subgraph.\n"
-				"Use editor.blueprint.getProperties first to discover available graphs.\n\n"
+				"Use bp_get_properties first to discover available graphs.\n\n"
 				"node_type_alias and generic_class_name (roundtrip contract for add_node):\n"
 				"- node_type_alias is the guaranteed-roundtrip value for add_node(node_type=...). Prefer it\n"
 				"  over node_class when re-creating nodes.\n"
@@ -101,7 +112,7 @@ TSharedPtr<FJsonObject> ClaireonTool_GetBlueprintGraph::GetInputSchema() const
 	// include_pin_defaults - optional
 	TSharedPtr<FJsonObject> DefaultsProp = MakeShared<FJsonObject>();
 	DefaultsProp->SetStringField(TEXT("type"), TEXT("boolean"));
-	DefaultsProp->SetStringField(TEXT("description"), TEXT("Include default values for unconnected pins in JSON output. Default: true. In 'exec' node_detail_level mode, this parameter is ignored (no data pins shown). In 'summary' mode, defaults to false."));
+	DefaultsProp->SetStringField(TEXT("description"), TEXT("Include default values for unconnected pins in JSON output. Default: true. Applies at 'full' and 'summary' node_detail_level (both emit defaults unless this is explicitly false). At 'exec' and 'outline' detail no pin defaults are emitted regardless of this flag."));
 	Properties->SetObjectField(TEXT("include_pin_defaults"), DefaultsProp);
 
 	// node_detail_level - optional
@@ -114,9 +125,9 @@ TSharedPtr<FJsonObject> ClaireonTool_GetBlueprintGraph::GetInputSchema() const
 	DetailEnum.Add(MakeShared<FJsonValueString>(TEXT("outline")));
 	DetailProp->SetArrayField(TEXT("enum"), DetailEnum);
 	DetailProp->SetStringField(TEXT("description"), TEXT("Level of detail for node output. Default: 'exec'.\n"
-														 "'exec' Ã¢Â€Â” compact view: node title, class, GUID, position, exec-pin connections only, and a compact data pin count (N data pins). Best for surveying large graphs.\n"
-														 "'full' Ã¢Â€Â” all pin details and defaults.\n"
-														 "'summary' Ã¢Â€Â” node types and connections only (no pin defaults).\n"
+														 "'exec' - compact view: node title, class, GUID, position, exec-pin connections only, and a compact data pin count (N data pins). Best for surveying large graphs.\n"
+														 "'full' - all pin details and defaults.\n"
+														 "'summary' - node types and connections only (no pin defaults).\n"
 														 "'outline' - one line per node; see full description for grammar and regex."));
 	Properties->SetObjectField(TEXT("node_detail_level"), DetailProp);
 
@@ -165,8 +176,46 @@ TSharedPtr<FJsonObject> ClaireonTool_GetBlueprintGraph::GetInputSchema() const
 			 "(K2Node_PromotableOperator / math libs / getters) that feed data-input "
 			 "pins on selected nodes, and emit edges from each pure source into the "
 			 "consuming node. Default false. Most useful with node_detail_level='full' "
-			 "for translator workflows that need to see how each data pin is computed."));
+			 "for translator workflows that need to see how each data pin is computed."
+			 " DEPRECATED alias: exec_only=true is equivalent to include_pure_subgraph=false and is preferred for anchored calls; this flag is retained for back-compat and default-false unanchored calls."));
 	Properties->SetObjectField(TEXT("include_pure_subgraph"), PureProp);
+
+	// exec_only - force-suppress pure-subgraph expansion on anchored calls.
+	TSharedPtr<FJsonObject> ExecOnlyProp = MakeShared<FJsonObject>();
+	ExecOnlyProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	ExecOnlyProp->SetStringField(TEXT("description"),
+		TEXT("When true, suppress pure-subgraph expansion even when anchor_node_guid would otherwise default it on. "
+			 "The specialist walk (see include_pure_subgraph) never runs. Default false."));
+	Properties->SetObjectField(TEXT("exec_only"), ExecOnlyProp);
+
+	// filter_class - server-side class filter.
+	TSharedPtr<FJsonObject> FilterClassProp = MakeShared<FJsonObject>();
+	FilterClassProp->SetStringField(TEXT("type"), TEXT("string"));
+	FilterClassProp->SetStringField(TEXT("description"),
+		TEXT("Filter nodes by class name (e.g. 'K2Node_CallFunction'). Resolved via ClaireonNameResolver::ResolveClassName "
+			 "against UEdGraphNode as the required base class (same fuzzy resolution used elsewhere in Claireon for bare class "
+			 "names -- accepts short names, case-insensitive, U-prefixed or not). A node matches if its actual class IsChildOf "
+			 "the resolved class, so filtering by a base class also returns its subclasses. If the name does not resolve to "
+			 "exactly one class, returns an error naming the resolver's own candidates/error text verbatim."));
+	Properties->SetObjectField(TEXT("filter_class"), FilterClassProp);
+
+	// filter_title_contains - server-side title substring filter.
+	TSharedPtr<FJsonObject> FilterTitleProp = MakeShared<FJsonObject>();
+	FilterTitleProp->SetStringField(TEXT("type"), TEXT("string"));
+	FilterTitleProp->SetStringField(TEXT("description"),
+		TEXT("Case-insensitive substring match against the node's ListView title (the same title text emitted as node_title "
+			 "in the payload). A node matches if its node_title contains this substring, ignoring case."));
+	Properties->SetObjectField(TEXT("filter_title_contains"), FilterTitleProp);
+
+	// offset - pagination over the filtered set.
+	TSharedPtr<FJsonObject> OffsetProp = MakeShared<FJsonObject>();
+	OffsetProp->SetStringField(TEXT("type"), TEXT("integer"));
+	OffsetProp->SetStringField(TEXT("description"),
+		TEXT("Skip this many nodes from the front of the filtered set before applying max_nodes. Composes with "
+			 "node_filter/filter_class/filter_title_contains: the offset is applied to the set AFTER all other filters, so two "
+			 "calls with the same filters and offset=0/offset=max_nodes partition the same filtered result. "
+			 "Ignored (treated as 0) when anchor_node_guid is set -- offset does not apply to BFS traversal order."));
+	Properties->SetObjectField(TEXT("offset"), OffsetProp);
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
@@ -210,6 +259,28 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 		}
 	}
 
+	// format: 'json' (default) | 't3d' | 'both'. T3D output attaches a per-graph
+	// 't3d' field alongside (or instead of caring about) the JSON node dump.
+	FString Format = TEXT("json");
+	if (Arguments->HasField(TEXT("format")))
+	{
+		Format = Arguments->GetStringField(TEXT("format")).ToLower();
+		if (Format != TEXT("json") && Format != TEXT("t3d") && Format != TEXT("both"))
+		{
+			return MakeErrorResult(FString::Printf(TEXT("Invalid format: %s. Must be one of: json, t3d, both"), *Format));
+		}
+	}
+	const bool bIncludeT3D = (Format == TEXT("t3d") || Format == TEXT("both"));
+
+	// include_pin_defaults: when explicitly false, suppress default_value emission on
+	// unconnected pins (and sub-pins). Default true, matching the long-standing output
+	// shape at 'full' and 'summary' detail. 'exec'/'outline' never emit defaults.
+	bool bIncludePinDefaults = true;
+	if (Arguments->HasField(TEXT("include_pin_defaults")))
+	{
+		bIncludePinDefaults = Arguments->GetBoolField(TEXT("include_pin_defaults"));
+	}
+
 	int32 MaxNodes = 0;  // 0 = unlimited (all nodes); callers may pass a positive cap
 	if (Arguments->HasField(TEXT("max_nodes")))
 	{
@@ -241,14 +312,55 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 		NodeFilter = NodeFilter.ToLower();
 	}
 
-	// include_pure_subgraph -- when true, expand NodesToProcess to also include the
-	// pure-call source nodes (K2Node_PromotableOperator, math lib calls, getters) that
-	// feed data-input pins on already-selected nodes. Defaults false to keep the existing
-	// output compact. Only meaningful at node_detail_level=full where data pins are emitted.
+	// Pure-subgraph expansion pulls in the pure-call source nodes (K2Node_PromotableOperator,
+	// math lib calls, getters) feeding data-input pins on already-selected nodes. Precedence
+	// for the effective value, evaluated after AnchorGuid is read so anchor presence is known:
+	//   1. exec_only=true            -> false (wins outright; the only force-suppress)
+	//   2. explicit include_pure_subgraph -> that value (back-compat, either direction)
+	//   3. anchored call             -> true (flipped default: anchored walks include feeders)
+	//   4. otherwise                 -> false (unanchored dumps already list pure nodes via
+	//                                   the linear scan; only the anchored BFS excluded them)
 	bool bIncludePureSubgraph = false;
-	if (Arguments->HasField(TEXT("include_pure_subgraph")))
+	if (Arguments->HasField(TEXT("exec_only")) && Arguments->GetBoolField(TEXT("exec_only")))
+	{
+		bIncludePureSubgraph = false;
+	}
+	else if (Arguments->HasField(TEXT("include_pure_subgraph")))
 	{
 		bIncludePureSubgraph = Arguments->GetBoolField(TEXT("include_pure_subgraph"));
+	}
+	else if (!AnchorGuid.IsEmpty())
+	{
+		bIncludePureSubgraph = true;
+	}
+
+	// filter_class -- resolved ONCE per Execute, not per node. Resolution failure is fatal:
+	// returning an unfiltered result would silently ignore the caller's filter.
+	UClass* FilterClass = nullptr;
+	if (Arguments->HasField(TEXT("filter_class")))
+	{
+		const FString FilterClassStr = Arguments->GetStringField(TEXT("filter_class"));
+		if (!FilterClassStr.IsEmpty())
+		{
+			ClaireonNameResolver::FNameResolveResult ClassResult;
+			FilterClass = ClaireonNameResolver::ResolveClassName(FilterClassStr, UEdGraphNode::StaticClass(), ClassResult);
+			if (!IsValid(FilterClass))
+			{
+				return MakeErrorResult(ClassResult.Error);
+			}
+		}
+	}
+
+	FString FilterTitleContains;
+	if (Arguments->HasField(TEXT("filter_title_contains")))
+	{
+		FilterTitleContains = Arguments->GetStringField(TEXT("filter_title_contains"));
+	}
+
+	int32 Offset = 0;
+	if (Arguments->HasField(TEXT("offset")))
+	{
+		Offset = FMath::Max(0, static_cast<int32>(Arguments->GetNumberField(TEXT("offset"))));
 	}
 
 	// node_filter predicate. Applied after the BFS / linear scan, before node serialization.
@@ -257,7 +369,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 	// 'all' = pass-through.
 	auto PassesNodeFilter = [&NodeFilter](UEdGraphNode* Node) -> bool
 	{
-		if (!Node) { return false; }
+		if (!IsValid(Node)) { return false; }
 		if (NodeFilter == TEXT("all")) { return true; }
 		if (NodeFilter == TEXT("comments"))
 		{
@@ -293,10 +405,26 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 		return bHasAnyExec;
 	};
 
+	// filter_class / filter_title_contains predicate, composed with PassesNodeFilter via &&.
+	// Kept separate so the BFS path can tell "no extra filters requested" from "everything
+	// failed them" when deciding whether the post-BFS filter pass is needed at all.
+	const bool bHasExtraFilters = (FilterClass != nullptr) || !FilterTitleContains.IsEmpty();
+	auto PassesExtraFilters = [FilterClass, &FilterTitleContains](UEdGraphNode* Node) -> bool
+	{
+		if (!IsValid(Node)) { return false; }
+		if (IsValid(FilterClass) && !Node->GetClass()->IsChildOf(FilterClass)) { return false; }
+		if (!FilterTitleContains.IsEmpty()
+			&& !GetNodeTitle(Node).Contains(FilterTitleContains, ESearchCase::IgnoreCase))
+		{
+			return false;
+		}
+		return true;
+	};
+
 	// Load Blueprint
 	FString LoadError;
 	UBlueprint* Blueprint = LoadBlueprintFromPath(AssetPath, LoadError);
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -307,7 +435,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 	{
 		FString FindError;
 		UEdGraph* FoundGraph = FindGraphByName(Blueprint, GraphName, FindError);
-		if (!FoundGraph)
+		if (!IsValid(FoundGraph))
 		{
 			return MakeErrorResult(FindError);
 		}
@@ -318,14 +446,14 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 		// All graphs: event graphs + function graphs
 		for (UEdGraph* Graph : Blueprint->UbergraphPages)
 		{
-			if (Graph)
+			if (IsValid(Graph))
 			{
 				GraphsToProcess.Add(Graph);
 			}
 		}
 		for (UEdGraph* Graph : Blueprint->FunctionGraphs)
 		{
-			if (Graph)
+			if (IsValid(Graph))
 			{
 				GraphsToProcess.Add(Graph);
 			}
@@ -337,6 +465,36 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 		return MakeErrorResult(TEXT("No graphs found in Blueprint"));
 	}
 
+	// Resolve the anchor node up front via the shared >=8-hex prefix resolver.
+	// An unresolvable, ambiguous, or malformed anchor is now a structured error
+	// instead of a silent node_count=0 (WS-B B-4 / WS-C C-2). The anchor lives in
+	// exactly one of the graphs being processed; find it there.
+	UEdGraphNode* ResolvedAnchorNode = nullptr;
+	if (!AnchorGuid.IsEmpty())
+	{
+		FString AnchorError = FString::Printf(
+			TEXT("anchor_node_guid '%s' did not resolve to any node in the requested graph(s)."), *AnchorGuid);
+		for (UEdGraph* Graph : GraphsToProcess)
+		{
+			if (!IsValid(Graph))
+			{
+				continue;
+			}
+			UEdGraphNode* Candidate = nullptr;
+			FString Err;
+			if (ClaireonBlueprintHelpers::ResolveNodeGuidString(Graph, AnchorGuid, Candidate, Err, TEXT("anchor_node_guid")))
+			{
+				ResolvedAnchorNode = Candidate;
+				break;
+			}
+			AnchorError = Err;
+		}
+		if (!IsValid(ResolvedAnchorNode))
+		{
+			return MakeErrorResult(AnchorError);
+		}
+	}
+
 	// Build graphs array
 	TArray<TSharedPtr<FJsonValue>> GraphsArray;
 	int32 TotalNodeCount = 0;
@@ -344,7 +502,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 
 	for (UEdGraph* Graph : GraphsToProcess)
 	{
-		if (!Graph)
+		if (!IsValid(Graph))
 		{
 			continue;
 		}
@@ -357,21 +515,24 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 
 		// Build nodes array
 		TArray<TSharedPtr<FJsonValue>> NodesArray;
-		const int32 MaxNodesToShow = (MaxNodes > 0) ? MaxNodes : Graph->Nodes.Num();
 
 		// Determine which nodes to include (BFS anchor or linear scan)
 		TArray<UEdGraphNode*> NodesToProcess;
 
+		// Size of the filtered set BEFORE offset/max_nodes windowing -- what a caller has to
+		// page through. Set by whichever path below runs.
+		int32 TotalFiltered = 0;
+
 		if (!AnchorGuid.IsEmpty())
 		{
-			// BFS from anchor — parse GUID to handle both hyphenated and non-hyphenated formats
-			FGuid ParsedAnchorGuid;
-			FGuid::Parse(AnchorGuid, ParsedAnchorGuid);
-			UEdGraphNode* AnchorNode = ParsedAnchorGuid.IsValid()
-				? ClaireonBlueprintHelpers::FindNodeByGuid(Graph, ParsedAnchorGuid)
+			// BFS from the anchor node (resolved up front via the shared prefix
+			// resolver). Only the graph that actually owns the anchor runs the BFS;
+			// other graphs in a multi-graph dump emit an empty node set as before.
+			UEdGraphNode* AnchorNode = (IsValid(ResolvedAnchorNode) && Graph->Nodes.Contains(ResolvedAnchorNode))
+				? ResolvedAnchorNode
 				: nullptr;
 
-			if (AnchorNode)
+			if (IsValid(AnchorNode))
 			{
 				const int32 BFSCap = FMath::Min((MaxNodes > 0) ? MaxNodes : 50, 50);
 				TSet<FGuid> Visited;
@@ -405,7 +566,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 								continue;
 							}
 							UEdGraphNode* Neighbor = LinkedPin->GetOwningNode();
-							if (!Neighbor || Visited.Contains(Neighbor->NodeGuid))
+							if (!IsValid(Neighbor) || Visited.Contains(Neighbor->NodeGuid))
 							{
 								continue;
 							}
@@ -427,32 +588,45 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 		}
 		else
 		{
-			// Linear scan up to MaxNodesToShow. node_filter is applied here so the cap
-			// limits the FILTERED set (e.g. asking for 50 entry-points returns the first
-			// 50 entry-points, not the first 50 nodes filtered down to whatever subset
-			// happened to be entry-points).
+			// Linear scan. All filters are applied first so the window (offset + max_nodes)
+			// bounds the FILTERED set -- asking for 50 entry-points returns the first 50
+			// entry-points, not the first 50 nodes narrowed to whatever happened to match.
+			// The full filtered list is materialized because total_filtered and offset both
+			// need its true size, which an early break would hide.
+			TArray<UEdGraphNode*> FilteredNodes;
 			for (UEdGraphNode* Node : Graph->Nodes)
 			{
-				if (Node && PassesNodeFilter(Node))
+				if (IsValid(Node) && PassesNodeFilter(Node) && PassesExtraFilters(Node))
 				{
-					NodesToProcess.Add(Node);
-					if (NodesToProcess.Num() >= MaxNodesToShow)
-					{
-						break;
-					}
+					FilteredNodes.Add(Node);
 				}
+			}
+			TotalFiltered = FilteredNodes.Num();
+
+			const int32 WindowStart = FMath::Min(Offset, FilteredNodes.Num());
+			const int32 Available = FilteredNodes.Num() - WindowStart;
+			const int32 WindowCount = (MaxNodes > 0) ? FMath::Min(MaxNodes, Available) : Available;
+			NodesToProcess.Reserve(WindowCount);
+			for (int32 I = WindowStart; I < WindowStart + WindowCount; ++I)
+			{
+				NodesToProcess.Add(FilteredNodes[I]);
 			}
 		}
 
-		// BFS path: filter is applied post-BFS so the traversal still walks through
+		// BFS path: filters are applied post-BFS so the traversal still walks through
 		// non-matching exec neighbors. If you ask for entry_points anchored at a node,
-		// you get the entry-points reachable through the traversal.
-		if (!AnchorGuid.IsEmpty() && NodeFilter != TEXT("all"))
+		// you get the entry-points reachable through the traversal. offset does not apply
+		// here (per the schema contract) and max_nodes already bounded the walk via BFSCap.
+		if (!AnchorGuid.IsEmpty())
 		{
-			NodesToProcess = NodesToProcess.FilterByPredicate([&PassesNodeFilter](UEdGraphNode* N)
+			if (NodeFilter != TEXT("all") || bHasExtraFilters)
 			{
-				return PassesNodeFilter(N);
-			});
+				NodesToProcess = NodesToProcess.FilterByPredicate([&PassesNodeFilter, &PassesExtraFilters](UEdGraphNode* N)
+				{
+					return PassesNodeFilter(N) && PassesExtraFilters(N);
+				});
+			}
+			TotalFiltered = NodesToProcess.Num();
 		}
 
 		// Pure-subgraph expansion. Walk data-input pins on each selected node and add
@@ -471,7 +645,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 				TArray<UEdGraphNode*> Snapshot = NodesToProcess;
 				for (UEdGraphNode* Node : Snapshot)
 				{
-					if (!Node) { continue; }
+					if (!IsValid(Node)) { continue; }
 					for (UEdGraphPin* Pin : Node->Pins)
 					{
 						if (!Pin || Pin->Direction != EGPD_Input) { continue; }
@@ -480,10 +654,10 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 						{
 							if (!Linked) { continue; }
 							UEdGraphNode* Src = Linked->GetOwningNode();
-							if (!Src || Selected.Contains(Src)) { continue; }
+							if (!IsValid(Src) || Selected.Contains(Src)) { continue; }
 							// Only pull in pure nodes -- avoid accidentally inflating result with exec-mode peers.
 							UK2Node* K2Src = Cast<UK2Node>(Src);
-							if (!K2Src || !K2Src->IsNodePure()) { continue; }
+							if (!IsValid(K2Src) || !K2Src->IsNodePure()) { continue; }
 							Selected.Add(Src);
 							NodesToProcess.Add(Src);
 							bAddedAny = true;
@@ -496,7 +670,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 
 		for (UEdGraphNode* Node : NodesToProcess)
 		{
-			if (!Node)
+			if (!IsValid(Node))
 			{
 				continue;
 			}
@@ -553,6 +727,18 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 			PosObj->SetNumberField(TEXT("y"), Node->NodePosY);
 			NodeObj->SetObjectField(TEXT("position"), PosObj);
 
+			// Member references (function/variable/macro/cast/proxy/delegate/...)
+			// carry the node's replayable identity; without them callers had to
+			// regex-harvest T3D exports. Emitted at 'full' and 'summary' detail.
+			if (DetailLevel == TEXT("full") || DetailLevel == TEXT("summary"))
+			{
+				ClaireonBlueprintNodeSerializer::AppendMemberReferenceFields(Node, NodeObj);
+			}
+
+			// linked_to is emitted at 'full' and 'exec' detail so pin-level payloads carry
+			// actual endpoints (node GUID + pin name), not just a connection_count.
+			const bool bEmitLinkedTo = (DetailLevel == TEXT("full") || DetailLevel == TEXT("exec"));
+
 			// Build pins array
 			TArray<TSharedPtr<FJsonValue>> PinsArray;
 			for (UEdGraphPin* Pin : Node->Pins)
@@ -568,15 +754,52 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 				PinObj->SetStringField(TEXT("direction"), Pin->Direction == EGPD_Input ? TEXT("input") : TEXT("output"));
 				PinObj->SetNumberField(TEXT("connection_count"), Pin->LinkedTo.Num());
 
+				// Per-pin endpoints: node_id (DigitsWithHyphens, string-matching nodes[].node_id)
+				// plus the far pin's name. Without this, connections were only recoverable from
+				// the graph-level connections[] array, which drops nothing now but is edge-form.
+				if (bEmitLinkedTo && Pin->LinkedTo.Num() > 0)
+				{
+					TArray<TSharedPtr<FJsonValue>> LinkedToArray;
+					for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
+					{
+						if (!LinkedPin)
+						{
+							continue;
+						}
+						UEdGraphNode* LinkedNode = LinkedPin->GetOwningNode();
+						if (!IsValid(LinkedNode))
+						{
+							continue;
+						}
+						TSharedPtr<FJsonObject> LinkObj = MakeShared<FJsonObject>();
+						LinkObj->SetStringField(TEXT("node_id"), LinkedNode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+						LinkObj->SetStringField(TEXT("pin_name"), LinkedPin->PinName.ToString());
+						LinkedToArray.Add(MakeShared<FJsonValueObject>(LinkObj));
+					}
+					PinObj->SetArrayField(TEXT("linked_to"), LinkedToArray);
+				}
+
 				// surface default_value on unconnected pins at both 'full' and 'summary'
 				// detail levels so callers can tell how a node will behave without escalating
 				// to blueprint_graph_inspect_node (PIE-blocked). 'exec' / 'outline' remain
-				// compact and omit defaults.
-				if ((DetailLevel == TEXT("full") || DetailLevel == TEXT("summary"))
+				// compact and omit defaults. Suppressed entirely by include_pin_defaults=false.
+				if (bIncludePinDefaults
+					&& (DetailLevel == TEXT("full") || DetailLevel == TEXT("summary"))
 					&& !Pin->DefaultValue.IsEmpty()
 					&& Pin->LinkedTo.Num() == 0)
 				{
 					PinObj->SetStringField(TEXT("default_value"), Pin->DefaultValue);
+				}
+
+				// Object/class pin identities live in DefaultObject, not DefaultValue
+				// (e.g. CreateWidget's Class pin, asset-reference pins). Emit the object
+				// path so replay can restore it via bp_set_pin_value.
+				if (bIncludePinDefaults
+					&& (DetailLevel == TEXT("full") || DetailLevel == TEXT("summary"))
+					&& Pin->DefaultObject
+					&& Pin->LinkedTo.Num() == 0)
+				{
+					PinObj->SetStringField(TEXT("default_object"), Pin->DefaultObject->GetPathName());
 				}
 
 				// split parent pins (DestLocation -> _X/_Y/_Z) carry their actual
@@ -594,7 +817,22 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 						SubObj->SetStringField(TEXT("pin_type"), GetPinTypeString(SubPin));
 						SubObj->SetStringField(TEXT("direction"), SubPin->Direction == EGPD_Input ? TEXT("input") : TEXT("output"));
 						SubObj->SetNumberField(TEXT("connection_count"), SubPin->LinkedTo.Num());
-						if (!SubPin->DefaultValue.IsEmpty() && SubPin->LinkedTo.Num() == 0)
+						if (SubPin->LinkedTo.Num() > 0)
+						{
+							TArray<TSharedPtr<FJsonValue>> SubLinkedToArray;
+							for (UEdGraphPin* SubLinkedPin : SubPin->LinkedTo)
+							{
+								if (!SubLinkedPin) { continue; }
+								UEdGraphNode* SubLinkedNode = SubLinkedPin->GetOwningNode();
+								if (!IsValid(SubLinkedNode)) { continue; }
+								TSharedPtr<FJsonObject> SubLinkObj = MakeShared<FJsonObject>();
+								SubLinkObj->SetStringField(TEXT("node_id"), SubLinkedNode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+								SubLinkObj->SetStringField(TEXT("pin_name"), SubLinkedPin->PinName.ToString());
+								SubLinkedToArray.Add(MakeShared<FJsonValueObject>(SubLinkObj));
+							}
+							SubObj->SetArrayField(TEXT("linked_to"), SubLinkedToArray);
+						}
+						if (bIncludePinDefaults && !SubPin->DefaultValue.IsEmpty() && SubPin->LinkedTo.Num() == 0)
 						{
 							SubObj->SetStringField(TEXT("default_value"), SubPin->DefaultValue);
 						}
@@ -610,39 +848,69 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 			NodesArray.Add(MakeShared<FJsonValueObject>(NodeObj));
 		}
 
-		// Build connections array
+		// Build connections array.
+		// GUID format contract: from_node/to_node use EGuidFormats::DigitsWithHyphens so
+		// they string-match nodes[].node_id (the payload uses ONE GUID format throughout).
+		// Truncation contract: edges touching nodes outside the returned node set are KEPT
+		// and flagged with target_in_set:false / source_in_set:false instead of dropped,
+		// so a capped read still exposes the surviving nodes' full connectivity.
 		TArray<TSharedPtr<FJsonValue>> ConnectionsArray;
 		TSet<UEdGraphNode*> ProcessedSet(NodesToProcess);
 		for (UEdGraphNode* Node : NodesToProcess)
 		{
-			if (!Node)
+			if (!IsValid(Node))
 			{
 				continue;
 			}
 			for (UEdGraphPin* Pin : Node->Pins)
 			{
-				if (!Pin || Pin->Direction != EGPD_Output)
+				if (!Pin)
 				{
 					continue;
 				}
-				for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
-				{
-					if (!LinkedPin || !LinkedPin->GetOwningNode())
-					{
-						continue;
-					}
-					// Only emit connections where both nodes are in our set
-					if (!ProcessedSet.Contains(LinkedPin->GetOwningNode()))
-					{
-						continue;
-					}
 
-					TSharedPtr<FJsonObject> ConnObj = MakeShared<FJsonObject>();
-					ConnObj->SetStringField(TEXT("from_node"), Node->NodeGuid.ToString());
-					ConnObj->SetStringField(TEXT("from_pin"), Pin->PinName.ToString());
-					ConnObj->SetStringField(TEXT("to_node"), LinkedPin->GetOwningNode()->NodeGuid.ToString());
-					ConnObj->SetStringField(TEXT("to_pin"), LinkedPin->PinName.ToString());
-					ConnectionsArray.Add(MakeShared<FJsonValueObject>(ConnObj));
+				if (Pin->Direction == EGPD_Output)
+				{
+					for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
+					{
+						UEdGraphNode* TargetNode = LinkedPin ? LinkedPin->GetOwningNode() : nullptr;
+						if (!IsValid(TargetNode))
+						{
+							continue;
+						}
+
+						TSharedPtr<FJsonObject> ConnObj = MakeShared<FJsonObject>();
+						ConnObj->SetStringField(TEXT("from_node"), Node->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+						ConnObj->SetStringField(TEXT("from_pin"), Pin->PinName.ToString());
+						ConnObj->SetStringField(TEXT("to_node"), TargetNode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+						ConnObj->SetStringField(TEXT("to_pin"), LinkedPin->PinName.ToString());
+						if (!ProcessedSet.Contains(TargetNode))
+						{
+							ConnObj->SetBoolField(TEXT("target_in_set"), false);
+						}
+						ConnectionsArray.Add(MakeShared<FJsonValueObject>(ConnObj));
+					}
+				}
+				else if (Pin->Direction == EGPD_Input)
+				{
+					// Inbound edges from OUT-OF-SET sources. In-set sources are already
+					// covered by the output-pin iteration above (avoids duplicates).
+					for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
+					{
+						UEdGraphNode* SourceNode = LinkedPin ? LinkedPin->GetOwningNode() : nullptr;
+						if (!IsValid(SourceNode) || ProcessedSet.Contains(SourceNode))
+						{
+							continue;
+						}
+
+						TSharedPtr<FJsonObject> ConnObj = MakeShared<FJsonObject>();
+						ConnObj->SetStringField(TEXT("from_node"), SourceNode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+						ConnObj->SetStringField(TEXT("from_pin"), LinkedPin->PinName.ToString());
+						ConnObj->SetStringField(TEXT("to_node"), Node->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+						ConnObj->SetStringField(TEXT("to_pin"), Pin->PinName.ToString());
+						ConnObj->SetBoolField(TEXT("source_in_set"), false);
+						ConnectionsArray.Add(MakeShared<FJsonValueObject>(ConnObj));
+					}
 				}
 			}
 		}
@@ -652,6 +920,12 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 		GraphObj->SetArrayField(TEXT("connections"), ConnectionsArray);
 		GraphObj->SetNumberField(TEXT("connection_count"), ConnectionsArray.Num());
 		GraphObj->SetNumberField(TEXT("total_nodes_in_graph"), Graph->Nodes.Num());
+		GraphObj->SetNumberField(TEXT("total_filtered"), TotalFiltered);
+
+		if (bIncludeT3D)
+		{
+			GraphObj->SetStringField(TEXT("t3d"), BuildGraphT3DExport(Graph));
+		}
 
 		TotalNodeCount += NodesArray.Num();
 		TotalConnectionCount += ConnectionsArray.Num();
@@ -686,13 +960,65 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 		Summary = FString::Printf(TEXT("%d graphs: %d nodes, %d connections"), GraphsArray.Num(), TotalNodeCount, TotalConnectionCount);
 	}
 
-	return MakeSuccessResult(Data, Summary);
+	FToolResult Result = MakeSuccessResult(Data, Summary);
+
+	// Success-path guidance. The reported friction was a caller concluding that connectivity
+	// was unavailable when it was simply not emitted at the detail level they asked for --
+	// nothing in the payload said so, and the field they guessed at ('links') never existed.
+	// This makes the omission self-describing.
+	//
+	// Mirrors the emission conditions above exactly: linked_to at 'full'/'exec' (line ~740),
+	// pin defaults at 'full'/'summary' gated on include_pin_defaults (~786).
+	{
+		const bool bConnectivityOmitted = !(DetailLevel == TEXT("full") || DetailLevel == TEXT("exec"));
+		const bool bPinDefaultsOmitted =
+			!(bIncludePinDefaults && (DetailLevel == TEXT("full") || DetailLevel == TEXT("summary")));
+
+		// LATCHED per session by code: this teaches a PARAMETER, and that lesson transfers the
+		// moment it lands, so repeating it on every call of a sweep is the bulk-loop noise that
+		// forced a latch onto the get_editor_property nudge.
+		if ((bConnectivityOmitted || bPinDefaultsOmitted)
+			&& ShouldEmitLatchedHint(TEXT("bp_get_graph_detail_omissions")))
+		{
+			// ONE hint, not two. Both omissions share a single remedy -- one corrected re-call
+			// -- and two reasons with one action is one hint. The reason enumerates each
+			// omission with its OWN flag so a caller who only wants connectivity can take half
+			// the advice, rather than maxing every detail on a large graph and spilling through
+			// the Output Gate.
+			TArray<FString> Omissions;
+			if (bConnectivityOmitted)
+			{
+				Omissions.Add(FString::Printf(
+					TEXT("per-pin connectivity (pins[].linked_to) is not emitted at node_detail_level='%s'; ")
+					TEXT("use 'full' or 'exec' for it. The graph-level connections[] array is always present ")
+					TEXT("and never drops edges"),
+					*DetailLevel));
+			}
+			if (bPinDefaultsOmitted)
+			{
+				Omissions.Add(FString::Printf(
+					TEXT("pin default values are not emitted%s at node_detail_level='%s'; ")
+					TEXT("use 'full' or 'summary' with include_pin_defaults=true"),
+					bIncludePinDefaults ? TEXT("") : TEXT(" when include_pin_defaults=false"),
+					*DetailLevel));
+			}
+
+			// args echoes the original call with every correction applied, so it stays directly
+			// callable -- a bare {node_detail_level} delta would re-issue without asset_path.
+			TSharedPtr<FJsonObject> FullArgs = CloneHintArgs(Arguments);
+			FullArgs->SetStringField(TEXT("node_detail_level"), TEXT("full"));
+			FullArgs->SetBoolField(TEXT("include_pin_defaults"), true);
+
+			Result.Hint = MakeGuidanceHint(GetName(), FString::Join(Omissions, TEXT(". ")), FullArgs);
+		}
+	}
+	return Result;
 }
 
 UBlueprint* ClaireonTool_GetBlueprintGraph::LoadBlueprintFromPath(const FString& AssetPath, FString& OutError)
 {
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		OutError = FString::Printf(TEXT("Failed to load Blueprint at path: %s. Ensure the path is correct and the asset is a Blueprint."), *AssetPath);
 		return nullptr;
@@ -707,7 +1033,7 @@ UEdGraph* ClaireonTool_GetBlueprintGraph::FindGraphByName(const UBlueprint* Blue
 	// Search in UbergraphPages (event graphs)
 	for (UEdGraph* Graph : Blueprint->UbergraphPages)
 	{
-		if (Graph && Graph->GetName() == GraphName)
+		if (IsValid(Graph) && Graph->GetName() == GraphName)
 		{
 			return Graph;
 		}
@@ -716,30 +1042,44 @@ UEdGraph* ClaireonTool_GetBlueprintGraph::FindGraphByName(const UBlueprint* Blue
 	// Search in FunctionGraphs
 	for (UEdGraph* Graph : Blueprint->FunctionGraphs)
 	{
-		if (Graph && Graph->GetName() == GraphName)
+		if (IsValid(Graph) && Graph->GetName() == GraphName)
 		{
 			return Graph;
 		}
 	}
 
-	OutError = FString::Printf(TEXT("Graph '%s' not found in Blueprint. Use editor.blueprint.getProperties to see available graphs."), *GraphName);
+	// Everything else, including macro/delegate graphs and composite
+	// (collapsed-graph) subgraphs, which live recursively in SubGraphs.
+	{
+		TArray<UEdGraph*> AllGraphs;
+		Blueprint->GetAllGraphs(AllGraphs);
+		for (UEdGraph* Graph : AllGraphs)
+		{
+			if (IsValid(Graph) && Graph->GetName() == GraphName)
+			{
+				return Graph;
+			}
+		}
+	}
+
+	OutError = FString::Printf(TEXT("Graph '%s' not found in Blueprint. Use bp_get_properties to see available graphs."), *GraphName);
 	return nullptr;
 }
 
 FString ClaireonTool_GetBlueprintGraph::BuildGraphJsonSummary(const UEdGraph* Graph, const FString& DetailLevel, int32 MaxNodes, const FString& AnchorGuid, int32 TraversalDepth)
 {
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return TEXT("Error: Invalid graph");
 	}
 
-	// AnimBP graphs don't use PC_Exec pins Ã¢Â€Â” fall back to "summary" detail
+	// AnimBP graphs don't use PC_Exec pins - fall back to "summary" detail
 	FString EffectiveDetailLevel = DetailLevel;
 	FString AnimBPFallbackNote;
-	if (DetailLevel == TEXT("exec") && Graph->Schema && Graph->Schema->IsChildOf(UAnimationGraphSchema::StaticClass()))
+	if (DetailLevel == TEXT("exec") && IsValid(Graph->Schema) && Graph->Schema->IsChildOf(UAnimationGraphSchema::StaticClass()))
 	{
 		EffectiveDetailLevel = TEXT("summary");
-		AnimBPFallbackNote = TEXT("\n(exec detail not available for AnimBP graphs Ã¢Â€Â” showing summary)");
+		AnimBPFallbackNote = TEXT("\n(exec detail not available for AnimBP graphs - showing summary)");
 	}
 
 	FString Output;
@@ -749,16 +1089,13 @@ FString ClaireonTool_GetBlueprintGraph::BuildGraphJsonSummary(const UEdGraph* Gr
 	// --- Anchor BFS path ---
 	if (!AnchorGuid.IsEmpty())
 	{
-		// Find the anchor node by GUID — parse to handle both hyphenated and non-hyphenated formats
-		FGuid ParsedAnchorGuid;
-		FGuid::Parse(AnchorGuid, ParsedAnchorGuid);
-		UEdGraphNode* AnchorNode = ParsedAnchorGuid.IsValid()
-			? ClaireonBlueprintHelpers::FindNodeByGuid(Graph, ParsedAnchorGuid)
-			: nullptr;
-
-		if (!AnchorNode)
+		// Find the anchor node via the shared >=8-hex prefix resolver (full GUID or
+		// unique prefix). Unresolvable/ambiguous/malformed -> structured error text.
+		UEdGraphNode* AnchorNode = nullptr;
+		FString AnchorError;
+		if (!ClaireonBlueprintHelpers::ResolveNodeGuidString(Graph, AnchorGuid, AnchorNode, AnchorError, TEXT("anchor_node_guid")))
 		{
-			return FString::Printf(TEXT("Anchor node not found: %s"), *AnchorGuid);
+			return AnchorError;
 		}
 
 		// BFS along exec pins from anchor
@@ -802,7 +1139,7 @@ FString ClaireonTool_GetBlueprintGraph::BuildGraphJsonSummary(const UEdGraph* Gr
 						continue;
 					}
 					UEdGraphNode* Neighbor = LinkedPin->GetOwningNode();
-					if (!Neighbor || Visited.Contains(Neighbor->NodeGuid))
+					if (!IsValid(Neighbor) || Visited.Contains(Neighbor->NodeGuid))
 					{
 						continue;
 					}
@@ -860,7 +1197,7 @@ FString ClaireonTool_GetBlueprintGraph::BuildGraphJsonSummary(const UEdGraph* Gr
 							continue;
 						}
 						UEdGraphNode* Neighbor = LinkedPin->GetOwningNode();
-						if (!Neighbor || DataNeighborVisited.Contains(Neighbor->NodeGuid))
+						if (!IsValid(Neighbor) || DataNeighborVisited.Contains(Neighbor->NodeGuid))
 						{
 							continue;
 						}
@@ -870,7 +1207,7 @@ FString ClaireonTool_GetBlueprintGraph::BuildGraphJsonSummary(const UEdGraph* Gr
 				}
 
 				FString AnchorTitle = GetNodeTitle(AnchorNode);
-				Output += FString::Printf(TEXT("\n(Anchor node [%s] has no exec connections Ã¢Â€Â” showing data-pin neighbors instead.)"), *AnchorTitle);
+				Output += FString::Printf(TEXT("\n(Anchor node [%s] has no exec connections - showing data-pin neighbors instead.)"), *AnchorTitle);
 				Output += AnimBPFallbackNote;
 				return Output;
 			}
@@ -890,7 +1227,7 @@ FString ClaireonTool_GetBlueprintGraph::BuildGraphJsonSummary(const UEdGraph* Gr
 		FString AnchorTitle = GetNodeTitle(AnchorNode);
 		FString DepthStr = (TraversalDepth >= 0) ? FString::FromInt(TraversalDepth) : TEXT("unlimited");
 		Output += FString::Printf(
-			TEXT("\n(Showing %d of %d nodes Ã¢Â€Â” anchored at [%s], depth %s.\n %d nodes not shown. Use anchor_node_guid=<guid> to navigate to a different section.)"),
+			TEXT("\n(Showing %d of %d nodes - anchored at [%s], depth %s.\n %d nodes not shown. Use anchor_node_guid=<guid> to navigate to a different section.)"),
 			ShownNodes, TotalNodes, *AnchorTitle, *DepthStr, NotShown);
 		Output += AnimBPFallbackNote;
 		return Output;
@@ -903,7 +1240,7 @@ FString ClaireonTool_GetBlueprintGraph::BuildGraphJsonSummary(const UEdGraph* Gr
 
 	for (UEdGraphNode* Node : Graph->Nodes)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			continue;
 		}
@@ -937,7 +1274,7 @@ FString ClaireonTool_GetBlueprintGraph::BuildGraphJsonSummary(const UEdGraph* Gr
 
 FString ClaireonTool_GetBlueprintGraph::BuildGraphT3DExport(const UEdGraph* Graph)
 {
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return TEXT("Error: Invalid graph");
 	}
@@ -946,7 +1283,7 @@ FString ClaireonTool_GetBlueprintGraph::BuildGraphT3DExport(const UEdGraph* Grap
 	TSet<UObject*> NodesToExport;
 	for (UEdGraphNode* Node : Graph->Nodes)
 	{
-		if (Node)
+		if (IsValid(Node))
 		{
 			NodesToExport.Add(Node);
 		}
@@ -966,7 +1303,7 @@ FString ClaireonTool_GetBlueprintGraph::BuildGraphT3DExport(const UEdGraph* Grap
 
 FString ClaireonTool_GetBlueprintGraph::FormatNodeSummary(const UEdGraphNode* Node, const FString& DetailLevel)
 {
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return TEXT("[Invalid Node]");
 	}
@@ -1024,7 +1361,7 @@ FString ClaireonTool_GetBlueprintGraph::FormatNodeSummary(const UEdGraphNode* No
 				{
 					for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
 					{
-						if (LinkedPin && LinkedPin->GetOwningNode())
+						if (LinkedPin && IsValid(LinkedPin->GetOwningNode()))
 						{
 							FString ConnectedTitle = GetNodeTitle(LinkedPin->GetOwningNode());
 							if (Pin->Direction == EGPD_Input)
@@ -1131,7 +1468,7 @@ FString ClaireonTool_GetBlueprintGraph::FormatPinInfo(const UEdGraphPin* Pin, co
 		TArray<FString> LinkedNodes;
 		for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
 		{
-			if (LinkedPin && LinkedPin->GetOwningNode())
+			if (LinkedPin && IsValid(LinkedPin->GetOwningNode()))
 			{
 				LinkedNodes.Add(FString::Printf(TEXT("[%s]"), *GetNodeTitle(LinkedPin->GetOwningNode())));
 			}
@@ -1161,7 +1498,7 @@ FString ClaireonTool_GetBlueprintGraph::BuildOverflowSummary(const UEdGraph* Gra
 
 	for (UEdGraphNode* Node : Graph->Nodes)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			continue;
 		}
@@ -1300,7 +1637,7 @@ FString ClaireonTool_GetBlueprintGraph::GetPinTypeString(const UEdGraphPin* Pin)
 
 FString ClaireonTool_GetBlueprintGraph::GetNodeTitle(const UEdGraphNode* Node)
 {
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return TEXT("Unknown");
 	}

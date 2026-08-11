@@ -57,7 +57,7 @@ void FClaireonAnthropicClient::SendMessage(const FString& UserText,
 	if (!bHasSwept)
 	{
 		bHasSwept = true;
-		if (const UClaireonSettings* Settings = UClaireonSettings::Get())
+		if (const UClaireonSettings* Settings = UClaireonSettings::Get(); IsValid(Settings))
 		{
 			if (!Settings->bKeepResultSpills)
 			{
@@ -128,7 +128,7 @@ void FClaireonAnthropicClient::PostToAPI(
 	}
 
 	const UClaireonSettings* Settings = UClaireonSettings::Get();
-	const FString ApiKey = Settings ? Settings->GetAnthropicApiKey() : FString();
+	const FString ApiKey = IsValid(Settings) ? Settings->GetAnthropicApiKey() : FString();
 	if (ApiKey.IsEmpty())
 	{
 		FREPLEvent Ev;
@@ -824,6 +824,26 @@ bool FClaireonAnthropicClient::ExecuteToolUses(
 		for (const FString& Warning : ToolResult.Warnings)
 		{
 			ResultText += TEXT("\n\nWarning: ") + Warning;
+		}
+
+		// Hint, on BOTH the success and error paths. The REPL previously dropped this field
+		// entirely, so no hint had ever reached a REPL user -- including python_execute's
+		// long-standing nudges, which become visible here for the first time.
+		if (ToolResult.Hint.IsValid())
+		{
+			FString HintError;
+			if (IClaireonTool::ValidateHint(ToolResult.Hint, HintError))
+			{
+				FString HintJson;
+				auto HintWriter = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&HintJson);
+				FJsonSerializer::Serialize(ToolResult.Hint.ToSharedRef(), HintWriter);
+				HintWriter->Close();
+				ResultText += TEXT("\n\nHint: ") + HintJson;
+			}
+			else
+			{
+				UE_LOG(LogClaireon, Warning, TEXT("[REPLClient] Dropping malformed hint: %s"), *HintError);
+			}
 		}
 
 		if (Settings->bLogAllToolCalls)

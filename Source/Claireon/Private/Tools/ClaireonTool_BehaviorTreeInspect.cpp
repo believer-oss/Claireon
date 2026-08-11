@@ -18,7 +18,8 @@ FString ClaireonTool_BehaviorTreeInspect::GetDescription() const
 {
 	return TEXT("Read the structure of a Behavior Tree asset. Displays the full node hierarchy: "
 				"composites, tasks, decorators, services, and blackboard key references. "
-				"Use detail_level='summary' for a compact overview or 'full' for complete property details.");
+				"Use detail_level='summary' for a compact overview or 'full' for complete property details. "
+				"Stateless / read-only / non-session: never mutates and requires no open session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_BehaviorTreeInspect::GetInputSchema() const
@@ -72,7 +73,7 @@ IClaireonTool::FToolResult ClaireonTool_BehaviorTreeInspect::Execute(const TShar
 
 	FString LoadError;
 	UBehaviorTree* BehaviorTree = ClaireonBehaviorTreeHelpers::LoadBehaviorTreeAsset(AssetPath, LoadError);
-	if (!BehaviorTree)
+	if (!IsValid(BehaviorTree))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -84,7 +85,7 @@ IClaireonTool::FToolResult ClaireonTool_BehaviorTreeInspect::Execute(const TShar
 		TFunction<void(const UBTCompositeNode*)> CountNodes;
 		CountNodes = [&CountNodes, &NodeCount](const UBTCompositeNode* Composite)
 		{
-			if (!Composite)
+			if (!IsValid(Composite))
 			{
 				return;
 			}

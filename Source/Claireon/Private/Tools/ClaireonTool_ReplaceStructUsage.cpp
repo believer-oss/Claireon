@@ -31,7 +31,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-namespace
+namespace ClaireonTool_ReplaceStructUsage_Private
 {
 	// One pre-reconstruction pin connection: the node GUID + pin name form a stable
 	// identity we can resolve again after AllocateDefaultPins blows the pin set away.
@@ -56,7 +56,7 @@ namespace
 			TArray<FPinLinkSnapshot> Links;
 			for (UEdGraphPin* Linked : Pin->LinkedTo)
 			{
-				if (!Linked || !Linked->GetOwningNode()) continue;
+				if (!Linked || !IsValid(Linked->GetOwningNode())) continue;
 				FPinLinkSnapshot L;
 				L.OtherNodeGuid = Linked->GetOwningNode()->NodeGuid;
 				L.OtherPinName = Linked->PinName;
@@ -75,7 +75,7 @@ namespace
 	{
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
-			if (!Node || Node->NodeGuid != NodeGuid) continue;
+			if (!IsValid(Node) || Node->NodeGuid != NodeGuid) continue;
 			for (UEdGraphPin* Pin : Node->Pins)
 			{
 				if (Pin && Pin->PinName == PinName && Pin->Direction.GetValue() == Direction)
@@ -105,7 +105,7 @@ namespace
 		if (Parent->SubPins.Num() == 0)
 		{
 			const UEdGraphSchema_K2* K2Schema = GetDefault<UEdGraphSchema_K2>();
-			if (!K2Schema) return nullptr;
+			if (!IsValid(K2Schema)) return nullptr;
 			K2Schema->SplitPin(Parent, /*bNotify=*/false);
 		}
 
@@ -180,7 +180,7 @@ namespace
 		}
 
 		// 3. Fuzzy via the struct's property resolver (handles "Blend In Time" ↔ "BlendInTime", b-prefix, etc.)
-		if (NewStruct)
+		if (IsValid(NewStruct))
 		{
 			ClaireonNameResolver::FNameResolveResult R;
 			FProperty* Resolved = ClaireonNameResolver::ResolvePropertyName(NewStruct, OldNameStr, R);
@@ -212,11 +212,11 @@ namespace
 	TArray<UEdGraph*> CollectEditableGraphs(UBlueprint* BP)
 	{
 		TArray<UEdGraph*> Graphs;
-		if (!BP) return Graphs;
+		if (!IsValid(BP)) return Graphs;
 
 		auto AddIfNew = [&](UEdGraph* G)
 		{
-			if (G) Graphs.AddUnique(G);
+			if (IsValid(G)) Graphs.AddUnique(G);
 		};
 
 		for (UEdGraph* G : BP->UbergraphPages) AddIfNew(G);
@@ -224,7 +224,7 @@ namespace
 		for (UEdGraph* G : BP->MacroGraphs)    AddIfNew(G);
 		for (UEdGraph* G : BP->IntermediateGeneratedGraphs) AddIfNew(G);
 
-		if (UAnimBlueprint* AnimBP = Cast<UAnimBlueprint>(BP))
+		if (UAnimBlueprint* AnimBP = Cast<UAnimBlueprint>(BP); IsValid(AnimBP))
 		{
 			for (const ClaireonAnimGraphHelpers::FAnimGraphInfo& Info : ClaireonAnimGraphHelpers::CollectAllGraphs(AnimBP))
 			{
@@ -237,7 +237,7 @@ namespace
 
 	void SavePackageIfDirty(UBlueprint* BP, TArray<FString>& OutWarnings)
 	{
-		if (!BP || !BP->GetOutermost()) return;
+		if (!IsValid(BP) || !IsValid(BP->GetOutermost())) return;
 		UPackage* Pkg = BP->GetOutermost();
 		if (!Pkg->IsDirty()) return;
 
@@ -252,18 +252,17 @@ namespace
 		}
 	}
 }
+using namespace ClaireonTool_ReplaceStructUsage_Private;
 
 FString ClaireonTool_ReplaceStructUsage::GetOperation() const { return TEXT("replace_struct_usage"); }
 FString ClaireonTool_ReplaceStructUsage::GetCategory() const { return kBPCategory; }
 
 FString ClaireonTool_ReplaceStructUsage::GetDescription() const
 {
-	return TEXT("Retarget every reference to a struct type across a Blueprint or Animation Blueprint in one pass. "
-		"Updates UK2Node_MakeStruct / UK2Node_BreakStruct (reconstructing pins and preserving connections by name / "
-		"fuzzy match / field_map), user-defined pins on function entry/result nodes, local variables on function "
-		"entries, and any loose struct-typed pin elsewhere. Member variables typed by the old struct should be "
-		"retyped first via blueprint_set_variable_type — this tool warns (but does not retype) for safety. "
-		"Supports dry_run for a plan-before-apply report.");
+	return TEXT("Replace all uses of a struct type in a Blueprint or AnimBlueprint: Make/Break/SetFields nodes "
+		"(reconstructed; connections remapped by name/fuzzy/field_map), function entry/result pins, local "
+		"variables, and loose struct-typed pins. Member variables of the old struct are warned about, not retyped: "
+		"retype them first. dry_run plans; drops gate on confirm_dropped_fields. Stateless / non-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ReplaceStructUsage::GetInputSchema() const
@@ -320,16 +319,16 @@ FToolResult ClaireonTool_ReplaceStructUsage::Execute(const TSharedPtr<FJsonObjec
 		return MakeErrorResult(BPResolve.Error);
 	UObject* Loaded = FSoftObjectPath(BPResolve.ResolvedPath.Path).TryLoad();
 	UBlueprint* BP = Cast<UBlueprint>(Loaded);
-	if (!BP)
+	if (!IsValid(BP))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset at '%s' is not a Blueprint"), *BPResolve.ResolvedPath.Path));
 	}
 
 	FString StructErr;
 	UScriptStruct* FromStruct = ClaireonStructReflection::ResolveStructPath(FromPath, StructErr);
-	if (!FromStruct) return MakeErrorResult(FString::Printf(TEXT("from_struct_path: %s"), *StructErr));
+	if (!IsValid(FromStruct)) return MakeErrorResult(FString::Printf(TEXT("from_struct_path: %s"), *StructErr));
 	UScriptStruct* ToStruct = ClaireonStructReflection::ResolveStructPath(ToPath, StructErr);
-	if (!ToStruct)   return MakeErrorResult(FString::Printf(TEXT("to_struct_path: %s"), *StructErr));
+	if (!IsValid(ToStruct))   return MakeErrorResult(FString::Printf(TEXT("to_struct_path: %s"), *StructErr));
 	if (FromStruct == ToStruct)
 	{
 		return MakeErrorResult(TEXT("from_struct and to_struct resolve to the same type — nothing to do"));
@@ -427,7 +426,7 @@ FToolResult ClaireonTool_ReplaceStructUsage::Execute(const TSharedPtr<FJsonObjec
 
 	for (UEdGraph* Graph : Graphs)
 	{
-		if (!Graph) continue;
+		if (!IsValid(Graph)) continue;
 		Graph->Modify();
 
 		// Snapshot for iteration stability — we'll mutate nodes' pins inside the loop.
@@ -435,19 +434,19 @@ FToolResult ClaireonTool_ReplaceStructUsage::Execute(const TSharedPtr<FJsonObjec
 
 		for (UEdGraphNode* Node : NodesSnapshot)
 		{
-			if (!Node) continue;
+			if (!IsValid(Node)) continue;
 
 			// ----- 1. Make/Break struct nodes: retarget + reconstruct with pin preservation -----
 			UK2Node_MakeStruct* MakeNode = Cast<UK2Node_MakeStruct>(Node);
 			UK2Node_BreakStruct* BreakNode = Cast<UK2Node_BreakStruct>(Node);
 			UK2Node_SetFieldsInStruct* SetFieldsNode = Cast<UK2Node_SetFieldsInStruct>(Node);
-			if (MakeNode || BreakNode || SetFieldsNode)
+			if (IsValid(MakeNode) || IsValid(BreakNode) || IsValid(SetFieldsNode))
 			{
 				// All three node types carry a StructType property and allocate pins derived
 				// from it — they share the same snapshot → swap → reconstruct → remap flow.
-				UScriptStruct* CurrentStruct = MakeNode
+				UScriptStruct* CurrentStruct = IsValid(MakeNode)
 					? MakeNode->StructType.Get()
-					: (BreakNode ? BreakNode->StructType.Get() : SetFieldsNode->StructType.Get());
+					: (IsValid(BreakNode) ? BreakNode->StructType.Get() : SetFieldsNode->StructType.Get());
 
 				// In normal mode, match nodes still typed as the old struct. In reconcile mode,
 				// match nodes already migrated to the new struct — lets the caller re-snapshot
@@ -455,14 +454,14 @@ FToolResult ClaireonTool_ReplaceStructUsage::Execute(const TSharedPtr<FJsonObjec
 				UScriptStruct* const ExpectedStruct = bReconcile ? ToStruct : FromStruct;
 				if (CurrentStruct != ExpectedStruct) continue;
 
-				const TCHAR* NodeKind = MakeNode ? TEXT("MakeStruct")
-					: (BreakNode ? TEXT("BreakStruct") : TEXT("SetFieldsInStruct"));
+				const TCHAR* NodeKind = IsValid(MakeNode) ? TEXT("MakeStruct")
+					: (IsValid(BreakNode) ? TEXT("BreakStruct") : TEXT("SetFieldsInStruct"));
 
 				// Dry-run: just count. Leave the node alone.
 				if (bDryRun)
 				{
-					if (MakeNode) ++MakeNodesRetargeted;
-					else if (BreakNode) ++BreakNodesRetargeted;
+					if (IsValid(MakeNode)) ++MakeNodesRetargeted;
+					else if (IsValid(BreakNode)) ++BreakNodesRetargeted;
 					else ++SetFieldsRetargeted;
 					continue;
 				}
@@ -470,8 +469,8 @@ FToolResult ClaireonTool_ReplaceStructUsage::Execute(const TSharedPtr<FJsonObjec
 				const FMakeBreakSnapshot Snapshot = SnapshotNodeLinks(Node);
 				Node->Modify();
 
-				if (MakeNode) MakeNode->StructType = ToStruct;
-				else if (BreakNode) BreakNode->StructType = ToStruct;
+				if (IsValid(MakeNode)) MakeNode->StructType = ToStruct;
+				else if (IsValid(BreakNode)) BreakNode->StructType = ToStruct;
 				else SetFieldsNode->StructType = ToStruct;
 
 				// Clear ShowPinForProperties before reconstruction. UK2Node_StructOperation
@@ -482,8 +481,8 @@ FToolResult ClaireonTool_ReplaceStructUsage::Execute(const TSharedPtr<FJsonObjec
 				// "pin X no longer exists" compile errors despite StructType pointing at the new
 				// struct. Clearing forces the node to rebuild ShowPinForProperties from the
 				// current StructType during AllocateDefaultPins.
-				if (MakeNode) MakeNode->ShowPinForProperties.Reset();
-				else if (BreakNode) BreakNode->ShowPinForProperties.Reset();
+				if (IsValid(MakeNode)) MakeNode->ShowPinForProperties.Reset();
+				else if (IsValid(BreakNode)) BreakNode->ShowPinForProperties.Reset();
 				else SetFieldsNode->ShowPinForProperties.Reset();
 
 				Node->ReconstructNode();
@@ -554,8 +553,8 @@ FToolResult ClaireonTool_ReplaceStructUsage::Execute(const TSharedPtr<FJsonObjec
 					Node->DestroyPin(Pin);
 				}
 
-				if (MakeNode) ++MakeNodesRetargeted;
-				else if (BreakNode) ++BreakNodesRetargeted;
+				if (IsValid(MakeNode)) ++MakeNodesRetargeted;
+				else if (IsValid(BreakNode)) ++BreakNodesRetargeted;
 				else ++SetFieldsRetargeted;
 				continue;
 			}
@@ -563,10 +562,10 @@ FToolResult ClaireonTool_ReplaceStructUsage::Execute(const TSharedPtr<FJsonObjec
 			// ----- 2. Function entry / result user-defined pins + local variables -----
 			UK2Node_FunctionEntry* EntryNode = Cast<UK2Node_FunctionEntry>(Node);
 			UK2Node_FunctionResult* ResultNode = Cast<UK2Node_FunctionResult>(Node);
-			if (EntryNode || ResultNode)
+			if (IsValid(EntryNode) || IsValid(ResultNode))
 			{
 				// User-defined pin specs live on both entry and result; retarget any whose type is the old struct.
-				TArray<TSharedPtr<FUserPinInfo>>& UserPins = EntryNode ? EntryNode->UserDefinedPins : ResultNode->UserDefinedPins;
+				TArray<TSharedPtr<FUserPinInfo>>& UserPins = IsValid(EntryNode) ? EntryNode->UserDefinedPins : ResultNode->UserDefinedPins;
 				bool bAnyChanged = false;
 				for (const TSharedPtr<FUserPinInfo>& UP : UserPins)
 				{
@@ -582,7 +581,7 @@ FToolResult ClaireonTool_ReplaceStructUsage::Execute(const TSharedPtr<FJsonObjec
 				}
 
 				// Local variables (entry-only)
-				if (EntryNode)
+				if (IsValid(EntryNode))
 				{
 					for (FBPVariableDescription& Local : EntryNode->LocalVariables)
 					{
@@ -630,7 +629,7 @@ FToolResult ClaireonTool_ReplaceStructUsage::Execute(const TSharedPtr<FJsonObjec
 	{
 		for (UEdGraphNode* Node : NodesNeedingReconstruction)
 		{
-			if (Node) Node->ReconstructNode();
+			if (IsValid(Node)) Node->ReconstructNode();
 		}
 
 		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);

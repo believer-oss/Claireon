@@ -104,7 +104,11 @@ namespace Cl628WpTestNS
 // ---------------------------------------------------------------------------
 // Fixture match: ids == HuggingFace reference for every row.
 // ---------------------------------------------------------------------------
-UNTEST_UNIT(Claireon, WordPiece, MatchesReferenceIds)
+// Root cause of the historical failure: the default unit budget is 0.5ms, but
+// this test reads the committed 226 KB vocab.txt (~30k entries) off disk and
+// builds the token map, which costs ~5ms. The assertions were correct; only the
+// timeout was wrong. Give it a real file-I/O budget.
+UNTEST_UNIT_OPTS(Claireon, WordPiece, MatchesReferenceIds, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace Cl628WpTestNS;
 
@@ -163,7 +167,8 @@ UNTEST_UNIT(Claireon, WordPiece, MatchesReferenceIds)
 // ---------------------------------------------------------------------------
 // Truncation: a long input is clamped to MaxLen with [CLS] first and [SEP] last.
 // ---------------------------------------------------------------------------
-UNTEST_UNIT(Claireon, WordPiece, TruncatesToMaxLen)
+// Same vocab-load cost as MatchesReferenceIds -- needs the same budget.
+UNTEST_UNIT_OPTS(Claireon, WordPiece, TruncatesToMaxLen, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace Cl628WpTestNS;
 
@@ -194,7 +199,7 @@ UNTEST_UNIT(Claireon, WordPiece, TruncatesToMaxLen)
 // ---------------------------------------------------------------------------
 // Not-ready guard: Encode on an unloaded tokenizer yields empty output.
 // ---------------------------------------------------------------------------
-UNTEST_UNIT(Claireon, WordPiece, NotReadyYieldsEmpty)
+UNTEST_UNIT_OPTS(Claireon, WordPiece, NotReadyYieldsEmpty, UNTEST_TIMEOUTMS(10000))
 {
 	FClaireonWordPieceTokenizer Tok;  // no LoadVocab
 	TArray<int32> Ids, Mask;

@@ -30,7 +30,7 @@ UObject* ClaireonEnhancedInputHelpers::LoadInputAsset(const FString& AssetPath, 
 
 	FSoftObjectPath SoftPath(ResolvedPath);
 	UObject* LoadedObj = SoftPath.TryLoad();
-	if (!LoadedObj)
+	if (!IsValid(LoadedObj))
 	{
 		OutError = FString::Printf(TEXT("Failed to load asset at path: %s"), *ResolvedPath);
 		return nullptr;
@@ -96,7 +96,7 @@ bool ClaireonEnhancedInputHelpers::ParseValueType(const FString& TypeStr, EInput
 
 FString ClaireonEnhancedInputHelpers::FormatObjectProperties(const UObject* Object, const FString& Indent)
 {
-	if (!Object)
+	if (!IsValid(Object))
 	{
 		return TEXT("");
 	}
@@ -146,7 +146,7 @@ FString ClaireonEnhancedInputHelpers::FormatTriggers(const TArray<TObjectPtr<UIn
 	for (int32 i = 0; i < Triggers.Num(); ++i)
 	{
 		const UInputTrigger* Trigger = Triggers[i];
-		if (!Trigger)
+		if (!IsValid(Trigger))
 		{
 			Output += FString::Printf(TEXT("%s  [%d] (null)\n"), *Indent, i);
 			continue;
@@ -172,7 +172,7 @@ FString ClaireonEnhancedInputHelpers::FormatModifiers(const TArray<TObjectPtr<UI
 	for (int32 i = 0; i < Modifiers.Num(); ++i)
 	{
 		const UInputModifier* Modifier = Modifiers[i];
-		if (!Modifier)
+		if (!IsValid(Modifier))
 		{
 			Output += FString::Printf(TEXT("%s  [%d] (null)\n"), *Indent, i);
 			continue;
@@ -188,7 +188,7 @@ FString ClaireonEnhancedInputHelpers::FormatModifiers(const TArray<TObjectPtr<UI
 
 FString ClaireonEnhancedInputHelpers::FormatInputAction(const UInputAction* Action, bool bSummaryOnly)
 {
-	if (!Action)
+	if (!IsValid(Action))
 	{
 		return TEXT("(null Input Action)\n");
 	}
@@ -243,7 +243,7 @@ FString ClaireonEnhancedInputHelpers::FormatMapping(const FEnhancedActionKeyMapp
 
 FString ClaireonEnhancedInputHelpers::FormatMappingContext(const UInputMappingContext* IMC, bool bSummaryOnly)
 {
-	if (!IMC)
+	if (!IsValid(IMC))
 	{
 		return TEXT("(null Input Mapping Context)\n");
 	}
@@ -273,7 +273,7 @@ UClass* ClaireonEnhancedInputHelpers::ResolveModifierClass(const FString& ClassN
 {
 	auto ValidateClass = [](UClass* Class) -> bool
 	{
-		return Class && Class->IsChildOf(UInputModifier::StaticClass()) && !Class->HasAnyClassFlags(CLASS_Abstract);
+		return IsValid(Class) && Class->IsChildOf(UInputModifier::StaticClass()) && !Class->HasAnyClassFlags(CLASS_Abstract);
 	};
 
 	// Try direct name
@@ -318,7 +318,7 @@ UClass* ClaireonEnhancedInputHelpers::ResolveTriggerClass(const FString& ClassNa
 {
 	auto ValidateClass = [](UClass* Class) -> bool
 	{
-		return Class && Class->IsChildOf(UInputTrigger::StaticClass()) && !Class->HasAnyClassFlags(CLASS_Abstract);
+		return IsValid(Class) && Class->IsChildOf(UInputTrigger::StaticClass()) && !Class->HasAnyClassFlags(CLASS_Abstract);
 	};
 
 	// Try direct name
@@ -365,7 +365,7 @@ UClass* ClaireonEnhancedInputHelpers::ResolveTriggerClass(const FString& ClassNa
 
 UInputModifier* ClaireonEnhancedInputHelpers::CreateModifier(UObject* Outer, UClass* ModifierClass)
 {
-	if (!Outer || !ModifierClass)
+	if (!IsValid(Outer) || !IsValid(ModifierClass))
 	{
 		return nullptr;
 	}
@@ -374,7 +374,7 @@ UInputModifier* ClaireonEnhancedInputHelpers::CreateModifier(UObject* Outer, UCl
 
 UInputTrigger* ClaireonEnhancedInputHelpers::CreateTrigger(UObject* Outer, UClass* TriggerClass)
 {
-	if (!Outer || !TriggerClass)
+	if (!IsValid(Outer) || !IsValid(TriggerClass))
 	{
 		return nullptr;
 	}
@@ -388,7 +388,7 @@ UInputTrigger* ClaireonEnhancedInputHelpers::CreateTrigger(UObject* Outer, UClas
 bool ClaireonEnhancedInputHelpers::SetObjectProperty(UObject* Object, const FString& PropertyName,
 	const FString& PropertyValue, FString& OutError)
 {
-	if (!Object)
+	if (!IsValid(Object))
 	{
 		OutError = TEXT("Object is null");
 		return false;
@@ -430,7 +430,7 @@ TArray<FEnhancedActionKeyMapping>& ClaireonEnhancedInputHelpers::GetMappingsMuta
 
 void ClaireonEnhancedInputHelpers::NotifyMappingContextModified(UInputMappingContext* IMC)
 {
-	if (!IMC)
+	if (!IsValid(IMC))
 	{
 		return;
 	}

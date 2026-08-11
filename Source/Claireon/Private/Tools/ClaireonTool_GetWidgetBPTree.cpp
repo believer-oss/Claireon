@@ -93,7 +93,7 @@ ClaireonTool_GetWidgetBPTree::FToolResult ClaireonTool_GetWidgetBPTree::Execute(
 	AssetPath = ResolveResult.ResolvedPath.Path;
 
 	UWidgetBlueprint* WBP = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
-	if (!WBP)
+	if (!IsValid(WBP))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load Widget Blueprint: %s"), *AssetPath));
 	}
@@ -120,7 +120,7 @@ ClaireonTool_GetWidgetBPTree::FToolResult ClaireonTool_GetWidgetBPTree::Execute(
 	// root class from the actual UWidget so the summary stays informative.
 	int32 WidgetCount = 0;
 	FString RootWidgetClass;
-	if (UWidgetTree* WT = WBP->WidgetTree)
+	if (UWidgetTree* WT = WBP->WidgetTree; IsValid(WT))
 	{
 		if (WT->RootWidget)
 		{
@@ -134,14 +134,16 @@ ClaireonTool_GetWidgetBPTree::FToolResult ClaireonTool_GetWidgetBPTree::Execute(
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("asset_path"), AssetPath);
-	// Note: `root_widget`/`widget_count` removed in F3 -- use `tree.root` and walk it
-	// instead. Keep `root_class` and `widget_count` as scalar conveniences alongside the
+	// Note: `root_widget`/`widget_count` removed in F3 -- use `widget_tree.root` and walk
+	// it instead. Keep `root_class` and `widget_count` as scalar conveniences alongside the
 	// structured tree so summary-only consumers do not regress.
+	// Field is `widget_tree` (not `tree`) to match the edit family's BuildStateResponse,
+	// which is the larger surface. See C7 in Docs/llm/todo/claireon-product-defects.md.
 	Data->SetStringField(TEXT("root_class"), RootWidgetClass);
 	Data->SetNumberField(TEXT("widget_count"), WidgetCount);
 	if (TreeObj.IsValid())
 	{
-		Data->SetObjectField(TEXT("tree"), TreeObj);
+		Data->SetObjectField(TEXT("widget_tree"), TreeObj);
 	}
 
 	// Extract asset short name for summary

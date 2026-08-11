@@ -36,7 +36,7 @@ FToolResult ClaireonInputTool_AddActionModifier::Execute(const TSharedPtr<FJsonO
 	}
 
 	UInputAction* IA = RequireInputAction(Data, Error);
-	if (!IA)
+	if (!IsValid(IA))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -48,7 +48,7 @@ FToolResult ClaireonInputTool_AddActionModifier::Execute(const TSharedPtr<FJsonO
 	}
 
 	UClass* ModifierClass = ClaireonEnhancedInputHelpers::ResolveModifierClass(ModifierClassName, Error);
-	if (!ModifierClass)
+	if (!IsValid(ModifierClass))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -57,7 +57,7 @@ FToolResult ClaireonInputTool_AddActionModifier::Execute(const TSharedPtr<FJsonO
 	IA->Modify();
 
 	UInputModifier* NewModifier = ClaireonEnhancedInputHelpers::CreateModifier(IA, ModifierClass);
-	if (!NewModifier)
+	if (!IsValid(NewModifier))
 	{
 		return MakeErrorResult(TEXT("Failed to create modifier instance"));
 	}

@@ -4,6 +4,7 @@
 #include "Tools/ClaireonAnimTools_Notify.h"
 #include "Tools/ClaireonAnimHelpers.h"
 #include "Tools/ClaireonPropertyUtils.h"
+#include "ClaireonNameResolver.h"
 #include "ClaireonLog.h"
 #include "Animation/AnimSequenceBase.h"
 #include "Animation/AnimNotifies/AnimNotify.h"
@@ -27,7 +28,7 @@ TSharedPtr<FJsonObject> ClaireonAnimTool_AddNotify::GetInputSchema() const
 {
 	FToolSchemaBuilder S;
 	S.AddSessionParams();
-	S.AddString(TEXT("notify_type"), TEXT("'skeleton' for skeleton notifies, or a class name (e.g. 'AnimNotify_PlaySound', 'ANS_ComboWindow')"), true);
+	S.AddString(TEXT("notify_type"), TEXT("'skeleton' for skeleton notifies (requires notify_name), or a notify class for class-based notifies. Accepts any UAnimNotify (instant) or UAnimNotifyState (state) subclass, native or Blueprint, in any spelling: short name ('AnimNotify_PlaySound', 'AnimNotifyState_TimedParticleEffect'), U-prefixed C++ name ('UAnimNotifyState_TimedParticleEffect'), rooted /Script/ path, or Blueprint class name ('ANS_ComboWindow'). State-vs-instant is classified from the resolved class, not from the name."), true);
 	S.AddNumber(TEXT("time"), TEXT("Time in seconds where the notify starts"), true);
 	S.AddString(TEXT("notify_name"), TEXT("Name for skeleton notifies (required when notify_type='skeleton')"));
 	S.AddNumber(TEXT("duration"), TEXT("Duration in seconds (for state notifies)"));
@@ -76,7 +77,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddNotify::Execute(const TSharedPtr<
 	int32 TrackIndex = static_cast<int32>(TrackIndexD);
 
 	UAnimSequenceBase* Anim = Data->Animation.Get();
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		return MakeErrorResult(TEXT("Animation asset is no longer valid"));
 	}
@@ -97,12 +98,71 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddNotify::Execute(const TSharedPtr<
 	}
 	else
 	{
-		bool bIsState = NotifyType.Contains(TEXT("State")) || NotifyType.StartsWith(TEXT("ANS_"));
-		UClass* NotifyClass = ClaireonAnimHelpers::ResolveNotifyClass(NotifyType, bIsState, OpError);
-		if (!NotifyClass)
+		// Resolve the class FIRST against both notify base classes, then let the
+		// helper classify state-vs-instant from the RESOLVED class
+		// (IsChildOf(UAnimNotifyState) inside AddClassNotify). The old name
+		// heuristic ("State" substring / "ANS_" prefix) picked a single base up
+		// front, so native notify-state classes matching neither spelling (e.g.
+		// FSANS_ApplyGameplayEffects) failed to resolve under every spelling.
+		// The heuristic is kept ONLY as a tiebreaker: it orders which scope the
+		// Blueprint asset-registry fallback tries first, and it breaks the tie
+		// when the same name resolves to different classes in both scopes.
+		const bool bNameSuggestsState = NotifyType.Contains(TEXT("State")) || NotifyType.StartsWith(TEXT("ANS_"));
+
+		TArray<UClass*> NotifyBases;
+		NotifyBases.Add(UAnimNotify::StaticClass());
+		NotifyBases.Add(UAnimNotifyState::StaticClass());
+
+		ClaireonNameResolver::FNameResolveResult ResolveResult;
+		UClass* NotifyClass = ClaireonNameResolver::ResolveClassNameMultiBase(NotifyType, NotifyBases, ResolveResult);
+
+		// If the multi-base resolution ended in ambiguity (cross-base: a
+		// different class per scope; or within-base: multiple matches inside
+		// one scope), remember the precise error so a total failure below
+		// reports the ambiguity instead of a generic not-found.
+		FString AmbiguityError;
+		if (!IsValid(NotifyClass) && ResolveResult.Candidates.Num() > 1)
 		{
-			return MakeErrorResult(OpError);
+			AmbiguityError = ResolveResult.Error;
+
+			// Cross-base ambiguity (e.g. both an AnimNotify_X and an
+			// AnimNotifyState_X exist): preserve the previously-working call
+			// shape by re-resolving inside the heuristic-preferred scope only.
+			// A within-base ambiguity fails this re-resolve too and falls
+			// through to the Blueprint fallback below.
+			UClass* PreferredBase = bNameSuggestsState ? UAnimNotifyState::StaticClass() : UAnimNotify::StaticClass();
+			ClaireonNameResolver::FNameResolveResult TiebreakResult;
+			NotifyClass = ClaireonNameResolver::ResolveClassName(NotifyType, PreferredBase, TiebreakResult);
 		}
+
+		if (!IsValid(NotifyClass))
+		{
+			// Blueprint asset-registry fallback (existing helper), tried under
+			// both base gates so BP-authored classes keep resolving exactly as
+			// before regardless of their naming convention. The heuristic only
+			// orders which scope is scanned first.
+			FString UnusedBPFallbackError;
+			NotifyClass = ClaireonAnimHelpers::ResolveNotifyClass(NotifyType, bNameSuggestsState, UnusedBPFallbackError);
+			if (!IsValid(NotifyClass))
+			{
+				NotifyClass = ClaireonAnimHelpers::ResolveNotifyClass(NotifyType, !bNameSuggestsState, UnusedBPFallbackError);
+			}
+		}
+
+		if (!IsValid(NotifyClass))
+		{
+			if (!AmbiguityError.IsEmpty())
+			{
+				return MakeErrorResult(AmbiguityError);
+			}
+			// NOTE: this exact error text is pinned by
+			// Tests/ClaireonNotifyClassResolveTests.cpp
+			// (AddNotify_GarbageName_ErrorNamesScopes). Keep them in sync.
+			return MakeErrorResult(FString::Printf(
+				TEXT("Could not resolve notify class '%s'. Attempted scopes: AnimNotify, AnimNotifyState (native classes and Blueprint asset registry). Use a class name like 'AnimNotify_PlaySound' or 'AnimNotifyState_TimedParticleEffect', a U-prefixed C++ name, or a /Script/ path."),
+				*NotifyType));
+		}
+
 		NewIndex = ClaireonAnimHelpers::AddClassNotify(Anim, NotifyClass, static_cast<float>(Time), static_cast<float>(Duration), TrackIndex, OpError);
 	}
 
@@ -170,7 +230,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_RemoveNotify::Execute(const TSharedP
 	int32 NotifyIndex = static_cast<int32>(NotifyIndexD);
 
 	UAnimSequenceBase* Anim = Data->Animation.Get();
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		return MakeErrorResult(TEXT("Animation asset is no longer valid"));
 	}
@@ -244,7 +304,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_MoveNotify::Execute(const TSharedPtr
 	if (EndTime >= 0.0 && NewDuration < 0.0)
 	{
 		UAnimSequenceBase* Anim = Data->Animation.Get();
-		if (!Anim)
+		if (!IsValid(Anim))
 		{
 			return MakeErrorResult(TEXT("Animation asset is no longer valid"));
 		}
@@ -262,7 +322,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_MoveNotify::Execute(const TSharedPtr
 	}
 
 	UAnimSequenceBase* Anim = Data->Animation.Get();
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		return MakeErrorResult(TEXT("Animation asset is no longer valid"));
 	}
@@ -318,7 +378,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_DuplicateNotify::Execute(const TShar
 	int32 SourceIndex = static_cast<int32>(NotifyIndexD);
 
 	UAnimSequenceBase* Anim = Data->Animation.Get();
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		return MakeErrorResult(TEXT("Animation asset is no longer valid"));
 	}
@@ -424,7 +484,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_SetNotifyProperty::Execute(const TSh
 	}
 
 	UAnimSequenceBase* Anim = Data->Animation.Get();
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		return MakeErrorResult(TEXT("Animation asset is no longer valid"));
 	}
@@ -485,7 +545,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_GetNotifyProperty::Execute(const TSh
 	}
 
 	UAnimSequenceBase* Anim = Data->Animation.Get();
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		return MakeErrorResult(TEXT("Animation asset is no longer valid"));
 	}
@@ -545,7 +605,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_ListNotifyProperties::Execute(const 
 	Arguments->TryGetStringField(TEXT("filter"), Filter);
 
 	UAnimSequenceBase* Anim = Data->Animation.Get();
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		return MakeErrorResult(TEXT("Animation asset is no longer valid"));
 	}
@@ -558,7 +618,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_ListNotifyProperties::Execute(const 
 	const FAnimNotifyEvent& Event = Anim->Notifies[NotifyIndex];
 	UObject* SubObject = Event.Notify ? static_cast<UObject*>(Event.Notify) : static_cast<UObject*>(Event.NotifyStateClass);
 
-	if (!SubObject)
+	if (!IsValid(SubObject))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Notify at index %d is a skeleton notify with no sub-object (no properties to list)"), NotifyIndex));
 	}
@@ -605,7 +665,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddNotifyTrack::Execute(const TShare
 	if (!Arguments->TryGetStringField(TEXT("track_name"), TrackName) || TrackName.IsEmpty())
 	{
 		UAnimSequenceBase* Anim = Data->Animation.Get();
-		if (Anim)
+		if (IsValid(Anim))
 		{
 			TrackName = FString::Printf(TEXT("Track %d"), Anim->AnimNotifyTracks.Num());
 		}
@@ -616,7 +676,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddNotifyTrack::Execute(const TShare
 	}
 
 	UAnimSequenceBase* Anim = Data->Animation.Get();
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		return MakeErrorResult(TEXT("Animation asset is no longer valid"));
 	}
@@ -669,7 +729,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_RemoveNotifyTrack::Execute(const TSh
 	int32 TrackIndex = static_cast<int32>(TrackIndexD);
 
 	UAnimSequenceBase* Anim = Data->Animation.Get();
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		return MakeErrorResult(TEXT("Animation asset is no longer valid"));
 	}
@@ -752,7 +812,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_RenameNotifyTrack::Execute(const TSh
 	}
 
 	UAnimSequenceBase* Anim = Data->Animation.Get();
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		return MakeErrorResult(TEXT("Animation asset is no longer valid"));
 	}
@@ -816,7 +876,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_ReorderNotifyTrack::Execute(const TS
 	int32 NewIndex = static_cast<int32>(NewIndexD);
 
 	UAnimSequenceBase* Anim = Data->Animation.Get();
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		return MakeErrorResult(TEXT("Animation asset is no longer valid"));
 	}

@@ -62,7 +62,7 @@ FToolResult ClaireonLevelSequenceTool_AddSection::Execute(const TSharedPtr<FJson
 
 	UMovieSceneTrack* Track = ClaireonLevelSequenceInternal::ResolveFocusedTrack(
 		Data->Sequence->GetMovieScene(), Data->FocusedBindingIndex, Data->FocusedTrackIndex, Error);
-	if (!Track)
+	if (!IsValid(Track))
 	{
 		return MakeErrorResult(Error);
 	}

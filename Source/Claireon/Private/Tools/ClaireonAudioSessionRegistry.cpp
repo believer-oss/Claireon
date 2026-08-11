@@ -4,7 +4,7 @@
 #include "Tools/ClaireonAudioSessionRegistry.h"
 #include "ClaireonSessionManager.h"
 
-namespace
+namespace ClaireonAudioSessionRegistry_Private
 {
 	// namespace-isolated helpers. Names are unique enough across the Claireon module that no
 	// further file-local discriminator prefix is needed (verified by basename uniqueness scan).
@@ -28,6 +28,7 @@ namespace
 		return b;
 	}
 }
+using namespace ClaireonAudioSessionRegistry_Private;
 
 void ClaireonAudioSessionRegistry::EnsureDelegateRegistered()
 {

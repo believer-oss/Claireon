@@ -17,7 +17,7 @@ FString ClaireonWidgetBPTool_RemoveMVVMBinding::GetOperation() const { return TE
 
 FString ClaireonWidgetBPTool_RemoveMVVMBinding::GetDescription() const
 {
-    return TEXT("Remove an MVVM binding by id from the Widget Blueprint in the open editing session. Requires open session_id from widgetbp_open. Transactional. Common pitfall: the binding_id must match the id returned by widgetbp_list_mvvm_bindings; deleting a binding does not affect the viewmodel context itself.");
+    return TEXT("Remove an MVVM binding by id from the Widget Blueprint in the open editing session. Requires open session_id from widgetbp_open. Transactional. Common pitfall: binding_id must match the binding_id returned by widgetbp_list_mvvm_bindings; deleting a binding does not affect the viewmodel context itself.");
 }
 
 TSharedPtr<FJsonObject> ClaireonWidgetBPTool_RemoveMVVMBinding::GetInputSchema() const
@@ -39,7 +39,7 @@ FToolResult ClaireonWidgetBPTool_RemoveMVVMBinding::Execute(const TSharedPtr<FJs
         return Error;
     }
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
-	if (!WBP)
+	if (!IsValid(WBP))
 	{
 		return MakeErrorResult(TEXT("Widget Blueprint is no longer valid"));
 	}
@@ -57,7 +57,7 @@ FToolResult ClaireonWidgetBPTool_RemoveMVVMBinding::Execute(const TSharedPtr<FJs
 	}
 
 	UMVVMBlueprintView* View = ClaireonWidgetHelpers::GetOrCreateMVVMBlueprintView(WBP);
-	if (!View)
+	if (!IsValid(View))
 	{
 		return MakeErrorResult(TEXT("No MVVM Blueprint View exists"));
 	}
@@ -75,8 +75,11 @@ FToolResult ClaireonWidgetBPTool_RemoveMVVMBinding::Execute(const TSharedPtr<FJs
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
 	Data->bModified = true;
 
+	// Field is `binding_id` (not `removed_binding_id`) so every MVVM binding
+	// response -- add, edit, list, remove -- uses the identical key. See C7 in
+	// Docs/llm/todo/claireon-product-defects.md.
 	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
-	ResultObj->SetStringField(TEXT("removed_binding_id"), BindingIdStr);
+	ResultObj->SetStringField(TEXT("binding_id"), BindingIdStr);
 
 	return MakeSuccessResult(ResultObj, FString::Printf(TEXT("Removed MVVM binding '%s'"), *BindingIdStr));
 }

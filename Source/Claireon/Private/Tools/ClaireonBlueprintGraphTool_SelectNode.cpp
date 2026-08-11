@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -126,7 +126,7 @@ FToolResult ClaireonBlueprintGraphTool_SelectNode::Execute(const TSharedPtr<FJso
     }
 	UEdGraph* Graph = Data->Graph.Get();
 
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(TEXT("Graph is no longer valid"));
 	}
@@ -138,24 +138,17 @@ FToolResult ClaireonBlueprintGraphTool_SelectNode::Execute(const TSharedPtr<FJso
 		return MakeErrorResult(TEXT("Missing required field: node_guid"));
 	}
 
-	FGuid NodeGuid;
-	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
+	// Find the node (full GUID or >=8-hex prefix)
+	FString ResolveError;
+	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperationStr(Graph, NodeGuidStr, Data, ResolveError);
+	if (!IsValid(Node))
 	{
-		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
-	}
-
-	// Find the node
-	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperation(Graph, NodeGuid, Data);
-	if (!Node)
-	{
-		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
-		return MakeErrorResult(FString::Printf(TEXT("Node not found with GUID: %s in graph '%s'.\n%s"),
-			*NodeGuidStr, *Graph->GetName(), *AvailableNodes));
+		return MakeErrorResult(ResolveError);
 	}
 
 	// Move cursor to this node
 	Data->Cursor.PushHistory(Data->Cursor.GraphName);
-	Data->Cursor.FocusedNodeGuid = NodeGuid;
+	Data->Cursor.FocusedNodeGuid = Node->NodeGuid;
 
 	// Focus on first output pin
 	UEdGraphPin* FirstOutputPin = ClaireonBlueprintHelpers::GetFirstOutputPin(Node);

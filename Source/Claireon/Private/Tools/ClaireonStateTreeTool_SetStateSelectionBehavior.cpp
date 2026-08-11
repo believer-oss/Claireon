@@ -39,7 +39,7 @@ FToolResult ClaireonStateTreeTool_SetStateSelectionBehavior::Execute(const TShar
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	FGuid StateId;
@@ -51,7 +51,7 @@ FToolResult ClaireonStateTreeTool_SetStateSelectionBehavior::Execute(const TShar
 		return MakeErrorResult(TEXT("Missing parameter: behavior"));
 
 	UStateTreeState* State = ClaireonStateTreeHelpers::FindStateById(EditorData, StateId);
-	if (!State)
+	if (!IsValid(State))
 		return MakeErrorResult(TEXT("State not found"));
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Set State Selection Behavior")));

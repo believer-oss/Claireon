@@ -78,7 +78,7 @@ bool FClaireonDeltaApplicator_LevelSequence::OpenOrReuseSession(const TSharedPtr
 	}
 
 	ULevelSequence* Sequence = FClaireonSequenceHelpers::LoadLevelSequenceAsset(AssetPathArg, OutError);
-	if (!Sequence) { return false; }
+	if (!IsValid(Sequence)) { return false; }
 
 	ClaireonLevelSequenceEditToolBase::EnsureDelegateRegistered();
 
@@ -113,13 +113,13 @@ bool FClaireonDeltaApplicator_LevelSequence::ApplyPhase2_Remove(const FString& S
 	using namespace ClaireonDeltaApplicator_LS_anon;
 	(void)SessionId;
 	ULevelSequence* Sequence = CachedSequence.Get();
-	if (!Sequence)
+	if (!IsValid(Sequence))
 	{
 		AddError(TEXT("level_sequence_apply_delta: sequence is no longer valid"));
 		return false;
 	}
 	UMovieScene* MovieScene = Sequence->GetMovieScene();
-	if (!MovieScene)
+	if (!IsValid(MovieScene))
 	{
 		AddError(TEXT("level_sequence_apply_delta: movie scene is no longer valid"));
 		return false;
@@ -206,7 +206,7 @@ bool FClaireonDeltaApplicator_LevelSequence::ApplyPhase3_Create(const FString& S
 	using namespace ClaireonDeltaApplicator_LS_anon;
 	(void)SessionId;
 	ULevelSequence* Sequence = CachedSequence.Get();
-	if (!Sequence)
+	if (!IsValid(Sequence))
 	{
 		AddError(TEXT("level_sequence_apply_delta: sequence is no longer valid"));
 		return false;
@@ -240,8 +240,8 @@ bool FClaireonDeltaApplicator_LevelSequence::ApplyPhase3_Create(const FString& S
 			return false;
 		}
 		UClass* ObjectClass = FindObject<UClass>(nullptr, *ObjectClassPath);
-		if (!ObjectClass) { ObjectClass = LoadObject<UClass>(nullptr, *ObjectClassPath); }
-		if (!ObjectClass)
+		if (!IsValid(ObjectClass)) { ObjectClass = LoadObject<UClass>(nullptr, *ObjectClassPath); }
+		if (!IsValid(ObjectClass))
 		{
 			AddError(FString::Printf(TEXT("level_sequence_apply_delta: nodes[%d]: could not resolve object_class '%s'"), i, *ObjectClassPath));
 			return false;
@@ -269,7 +269,7 @@ void FClaireonDeltaApplicator_LevelSequence::FinalizeSession(const FString& Sess
 {
 	(void)SessionId;
 	ULevelSequence* Sequence = CachedSequence.Get();
-	if (Sequence) { ClaireonLevelSequenceInternal::MarkMutated(Sequence); }
+	if (IsValid(Sequence)) { ClaireonLevelSequenceInternal::MarkMutated(Sequence); }
 }
 
 void FClaireonDeltaApplicator_LevelSequence::CloseSessionIfOwned(const FString& SessionId)
@@ -285,7 +285,7 @@ void FClaireonDeltaApplicator_LevelSequence::Phase3CleanupOnFailure(const FStrin
 {
 	(void)SessionId;
 	ULevelSequence* Sequence = CachedSequence.Get();
-	if (!Sequence) { return; }
+	if (!IsValid(Sequence)) { return; }
 	for (const FGuid& BindingGuid : CreatedBindingsThisCall)
 	{
 		FString RemError;

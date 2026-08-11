@@ -16,10 +16,10 @@ FString ClaireonTool_GasSetTags::GetOperation() const { return TEXT("set_tags");
 
 FString ClaireonTool_GasSetTags::GetDescription() const
 {
-	return TEXT("Add or remove loose gameplay tags on a live PIE actor's ASC -- simulate a trigger/state "
-		"condition (e.g. add a state tag so an aspect's HitModifier condition fires). Args: tags (array "
-		"of registered gameplay tag strings) and op ('add' or 'remove'). Defaults to the server world. "
-		"Returns the owned tags after the change. Requires PIE.");
+	return TEXT("Add or remove loose gameplay tags on a live PIE actor's ASC to simulate a trigger/state condition "
+		"(e.g. add a state tag so an aspect's HitModifier condition fires). Args: tags (array of registered "
+		"gameplay tag strings) and op ('add' or 'remove'). Requires a live PIE session; net_mode defaults "
+		"to the server world. Returns the owned tags after the change.");
 }
 
 EClaireonToolSessionMode ClaireonTool_GasSetTags::GetSessionMode() const

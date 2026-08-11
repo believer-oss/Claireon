@@ -29,7 +29,10 @@ FString FClaireonCameraAssetTool_Save::GetOperation() const { return TEXT("save"
 
 FString FClaireonCameraAssetTool_Save::GetDescription() const
 {
-	return TEXT("Save a UCameraAsset to disk after running BuildCamera validation; returns the captured build log.");
+	return TEXT("Save the UCameraAsset at asset_path to disk, first running BuildCamera and returning the captured "
+		"build log plus error_count; bytes are written even when the build reports errors, so call "
+		"camera_asset_compile first to gate strictly. Non-session: this is the persist step for the in-memory "
+		"edits made by the other camera_asset tools; no open session is involved.");
 }
 
 TSharedPtr<FJsonObject> FClaireonCameraAssetTool_Save::GetInputSchema() const
@@ -58,7 +61,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_Save::Execute(const TSharedP
 	}
 
 	UCameraAsset* Asset = LoadObject<UCameraAsset>(nullptr, *Canon);
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Camera asset not found: %s"), *Canon));
 	}
@@ -101,7 +104,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_Save::Execute(const TSharedP
 	// camera_asset_compile first.
 
 	UPackage* Package = Asset->GetPackage();
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		Data->SetBoolField(TEXT("success"), false);
 		Data->SetStringField(TEXT("error"), TEXT("Asset has no package"));

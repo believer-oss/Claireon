@@ -36,7 +36,7 @@ namespace ClaireonWidgetBPTool_ApplyDeltaTests_anon
 		UPackage* Pkg = GetTransientPackage();
 		UWidgetBlueprint* WBP = NewObject<UWidgetBlueprint>(
 			Pkg, FName(TEXT("WBP_ClaireonDeltaFixture")), RF_Transient | RF_Transactional);
-		if (!WBP) { return nullptr; }
+		if (!IsValid(WBP)) { return nullptr; }
 		WBP->ParentClass = UUserWidget::StaticClass();
 		WBP->WidgetTree = NewObject<UWidgetTree>(WBP, FName(TEXT("WidgetTree")), RF_Transactional);
 		UCanvasPanel* Root = WBP->WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), FName(TEXT("Root")));
@@ -266,10 +266,10 @@ UNTEST_UNIT_OPTS(Claireon, WidgetBPApplyDelta, H4_ReparentMatchesMoveWidgetHelpe
 	auto CheckTree = [](UWidgetBlueprint* WBP) -> bool
 	{
 		UCanvasPanel* Root = Cast<UCanvasPanel>(WBP->WidgetTree->RootWidget);
-		if (!Root) { return false; }
+		if (!IsValid(Root)) { return false; }
 		if (Root->GetChildrenCount() != 2) { return false; }
 		UVerticalBox* VB = Cast<UVerticalBox>(ClaireonWidgetHelpers::FindWidgetByName(WBP->WidgetTree, FName(TEXT("vb"))));
-		if (!VB) { return false; }
+		if (!IsValid(VB)) { return false; }
 		if (VB->GetChildrenCount() != 0) { return false; }
 		return true;
 	};

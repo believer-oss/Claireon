@@ -5,6 +5,7 @@
 #include "Untest.h"
 #include "Tools/ClaireonPropertyResolver.h"
 #include "Tools/ClaireonAssetUtils.h"
+#include "ClaireonLog.h"
 #include "ScopedTransaction.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -23,15 +24,15 @@ namespace ClaireonPropertyResolverTestsHelpers
 
 AActor* FindTestActorWithComponents()
 {
-	if (!GEditor) return nullptr;
+	if (!IsValid(GEditor)) return nullptr;
 	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World) return nullptr;
+	if (!IsValid(World)) return nullptr;
 
 	// Find any actor that has a root component and at least one other component
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
 		AActor* Actor = *It;
-		if (!Actor || !Actor->GetRootComponent()) continue;
+		if (!IsValid(Actor) || !IsValid(Actor->GetRootComponent())) continue;
 		TArray<UActorComponent*> Components;
 		Actor->GetComponents(Components);
 		if (Components.Num() >= 2) return Actor;
@@ -47,7 +48,7 @@ UBlueprint* LoadBlueprintWithSCSComponents()
 	{
 		FString Error;
 		UBlueprint* BP = LoadObject<UBlueprint>(nullptr, *Asset.GetObjectPathString());
-		if (!BP || !BP->SimpleConstructionScript) continue;
+		if (!IsValid(BP) || !BP->SimpleConstructionScript) continue;
 		if (BP->SimpleConstructionScript->GetAllNodes().Num() > 0)
 		{
 			return BP;
@@ -62,11 +63,11 @@ UBlueprint* LoadBlueprintWithSCSComponents()
 // ResolvePropertyOnActor tests
 // ---------------------------------------------------------------------------
 
-UNTEST_UNIT(Claireon, PropertyResolver_Actor, RootProperty)
+UNTEST_UNIT_OPTS(Claireon, PropertyResolver_Actor, RootProperty, UNTEST_TIMEOUTMS(5000))
 {
-	if (!GEditor) co_return;
+	if (!IsValid(GEditor)) co_return;
 	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World) co_return;
+	if (!IsValid(World)) co_return;
 
 	AActor* Actor = nullptr;
 	for (TActorIterator<AActor> It(World); It; ++It)
@@ -85,10 +86,10 @@ UNTEST_UNIT(Claireon, PropertyResolver_Actor, RootProperty)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PropertyResolver_Actor, RootComponentFallback)
+UNTEST_UNIT_OPTS(Claireon, PropertyResolver_Actor, RootComponentFallback, UNTEST_TIMEOUTMS(5000))
 {
 	AActor* Actor = ClaireonPropertyResolverTestsHelpers::FindTestActorWithComponents();
-	if (!Actor) co_return; // skip gracefully
+	if (!IsValid(Actor)) co_return; // skip gracefully
 
 	ClaireonPropertyResolver::FResolvedProperty Resolved;
 	FString Error;
@@ -100,32 +101,32 @@ UNTEST_UNIT(Claireon, PropertyResolver_Actor, RootComponentFallback)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PropertyResolver_Actor, ComponentFallback)
+UNTEST_UNIT_OPTS(Claireon, PropertyResolver_Actor, ComponentFallback, UNTEST_TIMEOUTMS(5000))
 {
-	if (!GEditor) co_return;
+	if (!IsValid(GEditor)) co_return;
 	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World) co_return;
+	if (!IsValid(World)) co_return;
 
 	// Find an actor with a primitive component that has CastShadow
 	AActor* TestActor = nullptr;
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
 		AActor* Actor = *It;
-		if (!Actor) continue;
+		if (!IsValid(Actor)) continue;
 		TArray<UActorComponent*> Components;
 		Actor->GetComponents(Components);
 		for (UActorComponent* Comp : Components)
 		{
-			if (Comp && Comp != Actor->GetRootComponent() &&
+			if (IsValid(Comp) && Comp != Actor->GetRootComponent() &&
 				Comp->GetClass()->FindPropertyByName(FName(TEXT("CastShadow"))))
 			{
 				TestActor = Actor;
 				break;
 			}
 		}
-		if (TestActor) break;
+		if (IsValid(TestActor)) break;
 	}
-	if (!TestActor) co_return; // skip gracefully
+	if (!IsValid(TestActor)) co_return; // skip gracefully
 
 	ClaireonPropertyResolver::FResolvedProperty Resolved;
 	FString Error;
@@ -139,10 +140,10 @@ UNTEST_UNIT(Claireon, PropertyResolver_Actor, ComponentFallback)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PropertyResolver_Actor, ExplicitComponentPrefix)
+UNTEST_UNIT_OPTS(Claireon, PropertyResolver_Actor, ExplicitComponentPrefix, UNTEST_TIMEOUTMS(5000))
 {
 	AActor* Actor = ClaireonPropertyResolverTestsHelpers::FindTestActorWithComponents();
-	if (!Actor || !Actor->GetRootComponent()) co_return;
+	if (!IsValid(Actor) || !IsValid(Actor->GetRootComponent())) co_return;
 
 	FString CompName = Actor->GetRootComponent()->GetName();
 	FString Path = CompName + TEXT(".Mobility");
@@ -156,11 +157,11 @@ UNTEST_UNIT(Claireon, PropertyResolver_Actor, ExplicitComponentPrefix)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PropertyResolver_Actor, NotFound)
+UNTEST_UNIT_OPTS(Claireon, PropertyResolver_Actor, NotFound, UNTEST_TIMEOUTMS(5000))
 {
-	if (!GEditor) co_return;
+	if (!IsValid(GEditor)) co_return;
 	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World) co_return;
+	if (!IsValid(World)) co_return;
 
 	AActor* Actor = nullptr;
 	for (TActorIterator<AActor> It(World); It; ++It)
@@ -182,10 +183,10 @@ UNTEST_UNIT(Claireon, PropertyResolver_Actor, NotFound)
 // ReadPropertyOnActor / WritePropertyOnActor tests
 // ---------------------------------------------------------------------------
 
-UNTEST_UNIT(Claireon, PropertyResolver_Actor, ReadViaFallback)
+UNTEST_UNIT_OPTS(Claireon, PropertyResolver_Actor, ReadViaFallback, UNTEST_TIMEOUTMS(5000))
 {
 	AActor* Actor = ClaireonPropertyResolverTestsHelpers::FindTestActorWithComponents();
-	if (!Actor) co_return;
+	if (!IsValid(Actor)) co_return;
 
 	ClaireonPropertyResolver::FResolvedProperty Resolved;
 	FString Error;
@@ -198,9 +199,9 @@ UNTEST_UNIT(Claireon, PropertyResolver_Actor, ReadViaFallback)
 
 UNTEST_UNIT_OPTS(Claireon, PropertyResolver_Actor, WriteReadRoundTrip, UNTEST_TIMEOUTMS(5000))
 {
-	if (!GEditor) co_return;
+	if (!IsValid(GEditor)) co_return;
 	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World) co_return;
+	if (!IsValid(World)) co_return;
 
 	AActor* Actor = nullptr;
 	for (TActorIterator<AActor> It(World); It; ++It)
@@ -226,7 +227,32 @@ UNTEST_UNIT_OPTS(Claireon, PropertyResolver_Actor, WriteReadRoundTrip, UNTEST_TI
 		UNTEST_EXPECT_STRCASEEQ(*NewVal, TEXT("True"));
 	}
 
-	GEditor->UndoTransaction();
+	// The undo half only runs where an undo actually happens. GEditor->Trans is
+	// created in UEditorEngine::Init (UEditorEngine::CreateTrans), which an Untest
+	// commandlet never reaches, so FScopedTransaction records nothing and
+	// UndoTransaction() returns false without touching the actor. The old
+	// unconditional assertion failed for that reason, not because
+	// WritePropertyOnActor/ReadPropertyOnActor misbehaved -- both are still
+	// asserted above. Gate on the return value so the assertion keeps running in
+	// a warm editor.
+	const bool bUndone = GEditor->UndoTransaction();
+	if (!bUndone)
+	{
+		UE_LOG(LogClaireon, Warning,
+			TEXT("PropertyResolver_Actor.WriteReadRoundTrip: skipping the undo-restores assertion -- ")
+			TEXT("GEditor->UndoTransaction() returned false, which means this process has no editor ")
+			TEXT("transaction buffer (GEditor->Trans is null outside UEditorEngine::Init, e.g. in a ")
+			TEXT("commandlet). Restoring bHidden with a direct write instead."));
+
+		// Undo could not put the actor back, so write the original value through
+		// the same resolver. That also keeps the round trip meaningful: the value
+		// has to survive being written twice.
+		FString RestoreError;
+		ClaireonPropertyResolver::FResolvedProperty RestoreResolved;
+		ClaireonPropertyResolver::WritePropertyOnActor(Actor, TEXT("bHidden"), Original, RestoreResolved, RestoreError);
+		UNTEST_EXPECT_TRUE(RestoreError.IsEmpty());
+	}
+
 	FString Restored = ClaireonPropertyResolver::ReadPropertyOnActor(Actor, TEXT("bHidden"), ReadResolved3, Error);
 	UNTEST_EXPECT_STREQ(*Restored, *Original);
 	co_return;
@@ -239,8 +265,8 @@ UNTEST_UNIT_OPTS(Claireon, PropertyResolver_Actor, WriteReadRoundTrip, UNTEST_TI
 UNTEST_UNIT_OPTS(Claireon, PropertyResolver_CDO, DirectProperty, UNTEST_TIMEOUTMS(5000))
 {
 	UBlueprint* Blueprint = ClaireonPropertyResolverTestsHelpers::LoadBlueprintWithSCSComponents();
-	if (!Blueprint) co_return; // skip gracefully
-	if (!Blueprint->GeneratedClass) co_return;
+	if (!IsValid(Blueprint)) co_return; // skip gracefully
+	if (!IsValid(Blueprint->GeneratedClass)) co_return;
 
 	UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
 	UNTEST_ASSERT_PTR(CDO);
@@ -257,13 +283,13 @@ UNTEST_UNIT_OPTS(Claireon, PropertyResolver_CDO, DirectProperty, UNTEST_TIMEOUTM
 UNTEST_UNIT_OPTS(Claireon, PropertyResolver_CDO, SCSComponentTemplate, UNTEST_TIMEOUTMS(5000))
 {
 	UBlueprint* Blueprint = ClaireonPropertyResolverTestsHelpers::LoadBlueprintWithSCSComponents();
-	if (!Blueprint || !Blueprint->SimpleConstructionScript) co_return;
+	if (!IsValid(Blueprint) || !Blueprint->SimpleConstructionScript) co_return;
 
 	// Find a node with a component template that has CastShadow (UPrimitiveComponent)
 	bool bHasSuitableNode = false;
 	for (USCS_Node* Node : Blueprint->SimpleConstructionScript->GetAllNodes())
 	{
-		if (!Node || !Node->ComponentTemplate) continue;
+		if (!IsValid(Node) || !Node->ComponentTemplate) continue;
 		if (Node->ComponentTemplate->GetClass()->FindPropertyByName(FName(TEXT("CastShadow"))))
 		{
 			bHasSuitableNode = true;
@@ -284,20 +310,20 @@ UNTEST_UNIT_OPTS(Claireon, PropertyResolver_CDO, SCSComponentTemplate, UNTEST_TI
 UNTEST_UNIT_OPTS(Claireon, PropertyResolver_CDO, ExplicitSCSPrefix, UNTEST_TIMEOUTMS(5000))
 {
 	UBlueprint* Blueprint = ClaireonPropertyResolverTestsHelpers::LoadBlueprintWithSCSComponents();
-	if (!Blueprint || !Blueprint->SimpleConstructionScript) co_return;
+	if (!IsValid(Blueprint) || !Blueprint->SimpleConstructionScript) co_return;
 
 	// Find a scene component SCS node with Mobility
 	USCS_Node* TargetNode = nullptr;
 	for (USCS_Node* Node : Blueprint->SimpleConstructionScript->GetAllNodes())
 	{
-		if (!Node || !Node->ComponentTemplate) continue;
+		if (!IsValid(Node) || !Node->ComponentTemplate) continue;
 		if (Node->ComponentTemplate->GetClass()->FindPropertyByName(FName(TEXT("Mobility"))))
 		{
 			TargetNode = Node;
 			break;
 		}
 	}
-	if (!TargetNode) co_return; // skip gracefully
+	if (!IsValid(TargetNode)) co_return; // skip gracefully
 
 	FString VarName = TargetNode->GetVariableName().ToString();
 	FString Path = VarName + TEXT(".Mobility");

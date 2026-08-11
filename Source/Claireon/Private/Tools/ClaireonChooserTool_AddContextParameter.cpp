@@ -14,8 +14,9 @@ FString ClaireonTool_ChooserAddContextParameter::GetOperation() const { return T
 
 FString ClaireonTool_ChooserAddContextParameter::GetDescription() const
 {
-	return TEXT("Add a context data parameter (struct or class) to a ChooserTable. "
-		"Direction controls Input / Output / InputOutput. Triggers a recompile of the chooser bindings.");
+	return TEXT("Add a context data parameter (struct or class, with Input / Output / InputOutput direction) to a "
+		"ChooserTable and recompile its bindings; returns the new parameter_count. Parameters live on the "
+		"root chooser. Stateless / non-session: writes the asset directly by path, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ChooserAddContextParameter::GetInputSchema() const
@@ -57,7 +58,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserAddContextParameter::Execute(cons
 
 	FString Error;
 	UChooserTable* Chooser = ClaireonChooserHelpers::LoadChooserTableAsset(AssetPath, Error);
-	if (!Chooser)
+	if (!IsValid(Chooser))
 	{
 		return MakeErrorResult(Error);
 	}

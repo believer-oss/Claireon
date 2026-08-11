@@ -12,6 +12,7 @@
 #include "Misc/Guid.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
+#include "Misc/ScopeExit.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectGlobals.h"
 
@@ -59,7 +60,7 @@ UObject* LoadAssetFromPath(const FString& AssetPath, FString& OutError)
 {
 	const FSoftObjectPath SoftPath(AssetPath);
 	UObject* Object = SoftPath.TryLoad();
-	if (!Object)
+	if (!IsValid(Object))
 	{
 		OutError = FString::Printf(TEXT("Failed to load asset at path: %s"), *AssetPath);
 		return nullptr;
@@ -71,11 +72,44 @@ UObject* LoadAssetFromPath(const FString& AssetPath, FString& OutError)
 
 FString ConvertAssetPathToGitRelativePath(const FString& AssetPath)
 {
-	// /Game/Foo/Bar -> Content/Foo/Bar.uasset
-	FString RelativePath = AssetPath;
-	RelativePath.ReplaceInline(TEXT("/Game/"), TEXT("Content/"));
-	RelativePath += TEXT(".uasset");
-	return RelativePath;
+	// Strip a trailing .ObjectName: "/Game/Foo/Bar.Bar" names the object, and
+	// git names the file. Package names cannot contain '.', so a dot in the last
+	// segment is always the object separator.
+	FString PackageName = AssetPath;
+	{
+		int32 LastSlash = INDEX_NONE;
+		PackageName.FindLastChar(TEXT('/'), LastSlash);
+		int32 Dot = INDEX_NONE;
+		if (PackageName.FindLastChar(TEXT('.'), Dot) && Dot > LastSlash)
+		{
+			PackageName.LeftInline(Dot);
+		}
+	}
+
+	// Ask the package system for the on-disk filename. This is what knows about
+	// plugin mount points and about .umap-vs-.uasset; the old hard-coded
+	// "/Game/ -> Content/" + ".uasset" answered wrongly for both, and wrongly in
+	// the quiet way -- git then reported the path as missing at that revision.
+	FString Filename;
+	if (!FPackageName::DoesPackageExist(PackageName, &Filename))
+	{
+		if (!FPackageName::TryConvertLongPackageNameToFilename(
+				PackageName, Filename, FPackageName::GetAssetPackageExtension()))
+		{
+			// Unmounted or malformed: fall back to the historical mapping rather
+			// than returning nothing, so the caller still gets a git error naming
+			// a path instead of an empty-path error naming nothing.
+			FString RelativePath = PackageName;
+			RelativePath.ReplaceInline(TEXT("/Game/"), TEXT("Content/"));
+			RelativePath += TEXT(".uasset");
+			return RelativePath;
+		}
+	}
+
+	Filename = FPaths::ConvertRelativePathToFull(Filename);
+	const FString ProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+	FPaths::MakePathRelativeTo(Filename, *ProjectDir);
+	return Filename;
 }
 
 bool SanitizeRevision(const FString& Revision, FString& OutError)
@@ -98,6 +132,144 @@ FString GetDiffTempDir()
 	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Temp"), TEXT("MCP"), TEXT("Diff"));
 }
 
+namespace
+{
+	/** Wraps one argv entry for CreateProcess. Unconditional quoting is correct
+	 *  here: SanitizeRevision rejects quotes and backslashes never reach us
+	 *  (paths are normalised to forward slashes), so there is nothing to escape.
+	 *  File-local prefix to avoid anon-NS collisions under unity batching. */
+	FString Cl613Diff_QuoteArg(const FString& Arg)
+	{
+		return FString::Printf(TEXT("\"%s\""), *Arg);
+	}
+}
+
+FGitCommandResult RunGitCommand(
+	const TArray<FString>& Args,
+	const TArray<uint8>* OptionalStdIn,
+	double TimeoutSeconds)
+{
+	FGitCommandResult Result;
+
+	FString Parms;
+	for (const FString& Arg : Args)
+	{
+		if (!Parms.IsEmpty())
+		{
+			Parms += TEXT(" ");
+		}
+		Parms += Cl613Diff_QuoteArg(Arg);
+	}
+
+	void* StdOutRead = nullptr;
+	void* StdOutWrite = nullptr;
+	void* StdErrRead = nullptr;
+	void* StdErrWrite = nullptr;
+	void* StdInRead = nullptr;
+	void* StdInWrite = nullptr;
+
+	ON_SCOPE_EXIT
+	{
+		if (StdOutRead || StdOutWrite) { FPlatformProcess::ClosePipe(StdOutRead, StdOutWrite); }
+		if (StdErrRead || StdErrWrite) { FPlatformProcess::ClosePipe(StdErrRead, StdErrWrite); }
+		if (StdInRead || StdInWrite) { FPlatformProcess::ClosePipe(StdInRead, StdInWrite); }
+	};
+
+	if (!FPlatformProcess::CreatePipe(StdOutRead, StdOutWrite))
+	{
+		return Result;
+	}
+	if (!FPlatformProcess::CreatePipe(StdErrRead, StdErrWrite))
+	{
+		return Result;
+	}
+	if (OptionalStdIn != nullptr)
+	{
+		// The child reads this end, so the WRITE end is the local one.
+		if (!FPlatformProcess::CreatePipe(StdInRead, StdInWrite, /*bWritePipeLocal=*/ true))
+		{
+			return Result;
+		}
+	}
+
+	// bLaunchDetached must stay false: a detached child does not inherit the
+	// pipe handles, and the reads below would then block until the timeout.
+	FProcHandle ProcHandle = FPlatformProcess::CreateProc(
+		TEXT("git"), *Parms,
+		/* bLaunchDetached */ false,
+		/* bLaunchHidden */ true,
+		/* bLaunchReallyHidden */ true,
+		/* OutProcessID */ nullptr,
+		/* PriorityModifier */ 0,
+		/* OptionalWorkingDirectory */ nullptr,
+		/* PipeWriteChild */ StdOutWrite,
+		/* PipeReadChild */ StdInRead,
+		/* PipeStdErrChild */ StdErrWrite);
+
+	if (!ProcHandle.IsValid())
+	{
+		return Result;
+	}
+	Result.bLaunched = true;
+
+	if (OptionalStdIn != nullptr)
+	{
+		if (OptionalStdIn->Num() > 0)
+		{
+			FPlatformProcess::WritePipe(StdInWrite, OptionalStdIn->GetData(), OptionalStdIn->Num());
+		}
+		// Close our write end so the child sees EOF rather than hanging.
+		FPlatformProcess::ClosePipe(StdInRead, StdInWrite);
+		StdInRead = nullptr;
+		StdInWrite = nullptr;
+	}
+
+	// Drain both pipes WHILE the process runs. Waiting first would deadlock on
+	// any payload larger than the pipe buffer, which every real .uasset is.
+	TArray<uint8> Chunk;
+	TArray<uint8> ErrBytes;
+	const double StartTime = FPlatformTime::Seconds();
+
+	auto DrainPipes = [&]()
+	{
+		while (FPlatformProcess::ReadPipeToArray(StdOutRead, Chunk))
+		{
+			Result.StdOut.Append(Chunk);
+		}
+		while (FPlatformProcess::ReadPipeToArray(StdErrRead, Chunk))
+		{
+			ErrBytes.Append(Chunk);
+		}
+	};
+
+	while (FPlatformProcess::IsProcRunning(ProcHandle))
+	{
+		DrainPipes();
+		if (FPlatformTime::Seconds() - StartTime > TimeoutSeconds)
+		{
+			Result.bTimedOut = true;
+			FPlatformProcess::TerminateProc(ProcHandle, true);
+			break;
+		}
+		FPlatformProcess::Sleep(0.01f);
+	}
+
+	// Whatever the child wrote between the last poll and exit is still buffered.
+	DrainPipes();
+
+	FPlatformProcess::GetProcReturnCode(ProcHandle, &Result.ReturnCode);
+	FPlatformProcess::CloseProc(ProcHandle);
+
+	if (ErrBytes.Num() > 0)
+	{
+		ErrBytes.Add(0);
+		Result.StdErr = FString(UTF8_TO_TCHAR(reinterpret_cast<const char*>(ErrBytes.GetData())));
+		Result.StdErr.TrimStartAndEndInline();
+	}
+
+	return Result;
+}
+
 FString ExtractAssetFromGitRevision(const FString& GitRelativePath, const FString& Revision, FString& OutError)
 {
 	// Sanitize revision
@@ -113,118 +285,80 @@ FString ExtractAssetFromGitRevision(const FString& GitRelativePath, const FStrin
 	// Generate unique temp file path
 	const FString TempFileName = FGuid::NewGuid().ToString() + TEXT(".uasset");
 	const FString TempFilePath = FPaths::Combine(TempDir, TempFileName);
-	const FString ErrFilePath = TempFilePath + TEXT(".err");
 
-	// Build git show command
-	// Use cmd.exe /C with shell redirection for binary-safe extraction
 	const FString ProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 
-	// Normalize paths: forward slashes for git, but we need Windows backslashes for the redirection targets
+	// git wants forward slashes in the pathspec on every platform.
 	FString GitPath = GitRelativePath;
 	GitPath.ReplaceInline(TEXT("\\"), TEXT("/"));
 
 	const FString AbsTempFilePath = FPaths::ConvertRelativePathToFull(TempFilePath);
-	const FString AbsErrFilePath = FPaths::ConvertRelativePathToFull(ErrFilePath);
-
-	const FString GitCommand = FString::Printf(
-		TEXT("git -C \"%s\" show %s:%s"),
-		*ProjectDir, *Revision, *GitPath);
-
-	// Use cmd.exe /C with redirection for binary-safe output
-	const FString CmdArgs = FString::Printf(
-		TEXT("/C \"%s > \"%s\" 2>\"%s\"\""),
-		*GitCommand, *AbsTempFilePath, *AbsErrFilePath);
 
 	UE_LOG(LogClaireon, Display, TEXT("[MCP] Extracting asset from git: %s:%s"), *Revision, *GitPath);
 
-	// Launch process
-	FProcHandle ProcHandle = FPlatformProcess::CreateProc(
-		TEXT("cmd.exe"), *CmdArgs,
-		/* bLaunchDetached */ true,
-		/* bLaunchHidden */ true,
-		/* bLaunchReallyHidden */ true,
-		/* OutProcessID */ nullptr,
-		/* PriorityModifier */ 0,
-		/* OptionalWorkingDirectory */ nullptr,
-		/* PipeWriteChild */ nullptr,
-		/* PipeReadChild */ nullptr);
+	// `<rev>:<path>` is ONE argv entry. Interpolating it into a shell string is
+	// what let cmd.exe eat the `^` in `HEAD^` and report HEAD's own bytes.
+	const TArray<FString> Args = {
+		TEXT("-C"), ProjectDir,
+		TEXT("show"), FString::Printf(TEXT("%s:%s"), *Revision, *GitPath)
+	};
 
-	if (!ProcHandle.IsValid())
+	constexpr double TimeoutSeconds = 30.0;
+	const FGitCommandResult GitResult = RunGitCommand(Args, /*OptionalStdIn=*/ nullptr, TimeoutSeconds);
+
+	if (!GitResult.bLaunched)
 	{
-		OutError = TEXT("Failed to launch git process for asset extraction.");
+		OutError = TEXT("Failed to launch git process for asset extraction. Is git on PATH?");
 		return FString();
 	}
 
-	// Wait with timeout (30 seconds)
-	constexpr double TimeoutSeconds = 30.0;
-	const double StartTime = FPlatformTime::Seconds();
-	bool bTimedOut = false;
-
-	while (FPlatformProcess::IsProcRunning(ProcHandle))
+	if (GitResult.bTimedOut)
 	{
-		FPlatformProcess::Sleep(0.1f);
-		if (FPlatformTime::Seconds() - StartTime > TimeoutSeconds)
-		{
-			bTimedOut = true;
-			FPlatformProcess::TerminateProc(ProcHandle, true);
-			break;
-		}
-	}
-
-	int32 ReturnCode = -1;
-	FPlatformProcess::GetProcReturnCode(ProcHandle, &ReturnCode);
-	FPlatformProcess::CloseProc(ProcHandle);
-
-	if (bTimedOut)
-	{
-		CleanupTempFile(TempFilePath);
-		CleanupTempFile(ErrFilePath);
 		OutError = TEXT("Git asset extraction timed out after 30 seconds.");
 		return FString();
 	}
 
-	if (ReturnCode != 0)
+	if (GitResult.ReturnCode != 0)
 	{
-		// Read stderr for details
-		FString StdErr;
-		FFileHelper::LoadFileToString(StdErr, *AbsErrFilePath);
-		StdErr.TrimStartAndEndInline();
+		const FString& StdErr = GitResult.StdErr;
 
-		CleanupTempFile(TempFilePath);
-		CleanupTempFile(ErrFilePath);
-
-		if (StdErr.Contains(TEXT("bad revision")) || StdErr.Contains(TEXT("unknown revision")))
+		// git's wording varies by subcommand and version. "invalid object name"
+		// is what `git show <bad-rev>:<path>` actually says -- matching only
+		// "bad revision"/"unknown revision" pushed the commonest case into the
+		// generic branch, where the caller had to read raw git text to learn
+		// that the revision, not the asset, was the problem.
+		if (StdErr.Contains(TEXT("bad revision"))
+			|| StdErr.Contains(TEXT("unknown revision"))
+			|| StdErr.Contains(TEXT("invalid object name"))
+			|| StdErr.Contains(TEXT("Needed a single revision")))
 		{
-			OutError = FString::Printf(TEXT("Bad git revision: '%s'"), *Revision);
+			OutError = FString::Printf(TEXT("Bad git revision: '%s' (git: %s)"), *Revision, *StdErr);
 		}
-		else if (StdErr.Contains(TEXT("does not exist")) || StdErr.Contains(TEXT("path") ))
+		else if (StdErr.Contains(TEXT("does not exist")) || StdErr.Contains(TEXT("path")))
 		{
-			OutError = FString::Printf(TEXT("Asset not found at revision '%s': %s"), *Revision, *GitRelativePath);
+			OutError = FString::Printf(TEXT("Asset not found at revision '%s': %s (git: %s)"),
+				*Revision, *GitRelativePath, *StdErr);
 		}
 		else
 		{
-			OutError = FString::Printf(TEXT("Git extraction failed (exit %d): %s"), ReturnCode, *StdErr);
+			OutError = FString::Printf(TEXT("Git extraction failed (exit %d): %s"), GitResult.ReturnCode, *StdErr);
 		}
 		return FString();
 	}
 
-	// Clean up stderr file
-	CleanupTempFile(ErrFilePath);
-
-	// Verify the temp file exists and is non-empty
-	if (!IFileManager::Get().FileExists(*AbsTempFilePath))
+	if (GitResult.StdOut.Num() <= 0)
 	{
-		OutError = FString::Printf(TEXT("Git extraction produced no output file for %s:%s"), *Revision, *GitRelativePath);
+		OutError = FString::Printf(TEXT("Git extraction produced no bytes for %s:%s"), *Revision, *GitRelativePath);
 		return FString();
 	}
 
-	const int64 FileSize = IFileManager::Get().FileSize(*AbsTempFilePath);
-	if (FileSize <= 0)
+	if (!FFileHelper::SaveArrayToFile(GitResult.StdOut, *AbsTempFilePath))
 	{
-		CleanupTempFile(TempFilePath);
-		OutError = FString::Printf(TEXT("Git extraction produced empty file for %s:%s"), *Revision, *GitRelativePath);
+		OutError = FString::Printf(TEXT("Failed to write extracted asset to temp file: %s"), *AbsTempFilePath);
 		return FString();
 	}
+
+	const int64 FileSize = GitResult.StdOut.Num();
 
 	UE_LOG(LogClaireon, Display, TEXT("[MCP] Extracted %lld bytes to %s"), FileSize, *TempFilePath);
 
@@ -235,96 +369,64 @@ FString ExtractAssetFromGitRevision(const FString& GitRelativePath, const FStrin
 	// with "version https://git-lfs.github.com/", smudge it through `git lfs smudge`.
 	if (FileSize < 4096)
 	{
-		TArray<uint8> Head;
-		if (FFileHelper::LoadFileToArray(Head, *AbsTempFilePath) && Head.Num() > 0)
+		const TArray<uint8>& Head = GitResult.StdOut;
+
+		// Treat as ASCII text only when no NULs in first 256 bytes.
+		const int32 Probe = FMath::Min<int32>(Head.Num(), 256);
+		bool bAscii = true;
+		for (int32 i = 0; i < Probe; ++i)
 		{
-			// Treat as ASCII text only when no NULs in first 256 bytes.
-			const int32 Probe = FMath::Min<int32>(Head.Num(), 256);
-			bool bAscii = true;
-			for (int32 i = 0; i < Probe; ++i)
+			if (Head[i] == 0)
 			{
-				if (Head[i] == 0)
-				{
-					bAscii = false;
-					break;
-				}
+				bAscii = false;
+				break;
 			}
-			if (bAscii)
+		}
+		if (bAscii)
+		{
+			const FString HeadStr(Probe, reinterpret_cast<const char*>(Head.GetData()));
+			if (HeadStr.StartsWith(TEXT("version https://git-lfs.github.com/")))
 			{
-				const FString HeadStr(Probe, reinterpret_cast<const char*>(Head.GetData()));
-				if (HeadStr.StartsWith(TEXT("version https://git-lfs.github.com/")))
+				UE_LOG(LogClaireon, Display, TEXT("[MCP] LFS pointer detected; smudging %s"), *GitRelativePath);
+
+				// Smudge: feed the pointer bytes to `git lfs smudge -- <path>` on
+				// stdin; stdout is the real object content. Same no-shell path as
+				// the show above, with the pointer written to the child's stdin
+				// pipe rather than redirected by cmd.exe.
+				const TArray<FString> SmudgeArgs = {
+					TEXT("-C"), ProjectDir,
+					TEXT("lfs"), TEXT("smudge"), TEXT("--"), GitPath
+				};
+
+				const FGitCommandResult SmudgeResult =
+					RunGitCommand(SmudgeArgs, &GitResult.StdOut, /*TimeoutSeconds=*/ 60.0); // LFS fetch can be slow
+
+				if (!SmudgeResult.Succeeded())
 				{
-					UE_LOG(LogClaireon, Display, TEXT("[MCP] LFS pointer detected; smudging %s"), *GitRelativePath);
-
-					// Smudge: feed the pointer text through `git lfs smudge -- <path>` whose stdin is the
-					// pointer; stdout becomes the real object content. Use the same cmd.exe redirection
-					// pattern as the show call above.
-					const FString SmudgeOut = AbsTempFilePath + TEXT(".smudged");
-					const FString SmudgeErr = AbsTempFilePath + TEXT(".smudge.err");
-					const FString SmudgeCommand = FString::Printf(
-						TEXT("git -C \"%s\" lfs smudge -- %s"),
-						*ProjectDir, *GitPath);
-					const FString SmudgeCmdArgs = FString::Printf(
-						TEXT("/C \"%s < \"%s\" > \"%s\" 2>\"%s\"\""),
-						*SmudgeCommand, *AbsTempFilePath, *SmudgeOut, *SmudgeErr);
-
-					FProcHandle SmudgeProc = FPlatformProcess::CreateProc(
-						TEXT("cmd.exe"), *SmudgeCmdArgs,
-						true, true, true, nullptr, 0, nullptr, nullptr, nullptr);
-					if (!SmudgeProc.IsValid())
-					{
-						CleanupTempFile(SmudgeOut);
-						CleanupTempFile(SmudgeErr);
-						OutError = TEXT("Failed to launch git lfs smudge process");
-						CleanupTempFile(TempFilePath);
-						return FString();
-					}
-
-					const double SmudgeStart = FPlatformTime::Seconds();
-					bool bSmudgeTimedOut = false;
-					while (FPlatformProcess::IsProcRunning(SmudgeProc))
-					{
-						FPlatformProcess::Sleep(0.1f);
-						if (FPlatformTime::Seconds() - SmudgeStart > 60.0)  // LFS fetch can be slow
-						{
-							bSmudgeTimedOut = true;
-							FPlatformProcess::TerminateProc(SmudgeProc, true);
-							break;
-						}
-					}
-					int32 SmudgeRet = -1;
-					FPlatformProcess::GetProcReturnCode(SmudgeProc, &SmudgeRet);
-					FPlatformProcess::CloseProc(SmudgeProc);
-
-					if (bSmudgeTimedOut || SmudgeRet != 0)
-					{
-						FString SmudgeStdErr;
-						FFileHelper::LoadFileToString(SmudgeStdErr, *SmudgeErr);
-						SmudgeStdErr.TrimStartAndEndInline();
-						CleanupTempFile(SmudgeOut);
-						CleanupTempFile(SmudgeErr);
-						CleanupTempFile(TempFilePath);
-						OutError = FString::Printf(
-							TEXT("git lfs smudge failed for %s:%s (exit %d): %s"),
-							*Revision, *GitRelativePath, SmudgeRet, *SmudgeStdErr);
-						return FString();
-					}
-
-					CleanupTempFile(SmudgeErr);
-
-					// Replace pointer file with smudged content.
-					if (!IFileManager::Get().Move(*AbsTempFilePath, *SmudgeOut, /*bReplace*/true, /*bEvenIfReadOnly*/true))
-					{
-						CleanupTempFile(SmudgeOut);
-						CleanupTempFile(TempFilePath);
-						OutError = TEXT("Failed to replace LFS-pointer temp file with smudged content");
-						return FString();
-					}
-
-					const int64 SmudgedSize = IFileManager::Get().FileSize(*AbsTempFilePath);
-					UE_LOG(LogClaireon, Display, TEXT("[MCP] LFS smudge produced %lld bytes for %s"),
-						SmudgedSize, *GitRelativePath);
+					CleanupTempFile(TempFilePath);
+					OutError = FString::Printf(
+						TEXT("git lfs smudge failed for %s:%s (exit %d): %s"),
+						*Revision, *GitRelativePath, SmudgeResult.ReturnCode, *SmudgeResult.StdErr);
+					return FString();
 				}
+
+				if (SmudgeResult.StdOut.Num() <= 0)
+				{
+					CleanupTempFile(TempFilePath);
+					OutError = FString::Printf(
+						TEXT("git lfs smudge produced no bytes for %s:%s"), *Revision, *GitRelativePath);
+					return FString();
+				}
+
+				if (!FFileHelper::SaveArrayToFile(SmudgeResult.StdOut, *AbsTempFilePath))
+				{
+					CleanupTempFile(TempFilePath);
+					OutError = TEXT("Failed to replace LFS-pointer temp file with smudged content");
+					return FString();
+				}
+
+				UE_LOG(LogClaireon, Display, TEXT("[MCP] LFS smudge produced %d bytes for %s"),
+					SmudgeResult.StdOut.Num(), *GitRelativePath);
 			}
 		}
 	}
@@ -355,7 +457,7 @@ UPackage* LoadPackageForDiff(const FString& TempFilePath, const FString& OrigAss
 	FPackagePath::TryFromPackageName(OrigPackageName, OrigPackagePath);
 
 	UPackage* Package = DiffUtils::LoadPackageForDiff(TempPackagePath, OrigPackagePath);
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		OutError = FString::Printf(TEXT("Failed to load diff package from temp file: %s"), *TempFilePath);
 		return nullptr;
@@ -370,7 +472,7 @@ UObject* FindAssetInPackage(UPackage* Package, FString& OutError)
 
 	ForEachObjectWithPackage(Package, [&FoundAsset](UObject* Object)
 	{
-		if (Object && !Object->IsA<UPackage>() && Object->IsAsset())
+		if (IsValid(Object) && !Object->IsA<UPackage>() && Object->IsAsset())
 		{
 			FoundAsset = Object;
 			return false; // stop iterating
@@ -378,7 +480,7 @@ UObject* FindAssetInPackage(UPackage* Package, FString& OutError)
 		return true; // continue
 	});
 
-	if (!FoundAsset)
+	if (!IsValid(FoundAsset))
 	{
 		OutError = FString::Printf(TEXT("No asset found in diff package: %s"), *Package->GetName());
 	}
@@ -425,7 +527,7 @@ FResolvedDiffSide ResolveDiffSide(const FString& AssetPath, const FString& Revis
 
 	// Load via DiffUtils
 	Result.DiffPackage = LoadPackageForDiff(TempFilePath, AssetPath, OutError);
-	if (!Result.DiffPackage)
+	if (!IsValid(Result.DiffPackage))
 	{
 		CleanupTempFile(TempFilePath);
 		Result.TempFilePath.Empty();
@@ -433,7 +535,7 @@ FResolvedDiffSide ResolveDiffSide(const FString& AssetPath, const FString& Revis
 	}
 
 	Result.Object = FindAssetInPackage(Result.DiffPackage, OutError);
-	if (!Result.Object)
+	if (!IsValid(Result.Object))
 	{
 		CleanupTempFile(TempFilePath);
 		Result.TempFilePath.Empty();

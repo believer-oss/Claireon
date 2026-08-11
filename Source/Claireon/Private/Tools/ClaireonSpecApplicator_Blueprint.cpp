@@ -197,7 +197,7 @@ bool FClaireonSpecApplicator_Blueprint::OpenOrCreateAsset(const FString& AssetPa
 
 	// Try to load existing Blueprint
 	UBlueprint* BP = LoadObject<UBlueprint>(nullptr, *ResolvedPath);
-	if (!BP)
+	if (!IsValid(BP))
 	{
 		// Blueprint supports creation -- create a new one
 		FString ValidationError;
@@ -217,7 +217,7 @@ bool FClaireonSpecApplicator_Blueprint::OpenOrCreateAsset(const FString& AssetPa
 		ClaireonNameResolver::FNameResolveResult ParentClassResult;
 		UClass* ParentClass = ClaireonNameResolver::ResolveClassName(
 			ParentClassName, nullptr, ParentClassResult);
-		if (!ParentClass)
+		if (!IsValid(ParentClass))
 		{
 			OutError = FString::Printf(TEXT("Failed to resolve parent_class '%s': %s"),
 				*ParentClassName, *ParentClassResult.Error);
@@ -245,7 +245,7 @@ bool FClaireonSpecApplicator_Blueprint::OpenOrCreateAsset(const FString& AssetPa
 	// Find graph
 	FString GraphName = TEXT("EventGraph");
 	UEdGraph* Graph = ClaireonBlueprintHelpers::FindGraphByName(BP, GraphName);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		OutError = FString::Printf(TEXT("Graph '%s' not found in Blueprint %s"), *GraphName, *ResolvedPath);
 		return false;
@@ -279,7 +279,7 @@ bool FClaireonSpecApplicator_Blueprint::ApplyPass1_CreateEntities(const FString&
 {
 	UBlueprint* BP = Blueprint.Get();
 	UEdGraph* Graph = ActiveGraph.Get();
-	if (!BP || !Graph)
+	if (!IsValid(BP) || !IsValid(Graph))
 	{
 		AddError(TEXT("Blueprint or Graph is no longer valid"));
 		return false;
@@ -346,11 +346,27 @@ bool FClaireonSpecApplicator_Blueprint::ApplyPass1_CreateEntities(const FString&
 				Position.Y = (*PosArray)[1]->AsNumber();
 			}
 
+			// Per-node graph targeting. Absent means the spec's active graph
+			// (EventGraph by default); an unresolvable name fails just this entry,
+			// matching the factory-failure handling below rather than aborting the batch.
+			UEdGraph* TargetGraph = Graph;
+			FString NodeGraphName;
+			if (NodeObj->TryGetStringField(TEXT("graph"), NodeGraphName) && !NodeGraphName.IsEmpty())
+			{
+				TargetGraph = ClaireonBlueprintHelpers::FindGraphByName(BP, NodeGraphName);
+				if (!IsValid(TargetGraph))
+				{
+					RecordEntryFailure(SpecId,
+						FString::Printf(TEXT("Graph '%s' not found in Blueprint"), *NodeGraphName));
+					continue;
+				}
+			}
+
 			TSharedPtr<FJsonObject> FactoryParams =
 				NormalizeNodeSpecForFactory_BlueprintApplicator(NodeObj, NodeType);
 
 			ClaireonBlueprintNodeFactory::FCreateResult R =
-				ClaireonBlueprintNodeFactory::CreateNode(BP, Graph, FactoryParams, Position);
+				ClaireonBlueprintNodeFactory::CreateNode(BP, TargetGraph, FactoryParams, Position);
 
 			if (!R.IsOk())
 			{
@@ -358,10 +374,12 @@ bool FClaireonSpecApplicator_Blueprint::ApplyPass1_CreateEntities(const FString&
 				continue;
 			}
 
-			// Factory already added the node to Graph and called AllocateDefaultPins +
+			// Factory already added the node to TargetGraph and called AllocateDefaultPins +
 			// ReconstructNode (for typed branches that need it). Just record the IdMap entry.
 			const FString GuidStr = R.Node->NodeGuid.ToString(EGuidFormats::DigitsWithHyphensLower);
 			RegisterIdMapping(SpecId, GuidStr);
+			// Pass 2 needs to know which graph to look this id up in.
+			IdToGraph.Add(SpecId, TargetGraph);
 			RecordEntrySuccess(SpecId, GuidStr);
 			for (const FString& W : R.Warnings) { AddWarning(W); }
 			NodeSuccessCount++;
@@ -381,7 +399,7 @@ bool FClaireonSpecApplicator_Blueprint::ApplyPass1_CreateEntities(const FString&
 		FGuid NodeGuid;
 		if (!FGuid::Parse(GuidStr, NodeGuid)) continue;  // skip non-GUID entries (variables)
 		UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
-		if (!Node) continue;
+		if (!IsValid(Node)) continue;
 		if (Node->IsA<UK2Node_VariableGet>() || Node->IsA<UK2Node_VariableSet>())
 		{
 			const int32 PrevX = Node->NodePosX;
@@ -399,7 +417,7 @@ bool FClaireonSpecApplicator_Blueprint::ApplyPass2_WireRelationships(const FStri
 {
 	UBlueprint* BP = Blueprint.Get();
 	UEdGraph* Graph = ActiveGraph.Get();
-	if (!BP || !Graph)
+	if (!IsValid(BP) || !IsValid(Graph))
 	{
 		AddError(TEXT("Blueprint or Graph is no longer valid"));
 		return false;
@@ -429,8 +447,12 @@ bool FClaireonSpecApplicator_Blueprint::ApplyPass2_WireRelationships(const FStri
 			FString GuidStr = ResolveId(SpecId);
 			FGuid NodeGuid;
 			FGuid::Parse(GuidStr, NodeGuid);
-			UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid);
-			if (!Node)
+			// Look the node up in the graph it was created in, not the spec's active
+			// graph -- FindNodeByGuid searches exactly one graph.
+			UEdGraph* NodeGraph = IdToGraph.FindRef(SpecId).Get();
+			if (!IsValid(NodeGraph)) { NodeGraph = Graph; }
+			UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(NodeGraph, NodeGuid);
+			if (!IsValid(Node))
 			{
 				AddWarning(FString::Printf(TEXT("Could not find node '%s' for pin_defaults"), *SpecId));
 				continue;
@@ -449,6 +471,23 @@ bool FClaireonSpecApplicator_Blueprint::ApplyPass2_WireRelationships(const FStri
 				}
 
 				K2Schema->TrySetDefaultValue(*Pin, PinValue);
+
+				// TrySetDefaultValue swallows validation failures, so confirm the
+				// write landed. Without this a rejected literal left the pin at its
+				// old value and the spec was still reported as applied.
+				// Same check as ClaireonTool_ApplyBlueprintDelta's pin_defaults arm.
+				//
+				// NOT covered by a test: on this 5.5 engine build the K2 schema stores an
+				// unparseable float literal rather than rejecting it, so a black-box
+				// test through bp_apply_spec could not manufacture a rejection. See
+				// the note in ClaireonSilentSuccessWritePathTests.cpp; a strict pin
+				// type (enum/byte) is the lead for pinning this.
+				if (Pin->DefaultValue != PinValue && Pin->DefaultObject == nullptr && Pin->DefaultTextValue.IsEmpty())
+				{
+					AddWarning(FString::Printf(
+						TEXT("Pin '%s' on node '%s' rejected default '%s'; the pin is unchanged"),
+						*Pair.Key, *SpecId, *PinValue));
+				}
 			}
 		}
 	}
@@ -489,10 +528,17 @@ bool FClaireonSpecApplicator_Blueprint::ApplyPass2_WireRelationships(const FStri
 			FGuid::Parse(SourceGuidStr, SourceGuid);
 			FGuid::Parse(TargetGuidStr, TargetGuid);
 
-			UEdGraphNode* SourceNode = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, SourceGuid);
-			UEdGraphNode* TargetNode = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, TargetGuid);
+			// Each endpoint is resolved against its own creation graph; a node placed
+			// via nodes[].graph does not live in the spec's active graph.
+			UEdGraph* SourceGraph = IdToGraph.FindRef(SourceNodeId).Get();
+			if (!IsValid(SourceGraph)) { SourceGraph = Graph; }
+			UEdGraph* TargetGraph = IdToGraph.FindRef(TargetNodeId).Get();
+			if (!IsValid(TargetGraph)) { TargetGraph = Graph; }
 
-			if (!SourceNode || !TargetNode)
+			UEdGraphNode* SourceNode = ClaireonBlueprintHelpers::FindNodeByGuid(SourceGraph, SourceGuid);
+			UEdGraphNode* TargetNode = ClaireonBlueprintHelpers::FindNodeByGuid(TargetGraph, TargetGuid);
+
+			if (!IsValid(SourceNode) || !IsValid(TargetNode))
 			{
 				AddWarning(FString::Printf(TEXT("connections[%d]: could not find source or target node in graph"), i));
 				continue;
@@ -550,7 +596,7 @@ bool FClaireonSpecApplicator_Blueprint::ApplyPass2_WireRelationships(const FStri
 bool FClaireonSpecApplicator_Blueprint::CompileAsset(const FString& SessionId, FString& OutError)
 {
 	UBlueprint* BP = Blueprint.Get();
-	if (!BP)
+	if (!IsValid(BP))
 	{
 		OutError = TEXT("Blueprint is no longer valid");
 		return false;
@@ -570,14 +616,14 @@ bool FClaireonSpecApplicator_Blueprint::CompileAsset(const FString& SessionId, F
 bool FClaireonSpecApplicator_Blueprint::SaveAsset(const FString& SessionId, FString& OutError)
 {
 	UBlueprint* BP = Blueprint.Get();
-	if (!BP)
+	if (!IsValid(BP))
 	{
 		OutError = TEXT("Blueprint is no longer valid");
 		return false;
 	}
 
 	UPackage* Package = BP->GetOutermost();
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		OutError = TEXT("Failed to get package for Blueprint");
 		return false;

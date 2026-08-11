@@ -3,7 +3,9 @@
 
 #include "Tools/ClaireonTool_TestRun.h"
 #include "ClaireonLog.h"
+#include "Tools/ClaireonWaitSupport.h"
 
+#include "Containers/Ticker.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "HAL/FileManager.h"
@@ -15,6 +17,32 @@
 #include "Misc/FileHelper.h"
 #include "Misc/FilterCollection.h"
 #include "Misc/Paths.h"
+
+namespace ClaireonToolTestRunInternal
+{
+	/**
+	 * TestRun_: pump the systems automation depends on while Execute blocks
+	 * the game thread. Execute runs on the game thread, so the engine loop is
+	 * NOT advancing during the wait -- anything the tests need per frame must
+	 * be pumped here explicitly:
+	 *  - FTSTicker core ticker: drives the automation worker and other
+	 *    frame-registered delegates.
+	 *  - IAutomationControllerModule::Tick: controller-side message pump.
+	 *  - FAutomationTestFramework::ExecuteLatentCommands (during the run
+	 *    only): lets latent test commands progress instead of hanging.
+	 */
+	void TestRun_PumpAutomationWait(IAutomationControllerModule& AutomationModule, float DeltaSeconds, bool bPumpLatentCommands)
+	{
+		FTSTicker::GetCoreTicker().Tick(DeltaSeconds);
+		AutomationModule.Tick();
+		if (bPumpLatentCommands)
+		{
+			FAutomationTestFramework::Get().ExecuteLatentCommands();
+		}
+	}
+} // namespace ClaireonToolTestRunInternal
+
+using namespace ClaireonToolTestRunInternal;
 
 FString ClaireonTool_TestRun::GetCategory() const { return TEXT("test"); }
 FString ClaireonTool_TestRun::GetOperation() const { return TEXT("run"); }
@@ -42,7 +70,7 @@ TSharedPtr<FJsonObject> ClaireonTool_TestRun::GetInputSchema() const
 	TSharedPtr<FJsonObject> NoTimeoutProp = MakeShared<FJsonObject>();
 	NoTimeoutProp->SetStringField(TEXT("type"), TEXT("boolean"));
 	NoTimeoutProp->SetStringField(TEXT("description"),
-		TEXT("Disable test timeout (useful for debugging, default: false)"));
+		TEXT("Extend the run deadline to the hard cap of 3600 seconds instead of the default 1800 seconds (useful for debugging, default: false). The run is never unbounded: on reaching the deadline the tests are stopped and the run is reported as timed out."));
 	Properties->SetObjectField(TEXT("noTimeout"), NoTimeoutProp);
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
@@ -110,12 +138,11 @@ IClaireonTool::FToolResult ClaireonTool_TestRun::Execute(const TSharedPtr<FJsonO
 	// Step 3: Wait for workers to become available, ticking the controller
 	const double StartTime = FPlatformTime::Seconds();
 	constexpr double WorkerTimeoutSeconds = 30.0;
-	constexpr double RunTimeoutSeconds = 1800.0;
 
 	// Poll until the controller has device clusters (workers available)
 	while (Controller->GetNumDeviceClusters() == 0)
 	{
-		AutomationModule.Tick();
+		TestRun_PumpAutomationWait(AutomationModule, 0.1f, /*bPumpLatentCommands*/ false);
 		FPlatformProcess::Sleep(0.1f);
 
 		const double Elapsed = FPlatformTime::Seconds() - StartTime;
@@ -139,7 +166,7 @@ IClaireonTool::FToolResult ClaireonTool_TestRun::Execute(const TSharedPtr<FJsonO
 	// which populates the report tree. We detect this by checking GetFilteredTestNames.
 	for (;;)
 	{
-		AutomationModule.Tick();
+		TestRun_PumpAutomationWait(AutomationModule, 0.1f, /*bPumpLatentCommands*/ false);
 		FPlatformProcess::Sleep(0.1f);
 
 		TArray<FString> AvailableNames;
@@ -183,14 +210,17 @@ IClaireonTool::FToolResult ClaireonTool_TestRun::Execute(const TSharedPtr<FJsonO
 	Controller->SetNumPasses(1);
 	Controller->RunTests(/* bIsLocalSession */ true);
 
-	// Step 6: Poll for completion
+	// Step 6: Poll for completion.
+	// noTimeout resolves to a hard cap (3600s), never numeric max: the old
+	// TNumericLimits<double>::Max() deadline was an unbounded game-thread
+	// block with no cancellation.
 	const double RunStartTime = FPlatformTime::Seconds();
-	const double EffectiveTimeout = bNoTimeout ? TNumericLimits<double>::Max() : RunTimeoutSeconds;
+	const double EffectiveTimeout = ClaireonWaitSupport::ResolveTestRunTimeoutSeconds(bNoTimeout);
 	bool bTimedOut = false;
 
 	while (Controller->GetTestState() == EAutomationControllerModuleState::Running)
 	{
-		AutomationModule.Tick();
+		TestRun_PumpAutomationWait(AutomationModule, 0.5f, /*bPumpLatentCommands*/ true);
 		FPlatformProcess::Sleep(0.5f);
 
 		const double Elapsed = FPlatformTime::Seconds() - RunStartTime;

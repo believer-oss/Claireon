@@ -30,10 +30,10 @@ FString ClaireonTool_ChooserAddColumn::GetOperation() const { return TEXT("add_c
 
 FString ClaireonTool_ChooserAddColumn::GetDescription() const
 {
-	return TEXT("Add a new column to a ChooserTable. Specify the column type and optional property binding. "
-		"Filter column types: GameplayTag, Bool, Enum, MultiEnum, FloatRange, Object. "
-		"Output column types: OutputStruct, OutputBool, OutputFloat, OutputEnum, OutputObject. "
-		"Special: Randomize.");
+	return TEXT("Add a new column to a ChooserTable, with an optional property binding and insert position. Filter "
+		"column types: GameplayTag, Bool, Enum, MultiEnum, FloatRange, Object. Output column types: "
+		"OutputStruct, OutputBool, OutputFloat, OutputEnum, OutputObject. Special: Randomize. Stateless / "
+		"non-session: writes the asset directly by path, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ChooserAddColumn::GetInputSchema() const
@@ -51,13 +51,13 @@ TSharedPtr<FJsonObject> ClaireonTool_ChooserAddColumn::GetInputSchema() const
 	return S.Build();
 }
 
-namespace
+namespace ClaireonChooserTool_AddColumn_Private
 {
 	/** Set up the property binding on a column's InputValue. */
 	void SetupColumnBinding(FInstancedStruct& ColumnStruct, const TArray<FName>& PropertyChain, int32 ContextIndex, TArrayView<const FInstancedStruct> ContextData)
 	{
 		const UScriptStruct* ColStructType = ColumnStruct.GetScriptStruct();
-		if (!ColStructType) return;
+		if (!IsValid(ColStructType)) return;
 
 		const FStructProperty* InputValueProp = CastField<FStructProperty>(ColStructType->FindPropertyByName(TEXT("InputValue")));
 		if (!InputValueProp || InputValueProp->Struct != TBaseStructure<FInstancedStruct>::Get()) return;
@@ -66,7 +66,7 @@ namespace
 		if (!InputValuePtr || !InputValuePtr->IsValid()) return;
 
 		const UScriptStruct* ParamStruct = InputValuePtr->GetScriptStruct();
-		if (!ParamStruct) return;
+		if (!IsValid(ParamStruct)) return;
 
 		const FProperty* BindingProp = ParamStruct->FindPropertyByName(TEXT("Binding"));
 		if (!BindingProp) return;
@@ -111,6 +111,7 @@ namespace
 		}
 	}
 }
+using namespace ClaireonChooserTool_AddColumn_Private;
 
 IClaireonTool::FToolResult ClaireonTool_ChooserAddColumn::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
@@ -128,7 +129,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserAddColumn::Execute(const TSharedP
 
 	FString Error;
 	UChooserTable* Chooser = ClaireonChooserHelpers::LoadChooserTableAsset(AssetPath, Error);
-	if (!Chooser)
+	if (!IsValid(Chooser))
 	{
 		return MakeErrorResult(Error);
 	}

@@ -3,6 +3,13 @@
 
 // Functional tests for statetree_apply_delta.
 // Verifies AR4 dual-shape transitions, dedupe rules (M3), and base-class invariants.
+//
+// These tests used to target /Game/BP/AI/ST/ST_TestDummy, which does not exist
+// anywhere in the repo -- /Game/BP/AI/ST/ is empty and nothing is tracked there.
+// DuplicateAsset therefore returned null and every fixture-dependent test took
+// the "Test asset not present; skipping" branch, which Untest scores as a PASS
+// (there is no skip primitive). Build the fixture with statetree_create instead,
+// mirroring ApplySpec_StateTree (ClaireonApplySpecTests.cpp, CreateStatesFromSpec).
 
 #if WITH_UNTESTED
 
@@ -11,21 +18,73 @@
 #include "Tools/ClaireonStateTreeTool_ApplyDelta.h"
 #include "Tools/ClaireonStateTreeTool_Open.h"
 #include "Tools/ClaireonStateTreeTool_Close.h"
+#include "Tools/ClaireonStateTreeTool_Create.h"
 #include "Tools/ClaireonStateTreeHelpers.h"
 #include "Tools/ClaireonStateTreeEditToolBase.h"
 #include "Tools/FClaireonDeltaApplicator_StateTree.h"
+#include "Tests/ClaireonTestDataAssertions.h"
+#include "Tests/ClaireonTestSchemaDiscovery.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "EditorAssetLibrary.h"
 #include "StateTree.h"
 #include "StateTreeEditorData.h"
 #include "StateTreeState.h"
+#include "Misc/ScopeExit.h"
+#include "UObject/UObjectGlobals.h"
 
+#include "ClaireonTestAssetDeletion.h"
 namespace ClaireonStateTreeTool_ApplyDeltaTests_anon
 {
-	static const TCHAR* STDeltaTestAssetPath = TEXT("/Game/BP/AI/ST/ST_TestDummy");
+	// UStateTreeSchema itself is the abstract base and statetree_create rejects it,
+	// so the fixture needs a concrete subclass. Claireon ships none of its own, so
+	// discover one from the running project (see ClaireonTestSchemaDiscovery). This is
+	// a soft dependency: if no concrete schema is loaded (e.g. a bare host with no
+	// schema-providing plugin), skip rather than fail. If one IS available, any failure
+	// from here on is a real defect.
+	static const TCHAR* STDeltaTestAssetPath = TEXT("/Game/__MCPTests/ST_ApplyDeltaTest");
 
 	static TSharedPtr<FJsonValue> STDeltaTest_ObjVal(const TSharedPtr<FJsonObject>& O) { return MakeShared<FJsonValueObject>(O); }
 	static TSharedPtr<FJsonValue> STDeltaTest_StrVal(const FString& V) { return MakeShared<FJsonValueString>(V); }
+
+	static bool STDeltaTest_IsSchemaAvailable()
+	{
+		return !ClaireonTestSchemaDiscovery::FindConcreteStateTreeSchemaClassPath().IsEmpty();
+	}
+
+	static void STDeltaTest_DeleteFixture()
+	{
+		if (UEditorAssetLibrary::DoesAssetExist(STDeltaTestAssetPath))
+		{
+			ClaireonTestAssetDeletion::DeleteAssetForTest(STDeltaTestAssetPath);
+		}
+	}
+
+	// Synthesizes a fresh StateTree fixture at STDeltaTestAssetPath via
+	// statetree_create. Caller must have already confirmed the schema is
+	// available (STDeltaTest_IsSchemaAvailable) -- with that confirmed, any
+	// failure here is a real bug, so this asserts rather than returning a
+	// soft failure code.
+	static void STDeltaTest_CreateFixture(FUntestContext& TestContext)
+	{
+		// /Game/__MCPTests is NOT gitignored and persists between runs, so clear
+		// any copy a previous run left behind before creating.
+		STDeltaTest_DeleteFixture();
+
+		const FString SchemaClassPath = ClaireonTestSchemaDiscovery::FindConcreteStateTreeSchemaClassPath();
+		ClaireonStateTreeTool_Create CreateTool;
+		TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
+		CreateArgs->SetStringField(TEXT("asset_path"), STDeltaTestAssetPath);
+		CreateArgs->SetStringField(TEXT("schema_class_path"), SchemaClassPath);
+		const auto CreateResult = CreateTool.Execute(CreateArgs);
+		if (CreateResult.bIsError)
+		{
+			TestContext.AddError(FString::Printf(
+				TEXT("[StateTreeApplyDelta] statetree_create failed for the test fixture even though "
+					"schema '%s' resolved: %s"),
+				*SchemaClassPath, *CreateResult.ErrorMessage));
+		}
+	}
 
 	static FString STDeltaTest_OpenSession()
 	{
@@ -58,21 +117,21 @@ namespace ClaireonStateTreeTool_ApplyDeltaTests_anon
 
 	static int32 STDeltaTest_CountSubTrees(UStateTreeEditorData* ED)
 	{
-		return ED ? ED->SubTrees.Num() : -1;
+		return IsValid(ED) ? ED->SubTrees.Num() : -1;
 	}
 
 	static int32 STDeltaTest_CountAllTransitions(UStateTreeEditorData* ED)
 	{
-		if (!ED) { return -1; }
+		if (!IsValid(ED)) { return -1; }
 		int32 Total = 0;
 		TArray<UStateTreeState*> Stack;
-		for (UStateTreeState* Root : ED->SubTrees) { if (Root) { Stack.Add(Root); } }
+		for (UStateTreeState* Root : ED->SubTrees) { if (IsValid(Root)) { Stack.Add(Root); } }
 		while (Stack.Num() > 0)
 		{
 			UStateTreeState* S = Stack.Pop(EAllowShrinking::No);
-			if (!S) { continue; }
+			if (!IsValid(S)) { continue; }
 			Total += S->Transitions.Num();
-			for (UStateTreeState* Child : S->Children) { if (Child) { Stack.Add(Child); } }
+			for (UStateTreeState* Child : S->Children) { if (IsValid(Child)) { Stack.Add(Child); } }
 		}
 		return Total;
 	}
@@ -93,15 +152,20 @@ UNTEST_UNIT_OPTS(Claireon, StateTreeApplyDelta, MissingSessionAndAssetPath, UNTE
 }
 
 // 2. Rejection: 'transition' kind in remove_nodes[] -> validation error.
-UNTEST_UNIT_OPTS(Claireon, StateTreeApplyDelta, RejectTransitionKindInRemove, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, StateTreeApplyDelta, RejectTransitionKindInRemove, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace ClaireonStateTreeTool_ApplyDeltaTests_anon;
-	const FString SessionId = STDeltaTest_OpenSession();
-	if (SessionId.IsEmpty())
+	if (!STDeltaTest_IsSchemaAvailable())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[StateTreeApplyDelta] Test asset not present; skipping."));
+		UE_LOG(LogTemp, Warning,
+			TEXT("[StateTreeApplyDelta] No concrete UStateTreeSchema subclass is loaded in this project; skipping."));
 		co_return;
 	}
+	STDeltaTest_CreateFixture(TestContext);
+	ON_SCOPE_EXIT { STDeltaTest_DeleteFixture(); };
+
+	const FString SessionId = STDeltaTest_OpenSession();
+	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
 
 	FClaireonStateTreeTool_ApplyDelta Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
@@ -118,6 +182,7 @@ UNTEST_UNIT_OPTS(Claireon, StateTreeApplyDelta, RejectTransitionKindInRemove, UN
 
 	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_TRUE(Result.bIsError);
+	UNTEST_ASSERT_PTR(Result.Data.Get());
 	FString FailedPhase;
 	Result.Data->TryGetStringField(TEXT("failed_phase"), FailedPhase);
 	UNTEST_EXPECT_STREQ(FailedPhase, TEXT("validate"));
@@ -130,12 +195,18 @@ UNTEST_UNIT_OPTS(Claireon, StateTreeApplyDelta, RejectTransitionKindInRemove, UN
 UNTEST_UNIT_OPTS(Claireon, StateTreeApplyDelta, CreateRootStatesPhase3, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace ClaireonStateTreeTool_ApplyDeltaTests_anon;
-	const FString SessionId = STDeltaTest_OpenSession();
-	if (SessionId.IsEmpty())
+	if (!STDeltaTest_IsSchemaAvailable())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[StateTreeApplyDelta] Test asset not present; skipping."));
+		UE_LOG(LogTemp, Warning,
+			TEXT("[StateTreeApplyDelta] No concrete UStateTreeSchema subclass is loaded in this project; skipping."));
 		co_return;
 	}
+	STDeltaTest_CreateFixture(TestContext);
+	ON_SCOPE_EXIT { STDeltaTest_DeleteFixture(); };
+
+	const FString SessionId = STDeltaTest_OpenSession();
+	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
+
 	UStateTreeEditorData* ED = STDeltaTest_GetEditorData(SessionId);
 	UNTEST_ASSERT_PTR(ED);
 
@@ -164,7 +235,7 @@ UNTEST_UNIT_OPTS(Claireon, StateTreeApplyDelta, CreateRootStatesPhase3, UNTEST_T
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 
 	const TSharedPtr<FJsonObject>* IdMap = nullptr;
-	UNTEST_ASSERT_TRUE(Result.Data->TryGetObjectField(TEXT("id_map"), IdMap));
+	UNTEST_CLAIREON_DATA_OBJECT(Result, "id_map", IdMap);
 	UNTEST_EXPECT_TRUE((*IdMap)->HasField(TEXT("d1")));
 	UNTEST_EXPECT_TRUE((*IdMap)->HasField(TEXT("d2")));
 
@@ -179,12 +250,18 @@ UNTEST_UNIT_OPTS(Claireon, StateTreeApplyDelta, CreateRootStatesPhase3, UNTEST_T
 UNTEST_UNIT_OPTS(Claireon, StateTreeApplyDelta, AR4_DedupeById, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace ClaireonStateTreeTool_ApplyDeltaTests_anon;
-	const FString SessionId = STDeltaTest_OpenSession();
-	if (SessionId.IsEmpty())
+	if (!STDeltaTest_IsSchemaAvailable())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[StateTreeApplyDelta] Test asset not present; skipping."));
+		UE_LOG(LogTemp, Warning,
+			TEXT("[StateTreeApplyDelta] No concrete UStateTreeSchema subclass is loaded in this project; skipping."));
 		co_return;
 	}
+	STDeltaTest_CreateFixture(TestContext);
+	ON_SCOPE_EXIT { STDeltaTest_DeleteFixture(); };
+
+	const FString SessionId = STDeltaTest_OpenSession();
+	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
+
 	UStateTreeEditorData* ED = STDeltaTest_GetEditorData(SessionId);
 	UNTEST_ASSERT_PTR(ED);
 
@@ -236,7 +313,7 @@ UNTEST_UNIT_OPTS(Claireon, StateTreeApplyDelta, AR4_DedupeById, UNTEST_TIMEOUTMS
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 
 	int32 ConnectionsMade = -1;
-	Result.Data->TryGetNumberField(TEXT("connections_made"), ConnectionsMade);
+	UNTEST_CLAIREON_DATA_INT(Result, "connections_made", ConnectionsMade);
 	UNTEST_EXPECT_EQ(ConnectionsMade, 1); // Dedupe-by-id collapsed to one transition.
 
 	const int32 AfterTransitions = STDeltaTest_CountAllTransitions(ED);
@@ -250,12 +327,18 @@ UNTEST_UNIT_OPTS(Claireon, StateTreeApplyDelta, AR4_DedupeById, UNTEST_TIMEOUTMS
 UNTEST_UNIT_OPTS(Claireon, StateTreeApplyDelta, AR4_DedupeByFromTo, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace ClaireonStateTreeTool_ApplyDeltaTests_anon;
-	const FString SessionId = STDeltaTest_OpenSession();
-	if (SessionId.IsEmpty())
+	if (!STDeltaTest_IsSchemaAvailable())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[StateTreeApplyDelta] Test asset not present; skipping."));
+		UE_LOG(LogTemp, Warning,
+			TEXT("[StateTreeApplyDelta] No concrete UStateTreeSchema subclass is loaded in this project; skipping."));
 		co_return;
 	}
+	STDeltaTest_CreateFixture(TestContext);
+	ON_SCOPE_EXIT { STDeltaTest_DeleteFixture(); };
+
+	const FString SessionId = STDeltaTest_OpenSession();
+	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
+
 	UStateTreeEditorData* ED = STDeltaTest_GetEditorData(SessionId);
 	UNTEST_ASSERT_PTR(ED);
 
@@ -300,7 +383,7 @@ UNTEST_UNIT_OPTS(Claireon, StateTreeApplyDelta, AR4_DedupeByFromTo, UNTEST_TIMEO
 	auto Result = Tool.Execute(Args);
 	UNTEST_ASSERT_FALSE(Result.bIsError);
 	int32 ConnectionsMade = -1;
-	Result.Data->TryGetNumberField(TEXT("connections_made"), ConnectionsMade);
+	UNTEST_CLAIREON_DATA_INT(Result, "connections_made", ConnectionsMade);
 	UNTEST_EXPECT_EQ(ConnectionsMade, 1);
 	const int32 AfterTransitions = STDeltaTest_CountAllTransitions(ED);
 	UNTEST_EXPECT_EQ(AfterTransitions, BeforeTransitions + 1);

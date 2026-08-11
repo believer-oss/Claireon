@@ -73,7 +73,7 @@ FToolResult ClaireonBlackboardTool_AddKey::Execute(const TSharedPtr<FJsonObject>
 	}
 
 	UBlackboardKeyType* NewKeyType = CreateKeyTypeForName(KeyType, BB, Error);
-	if (!NewKeyType)
+	if (!IsValid(NewKeyType))
 	{
 		return MakeErrorResult(Error);
 	}

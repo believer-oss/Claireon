@@ -34,14 +34,14 @@ UStateTree* ClaireonStateTreeHelpers::LoadStateTreeAsset(const FString& AssetPat
 
 	FSoftObjectPath SoftPath(ResolvedPath);
 	UObject* LoadedObj = SoftPath.TryLoad();
-	if (!LoadedObj)
+	if (!IsValid(LoadedObj))
 	{
 		OutError = FString::Printf(TEXT("Failed to load asset at path: %s"), *ResolvedPath);
 		return nullptr;
 	}
 
 	UStateTree* StateTree = Cast<UStateTree>(LoadedObj);
-	if (!StateTree)
+	if (!IsValid(StateTree))
 	{
 		OutError = FString::Printf(TEXT("Asset at %s is not a State Tree (actual type: %s)"), *ResolvedPath, *LoadedObj->GetClass()->GetName());
 		return nullptr;
@@ -52,7 +52,7 @@ UStateTree* ClaireonStateTreeHelpers::LoadStateTreeAsset(const FString& AssetPat
 
 UStateTreeEditorData* ClaireonStateTreeHelpers::GetEditorData(UStateTree* StateTree, FString& OutError)
 {
-	if (!StateTree)
+	if (!IsValid(StateTree))
 	{
 		OutError = TEXT("StateTree is null");
 		return nullptr;
@@ -60,7 +60,7 @@ UStateTreeEditorData* ClaireonStateTreeHelpers::GetEditorData(UStateTree* StateT
 
 #if WITH_EDITORONLY_DATA
 	UStateTreeEditorData* EditorData = Cast<UStateTreeEditorData>(StateTree->EditorData);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 	{
 		OutError = TEXT("State Tree has no editor data (EditorData is null or wrong type)");
 		return nullptr;
@@ -76,13 +76,13 @@ UStateTreeEditorData* ClaireonStateTreeHelpers::GetEditorData(UStateTree* StateT
 // Node/State Lookup
 // ============================================================================
 
-namespace
+namespace ClaireonStateTreeHelpers_Private1
 {
 	UStateTreeState* FindStateByIdRecursive(const TArray<TObjectPtr<UStateTreeState>>& States, const FGuid& StateId)
 	{
 		for (UStateTreeState* State : States)
 		{
-			if (!State)
+			if (!IsValid(State))
 			{
 				continue;
 			}
@@ -91,7 +91,7 @@ namespace
 				return State;
 			}
 			UStateTreeState* Found = FindStateByIdRecursive(State->Children, StateId);
-			if (Found)
+			if (IsValid(Found))
 			{
 				return Found;
 			}
@@ -113,7 +113,7 @@ namespace
 
 	FStateTreeEditorNode* FindNodeInStateRecursive(UStateTreeState* State, const FGuid& NodeId)
 	{
-		if (!State)
+		if (!IsValid(State))
 		{
 			return nullptr;
 		}
@@ -158,10 +158,11 @@ namespace
 		return nullptr;
 	}
 } // namespace
+using namespace ClaireonStateTreeHelpers_Private1;
 
 UStateTreeState* ClaireonStateTreeHelpers::FindStateById(UStateTreeEditorData* EditorData, const FGuid& StateId)
 {
-	if (!EditorData || !StateId.IsValid())
+	if (!IsValid(EditorData) || !StateId.IsValid())
 	{
 		return nullptr;
 	}
@@ -170,7 +171,7 @@ UStateTreeState* ClaireonStateTreeHelpers::FindStateById(UStateTreeEditorData* E
 
 FStateTreeEditorNode* ClaireonStateTreeHelpers::FindNodeById(UStateTreeEditorData* EditorData, const FGuid& NodeId)
 {
-	if (!EditorData || !NodeId.IsValid())
+	if (!IsValid(EditorData) || !NodeId.IsValid())
 	{
 		return nullptr;
 	}
@@ -198,7 +199,7 @@ FStateTreeEditorNode* ClaireonStateTreeHelpers::FindNodeById(UStateTreeEditorDat
 
 FStateTreeTransition* ClaireonStateTreeHelpers::FindTransitionById(UStateTreeState* State, const FGuid& TransitionId)
 {
-	if (!State || !TransitionId.IsValid())
+	if (!IsValid(State) || !TransitionId.IsValid())
 	{
 		return nullptr;
 	}
@@ -216,7 +217,7 @@ FStateTreeTransition* ClaireonStateTreeHelpers::FindTransitionById(UStateTreeSta
 // Formatting Helpers
 // ============================================================================
 
-namespace
+namespace ClaireonStateTreeHelpers_Private2
 {
 	FString StateTreeHelpers_FormatPropertyValue(const FProperty* Prop, const void* ValuePtr)
 	{
@@ -239,7 +240,7 @@ namespace
 
 	FString StateTreeHelpers_FormatStructProperties(const UScriptStruct* Struct, const void* StructData, int32 MaxProps = 10)
 	{
-		if (!Struct || !StructData)
+		if (!IsValid(Struct) || !StructData)
 		{
 			return TEXT("");
 		}
@@ -381,7 +382,7 @@ namespace
 
 	void StateTreeHelpers_FormatStateRecursive(UStateTreeState* State, FString& Output, const FString& Indent, bool bIsLast, const FGuid* FocusStateId)
 	{
-		if (!State)
+		if (!IsValid(State))
 		{
 			return;
 		}
@@ -414,7 +415,7 @@ namespace
 		if (State->Type == EStateTreeStateType::LinkedAsset)
 		{
 			const UStateTree* LinkedAsset = State->LinkedAsset.Get();
-			const FString LinkedPath = LinkedAsset ? LinkedAsset->GetPathName() : FString(TEXT("(null)"));
+			const FString LinkedPath = IsValid(LinkedAsset) ? LinkedAsset->GetPathName() : FString(TEXT("(null)"));
 			Output += FString::Printf(TEXT("%sLinkedAsset: %s\n"), *ChildIndent, *LinkedPath);
 		}
 		else if (State->Type == EStateTreeStateType::Linked)
@@ -520,6 +521,7 @@ namespace
 		}
 	}
 } // namespace
+using namespace ClaireonStateTreeHelpers_Private2;
 
 FString ClaireonStateTreeHelpers::FormatEditorNode(const FStateTreeEditorNode& Node)
 {
@@ -529,12 +531,12 @@ FString ClaireonStateTreeHelpers::FormatEditorNode(const FStateTreeEditorNode& N
 	}
 
 	const UScriptStruct* NodeStruct = Node.Node.GetScriptStruct();
-	FString StructName = NodeStruct ? NodeStruct->GetName() : TEXT("Unknown");
+	FString StructName = IsValid(NodeStruct) ? NodeStruct->GetName() : TEXT("Unknown");
 	FString GuidStr = Node.ID.ToString(EGuidFormats::DigitsWithHyphensLower);
 
 	// Format node struct properties
 	FString PropsStr;
-	if (NodeStruct)
+	if (IsValid(NodeStruct))
 	{
 		PropsStr = StateTreeHelpers_FormatStructProperties(NodeStruct, Node.Node.GetMemory());
 	}
@@ -544,7 +546,7 @@ FString ClaireonStateTreeHelpers::FormatEditorNode(const FStateTreeEditorNode& N
 	if (Node.Instance.IsValid())
 	{
 		const UScriptStruct* InstanceStruct = Node.Instance.GetScriptStruct();
-		if (InstanceStruct)
+		if (IsValid(InstanceStruct))
 		{
 			FString InstanceProps = StateTreeHelpers_FormatStructProperties(InstanceStruct, Node.Instance.GetMemory());
 			if (!InstanceProps.IsEmpty())
@@ -596,7 +598,7 @@ FString ClaireonStateTreeHelpers::FormatEditorNode(const FStateTreeEditorNode& N
 
 FString ClaireonStateTreeHelpers::FormatStateArea(UStateTreeState* State)
 {
-	if (!State)
+	if (!IsValid(State))
 	{
 		return TEXT("(null state)");
 	}
@@ -611,7 +613,7 @@ FString ClaireonStateTreeHelpers::FormatStateTreeStructure(
 	const FGuid* FocusStateId,
 	const TArray<FString>* IncludedSections)
 {
-	if (!EditorData)
+	if (!IsValid(EditorData))
 	{
 		return TEXT("(null editor data)");
 	}
@@ -630,13 +632,13 @@ FString ClaireonStateTreeHelpers::FormatStateTreeStructure(
 	FString Output;
 
 	// Header (always emitted; not a filterable section)
-	FString AssetName = StateTree ? StateTree->GetName() : TEXT("Unknown");
+	FString AssetName = IsValid(StateTree) ? StateTree->GetName() : TEXT("Unknown");
 	Output += FString::Printf(TEXT("=== State Tree: %s ===\n"), *AssetName);
 
-	if (StateTree)
+	if (IsValid(StateTree))
 	{
 		const UStateTreeSchema* Schema = StateTree->GetSchema();
-		if (Schema)
+		if (IsValid(Schema))
 		{
 			Output += FString::Printf(TEXT("Schema: %s\n"), *Schema->GetClass()->GetName());
 		}
@@ -760,7 +762,7 @@ UScriptStruct* ClaireonStateTreeHelpers::ResolveNodeStruct(const FString& Struct
 
 	ClaireonNameResolver::FNameResolveResult NameResult;
 	UScriptStruct* FoundStruct = ClaireonNameResolver::ResolveStructName(CandidateName, NameResult);
-	if (!FoundStruct)
+	if (!IsValid(FoundStruct))
 	{
 		// Build a richer error so the next attempt has a fighting chance. The plain
 		// "Struct not found" message from the resolver does not tell callers that
@@ -789,7 +791,7 @@ UScriptStruct* ClaireonStateTreeHelpers::ResolveNodeStruct(const FString& Struct
 
 bool ClaireonStateTreeHelpers::CreateEditorNode(FStateTreeEditorNode& OutNode, UScriptStruct* NodeStruct, UObject* Outer, FString& OutError)
 {
-	if (!NodeStruct)
+	if (!IsValid(NodeStruct))
 	{
 		OutError = TEXT("NodeStruct is null");
 		return false;
@@ -802,17 +804,17 @@ bool ClaireonStateTreeHelpers::CreateEditorNode(FStateTreeEditorNode& OutNode, U
 	const FStateTreeNodeBase& NodeBase = OutNode.Node.Get<const FStateTreeNodeBase>();
 	const UStruct* InstanceType = NodeBase.GetInstanceDataType();
 
-	if (InstanceType)
+	if (IsValid(InstanceType))
 	{
-		if (const UScriptStruct* InstanceStruct = Cast<const UScriptStruct>(InstanceType))
+		if (const UScriptStruct* InstanceStruct = Cast<const UScriptStruct>(InstanceType); IsValid(InstanceStruct))
 		{
 			// Struct-based instance data
 			OutNode.Instance.InitializeAs(InstanceStruct);
 		}
-		else if (const UClass* InstanceClass = Cast<const UClass>(InstanceType))
+		else if (const UClass* InstanceClass = Cast<const UClass>(InstanceType); IsValid(InstanceClass))
 		{
 			// UObject-based instance data
-			if (Outer)
+			if (IsValid(Outer))
 			{
 				OutNode.InstanceObject = NewObject<UObject>(Outer, const_cast<UClass*>(InstanceClass));
 			}
@@ -837,7 +839,7 @@ bool ClaireonStateTreeHelpers::ResolvePropertyPath(
 	OutLeafProperty = nullptr;
 	OutLeafAddress = nullptr;
 
-	if (!RootStruct)
+	if (!IsValid(RootStruct))
 	{
 		OutError = TEXT("ResolvePropertyPath: RootStruct is null");
 		return false;
@@ -867,12 +869,12 @@ bool ClaireonStateTreeHelpers::ResolvePropertyPath(
 	for (int32 Index = 0; Index < Segments.Num(); ++Index)
 	{
 		const FString& Segment = Segments[Index];
-		FProperty* Prop = CurrentStruct ? CurrentStruct->FindPropertyByName(FName(*Segment)) : nullptr;
+		FProperty* Prop = IsValid(CurrentStruct) ? CurrentStruct->FindPropertyByName(FName(*Segment)) : nullptr;
 		if (!Prop)
 		{
 			OutError = FString::Printf(TEXT("Property '%s' not found on '%s'"),
 				*Segment,
-				CurrentStruct ? *CurrentStruct->GetName() : TEXT("(null)"));
+				IsValid(CurrentStruct) ? *CurrentStruct->GetName() : TEXT("(null)"));
 			return false;
 		}
 
@@ -1066,7 +1068,7 @@ TSharedPtr<FJsonObject> ClaireonStateTreeHelpers::EmitBindingSourceRecord(const 
 	Out->SetStringField(TEXT("struct"), Desc.Struct ? Desc.Struct->GetPathName() : FString());
 
 	const UEnum* SourceEnum = StaticEnum<EStateTreeBindableStructSource>();
-	const FString SourceTypeStr = SourceEnum
+	const FString SourceTypeStr = IsValid(SourceEnum)
 		? SourceEnum->GetNameStringByValue(static_cast<int64>(Desc.DataSource))
 		: FString::FromInt(static_cast<int32>(Desc.DataSource));
 	Out->SetStringField(TEXT("source_type"), SourceTypeStr);
@@ -1114,7 +1116,7 @@ bool ClaireonStateTreeHelpers::SetNodeProperty(FStateTreeEditorNode& Node, const
 		TargetData = Node.Node.GetMutableMemory();
 	}
 
-	if (!TargetStruct || !TargetData)
+	if (!IsValid(TargetStruct) || !TargetData)
 	{
 		OutError = TEXT("Could not resolve target struct or data");
 		return false;

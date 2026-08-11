@@ -8,7 +8,7 @@
 #include "ScopedTransaction.h"
 #include "Dom/JsonObject.h"
 
-namespace
+namespace ClaireonSkeletonTools_Sockets_Private
 {
 	TSharedPtr<FJsonObject> BuildSocketSnapshot(const USkeleton* Skeleton, const FString& LastOperation)
 	{
@@ -18,6 +18,7 @@ namespace
 		return Out;
 	}
 }
+using namespace ClaireonSkeletonTools_Sockets_Private;
 
 // ============================================================================
 // skeleton_add_socket
@@ -27,8 +28,9 @@ FString ClaireonSkeletonTool_AddSocket::GetOperation() const { return TEXT("add_
 
 FString ClaireonSkeletonTool_AddSocket::GetDescription() const
 {
-	return TEXT("Add a socket to the skeleton, attached to a specific bone. "
-				"Transform fields are optional {x,y,z} / {pitch,yaw,roll} objects; defaults are zero location/rotation and unit scale.");
+	return TEXT("Add a socket to a skeleton, attached to an existing bone named by bone_name. relative_location / relative_rotation / relative_scale are optional "
+				"{x,y,z} / {pitch,yaw,roll} objects defaulting to zero offset and unit scale. Stateless / non-session: writes the skeleton directly by skeleton_path "
+				"in one transaction, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_AddSocket::GetInputSchema() const
@@ -49,7 +51,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_AddSocket::Execute(const TShared
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString SocketNameStr, BoneNameStr;
 	if (!Arguments->TryGetStringField(TEXT("socket_name"), SocketNameStr) || SocketNameStr.IsEmpty())
@@ -96,7 +98,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_AddSocket::Execute(const TShared
 	Skeleton->Modify();
 
 	USkeletalMeshSocket* NewSocket = NewObject<USkeletalMeshSocket>(Skeleton);
-	if (!NewSocket)
+	if (!IsValid(NewSocket))
 	{
 		return MakeErrorResult(TEXT("Failed to allocate new USkeletalMeshSocket"));
 	}
@@ -124,7 +126,8 @@ FString ClaireonSkeletonTool_RemoveSocket::GetOperation() const { return TEXT("r
 
 FString ClaireonSkeletonTool_RemoveSocket::GetDescription() const
 {
-    return TEXT("Remove a socket from the skeleton by name in the open session. Session-mode tool: open via skeleton_open first.");
+	return TEXT("Remove a socket from a skeleton by socket_name. Fails if no socket with that name exists on the skeleton. "
+				"Stateless / non-session: writes the skeleton directly by skeleton_path in one transaction, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RemoveSocket::GetInputSchema() const
@@ -140,7 +143,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RemoveSocket::Execute(const TSha
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString SocketNameStr;
 	if (!Arguments->TryGetStringField(TEXT("socket_name"), SocketNameStr) || SocketNameStr.IsEmpty())
@@ -148,7 +151,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RemoveSocket::Execute(const TSha
 
 	const FName SocketName(*SocketNameStr);
 	USkeletalMeshSocket* Socket = Skeleton->FindSocket(SocketName);
-	if (!Socket)
+	if (!IsValid(Socket))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Socket '%s' not found"), *SocketNameStr));
 	}
@@ -172,7 +175,8 @@ FString ClaireonSkeletonTool_RenameSocket::GetOperation() const { return TEXT("r
 
 FString ClaireonSkeletonTool_RenameSocket::GetDescription() const
 {
-    return TEXT("Rename a socket on the skeleton. Fails if new_name is already used by another socket. Session-mode tool: open via skeleton_open first.");
+	return TEXT("Rename a socket on a skeleton from old_name to new_name. Fails if old_name is not found or new_name is already used by "
+				"another socket. Stateless / non-session: writes the skeleton directly by skeleton_path in one transaction, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RenameSocket::GetInputSchema() const
@@ -189,7 +193,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RenameSocket::Execute(const TSha
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString OldStr, NewStr;
 	if (!Arguments->TryGetStringField(TEXT("old_name"), OldStr) || OldStr.IsEmpty())
@@ -201,7 +205,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RenameSocket::Execute(const TSha
 	const FName NewName(*NewStr);
 
 	USkeletalMeshSocket* Socket = Skeleton->FindSocket(OldName);
-	if (!Socket) return MakeErrorResult(FString::Printf(TEXT("Socket '%s' not found"), *OldStr));
+	if (!IsValid(Socket)) return MakeErrorResult(FString::Printf(TEXT("Socket '%s' not found"), *OldStr));
 	if (Skeleton->FindSocket(NewName) != nullptr)
 	{
 		return MakeErrorResult(FString::Printf(TEXT("A socket named '%s' already exists"), *NewStr));
@@ -227,8 +231,9 @@ FString ClaireonSkeletonTool_ModifySocket::GetOperation() const { return TEXT("m
 
 FString ClaireonSkeletonTool_ModifySocket::GetDescription() const
 {
-	return TEXT("Modify an existing socket in place. Any combination of bone_name, relative_location, relative_rotation, relative_scale, "
-				"and force_always_animated may be supplied; fields that are omitted are left unchanged.");
+	return TEXT("Modify an existing socket on a skeleton in place. Any combination of bone_name, relative_location, relative_rotation, relative_scale, "
+				"and force_always_animated may be supplied; omitted fields are left unchanged, and supplying none is an error. Stateless / non-session: "
+				"writes the skeleton directly by skeleton_path, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_ModifySocket::GetInputSchema() const
@@ -249,14 +254,14 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_ModifySocket::Execute(const TSha
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString SocketNameStr;
 	if (!Arguments->TryGetStringField(TEXT("socket_name"), SocketNameStr) || SocketNameStr.IsEmpty())
 		return MakeErrorResult(TEXT("Missing required parameter: socket_name"));
 
 	USkeletalMeshSocket* Socket = Skeleton->FindSocket(FName(*SocketNameStr));
-	if (!Socket) return MakeErrorResult(FString::Printf(TEXT("Socket '%s' not found"), *SocketNameStr));
+	if (!IsValid(Socket)) return MakeErrorResult(FString::Printf(TEXT("Socket '%s' not found"), *SocketNameStr));
 
 	FString BoneNameStr;
 	const bool bHasBone = Arguments->TryGetStringField(TEXT("bone_name"), BoneNameStr) && !BoneNameStr.IsEmpty();

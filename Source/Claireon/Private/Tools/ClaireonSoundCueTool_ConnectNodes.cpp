@@ -45,7 +45,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_ConnectNodes::Execute(const TSh
 		return MakeErrorResult(FString::Printf(TEXT("SoundCue session not found: %s"), *SessionId));
 	}
 	USoundCue* Cue = Cast<USoundCue>(Data->Asset.Get());
-	if (!Cue) return MakeErrorResult(TEXT("Session asset is not a SoundCue"));
+	if (!IsValid(Cue)) return MakeErrorResult(TEXT("Session asset is not a SoundCue"));
 
 	int32 ParentIdx = INDEX_NONE, ChildIdx = INDEX_NONE, Slot = 0;
 	if (!Arguments->TryGetNumberField(TEXT("parent_index"), ParentIdx)) return MakeErrorResult(TEXT("Missing parent_index"));
@@ -57,7 +57,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_ConnectNodes::Execute(const TSh
 	if (!Cue->AllNodes.IsValidIndex(ChildIdx))  return MakeErrorResult(FString::Printf(TEXT("child_index %d out of range"), ChildIdx));
 	USoundNode* Parent = Cue->AllNodes[ParentIdx];
 	USoundNode* Child  = Cue->AllNodes[ChildIdx];
-	if (!Parent || !Child) return MakeErrorResult(TEXT("Parent or child node is null"));
+	if (!IsValid(Parent) || !IsValid(Child)) return MakeErrorResult(TEXT("Parent or child node is null"));
 	if (Parent == Child) return MakeErrorResult(TEXT("Cannot connect a node to itself"));
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Connect SoundCue Nodes")));

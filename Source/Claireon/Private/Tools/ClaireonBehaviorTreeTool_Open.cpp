@@ -52,13 +52,13 @@ FToolResult ClaireonBehaviorTreeTool_Open::Execute(const TSharedPtr<FJsonObject>
 
 	FString Error;
 	UBehaviorTree* BT = ClaireonBehaviorTreeHelpers::LoadBehaviorTreeAsset(AssetPath, Error);
-	if (!BT)
+	if (!IsValid(BT))
 	{
 		return MakeErrorResult(Error);
 	}
 
 	UBehaviorTreeGraph* BTGraph = ClaireonBehaviorTreeHelpers::GetBTGraph(BT, Error);
-	if (!BTGraph)
+	if (!IsValid(BTGraph))
 	{
 		return MakeErrorResult(Error);
 	}

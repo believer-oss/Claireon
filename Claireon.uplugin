@@ -15,6 +15,7 @@
 		{ "Name": "ModularGameplay", "Enabled": true },
 		{ "Name": "GameplayAbilities", "Enabled": true },
 		{ "Name": "StateTree", "Enabled": true },
+		{ "Name": "GameplayStateTree", "Enabled": true },
 		{ "Name": "Niagara", "Enabled": true },
 		{ "Name": "Untested", "Enabled": true, "Optional": true },
 		{ "Name": "BlueprintAssist", "Enabled": true, "Optional": true },

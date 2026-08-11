@@ -23,8 +23,9 @@
  * the actor's component UPROPERTY by name (e.g. property_path
  * "MyComp.SomeField" on an actor object_path).
  *
- * Read-only. No setter surface is exposed by this tool; a write counterpart
- * is deferred to a separate work item.
+ * Read-only. No setter surface is exposed by this tool; the write counterpart
+ * is uobject_set_property, which shares this tool's object-path resolution
+ * (ClaireonPathResolver::ResolveObjectFromPath) so both reach the same objects.
  *
  * Object-path resolution covers:
  *  - Loaded assets (FindObject / StaticFindObject).

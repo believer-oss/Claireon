@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -148,23 +148,18 @@ FToolResult ClaireonBlueprintGraphTool_ReconstructNode::ReconstructNode_Impl(con
 {
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
-	if (!Blueprint || !Graph)
+	if (!IsValid(Blueprint) || !IsValid(Graph))
 		return MakeErrorResult(TEXT("Blueprint or Graph is no longer valid"));
 
 	FString NodeGuidStr;
 	if (!Params->TryGetStringField(TEXT("node_guid"), NodeGuidStr))
 		return MakeErrorResult(TEXT("Missing required field: node_guid"));
 
-	FGuid NodeGuid;
-	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
-		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
-
-	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperation(Graph, NodeGuid, Data);
-	if (!Node)
+	FString ResolveError;
+	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperationStr(Graph, NodeGuidStr, Data, ResolveError);
+	if (!IsValid(Node))
 	{
-		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
-		return MakeErrorResult(FString::Printf(TEXT("Node not found with GUID: %s in graph '%s'.\n%s"),
-			*NodeGuidStr, *Graph->GetName(), *AvailableNodes));
+		return MakeErrorResult(ResolveError);
 	}
 
 	FString NodeTitle = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();
@@ -193,23 +188,18 @@ FToolResult ClaireonBlueprintGraphTool_ReconstructNode::ReconstructNodeStateless
 		return MakeErrorResult(ValidationError);
 
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load Blueprint: %s"), *AssetPath));
 
 	UEdGraph* Graph = ClaireonBlueprintHelpers::FindGraphByName(Blueprint, GraphName);
-	if (!Graph)
+	if (!IsValid(Graph))
 		return MakeErrorResult(FString::Printf(TEXT("Graph '%s' not found"), *GraphName));
 
-	FGuid NodeGuid;
-	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
-		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
-
-	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperation(Graph, NodeGuid, nullptr);
-	if (!Node)
+	FString ResolveError;
+	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperationStr(Graph, NodeGuidStr, nullptr, ResolveError);
+	if (!IsValid(Node))
 	{
-		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
-		return MakeErrorResult(FString::Printf(TEXT("Node not found with GUID: %s in graph '%s'.\n%s"),
-			*NodeGuidStr, *Graph->GetName(), *AvailableNodes));
+		return MakeErrorResult(ResolveError);
 	}
 
 	FString NodeTitle = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();

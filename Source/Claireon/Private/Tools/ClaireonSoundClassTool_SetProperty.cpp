@@ -12,7 +12,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-namespace
+namespace ClaireonSoundClassTool_SetProperty_Private
 {
 	FString SoundClassSetProperty_JsonValueToString(const TSharedPtr<FJsonValue>& V)
 	{
@@ -33,6 +33,7 @@ namespace
 		return FString();
 	}
 }
+using namespace ClaireonSoundClassTool_SetProperty_Private;
 
 FString FClaireonSoundClassTool_SetProperty::GetCategory() const { return TEXT("soundclass"); }
 FString FClaireonSoundClassTool_SetProperty::GetOperation() const { return TEXT("set_property"); }
@@ -69,14 +70,9 @@ IClaireonTool::FToolResult FClaireonSoundClassTool_SetProperty::Execute(const TS
 	FString PropertyPath;
 	if (!Arguments->TryGetStringField(TEXT("property_path"), PropertyPath) || PropertyPath.IsEmpty())
 	{
-		FString FieldName;
-		if (!Arguments->TryGetStringField(TEXT("field_name"), FieldName) || FieldName.IsEmpty())
-		{
-			return MakeErrorResult(TEXT("Missing required parameter: property_path"));
-		}
-		PropertyPath = FString::Printf(TEXT("Properties.%s"), *FieldName);
+		return MakeErrorResult(TEXT("Missing required parameter: property_path"));
 	}
-	else if (!PropertyPath.StartsWith(TEXT("Properties.")))
+	if (!PropertyPath.StartsWith(TEXT("Properties.")))
 	{
 		PropertyPath = FString::Printf(TEXT("Properties.%s"), *PropertyPath);
 	}
@@ -91,12 +87,12 @@ IClaireonTool::FToolResult FClaireonSoundClassTool_SetProperty::Execute(const TS
 	FString Error;
 	EClaireonAudioAssetKind Kind = EClaireonAudioAssetKind::Unknown;
 	UObject* Loaded = ClaireonAudioHelpers::LoadAudioAsset(AssetPath, Kind, Error);
-	if (!Loaded)
+	if (!IsValid(Loaded))
 	{
 		return MakeErrorResult(Error);
 	}
 	USoundClass* SoundClass = Cast<USoundClass>(Loaded);
-	if (!SoundClass || Kind != EClaireonAudioAssetKind::SoundClass)
+	if (!IsValid(SoundClass) || Kind != EClaireonAudioAssetKind::SoundClass)
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset is not a SoundClass: %s"), *AssetPath));
 	}

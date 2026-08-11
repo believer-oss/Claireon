@@ -67,7 +67,7 @@ FToolResult ClaireonNiagaraTool_SetEmitterProperty::Execute(const TSharedPtr<FJs
 
 	const FNiagaraEmitterHandle& Handle = Handles[EmitterIndex];
 	UNiagaraEmitter* Emitter = Handle.GetInstance().Emitter;
-	if (!Emitter)
+	if (!IsValid(Emitter))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Could not get emitter instance for emitter %d"), EmitterIndex));
 	}

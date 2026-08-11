@@ -118,13 +118,21 @@ namespace ClaireonPropertyUtils
 	 *                       (may be the Object itself, a struct interior, or an inner
 	 *                       sub-object). Set to nullptr on failure.
 	 * @param OutError     - Populated on failure with a diagnostic
+	 * @param OutOwnerObject - Optional. On success, receives the innermost UObject the
+	 *                       walk stepped into: the object that actually owns the leaf.
+	 *                       Equals Object unless the path traversed a component,
+	 *                       sub-object, or SCS ComponentTemplate. A caller that needs
+	 *                       Modify() or PostEditChangeProperty to land on the right
+	 *                       object cannot recover this from OutContainer, which is an
+	 *                       untyped interior pointer.
 	 * @return The leaf FProperty, or nullptr on failure
 	 */
 	CLAIREON_API FProperty* ResolvePropertyByPath(
 		UObject*       Object,
 		const FString& PropertyPath,
 		void*&         OutContainer,
-		FString&       OutError);
+		FString&       OutError,
+		UObject**      OutOwnerObject = nullptr);
 
 	/**
 	 * Append a new RF_Transactional inline (EditInline / Instanced) sub-object to a

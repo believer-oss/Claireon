@@ -64,18 +64,18 @@ FToolResult ClaireonPCGGraphTool_Connect::Execute(const TSharedPtr<FJsonObject>&
 	UPCGNode* FromNode = ClaireonPCGGraphHelpers::FindNodeByIdentifier(Data->PCGGraph.Get(), FromNodeId, FromIndex);
 	UPCGNode* ToNode = ClaireonPCGGraphHelpers::FindNodeByIdentifier(Data->PCGGraph.Get(), ToNodeId, ToIndex);
 
-	if (!FromNode)
+	if (!IsValid(FromNode))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Source node not found: %s"), *FromNodeId));
 	}
-	if (!ToNode)
+	if (!IsValid(ToNode))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Target node not found: %s"), *ToNodeId));
 	}
 
 	// Verify pins exist
 	UPCGPin* FromPin = FromNode->GetOutputPin(FName(*FromPinLabel));
-	if (!FromPin)
+	if (!IsValid(FromPin))
 	{
 		// List available output pins
 		FString Available;
@@ -93,7 +93,7 @@ FToolResult ClaireonPCGGraphTool_Connect::Execute(const TSharedPtr<FJsonObject>&
 	}
 
 	UPCGPin* ToPin = ToNode->GetInputPin(FName(*ToPinLabel));
-	if (!ToPin)
+	if (!IsValid(ToPin))
 	{
 		FString Available;
 		for (const TObjectPtr<UPCGPin>& Pin : ToNode->GetInputPins())

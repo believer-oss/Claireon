@@ -58,7 +58,7 @@ FToolResult ClaireonStateTreeTool_AddPropertyFunction::Execute(const TSharedPtr<
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	FString StructName;
@@ -78,7 +78,7 @@ FToolResult ClaireonStateTreeTool_AddPropertyFunction::Execute(const TSharedPtr<
 
 #if WITH_EDITORONLY_DATA
 	UScriptStruct* NodeStruct = ClaireonStateTreeHelpers::ResolveNodeStruct(StructName, Error);
-	if (!NodeStruct)
+	if (!IsValid(NodeStruct))
 		return MakeErrorResult(Error);
 
 	if (!NodeStruct->IsChildOf(FStateTreePropertyFunctionBase::StaticStruct()))
@@ -101,7 +101,7 @@ FToolResult ClaireonStateTreeTool_AddPropertyFunction::Execute(const TSharedPtr<
 		FInstancedStruct TempInstance;
 		TempInstance.InitializeAs(NodeStruct);
 		const FStateTreePropertyFunctionBase& TempFunction = TempInstance.Get<FStateTreePropertyFunctionBase>();
-		if (const UStruct* InstanceType = Cast<const UStruct>(TempFunction.GetInstanceDataType()))
+		if (const UStruct* InstanceType = Cast<const UStruct>(TempFunction.GetInstanceDataType()); IsValid(InstanceType))
 		{
 			for (TFieldIterator<FProperty> It(InstanceType); It; ++It)
 			{

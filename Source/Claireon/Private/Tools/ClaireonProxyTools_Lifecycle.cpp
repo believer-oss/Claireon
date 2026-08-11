@@ -53,7 +53,7 @@ IClaireonTool::FToolResult ClaireonTool_ProxyTableCreate::Execute(const TSharedP
 	UProxyTable* ProxyTable = NewObject<UProxyTable>(Package, FName(*AssetName),
 		RF_Public | RF_Standalone | RF_Transactional | RF_LoadCompleted);
 
-	if (!ProxyTable)
+	if (!IsValid(ProxyTable))
 	{
 		return MakeErrorResult(TEXT("Failed to create ProxyTable asset"));
 	}
@@ -106,7 +106,7 @@ IClaireonTool::FToolResult ClaireonTool_ProxyTableDuplicate::Execute(const TShar
 
 	FString Error;
 	UProxyTable* Source = ClaireonProxyTableHelpers::LoadProxyTableAsset(SourcePath, Error);
-	if (!Source)
+	if (!IsValid(Source))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -122,7 +122,7 @@ IClaireonTool::FToolResult ClaireonTool_ProxyTableDuplicate::Execute(const TShar
 
 	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
 	UObject* NewAsset = AssetTools.DuplicateAsset(DestName, DestFolder, Source);
-	if (!NewAsset)
+	if (!IsValid(NewAsset))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to duplicate ProxyTable to '%s'"), *DestCanon));
 	}
@@ -174,7 +174,7 @@ IClaireonTool::FToolResult ClaireonTool_ProxyAssetCreate::Execute(const TSharedP
 	UProxyAsset* ProxyAsset = NewObject<UProxyAsset>(Package, FName(*AssetName),
 		RF_Public | RF_Standalone | RF_Transactional | RF_LoadCompleted);
 
-	if (!ProxyAsset)
+	if (!IsValid(ProxyAsset))
 	{
 		return MakeErrorResult(TEXT("Failed to create ProxyAsset"));
 	}
@@ -187,11 +187,11 @@ IClaireonTool::FToolResult ClaireonTool_ProxyAssetCreate::Execute(const TSharedP
 	if (Arguments->TryGetStringField(TEXT("type"), TypeStr) && !TypeStr.IsEmpty())
 	{
 		UClass* TypeClass = FindObject<UClass>(nullptr, *TypeStr);
-		if (!TypeClass)
+		if (!IsValid(TypeClass))
 		{
 			TypeClass = LoadObject<UClass>(nullptr, *TypeStr);
 		}
-		if (TypeClass)
+		if (IsValid(TypeClass))
 		{
 			ProxyAsset->Type = TypeClass;
 		}
@@ -246,7 +246,7 @@ IClaireonTool::FToolResult ClaireonTool_ProxyAssetDuplicate::Execute(const TShar
 
 	FString Error;
 	UProxyAsset* Source = ClaireonProxyTableHelpers::LoadProxyAsset(SourcePath, Error);
-	if (!Source)
+	if (!IsValid(Source))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -262,7 +262,7 @@ IClaireonTool::FToolResult ClaireonTool_ProxyAssetDuplicate::Execute(const TShar
 
 	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
 	UObject* NewAsset = AssetTools.DuplicateAsset(DestName, DestFolder, Source);
-	if (!NewAsset)
+	if (!IsValid(NewAsset))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to duplicate ProxyAsset to '%s'"), *DestCanon));
 	}

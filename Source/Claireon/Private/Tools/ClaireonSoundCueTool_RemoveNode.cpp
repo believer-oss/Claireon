@@ -48,7 +48,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_RemoveNode::Execute(const TShar
 		return MakeErrorResult(FString::Printf(TEXT("SoundCue session not found: %s"), *SessionId));
 	}
 	USoundCue* Cue = Cast<USoundCue>(Data->Asset.Get());
-	if (!Cue) return MakeErrorResult(TEXT("Session asset is not a SoundCue"));
+	if (!IsValid(Cue)) return MakeErrorResult(TEXT("Session asset is not a SoundCue"));
 
 	int32 NodeIndex = INDEX_NONE;
 	if (!Arguments->TryGetNumberField(TEXT("node_index"), NodeIndex))
@@ -61,7 +61,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_RemoveNode::Execute(const TShar
 		return MakeErrorResult(FString::Printf(TEXT("node_index %d out of range"), NodeIndex));
 	}
 	USoundNode* Victim = Cue->AllNodes[NodeIndex];
-	if (!Victim)
+	if (!IsValid(Victim))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("node_index %d is null"), NodeIndex));
 	}
@@ -71,7 +71,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_RemoveNode::Execute(const TShar
 	if (Cue->SoundCueGraph) Cue->SoundCueGraph->Modify();
 	for (USoundNode* N : Cue->AllNodes)
 	{
-		if (!N || N == Victim) continue;
+		if (!IsValid(N) || N == Victim) continue;
 		N->Modify();
 		for (int32 i = 0; i < N->ChildNodes.Num(); ++i)
 		{
@@ -79,7 +79,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_RemoveNode::Execute(const TShar
 		}
 	}
 	if (Cue->FirstNode == Victim) Cue->FirstNode = nullptr;
-	if (UEdGraphNode* GN = Victim->GraphNode)
+	if (UEdGraphNode* GN = Victim->GraphNode; IsValid(GN))
 	{
 		GN->Modify();
 		GN->BreakAllNodeLinks();

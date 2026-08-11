@@ -91,7 +91,7 @@ bool ResolvePropertyPath(
 	UStruct* CurrentStruct = StartClass;
 	for (int32 i = 0; i < Segments.Num(); ++i)
 	{
-		if (!CurrentStruct)
+		if (!IsValid(CurrentStruct))
 		{
 			OutError = FString::Printf(TEXT("Cannot resolve segment '%s' -- no struct context at depth %d"), *Segments[i], i);
 			return false;
@@ -140,7 +140,7 @@ const UFunction* ResolveConversionFunction(
 {
 	// 1. Full path
 	const UFunction* Func = FindObject<UFunction>(nullptr, *FunctionNameStr);
-	if (Func)
+	if (IsValid(Func))
 	{
 		if (UMVVMBlueprintViewConversionFunction::IsValidConversionFunction(WBP, Func))
 		{
@@ -156,11 +156,11 @@ const UFunction* ResolveConversionFunction(
 	{
 		ClaireonNameResolver::FNameResolveResult ClassResult;
 		UClass* FoundClass = ClaireonNameResolver::ResolveClassName(ClassName, nullptr, ClassResult);
-		if (FoundClass)
+		if (IsValid(FoundClass))
 		{
 			ClaireonNameResolver::FNameResolveResult FuncResult;
 			Func = ClaireonNameResolver::ResolveFunctionName(FoundClass, FuncName, FuncResult);
-			if (Func)
+			if (IsValid(Func))
 			{
 				if (UMVVMBlueprintViewConversionFunction::IsValidConversionFunction(WBP, Func))
 				{
@@ -173,11 +173,11 @@ const UFunction* ResolveConversionFunction(
 	}
 
 	// 3. Self-context: search WBP generated class hierarchy
-	if (WBP->GeneratedClass)
+	if (IsValid(WBP->GeneratedClass))
 	{
 		ClaireonNameResolver::FNameResolveResult SelfFuncResult;
 		Func = ClaireonNameResolver::ResolveFunctionName(WBP->GeneratedClass, FunctionNameStr, SelfFuncResult);
-		if (Func)
+		if (IsValid(Func))
 		{
 			if (UMVVMBlueprintViewConversionFunction::IsValidConversionFunction(WBP, Func))
 			{

@@ -23,7 +23,7 @@ TSharedPtr<FJsonObject> ClaireonTool_TransactionRollbackGroup::GetInputSchema() 
 
 FToolResult ClaireonTool_TransactionRollbackGroup::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("GEditor is not available"));
 	}

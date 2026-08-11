@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -136,22 +136,18 @@ FToolResult ClaireonBlueprintGraphTool_RemovePin::RemovePin_Impl(
 {
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
-	if (!Blueprint || !Graph)
+	if (!IsValid(Blueprint) || !IsValid(Graph))
 		return MakeErrorResult(TEXT("Blueprint or Graph is no longer valid"));
 
 	FString NodeGuidStr;
 	if (!Params->TryGetStringField(TEXT("node_guid"), NodeGuidStr))
 		return MakeErrorResult(TEXT("Missing required field: node_guid"));
 
-	FGuid NodeGuid;
-	if (!FGuid::Parse(NodeGuidStr, NodeGuid))
-		return MakeErrorResult(FString::Printf(TEXT("Invalid node_guid format: %s"), *NodeGuidStr));
-
-	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperation(Graph, NodeGuid, Data);
-	if (!Node)
+	FString ResolveError;
+	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperationStr(Graph, NodeGuidStr, Data, ResolveError);
+	if (!IsValid(Node))
 	{
-		FString AvailableNodes = ClaireonBlueprintHelpers::FormatAvailableNodes(Graph);
-		return MakeErrorResult(FString::Printf(TEXT("Node not found with GUID: %s.\n%s"), *NodeGuidStr, *AvailableNodes));
+		return MakeErrorResult(ResolveError);
 	}
 
 	// Find the pin to remove -- by name or by index
@@ -194,7 +190,7 @@ FToolResult ClaireonBlueprintGraphTool_RemovePin::RemovePin_Impl(
 			{
 				DynamicPins.Add(Pin);
 			}
-			else if (SwitchNode)
+			else if (IsValid(SwitchNode))
 			{
 				// For switch nodes, dynamic pins are output exec pins that aren't the default pin
 				UEdGraphPin* DefaultPin = SwitchNode->GetDefaultPin();
@@ -228,7 +224,7 @@ FToolResult ClaireonBlueprintGraphTool_RemovePin::RemovePin_Impl(
 		}
 		AddPinIface->RemoveInputPin(TargetPin);
 	}
-	else if (UK2Node_Switch* SwitchNode = Cast<UK2Node_Switch>(Node))
+	else if (UK2Node_Switch* SwitchNode = Cast<UK2Node_Switch>(Node); IsValid(SwitchNode))
 	{
 		if (SwitchNode->IsA<UK2Node_SwitchEnum>())
 		{

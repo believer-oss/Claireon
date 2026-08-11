@@ -16,11 +16,11 @@ namespace ClaireonLevelSequenceInternal
 {
 	void MarkMutated(ULevelSequence* Sequence)
 	{
-		if (!Sequence)
+		if (!IsValid(Sequence))
 		{
 			return;
 		}
-		if (UMovieScene* MovieScene = Sequence->GetMovieScene())
+		if (UMovieScene* MovieScene = Sequence->GetMovieScene(); IsValid(MovieScene))
 		{
 			MovieScene->MarkAsChanged();
 		}
@@ -32,7 +32,7 @@ namespace ClaireonLevelSequenceInternal
 	{
 		OutIndex = INDEX_NONE;
 		OutGuid = FGuid();
-		if (!MovieScene)
+		if (!IsValid(MovieScene))
 		{
 			OutError = TEXT("MovieScene is null");
 			return false;
@@ -78,7 +78,7 @@ namespace ClaireonLevelSequenceInternal
 
 	UMovieSceneTrack* ResolveFocusedTrack(UMovieScene* MovieScene, int32 FocusedBinding, int32 FocusedTrack, FString& OutError)
 	{
-		if (!MovieScene)
+		if (!IsValid(MovieScene))
 		{
 			OutError = TEXT("MovieScene is null");
 			return nullptr;
@@ -122,7 +122,7 @@ namespace ClaireonLevelSequenceInternal
 		}
 		UMovieScene* MovieScene = Data->Sequence->GetMovieScene();
 		UMovieSceneTrack* Track = ResolveFocusedTrack(MovieScene, Data->FocusedBindingIndex, Data->FocusedTrackIndex, OutError);
-		if (!Track)
+		if (!IsValid(Track))
 		{
 			return nullptr;
 		}
@@ -171,7 +171,7 @@ namespace ClaireonLevelSequenceInternal
 			AssetName = FPackageName::GetLongPackageAssetName(PkgName);
 		}
 		UPackage* Package = CreatePackage(*PkgName);
-		if (!Package)
+		if (!IsValid(Package))
 		{
 			OutError = FString::Printf(TEXT("CreatePackage failed for: %s"), *PkgName);
 			return nullptr;
@@ -179,7 +179,7 @@ namespace ClaireonLevelSequenceInternal
 		Package->FullyLoad();
 		ULevelSequence* NewSeq = NewObject<ULevelSequence>(Package, FName(*AssetName),
 			RF_Public | RF_Standalone | RF_Transactional);
-		if (!NewSeq)
+		if (!IsValid(NewSeq))
 		{
 			OutError = TEXT("NewObject<ULevelSequence> failed");
 			return nullptr;

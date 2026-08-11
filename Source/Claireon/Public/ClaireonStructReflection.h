@@ -4,8 +4,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "UObject/ObjectMacros.h" // EPropertyFlags (not reachable via CoreMinimal -- Core cannot include CoreUObject)
 
 class FJsonObject;
+class FJsonValue;
 class UScriptStruct;
 class FProperty;
 
@@ -56,6 +58,22 @@ namespace ClaireonStructReflection
 
 	/** Decompose a CPF flag bitmask into human-readable flag strings. */
 	CLAIREON_API TArray<FString> FormatPropertyFlags(uint64 PropertyFlags);
+
+	/**
+	 * C++ access level implied by the native access-specifier flags:
+	 * "private", "protected", or "public".
+	 *
+	 * Shared by uobject_inspect (reporting) and uobject_set_property (the
+	 * non-editable write guard) so the two cannot describe the same property
+	 * differently.
+	 */
+	CLAIREON_API FString DescribeAccess(EPropertyFlags Flags);
+
+	/** Blueprint exposure: "assignable", "read", "read_write", or "none". */
+	CLAIREON_API FString DescribeBpAccess(EPropertyFlags Flags);
+
+	/** Details-panel exposure: "edit_const", "edit", or "none". */
+	CLAIREON_API FString DescribeEditorAccess(EPropertyFlags Flags);
 
 	/**
 	 * Serialize a property's full metadata (kind, cpp type, flags, metadata map, optional default)

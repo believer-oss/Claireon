@@ -15,13 +15,13 @@ namespace ClaireonBPInterfaceAuthor
 	/** Collect post-op interface short names into the result. */
 	static void CollectPostOpNames(UBlueprint* Blueprint, FInterfaceOpResult& Out)
 	{
-		if (!Blueprint)
+		if (!IsValid(Blueprint))
 		{
 			return;
 		}
 		for (const FBPInterfaceDescription& I : Blueprint->ImplementedInterfaces)
 		{
-			if (I.Interface)
+			if (IsValid(I.Interface))
 			{
 				Out.PostOpInterfaceNames.Add(I.Interface->GetName());
 			}
@@ -32,7 +32,7 @@ namespace ClaireonBPInterfaceAuthor
 	{
 		FInterfaceOpResult Out;
 
-		if (!Blueprint)
+		if (!IsValid(Blueprint))
 		{
 			Out.Error = TEXT("Blueprint is null");
 			return Out;
@@ -47,7 +47,7 @@ namespace ClaireonBPInterfaceAuthor
 		UClass* Class = ClaireonNameResolver::ResolveClassName(InterfaceName, nullptr, ResolveResult);
 		Out.ResolutionNote = ResolveResult.ResolutionNote;
 
-		if (!Class)
+		if (!IsValid(Class))
 		{
 			Out.Error = FString::Printf(TEXT("Could not resolve interface class '%s': %s"),
 				*InterfaceName,
@@ -96,7 +96,7 @@ namespace ClaireonBPInterfaceAuthor
 	{
 		FInterfaceOpResult Out;
 
-		if (!Blueprint)
+		if (!IsValid(Blueprint))
 		{
 			Out.Error = TEXT("Blueprint is null");
 			return Out;
@@ -111,7 +111,7 @@ namespace ClaireonBPInterfaceAuthor
 		UClass* Class = ClaireonNameResolver::ResolveClassName(InterfaceName, nullptr, ResolveResult);
 		Out.ResolutionNote = ResolveResult.ResolutionNote;
 
-		if (!Class)
+		if (!IsValid(Class))
 		{
 			Out.Error = FString::Printf(TEXT("Could not resolve interface class '%s': %s"),
 				*InterfaceName,

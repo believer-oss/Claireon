@@ -23,7 +23,7 @@ TSharedPtr<FJsonObject> ClaireonTool_TransactionEndGroup::GetInputSchema() const
 
 FToolResult ClaireonTool_TransactionEndGroup::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("GEditor is not available"));
 	}

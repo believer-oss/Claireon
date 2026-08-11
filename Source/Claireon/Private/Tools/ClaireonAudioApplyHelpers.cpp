@@ -16,7 +16,7 @@
 
 namespace ClaireonAudioApplyHelpers
 {
-	namespace
+	namespace ClaireonAudioApplyHelpers_Private
 	{
 		// File-local helpers avoid anon-namespace symbol collisions under unity batching.
 		static FVector AudioApplyHelpers_ParseVector(const TSharedPtr<FJsonObject>& Obj, double DX = 0.0, double DY = 0.0, double DZ = 0.0)
@@ -43,6 +43,7 @@ namespace ClaireonAudioApplyHelpers
 			return FRotator(Pitch, Yaw, Roll);
 		}
 	}
+	using namespace ClaireonAudioApplyHelpers_Private;
 
 	bool ParseTransformField(const TSharedPtr<FJsonObject>& Args, FTransform& OutXform, FString& OutError)
 	{
@@ -78,7 +79,7 @@ namespace ClaireonAudioApplyHelpers
 			return nullptr;
 		}
 		USoundBase* Sound = LoadObject<USoundBase>(nullptr, *Resolved.ResolvedPath.Path);
-		if (!Sound)
+		if (!IsValid(Sound))
 		{
 			OutError = FString::Printf(TEXT("Failed to load USoundBase at '%s' (or wrong class)"), *Resolved.ResolvedPath.Path);
 		}
@@ -87,11 +88,11 @@ namespace ClaireonAudioApplyHelpers
 
 	AActor* FindActorByLabel(UWorld* World, const FString& Label)
 	{
-		if (!World) return nullptr;
+		if (!IsValid(World)) return nullptr;
 		for (TActorIterator<AActor> It(World); It; ++It)
 		{
 			AActor* A = *It;
-			if (A && A->GetActorLabel() == Label)
+			if (IsValid(A) && A->GetActorLabel() == Label)
 			{
 				return A;
 			}
@@ -101,7 +102,7 @@ namespace ClaireonAudioApplyHelpers
 
 	void WriteReflectedProperties(UObject* Target, const TSharedPtr<FJsonObject>& Props, TArray<FString>& OutWarnings)
 	{
-		if (!Target || !Props.IsValid()) return;
+		if (!IsValid(Target) || !Props.IsValid()) return;
 		for (const auto& Pair : Props->Values)
 		{
 			FString ValueStr;
@@ -114,7 +115,7 @@ namespace ClaireonAudioApplyHelpers
 			}
 			FString Err;
 			bool bOk = false;
-			if (AActor* AsActor = Cast<AActor>(Target))
+			if (AActor* AsActor = Cast<AActor>(Target); IsValid(AsActor))
 			{
 				ClaireonPropertyResolver::FResolvedProperty Resolved;
 				bOk = ClaireonPropertyResolver::WritePropertyOnActor(AsActor, FString(*Pair.Key), ValueStr, Resolved, Err);
@@ -128,5 +129,54 @@ namespace ClaireonAudioApplyHelpers
 				OutWarnings.Add(FString::Printf(TEXT("Could not set %s: %s"), *Pair.Key, *Err));
 			}
 		}
+	}
+}
+
+namespace ClaireonAudioSchema
+{
+	namespace
+	{
+		// File-local prefix to avoid anon-NS collisions under unity batching.
+		TSharedPtr<FJsonObject> Cl612Audio_MakeProp(const TCHAR* Description)
+		{
+			TSharedPtr<FJsonObject> Prop = MakeShared<FJsonObject>();
+			Prop->SetStringField(TEXT("description"), Description);
+			return Prop;
+		}
+	}
+
+	void AddString(const TSharedPtr<FJsonObject>& Properties, const TCHAR* Name, const TCHAR* Description)
+	{
+		TSharedPtr<FJsonObject> Prop = Cl612Audio_MakeProp(Description);
+		Prop->SetStringField(TEXT("type"), TEXT("string"));
+		Properties->SetObjectField(Name, Prop);
+	}
+
+	void AddBoolean(const TSharedPtr<FJsonObject>& Properties, const TCHAR* Name, const TCHAR* Description)
+	{
+		TSharedPtr<FJsonObject> Prop = Cl612Audio_MakeProp(Description);
+		Prop->SetStringField(TEXT("type"), TEXT("boolean"));
+		Properties->SetObjectField(Name, Prop);
+	}
+
+	void AddObject(const TSharedPtr<FJsonObject>& Properties, const TCHAR* Name, const TCHAR* Description)
+	{
+		TSharedPtr<FJsonObject> Prop = Cl612Audio_MakeProp(Description);
+		Prop->SetStringField(TEXT("type"), TEXT("object"));
+		Properties->SetObjectField(Name, Prop);
+	}
+
+	void AddAnyType(const TSharedPtr<FJsonObject>& Properties, const TCHAR* Name, const TCHAR* Description)
+	{
+		TSharedPtr<FJsonObject> Prop = Cl612Audio_MakeProp(Description);
+		// JSON Schema type-array form. Stating the accepted set is honest;
+		// omitting "type" entirely is indistinguishable from forgetting it.
+		TArray<TSharedPtr<FJsonValue>> Types;
+		for (const TCHAR* T : { TEXT("string"), TEXT("number"), TEXT("boolean"), TEXT("object"), TEXT("array") })
+		{
+			Types.Add(MakeShared<FJsonValueString>(T));
+		}
+		Prop->SetArrayField(TEXT("type"), Types);
+		Properties->SetObjectField(Name, Prop);
 	}
 }

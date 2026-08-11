@@ -55,7 +55,7 @@ FToolResult ClaireonBlackboardTool_SetParent::Execute(const TSharedPtr<FJsonObje
 	}
 
 	UBlackboardData* ParentBB = ClaireonBehaviorTreeHelpers::LoadBlackboardAsset(ParentPath, Error);
-	if (!ParentBB)
+	if (!IsValid(ParentBB))
 	{
 		return MakeErrorResult(Error);
 	}

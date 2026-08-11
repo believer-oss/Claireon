@@ -44,7 +44,7 @@ namespace ClaireonGasToolCommonInternal
 		if (Arguments->TryGetStringField(PathField, ClassPath) && !ClassPath.IsEmpty())
 		{
 			UClass* Loaded = LoadClass<UObject>(nullptr, *ClassPath);
-			if (!Loaded)
+			if (!IsValid(Loaded))
 			{
 				OutError = FString::Printf(
 					TEXT("Could not load a class from %s='%s'. Expected a generated-class path "
@@ -145,7 +145,7 @@ bool ResolveTarget(const TSharedPtr<FJsonObject>& Arguments, FGasTarget& OutTarg
 		return false;
 	}
 
-	if (!GEditor || !GEditor->IsPlaySessionInProgress())
+	if (!IsValid(GEditor) || !GEditor->IsPlaySessionInProgress())
 	{
 		OutError = TEXT("No active PIE session. Start Play-in-Editor first (these tools mutate/read "
 			"live runtime GAS state, not on-disk assets).");
@@ -160,14 +160,14 @@ bool ResolveTarget(const TSharedPtr<FJsonObject>& Arguments, FGasTarget& OutTarg
 	}
 
 	UWorld* World = ClaireonPIEWorldResolver::ResolvePIEWorld(Arguments, OutError);
-	if (!World)
+	if (!IsValid(World))
 	{
 		return false;
 	}
 	OutTarget.World = World;
 
 	AActor* Actor = FClaireonPIEManager::Get().ResolveActorId(ActorId, World);
-	if (!Actor)
+	if (!IsValid(Actor))
 	{
 		OutError = FString::Printf(
 			TEXT("Actor not found for ID '%s' on the resolved world. Actor IDs are per-world; "
@@ -181,11 +181,11 @@ bool ResolveTarget(const TSharedPtr<FJsonObject>& Arguments, FGasTarget& OutTarg
 	{
 		ASC = ASCInterface->GetAbilitySystemComponent();
 	}
-	if (!ASC)
+	if (!IsValid(ASC))
 	{
 		ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Actor);
 	}
-	if (!ASC)
+	if (!IsValid(ASC))
 	{
 		OutError = FString::Printf(
 			TEXT("Actor '%s' (%s) has no AbilitySystemComponent."),
@@ -202,7 +202,7 @@ TSubclassOf<UGameplayEffect> ResolveEffectClass(const TSharedPtr<FJsonObject>& A
 	UClass* Resolved = ResolveClassByPathOrName(
 		Arguments, TEXT("effect_class_path"), TEXT("effect_name"),
 		UGameplayEffect::StaticClass(), OutError);
-	return Resolved ? TSubclassOf<UGameplayEffect>(Resolved) : nullptr;
+	return IsValid(Resolved) ? TSubclassOf<UGameplayEffect>(Resolved) : nullptr;
 }
 
 TSubclassOf<UGameplayAbility> ResolveAbilityClass(const TSharedPtr<FJsonObject>& Arguments, FString& OutError)
@@ -210,12 +210,12 @@ TSubclassOf<UGameplayAbility> ResolveAbilityClass(const TSharedPtr<FJsonObject>&
 	UClass* Resolved = ResolveClassByPathOrName(
 		Arguments, TEXT("ability_class_path"), TEXT("ability_name"),
 		UGameplayAbility::StaticClass(), OutError);
-	return Resolved ? TSubclassOf<UGameplayAbility>(Resolved) : nullptr;
+	return IsValid(Resolved) ? TSubclassOf<UGameplayAbility>(Resolved) : nullptr;
 }
 
 bool ResolveAttribute(UAbilitySystemComponent* ASC, const FString& Name, FGameplayAttribute& OutAttr, FString& OutError)
 {
-	if (!ASC)
+	if (!IsValid(ASC))
 	{
 		OutError = TEXT("No AbilitySystemComponent.");
 		return false;
@@ -273,7 +273,7 @@ bool ResolveAttribute(UAbilitySystemComponent* ASC, const FString& Name, FGamepl
 FString AttributeDisplayName(const FGameplayAttribute& Attr)
 {
 	const UClass* SetClass = Attr.GetAttributeSetClass();
-	if (SetClass)
+	if (IsValid(SetClass))
 	{
 		return FString::Printf(TEXT("%s.%s"), *SetClass->GetName(), *Attr.GetName());
 	}

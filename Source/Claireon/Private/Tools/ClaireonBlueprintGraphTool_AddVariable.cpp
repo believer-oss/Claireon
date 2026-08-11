@@ -145,7 +145,7 @@ FToolResult ClaireonBlueprintGraphTool_AddVariable::Execute(const TSharedPtr<FJs
     }
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
 	}
@@ -311,7 +311,7 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddVariable::GetParameterTool
 {
     TSharedPtr<FJsonObject> T = MakeShared<FJsonObject>();
     T->SetStringField(TEXT("session_id"), TEXT("Session ID returned by bp_open or _create."));
-    T->SetStringField(TEXT("name"), TEXT("Variable name (also member name on the generated CDO)."));
+    T->SetStringField(TEXT("variable_name"), TEXT("Variable name (also member name on the generated CDO)."));
     T->SetStringField(TEXT("variable_type"), TEXT("Simple type form: primitive name, class path, or struct path. Use variable_type_spec for delegate/soft-class/soft-object/instanced-struct types."));
     T->SetStringField(TEXT("variable_type_spec"), TEXT("Structured type form: { base: 'Delegate'|'MulticastDelegate'|'SoftClass'|'SoftObject'|'InstancedStruct', signature_function: '...', subtype: '...' }. Takes precedence over variable_type when both are provided."));
     T->SetStringField(TEXT("replication"), TEXT("'None' | 'Replicated' | 'RepNotify'. RepNotify auto-creates the OnRep_<Name> handler function graph (customizable via rep_notify_func)."));

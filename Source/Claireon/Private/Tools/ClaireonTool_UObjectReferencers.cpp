@@ -36,15 +36,15 @@ namespace ClaireonToolUObjectReferencers_Internal
 		if (Resolved.ResolvedPath.Kind == ClaireonPathResolver::EPathKind::NativeClassPath)
 		{
 			UClass* ResolvedClass = FindObject<UClass>(nullptr, *Path);
-			if (!ResolvedClass)
+			if (!IsValid(ResolvedClass))
 			{
 				ResolvedClass = FindFirstObjectSafe<UClass>(*Path);
 			}
-			if (!ResolvedClass && bAllowLoad)
+			if (!IsValid(ResolvedClass) && bAllowLoad)
 			{
 				ResolvedClass = LoadObject<UClass>(nullptr, *Path);
 			}
-			if (!ResolvedClass)
+			if (!IsValid(ResolvedClass))
 			{
 				OutError = FString::Printf(TEXT("Could not resolve native class '%s'."), *Path);
 				return nullptr;
@@ -54,15 +54,15 @@ namespace ClaireonToolUObjectReferencers_Internal
 
 		UObject* Found = StaticFindObject(UObject::StaticClass(), nullptr, *Path, /*ExactClass=*/false);
 		const bool bIsSubObject = Path.Contains(TEXT(":"));
-		if (!Found && bIsSubObject)
+		if (!IsValid(Found) && bIsSubObject)
 		{
 			Found = FindFirstObjectSafe<UObject>(*Path);
 		}
-		if (!Found && !bIsSubObject && bAllowLoad)
+		if (!IsValid(Found) && !bIsSubObject && bAllowLoad)
 		{
 			Found = StaticLoadObject(UObject::StaticClass(), nullptr, *Path, nullptr, LOAD_None);
 		}
-		if (!Found)
+		if (!IsValid(Found))
 		{
 			OutError = FString::Printf(TEXT("Could not find object '%s'."), *ObjectPath);
 			return nullptr;
@@ -99,7 +99,7 @@ namespace ClaireonToolUObjectReferencers_Internal
 	void BuildOuterChain(UObject* Object, TArray<TSharedPtr<FJsonValue>>& Out)
 	{
 		// Walk outers innermost->outermost, skip the object itself.
-		for (UObject* Outer = Object ? Object->GetOuter() : nullptr; Outer; Outer = Outer->GetOuter())
+		for (UObject* Outer = IsValid(Object) ? Object->GetOuter() : nullptr; IsValid(Outer); Outer = Outer->GetOuter())
 		{
 			Out.Add(MakeShared<FJsonValueString>(Outer->GetName()));
 		}
@@ -117,17 +117,11 @@ namespace ClaireonToolUObjectReferencers_Internal
 FString ClaireonTool_UObjectReferencers::GetDescription() const
 {
 	return TEXT(
-		"Reverse-reference finder for any loaded UObject. Given an object_path, "
-		"returns the loaded UObjects that hold a UPROPERTY pointing at it, "
-		"together with the holding property's name and kind (hard/weak/interface/"
-		"class). Built on FFindReferencersArchive, so it sees the same hard "
-		"object refs the engine resolves at package load time -- exactly the "
-		"refs that force-load actors across cell / data-layer boundaries. Soft "
-		"refs are not included; use asset_references for the static / package-"
-		"level view. When the target is an AActor and include_components=true "
-		"(default), the actor's UActorComponent sub-objects are also probed and "
-		"each hit reports target_kind+target_path so the caller sees whether "
-		"the referencer points at the actor or one of its components.");
+		"Find the loaded UObjects holding a UPROPERTY that points at object_path, reporting "
+		"each holding property's name and kind (hard/weak/interface/class). Built on "
+		"FFindReferencersArchive, so it sees the hard refs that force-load actors across "
+		"cell / data-layer boundaries; soft refs are excluded (use asset_references). "
+		"Components are probed too unless include_components=false. Read-only, non-session.");
 }
 
 TArray<FString> ClaireonTool_UObjectReferencers::GetSearchKeywords() const
@@ -201,7 +195,7 @@ IClaireonTool::FToolResult ClaireonTool_UObjectReferencers::Execute(const TShare
 
 	FString ResolveError;
 	UObject* Target = ResolveObject(ObjectPath, bAllowLoad, ResolveError);
-	if (!Target)
+	if (!IsValid(Target))
 	{
 		return MakeErrorResult(ResolveError);
 	}
@@ -217,14 +211,14 @@ IClaireonTool::FToolResult ClaireonTool_UObjectReferencers::Execute(const TShare
 
 	if (bIncludeComponents)
 	{
-		if (AActor* Actor = Cast<AActor>(Target))
+		if (AActor* Actor = Cast<AActor>(Target); IsValid(Actor))
 		{
 			TargetKindByObj[Target] = TEXT("actor");
 			TArray<UActorComponent*> Components;
 			Actor->GetComponents(Components);
 			for (UActorComponent* Comp : Components)
 			{
-				if (Comp && !TargetKindByObj.Contains(Comp))
+				if (IsValid(Comp) && !TargetKindByObj.Contains(Comp))
 				{
 					TargetSet.Add(Comp);
 					TargetKindByObj.Add(Comp, TEXT("component"));

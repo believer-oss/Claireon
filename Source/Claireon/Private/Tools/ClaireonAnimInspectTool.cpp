@@ -26,7 +26,7 @@ namespace ClaireonAnimInspectScratch
 {
 	UWorld* ResolvePIEWorld(FString& OutErrorMessage)
 	{
-		if (!GEditor)
+		if (!IsValid(GEditor))
 		{
 			OutErrorMessage = TEXT("GEditor is not available");
 			return nullptr;
@@ -34,7 +34,7 @@ namespace ClaireonAnimInspectScratch
 
 		for (const FWorldContext& Context : GEngine->GetWorldContexts())
 		{
-			if (Context.WorldType == EWorldType::PIE && Context.World())
+			if (Context.WorldType == EWorldType::PIE && IsValid(Context.World()))
 			{
 				return Context.World();
 			}
@@ -60,14 +60,14 @@ namespace ClaireonAnimInspectScratch
 
 		FString Err;
 		UWorld* PIEWorld = ResolvePIEWorld(Err);
-		if (!PIEWorld)
+		if (!IsValid(PIEWorld))
 		{
 			OutResult = IClaireonTool::MakeErrorResult(Err);
 			return false;
 		}
 
 		AActor* Actor = FClaireonPIEManager::Get().ResolveActorId(OutActorId, PIEWorld);
-		if (!Actor)
+		if (!IsValid(Actor))
 		{
 			OutResult = IClaireonTool::MakeErrorResult(
 				FString::Printf(TEXT("Actor not found for ID: %s"), *OutActorId));
@@ -164,7 +164,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimInspectMontages::Execute(const TShar
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 
 	ACharacter* Character = Cast<ACharacter>(Actor);
-	if (!Character)
+	if (!IsValid(Character))
 	{
 		Data->SetBoolField(TEXT("hasAnimInstance"), false);
 		Data->SetStringField(TEXT("reason"),
@@ -173,9 +173,9 @@ IClaireonTool::FToolResult ClaireonTool_AnimInspectMontages::Execute(const TShar
 	}
 
 	USkeletalMeshComponent* Mesh = Character->GetMesh();
-	UAnimInstance* AnimInstance = Mesh ? Mesh->GetAnimInstance() : nullptr;
+	UAnimInstance* AnimInstance = IsValid(Mesh) ? Mesh->GetAnimInstance() : nullptr;
 
-	if (!AnimInstance)
+	if (!IsValid(AnimInstance))
 	{
 		Data->SetBoolField(TEXT("hasAnimInstance"), false);
 		Data->SetStringField(TEXT("reason"),
@@ -187,7 +187,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimInspectMontages::Execute(const TShar
 	Data->SetStringField(TEXT("animInstanceClass"), AnimInstance->GetClass()->GetPathName());
 	UClass* ParentClass = AnimInstance->GetClass()->GetSuperClass();
 	Data->SetStringField(TEXT("animInstanceParentClass"),
-		ParentClass ? ParentClass->GetPathName() : FString());
+		IsValid(ParentClass) ? ParentClass->GetPathName() : FString());
 
 	// Skeletal mesh extras.
 	{
@@ -202,7 +202,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimInspectMontages::Execute(const TShar
 
 	// Active montage (top-of-stack).
 	UAnimMontage* ActiveMontage = AnimInstance->GetCurrentActiveMontage();
-	if (ActiveMontage)
+	if (IsValid(ActiveMontage))
 	{
 		Data->SetStringField(TEXT("activeMontageName"), ActiveMontage->GetName());
 	}
@@ -227,10 +227,10 @@ IClaireonTool::FToolResult ClaireonTool_AnimInspectMontages::Execute(const TShar
 
 		const UAnimMontage* Montage = Instance->Montage;
 		InstObj->SetStringField(TEXT("montageName"),
-			Montage ? Montage->GetName() : FString(TEXT("<null>")));
+			IsValid(Montage) ? Montage->GetName() : FString(TEXT("<null>")));
 
 		const float Position = Instance->GetPosition();
-		const float Length = Montage ? Montage->GetPlayLength() : 0.f;
+		const float Length = IsValid(Montage) ? Montage->GetPlayLength() : 0.f;
 		InstObj->SetNumberField(TEXT("position"), Position);
 		InstObj->SetNumberField(TEXT("length"), Length);
 		InstObj->SetNumberField(TEXT("playRate"), Instance->GetPlayRate());
@@ -253,7 +253,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimInspectMontages::Execute(const TShar
 		InstObj->SetBoolField(TEXT("playing"), bPlaying);
 		InstObj->SetBoolField(TEXT("rootMotionDisabled"), Instance->IsRootMotionDisabled());
 
-		if (Montage)
+		if (IsValid(Montage))
 		{
 			InstObj->SetStringField(TEXT("montageGroupName"), Montage->GetGroupName().ToString());
 		}
@@ -382,7 +382,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimInspectMotionWarping::Execute(const 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 
 	UMotionWarpingComponent* WarpComp = Actor->FindComponentByClass<UMotionWarpingComponent>();
-	if (!WarpComp)
+	if (!IsValid(WarpComp))
 	{
 		Data->SetBoolField(TEXT("hasMotionWarpingComponent"), false);
 		Data->SetStringField(TEXT("reason"),
@@ -411,7 +411,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimInspectMotionWarping::Execute(const 
 	TArray<TSharedPtr<FJsonValue>> ModifiersArr;
 	for (URootMotionModifier* Modifier : Modifiers)
 	{
-		if (!Modifier)
+		if (!IsValid(Modifier))
 		{
 			continue;
 		}
@@ -419,7 +419,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimInspectMotionWarping::Execute(const 
 		ModObj->SetStringField(TEXT("className"), Modifier->GetClass()->GetName());
 
 		const UAnimSequenceBase* Anim = Modifier->Animation.Get();
-		if (Anim)
+		if (IsValid(Anim))
 		{
 			ModObj->SetStringField(TEXT("animation"), Anim->GetPathName());
 		}
@@ -440,7 +440,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimInspectMotionWarping::Execute(const 
 		ModObj->SetBoolField(TEXT("active"), State == ERootMotionModifierState::Active);
 
 		// WarpTargetName is only on URootMotionModifier_Warp subclass.
-		if (URootMotionModifier_Warp* WarpMod = Cast<URootMotionModifier_Warp>(Modifier))
+		if (URootMotionModifier_Warp* WarpMod = Cast<URootMotionModifier_Warp>(Modifier); IsValid(WarpMod))
 		{
 			ModObj->SetStringField(TEXT("warpTargetName"), WarpMod->WarpTargetName.ToString());
 		}
@@ -477,8 +477,8 @@ IClaireonTool::FToolResult ClaireonTool_AnimInspectMotionWarping::Execute(const 
 			SetRotatorField(TgtObj, TEXT("rotation"), Target->Rotation);
 
 			const USceneComponent* Comp = Target->Component.Get();
-			AActor* CompOwner = Comp ? Comp->GetOwner() : nullptr;
-			if (CompOwner)
+			AActor* CompOwner = IsValid(Comp) ? Comp->GetOwner() : nullptr;
+			if (IsValid(CompOwner))
 			{
 				TgtObj->SetStringField(TEXT("componentOwner"), CompOwner->GetName());
 			}

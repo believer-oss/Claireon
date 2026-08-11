@@ -10,7 +10,11 @@ FString FClaireonMaterialTool_ApplyDelta::GetOperation() const { return TEXT("ap
 
 FString FClaireonMaterialTool_ApplyDelta::GetDescription() const
 {
-	return TEXT("Atomic batch material modification. Disconnects, removes, creates, and connects in one transactional call. Counterpart to material_apply_spec. Execution order: disconnect -> remove -> create -> connect. (Note: applies to UMaterial only; UMaterialInstanceConstant uses material_instance_* discrete tools.)");
+	return TEXT("Apply an atomic batch of UMaterial edits in one transactional call. Execution order: "
+				"disconnect -> remove -> create -> connect; any phase failure cancels the transaction so "
+				"nothing lands. Counterpart to material_apply_spec. Pass session_id for an open material "
+				"session (material_open) or asset_path for a temporary one. UMaterial only; "
+				"UMaterialInstanceConstant uses the material_instance_* tools.");
 }
 
 TSharedPtr<FJsonObject> FClaireonMaterialTool_ApplyDelta::GetInputSchema() const

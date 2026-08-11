@@ -52,6 +52,32 @@ namespace ClaireonNameResolver
 		FNameResolveResult& OutResult);
 
 	/**
+	 * Resolve a class name accepting any of several base classes.
+	 *
+	 * Runs the full ResolveClassName pipeline once per acceptable base and
+	 * merges the outcomes, so a name that only resolves under one of the bases
+	 * (e.g. a native UAnimNotifyState subclass checked against both UAnimNotify
+	 * and UAnimNotifyState) still resolves instead of being discarded by the
+	 * single-base IsChildOf gate. Short names, U/A-prefixed names, and rooted
+	 * object paths (e.g. '/Script/Engine.AnimNotifyState_TimedParticleEffect')
+	 * are all accepted.
+	 *
+	 * If different bases resolve the input to different classes, resolution
+	 * fails with an ambiguity error listing every match in OutResult.Candidates
+	 * so the caller can apply its own tiebreaker. On total failure the error
+	 * names every attempted base scope.
+	 *
+	 * @param Input                 The class name to resolve
+	 * @param AcceptableBaseClasses Candidate base classes; the resolved class must derive from at least one. Null entries are skipped; must contain at least one non-null entry.
+	 * @param OutResult             Populated with resolution details
+	 * @return                      The resolved UClass, or nullptr on failure
+	 */
+	UClass* ResolveClassNameMultiBase(
+		const FString& Input,
+		const TArray<UClass*>& AcceptableBaseClasses,
+		FNameResolveResult& OutResult);
+
+	/**
 	 * Resolve a pin name on a graph node using fuzzy matching.
 	 * Tries exact match, case-insensitive, common aliases, substring, and direction prefix stripping.
 	 *

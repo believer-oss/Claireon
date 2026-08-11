@@ -28,9 +28,6 @@ namespace ClaireonToolUObjectInspect_Internal
 		TSharedPtr<FJsonValue> Value; // optional, only populated when include_values=true
 	};
 
-	FString DeriveAccess(EPropertyFlags Flags);
-	FString DeriveBpAccess(EPropertyFlags Flags);
-	FString DeriveEditorAccess(EPropertyFlags Flags);
 	FString DelegateValueDescription(FProperty* Property, const void* ValuePtr);
 
 	void BuildPropertyListing(
@@ -41,8 +38,6 @@ namespace ClaireonToolUObjectInspect_Internal
 		TArray<FPropertyEntry>& OutEntries);
 
 	TSharedPtr<FJsonObject> EntryToJson(const FPropertyEntry& Entry);
-
-	UObject* ResolveObject(const FString& ObjectPath, bool bAllowLoad, FString& OutError);
 }
 
 FString ClaireonTool_UObjectInspect::GetOperation() const
@@ -53,17 +48,11 @@ FString ClaireonTool_UObjectInspect::GetOperation() const
 FString ClaireonTool_UObjectInspect::GetDescription() const
 {
 	return TEXT(
-		"Read any UPROPERTY value on any loaded UObject (asset, CDO, or "
-		"world actor) via FProperty reflection. Unlike get_editor_property, "
-		"this tool ignores Blueprint accessor specifiers and C++ access "
-		"level, so it can read fields declared without "
-		"BlueprintReadOnly/BlueprintReadWrite/EditAnywhere or fields "
-		"declared protected/private. Read-only. Listing mode (omit "
-		"property_path) returns schema for every property; pass "
-		"include_values=true to also include serialized values. Targeted "
-		"mode (property_path='Foo.Bar[0]') returns one value. Component "
-		"sub-properties are reached by traversing the actor's component "
-		"UPROPERTY: property_path='MyComp.SomeField'.");
+		"Read any UPROPERTY value on any loaded UObject (asset, CDO, or world actor) via "
+		"FProperty reflection, ignoring the Blueprint accessor specifiers and C++ access "
+		"level that block get_editor_property. Omit property_path for every property's "
+		"schema (values too with include_values=true); property_path='MyComp.Foo.Bar[0]' "
+		"returns one value. Read-only, non-session.");
 }
 
 TArray<FString> ClaireonTool_UObjectInspect::GetSearchKeywords() const
@@ -87,7 +76,10 @@ TSharedPtr<FJsonObject> ClaireonTool_UObjectInspect::GetInputSchema() const
 {
 	FToolSchemaBuilder S;
 	S.AddString(TEXT("object_path"),
-		TEXT("Path to a UObject. Accepts asset paths (/Game/...), native class paths (/Script/Module.ClassName, inspects the CDO), and world-actor / sub-object paths."),
+		TEXT("Path to a UObject. Accepts asset paths (/Game/...), native class paths (/Script/Module.ClassName, inspects the CDO), "
+			 "world-actor / sub-object paths (including live PIE actor paths like "
+			 "'/Game/Maps/UEDPIE_0_Map.Map:PersistentLevel.MyActor_1'), and rooted in-memory object paths "
+			 "(/Memory/..., /Temp/...)."),
 		true);
 	S.AddString(TEXT("property_path"),
 		TEXT("Dot-path with [N] for TArray indexing (e.g. 'Foo.Bar[0]'). Omit for listing mode."));
@@ -132,10 +124,16 @@ IClaireonTool::FToolResult ClaireonTool_UObjectInspect::Execute(const TSharedPtr
 	bool bAllowLoad = true;
 	Arguments->TryGetBoolField(TEXT("allow_load"), bAllowLoad);
 
-	// 2) Resolve object.
+	// 2) Resolve object. Shared with uobject_set_property so read and write
+	// reach the same object set.
 	FString ResolveError;
-	UObject* Object = ResolveObject(ObjectPath, bAllowLoad, ResolveError);
-	if (!Object)
+	// P0-8b: a path naming a class or Blueprint asset now resolves to its CDO.
+	// Capture the note so the substitution is disclosed -- reporting properties
+	// of a different object than the caller named, silently, is the failure
+	// shape this whole band is about.
+	FString CoercionNote;
+	UObject* Object = ClaireonPathResolver::ResolveObjectFromPath(ObjectPath, bAllowLoad, ResolveError, &CoercionNote);
+	if (!IsValid(Object))
 	{
 		return MakeErrorResult(ResolveError);
 	}
@@ -149,7 +147,7 @@ IClaireonTool::FToolResult ClaireonTool_UObjectInspect::Execute(const TSharedPtr
 		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 		Data->SetStringField(TEXT("object_path"), Object->GetPathName());
 		Data->SetStringField(TEXT("class"), Object->GetClass()->GetName());
-		if (UClass* Super = Object->GetClass()->GetSuperClass())
+		if (UClass* Super = Object->GetClass()->GetSuperClass(); IsValid(Super))
 		{
 			Data->SetStringField(TEXT("class_super"), Super->GetName());
 		}
@@ -169,7 +167,13 @@ IClaireonTool::FToolResult ClaireonTool_UObjectInspect::Execute(const TSharedPtr
 			*Object->GetClass()->GetName(),
 			Entries.Num(),
 			Entries.Num() == 1 ? TEXT("y") : TEXT("ies"));
-		return MakeSuccessResult(Data, Summary);
+
+		FToolResult ListingResult = MakeSuccessResult(Data, Summary);
+		if (!CoercionNote.IsEmpty())
+		{
+			ListingResult.Warnings.Add(CoercionNote);
+		}
+		return ListingResult;
 	}
 
 	// 4) Targeted mode.
@@ -192,9 +196,9 @@ IClaireonTool::FToolResult ClaireonTool_UObjectInspect::Execute(const TSharedPtr
 	// UStateTree::Schema. Surface the access level + a Warning so the caller's
 	// next step is informed.
 	const EPropertyFlags LeafFlags = LeafProperty->GetPropertyFlags();
-	const FString LeafAccess = ClaireonToolUObjectInspect_Internal::DeriveAccess(LeafFlags);
-	const FString LeafBpAccess = ClaireonToolUObjectInspect_Internal::DeriveBpAccess(LeafFlags);
-	const FString LeafEditorAccess = ClaireonToolUObjectInspect_Internal::DeriveEditorAccess(LeafFlags);
+	const FString LeafAccess = ClaireonStructReflection::DescribeAccess(LeafFlags);
+	const FString LeafBpAccess = ClaireonStructReflection::DescribeBpAccess(LeafFlags);
+	const FString LeafEditorAccess = ClaireonStructReflection::DescribeEditorAccess(LeafFlags);
 
 	// ResolvePropertyByPath returns Container; for array-leaf elements the
 	// container IS the element data and the leaf property is the inner.
@@ -226,6 +230,11 @@ IClaireonTool::FToolResult ClaireonTool_UObjectInspect::Execute(const TSharedPtr
 		*PropertyPath);
 	FToolResult Result = MakeSuccessResult(Data, Summary);
 
+	if (!CoercionNote.IsEmpty())
+	{
+		Result.Warnings.Add(CoercionNote);
+	}
+
 	// Warn when the field is C++-protected/private AND has no BP/editor access:
 	// this is the exact shape of UStateTree::Schema and the other known SEH
 	// triggers. Callers re-routing the same path through raw get_editor_property
@@ -244,87 +253,6 @@ IClaireonTool::FToolResult ClaireonTool_UObjectInspect::Execute(const TSharedPtr
 
 namespace ClaireonToolUObjectInspect_Internal
 {
-	UObject* ResolveObject(const FString& ObjectPath, bool bAllowLoad, FString& OutError)
-	{
-		ClaireonPathResolver::FResolveResult Resolved = ClaireonPathResolver::Resolve(ObjectPath);
-		if (!Resolved.bSuccess)
-		{
-			OutError = FString::Printf(
-				TEXT("Could not resolve path '%s': %s"),
-				*ObjectPath,
-				*Resolved.Error);
-			return nullptr;
-		}
-
-		const FString& Path = Resolved.ResolvedPath.Path;
-
-		// (a) Native class path -> CDO.
-		if (Resolved.ResolvedPath.Kind == ClaireonPathResolver::EPathKind::NativeClassPath)
-		{
-			UClass* ResolvedClass = FindObject<UClass>(nullptr, *Path);
-			if (!ResolvedClass)
-			{
-				ResolvedClass = FindFirstObjectSafe<UClass>(*Path);
-			}
-			if (!ResolvedClass && bAllowLoad)
-			{
-				ResolvedClass = LoadObject<UClass>(nullptr, *Path);
-			}
-			if (!ResolvedClass)
-			{
-				OutError = FString::Printf(
-					TEXT("Could not resolve native class '%s' for CDO inspection."),
-					*Path);
-				return nullptr;
-			}
-			return ResolvedClass->GetDefaultObject();
-		}
-
-		// (b) Asset path or sub-object path.
-		UObject* Found = StaticFindObject(
-			UObject::StaticClass(),
-			/*Outer=*/nullptr,
-			*Path,
-			/*ExactClass=*/false);
-
-		const bool bIsSubObject = Path.Contains(TEXT(":"));
-		if (!Found && bIsSubObject)
-		{
-			// ANY_PACKAGE is deprecated in UE 5.1+; use FindFirstObjectSafe for
-			// sub-object / world-actor paths that may not have a known outer.
-			Found = FindFirstObjectSafe<UObject>(*Path);
-		}
-
-		if (!Found && !bIsSubObject && bAllowLoad)
-		{
-			Found = StaticLoadObject(
-				UObject::StaticClass(),
-				/*Outer=*/nullptr,
-				*Path,
-				/*Filename=*/nullptr,
-				LOAD_None);
-		}
-
-		if (!Found)
-		{
-			if (!bAllowLoad && !bIsSubObject)
-			{
-				OutError = FString::Printf(
-					TEXT("Object '%s' is not loaded (allow_load=false)."),
-					*ObjectPath);
-			}
-			else
-			{
-				OutError = FString::Printf(
-					TEXT("Could not find object '%s'."),
-					*ObjectPath);
-			}
-			return nullptr;
-		}
-
-		return Found;
-	}
-
 	void BuildPropertyListing(
 		UObject* Object,
 		const FString& Filter,
@@ -353,9 +281,9 @@ namespace ClaireonToolUObjectInspect_Internal
 			Entry.Kind = ClaireonStructReflection::ClassifyProperty(Property);
 			Entry.CppType = ClaireonStructReflection::GetPropertySubtypePath(Property);
 			const EPropertyFlags Flags = Property->GetPropertyFlags();
-			Entry.Access = DeriveAccess(Flags);
-			Entry.BpAccess = DeriveBpAccess(Flags);
-			Entry.EditorAccess = DeriveEditorAccess(Flags);
+			Entry.Access = ClaireonStructReflection::DescribeAccess(Flags);
+			Entry.BpAccess = ClaireonStructReflection::DescribeBpAccess(Flags);
+			Entry.EditorAccess = ClaireonStructReflection::DescribeEditorAccess(Flags);
 
 			if (bIncludeValues)
 			{
@@ -377,32 +305,6 @@ namespace ClaireonToolUObjectInspect_Internal
 		}
 	}
 
-	FString DeriveAccess(EPropertyFlags Flags)
-	{
-		if (Flags & CPF_NativeAccessSpecifierPrivate)   { return TEXT("private"); }
-		if (Flags & CPF_NativeAccessSpecifierProtected) { return TEXT("protected"); }
-		return TEXT("public");
-	}
-
-	FString DeriveBpAccess(EPropertyFlags Flags)
-	{
-		if (Flags & CPF_BlueprintAssignable) { return TEXT("assignable"); }
-		if (Flags & CPF_BlueprintVisible)
-		{
-			return (Flags & CPF_BlueprintReadOnly) ? TEXT("read") : TEXT("read_write");
-		}
-		return TEXT("none");
-	}
-
-	FString DeriveEditorAccess(EPropertyFlags Flags)
-	{
-		const bool bEdit = (Flags & CPF_Edit) != 0;
-		const bool bEditConst = (Flags & CPF_EditConst) != 0;
-		if (bEdit && bEditConst) { return TEXT("edit_const"); }
-		if (bEdit)               { return TEXT("edit"); }
-		return TEXT("none");
-	}
-
 	FString DelegateValueDescription(FProperty* Property, const void* ValuePtr)
 	{
 		if (FMulticastDelegateProperty* Multicast = CastField<FMulticastDelegateProperty>(Property))
@@ -417,7 +319,7 @@ namespace ClaireonToolUObjectInspect_Internal
 			TArray<FString> Bindings;
 			for (UObject* Receiver : Receivers)
 			{
-				if (Receiver) { Bindings.Add(Receiver->GetName()); }
+				if (IsValid(Receiver)) { Bindings.Add(Receiver->GetName()); }
 			}
 			if (Bindings.Num() == 0) { return TEXT("<unbound>"); }
 			return FString::Join(Bindings, TEXT(", "));

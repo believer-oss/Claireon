@@ -6,6 +6,7 @@
 #include "Tools/ClaireonAudioTool_PlaceAudioVolume.h"
 #include "Tools/ClaireonAudioTool_AttachAudioComponent.h"
 #include "Tools/ClaireonAudioTool_SetAudioProperty.h"
+#include "Tools/ClaireonAudioApplyHelpers.h"
 #include "ClaireonLog.h"
 
 #include "Dom/JsonObject.h"
@@ -18,9 +19,11 @@ FString FClaireonTool_AudioApply::GetOperation() const { return TEXT("apply"); }
 
 FString FClaireonTool_AudioApply::GetDescription() const
 {
-	return TEXT("DEPRECATED: dispatches on 'operation'. Use the per-op tools instead: "
-	            "audio_place_ambient_sound, audio_place_audio_volume, audio_attach_audio_component, audio_set_audio_property. "
-	            "RequiresNoPIE AND RequiresEditorWorld.");
+	return TEXT("Apply an audio edit by dispatching on the 'operation' field. DEPRECATED: use the per-op "
+	            "tools instead -- audio_place_ambient_sound, audio_place_audio_volume, "
+	            "audio_attach_audio_component, audio_set_audio_property. Stateless / non-session: forwards "
+	            "to the per-op tool, which edits the current editor world directly. Requires an editor "
+	            "world and refuses to run during PIE.");
 }
 
 TSharedPtr<FJsonObject> FClaireonTool_AudioApply::GetInputSchema() const
@@ -45,30 +48,29 @@ TSharedPtr<FJsonObject> FClaireonTool_AudioApply::GetInputSchema() const
 	}
 	Properties->SetObjectField(TEXT("operation"), OpProp);
 
-	// Per-op fields kept loose-typed for backwards compatibility.
-	for (const TCHAR* Field : { TEXT("sound_asset_path"), TEXT("actor_name"), TEXT("component_path"),
-								TEXT("field_name"), TEXT("component_name"), TEXT("label") })
-	{
-		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
-		P->SetStringField(TEXT("type"), TEXT("string"));
-		Properties->SetObjectField(Field, P);
-	}
-	{
-		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
-		P->SetStringField(TEXT("type"), TEXT("boolean"));
-		Properties->SetObjectField(TEXT("auto_activate"), P);
-	}
-	for (const TCHAR* Field : { TEXT("transform"), TEXT("properties") })
-	{
-		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
-		P->SetStringField(TEXT("type"), TEXT("object"));
-		Properties->SetObjectField(Field, P);
-	}
-	{
-		// value -- any type
-		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
-		Properties->SetObjectField(TEXT("value"), P);
-	}
+	// Per-op fields kept loose-typed for backwards compatibility. Each still
+	// carries a description: an undescribed parameter is invisible in help and
+	// in the MCP schema, so a caller can only discover it by reading the source.
+	ClaireonAudioSchema::AddString(Properties, TEXT("sound_asset_path"),
+		TEXT("Sound asset to place or attach. Used by place_ambient_sound and attach_audio_component."));
+	ClaireonAudioSchema::AddString(Properties, TEXT("actor_name"),
+		TEXT("Target actor, by label or name. Used by attach_audio_component and set_audio_property."));
+	ClaireonAudioSchema::AddString(Properties, TEXT("component_path"),
+		TEXT("Path to the component to write. Used by set_audio_property."));
+	ClaireonAudioSchema::AddString(Properties, TEXT("field_name"),
+		TEXT("Property name to write on the resolved component. Used by set_audio_property."));
+	ClaireonAudioSchema::AddString(Properties, TEXT("component_name"),
+		TEXT("Name for the newly attached component. Used by attach_audio_component."));
+	ClaireonAudioSchema::AddString(Properties, TEXT("label"),
+		TEXT("Actor label for the placed actor. Used by place_ambient_sound and place_audio_volume."));
+	ClaireonAudioSchema::AddBoolean(Properties, TEXT("auto_activate"),
+		TEXT("Whether the created audio component auto-activates. Used by place_ambient_sound and attach_audio_component."));
+	ClaireonAudioSchema::AddObject(Properties, TEXT("transform"),
+		TEXT("Placement transform {location, rotation, scale}. Used by place_ambient_sound and place_audio_volume."));
+	ClaireonAudioSchema::AddObject(Properties, TEXT("properties"),
+		TEXT("Property name/value map applied to the placed actor. Used by place_audio_volume."));
+	ClaireonAudioSchema::AddAnyType(Properties, TEXT("value"),
+		TEXT("New value for field_name. Accepts whatever JSON type the target property takes. Used by set_audio_property."));
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
 

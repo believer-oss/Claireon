@@ -22,6 +22,7 @@ public class Claireon : ModuleRules
 			"Engine",
 			"Projects",          // IPluginManager for plugin content-dir lookup
 			"UnrealEd",
+			"LevelEditor",       // FLevelEditorModule/ILevelEditor/SLevelViewport for slate.screenshot level_viewport target
 			"Slate",
 			"SlateCore",
 			"ToolMenus",
@@ -54,6 +55,12 @@ public class Claireon : ModuleRules
 
 			// Combat testing tools dependencies
 			"GameplayAbilities", // UAbilitySystemComponent, UGameplayAbility, FGameplayAbilitySpec
+			// UGameplayTask / UAbilityTask, for routing latent task factories to their
+			// dedicated K2 node classes. Runtime module only -- the node classes
+			// themselves (UK2Node_LatentAbilityCall, UK2Node_LatentGameplayTaskCall)
+			// live in editor modules and are still resolved by name, so no
+			// GameplayAbilitiesEditor / GameplayTasksEditor edge is added.
+			"GameplayTasks",
 			"AIModule",          // AAIController, UBlackboardComponent
 			"BehaviorTreeEditor", // UBehaviorTreeGraph, UBehaviorTreeGraphNode (BT editing)
 			"AIGraph",           // UAIGraphNode::AddSubNode/RemoveSubNode (decorator/service editing)
@@ -62,6 +69,10 @@ public class Claireon : ModuleRules
 			"StateTreeModule",       // UStateTree, FStateTreeStateHandle, node base classes
 			"StateTreeEditorModule", // UStateTreeEditorData, UStateTreeState, FStateTreeCompiler
 			"PropertyBindingUtils",  // FPropertyBindingPath, FPropertyBindingPathSegment (UE 5.7+)
+			// UStateTreeComponent / UStateTreeAIComponent, for resolving the runtime
+			// component by type instead of by class-name substring. Both are
+			// GAMEPLAYSTATETREEMODULE_API; the name match could never hit the AI subclass.
+			"GameplayStateTreeModule",
 
 			// Blueprint editor library (RemoveUnusedNodes, RemoveUnusedVariables)
 			"BlueprintEditorLibrary",
@@ -155,8 +166,11 @@ public class Claireon : ModuleRules
 			PrivateDependencyModuleNames.Add("PythonScriptPlugin");
 		}
 
-		// UE 5.7 moved these headers into module Internal/ dirs, which UBT doesn't expose to
-		// external plugins. Owning modules are already linked; just add the Internal/ paths.
+		// UE 5.7 relocated some headers into their module's Internal/ folder, which UBT does NOT
+		// auto-expose to external (project) plugins. The owning modules are already linked via
+		// PrivateDependencyModuleNames; here we add the Internal/ dirs to the include path so
+		// "AnimGraphNodeBinding.h" (UAnimGraphNodeBinding) and "LookupProxy.h" (FLookupProxy)
+		// resolve. Guarded by Directory.Exists so older engines (where these were Public/) are unaffected.
 		string AnimGraphInternal = Path.Combine(EngineDirectory, "Source", "Editor", "AnimGraph", "Internal");
 		if (Directory.Exists(AnimGraphInternal))
 		{
@@ -168,8 +182,10 @@ public class Claireon : ModuleRules
 			PrivateIncludePaths.Add(ProxyTableInternal);
 		}
 
-		// Optional: GameplayCameras is Experimental and its API churns. Gate it like Untested so
-		// it dropping out only loses the camera tools, not the whole build.
+		// Camera asset tools — optional dependency. GameplayCameras is an Experimental engine
+		// plugin whose API churns across UE versions; gate it like Untested/BlueprintAssist so a
+		// future engine break (or a project that disables it) drops only the camera tools instead
+		// of failing the whole plugin build. The camera tool code is wrapped in #if WITH_GAMEPLAY_CAMERAS.
 		string GameplayCamerasUplugin = Path.Combine(EngineDirectory,
 			"Plugins", "Cameras", "GameplayCameras", "GameplayCameras.uplugin");
 		if (File.Exists(GameplayCamerasUplugin))

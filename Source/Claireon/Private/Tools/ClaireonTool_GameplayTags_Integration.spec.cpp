@@ -22,7 +22,7 @@
 #include "Misc/Paths.h"
 #include "UObject/UObjectGlobals.h"
 
-namespace
+namespace ClaireonTool_GameplayTags_Integration_spec_Private
 {
 	const TCHAR* const IntegrationSpec_TransientSource = TEXT("ClaireonSpecGameplayTags.ini");
 
@@ -39,7 +39,7 @@ namespace
 	FString IntegrationSpec_DefaultConfigPath()
 	{
 		const UGameplayTagsSettings* Settings = GetDefault<UGameplayTagsSettings>();
-		return Settings ? Settings->GetDefaultConfigFilename() : FString();
+		return IsValid(Settings) ? Settings->GetDefaultConfigFilename() : FString();
 	}
 
 	void IntegrationSpec_RegisterTransientSource()
@@ -112,6 +112,7 @@ namespace
 		return true;
 	}
 }
+using namespace ClaireonTool_GameplayTags_Integration_spec_Private;
 
 // =====================================================================================
 // Test 1: Add -> Reload -> Remove cycle. Tags must remain valid across the reload.
@@ -119,7 +120,7 @@ namespace
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonGameplayTagsIntegrationTest_AddReloadRemoveCycle,
 	"Claireon.GameplayTagsIntegration.AddReloadRemoveCycle",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonGameplayTagsIntegrationTest_AddReloadRemoveCycle::RunTest(const FString& /*Parameters*/)
 {
@@ -193,7 +194,7 @@ bool FClaireonGameplayTagsIntegrationTest_AddReloadRemoveCycle::RunTest(const FS
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonGameplayTagsIntegrationTest_DefaultConfigUntouched,
 	"Claireon.GameplayTagsIntegration.DefaultConfigUntouched",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonGameplayTagsIntegrationTest_DefaultConfigUntouched::RunTest(const FString& /*Parameters*/)
 {
@@ -265,7 +266,7 @@ bool FClaireonGameplayTagsIntegrationTest_DefaultConfigUntouched::RunTest(const 
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonGameplayTagsIntegrationTest_ExternalEditThenAdd,
 	"Claireon.GameplayTagsIntegration.ExternalEditThenAdd",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonGameplayTagsIntegrationTest_ExternalEditThenAdd::RunTest(const FString& /*Parameters*/)
 {
@@ -278,8 +279,11 @@ bool FClaireonGameplayTagsIntegrationTest_ExternalEditThenAdd::RunTest(const FSt
 	bool bPassed = true;
 
 	// Write the external tag row directly via IPlatformFile (no manager API).
+	// No '+' prefix on the key -- see the comment in ClaireonTool_GameplayTagsReload.spec.cpp.
+	// A standalone tag source ini is read with bHandleSymbolCommands=false, so '+GameplayTagList'
+	// would parse as a literal key name and the row would be dropped without a warning.
 	const FString IniContents = FString::Printf(
-		TEXT("[/Script/GameplayTags.GameplayTagsList]\r\n+GameplayTagList=(Tag=\"%s\",DevComment=\"\")\r\n"),
+		TEXT("[/Script/GameplayTags.GameplayTagsList]\r\nGameplayTagList=(Tag=\"%s\",DevComment=\"\")\r\n"),
 		*ExternalTag);
 	if (!FFileHelper::SaveStringToFile(IniContents, *IntegrationSpec_TransientFile()))
 	{

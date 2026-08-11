@@ -22,7 +22,9 @@ FString FClaireonCameraAssetTool_RemoveNode::GetOperation() const { return TEXT(
 
 FString FClaireonCameraAssetTool_RemoveNode::GetDescription() const
 {
-	return TEXT("Remove a UCameraNode from a rig (from a UArrayCameraNode parent's Children, or clear a rig root with force_root_clear).");
+	return TEXT("Remove a UCameraNode from a rig, either out of its UArrayCameraNode parent's Children array or, with "
+		"force_root_clear, by clearing the rig root. Non-session: the asset is addressed by asset_path and "
+		"the write is transactional; there is no camera_asset_open -- persist with camera_asset_save.");
 }
 
 TSharedPtr<FJsonObject> FClaireonCameraAssetTool_RemoveNode::GetInputSchema() const
@@ -71,7 +73,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_RemoveNode::Execute(const TS
 	}
 
 	UCameraAsset* Asset = LoadObject<UCameraAsset>(nullptr, *Canon);
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Camera asset not found: %s"), *Canon));
 	}
@@ -84,14 +86,14 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_RemoveNode::Execute(const TS
 			RigIndex, Rigs.Num()));
 	}
 	UCameraRigAsset* Rig = Rigs[RigIndex];
-	if (!Rig)
+	if (!IsValid(Rig))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Rig at index %d is null"), RigIndex));
 	}
 
 	FString ResolveError;
 	UCameraNode* Node = ClaireonCameraAssetHelpers::ResolveNode(Rig, NodeId, ResolveError);
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Failed to resolve node_id '%s': %s"), *NodeId, *ResolveError));
@@ -126,7 +128,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_RemoveNode::Execute(const TS
 
 		FString ParentResolveError;
 		UCameraNode* Parent = ClaireonCameraAssetHelpers::ResolveNode(Rig, ParentPath, ParentResolveError);
-		if (!Parent)
+		if (!IsValid(Parent))
 		{
 			Transaction.Cancel();
 			return MakeErrorResult(FString::Printf(
@@ -135,7 +137,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_RemoveNode::Execute(const TS
 		}
 
 		UArrayCameraNode* ArrayParent = Cast<UArrayCameraNode>(Parent);
-		if (!ArrayParent)
+		if (!IsValid(ArrayParent))
 		{
 			Transaction.Cancel();
 			return MakeErrorResult(FString::Printf(

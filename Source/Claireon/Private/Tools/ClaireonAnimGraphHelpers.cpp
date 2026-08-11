@@ -66,14 +66,14 @@ UAnimBlueprint* LoadAnimBlueprint(const FString& AssetPath, FString& OutError)
 	const FString ResolvedPath = ResolveResult.ResolvedPath.Path;
 
 	UObject* LoadedObj = FSoftObjectPath(ResolvedPath).TryLoad();
-	if (!LoadedObj)
+	if (!IsValid(LoadedObj))
 	{
 		OutError = FString::Printf(TEXT("Failed to load asset at path: %s"), *ResolvedPath);
 		return nullptr;
 	}
 
 	UAnimBlueprint* AnimBP = Cast<UAnimBlueprint>(LoadedObj);
-	if (!AnimBP)
+	if (!IsValid(AnimBP))
 	{
 		OutError = FString::Printf(TEXT("Asset at %s is not an Animation Blueprint (actual type: %s)"),
 			*ResolvedPath, *LoadedObj->GetClass()->GetName());
@@ -93,22 +93,22 @@ void CollectAnimGraphSubGraphs(UEdGraph* AnimGraph, const FString& ParentName, T
 /** Internal recursive helper to collect graphs from a state machine. */
 void CollectStateMachineGraphs(UAnimationStateMachineGraph* SMGraph, const FString& ParentName, TArray<FAnimGraphInfo>& OutGraphs)
 {
-	if (!SMGraph)
+	if (!IsValid(SMGraph))
 	{
 		return;
 	}
 
 	for (UEdGraphNode* Node : SMGraph->Nodes)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			continue;
 		}
 
 		// State nodes have a bound graph for their pose
-		if (UAnimStateNode* StateNode = Cast<UAnimStateNode>(Node))
+		if (UAnimStateNode* StateNode = Cast<UAnimStateNode>(Node); IsValid(StateNode))
 		{
-			if (UEdGraph* BoundGraph = StateNode->BoundGraph)
+			if (UEdGraph* BoundGraph = StateNode->BoundGraph; IsValid(BoundGraph))
 			{
 				FAnimGraphInfo Info;
 				Info.Name = BoundGraph->GetName();
@@ -122,9 +122,9 @@ void CollectStateMachineGraphs(UAnimationStateMachineGraph* SMGraph, const FStri
 				CollectAnimGraphSubGraphs(BoundGraph, BoundGraph->GetName(), OutGraphs);
 				for (UEdGraphNode* InnerNode : BoundGraph->Nodes)
 				{
-					if (UAnimGraphNode_StateMachine* NestedSM = Cast<UAnimGraphNode_StateMachine>(InnerNode))
+					if (UAnimGraphNode_StateMachine* NestedSM = Cast<UAnimGraphNode_StateMachine>(InnerNode); IsValid(NestedSM))
 					{
-						if (UAnimationStateMachineGraph* NestedSMGraph = NestedSM->EditorStateMachineGraph)
+						if (UAnimationStateMachineGraph* NestedSMGraph = NestedSM->EditorStateMachineGraph; IsValid(NestedSMGraph))
 						{
 							FAnimGraphInfo SMInfo;
 							SMInfo.Name = NestedSMGraph->GetName();
@@ -141,9 +141,9 @@ void CollectStateMachineGraphs(UAnimationStateMachineGraph* SMGraph, const FStri
 			}
 		}
 		// Transition nodes have a bound graph for their condition
-		else if (UAnimStateTransitionNode* TransNode = Cast<UAnimStateTransitionNode>(Node))
+		else if (UAnimStateTransitionNode* TransNode = Cast<UAnimStateTransitionNode>(Node); IsValid(TransNode))
 		{
-			if (UEdGraph* BoundGraph = TransNode->BoundGraph)
+			if (UEdGraph* BoundGraph = TransNode->BoundGraph; IsValid(BoundGraph))
 			{
 				FAnimGraphInfo Info;
 				Info.Name = BoundGraph->GetName();
@@ -154,7 +154,7 @@ void CollectStateMachineGraphs(UAnimationStateMachineGraph* SMGraph, const FStri
 				OutGraphs.Add(Info);
 			}
 			// Custom blend graph if present
-			if (UEdGraph* CustomBlend = TransNode->CustomTransitionGraph)
+			if (UEdGraph* CustomBlend = TransNode->CustomTransitionGraph; IsValid(CustomBlend))
 			{
 				FAnimGraphInfo Info;
 				Info.Name = CustomBlend->GetName();
@@ -166,9 +166,9 @@ void CollectStateMachineGraphs(UAnimationStateMachineGraph* SMGraph, const FStri
 			}
 		}
 		// Conduit nodes have a bound graph
-		else if (UAnimStateConduitNode* ConduitNode = Cast<UAnimStateConduitNode>(Node))
+		else if (UAnimStateConduitNode* ConduitNode = Cast<UAnimStateConduitNode>(Node); IsValid(ConduitNode))
 		{
-			if (UEdGraph* BoundGraph = ConduitNode->BoundGraph)
+			if (UEdGraph* BoundGraph = ConduitNode->BoundGraph; IsValid(BoundGraph))
 			{
 				FAnimGraphInfo Info;
 				Info.Name = BoundGraph->GetName();
@@ -185,22 +185,22 @@ void CollectStateMachineGraphs(UAnimationStateMachineGraph* SMGraph, const FStri
 /** Internal helper to collect graphs from an animation graph (AnimGraph root or state pose graph). */
 void CollectAnimGraphSubGraphs(UEdGraph* AnimGraph, const FString& ParentName, TArray<FAnimGraphInfo>& OutGraphs)
 {
-	if (!AnimGraph)
+	if (!IsValid(AnimGraph))
 	{
 		return;
 	}
 
 	for (UEdGraphNode* Node : AnimGraph->Nodes)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			continue;
 		}
 
 		// State machine nodes contain a state machine graph
-		if (UAnimGraphNode_StateMachine* SMNode = Cast<UAnimGraphNode_StateMachine>(Node))
+		if (UAnimGraphNode_StateMachine* SMNode = Cast<UAnimGraphNode_StateMachine>(Node); IsValid(SMNode))
 		{
-			if (UAnimationStateMachineGraph* SMGraph = SMNode->EditorStateMachineGraph)
+			if (UAnimationStateMachineGraph* SMGraph = SMNode->EditorStateMachineGraph; IsValid(SMGraph))
 			{
 				FAnimGraphInfo Info;
 				Info.Name = SMGraph->GetName();
@@ -218,7 +218,7 @@ void CollectAnimGraphSubGraphs(UEdGraph* AnimGraph, const FString& ParentName, T
 		// For generic UAnimGraphNode_Base nodes, check for BoundGraph (e.g., Blend Stack
 		// internal graphs, per-sample graphs, or other nodes with embedded logic).
 		// Access BoundGraph via UProperty reflection since it's not on the base class.
-		if (UAnimGraphNode_Base* AnimNode = Cast<UAnimGraphNode_Base>(Node))
+		if (UAnimGraphNode_Base* AnimNode = Cast<UAnimGraphNode_Base>(Node); IsValid(AnimNode))
 		{
 			// Look for a BoundGraph UProperty on the node
 			FObjectProperty* BoundGraphProp = CastField<FObjectProperty>(
@@ -226,7 +226,7 @@ void CollectAnimGraphSubGraphs(UEdGraph* AnimGraph, const FString& ParentName, T
 			if (BoundGraphProp)
 			{
 				UEdGraph* BoundGraph = Cast<UEdGraph>(BoundGraphProp->GetObjectPropertyValue_InContainer(AnimNode));
-				if (BoundGraph && BoundGraph->Nodes.Num() > 0)
+				if (IsValid(BoundGraph) && BoundGraph->Nodes.Num() > 0)
 				{
 					FAnimGraphInfo Info;
 					Info.Name = BoundGraph->GetName();
@@ -244,7 +244,7 @@ void CollectAnimGraphSubGraphs(UEdGraph* AnimGraph, const FString& ParentName, T
 			// Also check SubGraphs array (some nodes store multiple sub-graphs)
 			for (UEdGraph* SubGraph : Node->GetSubGraphs())
 			{
-				if (SubGraph && SubGraph != AnimGraph)
+				if (IsValid(SubGraph) && SubGraph != AnimGraph)
 				{
 					// Avoid duplicates (BoundGraph may already be added)
 					bool bAlreadyAdded = false;
@@ -277,7 +277,7 @@ void CollectAnimGraphSubGraphs(UEdGraph* AnimGraph, const FString& ParentName, T
 TArray<FAnimGraphInfo> CollectAllGraphs(UAnimBlueprint* AnimBP)
 {
 	TArray<FAnimGraphInfo> Result;
-	if (!AnimBP)
+	if (!IsValid(AnimBP))
 	{
 		return Result;
 	}
@@ -285,13 +285,13 @@ TArray<FAnimGraphInfo> CollectAllGraphs(UAnimBlueprint* AnimBP)
 	// Collect AnimGraph roots from FunctionGraphs.
 	// For child AnimBPs, FunctionGraphs may be empty — traverse the parent chain.
 	UAnimBlueprint* Current = AnimBP;
-	while (Current)
+	while (IsValid(Current))
 	{
 		UE_LOG(LogClaireon, Log, TEXT("[CollectAllGraphs] Checking '%s' — FunctionGraphs: %d"),
 			*Current->GetName(), Current->FunctionGraphs.Num());
 		for (UEdGraph* Graph : Current->FunctionGraphs)
 		{
-			if (!Graph)
+			if (!IsValid(Graph))
 			{
 				continue;
 			}
@@ -362,7 +362,7 @@ UEdGraph* FindAnimGraphByName(UAnimBlueprint* AnimBP, const FString& GraphName, 
 
 FString GetAnimNodeCategory(const UEdGraphNode* Node)
 {
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return TEXT("unknown");
 	}
@@ -504,7 +504,7 @@ FString GetPinTypeString(const UEdGraphPin* Pin)
 	// Check for pose pins
 	if (PinType.PinCategory == UAnimationGraphSchema::PC_Struct)
 	{
-		if (UScriptStruct* Struct = Cast<UScriptStruct>(PinType.PinSubCategoryObject.Get()))
+		if (UScriptStruct* Struct = Cast<UScriptStruct>(PinType.PinSubCategoryObject.Get()); IsValid(Struct))
 		{
 			const FString StructName = Struct->GetName();
 			if (StructName == TEXT("PoseLink"))
@@ -546,7 +546,7 @@ FString GetPinTypeString(const UEdGraphPin* Pin)
 	}
 	if (PinType.PinCategory == UEdGraphSchema_K2::PC_Object)
 	{
-		if (UClass* ObjClass = Cast<UClass>(PinType.PinSubCategoryObject.Get()))
+		if (UClass* ObjClass = Cast<UClass>(PinType.PinSubCategoryObject.Get()); IsValid(ObjClass))
 		{
 			return FString::Printf(TEXT("object<%s>"), *ObjClass->GetName());
 		}
@@ -554,7 +554,7 @@ FString GetPinTypeString(const UEdGraphPin* Pin)
 	}
 	if (PinType.PinCategory == UEdGraphSchema_K2::PC_Struct)
 	{
-		if (UScriptStruct* Struct = Cast<UScriptStruct>(PinType.PinSubCategoryObject.Get()))
+		if (UScriptStruct* Struct = Cast<UScriptStruct>(PinType.PinSubCategoryObject.Get()); IsValid(Struct))
 		{
 			return FString::Printf(TEXT("struct<%s>"), *Struct->GetName());
 		}
@@ -562,7 +562,7 @@ FString GetPinTypeString(const UEdGraphPin* Pin)
 	}
 	if (PinType.PinCategory == UEdGraphSchema_K2::PC_Enum || PinType.PinCategory == UEdGraphSchema_K2::PC_Byte)
 	{
-		if (UEnum* Enum = Cast<UEnum>(PinType.PinSubCategoryObject.Get()))
+		if (UEnum* Enum = Cast<UEnum>(PinType.PinSubCategoryObject.Get()); IsValid(Enum))
 		{
 			return FString::Printf(TEXT("enum<%s>"), *Enum->GetName());
 		}
@@ -579,7 +579,7 @@ FString GetPinTypeString(const UEdGraphPin* Pin)
 TArray<TSharedPtr<FJsonValue>> SerializeAllPins(const UEdGraphNode* Node, bool bIncludeDefaults)
 {
 	TArray<TSharedPtr<FJsonValue>> PinsArray;
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return PinsArray;
 	}
@@ -603,7 +603,7 @@ TArray<TSharedPtr<FJsonValue>> SerializeAllPins(const UEdGraphNode* Node, bool b
 			TArray<TSharedPtr<FJsonValue>> ConnectedArray;
 			for (const UEdGraphPin* LinkedPin : Pin->LinkedTo)
 			{
-				if (!LinkedPin || !LinkedPin->GetOwningNode())
+				if (!LinkedPin || !IsValid(LinkedPin->GetOwningNode()))
 				{
 					continue;
 				}
@@ -643,7 +643,7 @@ TArray<TSharedPtr<FJsonValue>> SerializeAllPins(const UEdGraphNode* Node, bool b
 TSharedPtr<FJsonObject> SerializeAnimNodeProperties(UAnimGraphNode_Base* AnimNode)
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	if (!AnimNode)
+	if (!IsValid(AnimNode))
 	{
 		return Result;
 	}
@@ -664,7 +664,7 @@ TSharedPtr<FJsonObject> SerializeAnimNodeProperties(UAnimGraphNode_Base* AnimNod
 		}
 	}
 
-	if (!AnimNodeStructProp || !AnimNodeStruct)
+	if (!AnimNodeStructProp || !IsValid(AnimNodeStruct))
 	{
 		Result->SetStringField(TEXT("_error"), TEXT("Could not find FAnimNode_Base struct property on node"));
 		return Result;
@@ -733,13 +733,13 @@ TSharedPtr<FJsonObject> SerializeAnimNodeProperties(UAnimGraphNode_Base* AnimNod
  */
 const TMap<FName, FAnimGraphNodePropertyBinding>* GetPropertyBindingsMap(UAnimGraphNode_Base* AnimNode)
 {
-	if (!AnimNode)
+	if (!IsValid(AnimNode))
 	{
 		return nullptr;
 	}
 
 	const UAnimGraphNodeBinding* BindingObj = AnimNode->GetBinding();
-	if (!BindingObj)
+	if (!IsValid(BindingObj))
 	{
 		return nullptr;
 	}
@@ -758,7 +758,7 @@ const TMap<FName, FAnimGraphNodePropertyBinding>* GetPropertyBindingsMap(UAnimGr
 TSharedPtr<FJsonObject> SerializePropertyBindings(UAnimGraphNode_Base* AnimNode)
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	if (!AnimNode)
+	if (!IsValid(AnimNode))
 	{
 		return Result;
 	}
@@ -822,7 +822,7 @@ TSharedPtr<FJsonObject> SerializePropertyBindings(UAnimGraphNode_Base* AnimNode)
 
 bool AnalyzeFastPath(UAnimGraphNode_Base* AnimNode, TArray<FString>& OutWarnings)
 {
-	if (!AnimNode)
+	if (!IsValid(AnimNode))
 	{
 		return true;
 	}
@@ -846,7 +846,7 @@ bool AnalyzeFastPath(UAnimGraphNode_Base* AnimNode, TArray<FString>& OutWarnings
 TSharedPtr<FJsonObject> SerializeLinkedLayerInfo(UAnimGraphNode_Base* AnimNode)
 {
 	UAnimGraphNode_LinkedAnimLayer* LayerNode = Cast<UAnimGraphNode_LinkedAnimLayer>(AnimNode);
-	if (!LayerNode)
+	if (!IsValid(LayerNode))
 	{
 		return nullptr;
 	}
@@ -895,13 +895,13 @@ TSharedPtr<FJsonObject> SerializeLinkedLayerInfo(UAnimGraphNode_Base* AnimNode)
 TArray<TSharedPtr<FJsonValue>> SerializeNodeBoundEvents(UEdGraphNode* Node, UAnimBlueprint* AnimBP)
 {
 	TArray<TSharedPtr<FJsonValue>> EventsArray;
-	if (!Node || !AnimBP)
+	if (!IsValid(Node) || !IsValid(AnimBP))
 	{
 		return EventsArray;
 	}
 
 	// State nodes have specific bound events
-	if (UAnimStateNode* StateNode = Cast<UAnimStateNode>(Node))
+	if (UAnimStateNode* StateNode = Cast<UAnimStateNode>(Node); IsValid(StateNode))
 	{
 		// Check for custom event graphs bound to this state
 		// State nodes can have OnStateEntered, OnStateLeft, OnStateFullyBlended events
@@ -928,11 +928,11 @@ TArray<TSharedPtr<FJsonValue>> SerializeNodeBoundEvents(UEdGraphNode* Node, UAni
 		}
 
 		// Examine bound graph for event-like nodes
-		if (UEdGraph* BoundGraph = StateNode->BoundGraph)
+		if (UEdGraph* BoundGraph = StateNode->BoundGraph; IsValid(BoundGraph))
 		{
 			for (UEdGraphNode* InnerNode : BoundGraph->Nodes)
 			{
-				if (!InnerNode)
+				if (!IsValid(InnerNode))
 				{
 					continue;
 				}
@@ -947,10 +947,10 @@ TArray<TSharedPtr<FJsonValue>> SerializeNodeBoundEvents(UEdGraphNode* Node, UAni
 	}
 
 	// Transition nodes can have custom event bindings
-	if (UAnimStateTransitionNode* TransNode = Cast<UAnimStateTransitionNode>(Node))
+	if (UAnimStateTransitionNode* TransNode = Cast<UAnimStateTransitionNode>(Node); IsValid(TransNode))
 	{
 		// Check for custom transition events
-		if (UEdGraph* BoundGraph = TransNode->BoundGraph)
+		if (UEdGraph* BoundGraph = TransNode->BoundGraph; IsValid(BoundGraph))
 		{
 			TSharedPtr<FJsonObject> EventObj = MakeShared<FJsonObject>();
 			EventObj->SetStringField(TEXT("event_name"), TEXT("TransitionCondition"));
@@ -959,7 +959,7 @@ TArray<TSharedPtr<FJsonValue>> SerializeNodeBoundEvents(UEdGraphNode* Node, UAni
 			EventObj->SetNumberField(TEXT("condition_node_count"), BoundGraph->Nodes.Num());
 			EventsArray.Add(MakeShared<FJsonValueObject>(EventObj));
 		}
-		if (UEdGraph* CustomBlend = TransNode->CustomTransitionGraph)
+		if (UEdGraph* CustomBlend = TransNode->CustomTransitionGraph; IsValid(CustomBlend))
 		{
 			TSharedPtr<FJsonObject> EventObj = MakeShared<FJsonObject>();
 			EventObj->SetStringField(TEXT("event_name"), TEXT("CustomBlend"));
@@ -970,7 +970,7 @@ TArray<TSharedPtr<FJsonValue>> SerializeNodeBoundEvents(UEdGraphNode* Node, UAni
 	}
 
 	// For generic anim graph nodes, check the three FMemberReference function bindings
-	if (UAnimGraphNode_Base* AnimGraphNode = Cast<UAnimGraphNode_Base>(Node))
+	if (UAnimGraphNode_Base* AnimGraphNode = Cast<UAnimGraphNode_Base>(Node); IsValid(AnimGraphNode))
 	{
 		auto AddFunctionEvent = [&](const FString& EventName, const FMemberReference& FuncRef)
 		{
@@ -1000,7 +1000,7 @@ TArray<TSharedPtr<FJsonValue>> SerializeNodeBoundEvents(UEdGraphNode* Node, UAni
 TSharedPtr<FJsonObject> SerializeAnimGraphNode(UEdGraphNode* Node, const FString& DetailLevel, UAnimBlueprint* AnimBP)
 {
 	TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return NodeObj;
 	}
@@ -1069,7 +1069,7 @@ TSharedPtr<FJsonObject> SerializeAnimGraphNode(UEdGraphNode* Node, const FString
 	// Full detail: include bindings and fast path
 	if (DetailLevel == TEXT("full"))
 	{
-		if (UAnimGraphNode_Base* AnimGraphNode = Cast<UAnimGraphNode_Base>(Node))
+		if (UAnimGraphNode_Base* AnimGraphNode = Cast<UAnimGraphNode_Base>(Node); IsValid(AnimGraphNode))
 		{
 			// Property bindings (informational — shows what bindings exist)
 			TSharedPtr<FJsonObject> Bindings = SerializePropertyBindings(AnimGraphNode);
@@ -1092,7 +1092,7 @@ TSharedPtr<FJsonObject> SerializeAnimGraphNode(UEdGraphNode* Node, const FString
 		}
 
 		// Node-bound events
-		if (AnimBP)
+		if (IsValid(AnimBP))
 		{
 			TArray<TSharedPtr<FJsonValue>> Events = SerializeNodeBoundEvents(Node, AnimBP);
 			if (Events.Num() > 0)
@@ -1103,7 +1103,7 @@ TSharedPtr<FJsonObject> SerializeAnimGraphNode(UEdGraphNode* Node, const FString
 	}
 
 	// Sub-graph references for state machine nodes
-	if (UAnimGraphNode_StateMachine* SMNode = Cast<UAnimGraphNode_StateMachine>(Node))
+	if (UAnimGraphNode_StateMachine* SMNode = Cast<UAnimGraphNode_StateMachine>(Node); IsValid(SMNode))
 	{
 		if (SMNode->EditorStateMachineGraph)
 		{
@@ -1114,7 +1114,7 @@ TSharedPtr<FJsonObject> SerializeAnimGraphNode(UEdGraphNode* Node, const FString
 			NodeObj->SetObjectField(TEXT("sub_graph"), SubGraph);
 		}
 	}
-	else if (UAnimStateNode* StateNode = Cast<UAnimStateNode>(Node))
+	else if (UAnimStateNode* StateNode = Cast<UAnimStateNode>(Node); IsValid(StateNode))
 	{
 		if (StateNode->BoundGraph)
 		{
@@ -1125,7 +1125,7 @@ TSharedPtr<FJsonObject> SerializeAnimGraphNode(UEdGraphNode* Node, const FString
 			NodeObj->SetObjectField(TEXT("sub_graph"), SubGraph);
 		}
 	}
-	else if (UAnimStateTransitionNode* TransNode = Cast<UAnimStateTransitionNode>(Node))
+	else if (UAnimStateTransitionNode* TransNode = Cast<UAnimStateTransitionNode>(Node); IsValid(TransNode))
 	{
 		if (TransNode->BoundGraph)
 		{
@@ -1139,8 +1139,8 @@ TSharedPtr<FJsonObject> SerializeAnimGraphNode(UEdGraphNode* Node, const FString
 		// Add transition summary info
 		UAnimStateNodeBase* PrevState = TransNode->GetPreviousState();
 		UAnimStateNodeBase* NextState = TransNode->GetNextState();
-		NodeObj->SetStringField(TEXT("from_state"), PrevState ? PrevState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("Unknown"));
-		NodeObj->SetStringField(TEXT("to_state"), NextState ? NextState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("Unknown"));
+		NodeObj->SetStringField(TEXT("from_state"), IsValid(PrevState) ? PrevState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("Unknown"));
+		NodeObj->SetStringField(TEXT("to_state"), IsValid(NextState) ? NextState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("Unknown"));
 		NodeObj->SetNumberField(TEXT("crossfade_duration"), TransNode->CrossfadeDuration);
 
 		// Shared transition rules
@@ -1159,7 +1159,7 @@ TSharedPtr<FJsonObject> SerializeAnimGraphNode(UEdGraphNode* Node, const FString
 			NodeObj->SetObjectField(TEXT("shared_crossfade"), SharedObj);
 		}
 	}
-	else if (UAnimStateConduitNode* ConduitNode = Cast<UAnimStateConduitNode>(Node))
+	else if (UAnimStateConduitNode* ConduitNode = Cast<UAnimStateConduitNode>(Node); IsValid(ConduitNode))
 	{
 		if (ConduitNode->BoundGraph)
 		{
@@ -1170,7 +1170,7 @@ TSharedPtr<FJsonObject> SerializeAnimGraphNode(UEdGraphNode* Node, const FString
 			NodeObj->SetObjectField(TEXT("sub_graph"), SubGraph);
 		}
 	}
-	else if (UAnimStateAliasNode* AliasNode = Cast<UAnimStateAliasNode>(Node))
+	else if (UAnimStateAliasNode* AliasNode = Cast<UAnimStateAliasNode>(Node); IsValid(AliasNode))
 	{
 		NodeObj->SetBoolField(TEXT("is_global_alias"), AliasNode->bGlobalAlias);
 
@@ -1178,7 +1178,7 @@ TSharedPtr<FJsonObject> SerializeAnimGraphNode(UEdGraphNode* Node, const FString
 		TArray<TSharedPtr<FJsonValue>> AliasedArray;
 		for (const TWeakObjectPtr<UAnimStateNodeBase>& StatePtr : AliasNode->GetAliasedStates())
 		{
-			if (UAnimStateNodeBase* AliasedState = StatePtr.Get())
+			if (UAnimStateNodeBase* AliasedState = StatePtr.Get(); IsValid(AliasedState))
 			{
 				TSharedPtr<FJsonObject> AliasedObj = MakeShared<FJsonObject>();
 				AliasedObj->SetStringField(TEXT("name"), AliasedState->GetNodeTitle(ENodeTitleType::ListView).ToString());
@@ -1199,7 +1199,7 @@ TSharedPtr<FJsonObject> SerializeAnimGraphNode(UEdGraphNode* Node, const FString
 TSharedPtr<FJsonObject> SerializeStateMachine(UAnimationStateMachineGraph* SMGraph)
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	if (!SMGraph)
+	if (!IsValid(SMGraph))
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Invalid state machine graph"));
 		return Result;
@@ -1216,12 +1216,12 @@ TSharedPtr<FJsonObject> SerializeStateMachine(UAnimationStateMachineGraph* SMGra
 
 	for (UEdGraphNode* Node : SMGraph->Nodes)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			continue;
 		}
 
-		if (UAnimStateEntryNode* EntryNode = Cast<UAnimStateEntryNode>(Node))
+		if (UAnimStateEntryNode* EntryNode = Cast<UAnimStateEntryNode>(Node); IsValid(EntryNode))
 		{
 			// Follow the entry node's output to find the default state
 			for (UEdGraphPin* Pin : EntryNode->Pins)
@@ -1229,14 +1229,14 @@ TSharedPtr<FJsonObject> SerializeStateMachine(UAnimationStateMachineGraph* SMGra
 				if (Pin && Pin->Direction == EGPD_Output && Pin->LinkedTo.Num() > 0)
 				{
 					UEdGraphNode* DefaultState = Pin->LinkedTo[0]->GetOwningNode();
-					if (DefaultState)
+					if (IsValid(DefaultState))
 					{
 						EntryStateName = DefaultState->GetNodeTitle(ENodeTitleType::ListView).ToString();
 					}
 				}
 			}
 		}
-		else if (UAnimStateNode* StateNode = Cast<UAnimStateNode>(Node))
+		else if (UAnimStateNode* StateNode = Cast<UAnimStateNode>(Node); IsValid(StateNode))
 		{
 			TSharedPtr<FJsonObject> StateObj = MakeShared<FJsonObject>();
 			StateObj->SetStringField(TEXT("name"), StateNode->GetNodeTitle(ENodeTitleType::ListView).ToString());
@@ -1250,15 +1250,15 @@ TSharedPtr<FJsonObject> SerializeStateMachine(UAnimationStateMachineGraph* SMGra
 
 			StatesArray.Add(MakeShared<FJsonValueObject>(StateObj));
 		}
-		else if (UAnimStateTransitionNode* TransNode = Cast<UAnimStateTransitionNode>(Node))
+		else if (UAnimStateTransitionNode* TransNode = Cast<UAnimStateTransitionNode>(Node); IsValid(TransNode))
 		{
 			TSharedPtr<FJsonObject> TransObj = MakeShared<FJsonObject>();
 
 			UAnimStateNodeBase* PrevState = TransNode->GetPreviousState();
 			UAnimStateNodeBase* NextState = TransNode->GetNextState();
 
-			TransObj->SetStringField(TEXT("from_state"), PrevState ? PrevState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("Unknown"));
-			TransObj->SetStringField(TEXT("to_state"), NextState ? NextState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("Unknown"));
+			TransObj->SetStringField(TEXT("from_state"), IsValid(PrevState) ? PrevState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("Unknown"));
+			TransObj->SetStringField(TEXT("to_state"), IsValid(NextState) ? NextState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("Unknown"));
 			TransObj->SetStringField(TEXT("guid"), TransNode->NodeGuid.ToString());
 			TransObj->SetNumberField(TEXT("crossfade_duration"), TransNode->CrossfadeDuration);
 			TransObj->SetNumberField(TEXT("priority_order"), TransNode->PriorityOrder);
@@ -1316,7 +1316,7 @@ TSharedPtr<FJsonObject> SerializeStateMachine(UAnimationStateMachineGraph* SMGra
 
 			TransitionsArray.Add(MakeShared<FJsonValueObject>(TransObj));
 		}
-		else if (UAnimStateConduitNode* ConduitNode = Cast<UAnimStateConduitNode>(Node))
+		else if (UAnimStateConduitNode* ConduitNode = Cast<UAnimStateConduitNode>(Node); IsValid(ConduitNode))
 		{
 			TSharedPtr<FJsonObject> ConduitObj = MakeShared<FJsonObject>();
 			ConduitObj->SetStringField(TEXT("name"), ConduitNode->GetNodeTitle(ENodeTitleType::ListView).ToString());
@@ -1344,7 +1344,7 @@ TSharedPtr<FJsonObject> SerializeStateMachine(UAnimationStateMachineGraph* SMGra
 TSharedPtr<FJsonObject> SerializeTransition(UAnimStateTransitionNode* TransNode)
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	if (!TransNode)
+	if (!IsValid(TransNode))
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Invalid transition node"));
 		return Result;
@@ -1353,8 +1353,8 @@ TSharedPtr<FJsonObject> SerializeTransition(UAnimStateTransitionNode* TransNode)
 	UAnimStateNodeBase* PrevState = TransNode->GetPreviousState();
 	UAnimStateNodeBase* NextState = TransNode->GetNextState();
 
-	Result->SetStringField(TEXT("from_state"), PrevState ? PrevState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("Unknown"));
-	Result->SetStringField(TEXT("to_state"), NextState ? NextState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("Unknown"));
+	Result->SetStringField(TEXT("from_state"), IsValid(PrevState) ? PrevState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("Unknown"));
+	Result->SetStringField(TEXT("to_state"), IsValid(NextState) ? NextState->GetNodeTitle(ENodeTitleType::ListView).ToString() : TEXT("Unknown"));
 	Result->SetStringField(TEXT("guid"), TransNode->NodeGuid.ToString());
 	Result->SetNumberField(TEXT("crossfade_duration"), TransNode->CrossfadeDuration);
 	Result->SetNumberField(TEXT("priority_order"), TransNode->PriorityOrder);
@@ -1450,7 +1450,7 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 	}
 
 	// Condition graph
-	if (UEdGraph* CondGraph = TransNode->BoundGraph)
+	if (UEdGraph* CondGraph = TransNode->BoundGraph; IsValid(CondGraph))
 	{
 		TSharedPtr<FJsonObject> CondGraphObj = MakeShared<FJsonObject>();
 		CondGraphObj->SetStringField(TEXT("graph_name"), CondGraph->GetName());
@@ -1459,7 +1459,7 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 		TArray<TSharedPtr<FJsonValue>> CondNodesArray;
 		for (UEdGraphNode* CondNode : CondGraph->Nodes)
 		{
-			if (CondNode)
+			if (IsValid(CondNode))
 			{
 				CondNodesArray.Add(MakeShared<FJsonValueObject>(SerializeAnimGraphNode(CondNode, TEXT("full"))));
 			}
@@ -1469,7 +1469,7 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 	}
 
 	// Custom transition graph
-	if (UEdGraph* CustomGraph = TransNode->CustomTransitionGraph)
+	if (UEdGraph* CustomGraph = TransNode->CustomTransitionGraph; IsValid(CustomGraph))
 	{
 		TSharedPtr<FJsonObject> CustomGraphObj = MakeShared<FJsonObject>();
 		CustomGraphObj->SetStringField(TEXT("graph_name"), CustomGraph->GetName());
@@ -1478,7 +1478,7 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 		TArray<TSharedPtr<FJsonValue>> CustomNodesArray;
 		for (UEdGraphNode* CustomNode : CustomGraph->Nodes)
 		{
-			if (CustomNode)
+			if (IsValid(CustomNode))
 			{
 				CustomNodesArray.Add(MakeShared<FJsonValueObject>(SerializeAnimGraphNode(CustomNode, TEXT("full"))));
 			}
@@ -1497,13 +1497,13 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 TSharedPtr<FJsonObject> SerializeClassSettings(UAnimBlueprint* AnimBP)
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	if (!AnimBP)
+	if (!IsValid(AnimBP))
 	{
 		return Result;
 	}
 
 	// Parent class
-	if (AnimBP->ParentClass)
+	if (IsValid(AnimBP->ParentClass))
 	{
 		TSharedPtr<FJsonObject> ParentObj = MakeShared<FJsonObject>();
 		ParentObj->SetStringField(TEXT("name"), AnimBP->ParentClass->GetName());
@@ -1520,7 +1520,7 @@ TSharedPtr<FJsonObject> SerializeClassSettings(UAnimBlueprint* AnimBP)
 
 	// Preview skeletal mesh
 	USkeletalMesh* PreviewMesh = AnimBP->GetPreviewMesh();
-	if (PreviewMesh)
+	if (IsValid(PreviewMesh))
 	{
 		Result->SetStringField(TEXT("preview_mesh_path"), PreviewMesh->GetPathName());
 	}
@@ -1529,7 +1529,7 @@ TSharedPtr<FJsonObject> SerializeClassSettings(UAnimBlueprint* AnimBP)
 	TArray<TSharedPtr<FJsonValue>> InterfacesArray;
 	for (const FBPInterfaceDescription& Interface : AnimBP->ImplementedInterfaces)
 	{
-		if (Interface.Interface)
+		if (IsValid(Interface.Interface))
 		{
 			TSharedPtr<FJsonObject> IntObj = MakeShared<FJsonObject>();
 			IntObj->SetStringField(TEXT("name"), Interface.Interface->GetName());
@@ -1553,7 +1553,7 @@ TSharedPtr<FJsonObject> SerializeClassSettings(UAnimBlueprint* AnimBP)
 TArray<TSharedPtr<FJsonValue>> SerializeVariables(UAnimBlueprint* AnimBP)
 {
 	TArray<TSharedPtr<FJsonValue>> VarsArray;
-	if (!AnimBP)
+	if (!IsValid(AnimBP))
 	{
 		return VarsArray;
 	}
@@ -1592,17 +1592,17 @@ TArray<TSharedPtr<FJsonValue>> SerializeVariables(UAnimBlueprint* AnimBP)
 		else if (Var.VarType.PinCategory == UEdGraphSchema_K2::PC_Struct)
 		{
 			UScriptStruct* Struct = Cast<UScriptStruct>(Var.VarType.PinSubCategoryObject.Get());
-			TypeStr = Struct ? FString::Printf(TEXT("struct<%s>"), *Struct->GetName()) : TEXT("struct");
+			TypeStr = IsValid(Struct) ? FString::Printf(TEXT("struct<%s>"), *Struct->GetName()) : TEXT("struct");
 		}
 		else if (Var.VarType.PinCategory == UEdGraphSchema_K2::PC_Object || Var.VarType.PinCategory == UEdGraphSchema_K2::PC_SoftObject)
 		{
 			UClass* ObjClass = Cast<UClass>(Var.VarType.PinSubCategoryObject.Get());
-			TypeStr = ObjClass ? FString::Printf(TEXT("object<%s>"), *ObjClass->GetName()) : TEXT("object");
+			TypeStr = IsValid(ObjClass) ? FString::Printf(TEXT("object<%s>"), *ObjClass->GetName()) : TEXT("object");
 		}
 		else if (Var.VarType.PinCategory == UEdGraphSchema_K2::PC_Enum || Var.VarType.PinCategory == UEdGraphSchema_K2::PC_Byte)
 		{
 			UEnum* Enum = Cast<UEnum>(Var.VarType.PinSubCategoryObject.Get());
-			TypeStr = Enum ? FString::Printf(TEXT("enum<%s>"), *Enum->GetName()) : Var.VarType.PinCategory.ToString();
+			TypeStr = IsValid(Enum) ? FString::Printf(TEXT("enum<%s>"), *Enum->GetName()) : Var.VarType.PinCategory.ToString();
 		}
 		else
 		{
@@ -1647,7 +1647,7 @@ TArray<TSharedPtr<FJsonValue>> SerializeVariables(UAnimBlueprint* AnimBP)
 TArray<TSharedPtr<FJsonValue>> SerializeFunctions(UAnimBlueprint* AnimBP)
 {
 	TArray<TSharedPtr<FJsonValue>> FuncsArray;
-	if (!AnimBP)
+	if (!IsValid(AnimBP))
 	{
 		return FuncsArray;
 	}
@@ -1657,7 +1657,7 @@ TArray<TSharedPtr<FJsonValue>> SerializeFunctions(UAnimBlueprint* AnimBP)
 
 	for (UEdGraph* FuncGraph : AnimBP->FunctionGraphs)
 	{
-		if (!FuncGraph)
+		if (!IsValid(FuncGraph))
 		{
 			continue;
 		}
@@ -1673,12 +1673,12 @@ TArray<TSharedPtr<FJsonValue>> SerializeFunctions(UAnimBlueprint* AnimBP)
 
 		// Try to find the corresponding UFunction for flag inspection
 		UFunction* CompiledFunc = nullptr;
-		if (GeneratedClass)
+		if (IsValid(GeneratedClass))
 		{
 			CompiledFunc = GeneratedClass->FindFunctionByName(FName(*FuncGraph->GetName()));
 		}
 
-		if (CompiledFunc)
+		if (IsValid(CompiledFunc))
 		{
 			FuncObj->SetBoolField(TEXT("is_pure"), CompiledFunc->HasAnyFunctionFlags(FUNC_BlueprintPure));
 			FuncObj->SetBoolField(TEXT("is_const"), CompiledFunc->HasAnyFunctionFlags(FUNC_Const));
@@ -1721,7 +1721,7 @@ TArray<TSharedPtr<FJsonValue>> SerializeFunctions(UAnimBlueprint* AnimBP)
 			// Fall back to graph inspection for function entry node
 			for (UEdGraphNode* Node : FuncGraph->Nodes)
 			{
-				if (UK2Node_FunctionEntry* EntryNode = Cast<UK2Node_FunctionEntry>(Node))
+				if (UK2Node_FunctionEntry* EntryNode = Cast<UK2Node_FunctionEntry>(Node); IsValid(EntryNode))
 				{
 					// Get basic info from entry node pins
 					TArray<TSharedPtr<FJsonValue>> ParamsArray;
@@ -1757,13 +1757,13 @@ TArray<TSharedPtr<FJsonValue>> SerializeFunctions(UAnimBlueprint* AnimBP)
 TSharedPtr<FJsonObject> AnalyzeThreadSafety(UAnimBlueprint* AnimBP)
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	if (!AnimBP)
+	if (!IsValid(AnimBP))
 	{
 		return Result;
 	}
 
 	UAnimBlueprintGeneratedClass* GeneratedClass = Cast<UAnimBlueprintGeneratedClass>(AnimBP->GeneratedClass);
-	if (!GeneratedClass)
+	if (!IsValid(GeneratedClass))
 	{
 		Result->SetStringField(TEXT("warning"), TEXT("Blueprint has no generated class - may need compilation"));
 		return Result;
@@ -1775,13 +1775,13 @@ TSharedPtr<FJsonObject> AnalyzeThreadSafety(UAnimBlueprint* AnimBP)
 
 	for (UEdGraph* FuncGraph : AnimBP->FunctionGraphs)
 	{
-		if (!FuncGraph || Cast<UAnimationGraph>(FuncGraph))
+		if (!IsValid(FuncGraph) || Cast<UAnimationGraph>(FuncGraph))
 		{
 			continue;
 		}
 
 		UFunction* CompiledFunc = GeneratedClass->FindFunctionByName(FName(*FuncGraph->GetName()));
-		if (!CompiledFunc)
+		if (!IsValid(CompiledFunc))
 		{
 			continue;
 		}
@@ -1823,7 +1823,7 @@ TSharedPtr<FJsonObject> AnalyzeThreadSafety(UAnimBlueprint* AnimBP)
 TSharedPtr<FJsonObject> CollectWarnings(UAnimBlueprint* AnimBP)
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	if (!AnimBP)
+	if (!IsValid(AnimBP))
 	{
 		return Result;
 	}
@@ -1839,14 +1839,14 @@ TSharedPtr<FJsonObject> CollectWarnings(UAnimBlueprint* AnimBP)
 	TArray<FAnimGraphInfo> AllGraphs = CollectAllGraphs(AnimBP);
 	for (const FAnimGraphInfo& GraphInfo : AllGraphs)
 	{
-		if (!GraphInfo.Graph)
+		if (!IsValid(GraphInfo.Graph))
 		{
 			continue;
 		}
 
 		for (UEdGraphNode* Node : GraphInfo.Graph->Nodes)
 		{
-			if (!Node || !Node->bHasCompilerMessage || Node->ErrorMsg.IsEmpty())
+			if (!IsValid(Node) || !Node->bHasCompilerMessage || Node->ErrorMsg.IsEmpty())
 			{
 				continue;
 			}

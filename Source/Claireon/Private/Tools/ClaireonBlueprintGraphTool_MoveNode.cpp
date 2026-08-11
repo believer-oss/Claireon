@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -111,8 +111,9 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_MoveNode::GetInputSchema() co
     Builder.AddString(TEXT("asset_path"), TEXT("Blueprint asset path (alternative to session_id)."), false);
     Builder.AddString(TEXT("node_title"), TEXT("Title of the target node."));
     Builder.AddString(TEXT("node_guid"), TEXT("GUID of the target node (alternative to node_title)."));
-    Builder.AddNumber(TEXT("position_x"), TEXT("New X coordinate."), true);
-    Builder.AddNumber(TEXT("position_y"), TEXT("New Y coordinate."), true);
+    Builder.AddNumber(TEXT("position_x"), TEXT("New X coordinate. Required together with position_y unless a position={x,y} object is supplied; the object wins when both forms are present."));
+    Builder.AddNumber(TEXT("position_y"), TEXT("New Y coordinate. Required together with position_x unless a position={x,y} object is supplied."));
+    Builder.AddObject(TEXT("position"), TEXT("{x,y} position object; alternative to position_x/position_y. Must contain BOTH x and y when present -- a partial object is an error, never a zero-default. Wins over the scalar form when both are supplied."));
     Builder.AddString(TEXT("response_mode"), TEXT("Response verbosity: 'full' | 'changed' | 'status' (default 'changed')."));
     return Builder.Build();
 }
@@ -138,21 +139,41 @@ FToolResult ClaireonBlueprintGraphTool_MoveNode::MoveNode_Impl(
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* Graph = Data->Graph.Get();
 
-	if (!Blueprint || !Graph)
+	if (!IsValid(Blueprint) || !IsValid(Graph))
 	{
 		return MakeErrorResult(TEXT("Blueprint or Graph is no longer valid"));
 	}
 
-	// Get position
-	const TSharedPtr<FJsonObject>* PositionObj = nullptr;
-	if (!Params->TryGetObjectField(TEXT("position"), PositionObj))
-	{
-		return MakeErrorResult(TEXT("Missing required field: position (object with x, y)"));
-	}
-
+	// Get position. Accept the schema's position_x/position_y number fields and
+	// a position={x,y} object -- earlier builds validated only the object form
+	// while the schema advertised the kwargs, forcing callers to pass both.
+	// The object form wins when both forms are supplied. A partial object is an
+	// error, never a silent move to origin.
 	double X = 0.0, Y = 0.0;
-	(*PositionObj)->TryGetNumberField(TEXT("x"), X);
-	(*PositionObj)->TryGetNumberField(TEXT("y"), Y);
+	const TSharedPtr<FJsonObject>* PositionObj = nullptr;
+	if (Params->TryGetObjectField(TEXT("position"), PositionObj))
+	{
+		double ObjX = 0.0, ObjY = 0.0;
+		const bool bObjHasX = (*PositionObj)->TryGetNumberField(TEXT("x"), ObjX);
+		const bool bObjHasY = (*PositionObj)->TryGetNumberField(TEXT("y"), ObjY);
+		if (!bObjHasX || !bObjHasY)
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("position object is missing '%s'; pass both x and y (a partial position object is never zero-defaulted)"),
+				!bObjHasX ? TEXT("x") : TEXT("y")));
+		}
+		X = ObjX;
+		Y = ObjY;
+	}
+	else
+	{
+		const bool bHaveX = Params->TryGetNumberField(TEXT("position_x"), X);
+		const bool bHaveY = Params->TryGetNumberField(TEXT("position_y"), Y);
+		if (!bHaveX || !bHaveY)
+		{
+			return MakeErrorResult(TEXT("Missing required position: pass position_x and position_y (or a position={x,y} object)"));
+		}
+	}
 
 	UEdGraphNode* Node = nullptr;
 	FToolResult ResolveError;
@@ -164,11 +185,15 @@ FToolResult ClaireonBlueprintGraphTool_MoveNode::MoveNode_Impl(
 	// Move the node
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Move Blueprint Node")));
 	Node->Modify();
-	Node->NodePosX = X;
-	Node->NodePosY = Y;
+	// NodePosX/Y are int32; convert explicitly (JSON numbers arrive as double).
+	Node->NodePosX = FMath::RoundToInt32(X);
+	Node->NodePosY = FMath::RoundToInt32(Y);
 	Graph->NotifyGraphChanged();
 
 	Data->LastOperationAffectedNodes.Add(Node->NodeGuid);
+	Data->Cursor.LastOperationStatus = FString::Printf(
+		TEXT("Moved node %s to (%.0f, %.0f)"),
+		*Node->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens).Left(8), X, Y);
 
 	return BuildStateResponse(SessionId, Data);
 }

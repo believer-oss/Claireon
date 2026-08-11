@@ -9,6 +9,7 @@
 #include "Tools/IClaireonTool.h"
 
 #include "Algo/Sort.h"
+#include "Hash/CityHash.h"
 #include "HAL/PlatformTime.h"
 #include "Interfaces/IPluginManager.h"
 #include "Misc/Paths.h"
@@ -21,6 +22,7 @@ TArray<float>             FClaireonToolEmbeddingIndex::GEmbeddingMatrix;
 int32                     FClaireonToolEmbeddingIndex::GEmbeddingDim = 0;
 TArray<FString>           FClaireonToolEmbeddingIndex::GToolNames;
 TArray<FString>           FClaireonToolEmbeddingIndex::GToolCategories;
+TMap<FString, FClaireonToolEmbeddingIndex::FCachedToolEmbedding> FClaireonToolEmbeddingIndex::GEmbedCache;
 FCriticalSection          FClaireonToolEmbeddingIndex::GLock;
 FClaireonEmbeddingModel     FClaireonToolEmbeddingIndex::GEmbeddingModel;
 FClaireonWordPieceTokenizer FClaireonToolEmbeddingIndex::GTokenizer;
@@ -145,8 +147,16 @@ void FClaireonToolEmbeddingIndex::RebuildFromLiveServer()
 	GToolCategories.Reserve(Tools.Num());
 	GEmbeddingMatrix.Reserve(Tools.Num() * Dim);
 
-	int32 Embedded = 0;
-	int32 Failed   = 0;
+	// Cache-aware rebuild: tools whose semantic doc string is unchanged since the
+	// last rebuild reuse their cached vector; only new/changed tools pay an ONNX
+	// inference. NewCache is rebuilt to exactly the live tool set so entries for
+	// unregistered tools are evicted, then swapped into GEmbedCache at the end.
+	TMap<FString, FCachedToolEmbedding> NewCache;
+	NewCache.Reserve(Tools.Num());
+
+	int32 Embedded  = 0;
+	int32 CacheHits = 0;
+	int32 Failed    = 0;
 	for (const TPair<FString, TSharedPtr<IClaireonTool>>& Pair : Tools)
 	{
 		const TSharedPtr<IClaireonTool>& Tool = Pair.Value;
@@ -163,9 +173,19 @@ void FClaireonToolEmbeddingIndex::RebuildFromLiveServer()
 		// Single-sourced doc string (shared with the FTS5 field extraction; the
 		// FlattenParams param-name flattener is single-sourced there too).
 		const FString Doc = FClaireonToolSearchIndex::BuildSemanticDocString(Tool);
+		const uint64 DocHash = CityHash64(
+			reinterpret_cast<const char*>(*Doc), Doc.Len() * sizeof(TCHAR));
+
+		const FCachedToolEmbedding* Cached = GEmbedCache.Find(ToolName);
+		const bool bCacheHit = Cached && Cached->DocHash == DocHash && Cached->Vec.Num() == Dim;
 
 		TArray<float> Vec;
-		if (!GEmbeddingModel.Embed(Doc, /*bIsQuery=*/false, Vec) || Vec.Num() != Dim)
+		if (bCacheHit)
+		{
+			Vec = Cached->Vec;
+			++CacheHits;
+		}
+		else if (!GEmbeddingModel.Embed(Doc, /*bIsQuery=*/false, Vec) || Vec.Num() != Dim)
 		{
 			// One tool failing to embed must not abort the whole index.
 			++Failed;
@@ -175,14 +195,20 @@ void FClaireonToolEmbeddingIndex::RebuildFromLiveServer()
 		GToolNames.Add(ToolName);
 		GToolCategories.Add(Tool->GetCategory());
 		GEmbeddingMatrix.Append(Vec);
+
+		FCachedToolEmbedding& Entry = NewCache.Add(ToolName);
+		Entry.DocHash = DocHash;
+		Entry.Vec = MoveTemp(Vec);
 		++Embedded;
 	}
 
+	GEmbedCache = MoveTemp(NewCache);
+
 	const double ElapsedMs = (FPlatformTime::Seconds() - StartSeconds) * 1000.0;
 	UE_LOG(LogClaireon, Display,
-		TEXT("[EmbeddingIndex] Rebuilt: %d tools embedded (%d failed) in %.1f ms "
+		TEXT("[EmbeddingIndex] Rebuilt: %d tools indexed (%d cached, %d failed) in %.1f ms "
 		     "(Dim=%d, matrix=%d floats)."),
-		Embedded, Failed, ElapsedMs, Dim, GEmbeddingMatrix.Num());
+		Embedded, CacheHits, Failed, ElapsedMs, Dim, GEmbeddingMatrix.Num());
 }
 
 void FClaireonToolEmbeddingIndex::Clear()
@@ -191,6 +217,7 @@ void FClaireonToolEmbeddingIndex::Clear()
 	GEmbeddingMatrix.Empty();
 	GToolNames.Empty();
 	GToolCategories.Empty();
+	GEmbedCache.Empty();
 	GEmbeddingDim = 0;
 
 	// Release the model session + vocab cleanly. Re-loading a fresh, default-
@@ -216,9 +243,12 @@ void FClaireonToolEmbeddingIndex::SetModelForTest(const FClaireonEmbedderMeta& M
 	// RebuildFromLiveServer reloads from the override meta. Mirrors Clear()'s
 	// teardown but is duplicated inline to stay under the single GLock acquired
 	// here (Clear() takes GLock itself; re-entering FCriticalSection is avoided).
+	// The embedding cache is dropped too: vectors from another model/dim are
+	// not comparable and must not be reused after the swap.
 	GEmbeddingMatrix.Empty();
 	GToolNames.Empty();
 	GToolCategories.Empty();
+	GEmbedCache.Empty();
 	GEmbeddingDim = 0;
 	GEmbeddingModel = FClaireonEmbeddingModel();
 	GTokenizer = FClaireonWordPieceTokenizer();
@@ -237,6 +267,7 @@ void FClaireonToolEmbeddingIndex::ResetModelForTest()
 	GEmbeddingMatrix.Empty();
 	GToolNames.Empty();
 	GToolCategories.Empty();
+	GEmbedCache.Empty();
 	GEmbeddingDim = 0;
 	GEmbeddingModel = FClaireonEmbeddingModel();
 	GTokenizer = FClaireonWordPieceTokenizer();

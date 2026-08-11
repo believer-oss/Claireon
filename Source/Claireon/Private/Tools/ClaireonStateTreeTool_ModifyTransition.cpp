@@ -47,7 +47,7 @@ FToolResult ClaireonStateTreeTool_ModifyTransition::Execute(const TSharedPtr<FJs
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	FGuid StateId, TransitionId;
@@ -57,7 +57,7 @@ FToolResult ClaireonStateTreeTool_ModifyTransition::Execute(const TSharedPtr<FJs
 		return MakeErrorResult(Error);
 
 	UStateTreeState* State = ClaireonStateTreeHelpers::FindStateById(EditorData, StateId);
-	if (!State)
+	if (!IsValid(State))
 		return MakeErrorResult(TEXT("State not found"));
 
 	FStateTreeTransition* Trans = ClaireonStateTreeHelpers::FindTransitionById(State, TransitionId);
@@ -132,7 +132,7 @@ FToolResult ClaireonStateTreeTool_ModifyTransition::Execute(const TSharedPtr<FJs
 			if (ClaireonStateTreeEditInternal::ParseGuidParam(Arguments, TEXT("target_state_id"), TargetStateId, Error))
 			{
 				UStateTreeState* TargetState = ClaireonStateTreeHelpers::FindStateById(EditorData, TargetStateId);
-				if (TargetState)
+				if (IsValid(TargetState))
 				{
 					Trans->State.ID = TargetState->ID;
 					Trans->State.Name = TargetState->Name;

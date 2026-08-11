@@ -21,10 +21,11 @@ FString FClaireonAudioTool_SetAudioProperty::GetOperation() const { return TEXT(
 
 FString FClaireonAudioTool_SetAudioProperty::GetDescription() const
 {
-	return TEXT("Reflection-write a property on an audio actor (target by actor_name) OR on a component "
-	            "(target by component_path = '<actor_label>.<component_name>'). Exactly one of actor_name "
-	            "or component_path must be supplied. The 'value' field is any JSON value; numbers and bools "
-	            "are stringified for ClaireonPropertyResolver. Wrapped in FScopedTransaction so editor undo works.");
+	return TEXT("Set a property by reflection on an audio actor (target by actor_name) OR on a component "
+	            "(target by component_path = '<actor_label>.<component_name>'); supply exactly one. "
+	            "'value' is any JSON value; numbers and bools are stringified for ClaireonPropertyResolver. "
+	            "Stateless / non-session: writes the editor world directly inside an FScopedTransaction, "
+	            "no open session required.");
 }
 
 TSharedPtr<FJsonObject> FClaireonAudioTool_SetAudioProperty::GetInputSchema() const
@@ -34,17 +35,11 @@ TSharedPtr<FJsonObject> FClaireonAudioTool_SetAudioProperty::GetInputSchema() co
 
 	TSharedPtr<FJsonObject> Properties = MakeShared<FJsonObject>();
 
-	for (const TCHAR* Field : { TEXT("actor_name"), TEXT("component_path"), TEXT("field_name") })
-	{
-		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
-		P->SetStringField(TEXT("type"), TEXT("string"));
-		Properties->SetObjectField(Field, P);
-	}
-	{
-		// value -- any type
-		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
-		Properties->SetObjectField(TEXT("value"), P);
-	}
+	ClaireonAudioSchema::AddString(Properties, TEXT("actor_name"), TEXT("Target actor, by label or name."));
+	ClaireonAudioSchema::AddString(Properties, TEXT("component_path"), TEXT("Path to the component to write, relative to the actor. Empty targets the actor's own audio component."));
+	ClaireonAudioSchema::AddString(Properties, TEXT("field_name"), TEXT("Property name to write on the resolved component."));
+	ClaireonAudioSchema::AddAnyType(Properties, TEXT("value"),
+		TEXT("New value for field_name. Accepts whatever JSON type the target property takes."));
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
@@ -57,7 +52,7 @@ TSharedPtr<FJsonObject> FClaireonAudioTool_SetAudioProperty::GetInputSchema() co
 
 FToolResult FClaireonAudioTool_SetAudioProperty::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor || !GEditor->GetEditorWorldContext().World())
+	if (!IsValid(GEditor) || !IsValid(GEditor->GetEditorWorldContext().World()))
 	{
 		return MakeErrorResult(TEXT("set_audio_property requires an active editor world"));
 	}
@@ -105,7 +100,7 @@ FToolResult FClaireonAudioTool_SetAudioProperty::Execute(const TSharedPtr<FJsonO
 	if (!ActorName.IsEmpty())
 	{
 		AActor* Target = ClaireonAudioApplyHelpers::FindActorByLabel(World, ActorName);
-		if (!Target) return MakeErrorResult(FString::Printf(TEXT("Actor '%s' not found"), *ActorName));
+		if (!IsValid(Target)) return MakeErrorResult(FString::Printf(TEXT("Actor '%s' not found"), *ActorName));
 		Target->Modify();
 		ClaireonPropertyResolver::FResolvedProperty Resolved;
 		FString Err;
@@ -128,17 +123,17 @@ FToolResult FClaireonAudioTool_SetAudioProperty::Execute(const TSharedPtr<FJsonO
 		return MakeErrorResult(TEXT("component_path must be in the form '<actor_label>.<component_name>'"));
 	}
 	AActor* Target = ClaireonAudioApplyHelpers::FindActorByLabel(World, ActorPart);
-	if (!Target) return MakeErrorResult(FString::Printf(TEXT("Actor '%s' not found"), *ActorPart));
+	if (!IsValid(Target)) return MakeErrorResult(FString::Printf(TEXT("Actor '%s' not found"), *ActorPart));
 	UActorComponent* TargetComp = nullptr;
 	for (UActorComponent* Comp : Target->GetComponents())
 	{
-		if (Comp && Comp->GetName() == CompPart)
+		if (IsValid(Comp) && Comp->GetName() == CompPart)
 		{
 			TargetComp = Comp;
 			break;
 		}
 	}
-	if (!TargetComp) return MakeErrorResult(FString::Printf(TEXT("Component '%s' not found on actor '%s'"), *CompPart, *ActorPart));
+	if (!IsValid(TargetComp)) return MakeErrorResult(FString::Printf(TEXT("Component '%s' not found on actor '%s'"), *CompPart, *ActorPart));
 
 	TargetComp->Modify();
 	FString Err;

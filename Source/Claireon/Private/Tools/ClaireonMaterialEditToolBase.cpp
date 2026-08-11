@@ -103,7 +103,7 @@ FToolResult ClaireonMaterialEditToolBase::BuildStateResponse(const FString& Sess
 	}
 
 	UMaterial* Material = Data->Material.Get();
-	if (!Material)
+	if (!IsValid(Material))
 	{
 		return MakeErrorResult(TEXT("Material is no longer valid"));
 	}
@@ -122,8 +122,8 @@ FToolResult ClaireonMaterialEditToolBase::BuildStateResponse(const FString& Sess
 	RespData->SetNumberField(TEXT("expression_count"), Material->GetExpressions().Num());
 	RespData->SetStringField(TEXT("last_operation_status"), Data->LastOperationStatus);
 
-	FString SessionHintSummaryTag;
-	ClaireonAssetUtils::EmitSessionHintIfNeeded(RespData, Data->ConsecutiveAssetPathCalls, Material->GetPathName(), SessionId, SessionHintSummaryTag);
+	TSharedPtr<FJsonObject> SessionHint;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(RespData, Data->ConsecutiveAssetPathCalls, Material->GetPathName(), SessionId, GetName(), SessionHint);
 
-	return MakeSuccessResult(RespData, Output + SessionHintSummaryTag);
+	return MakeSuccessResultWithHint(RespData, Output, SessionHint);
 }

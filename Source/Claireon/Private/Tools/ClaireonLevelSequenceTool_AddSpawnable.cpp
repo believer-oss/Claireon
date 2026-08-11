@@ -55,7 +55,7 @@ FToolResult ClaireonLevelSequenceTool_AddSpawnable::Execute(const TSharedPtr<FJs
 	if (!TemplateActorPath.IsEmpty())
 	{
 		Template = LoadObject<UObject>(nullptr, *TemplateActorPath);
-		if (!Template)
+		if (!IsValid(Template))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Could not load template: %s"), *TemplateActorPath));
 		}
@@ -63,16 +63,16 @@ FToolResult ClaireonLevelSequenceTool_AddSpawnable::Execute(const TSharedPtr<FJs
 	else if (!ObjectClassPath.IsEmpty())
 	{
 		UClass* Cls = FindObject<UClass>(nullptr, *ObjectClassPath);
-		if (!Cls)
+		if (!IsValid(Cls))
 		{
 			Cls = LoadObject<UClass>(nullptr, *ObjectClassPath);
 		}
-		if (!Cls)
+		if (!IsValid(Cls))
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Could not resolve object_class: %s"), *ObjectClassPath));
 		}
 		Template = NewObject<UObject>(Data->Sequence.Get(), Cls, NAME_None, RF_Transactional);
-		if (!Template)
+		if (!IsValid(Template))
 		{
 			return MakeErrorResult(TEXT("Failed to instantiate template object for spawnable"));
 		}

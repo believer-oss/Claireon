@@ -15,11 +15,10 @@ FString ClaireonTool_AssetDiffProperties::GetOperation() const { return TEXT("di
 
 FString ClaireonTool_AssetDiffProperties::GetDescription() const
 {
-	return TEXT("Compare properties between any two UObjects. Supports loading assets from the current editor state "
-		"or from git revisions. Each side is an asset path with an optional git revision. "
-		"At least one revision must be specified, or asset_path_b must differ from asset_path_a. "
-		"Use resolution='exists' for a quick boolean check, 'summary' for a list of differences, "
-		"or 'detailed' for full old/new values.");
+	return TEXT("Compare properties between any two UObjects. Each side is an asset path plus an optional git "
+		"revision; at least one revision must be given, or asset_path_b must differ from asset_path_a. "
+		"resolution='exists' for a boolean check, 'summary' for a difference list, 'detailed' for old/new "
+		"values. Read-only / non-session: opens no editing session and never writes either asset.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AssetDiffProperties::GetInputSchema() const
@@ -201,7 +200,7 @@ IClaireonTool::FToolResult ClaireonTool_AssetDiffProperties::Execute(const TShar
 				// Get old/new values
 				FString OldVal;
 				FString NewVal;
-				if (SideA.Object && SideB.Object)
+				if (IsValid(SideA.Object) && IsValid(SideB.Object))
 				{
 					UClass* ClassA = SideA.Object->GetClass();
 					if (FProperty* Prop = ClassA->FindPropertyByName(FName(*PropName)))

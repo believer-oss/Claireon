@@ -113,11 +113,11 @@ FToolResult ClaireonLevelSequenceEditToolBase::BuildStateResponse(const FString&
 		Response->SetStringField(TEXT("sequence_structure"), Structure);
 	}
 
-	FString SessionHintSummaryTag;
-	ClaireonAssetUtils::EmitSessionHintIfNeeded(Response, Data->ConsecutiveAssetPathCalls, AssetPath, SessionId, SessionHintSummaryTag);
+	TSharedPtr<FJsonObject> SessionHint;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(Response, Data->ConsecutiveAssetPathCalls, AssetPath, SessionId, GetName(), SessionHint);
 
 	const FString Summary = Data->LastOperationStatus.IsEmpty()
 		? FString::Printf(TEXT("Session %s: %s"), *SessionId, *AssetPath)
 		: Data->LastOperationStatus;
-	return MakeSuccessResult(Response, Summary + SessionHintSummaryTag);
+	return MakeSuccessResultWithHint(Response, Summary, SessionHint);
 }

@@ -54,14 +54,14 @@ ULevelSequence* CreateInMemoryFixtureSequence()
 		GetTransientPackage(),
 		FName(TEXT("LS_ClaireonF1Fixture")),
 		RF_Transient | RF_Transactional);
-	if (!Seq)
+	if (!IsValid(Seq))
 	{
 		return nullptr;
 	}
 	Seq->Initialize();
 
 	UMovieScene* MS = Seq->GetMovieScene();
-	if (!MS)
+	if (!IsValid(MS))
 	{
 		return nullptr;
 	}
@@ -71,10 +71,10 @@ ULevelSequence* CreateInMemoryFixtureSequence()
 
 	// Add a transform track to the binding.
 	UMovieScene3DTransformTrack* Track = MS->AddTrack<UMovieScene3DTransformTrack>(Guid);
-	if (Track)
+	if (IsValid(Track))
 	{
 		UMovieSceneSection* Section = Track->CreateNewSection();
-		if (Section)
+		if (IsValid(Section))
 		{
 			Section->SetRange(TRange<FFrameNumber>(FFrameNumber(0), FFrameNumber(24000)));
 			Track->AddSection(*Section);
@@ -327,9 +327,18 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, InspectHappyPath, UNTEST_TIMEOUTMS(100
 	}
 	UNTEST_EXPECT_TRUE(bFoundAssetPath);
 
-	// Description / full description / category sanity
-	UNTEST_EXPECT_TRUE(Tool.GetName() == TEXT("sequence_inspect"));
-	UNTEST_EXPECT_TRUE(Tool.GetCategory() == TEXT("sequence"));
+	// Description / full description / category sanity.
+	//
+	// IClaireonTool seals GetName() as GetCategory() + "_" + GetOperation().
+	// The tool-decomposition work (Docs/llm/archive/6435-decompose-tools)
+	// moved this tool into the "level" category, making the wire name
+	// "level_sequence_inspect". The previous assertions expected the
+	// pre-decomposition name "sequence_inspect" and category "sequence",
+	// which no build has emitted since that rename, so they could never hold
+	// no matter how the tool behaves.
+	UNTEST_EXPECT_TRUE(Tool.GetCategory() == TEXT("level"));
+	UNTEST_EXPECT_TRUE(Tool.GetOperation() == TEXT("sequence_inspect"));
+	UNTEST_EXPECT_TRUE(Tool.GetName() == TEXT("level_sequence_inspect"));
 	UNTEST_EXPECT_FALSE(Tool.GetDescription().IsEmpty());
 	UNTEST_EXPECT_FALSE(Tool.GetFullDescription().IsEmpty());
 	UNTEST_EXPECT_FALSE(Tool.RequiresNoPIE());
@@ -464,7 +473,12 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, ListTrackTypes_MetadataAndSchema, UNTE
 {
 	ClaireonTool_SequenceListTrackTypes Tool;
 
-	UNTEST_EXPECT_TRUE(Tool.GetName() == TEXT("sequence_list_track_types"));
+	// Sealed composed name is GetCategory() + "_" + GetOperation(). This tool
+	// lives in the "level" category since the tool-decomposition rename, so
+	// the old bare "sequence_list_track_types" expectation was unpassable.
+	UNTEST_EXPECT_TRUE(Tool.GetCategory() == TEXT("level"));
+	UNTEST_EXPECT_TRUE(Tool.GetOperation() == TEXT("sequence_list_track_types"));
+	UNTEST_EXPECT_TRUE(Tool.GetName() == TEXT("level_sequence_list_track_types"));
 	UNTEST_EXPECT_FALSE(Tool.GetDescription().IsEmpty());
 	UNTEST_EXPECT_FALSE(Tool.GetFullDescription().IsEmpty());
 	UNTEST_EXPECT_FALSE(Tool.RequiresNoPIE());
@@ -506,8 +520,13 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, ActorPlace_MetadataAndSchema, UNTEST_T
 {
 	ClaireonTool_SequenceActorPlace Tool;
 
-	UNTEST_EXPECT_TRUE(Tool.GetName() == TEXT("sequence_actor_place"));
-	UNTEST_EXPECT_TRUE(Tool.GetCategory() == TEXT("sequence"));
+	// Sealed composed name is GetCategory() + "_" + GetOperation(). The
+	// tool-decomposition rename put this tool in the "level" category, so the
+	// old expectations ("sequence_actor_place" / category "sequence") named a
+	// tool identity that no longer exists and could never hold.
+	UNTEST_EXPECT_TRUE(Tool.GetCategory() == TEXT("level"));
+	UNTEST_EXPECT_TRUE(Tool.GetOperation() == TEXT("sequence_actor_place"));
+	UNTEST_EXPECT_TRUE(Tool.GetName() == TEXT("level_sequence_actor_place"));
 	UNTEST_EXPECT_FALSE(Tool.GetDescription().IsEmpty());
 	UNTEST_EXPECT_FALSE(Tool.GetFullDescription().IsEmpty());
 	UNTEST_EXPECT_TRUE(Tool.RequiresNoPIE());
@@ -606,8 +625,12 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, ClassResolutionSanity, UNTEST_TIMEOUTM
 {
 	// Verifies the Level Sequence actor classes used in Execute resolve at runtime,
 	// so refactors/relocations in the engine don't silently break F4 spawning.
-	UNTEST_EXPECT_TRUE(ALevelSequenceActor::StaticClass() != nullptr);
-	UNTEST_EXPECT_TRUE(AReplicatedLevelSequenceActor::StaticClass() != nullptr);
+	// Removed two UNTEST_EXPECT_TRUE(...::StaticClass() != nullptr) checks here.
+	// StaticClass() on a UCLASS that is linked into the binary cannot return
+	// null -- if the class were gone the test would not compile, so the
+	// assertions were unfalsifiable. The IsChildOf and FindFProperty checks
+	// below are the real coverage: they can genuinely break on an engine
+	// refactor while still compiling.
 	UNTEST_EXPECT_TRUE(AReplicatedLevelSequenceActor::StaticClass()->IsChildOf(
 		ALevelSequenceActor::StaticClass()));
 
@@ -1092,7 +1115,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, UnknownBindingKindRejected, UNTEST_TIM
 
 UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_ByGuid_Resolves, UNTEST_TIMEOUTMS(5000))
 {
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = IsValid(GEditor) ? GEditor->GetEditorWorldContext().World() : nullptr;
 	UNTEST_ASSERT_TRUE(World != nullptr);
 
 	FGuid Guid;
@@ -1120,7 +1143,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_ByGuid_Resolves, UNTEST_TIMEOUT
 
 UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_PreservesCameraCutSection_Parameters, UNTEST_TIMEOUTMS(5000))
 {
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = IsValid(GEditor) ? GEditor->GetEditorWorldContext().World() : nullptr;
 	UNTEST_ASSERT_TRUE(World != nullptr);
 
 	FGuid Guid;
@@ -1171,7 +1194,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_PreservesCameraCutSection_Param
 
 UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_ByLabel_RepairsUnresolved, UNTEST_TIMEOUTMS(5000))
 {
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = IsValid(GEditor) ? GEditor->GetEditorWorldContext().World() : nullptr;
 	UNTEST_ASSERT_TRUE(World != nullptr);
 
 	ULevelSequence* Seq = NewObject<ULevelSequence>(GetTransientPackage(),
@@ -1236,7 +1259,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_ByLabel_RepairsUnresolved, UNTE
 
 UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_TwiceToDifferentActors_OneReference, UNTEST_TIMEOUTMS(5000))
 {
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = IsValid(GEditor) ? GEditor->GetEditorWorldContext().World() : nullptr;
 	UNTEST_ASSERT_TRUE(World != nullptr);
 
 	FGuid Guid;
@@ -1269,7 +1292,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_TwiceToDifferentActors_OneRefer
 UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_WrongClass_Errors, UNTEST_TIMEOUTMS(5000))
 {
 #if WITH_EDITORONLY_DATA
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = IsValid(GEditor) ? GEditor->GetEditorWorldContext().World() : nullptr;
 	UNTEST_ASSERT_TRUE(World != nullptr);
 
 	FGuid Guid;
@@ -1291,7 +1314,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_WrongClass_Errors, UNTEST_TIMEO
 
 UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_OnSpawnable_Errors, UNTEST_TIMEOUTMS(5000))
 {
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = IsValid(GEditor) ? GEditor->GetEditorWorldContext().World() : nullptr;
 	UNTEST_ASSERT_TRUE(World != nullptr);
 
 	ULevelSequence* Seq = NewObject<ULevelSequence>(GetTransientPackage(),
@@ -1321,7 +1344,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_OnSpawnable_Errors, UNTEST_TIME
 
 UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_ChildPossessable_Errors, UNTEST_TIMEOUTMS(5000))
 {
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = IsValid(GEditor) ? GEditor->GetEditorWorldContext().World() : nullptr;
 	UNTEST_ASSERT_TRUE(World != nullptr);
 
 	ULevelSequence* Seq = NewObject<ULevelSequence>(GetTransientPackage(),
@@ -1351,7 +1374,7 @@ UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_ChildPossessable_Errors, UNTEST
 
 UNTEST_UNIT_OPTS(Claireon, LevelSequence, Rebind_Clear_DropsReferences_KeepsGuid, UNTEST_TIMEOUTMS(5000))
 {
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = IsValid(GEditor) ? GEditor->GetEditorWorldContext().World() : nullptr;
 	UNTEST_ASSERT_TRUE(World != nullptr);
 
 	FGuid Guid;

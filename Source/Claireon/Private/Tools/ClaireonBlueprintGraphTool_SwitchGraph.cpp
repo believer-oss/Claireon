@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 
@@ -138,7 +138,7 @@ FToolResult ClaireonBlueprintGraphTool_SwitchGraph::Execute(const TSharedPtr<FJs
 	UBlueprint* Blueprint = Data->Blueprint.Get();
 	UEdGraph* NewGraph = ClaireonBlueprintHelpers::FindGraphByName(Blueprint, GraphName);
 
-	if (!NewGraph)
+	if (!IsValid(NewGraph))
 	{
 		const FString AvailableList = BuildAvailableGraphsList(Blueprint);
 		return MakeErrorResult(FString::Printf(
@@ -160,7 +160,7 @@ FToolResult ClaireonBlueprintGraphTool_SwitchGraph::Execute(const TSharedPtr<FJs
 
 	// Initialize cursor to the new graph's entry node.
 	UEdGraphNode* EntryNode = ClaireonBPGraphInternal::SelectEntryNodeForSwitch(Blueprint, NewGraph);
-	if (EntryNode)
+	if (IsValid(EntryNode))
 	{
 		Data->Cursor.FocusedNodeGuid = EntryNode->NodeGuid;
 		UEdGraphPin* OutputPin = ClaireonBlueprintHelpers::GetFirstOutputPin(EntryNode);

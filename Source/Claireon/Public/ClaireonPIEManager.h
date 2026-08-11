@@ -86,7 +86,17 @@ public:
 	/** Get or assign a stable actor ID for the given actor */
 	FString GetActorId(AActor* Actor);
 
-	/** Resolve an actor ID back to an actor pointer, or nullptr if invalid/stale */
+	/**
+	 * Resolve an actor ID back to an actor pointer.
+	 *
+	 * @param World  When non-null, the actor must belong to this world or the
+	 *               lookup returns nullptr. This matters: the ids are global,
+	 *               so without the check a caller that resolved a client world
+	 *               by net_mode would silently receive a server-world actor.
+	 *               Pass nullptr only when the caller genuinely does not care
+	 *               which world it gets.
+	 * @return the actor, or nullptr if unknown, stale, or in a different world.
+	 */
 	AActor* ResolveActorId(const FString& ActorId, UWorld* World);
 
 	// --- Damage Listener Infrastructure ---

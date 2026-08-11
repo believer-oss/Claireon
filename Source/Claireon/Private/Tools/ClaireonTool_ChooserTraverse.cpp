@@ -14,13 +14,10 @@ FString ClaireonTool_ChooserTraverse::GetOperation() const { return TEXT("traver
 
 FString ClaireonTool_ChooserTraverse::GetDescription() const
 {
-	return TEXT("Row-by-row depth-first traversal of a ChooserTable's dispatcher chain. For each "
-		"chooser visited (root first, then sub-choosers via row-result references in row order), "
-		"emits one entry per row with {chooser_path, row_index, depth, parent_chooser_path, "
-		"parent_row_index, disabled, result, follows_to, [column_values]}. When a row's result is "
-		"a sub-chooser ref, the next entries in the output are that sub-chooser's rows — so the "
-		"agent can read the dispatcher chain top-to-bottom without N inspect calls. "
-		"mode='compact' (default) omits column_values; 'full' includes them.");
+	return TEXT("Walk a ChooserTable's dispatcher chain row by row, depth-first: root rows first, then the rows of "
+		"each sub-chooser reached by a row result. Emits one entry per row with chooser_path, row_index, "
+		"depth, parent_chooser_path, parent_row_index, disabled, result, follows_to, plus column_values when "
+		"mode=full. Read-only / non-session: no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ChooserTraverse::GetInputSchema() const
@@ -60,7 +57,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserTraverse::Execute(const TSharedPt
 
 	FString Error;
 	UChooserTable* Root = ClaireonChooserHelpers::LoadChooserTableAsset(RootPath, Error);
-	if (!Root)
+	if (!IsValid(Root))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -71,7 +68,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserTraverse::Execute(const TSharedPt
 	auto Visit = [&](UChooserTable* Cur, int32 RowIndex, int32 Depth,
 		const FString& ParentPath, int32 ParentRowIndex) -> bool
 	{
-		if (!Cur) { return true; }
+		if (!IsValid(Cur)) { return true; }
 #if WITH_EDITORONLY_DATA
 		const bool bDisabled = Cur->IsRowDisabled(RowIndex);
 		if (!bIncludeDisabled && bDisabled) { return true; }
@@ -97,7 +94,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserTraverse::Execute(const TSharedPt
 		// follows_to: when this row's result targets a sub-chooser, expose
 		// the target path inline so a reader can pre-read the connection
 		// without parsing the result struct.
-		if (UChooserTable* Target = ClaireonChooserGraphHelpers::GetRowSubChooser(Cur, RowIndex))
+		if (UChooserTable* Target = ClaireonChooserGraphHelpers::GetRowSubChooser(Cur, RowIndex); IsValid(Target))
 		{
 			TSharedPtr<FJsonObject> Follow = MakeShared<FJsonObject>();
 			Follow->SetStringField(TEXT("path"), Target->GetPathName());

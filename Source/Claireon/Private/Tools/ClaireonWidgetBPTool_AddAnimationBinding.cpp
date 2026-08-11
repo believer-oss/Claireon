@@ -48,7 +48,7 @@ FToolResult ClaireonWidgetBPTool_AddAnimationBinding::Execute(const TSharedPtr<F
         return BeginError;
     }
     UWidgetBlueprint* WBP = Data ? Data->WidgetBlueprint.Get() : nullptr;
-    if (!WBP)
+    if (!IsValid(WBP))
     {
         return MakeErrorResult(TEXT("widget blueprint unavailable on session"));
     }
@@ -66,12 +66,12 @@ FToolResult ClaireonWidgetBPTool_AddAnimationBinding::Execute(const TSharedPtr<F
     Params->TryGetStringField(TEXT("slot_widget_name"), SlotWidgetName);
 
     UWidgetAnimation* Anim = Claireon::WidgetAnimation::FindWidgetAnimationByName(WBP, AnimationName);
-    if (!Anim)
+    if (!IsValid(Anim))
     {
         return MakeErrorResult(FString::Printf(TEXT("animation '%s' not found on %s"), *AnimationName, *WBP->GetName()));
     }
     UWidget* Widget = ClaireonWidgetHelpers::FindWidgetByName(WBP->WidgetTree, FName(*WidgetName));
-    if (!Widget)
+    if (!IsValid(Widget))
     {
         return MakeErrorResult(FString::Printf(TEXT("widget '%s' not found on %s"), *WidgetName, *WBP->GetName()));
     }

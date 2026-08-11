@@ -153,7 +153,7 @@ namespace ClaireonDeltaApplicatorBaseTests_anon
 }
 
 // 1. Empty input is success no-op (AR9).
-UNTEST_UNIT(Claireon, DeltaApplicatorBase, EmptyInputIsSuccess)
+UNTEST_UNIT_OPTS(Claireon, DeltaApplicatorBase, EmptyInputIsSuccess, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonDeltaApplicatorBaseTests_anon;
 
@@ -181,7 +181,7 @@ UNTEST_UNIT(Claireon, DeltaApplicatorBase, EmptyInputIsSuccess)
 }
 
 // 2. Missing both session_id AND asset_path -> validation error.
-UNTEST_UNIT(Claireon, DeltaApplicatorBase, MissingSessionAndAssetPath)
+UNTEST_UNIT_OPTS(Claireon, DeltaApplicatorBase, MissingSessionAndAssetPath, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonDeltaApplicatorBaseTests_anon;
 
@@ -202,7 +202,7 @@ UNTEST_UNIT(Claireon, DeltaApplicatorBase, MissingSessionAndAssetPath)
 }
 
 // 3. Phase-1 failure rolls back; no phase 2/3/4; close called on rollback path.
-UNTEST_UNIT(Claireon, DeltaApplicatorBase, Phase1FailureRollsBack)
+UNTEST_UNIT_OPTS(Claireon, DeltaApplicatorBase, Phase1FailureRollsBack, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonDeltaApplicatorBaseTests_anon;
 
@@ -233,7 +233,7 @@ UNTEST_UNIT(Claireon, DeltaApplicatorBase, Phase1FailureRollsBack)
 }
 
 // 4. Phase-3 failure: phase 4 never runs; cleanup invoked; close called.
-UNTEST_UNIT(Claireon, DeltaApplicatorBase, Phase3FailureRollsBack)
+UNTEST_UNIT_OPTS(Claireon, DeltaApplicatorBase, Phase3FailureRollsBack, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonDeltaApplicatorBaseTests_anon;
 
@@ -267,7 +267,7 @@ UNTEST_UNIT(Claireon, DeltaApplicatorBase, Phase3FailureRollsBack)
 }
 
 // 5. SupportsPhase1Disconnect()==false rejects non-empty disconnect.
-UNTEST_UNIT(Claireon, DeltaApplicatorBase, Phase1UnsupportedRejectsNonEmpty)
+UNTEST_UNIT_OPTS(Claireon, DeltaApplicatorBase, Phase1UnsupportedRejectsNonEmpty, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonDeltaApplicatorBaseTests_anon;
 
@@ -295,7 +295,7 @@ UNTEST_UNIT(Claireon, DeltaApplicatorBase, Phase1UnsupportedRejectsNonEmpty)
 }
 
 // 6. SupportsPhase1Disconnect()==false accepts empty disconnect (AR9).
-UNTEST_UNIT(Claireon, DeltaApplicatorBase, Phase1UnsupportedAcceptsEmpty)
+UNTEST_UNIT_OPTS(Claireon, DeltaApplicatorBase, Phase1UnsupportedAcceptsEmpty, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonDeltaApplicatorBaseTests_anon;
 
@@ -316,7 +316,7 @@ UNTEST_UNIT(Claireon, DeltaApplicatorBase, Phase1UnsupportedAcceptsEmpty)
 }
 
 // 7. SupportsPhase4Connect()==false rejects non-empty connections.
-UNTEST_UNIT(Claireon, DeltaApplicatorBase, Phase4UnsupportedRejectsNonEmpty)
+UNTEST_UNIT_OPTS(Claireon, DeltaApplicatorBase, Phase4UnsupportedRejectsNonEmpty, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonDeltaApplicatorBaseTests_anon;
 
@@ -341,7 +341,7 @@ UNTEST_UNIT(Claireon, DeltaApplicatorBase, Phase4UnsupportedRejectsNonEmpty)
 }
 
 // 8. SupportsPhase4Connect()==false accepts empty connections (AR9).
-UNTEST_UNIT(Claireon, DeltaApplicatorBase, Phase4UnsupportedAcceptsEmpty)
+UNTEST_UNIT_OPTS(Claireon, DeltaApplicatorBase, Phase4UnsupportedAcceptsEmpty, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonDeltaApplicatorBaseTests_anon;
 
@@ -362,7 +362,7 @@ UNTEST_UNIT(Claireon, DeltaApplicatorBase, Phase4UnsupportedAcceptsEmpty)
 }
 
 // 9. ID mapping persists from phase 3 to phase 4; unknown ids pass through.
-UNTEST_UNIT(Claireon, DeltaApplicatorBase, IdMappingPersistsAcrossPhases)
+UNTEST_UNIT_OPTS(Claireon, DeltaApplicatorBase, IdMappingPersistsAcrossPhases, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonDeltaApplicatorBaseTests_anon;
 
@@ -411,7 +411,7 @@ UNTEST_UNIT(Claireon, DeltaApplicatorBase, IdMappingPersistsAcrossPhases)
 }
 
 // 10. Counter increment correctness.
-UNTEST_UNIT(Claireon, DeltaApplicatorBase, CountersIncrementCorrectly)
+UNTEST_UNIT_OPTS(Claireon, DeltaApplicatorBase, CountersIncrementCorrectly, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonDeltaApplicatorBaseTests_anon;
 

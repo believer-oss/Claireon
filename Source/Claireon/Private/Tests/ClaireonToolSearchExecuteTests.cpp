@@ -12,6 +12,12 @@
 // constructed argument JSON object, then asserts on the FToolResult JSON
 // payload. Stub tools are unregistered in teardown to keep the live registry
 // clean for the next test.
+//
+// Timeouts: every Execute()-calling case carries a 60s budget because any of
+// them can be the FIRST to build the semantic embedding index in this process
+// (a one-time full-catalog ONNX embed, ~20s on a dev machine). Subsequent
+// rebuilds hit the per-tool embedding cache and cost milliseconds, even
+// though each stub registration dirties the registry.
 
 #if WITH_UNTESTED
 
@@ -178,7 +184,7 @@ namespace ClaireonToolSearchExecuteTestsNS
 // exact-name pin bypasses category filter; near-exact respects it.
 // ===========================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, ExactNamePrecedencePinsWithCategoryMismatch, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, ExactNamePrecedencePinsWithCategoryMismatch, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonToolSearchExecuteTestsNS;
 
@@ -212,7 +218,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, ExactNamePrecedencePinsWithCategor
 // hyphen/underscore equivalence for exact-name normalisation.
 // ===========================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, ExactNameHyphenUnderscoreEquivalence, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, ExactNameHyphenUnderscoreEquivalence, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonToolSearchExecuteTestsNS;
 
@@ -242,7 +248,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, ExactNameHyphenUnderscoreEquivalen
 // Levenshtein near-match pins typo; distance > 2 does not pin.
 // ===========================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, LevenshteinNearMatchPinsTypo, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, LevenshteinNearMatchPinsTypo, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonToolSearchExecuteTestsNS;
 
@@ -294,7 +300,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, LevenshteinNearMatchPinsTypo, UNTE
 // near-exact pin respects category filter (zero results when mismatched).
 // ===========================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, NearExactRespectsCategoryFilter, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, NearExactRespectsCategoryFilter, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonToolSearchExecuteTestsNS;
 
@@ -328,7 +334,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, NearExactRespectsCategoryFilter, U
 // the next Execute call rebuilds the catalog without an explicit RebuildCatalog.
 // ===========================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, OnToolsChangedAutoInvalidates, UNTEST_TIMEOUTMS(30000))
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, OnToolsChangedAutoInvalidates, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonToolSearchExecuteTestsNS;
 
@@ -378,7 +384,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, OnToolsChangedAutoInvalidates, UNT
 // Uses controlled stub fixture so the test does not depend on the live tool set.
 // ===========================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, Issue1AssetCreateReturnsAssetTool, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, Issue1AssetCreateReturnsAssetTool, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonToolSearchExecuteTestsNS;
 
@@ -411,7 +417,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, Issue1AssetCreateReturnsAssetTool,
 // fuzzy results don't contain any query word as a substring.
 // ===========================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, DefensiveSubstringFallbackMerge, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, DefensiveSubstringFallbackMerge, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonToolSearchExecuteTestsNS;
 
@@ -445,7 +451,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, DefensiveSubstringFallbackMerge, U
 // name= is a true alias of tool_name= for the deep-inspect bypass.
 // ===========================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, NameParameterAliasesToolName, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, NameParameterAliasesToolName, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonToolSearchExecuteTestsNS;
 
@@ -490,7 +496,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, NameParameterAliasesToolName, UNTE
 // fires exactly once.
 // ===========================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, NameParameterWinsOverToolNameWithLog, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, NameParameterWinsOverToolNameWithLog, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonToolSearchExecuteTestsNS;
 
@@ -557,7 +563,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, NameParameterWinsOverToolNameWithL
 // tool_search upgrade-path footer on brief/standard hits.
 // ===========================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterPresentOnMultiHitStandard, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterPresentOnMultiHitStandard, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonToolSearchExecuteTestsNS;
 
@@ -585,7 +591,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterPresentOnMultiHit
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterSuppressedOnDetailFull, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterSuppressedOnDetailFull, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonToolSearchExecuteTestsNS;
 
@@ -613,7 +619,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterSuppressedOnDetai
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterSuppressedOnDeepInspectByName, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterSuppressedOnDeepInspectByName, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonToolSearchExecuteTestsNS;
 
@@ -639,7 +645,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterSuppressedOnDeepI
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterSuppressedOnZeroHits, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterSuppressedOnZeroHits, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonToolSearchExecuteTestsNS;
 
@@ -662,7 +668,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterSuppressedOnZeroH
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterSuppressedOnExactSingleMatch, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterSuppressedOnExactSingleMatch, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonToolSearchExecuteTestsNS;
 
@@ -694,7 +700,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, UpgradePathFooterSuppressedOnExact
 // empty returns are suppressed.
 // ===========================================================================
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, DeepInspectBpAddNodeCarriesPatterns, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, DeepInspectBpAddNodeCarriesPatterns, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonToolSearchExecuteTestsNS;
 
@@ -732,7 +738,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, DeepInspectBpAddNodeCarriesPattern
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, DeepInspectStubToolHasNoPatternsField, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, DeepInspectStubToolHasNoPatternsField, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonToolSearchExecuteTestsNS;
 
@@ -773,8 +779,10 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, DeepInspectStubToolHasNoPatternsFi
 // ===========================================================================
 // tool_search surfaces ApplySpecCatalog.json entry under spec_shape for
 // every apply_spec / instance_apply_spec family; non-apply_spec tools
-// have no spec_shape; catalog has 17 entries matching the registry;
-// apply_spec_help is no longer registered.
+// have no spec_shape; catalog has 18 entries total: 17 are apply_spec
+// families matching the registry, plus 1 apply_delta_only row ("animbp",
+// no top-level `tool`) that names no apply_spec/instance_apply_spec tool
+// at all; apply_spec_help is no longer registered.
 // ===========================================================================
 
 namespace Cl622PartDHelpers
@@ -824,7 +832,7 @@ namespace Cl622PartDHelpers
 	}
 }
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, CatalogHasSeventeenFamilyEntries, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, CatalogHasEighteenFamilyEntries, UNTEST_TIMEOUTMS(15000))
 {
 	TSharedPtr<FJsonObject> Catalog = Cl622PartDHelpers::Cl622_LoadCatalogForTests();
 	UNTEST_ASSERT_TRUE(Catalog.IsValid());
@@ -835,7 +843,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, CatalogHasSeventeenFamilyEntries, 
 		if (KV.Key.StartsWith(TEXT("_"))) { continue; }
 		++NonMetaCount;
 	}
-	UNTEST_EXPECT_EQ(NonMetaCount, 17);
+	UNTEST_EXPECT_EQ(NonMetaCount, 18);
 
 	const TSharedPtr<FJsonObject>* MetaObj = nullptr;
 	if (Catalog->TryGetObjectField(TEXT("_meta"), MetaObj)
@@ -844,7 +852,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, CatalogHasSeventeenFamilyEntries, 
 		double EntryCount = 0.0;
 		if ((*MetaObj)->TryGetNumberField(TEXT("entry_count"), EntryCount))
 		{
-			UNTEST_EXPECT_EQ(static_cast<int32>(EntryCount), 17);
+			UNTEST_EXPECT_EQ(static_cast<int32>(EntryCount), 18);
 		}
 	}
 
@@ -864,7 +872,17 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, CatalogToolsMatchRegisteredTools, 
 	for (const TPair<FString, TSharedPtr<FJsonValue>>& KV : Catalog->Values)
 	{
 		if (KV.Key.StartsWith(TEXT("_"))) { continue; }
-		CatalogKeys.Add(KV.Key);
+
+		// apply_delta_only rows (no top-level `tool`, e.g. "animbp") are not
+		// apply_spec families at all -- they must NOT be required to match a
+		// registered apply_spec/instance_apply_spec tool below.
+		const TSharedPtr<FJsonObject>* EntryObj = nullptr;
+		FString ToolName;
+		if (KV.Value->TryGetObject(EntryObj) && EntryObj && (*EntryObj).IsValid()
+			&& (*EntryObj)->TryGetStringField(TEXT("tool"), ToolName))
+		{
+			CatalogKeys.Add(KV.Key);
+		}
 	}
 
 	TSet<FString> RegisteredApplySpecCategories;
@@ -970,7 +988,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, DeepInspectApplySpecFamiliesCarryS
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, DeepInspectNonApplySpecToolHasNoSpecShape, UNTEST_TIMEOUTMS(15000))
+UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, DeepInspectNonApplySpecToolHasNoSpecShape, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonToolSearchExecuteTestsNS;
 

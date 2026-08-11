@@ -40,7 +40,7 @@ FToolResult ClaireonInputTool_AddMapping::Execute(const TSharedPtr<FJsonObject>&
 	}
 
 	UInputMappingContext* IMC = RequireMappingContext(Data, Error);
-	if (!IMC)
+	if (!IsValid(IMC))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -63,7 +63,7 @@ FToolResult ClaireonInputTool_AddMapping::Execute(const TSharedPtr<FJsonObject>&
 		return MakeErrorResult(ResolveResult.Error);
 	}
 	UInputAction* Action = LoadObject<UInputAction>(nullptr, *ResolveResult.ResolvedPath.Path);
-	if (!Action)
+	if (!IsValid(Action))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load Input Action at: %s"), *ActionPath));
 	}

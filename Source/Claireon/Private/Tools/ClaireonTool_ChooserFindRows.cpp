@@ -12,7 +12,7 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
-namespace
+namespace ClaireonTool_ChooserFindRows_Private
 {
 	// Compare two FJsonValue payloads by canonical-string equality. Cheap
 	// and order-insensitive for primitives; for objects/arrays it is
@@ -138,17 +138,18 @@ namespace
 		return true;
 	}
 }
+using namespace ClaireonTool_ChooserFindRows_Private;
 
 FString ClaireonTool_ChooserFindRows::GetCategory() const { return TEXT("chooser"); }
 FString ClaireonTool_ChooserFindRows::GetOperation() const { return TEXT("find_rows"); }
 
 FString ClaireonTool_ChooserFindRows::GetDescription() const
 {
-	return TEXT("Search a chooser tree for rows matching a predicate. Selectors (AND-joined): "
-		"disabled (bool), output_asset_class (string), output_path_contains (string), "
-		"output_path_prefix (string), column_cell_equals ({column_index, value}), "
-		"enum_value_includes ({column_index, enum_value_name}). Recurses into NestedChoosers and "
-		"FNestedChooser/FEvaluateChooser row-result references when recursive=true (default).");
+	return TEXT("Find rows in a chooser tree matching an AND-joined predicate. Selectors: disabled, "
+		"output_asset_class, output_path_contains, output_path_prefix, column_cell_equals ({column_index, "
+		"value}), enum_value_includes ({column_index, enum_value_name}). Recurses into NestedChoosers and "
+		"row-result references when recursive=true (default). Read-only / non-session: no open session "
+		"required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ChooserFindRows::GetInputSchema() const
@@ -214,7 +215,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserFindRows::Execute(const TSharedPt
 
 	FString Error;
 	UChooserTable* Root = ClaireonChooserHelpers::LoadChooserTableAsset(RootPath, Error);
-	if (!Root)
+	if (!IsValid(Root))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -224,7 +225,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserFindRows::Execute(const TSharedPt
 
 	auto VisitChooser = [&](UChooserTable* Cur, int32 /*Depth*/, const FString& /*ParentPath*/, int32 /*ParentRowIndex*/) -> bool
 	{
-		if (!Cur) { return true; }
+		if (!IsValid(Cur)) { return true; }
 		SearchedPaths.Add(Cur->GetPathName());
 #if WITH_EDITORONLY_DATA
 		const int32 RowCount = Cur->ResultsStructs.Num();

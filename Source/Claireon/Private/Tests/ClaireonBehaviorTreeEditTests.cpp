@@ -1,8 +1,9 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 #if WITH_UNTESTED
 
 #include "Untest.h"
+#include "ClaireonSessionManager.h"
 #include "Tools/IClaireonTool.h"
 #include "Tools/ClaireonBehaviorTreeTool_Open.h"
 #include "Tools/ClaireonBehaviorTreeTool_Close.h"
@@ -27,7 +28,7 @@ static const TCHAR* EditTestEQSPath = TEXT("/Game/BP/AI/EQS/EQS_CombatWaiting_St
 // ---------------------------------------------------------------------------
 // Helper: Extract session ID from structured FToolResult Data
 // ---------------------------------------------------------------------------
-namespace
+namespace ClaireonBehaviorTreeEditTests_Private
 {
 	FString MCPBehaviorTreeEditTests_ExtractSessionId(const IClaireonTool::FToolResult& Result)
 	{
@@ -40,6 +41,7 @@ namespace
 		return SessionId;
 	}
 }
+using namespace ClaireonBehaviorTreeEditTests_Private;
 
 // ============================================================================
 // behaviortree_edit — Schema validation for updated tool
@@ -177,31 +179,69 @@ UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, SuppressOutput, UNTEST_TIMEOUTMS(
 }
 
 // ============================================================================
-// behaviortree_edit — Asset lock conflict
+// behaviortree_edit — Session reuse, and the lock that actually blocks
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, AssetLockConflict, UNTEST_TIMEOUTMS(15000))
+// A second open from the SAME tool reuses the existing session rather than
+// erroring. FClaireonSessionManager keys the asset lock on ToolName, so a repeat
+// open is indistinguishable from one agent re-entering its own session, and
+// returning ReusedExistingSession is what lets a multi-call workflow
+// (open -> add node -> save) avoid deadlocking against itself.
+//
+// This replaces AssetLockConflict, which asserted that the second open FAILS
+// with a "locked" error. No branch could ever pass it: OpenSession's
+// same-ToolName path returns EOpenSessionResult::ReusedExistingSession, and only
+// a *different* ToolName yields BlockedByOtherTool. See CrossToolLockBlocksOpen
+// below for the case AssetLockConflict was reaching for.
+UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, SameToolReopenReusesSession, UNTEST_TIMEOUTMS(15000))
 {
+	FClaireonSessionManager::Get().ReleaseByAssetPath(EditTestBTPath);
+
 	ClaireonBehaviorTreeTool_Open OpenTool;
 	ClaireonBehaviorTreeTool_Close CloseTool;
 
-	// Open first session
 	TSharedPtr<FJsonObject> OpenArgs = MakeShared<FJsonObject>();
 	OpenArgs->SetStringField(TEXT("asset_path"), EditTestBTPath);
 
 	auto Result1 = OpenTool.Execute(OpenArgs);
 	UNTEST_ASSERT_FALSE(Result1.bIsError);
-	FString SessionId1 = MCPBehaviorTreeEditTests_ExtractSessionId(Result1);
+	const FString SessionId1 = MCPBehaviorTreeEditTests_ExtractSessionId(Result1);
+	UNTEST_ASSERT_FALSE(SessionId1.IsEmpty());
 
-	// Try to open second session on same asset — should fail with lock error
 	auto Result2 = OpenTool.Execute(OpenArgs);
-	UNTEST_ASSERT_TRUE(Result2.bIsError);
-	UNTEST_EXPECT_TRUE(Result2.GetContentAsString().Contains(TEXT("locked")));
+	UNTEST_ASSERT_FALSE(Result2.bIsError);
+	UNTEST_EXPECT_EQ(MCPBehaviorTreeEditTests_ExtractSessionId(Result2), SessionId1);
 
-	// Cleanup
 	TSharedPtr<FJsonObject> CloseArgs = MakeShared<FJsonObject>();
 	CloseArgs->SetStringField(TEXT("session_id"), SessionId1);
 	CloseTool.Execute(CloseArgs);
+
+	co_return;
+}
+
+// The lock that DOES block is cross-tool. Hold the asset under a different
+// ToolName and behaviortree_open must refuse with the "locked" diagnostic. This
+// covers ClaireonBehaviorTreeTool_Open's BlockedByOtherTool branch, which had no
+// coverage at all while AssetLockConflict was asserting an impossible same-tool
+// block.
+UNTEST_UNIT_OPTS(Claireon, BehaviorTreeEditV2, CrossToolLockBlocksOpen, UNTEST_TIMEOUTMS(15000))
+{
+	FClaireonSessionManager& Sessions = FClaireonSessionManager::Get();
+	Sessions.ReleaseByAssetPath(EditTestBTPath);
+
+	const FMCPOpenSessionResult Held =
+		Sessions.OpenSession(EditTestBTPath, TEXT("claireon_test_foreign_tool"));
+	UNTEST_ASSERT_TRUE(Held.Result == EOpenSessionResult::Success);
+
+	ClaireonBehaviorTreeTool_Open OpenTool;
+	TSharedPtr<FJsonObject> OpenArgs = MakeShared<FJsonObject>();
+	OpenArgs->SetStringField(TEXT("asset_path"), EditTestBTPath);
+
+	auto Blocked = OpenTool.Execute(OpenArgs);
+	UNTEST_EXPECT_TRUE(Blocked.bIsError);
+	UNTEST_EXPECT_TRUE(Blocked.GetContentAsString().Contains(TEXT("locked")));
+
+	Sessions.CloseSession(Held.SessionId);
 
 	co_return;
 }

@@ -50,6 +50,12 @@ TSharedPtr<FJsonObject> ClaireonTool_DataTableAddRow::GetInputSchema() const
 	AllowOverwriteProp->SetStringField(TEXT("description"), TEXT("If true, replace an existing row with the same name (default: false)"));
 	Properties->SetObjectField(TEXT("allow_overwrite"), AllowOverwriteProp);
 
+	// refresh_composites - optional
+	TSharedPtr<FJsonObject> RefreshCompositesProp = MakeShared<FJsonObject>();
+	RefreshCompositesProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	RefreshCompositesProp->SetStringField(TEXT("description"), TEXT("After saving, refresh any composite data tables that aggregate this table (default: true). Set false for batch edits; follow with an explicit datatable_composite_refresh."));
+	Properties->SetObjectField(TEXT("refresh_composites"), RefreshCompositesProp);
+
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	TArray<TSharedPtr<FJsonValue>> Required;
@@ -86,6 +92,12 @@ IClaireonTool::FToolResult ClaireonTool_DataTableAddRow::Execute(const TSharedPt
 		bAllowOverwrite = Arguments->GetBoolField(TEXT("allow_overwrite"));
 	}
 
+	bool bRefreshComposites = true;
+	if (Arguments->HasField(TEXT("refresh_composites")))
+	{
+		bRefreshComposites = Arguments->GetBoolField(TEXT("refresh_composites"));
+	}
+
 	FString ValidateError;
 	if (!ClaireonDataTableHelpers::ValidateRowName(RowNameStr, ValidateError))
 	{
@@ -94,7 +106,7 @@ IClaireonTool::FToolResult ClaireonTool_DataTableAddRow::Execute(const TSharedPt
 
 	FString LoadError;
 	UDataTable* DataTable = ClaireonDataTableHelpers::LoadDataTableAsset(AssetPath, LoadError);
-	if (!DataTable)
+	if (!IsValid(DataTable))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -112,7 +124,7 @@ IClaireonTool::FToolResult ClaireonTool_DataTableAddRow::Execute(const TSharedPt
 	}
 
 	const UScriptStruct* RowStruct = DataTable->GetRowStruct();
-	if (!RowStruct)
+	if (!IsValid(RowStruct))
 	{
 		return MakeErrorResult(TEXT("DataTable has no row struct"));
 	}
@@ -145,7 +157,6 @@ IClaireonTool::FToolResult ClaireonTool_DataTableAddRow::Execute(const TSharedPt
 	}
 
 	const FString TableName = FPaths::GetBaseFilename(AssetPath);
-	const int32 RemainingRows = DataTable->GetRowMap().Num();
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("table_path"), AssetPath);
@@ -153,7 +164,9 @@ IClaireonTool::FToolResult ClaireonTool_DataTableAddRow::Execute(const TSharedPt
 	Data->SetBoolField(TEXT("created"), true);
 	Data->SetNumberField(TEXT("field_count"), FieldCount);
 
-	const FString Summary = FString::Printf(TEXT("Added row '%s' to %s"), *RowNameStr, *TableName);
+	const FString RefreshSuffix = ClaireonDataTableHelpers::RefreshDependentCompositesResult(DataTable, bRefreshComposites, Data);
+
+	const FString Summary = FString::Printf(TEXT("Added row '%s' to %s"), *RowNameStr, *TableName) + RefreshSuffix;
 
 	return MakeSuccessResult(Data, Summary);
 }

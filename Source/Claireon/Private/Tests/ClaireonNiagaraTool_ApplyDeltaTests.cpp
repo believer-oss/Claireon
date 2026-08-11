@@ -53,7 +53,7 @@ namespace ClaireonNiagaraTool_ApplyDeltaTests_anon
 	// accept both "User.X" and "X" forms for caller convenience.
 	static bool NiagDeltaTest_GetUserParam(UNiagaraSystem* System, const FString& AnyName, FNiagaraVariable& OutVar)
 	{
-		if (!System) { return false; }
+		if (!IsValid(System)) { return false; }
 		FString Simple = AnyName;
 		if (Simple.StartsWith(TEXT("User."))) { Simple = Simple.RightChop(5); }
 		TArray<FNiagaraVariable> UserParams;

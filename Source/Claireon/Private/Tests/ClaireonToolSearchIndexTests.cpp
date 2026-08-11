@@ -351,8 +351,21 @@ UNTEST_UNIT_OPTS(Claireon, ClaireonToolSearchIndex, ContentSpotCheckChooserInspe
 // ===========================================================================
 // Case 3: Abbreviation enrichment
 // Abbreviation pair: bp -> blueprint (reverse: blueprint -> bp).
-// Any tool with "blueprint" in its name has "bp" appended during enrichment.
-// Verify that a MATCH query for 'bp' returns at least one blueprint_* tool.
+//
+// Root cause of the previous failure: this test asserted that MATCH 'bp'
+// returns a tool whose NAME starts with "blueprint", on the premise that
+// Blueprint tools are named blueprint_*. They are not, and never were on this
+// branch -- the Blueprint tool family is registered under kBPCategory == "bp"
+// (Tools/ClaireonBlueprintGraphEditToolBase.h) and IClaireonTool::GetName() is
+// sealed to <category>_<operation>, so every name is bp_*. The old assertion
+// could only ever be false. Test defect, not a product bug.
+//
+// The enrichment direction that IS observable with bp_* names is the FORWARD
+// expansion bp -> blueprint applied to the indexed name column, so that is
+// what this now pins:
+//   1) the enriched `name` column of bp_duplicate contains "blueprint"
+//      (direct proof EnrichField ran on the name field), and
+//   2) MATCH 'blueprint' recalls a bp_*-named tool.
 // ===========================================================================
 
 UNTEST_UNIT_OPTS(Claireon, ClaireonToolSearchIndex, AbbreviationEnrichmentBpBlueprint, UNTEST_TIMEOUTMS(15000.0))
@@ -365,6 +378,11 @@ UNTEST_UNIT_OPTS(Claireon, ClaireonToolSearchIndex, AbbreviationEnrichmentBpBlue
 	FClaireonServer* Server = EnsureServerAndBridge(Module);
 	UNTEST_ASSERT_PTR(Server);
 
+	// Guard against a vacuous pass: the fixture tool must really be registered.
+	const TMap<FString, TSharedPtr<IClaireonTool>>& Tools = Server->GetTools();
+	const bool bBpDuplicateRegistered = Tools.Contains(TEXT("bp_duplicate"));
+	UNTEST_ASSERT_TRUE(bBpDuplicateRegistered);
+
 	const bool bBuilt = FClaireonToolSearchIndex::EnsureBuilt();
 	UNTEST_ASSERT_TRUE(bBuilt);
 
@@ -372,11 +390,19 @@ UNTEST_UNIT_OPTS(Claireon, ClaireonToolSearchIndex, AbbreviationEnrichmentBpBlue
 	UNTEST_ASSERT_TRUE(Db != nullptr);
 	UNTEST_ASSERT_TRUE(Db->IsValid());
 
-	// The reverse abbreviation for "blueprint" is "bp". Any tool whose name
-	// contains "blueprint" will have "bp" appended to its enriched name field.
-	// Querying MATCH 'bp' must find at least one blueprint_* tool.
-	const bool bBpMatchesBlueprintTool = MatchQueryFindsToolPrefix(*Db, TEXT("bp"), TEXT("blueprint"));
-	UNTEST_EXPECT_TRUE(bBpMatchesBlueprintTool);
+	// 1) The stored name column is EnrichField(name). "bp_duplicate" tokenises to
+	//    {bp, duplicate}; the forward map expands bp -> blueprint, so the stored
+	//    text must carry "blueprint" even though the raw name never does.
+	FString NameValue;
+	const bool bNameFound = GetToolColumnValue(*Db, TEXT("bp_duplicate"), TEXT("name"), NameValue);
+	UNTEST_EXPECT_TRUE(bNameFound);
+	const bool bNameEnrichedWithBlueprint = NameValue.Contains(TEXT("blueprint"));
+	UNTEST_EXPECT_TRUE(bNameEnrichedWithBlueprint);
+
+	// 2) The enriched text is reachable through the FTS5 tokenizer: querying the
+	//    expansion term must recall an abbreviated-named tool.
+	const bool bBlueprintMatchesBpTool = MatchQueryFindsToolPrefix(*Db, TEXT("blueprint"), TEXT("bp_"));
+	UNTEST_EXPECT_TRUE(bBlueprintMatchesBpTool);
 
 	FClaireonToolSearchIndex::Clear();
 
@@ -1064,10 +1090,12 @@ UNTEST_UNIT_OPTS(Claireon, ClaireonToolSearchIndex, QueryHostileInputSanitizatio
 }
 
 // ===========================================================================
-// Case 5: Corpus dry-run (MEASURE, DO NOT GATE)
+// Case 5: Corpus dry-run (MEASURE **AND** GATE)
 // Run all corpus rows through FindNearest; compute and log top-1/5/10 hit
-// rates per split (tune/dev/frozen). Write fts5_metrics.json.
-// No bar enforced here -- see the discoverability suite for the placement bar.
+// rates per split (tune/dev/frozen). Write fts5_metrics.json, then assert the
+// overall hit rates against committed floors (see the calibration block at the
+// bottom of the body). Previously this only asserted that the metrics file got
+// written, which meant a total relevance collapse still scored as a PASS.
 // ===========================================================================
 
 UNTEST_UNIT_OPTS(Claireon, ClaireonToolSearchIndex, QueryCorpusDryRun, UNTEST_TIMEOUTMS(120000.0))
@@ -1077,22 +1105,25 @@ UNTEST_UNIT_OPTS(Claireon, ClaireonToolSearchIndex, QueryCorpusDryRun, UNTEST_TI
 
 	FClaireonToolSearchIndex::Clear();
 
-	// Load corpus -- skip gracefully if absent.
+	// Load corpus. The fixture is COMMITTED in-plugin
+	// (Private/Tests/Fixtures/tool_search_corpus.json), so absence is a broken
+	// checkout, not an expected CI state -- fail rather than co_return, which
+	// Untest scores as a PASS.
 	const TSharedPtr<FJsonObject> CorpusRoot = LoadCorpusJson();
 	if (!CorpusRoot.IsValid())
 	{
-		UE_LOG(LogTemp, Display,
-			TEXT("[ClaireonToolSearchIndex] QueryCorpusDryRun: corpus not found -- skipping"));
-		co_return;
+		UE_LOG(LogTemp, Error,
+			TEXT("[ClaireonToolSearchIndex] QueryCorpusDryRun: committed corpus fixture missing or malformed"));
 	}
+	UNTEST_ASSERT_TRUE(CorpusRoot.IsValid());
 
 	const TArray<FCorpusRow007> Rows = ParseCorpusRows(CorpusRoot);
 	if (Rows.IsEmpty())
 	{
-		UE_LOG(LogTemp, Warning,
+		UE_LOG(LogTemp, Error,
 			TEXT("[ClaireonToolSearchIndex] QueryCorpusDryRun: corpus loaded but contains zero rows"));
-		co_return;
 	}
+	UNTEST_ASSERT_FALSE(Rows.IsEmpty());
 
 	FClaireonModule& Module = FClaireonModule::Get();
 	FClaireonServer* Server = EnsureServerAndBridge(Module);
@@ -1191,7 +1222,32 @@ UNTEST_UNIT_OPTS(Claireon, ClaireonToolSearchIndex, QueryCorpusDryRun, UNTEST_TI
 		}
 	}
 
-	// No bar asserted here -- this is a measurement-only dry-run.
+	// ------------------------------------------------------------------
+	// RELEVANCE FLOOR -- the actual gate.
+	//
+	// "Wrote fts5_metrics.json" used to be the only assertion here, so lexical
+	// relevance could fall to 0% and this test would still report PASS. The
+	// header above still says "MEASURE, DO NOT GATE"; that described the state
+	// before these floors and is no longer accurate -- the floors below gate.
+	//
+	// Calibration (2026-08-01, run 20260801_093801, 120 corpus rows, raw FTS5
+	// FClaireonToolSearchIndex::FindNearest -- lexical only, NO semantic/hybrid
+	// fusion, which is why these numbers sit well below the hybrid harness):
+	//     measured  top-1=49.2%  top-5=69.2%  top-10=79.2%
+	//     floor     top-1=38%    top-5=58%    top-10=68%
+	// ~11 points of headroom on each (13 of 120 rows) -- enough for corpus churn
+	// and tokenizer tuning, tight enough that an empty or unindexed DB (which
+	// scores near zero) trips it.
+	// ------------------------------------------------------------------
+	UNTEST_ASSERT_GE(Overall.Total, 60);
+
+	const double Top1Pct  = 100.0 * Overall.Hit1  / Overall.Total;
+	const double Top5Pct  = 100.0 * Overall.Hit5  / Overall.Total;
+	const double Top10Pct = 100.0 * Overall.Hit10 / Overall.Total;
+
+	UNTEST_EXPECT_GE(Top1Pct, 38.0);
+	UNTEST_EXPECT_GE(Top5Pct, 58.0);
+	UNTEST_EXPECT_GE(Top10Pct, 68.0);
 
 	FClaireonToolSearchIndex::Clear();
 
@@ -1199,16 +1255,17 @@ UNTEST_UNIT_OPTS(Claireon, ClaireonToolSearchIndex, QueryCorpusDryRun, UNTEST_TI
 }
 
 // ===========================================================================
-// Case 6: Semantic corpus dry-run (MEASURE, DO NOT GATE)
+// Case 6: Semantic corpus dry-run (MEASURE **AND** GATE)
 // Mirror of QueryCorpusDryRun but driving the SEMANTIC index
 // (FClaireonToolEmbeddingIndex::FindNearestSemantic) instead of the FTS5
 // FindNearest. Same corpus fixture, same intent-based union acceptance, same
 // top-1/5/10 per-split scoring. Writes semantic_metrics.json +
 // semantic_per_query.tsv.
 //
-// SKIP-with-log (co_return, NOT fail) when the corpus is absent OR the embedding
-// index is not ready (no ORT runtime / model / vocab), so CI without the model
-// stays green. The lexical surface is unaffected either way.
+// A missing corpus FAILS: the fixture is committed, so its absence is a broken
+// checkout, and a co_return would be scored as a PASS. A missing embedding index
+// (no ORT runtime / model / vocab) still skips, at Warning -- that one is genuine
+// external configuration and the lexical surface is unaffected either way.
 // ===========================================================================
 
 UNTEST_UNIT_OPTS(Claireon, ClaireonToolSearchIndex, QueryCorpusSemanticDryRun, UNTEST_TIMEOUTMS(120000.0))
@@ -1218,22 +1275,23 @@ UNTEST_UNIT_OPTS(Claireon, ClaireonToolSearchIndex, QueryCorpusSemanticDryRun, U
 
 	FClaireonToolEmbeddingIndex::Clear();
 
-	// Load corpus -- skip gracefully if absent.
+	// Load corpus. Committed in-plugin fixture -- absence is a broken checkout,
+	// not an expected CI state, so fail instead of co_return (= PASS).
 	const TSharedPtr<FJsonObject> CorpusRoot = LoadCorpusJson();
 	if (!CorpusRoot.IsValid())
 	{
-		UE_LOG(LogTemp, Display,
-			TEXT("[ClaireonToolSearchIndex] QueryCorpusSemanticDryRun: corpus not found -- skipping"));
-		co_return;
+		UE_LOG(LogTemp, Error,
+			TEXT("[ClaireonToolSearchIndex] QueryCorpusSemanticDryRun: committed corpus fixture missing or malformed"));
 	}
+	UNTEST_ASSERT_TRUE(CorpusRoot.IsValid());
 
 	const TArray<FCorpusRow007> Rows = ParseCorpusRows(CorpusRoot);
 	if (Rows.IsEmpty())
 	{
-		UE_LOG(LogTemp, Warning,
+		UE_LOG(LogTemp, Error,
 			TEXT("[ClaireonToolSearchIndex] QueryCorpusSemanticDryRun: corpus loaded but contains zero rows"));
-		co_return;
 	}
+	UNTEST_ASSERT_FALSE(Rows.IsEmpty());
 
 	FClaireonModule& Module = FClaireonModule::Get();
 	FClaireonServer* Server = EnsureServerAndBridge(Module);
@@ -1245,12 +1303,18 @@ UNTEST_UNIT_OPTS(Claireon, ClaireonToolSearchIndex, QueryCorpusSemanticDryRun, U
 	FClaireonToolEmbeddingIndex::RebuildFromLiveServer();
 
 	// If the model/runtime/vocab is unavailable the index never becomes ready.
-	// Skip-with-log so CI without the embedding model stays green.
+	// This is the one precondition here that is genuinely outside the test's
+	// control (the ONNX runtime and .onnx model are not present in every
+	// configuration), so it stays a skip -- but at Warning, never Display:
+	// Untest has no skip primitive, an early co_return is scored as a PASS, and
+	// the only way to tell "the semantic floors ran" from "they silently did
+	// not" is this line in the log.
 	if (!FClaireonToolEmbeddingIndex::IsReady())
 	{
-		UE_LOG(LogTemp, Display,
-			TEXT("[ClaireonToolSearchIndex] QueryCorpusSemanticDryRun: embedding index not ready "
-			     "(no ORT runtime / model / vocab) -- skipping (lexical fallback unaffected)"));
+		UE_LOG(LogTemp, Warning,
+			TEXT("[ClaireonToolSearchIndex] QueryCorpusSemanticDryRun: SKIPPED -- embedding index not ready "
+			     "(no ORT runtime / model / vocab); semantic relevance floors did NOT run "
+			     "(lexical fallback unaffected)"));
 		FClaireonToolEmbeddingIndex::Clear();
 		co_return;
 	}
@@ -1341,7 +1405,30 @@ UNTEST_UNIT_OPTS(Claireon, ClaireonToolSearchIndex, QueryCorpusSemanticDryRun, U
 		}
 	}
 
-	// No bar asserted here -- this is a measurement-only dry-run.
+	// ------------------------------------------------------------------
+	// RELEVANCE FLOOR -- the actual gate.
+	//
+	// "Wrote semantic_metrics.json" used to be the only assertion, so the
+	// embedding ranking could collapse to 0% and still report PASS.
+	//
+	// Calibration (2026-08-01, run 20260801_093801, 120 corpus rows, pure
+	// semantic FClaireonToolEmbeddingIndex::FindNearestSemantic -- no lexical
+	// contribution):
+	//     measured  top-1=73.3%  top-5=91.7%  top-10=95.8%
+	//     floor     top-1=60%    top-5=80%    top-10=86%
+	// ~10-13 points of headroom (12-16 of 120 rows). Model or tokenizer changes
+	// legitimately move these numbers, so re-baseline deliberately: update the
+	// measured line, the floor, and the run id together.
+	// ------------------------------------------------------------------
+	UNTEST_ASSERT_GE(Overall.Total, 60);
+
+	const double Top1Pct  = 100.0 * Overall.Hit1  / Overall.Total;
+	const double Top5Pct  = 100.0 * Overall.Hit5  / Overall.Total;
+	const double Top10Pct = 100.0 * Overall.Hit10 / Overall.Total;
+
+	UNTEST_EXPECT_GE(Top1Pct, 60.0);
+	UNTEST_EXPECT_GE(Top5Pct, 80.0);
+	UNTEST_EXPECT_GE(Top10Pct, 86.0);
 
 	FClaireonToolEmbeddingIndex::Clear();
 

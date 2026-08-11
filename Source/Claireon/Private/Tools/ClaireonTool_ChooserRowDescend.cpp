@@ -13,10 +13,10 @@ FString ClaireonTool_ChooserRowDescend::GetOperation() const { return TEXT("row_
 
 FString ClaireonTool_ChooserRowDescend::GetDescription() const
 {
-	return TEXT("Given a parent chooser and a row index, follow that row's result reference one hop "
-		"into the target chooser (FNestedChooser or FEvaluateChooser). Returns identifying info on the "
-		"hop and a compact summary of the target chooser. Composes with chooser_walk: walk first, "
-		"then descend specific rows of interest. Use chooser_inspect for the full body of the target.");
+	return TEXT("Navigate one hop from a parent ChooserTable row into the chooser its result references "
+		"(FNestedChooser or FEvaluateChooser), returning the hop type and a compact summary of the target; "
+		"follows_to is null when that row is not a chooser reference. Composes with chooser_walk, and "
+		"chooser_inspect gives the target's full body. Read-only / non-session: no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ChooserRowDescend::GetInputSchema() const
@@ -44,7 +44,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserRowDescend::Execute(const TShared
 
 	FString Error;
 	UChooserTable* Parent = ClaireonChooserHelpers::LoadChooserTableAsset(AssetPath, Error);
-	if (!Parent)
+	if (!IsValid(Parent))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -78,7 +78,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserRowDescend::Execute(const TShared
 		HopType = TEXT("EvaluateChooser");
 	}
 
-	if (!Target)
+	if (!IsValid(Target))
 	{
 		Data->SetField(TEXT("follows_to"), MakeShared<FJsonValueNull>());
 		const FString Why = Result.IsValid()

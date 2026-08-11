@@ -47,13 +47,13 @@ IClaireonTool::FToolResult ClaireonTool_ProxyTableAddEntry::Execute(const TShare
 
 	FString Error;
 	UProxyTable* ProxyTable = ClaireonProxyTableHelpers::LoadProxyTableAsset(AssetPath, Error);
-	if (!ProxyTable)
+	if (!IsValid(ProxyTable))
 	{
 		return MakeErrorResult(Error);
 	}
 
 	UProxyAsset* Proxy = ClaireonProxyTableHelpers::LoadProxyAsset(ProxyAssetPath, Error);
-	if (!Proxy)
+	if (!IsValid(Proxy))
 	{
 		return MakeErrorResult(Error);
 	}

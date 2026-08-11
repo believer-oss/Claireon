@@ -15,7 +15,7 @@ FString ClaireonMaterialInstanceTool_SetParent::GetOperation() const { return TE
 
 FString ClaireonMaterialInstanceTool_SetParent::GetDescription() const
 {
-    return TEXT("Reparent a UMaterialInstanceConstant to a new UMaterialInterface. Rejects cycles. Session-mode tool: open via material_instance_open first.");
+    return TEXT("Reparent a UMaterialInstanceConstant to a new UMaterialInterface. Rejects cycles. Session-mode tool: open via material_instance_instance_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialInstanceTool_SetParent::GetInputSchema() const
@@ -44,7 +44,7 @@ FToolResult ClaireonMaterialInstanceTool_SetParent::Execute(const TSharedPtr<FJs
 
 	FSoftObjectPath SoftPath(ParentPath);
 	UMaterialInterface* NewParent = Cast<UMaterialInterface>(SoftPath.TryLoad());
-	if (!NewParent)
+	if (!IsValid(NewParent))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load parent material '%s'"), *ParentPath));
 	}
@@ -55,13 +55,13 @@ FToolResult ClaireonMaterialInstanceTool_SetParent::Execute(const TSharedPtr<FJs
 	{
 		UMaterialInterface* Cursor = NewParent;
 		int32 Safety = 0;
-		while (Cursor && Safety++ < 64)
+		while (IsValid(Cursor) && Safety++ < 64)
 		{
 			if (Cursor == Instance)
 			{
 				return MakeErrorResult(TEXT("Setting parent would create a cycle"));
 			}
-			if (UMaterialInstance* AsInstance = Cast<UMaterialInstance>(Cursor))
+			if (UMaterialInstance* AsInstance = Cast<UMaterialInstance>(Cursor); IsValid(AsInstance))
 			{
 				Cursor = AsInstance->Parent;
 			}

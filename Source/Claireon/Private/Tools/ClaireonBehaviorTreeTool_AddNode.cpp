@@ -46,7 +46,7 @@ FToolResult ClaireonBehaviorTreeTool_AddNode::Execute(const TSharedPtr<FJsonObje
 	}
 
 	UBehaviorTreeGraph* Graph = ClaireonBehaviorTreeHelpers::GetBTGraph(Data->BehaviorTree.Get(), Error);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -68,7 +68,7 @@ FToolResult ClaireonBehaviorTreeTool_AddNode::Execute(const TSharedPtr<FJsonObje
 
 	ClaireonNameResolver::FNameResolveResult NameResult;
 	UClass* NodeClass = ClaireonNameResolver::ResolveClassName(NodeClassName, UBTNode::StaticClass(), NameResult);
-	if (!NodeClass)
+	if (!IsValid(NodeClass))
 	{
 		return MakeErrorResult(NameResult.Error);
 	}
@@ -79,10 +79,10 @@ FToolResult ClaireonBehaviorTreeTool_AddNode::Execute(const TSharedPtr<FJsonObje
 	}
 
 	UBehaviorTreeGraphNode* ParentGraphNode = ClaireonBehaviorTreeHelpers::FindGraphNodeByGuid(Graph, ParentGuid);
-	if (!ParentGraphNode)
+	if (!IsValid(ParentGraphNode))
 	{
 		UBehaviorTreeGraphNode_Root* RootNode = ClaireonBehaviorTreeHelpers::FindRootGraphNode(Graph);
-		if (RootNode && RootNode->NodeGuid == ParentGuid)
+		if (IsValid(RootNode) && RootNode->NodeGuid == ParentGuid)
 		{
 			ParentGraphNode = RootNode;
 		}
@@ -97,7 +97,7 @@ FToolResult ClaireonBehaviorTreeTool_AddNode::Execute(const TSharedPtr<FJsonObje
 
 	UBehaviorTreeGraphNode* NewNode = ClaireonBehaviorTreeHelpers::CreateGraphNodeForClass(Graph, NodeClass,
 		FVector2D(ParentGraphNode->NodePosX + 200, ParentGraphNode->NodePosY + 100), Error);
-	if (!NewNode)
+	if (!IsValid(NewNode))
 	{
 		return MakeErrorResult(Error);
 	}

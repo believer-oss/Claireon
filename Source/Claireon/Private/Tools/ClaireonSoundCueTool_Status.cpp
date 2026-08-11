@@ -48,7 +48,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_Status::Execute(const TSharedPt
 	Out->SetNumberField(TEXT("focused_node_index"), Data->FocusedNodeIndex);
 	Out->SetBoolField(TEXT("dirty"), Data->bDirty);
 	Out->SetStringField(TEXT("last_operation"), Data->LastOperationStatus);
-	if (USoundCue* Cue = Cast<USoundCue>(Data->Asset.Get()))
+	if (USoundCue* Cue = Cast<USoundCue>(Data->Asset.Get()); IsValid(Cue))
 	{
 #if WITH_EDITORONLY_DATA
 		Out->SetNumberField(TEXT("node_count"), Cue->AllNodes.Num());

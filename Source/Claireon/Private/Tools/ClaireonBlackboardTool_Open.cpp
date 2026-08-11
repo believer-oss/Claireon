@@ -51,7 +51,7 @@ FToolResult ClaireonBlackboardTool_Open::Execute(const TSharedPtr<FJsonObject>& 
 
 	FString Error;
 	UBlackboardData* BB = ClaireonBehaviorTreeHelpers::LoadBlackboardAsset(AssetPath, Error);
-	if (!BB)
+	if (!IsValid(BB))
 	{
 		return MakeErrorResult(Error);
 	}

@@ -51,7 +51,7 @@ IClaireonTool::FToolResult ClaireonTool_ProxyAssetSetContextParameterDirection::
 
 	FString Error;
 	UProxyAsset* ProxyAsset = ClaireonProxyTableHelpers::LoadProxyAsset(AssetPath, Error);
-	if (!ProxyAsset)
+	if (!IsValid(ProxyAsset))
 	{
 		return MakeErrorResult(Error);
 	}

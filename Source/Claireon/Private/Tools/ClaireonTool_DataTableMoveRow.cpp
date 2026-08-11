@@ -56,6 +56,12 @@ TSharedPtr<FJsonObject> ClaireonTool_DataTableMoveRow::GetInputSchema() const
 	CountProp->SetStringField(TEXT("description"), TEXT("Number of positions to move the row (default: 1)"));
 	Properties->SetObjectField(TEXT("count"), CountProp);
 
+	// refresh_composites - optional
+	TSharedPtr<FJsonObject> RefreshCompositesProp = MakeShared<FJsonObject>();
+	RefreshCompositesProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	RefreshCompositesProp->SetStringField(TEXT("description"), TEXT("After saving, refresh any composite data tables that aggregate this table (default: true). Set false for batch edits; follow with an explicit datatable_composite_refresh."));
+	Properties->SetObjectField(TEXT("refresh_composites"), RefreshCompositesProp);
+
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	TArray<TSharedPtr<FJsonValue>> Required;
@@ -105,10 +111,16 @@ IClaireonTool::FToolResult ClaireonTool_DataTableMoveRow::Execute(const TSharedP
 		Count = FMath::Max(1, static_cast<int32>(Arguments->GetNumberField(TEXT("count"))));
 	}
 
+	bool bRefreshComposites = true;
+	if (Arguments->HasField(TEXT("refresh_composites")))
+	{
+		bRefreshComposites = Arguments->GetBoolField(TEXT("refresh_composites"));
+	}
+
 	// 2. Load and validate table
 	FString Error;
 	UDataTable* Table = ClaireonDataTableHelpers::LoadDataTableAsset(AssetPath, Error);
-	if (!Table)
+	if (!IsValid(Table))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -154,6 +166,7 @@ IClaireonTool::FToolResult ClaireonTool_DataTableMoveRow::Execute(const TSharedP
 	FString SaveError;
 	bool bSaved = ClaireonDataTableHelpers::SaveDataTable(Table, SaveError);
 
+	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	FString Output;
 	if (NewIndex != INDEX_NONE)
 	{
@@ -170,7 +183,11 @@ IClaireonTool::FToolResult ClaireonTool_DataTableMoveRow::Execute(const TSharedP
 	{
 		Output += FString::Printf(TEXT("\nWarning: %s"), *SaveError);
 	}
+	else
+	{
+		Output += ClaireonDataTableHelpers::RefreshDependentCompositesResult(Table, bRefreshComposites, Data);
+	}
 
 	UE_LOG(LogClaireon, Display, TEXT("[MCP] editor.datatable.move_row: %s"), *Output);
-	return MakeSuccessResult(nullptr, Output);
+	return MakeSuccessResult(Data, Output);
 }

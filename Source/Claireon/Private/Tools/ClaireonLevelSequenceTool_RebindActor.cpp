@@ -22,11 +22,12 @@ FString ClaireonLevelSequenceTool_RebindActor::GetOperation() const
 
 FString ClaireonLevelSequenceTool_RebindActor::GetDescription() const
 {
-	return TEXT("Re-attach a world AActor to an existing possessable binding "
-	            "GUID without changing the GUID. Repairs bindings whose actor "
-	            "reference is unresolved (e.g. World Partition cells unstreamed "
-	            "at authoring time). Use clear=true to drop the binding's "
-	            "actor refs while keeping the GUID.");
+	return TEXT("Bind a world AActor onto an existing possessable binding without "
+	            "changing its GUID; target the binding by label or guid and the "
+	            "actor by actor_path or actor_label. Repairs bindings whose actor "
+	            "ref is unresolved (e.g. World Partition cells unstreamed at "
+	            "authoring time). clear=true drops the actor refs but keeps the "
+	            "GUID. Session-mode tool: open via level_sequence_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_RebindActor::GetInputSchema() const
@@ -91,12 +92,12 @@ FToolResult ClaireonLevelSequenceTool_RebindActor::Execute(
 		return MakeErrorResult(Error);
 	}
 
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("editor world unavailable"));
 	}
 	UWorld* EditorWorld = GEditor->GetEditorWorldContext().World();
-	if (!EditorWorld)
+	if (!IsValid(EditorWorld))
 	{
 		return MakeErrorResult(TEXT("editor world unavailable"));
 	}
@@ -113,11 +114,11 @@ FToolResult ClaireonLevelSequenceTool_RebindActor::Execute(
 				return MakeErrorResult(Resolved.Error);
 			}
 			Actor = FindObject<AActor>(nullptr, *Resolved.ResolvedPath.Path);
-			if (!Actor)
+			if (!IsValid(Actor))
 			{
 				Actor = LoadObject<AActor>(nullptr, *Resolved.ResolvedPath.Path);
 			}
-			if (!Actor)
+			if (!IsValid(Actor))
 			{
 				return MakeErrorResult(FString::Printf(
 					TEXT("actor not found at path '%s'"), *Resolved.ResolvedPath.Path));

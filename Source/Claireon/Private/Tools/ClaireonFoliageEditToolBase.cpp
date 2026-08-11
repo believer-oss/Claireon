@@ -38,7 +38,7 @@ void ClaireonFoliageEditToolBase::EnsureDelegateRegistered()
 UFoliageType* ClaireonFoliageEditToolBase::FindFoliageTypeInActor(AInstancedFoliageActor* IFA, const FString& NameOrPath)
 {
 #if WITH_EDITOR
-	if (!IFA)
+	if (!IsValid(IFA))
 	{
 		return nullptr;
 	}
@@ -46,7 +46,7 @@ UFoliageType* ClaireonFoliageEditToolBase::FindFoliageTypeInActor(AInstancedFoli
 	for (auto& Pair : IFA->GetFoliageInfos())
 	{
 		UFoliageType* FT = Pair.Key;
-		if (!FT) continue;
+		if (!IsValid(FT)) continue;
 
 		if (FT->GetName().Equals(NameOrPath, ESearchCase::IgnoreCase) ||
 			FT->GetPathName().Equals(NameOrPath, ESearchCase::IgnoreCase))
@@ -131,8 +131,8 @@ FToolResult ClaireonFoliageEditToolBase::BuildStateResponse(const FString& Sessi
 		const FFoliageInfo& Info = Pair.Value.Get();
 
 		TSharedPtr<FJsonObject> TypeJson = MakeShared<FJsonObject>();
-		TypeJson->SetStringField(TEXT("name"), FT ? FT->GetName() : TEXT("Unknown"));
-		TypeJson->SetStringField(TEXT("asset_path"), FT ? FT->GetPathName() : TEXT(""));
+		TypeJson->SetStringField(TEXT("name"), IsValid(FT) ? FT->GetName() : TEXT("Unknown"));
+		TypeJson->SetStringField(TEXT("asset_path"), IsValid(FT) ? FT->GetPathName() : TEXT(""));
 		TypeJson->SetNumberField(TEXT("instance_count"), Info.Instances.Num());
 		TypeArray.Add(MakeShared<FJsonValueObject>(TypeJson));
 		TotalInstances += Info.Instances.Num();
@@ -142,11 +142,11 @@ FToolResult ClaireonFoliageEditToolBase::BuildStateResponse(const FString& Sessi
 	ResultData->SetNumberField(TEXT("total_instances"), TotalInstances);
 #endif
 
-	FString SessionHintSummaryTag;
+	TSharedPtr<FJsonObject> SessionHint;
 	const FString FoliageActorPath = Data->FoliageActor.IsValid() ? Data->FoliageActor->GetPathName() : FString();
-	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResultData, Data->ConsecutiveAssetPathCalls, FoliageActorPath, SessionId, SessionHintSummaryTag);
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResultData, Data->ConsecutiveAssetPathCalls, FoliageActorPath, SessionId, GetName(), SessionHint);
 
 	const FString Summary = FString::Printf(
 		TEXT("Session %s: %s"), *SessionId, *Data->LastOperationStatus);
-	return MakeSuccessResult(ResultData, Summary + SessionHintSummaryTag);
+	return MakeSuccessResultWithHint(ResultData, Summary, SessionHint);
 }

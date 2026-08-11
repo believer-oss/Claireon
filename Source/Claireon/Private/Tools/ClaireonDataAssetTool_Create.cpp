@@ -19,8 +19,37 @@
 
 #define LOCTEXT_NAMESPACE "ClaireonDataAssetTool_Create"
 
-namespace
+namespace ClaireonDataAssetTool_Create_Private
 {
+	// Retire a half-built asset so the path is genuinely free again.
+	//
+	// The three failure branches below used to clear RF_Standalone|RF_Public and call
+	// MarkAsGarbage, on the stated assumption that this made the asset "not visible in
+	// subsequent LoadObject queries". It does not. A garbage-marked object still occupies
+	// its name inside its package until a GC actually collects it, and LoadObject keeps
+	// resolving it until then -- so a failed create left a half-built asset reachable, and
+	// the retry path's "Asset already exists" pre-check then wedged that path until editor
+	// restart, which is exactly the outcome the save branch's comment says it prevents.
+	//
+	// Renaming into the transient package under a unique name is what actually frees the
+	// name; MarkAsGarbage alone never did. Same reasoning, and the same collision hazard,
+	// as ClaireonAssetUtils::EvictInMemoryObject -- keep the unique name, or two failed
+	// creates of the same path in one session collide in the transient package and
+	// UObject::Rename treats that as fatal.
+	void DataAssetCreate_RetireHalfBuiltAsset(UObject* NewAsset)
+	{
+		if (!IsValid(NewAsset))
+		{
+			return;
+		}
+		NewAsset->ClearFlags(RF_Standalone | RF_Public);
+		const FName Retired = MakeUniqueObjectName(
+			GetTransientPackage(), NewAsset->GetClass(), NewAsset->GetFName());
+		NewAsset->Rename(*Retired.ToString(), GetTransientPackage(),
+			REN_DontCreateRedirectors | REN_NonTransactional | REN_DoNotDirty);
+		NewAsset->MarkAsGarbage();
+	}
+
 	// DataAssetCreate_: discriminator-prefixed file-local helpers to avoid unity-batch collisions
 	// with similarly-named helpers across cohort files (e.g. ClaireonAttenuationTool_SetProperty.cpp).
 	FString DataAssetCreate_JsonValueToString(const TSharedPtr<FJsonValue>& V)
@@ -51,15 +80,18 @@ namespace
 		return ClaireonAssetUtils::ResolveClassName(ClassPath);
 	}
 }
+using namespace ClaireonDataAssetTool_Create_Private;
 
 FString FClaireonDataAssetTool_Create::GetCategory() const { return TEXT("data_asset"); }
 FString FClaireonDataAssetTool_Create::GetOperation() const { return TEXT("create"); }
 
 FString FClaireonDataAssetTool_Create::GetDescription() const
 {
-	return TEXT("Create a UDataAsset / UPrimaryDataAsset subclass at a /Game/ path and optionally seed properties. "
-				"Supports TSoftObjectPtr<T> fields directly via reflection (string paths are parsed into FSoftObjectPath). "
-				"class_path accepts either /Script/Module.ClassName or a bare class name.");
+	return TEXT("Create a UDataAsset / UPrimaryDataAsset subclass instance at a /Game/ path and optionally seed "
+				"properties from a dot-path map. class_path accepts /Script/Module.ClassName or a bare class "
+				"name. TSoftObjectPtr<T> fields are settable directly (string paths parse into "
+				"FSoftObjectPath). Non-session and immediate: creates and saves in one call, opening no "
+				"editing session.");
 }
 
 TSharedPtr<FJsonObject> FClaireonDataAssetTool_Create::GetInputSchema() const
@@ -101,13 +133,22 @@ IClaireonTool::FToolResult FClaireonDataAssetTool_Create::Execute(const TSharedP
 		return MakeErrorResult(FString::Printf(TEXT("Could not derive object name from path: %s"), *Canon));
 	}
 
-	if (UObject* Existing = LoadObject<UObject>(nullptr, *Canon))
+	if (UObject* Existing = LoadObject<UObject>(nullptr, *Canon); IsValid(Existing))
 	{
-		return MakeErrorResult(FString::Printf(TEXT("Asset already exists at path: %s"), *Canon));
+		// IsValid() check: the failure branches below MarkAsGarbage a
+		// partially-created asset, but with pending-kill disabled (UE5 default)
+		// StaticFindObject still returns garbage-flagged objects until the next
+		// GC. A dead leftover must not wedge the path as 'Asset already exists';
+		// NewObject below replaces it in place (standard StaticAllocateObject
+		// behavior for same-name allocation).
+		if (IsValid(Existing))
+		{
+			return MakeErrorResult(FString::Printf(TEXT("Asset already exists at path: %s"), *Canon));
+		}
 	}
 
 	UClass* ResolvedClass = DataAssetCreate_ResolveClass(ClassPath);
-	if (!ResolvedClass)
+	if (!IsValid(ResolvedClass))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Could not resolve class: %s"), *ClassPath));
 	}
@@ -123,7 +164,7 @@ IClaireonTool::FToolResult FClaireonDataAssetTool_Create::Execute(const TSharedP
 	FScopedTransaction Transaction(LOCTEXT("CreateDataAsset", "[Claireon] Create Data Asset"));
 
 	UPackage* Package = CreatePackage(*Canon);
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		Transaction.Cancel();
 		return MakeErrorResult(TEXT("CreatePackage failed"));
@@ -131,7 +172,7 @@ IClaireonTool::FToolResult FClaireonDataAssetTool_Create::Execute(const TSharedP
 
 	UObject* NewAsset = NewObject<UObject>(Package, ResolvedClass, *ObjectName,
 		RF_Public | RF_Standalone | RF_Transactional | RF_LoadCompleted);
-	if (!NewAsset)
+	if (!IsValid(NewAsset))
 	{
 		Transaction.Cancel();
 		return MakeErrorResult(TEXT("NewObject failed"));
@@ -148,8 +189,7 @@ IClaireonTool::FToolResult FClaireonDataAssetTool_Create::Execute(const TSharedP
 			// below: cancel transaction, garbage-collect the partially-created
 			// asset so it does not linger in subsequent LoadObject queries.
 			Transaction.Cancel();
-			NewAsset->ClearFlags(RF_Standalone | RF_Public);
-			NewAsset->MarkAsGarbage();
+			DataAssetCreate_RetireHalfBuiltAsset(NewAsset);
 			return MakeErrorResult(AssertError);
 		}
 	}
@@ -170,11 +210,10 @@ IClaireonTool::FToolResult FClaireonDataAssetTool_Create::Execute(const TSharedP
 				const FString FullError = FString::Printf(
 					TEXT("Failed to set property '%s': %s"), *PropertyPath, *WriteError);
 
-				// Failure cleanup: cancel transaction, mark new asset as garbage so it is not
-				// visible in subsequent LoadObject queries.
+				// Failure cleanup: cancel the transaction and retire the half-built asset so
+				// it is genuinely gone from the path, not merely flagged.
 				Transaction.Cancel();
-				NewAsset->ClearFlags(RF_Standalone | RF_Public);
-				NewAsset->MarkAsGarbage();
+				DataAssetCreate_RetireHalfBuiltAsset(NewAsset);
 
 				return MakeErrorResult(FullError);
 			}
@@ -185,6 +224,13 @@ IClaireonTool::FToolResult FClaireonDataAssetTool_Create::Execute(const TSharedP
 	FString SaveError;
 	if (!ClaireonAssetUtils::SaveAsset(NewAsset, SaveError))
 	{
+		// Failure cleanup: identical to the earlier failure branches. Without
+		// this, the AssetCreated registration above leaks an in-memory asset
+		// with nothing on disk, and a retry's LoadObject pre-check reports
+		// 'Asset already exists' -- wedging the path until editor restart.
+		Transaction.Cancel();
+		DataAssetCreate_RetireHalfBuiltAsset(NewAsset);
+
 		return MakeErrorResult(SaveError);
 	}
 

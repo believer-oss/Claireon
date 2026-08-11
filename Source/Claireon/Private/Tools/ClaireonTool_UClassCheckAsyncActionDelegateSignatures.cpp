@@ -22,17 +22,11 @@ FString ClaireonTool_UClassCheckAsyncActionDelegateSignatures::GetOperation() co
 FString ClaireonTool_UClassCheckAsyncActionDelegateSignatures::GetDescription() const
 {
 	return TEXT(
-		"Static-analysis lint for UCancellableAsyncAction subclasses (B33). "
-		"K2Node_BaseAsyncTask emits one then-pin per BlueprintAssignable "
-		"multicast delegate but only allocates pin-type metadata for the "
-		"FIRST delegate signature it encounters -- subsequent delegates with "
-		"heterogeneous signatures silently lose their typed output pins. "
-		"This tool walks UCancellableAsyncAction-derived classes, groups "
-		"BlueprintAssignable delegates by signature, and reports a warning "
-		"when more than one distinct signature is present. Accepts a "
-		"Blueprint asset path or a native class path "
-		"(/Script/Module.ClassName). Read-only. Immediate-mode tool: no "
-		"session required.");
+		"Check UCancellableAsyncAction subclasses for heterogeneous BlueprintAssignable "
+		"delegate signatures. K2Node_BaseAsyncTask emits one then-pin per multicast "
+		"delegate but types only the FIRST signature it sees, so later delegates silently "
+		"lose their typed output pins. Takes a Blueprint asset path or "
+		"/Script/Module.ClassName. Read-only, immediate-mode: no session.");
 }
 
 TArray<FString> ClaireonTool_UClassCheckAsyncActionDelegateSignatures::GetSearchKeywords() const
@@ -76,11 +70,11 @@ namespace ClaireonToolUClassCheckAsyncActionDelegateSignatures_Internal
 		if (Resolved.ResolvedPath.Kind == ClaireonPathResolver::EPathKind::NativeClassPath)
 		{
 			UClass* NativeClass = FindObject<UClass>(nullptr, *Path);
-			if (!NativeClass)
+			if (!IsValid(NativeClass))
 			{
 				NativeClass = LoadObject<UClass>(nullptr, *Path);
 			}
-			if (!NativeClass)
+			if (!IsValid(NativeClass))
 			{
 				OutError = FString::Printf(
 					TEXT("Could not resolve native class '%s'."),
@@ -91,9 +85,9 @@ namespace ClaireonToolUClassCheckAsyncActionDelegateSignatures_Internal
 		}
 
 		// Blueprint asset path: load the Blueprint, return its GeneratedClass.
-		if (UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *Path))
+		if (UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *Path); IsValid(Blueprint))
 		{
-			if (Blueprint->GeneratedClass)
+			if (IsValid(Blueprint->GeneratedClass))
 			{
 				return Blueprint->GeneratedClass;
 			}
@@ -123,7 +117,7 @@ IClaireonTool::FToolResult ClaireonTool_UClassCheckAsyncActionDelegateSignatures
 	UClass* TargetClass =
 		ClaireonToolUClassCheckAsyncActionDelegateSignatures_Internal::ResolveTargetClass(
 			AssetOrClassPath, ResolveError);
-	if (!TargetClass)
+	if (!IsValid(TargetClass))
 	{
 		return MakeErrorResult(ResolveError);
 	}
@@ -166,7 +160,7 @@ IClaireonTool::FToolResult ClaireonTool_UClassCheckAsyncActionDelegateSignatures
 			continue;
 		}
 		UFunction* SignatureFunction = MulticastProp->SignatureFunction;
-		if (!SignatureFunction)
+		if (!IsValid(SignatureFunction))
 		{
 			continue;
 		}

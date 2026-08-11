@@ -38,7 +38,7 @@ FToolResult ClaireonInputTool_AddMappingTrigger::Execute(const TSharedPtr<FJsonO
 	}
 
 	UInputMappingContext* IMC = RequireMappingContext(Data, Error);
-	if (!IMC)
+	if (!IsValid(IMC))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -62,7 +62,7 @@ FToolResult ClaireonInputTool_AddMappingTrigger::Execute(const TSharedPtr<FJsonO
 	}
 
 	UClass* TriggerClass = ClaireonEnhancedInputHelpers::ResolveTriggerClass(TriggerClassName, Error);
-	if (!TriggerClass)
+	if (!IsValid(TriggerClass))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -71,7 +71,7 @@ FToolResult ClaireonInputTool_AddMappingTrigger::Execute(const TSharedPtr<FJsonO
 	IMC->Modify();
 
 	UInputTrigger* NewTrigger = ClaireonEnhancedInputHelpers::CreateTrigger(IMC, TriggerClass);
-	if (!NewTrigger)
+	if (!IsValid(NewTrigger))
 	{
 		return MakeErrorResult(TEXT("Failed to create trigger instance"));
 	}

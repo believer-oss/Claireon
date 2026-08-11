@@ -36,7 +36,7 @@ FToolResult ClaireonWidgetBPTool_ListAnimations::Execute(const TSharedPtr<FJsonO
         return Error;
     }
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
-	if (!WBP)
+	if (!IsValid(WBP))
 	{
 		return MakeErrorResult(TEXT("Widget Blueprint is no longer valid"));
 	}
@@ -44,7 +44,7 @@ FToolResult ClaireonWidgetBPTool_ListAnimations::Execute(const TSharedPtr<FJsonO
 	TArray<TSharedPtr<FJsonValue>> AnimArray;
 	for (UWidgetAnimation* Anim : WBP->Animations)
 	{
-		if (!Anim)
+		if (!IsValid(Anim))
 		{
 			continue;
 		}

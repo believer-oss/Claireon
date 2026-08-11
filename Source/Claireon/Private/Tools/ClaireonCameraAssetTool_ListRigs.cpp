@@ -19,7 +19,9 @@ FString FClaireonCameraAssetTool_ListRigs::GetOperation() const { return TEXT("l
 
 FString FClaireonCameraAssetTool_ListRigs::GetDescription() const
 {
-	return TEXT("List all UCameraRigAsset entries on a UCameraAsset, with rig index, name, and root node class.");
+	return TEXT("List the UCameraRigAsset entries on the UCameraAsset at asset_path with rig index, name, and root "
+		"node class -- the way to obtain the rig_index that the other camera_asset tools require. Read-only / "
+		"non-session: opens no session and does not modify the asset.");
 }
 
 TSharedPtr<FJsonObject> FClaireonCameraAssetTool_ListRigs::GetInputSchema() const
@@ -47,7 +49,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_ListRigs::Execute(const TSha
 	}
 
 	UCameraAsset* Asset = LoadObject<UCameraAsset>(nullptr, *Canon);
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Camera asset not found: %s"), *Canon));
 	}
@@ -59,10 +61,10 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_ListRigs::Execute(const TSha
 	{
 		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
 		Entry->SetNumberField(TEXT("rig_index"), Index);
-		Entry->SetStringField(TEXT("rig_name"), Rig ? Rig->GetName() : FString());
+		Entry->SetStringField(TEXT("rig_name"), IsValid(Rig) ? Rig->GetName() : FString());
 
 		FString RootClass;
-		if (Rig && Rig->RootNode)
+		if (IsValid(Rig) && Rig->RootNode)
 		{
 			RootClass = Rig->RootNode->GetClass()->GetName();
 		}

@@ -48,13 +48,13 @@ IClaireonTool::FToolResult ClaireonTool_DataTableGetInfo::Execute(const TSharedP
 
 	FString LoadError;
 	UDataTable* DataTable = ClaireonDataTableHelpers::LoadDataTableAsset(AssetPath, LoadError);
-	if (!DataTable)
+	if (!IsValid(DataTable))
 	{
 		return MakeErrorResult(LoadError);
 	}
 
 	const UScriptStruct* RowStruct = DataTable->GetRowStruct();
-	const FString StructName = RowStruct ? RowStruct->GetName() : TEXT("(unknown)");
+	const FString StructName = IsValid(RowStruct) ? RowStruct->GetName() : TEXT("(unknown)");
 
 	TArray<ClaireonDataTableHelpers::FColumnDef> Columns = ClaireonDataTableHelpers::GetColumnDefinitions(RowStruct);
 

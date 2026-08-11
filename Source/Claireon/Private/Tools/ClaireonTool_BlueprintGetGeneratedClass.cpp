@@ -49,13 +49,13 @@ FToolResult ClaireonTool_BlueprintGetGeneratedClass::Execute(const TSharedPtr<FJ
 	// property accessor.
 	const FSoftObjectPath Soft(ResolvedPath);
 	UObject* Loaded = Soft.TryLoad();
-	if (!Loaded)
+	if (!IsValid(Loaded))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Could not load asset at '%s'."), *ResolvedPath));
 	}
 
 	UBlueprint* Blueprint = Cast<UBlueprint>(Loaded);
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset at '%s' is not a UBlueprint (got '%s')."), *ResolvedPath, *Loaded->GetClass()->GetName()));
 	}
@@ -69,13 +69,13 @@ FToolResult ClaireonTool_BlueprintGetGeneratedClass::Execute(const TSharedPtr<FJ
 	// crash-prone editor-property path.
 	const UClass* GeneratedClass = Blueprint->GeneratedClass.Get();
 	bool bIsSkeletonOnly = false;
-	if (!GeneratedClass)
+	if (!IsValid(GeneratedClass))
 	{
 		GeneratedClass = Blueprint->SkeletonGeneratedClass.Get();
 		bIsSkeletonOnly = (GeneratedClass != nullptr);
 	}
 
-	if (!GeneratedClass)
+	if (!IsValid(GeneratedClass))
 	{
 		Data->SetField(TEXT("generated_class_path"), MakeShared<FJsonValueNull>());
 		Data->SetField(TEXT("parent_class_path"), MakeShared<FJsonValueNull>());
@@ -84,7 +84,7 @@ FToolResult ClaireonTool_BlueprintGetGeneratedClass::Execute(const TSharedPtr<FJ
 	}
 
 	Data->SetStringField(TEXT("generated_class_path"), GeneratedClass->GetPathName());
-	if (const UClass* Parent = Blueprint->ParentClass.Get())
+	if (const UClass* Parent = Blueprint->ParentClass.Get(); IsValid(Parent))
 	{
 		Data->SetStringField(TEXT("parent_class_path"), Parent->GetPathName());
 	}

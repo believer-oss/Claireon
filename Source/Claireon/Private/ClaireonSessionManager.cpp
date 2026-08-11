@@ -27,12 +27,13 @@ FClaireonSessionManager::~FClaireonSessionManager()
 	FTSTicker::GetCoreTicker().RemoveTicker(CleanupTickerHandle);
 }
 
-FMCPOpenSessionResult FClaireonSessionManager::OpenSession(const FString& AssetPath, const FString& ToolName, double InTimeoutMinutes)
+FMCPOpenSessionResult FClaireonSessionManager::OpenSession(const FString& AssetPath, const FString& ToolName, double InTimeoutMinutes,
+	bool bAllowUnsavedWorldPackage)
 {
 	// Bare-name validation lives in the bridge bootstrap
 	// (FClaireonBridge::BuildAndRunBootstrap, IsValidPyIdentifier). The session
 	// manager does not police tool naming; both forms are accepted.
-	const FString CanonicalPath = CanonicalizePath(AssetPath);
+	const FString CanonicalPath = CanonicalizePath(AssetPath, bAllowUnsavedWorldPackage);
 	if (CanonicalPath.IsEmpty())
 	{
 		return { EOpenSessionResult::InvalidAssetPath, TEXT(""), {} };
@@ -381,9 +382,30 @@ FMCPOpenSessionResult FClaireonSessionManager::OpenEditorWideSession(const FStri
 	// Block if any per-asset session is held -- editor-wide is mutually exclusive.
 	if (Sessions.Num() > 0)
 	{
-		const auto& AnyPair = *Sessions.CreateConstIterator();
-		FMCPSession BlockingCopy = AnyPair.Value;
-		UE_LOG(LogClaireon, Warning, TEXT("Editor-wide session blocked by per-asset session held by tool '%s' on '%s'"), *BlockingCopy.ToolName, *BlockingCopy.AssetPath);
+		// Log EVERY blocking session, not just the first map entry, so operators
+		// see the full set at once instead of discovering blockers one retry at
+		// a time. The result struct still carries a single BlockingSession (its
+		// shape is shared with per-asset OpenSession, where exactly one blocker
+		// can exist); callers that need the full set enumerate via ListSessions()
+		// -- see the EditorWide handling in FClaireonBridge::MCPCallTool.
+		// TODO(WI-16): carrying the full blocker list inside FMCPOpenSessionResult
+		// requires editing Public/ClaireonSessionManager.h, which is outside this
+		// work item's file ownership.
+		FString AllBlockersDesc;
+		for (const auto& Pair : Sessions)
+		{
+			if (!AllBlockersDesc.IsEmpty())
+			{
+				AllBlockersDesc += TEXT("; ");
+			}
+			AllBlockersDesc += FString::Printf(TEXT("tool '%s' session %s on '%s'"),
+				*Pair.Value.ToolName, *Pair.Value.SessionId, *Pair.Value.AssetPath);
+		}
+		UE_LOG(LogClaireon, Warning, TEXT("Editor-wide session blocked by %d per-asset session(s): %s"),
+			Sessions.Num(), *AllBlockersDesc);
+
+		const auto& FirstPair = *Sessions.CreateConstIterator();
+		FMCPSession BlockingCopy = FirstPair.Value;
 		return { EOpenSessionResult::BlockedByOtherTool, TEXT(""), TOptional<FMCPSession>(MoveTemp(BlockingCopy)) };
 	}
 
@@ -433,13 +455,24 @@ FOnMCPSessionClosed& FClaireonSessionManager::OnSessionClosed()
 	return OnSessionClosedDelegate;
 }
 
-FString FClaireonSessionManager::CanonicalizePath(const FString& InPath)
+FString FClaireonSessionManager::CanonicalizePath(const FString& InPath, bool bAllowUnsavedWorldPackage)
 {
 	auto Result = ClaireonPathResolver::Resolve(InPath);
 	if (!Result.bSuccess)
 	{
 		UE_LOG(LogClaireon, Warning, TEXT("Path canonicalization rejected invalid path: '%s' (%s)"), *InPath, *Result.Error);
 		return FString();
+	}
+
+	// C5 hardening: an unsaved level (File > New Level) lives at /Temp/Untitled_N until its
+	// first save. A caller that has explicitly identified InPath as the CURRENT EDITOR WORLD's
+	// own package (bAllowUnsavedWorldPackage=true -- see OpenSession/FClaireonScopedAssetLock)
+	// may lock it even though it is outside /Game/. This is deliberately scoped to world
+	// packages ONLY: it is opted into per call site, not a blanket relaxation of the /Game/ rule
+	// below for every other asset type reachable through a /Temp/ path.
+	if (bAllowUnsavedWorldPackage && Result.ResolvedPath.Path.StartsWith(TEXT("/Temp/")))
+	{
+		return Result.ResolvedPath.PackagePath;
 	}
 
 	// Session locking only applies to /Game/ assets

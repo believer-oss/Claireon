@@ -4,6 +4,7 @@
 #include "Tools/ClaireonAnimTools_Session.h"
 #include "Tools/ClaireonAnimHelpers.h"
 #include "ClaireonPathResolver.h"
+#include "ClaireonSafeExec.h"
 #include "ClaireonSessionManager.h"
 #include "ClaireonLog.h"
 #include "Animation/AnimSequenceBase.h"
@@ -27,7 +28,7 @@ FString ClaireonAnimTool_Open::GetDescription() const
 TSharedPtr<FJsonObject> ClaireonAnimTool_Open::GetInputSchema() const
 {
 	FToolSchemaBuilder S;
-	S.AddString(TEXT("asset_path"), TEXT("Unreal asset path (e.g. /Game/Char/STELLA/Anim/AM_Combo)"), true);
+	S.AddString(TEXT("asset_path"), TEXT("Unreal asset path (e.g. /Game/Characters/Hero/Anim/AM_Combo)"), true);
 	return S.Build();
 }
 
@@ -48,7 +49,7 @@ IClaireonTool::FToolResult ClaireonAnimTool_Open::Execute(const TSharedPtr<FJson
 
 	FString AssetType, Error;
 	UAnimSequenceBase* Anim = ClaireonAnimHelpers::LoadAnimAsset(AssetPath, AssetType, Error);
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -100,14 +101,14 @@ FString ClaireonAnimTool_Close::GetOperation() const { return TEXT("close"); }
 
 FString ClaireonAnimTool_Close::GetDescription() const
 {
-	return TEXT("Close an animation editing session and release the asset lock. Pass save=true to persist outstanding changes before closing. Common pitfall: closing without save discards in-flight edits silently; call anim_save first when changes must survive.");
+	return TEXT("Close an animation editing session and release the asset lock. Requires an open session_id from anim_open. Pass save_first=true to persist outstanding changes first ('save' is a legacy alias; save_first wins if both appear). If the save fails the session stays open and an error is returned. Closing without save_first silently discards in-flight edits, so pass save_first=true or call anim_save.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimTool_Close::GetInputSchema() const
 {
 	FToolSchemaBuilder S;
 	S.AddString(TEXT("session_id"), TEXT("Session identifier from open"), true);
-	S.AddBoolean(TEXT("save_first"), TEXT("Save the animation before closing"));
+	S.AddBoolean(TEXT("save_first"), TEXT("Save the animation before closing. If the save fails (read-only file, source-control lock, crash-recovery state), the session stays OPEN and an error is returned so no in-session work is lost. Legacy alias: 'save' (save_first takes precedence when both are present)."));
 	return S.Build();
 }
 
@@ -120,17 +121,43 @@ IClaireonTool::FToolResult ClaireonAnimTool_Close::Execute(const TSharedPtr<FJso
 		return Error;
 
 	bool bSaveFirst = false;
-	Arguments->TryGetBoolField(TEXT("save_first"), bSaveFirst);
+	if (!Arguments->TryGetBoolField(TEXT("save_first"), bSaveFirst))
+	{
+		// Legacy alias: earlier tool descriptions instructed callers to pass
+		// 'save=true'. Honored only when 'save_first' is absent (WI-9).
+		Arguments->TryGetBoolField(TEXT("save"), bSaveFirst);
+	}
 
 	if (bSaveFirst)
 	{
-		// Inline save
+		// Inline save. Any failure below returns WITHOUT closing the session so
+		// in-session edits are never silently discarded (WI-9).
 		UAnimSequenceBase* Anim = Data->Animation.Get();
+		if (!IsValid(Anim))
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("save_first failed: the session's animation asset is no longer loaded, so nothing could be saved. The asset was NOT saved and session %s is still open. Close with save_first=false to discard it."),
+				*SessionId));
+		}
+
+		if (ClaireonSafeExec::DidLastExecutionCrash())
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("save_first failed: save of %s was skipped because a previous tool execution crashed (ClaireonSafeExec crash flag is set) and editor state may be corrupted. The asset was NOT saved and session %s is still open. Verify editor state (restart if needed) and retry, or close with save_first=false to discard in-session edits."),
+				*Anim->GetPathName(), *SessionId));
+		}
+
 		UPackage* Package = Anim->GetOutermost();
 		Package->SetDirtyFlag(true);
 		TArray<UPackage*> PackagesToSave;
 		PackagesToSave.Add(Package);
-		UEditorLoadingAndSavingUtils::SavePackages(PackagesToSave, false);
+		const bool bSaved = UEditorLoadingAndSavingUtils::SavePackages(PackagesToSave, false);
+		if (!bSaved)
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("save_first failed: %s did not save (the package save was rejected; check for a read-only file or source-control lock). The asset was NOT saved and session %s is still open. Fix the save blocker and retry, or close with save_first=false to discard in-session edits."),
+				*Anim->GetPathName(), *SessionId));
+		}
 	}
 
 	FClaireonSessionManager::Get().CloseSession(SessionId);

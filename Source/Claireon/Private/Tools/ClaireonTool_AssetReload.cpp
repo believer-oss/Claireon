@@ -15,10 +15,10 @@ FString ClaireonTool_AssetReload::GetDescription() const
 	// Discards in-memory edits and reloads the asset from disk via
 	// UEditorAssetLibrary::ReloadAsset. NOTE: any open Claireon editing session pointing
 	// at this asset must close first; reload invalidates the cached weak object pointer.
-	return TEXT("Reload an asset from disk, discarding in-memory edits. "
-				"Wraps UEditorAssetLibrary::ReloadAsset. Close any open Claireon editing "
-				"session on this asset first; reload invalidates session-cached weak refs. "
-				"Non-session tool. Refuses to run while PIE is active.");
+	return TEXT("Revert an asset to its on-disk state, discarding all in-memory edits. Takes asset_path and "
+				"wraps UEditorAssetLibrary::ReloadAsset. Close any open Claireon editing session on this "
+				"asset first; the reload invalidates session-cached weak object refs. Non-session tool, "
+				"refuses to run while PIE is active.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_AssetReload::GetInputSchema() const
@@ -62,7 +62,7 @@ IClaireonTool::FToolResult ClaireonTool_AssetReload::Execute(const TSharedPtr<FJ
 	// asset_move / find_actors_by_label sibling tools remain fully functional;
 	// only the reload-from-disk path is degraded.
 	UObject* Asset = UEditorAssetLibrary::LoadAsset(R.ResolvedPath.Path);
-	const bool bDirty = (Asset != nullptr) && Asset->GetPackage() && Asset->GetPackage()->IsDirty();
+	const bool bDirty = (Asset != nullptr) && IsValid(Asset->GetPackage()) && Asset->GetPackage()->IsDirty();
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("asset_path"), R.ResolvedPath.Path);
@@ -71,7 +71,7 @@ IClaireonTool::FToolResult ClaireonTool_AssetReload::Execute(const TSharedPtr<FJ
 	Data->SetBoolField(TEXT("was_dirty"), bDirty);
 	Data->SetStringField(TEXT("note"), TEXT("UE 5.5 has no public ReloadAsset API on UEditorAssetLibrary; disk reload requires closing the asset editor and restarting. Use is_asset_dirty (planned) or asset_who_uses to inspect without reloading."));
 
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset not found: %s"), *R.ResolvedPath.Path));
 	}

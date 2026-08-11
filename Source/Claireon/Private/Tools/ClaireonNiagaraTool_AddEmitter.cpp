@@ -55,7 +55,7 @@ FToolResult ClaireonNiagaraTool_AddEmitter::Execute(const TSharedPtr<FJsonObject
 	{
 		TemplateEmitter = Cast<UNiagaraEmitter>(DefaultEmptyPath.TryLoad());
 	}
-	if (!TemplateEmitter)
+	if (!IsValid(TemplateEmitter))
 	{
 		return MakeErrorResult(TEXT("Could not load default empty emitter template. Check NiagaraEditorSettings.DefaultEmptyEmitter"));
 	}

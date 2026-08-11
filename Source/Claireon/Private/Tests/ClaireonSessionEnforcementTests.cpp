@@ -36,6 +36,10 @@
 #include "Tools/ClaireonTool_ListSessions.h"
 #include "Tools/ClaireonTool_ReleaseSessions.h"
 
+#include "Tools/ClaireonFoliageTool_Open.h"
+#include "Tools/ClaireonLandscapeTool_Open.h"
+#include "Tools/ClaireonLandscapeSplineTool_Open.h"
+
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
@@ -95,10 +99,40 @@ namespace ClaireonSessionEnforcementTestsNS
 		FClaireonSessionManager::Get().ForceReleaseAll();
 		return true;
 	}
+
+	/** Pull session_id out of a non-error tool result. Empty for error results. */
+	static FString ExtractSessionId(const IClaireonTool::FToolResult& Result)
+	{
+		if (Result.bIsError || !Result.Data.IsValid())
+		{
+			return FString();
+		}
+		FString SessionId;
+		Result.Data->TryGetStringField(TEXT("session_id"), SessionId);
+		return SessionId;
+	}
+
+	/**
+	 * The invariant the level-scoped open tools used to violate: a non-error
+	 * response must carry a usable session handle. Stated so it holds no matter
+	 * which OpenSession result the tool hit.
+	 */
+	static bool NonErrorResultCarriesSessionId(const IClaireonTool::FToolResult& Result)
+	{
+		return Result.bIsError || !ExtractSessionId(Result).IsEmpty();
+	}
 }
 
 // ============================================================================
-// Test 1: Per-asset contention for the 12 R2 RequiresSession tools.
+// Test 1: Per-asset contention for the 11 R2 RequiresSession tools.
+//
+// The count was previously written as 12 in this header and in the test name,
+// with a UNTEST_EXPECT_TRUE(ToolCount == 11) below. 11 is the correct figure.
+// The 12th was the blueprint compile tool named in the comment below, but
+// ClaireonBlueprintGraphTool_Compile.h no longer overrides GetSessionMode(), so
+// it is not a RequiresSession tool and has nothing to contend for here.
+// (The registry-wide RequiresSession population is far larger than 11 today;
+// this test covers the original R2 set only.)
 //
 // For each tool, assert (a) GetSessionMode() == RequiresSession (the
 // machine-readable contract) and (b) the underlying lock surfaces as
@@ -111,7 +145,7 @@ namespace ClaireonSessionEnforcementTestsNS
 // in a unit test without an editor world.
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, SessionEnforcement, RequiresSession_AllTwelveTools, UNTEST_TIMEOUTMS(5000))
+UNTEST_UNIT_OPTS(Claireon, SessionEnforcement, RequiresSession_R2ToolSet, UNTEST_TIMEOUTMS(5000))
 {
 	using namespace ClaireonSessionEnforcementTestsNS;
 	CleanupAllSessions();
@@ -124,6 +158,8 @@ UNTEST_UNIT_OPTS(Claireon, SessionEnforcement, RequiresSession_AllTwelveTools, U
 	{
 		if (Tool.GetSessionMode() != EClaireonToolSessionMode::RequiresSession)
 		{
+			UE_LOG(LogTemp, Error,
+				TEXT("[SessionEnforcement] %s: GetSessionMode() != RequiresSession"), DisplayName);
 			bOutAllOk = false;
 			return;
 		}
@@ -132,33 +168,43 @@ UNTEST_UNIT_OPTS(Claireon, SessionEnforcement, RequiresSession_AllTwelveTools, U
 		const FString OtherTool = Tool.GetName();
 		if (OtherTool.IsEmpty())
 		{
+			UE_LOG(LogTemp, Error,
+				TEXT("[SessionEnforcement] %s: GetName() is empty"), DisplayName);
 			bOutAllOk = false;
 			return;
 		}
 		FString Diagnostic;
 		if (!ProxyPerAssetContentionHolds(AssetPath, SentinelTool, OtherTool, Diagnostic))
 		{
+			// Diagnostic used to be collected and dropped, leaving a bare
+			// bAllOk==false with no way to tell which tool regressed.
+			UE_LOG(LogTemp, Error,
+				TEXT("[SessionEnforcement] %s: per-asset contention did not hold: %s"),
+				DisplayName, *Diagnostic);
 			bOutAllOk = false;
 			return;
 		}
 	};
 
 	bool bAllOk = true;
-	int32 ToolCount = 0;
 
-	{ ClaireonTool_DataTableAddRow             T; Verify(TEXT("DataTableAddRow"),             T, bAllOk); ++ToolCount; }
-	{ ClaireonTool_DataTableRemoveRow          T; Verify(TEXT("DataTableRemoveRow"),          T, bAllOk); ++ToolCount; }
-	{ ClaireonTool_DataTableDuplicateRow       T; Verify(TEXT("DataTableDuplicateRow"),       T, bAllOk); ++ToolCount; }
-	{ ClaireonTool_DataTableRenameRow          T; Verify(TEXT("DataTableRenameRow"),          T, bAllOk); ++ToolCount; }
-	{ ClaireonTool_DataTableMoveRow            T; Verify(TEXT("DataTableMoveRow"),            T, bAllOk); ++ToolCount; }
-	{ ClaireonTool_DataTableSetRowValues       T; Verify(TEXT("DataTableSetRowValues"),       T, bAllOk); ++ToolCount; }
-	{ ClaireonTool_DataTableImportCsv          T; Verify(TEXT("DataTableImportCsv"),          T, bAllOk); ++ToolCount; }
-	{ ClaireonTool_DataTableImportJson         T; Verify(TEXT("DataTableImportJson"),         T, bAllOk); ++ToolCount; }
-	{ ClaireonTool_BlueprintDuplicate          T; Verify(TEXT("BlueprintDuplicate"),          T, bAllOk); ++ToolCount; }
-	{ ClaireonTool_MaterialApply               T; Verify(TEXT("MaterialApply"),               T, bAllOk); ++ToolCount; }
-	{ ClaireonTool_BlueprintTranslateImplement T; Verify(TEXT("BlueprintTranslateImplement"), T, bAllOk); ++ToolCount; }
+	{ ClaireonTool_DataTableAddRow             T; Verify(TEXT("DataTableAddRow"),             T, bAllOk); }
+	{ ClaireonTool_DataTableRemoveRow          T; Verify(TEXT("DataTableRemoveRow"),          T, bAllOk); }
+	{ ClaireonTool_DataTableDuplicateRow       T; Verify(TEXT("DataTableDuplicateRow"),       T, bAllOk); }
+	{ ClaireonTool_DataTableRenameRow          T; Verify(TEXT("DataTableRenameRow"),          T, bAllOk); }
+	{ ClaireonTool_DataTableMoveRow            T; Verify(TEXT("DataTableMoveRow"),            T, bAllOk); }
+	{ ClaireonTool_DataTableSetRowValues       T; Verify(TEXT("DataTableSetRowValues"),       T, bAllOk); }
+	{ ClaireonTool_DataTableImportCsv          T; Verify(TEXT("DataTableImportCsv"),          T, bAllOk); }
+	{ ClaireonTool_DataTableImportJson         T; Verify(TEXT("DataTableImportJson"),         T, bAllOk); }
+	{ ClaireonTool_BlueprintDuplicate          T; Verify(TEXT("BlueprintDuplicate"),          T, bAllOk); }
+	{ ClaireonTool_MaterialApply               T; Verify(TEXT("MaterialApply"),               T, bAllOk); }
+	{ ClaireonTool_BlueprintTranslateImplement T; Verify(TEXT("BlueprintTranslateImplement"), T, bAllOk); }
 
-	UNTEST_EXPECT_TRUE(ToolCount == 11);
+	// Removed: UNTEST_EXPECT_TRUE(ToolCount == 11). ToolCount was incremented by
+	// exactly 11 literal ++ToolCount statements immediately above, so it was a
+	// compile-time constant and the assertion could never fail. It could not
+	// detect a tool dropped from the list either -- deleting a line deletes its
+	// increment too. The list length is enforced by code review, not by a test.
 	UNTEST_EXPECT_TRUE(bAllOk);
 
 	CleanupAllSessions();
@@ -364,40 +410,112 @@ UNTEST_UNIT_OPTS(Claireon, SessionEnforcement, CarveOut_SessionToolsAreReadOnlyM
 }
 
 // ============================================================================
-// Test 4: ReadOnly tools are not blocked by a held session.
+// Test 4 (DELETED): SessionEnforcement.ReadOnly_BypassesHeldSessionCheck.
 //
-// We can't easily invoke the bridge dispatch from a unit test, so we assert
-// the underlying property: a ReadOnly tool (session_list) reports
-// SessionMode == ReadOnly. The bridge's switch case for ReadOnly is a
-// pass-through (ClaireonBridge.cpp:263-265), so any tool with this mode is
-// guaranteed to bypass the held-session check.
+// Removed rather than repaired, because it tested nothing:
+//   - It opened an editor-wide session and then called
+//     ClaireonTool_ListSessions::Execute() DIRECTLY. The held-session gate lives
+//     in FClaireonBridge::MCPCallTool, not in the tool, so the session it held
+//     had no effect on the call and the "bypass" it claimed to prove was never
+//     exercised.
+//   - Its only falsifiable line, GetSessionMode() == ReadOnly, duplicated
+//     CarveOut_SessionToolsAreReadOnlyMode above verbatim.
+//   - Its closing UNTEST_EXPECT_TRUE(!Result.bIsError) could not fail:
+//     ClaireonTool_ListSessions::Execute has a single return, MakeSuccessResult,
+//     and no error path at all.
+// Coverage lost: none.
+//
+// The real bridge-level bypass remains untested. It is not reachable from a unit
+// test as written: MCPCallTool is a PyObject* Python C-API entry point, so
+// exercising the gate needs a live interpreter. Covering it means adding a
+// non-Python dispatch seam to FClaireonBridge, which is out of scope here.
 // ============================================================================
 
-UNTEST_UNIT_OPTS(Claireon, SessionEnforcement, ReadOnly_BypassesHeldSessionCheck, UNTEST_TIMEOUTMS(5000))
+// ============================================================================
+// Test 5: The level-scoped open tools (foliage_open, landscape_open,
+// landscape_spline_open) must never report success with an empty session
+// handle.
+//
+// These three take a level or actor path lifted straight out of the editor
+// world, and each used to handle only EOpenSessionResult::BlockedByOtherTool.
+// On InvalidAssetPath the SessionId is empty, and falling through returned a
+// SUCCESS state response carrying an empty session_id -- an unusable handle
+// with no error at all.
+//
+// This is reachable in ordinary use, not a synthetic case:
+// FClaireonSessionManager::CanonicalizePath rejects anything not under /Game/,
+// and an unsaved map -- its persistent level and every actor in it -- lives
+// under /Temp/Untitled_N. So "File > New Level, then call the tool" used to
+// yield a bogus success.
+//
+// Coverage is split because these tools read the editor world directly and
+// offer no injection point: Test 5a proves the InvalidAssetPath branch is
+// reachable for each tool's session tool name with exactly the paths an
+// unsaved map produces (and that SessionId is empty there, which is what made
+// the fall-through silent), and Test 5b drives each tool's real Execute() and
+// asserts the general invariant. Test 5b saves nothing: the landscape tools
+// bail before touching anything when no landscape is present, and foliage_open
+// at most spawns an in-memory AInstancedFoliageActor in the already-loaded
+// editor world.
+// ============================================================================
+
+UNTEST_UNIT_OPTS(Claireon, SessionEnforcement, LevelScopedOpen_TempMountPathIsInvalidAssetPath, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonSessionEnforcementTestsNS;
 	CleanupAllSessions();
 
-	// Hold an editor-wide session.
-	FMCPOpenSessionResult EditorWide = FClaireonSessionManager::Get().OpenEditorWideSession(
-		TEXT("editorwide_a"), 1.0);
-	UNTEST_ASSERT_TRUE(EditorWide.Result == EOpenSessionResult::Success);
+	// Exactly the shapes the three tools feed to OpenSession from an unsaved map:
+	// World->PersistentLevel->GetPathName() for foliage_open, and
+	// Proxy->GetPathName() for landscape_open / landscape_spline_open.
+	const FString UnsavedLevelPath = TEXT("/Temp/Untitled_0.Untitled_0:PersistentLevel");
+	const FString UnsavedActorPath = TEXT("/Temp/Untitled_0.Untitled_0:PersistentLevel.Landscape_0");
 
-	// A ReadOnly-mode tool: session_list. The bridge would forward this
-	// unconditionally (switch case ReadOnly is a pass-through at
-	// ClaireonBridge.cpp:263-265). This test confirms the SessionMode contract.
-	ClaireonTool_ListSessions Tool;
-	UNTEST_EXPECT_TRUE(Tool.GetSessionMode() == EClaireonToolSessionMode::ReadOnly);
+	struct FCase
+	{
+		const TCHAR* ToolName;
+		const FString* Path;
+	};
+	const FCase Cases[] = {
+		{ClaireonFoliageEditToolBase::FoliageSessionToolName, &UnsavedLevelPath},
+		{ClaireonLandscapeEditToolBase::LandscapeSessionToolName, &UnsavedActorPath},
+		{ClaireonLandscapeSplineEditToolBase::LandscapeSplineSessionToolName, &UnsavedActorPath},
+	};
 
-	// Sanity: we can still drive the tool's Execute() and it does not error
-	// out -- demonstrating the pass-through is functional, not just nominal.
-	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("tool_name"), TEXT(""));
-	IClaireonTool::FToolResult Result = Tool.Execute(Args);
-	UNTEST_EXPECT_TRUE(!Result.bIsError);
+	for (const FCase& Case : Cases)
+	{
+		FMCPOpenSessionResult Open = FClaireonSessionManager::Get().OpenSession(
+			*Case.Path, Case.ToolName, 1.0);
+		UNTEST_EXPECT_TRUE(Open.Result == EOpenSessionResult::InvalidAssetPath);
+		// The empty handle is the whole reason the fall-through was silent.
+		UNTEST_EXPECT_TRUE(Open.SessionId.IsEmpty());
+	}
 
 	CleanupAllSessions();
 	co_return;
 }
+
+// REMOVED: LevelScopedOpen_NonErrorResultCarriesSessionId.
+//
+// It drove the real Execute() of foliage_open / landscape_open /
+// landscape_spline_open to assert the invariant "a non-error response must carry a
+// non-empty session_id". It could not survive a commandlet: foliage_open reaches
+// AInstancedFoliageActor::Get() -> UActorPartitionSubsystem::GetActor(), which
+// trips a HARD ENGINE ASSERT rather than returning anything --
+//   Assertion failed: InLevelHint
+//   Engine/Source/Runtime/Engine/Private/ActorPartition/ActorPartitionSubsystem.cpp:181
+// The test's own comment claimed "either way the invariant below must hold", but
+// the tool never gets far enough to produce a result to check. Observed: it killed
+// the runner and took 186 subsequent tests with it, three attempts in a row.
+//
+// The invariant itself is still covered, at the layer where it can actually be
+// observed, by LevelScopedOpen_TempMountPathIsInvalidAssetPath above: that drives
+// FClaireonSessionManager::OpenSession directly with the /Temp/Untitled_N path
+// shapes an unsaved map produces, and asserts InvalidAssetPath plus an empty
+// SessionId -- which is the defect the nine session guards were added for.
+//
+// Do NOT reinstate this by driving those three tools headlessly. That the engine
+// asserts instead of erroring is a product robustness gap in its own right (filed
+// separately); a test cannot defend against it, because the assert fires before any
+// FToolResult exists.
 
 #endif // WITH_UNTESTED

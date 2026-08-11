@@ -86,7 +86,7 @@ IClaireonTool::FToolResult ClaireonTool_AssetMove::Execute(const TSharedPtr<FJso
 
 	FString SrcObjectPath = R.ResolvedPath.Path;
 	UObject* SrcAsset = LoadObject<UObject>(nullptr, *SrcObjectPath);
-	if (!SrcAsset)
+	if (!IsValid(SrcAsset))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load source asset: %s"), *SrcObjectPath));
 	}
@@ -175,7 +175,7 @@ IClaireonTool::FToolResult ClaireonTool_AssetMove::Execute(const TSharedPtr<FJso
 			TArray<UObjectRedirector*> RedirectorPtrs;
 			for (const FAssetData& D : Redirectors)
 			{
-				if (UObjectRedirector* Red = Cast<UObjectRedirector>(D.GetAsset()))
+				if (UObjectRedirector* Red = Cast<UObjectRedirector>(D.GetAsset()); IsValid(Red))
 				{
 					RedirectorPtrs.Add(Red);
 				}

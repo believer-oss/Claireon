@@ -40,7 +40,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserAddRow::Execute(const TSharedPtr<
 
 	FString Error;
 	UChooserTable* Chooser = ClaireonChooserHelpers::LoadChooserTableAsset(AssetPath, Error);
-	if (!Chooser)
+	if (!IsValid(Chooser))
 	{
 		return MakeErrorResult(Error);
 	}

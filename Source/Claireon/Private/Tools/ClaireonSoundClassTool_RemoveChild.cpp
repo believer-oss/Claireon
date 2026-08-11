@@ -26,6 +26,9 @@ TSharedPtr<FJsonObject> FClaireonSoundClassTool_RemoveChild::GetInputSchema() co
 	FToolSchemaBuilder S;
 	S.AddString(TEXT("asset_path"), TEXT("Path to the parent USoundClass"), true);
 	S.AddString(TEXT("child_path"), TEXT("Path of the child USoundClass to remove"), true);
+	// Accepted by Execute as a back-compat alias; declared so it is not rejected
+	// as an unknown argument (and so callers can see it exists).
+	S.AddString(TEXT("child_class_path"), TEXT("Deprecated alias for child_path. Prefer child_path."));
 	return S.Build();
 }
 
@@ -52,12 +55,12 @@ IClaireonTool::FToolResult FClaireonSoundClassTool_RemoveChild::Execute(const TS
 	FString Error;
 	EClaireonAudioAssetKind Kind = EClaireonAudioAssetKind::Unknown;
 	UObject* Loaded = ClaireonAudioHelpers::LoadAudioAsset(AssetPath, Kind, Error);
-	if (!Loaded)
+	if (!IsValid(Loaded))
 	{
 		return MakeErrorResult(Error);
 	}
 	USoundClass* Parent = Cast<USoundClass>(Loaded);
-	if (!Parent || Kind != EClaireonAudioAssetKind::SoundClass)
+	if (!IsValid(Parent) || Kind != EClaireonAudioAssetKind::SoundClass)
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset is not a SoundClass: %s"), *AssetPath));
 	}

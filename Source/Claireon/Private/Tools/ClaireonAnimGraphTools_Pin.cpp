@@ -41,14 +41,14 @@ UAnimGraphNode_Base* FindAnimNodeByGuid(UEdGraph* Graph, const FString& GuidStr,
 	}
 
 	UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, ParsedGuid);
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		OutError = FString::Printf(TEXT("Node not found: %s"), *GuidStr);
 		return nullptr;
 	}
 
 	UAnimGraphNode_Base* AnimNode = Cast<UAnimGraphNode_Base>(Node);
-	if (!AnimNode)
+	if (!IsValid(AnimNode))
 	{
 		OutError = FString::Printf(TEXT("Node '%s' is not an animation graph node (class: %s)"),
 			*Node->GetNodeTitle(ENodeTitleType::ListView).ToString(), *Node->GetClass()->GetName());
@@ -68,8 +68,10 @@ FString ClaireonAnimGraphTool_ExposePin::GetOperation() const { return TEXT("exp
 
 FString ClaireonAnimGraphTool_ExposePin::GetDescription() const
 {
-	return TEXT("Expose a property as a visible pin on an animation graph node. "
-		"The property must exist in the node's ShowPinForProperties array.");
+	return TEXT("Show a node property as a visible pin on an animation graph node in the open Animation Blueprint "
+		"session. Session-mode tool: open via animbp_open first, then pass session_id, node_guid, and "
+		"property_name. The property must already be listed in the node's ShowPinForProperties array; the reverse "
+		"operation is animbp_hide_pin.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_ExposePin::GetInputSchema() const
@@ -99,7 +101,7 @@ FToolResult ClaireonAnimGraphTool_ExposePin::Execute(const TSharedPtr<FJsonObjec
 
 	FString FindError;
 	UAnimGraphNode_Base* AnimNode = ClaireonAnimGraphTools_PinInternal::FindAnimNodeByGuid(Graph, NodeGuidStr, FindError);
-	if (!AnimNode) return MakeErrorResult(FindError);
+	if (!IsValid(AnimNode)) return MakeErrorResult(FindError);
 
 	// Find the property in ShowPinForProperties
 	int32 FoundIndex = INDEX_NONE;
@@ -153,7 +155,7 @@ FString ClaireonAnimGraphTool_HidePin::GetOperation() const { return TEXT("hide_
 
 FString ClaireonAnimGraphTool_HidePin::GetDescription() const
 {
-    return TEXT("Hide a previously exposed pin on an animation graph node in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Hide a previously exposed pin on an animation graph node in the open anim_graph session. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_HidePin::GetInputSchema() const
@@ -183,7 +185,7 @@ FToolResult ClaireonAnimGraphTool_HidePin::Execute(const TSharedPtr<FJsonObject>
 
 	FString FindError;
 	UAnimGraphNode_Base* AnimNode = ClaireonAnimGraphTools_PinInternal::FindAnimNodeByGuid(Graph, NodeGuidStr, FindError);
-	if (!AnimNode) return MakeErrorResult(FindError);
+	if (!IsValid(AnimNode)) return MakeErrorResult(FindError);
 
 	int32 FoundIndex = INDEX_NONE;
 	for (int32 i = 0; i < AnimNode->ShowPinForProperties.Num(); ++i)
@@ -227,8 +229,10 @@ FString ClaireonAnimGraphTool_SetBinding::GetOperation() const { return TEXT("se
 
 FString ClaireonAnimGraphTool_SetBinding::GetDescription() const
 {
-	return TEXT("Set a property binding on an animation graph node. Binds a node property to a "
-		"variable or function via the property access system. Default type is 'Property' (fast-path).");
+	return TEXT("Set a property binding on an animation graph node in the open Animation Blueprint session, wiring "
+		"the property to a variable or function through the property access system. Session-mode tool: open via "
+		"animbp_open first, then pass session_id, node_guid, property_name, and binding_path. binding_type "
+		"defaults to 'Property' (fast-path); use 'Function' for a function binding.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_SetBinding::GetInputSchema() const
@@ -265,11 +269,11 @@ FToolResult ClaireonAnimGraphTool_SetBinding::Execute(const TSharedPtr<FJsonObje
 
 	FString FindError;
 	UAnimGraphNode_Base* AnimNode = ClaireonAnimGraphTools_PinInternal::FindAnimNodeByGuid(Graph, NodeGuidStr, FindError);
-	if (!AnimNode) return MakeErrorResult(FindError);
+	if (!IsValid(AnimNode)) return MakeErrorResult(FindError);
 
 	// Access the mutable binding object
 	UAnimGraphNodeBinding* Binding = AnimNode->GetMutableBinding();
-	if (!Binding)
+	if (!IsValid(Binding))
 	{
 		return MakeErrorResult(TEXT("Node has no binding object"));
 	}
@@ -329,7 +333,7 @@ FString ClaireonAnimGraphTool_RemoveBinding::GetOperation() const { return TEXT(
 
 FString ClaireonAnimGraphTool_RemoveBinding::GetDescription() const
 {
-    return TEXT("Remove a property binding from an animation graph node in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Remove a property binding from an animation graph node in the open anim_graph session. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_RemoveBinding::GetInputSchema() const
@@ -359,7 +363,7 @@ FToolResult ClaireonAnimGraphTool_RemoveBinding::Execute(const TSharedPtr<FJsonO
 
 	FString FindError;
 	UAnimGraphNode_Base* AnimNode = ClaireonAnimGraphTools_PinInternal::FindAnimNodeByGuid(Graph, NodeGuidStr, FindError);
-	if (!AnimNode) return MakeErrorResult(FindError);
+	if (!IsValid(AnimNode)) return MakeErrorResult(FindError);
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Remove Property Binding")));
 	AnimNode->Modify();
@@ -385,8 +389,10 @@ FString ClaireonAnimGraphTool_BindFunction::GetOperation() const { return TEXT("
 
 FString ClaireonAnimGraphTool_BindFunction::GetDescription() const
 {
-	return TEXT("Bind a BlueprintThreadSafe function to a node event (OnBecomeRelevant, OnUpdate, OnInitialUpdate). "
-		"The function must exist on the AnimBP and be marked BlueprintThreadSafe.");
+	return TEXT("Bind a BlueprintThreadSafe function to an anim node event (OnBecomeRelevant, OnUpdate, or "
+		"OnInitialUpdate) in the open Animation Blueprint session. Session-mode tool: open via animbp_open first, "
+		"then pass session_id, node_guid, event_type, and function_name. The function must already exist on the "
+		"AnimBP and be marked BlueprintThreadSafe.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_BindFunction::GetInputSchema() const
@@ -420,7 +426,7 @@ FToolResult ClaireonAnimGraphTool_BindFunction::Execute(const TSharedPtr<FJsonOb
 
 	FString FindError;
 	UAnimGraphNode_Base* AnimNode = ClaireonAnimGraphTools_PinInternal::FindAnimNodeByGuid(Graph, NodeGuidStr, FindError);
-	if (!AnimNode) return MakeErrorResult(FindError);
+	if (!IsValid(AnimNode)) return MakeErrorResult(FindError);
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Bind Function to Node")));
 	AnimNode->Modify();

@@ -25,6 +25,7 @@
 #include "K2Node_DynamicCast.h"
 #include "K2Node_MakeStruct.h"
 #include "K2Node_BreakStruct.h"
+#include "K2Node_SetFieldsInStruct.h"
 #include "K2Node_SpawnActorFromClass.h"
 #include "K2Node_Knot.h"
 #include "EdGraphNode_Comment.h"
@@ -40,6 +41,13 @@
 #include "K2Node_SwitchEnum.h"
 #include "K2Node_ForEachElementInEnum.h"
 #include "K2Node_DoOnceMultiInput.h"
+#include "K2Node_MultiGate.h"
+#include "K2Node_FormatText.h"
+#include "K2Node_Composite.h"
+#include "GameplayTagsK2Node_SwitchGameplayTag.h"
+#include "ClaireonNameResolver.h"
+#include "ClaireonBlueprintNodeTypeRegistry.h"
+#include "Abilities/Tasks/AbilityTask.h"
 #include "K2Node_AddDelegate.h"
 #include "K2Node_RemoveDelegate.h"
 #include "K2Node_ClearDelegate.h"
@@ -58,35 +66,36 @@
 
 namespace ClaireonMacroShorthand
 {
-	static const TCHAR* const GKnownMacros[] = {
-		TEXT("DoN"),
-		TEXT("DoOnce"),
-		TEXT("FlipFlop"),
-		TEXT("ForEachLoop"),
-		TEXT("ForEachLoopWithBreak"),
-		TEXT("ForLoop"),
-		TEXT("ForLoopWithBreak"),
-		TEXT("Gate"),
-		TEXT("IsValid"),
-		TEXT("MultiGate"),
-		TEXT("StandardMacroBranch"),
-		TEXT("SwitchHasAuthority"),
-		TEXT("WhileLoop"),
-	};
-
+	// The shorthand list now lives in the shared node-type registry (Shorthand kind),
+	// so bp_list_node_types and this rewrite cannot disagree about what exists.
+	//
+	// NOTE: MultiGate is intentionally absent -- it is a native node
+	// (UK2Node_MultiGate), not a StandardMacros macro. SwitchHasAuthority is
+	// absent because it lives in ActorMacros under the display name
+	// "Switch Has Authority"; the factory handles that node_type directly.
 	static const TCHAR* const GStandardMacroLibrary =
 		TEXT("/Engine/EditorBlueprintResources/StandardMacros.StandardMacros");
 
 	static bool IsKnownMacroName(const FString& Name)
 	{
-		for (const TCHAR* Known : GKnownMacros)
+		return ClaireonBlueprintNodeTypes::IsMacroShorthand(Name);
+	}
+
+	// Alias -> the macro graph's actual name.
+	//
+	// Nearly every shorthand is spelled exactly like its graph, so passing the alias
+	// through was right often enough to look correct. "DoN" is the exception: the graph in
+	// StandardMacros is named "Do N", with a space, so the lookup searched for a graph
+	// that does not exist and bp_add_node could never create a Do N node -- even though
+	// the registry advertised the alias and this resolver accepted it. Caught by the first
+	// real execution of Claireon.EditBlueprintGraph.MacroShorthand.AllResolve.
+	static FString MacroGraphNameForAlias(const FString& Alias)
+	{
+		if (Alias == TEXT("DoN"))
 		{
-			if (Name.Equals(Known, ESearchCase::CaseSensitive))
-			{
-				return true;
-			}
+			return TEXT("Do N");
 		}
-		return false;
+		return Alias;
 	}
 
 	void ResolveIfShorthand(const TSharedPtr<FJsonObject>& Params)
@@ -117,7 +126,7 @@ namespace ClaireonMacroShorthand
 		}
 		if (!Params->HasField(TEXT("macro_name")))
 		{
-			Params->SetStringField(TEXT("macro_name"), NodeType);
+			Params->SetStringField(TEXT("macro_name"), MacroGraphNameForAlias(NodeType));
 		}
 	}
 }
@@ -145,12 +154,17 @@ namespace ClaireonNodeTypeAlias
 			M.Emplace(UK2Node_GetArrayItem::StaticClass(),        TEXT("GetArrayItem"));
 			M.Emplace(UK2Node_MakeStruct::StaticClass(),          TEXT("MakeStruct"));
 			M.Emplace(UK2Node_BreakStruct::StaticClass(),         TEXT("BreakStruct"));
+			M.Emplace(UK2Node_SetFieldsInStruct::StaticClass(),   TEXT("SetFieldsInStruct"));
 			M.Emplace(UK2Node_SwitchInteger::StaticClass(),       TEXT("SwitchInteger"));
 			M.Emplace(UK2Node_SwitchString::StaticClass(),        TEXT("SwitchString"));
 			M.Emplace(UK2Node_SwitchName::StaticClass(),          TEXT("SwitchName"));
 			M.Emplace(UK2Node_SwitchEnum::StaticClass(),          TEXT("SwitchEnum"));
 			M.Emplace(UK2Node_ForEachElementInEnum::StaticClass(),TEXT("ForEachElementInEnum"));
 			M.Emplace(UK2Node_DoOnceMultiInput::StaticClass(),    TEXT("DoOnceMultiInput"));
+			M.Emplace(UK2Node_MultiGate::StaticClass(),           TEXT("MultiGate"));
+			M.Emplace(UK2Node_FormatText::StaticClass(),          TEXT("FormatText"));
+			M.Emplace(UK2Node_Composite::StaticClass(),           TEXT("Composite"));
+			M.Emplace(UGameplayTagsK2Node_SwitchGameplayTag::StaticClass(), TEXT("SwitchGameplayTag"));
 			M.Emplace(UK2Node_MacroInstance::StaticClass(),       TEXT("MacroInstance"));
 			M.Emplace(UK2Node_Event::StaticClass(),               TEXT("EventOverride"));
 			M.Emplace(UK2Node_CallParentFunction::StaticClass(),  TEXT("CallParentFunction"));
@@ -186,12 +200,17 @@ namespace ClaireonNodeTypeAlias
 				TEXT("GetArrayItem"),
 				TEXT("MakeStruct"),
 				TEXT("BreakStruct"),
+				TEXT("SetFieldsInStruct"),
 				TEXT("SwitchInteger"),
 				TEXT("SwitchString"),
 				TEXT("SwitchName"),
 				TEXT("SwitchEnum"),
 				TEXT("ForEachElementInEnum"),
 				TEXT("DoOnceMultiInput"),
+				TEXT("MultiGate"),
+				TEXT("FormatText"),
+				TEXT("Composite"),
+				TEXT("SwitchGameplayTag"),
 				TEXT("MacroInstance"),
 				TEXT("EventOverride"),
 				TEXT("CallParentFunction"),
@@ -235,7 +254,7 @@ namespace ClaireonNodeTypeAlias
 
 	FString GetAliasForNodeClass(const UClass* NodeClass)
 	{
-		if (!NodeClass)
+		if (!IsValid(NodeClass))
 		{
 			return FString();
 		}
@@ -271,13 +290,53 @@ namespace ClaireonNodeTypeAlias
 			return;
 		}
 
+		// Latent task spellings. These are not class names, so nothing below would
+		// resolve them, and bp_add_node's final else would reject the call outright.
+		// Rewrite to the Generic + class_name route the factory already supports,
+		// choosing the node class by what the factory actually returns:
+		// UK2Node_LatentAbilityCall for UAbilityTask, UK2Node_LatentGameplayTaskCall
+		// for any other UGameplayTask. function_name/function_class forward untouched.
+		if (NodeType.Equals(TEXT("LatentAbilityCall"), ESearchCase::IgnoreCase)
+			|| NodeType.Equals(TEXT("LatentGameplayTaskCall"), ESearchCase::IgnoreCase))
+		{
+			const bool bAbilityTaskRequested = NodeType.Equals(TEXT("LatentAbilityCall"), ESearchCase::IgnoreCase);
+			bool bUseAbilityCall = bAbilityTaskRequested;
+
+			// If the caller named a factory, let the factory's own type decide -- the
+			// spelling is a hint, the resolved class is the truth.
+			FString FunctionClassName;
+			if (Params->TryGetStringField(TEXT("function_class"), FunctionClassName) && !FunctionClassName.IsEmpty())
+			{
+				ClaireonNameResolver::FNameResolveResult ClassResult;
+				if (UClass* FactoryOwner = ClaireonNameResolver::ResolveClassName(FunctionClassName, nullptr, ClassResult); IsValid(FactoryOwner))
+				{
+					bUseAbilityCall = FactoryOwner->IsChildOf(UAbilityTask::StaticClass());
+				}
+			}
+
+			Params->SetStringField(TEXT("node_type"), TEXT("Generic"));
+			Params->SetStringField(TEXT("class_name"),
+				bUseAbilityCall ? TEXT("K2Node_LatentAbilityCall") : TEXT("K2Node_LatentGameplayTaskCall"));
+			return;
+		}
+
 		UClass* Resolved = FindObject<UClass>(nullptr, *NodeType);
-		if (!Resolved)
+		if (!IsValid(Resolved))
 		{
 			const FString WithPrefix = FString(TEXT("U")) + NodeType;
 			Resolved = FindObject<UClass>(nullptr, *WithPrefix);
 		}
-		if (!Resolved)
+		if (!IsValid(Resolved) && (NodeType.Contains(TEXT("Node_")) || NodeType.StartsWith(TEXT("/Script/"))))
+		{
+			// FindObject with a null outer only resolves full object paths, so short
+			// class names ("K2Node_MakeArray", project K2Node subclasses) never hit.
+			// Fall back to the fuzzy resolver, but only for strings that structurally
+			// look like node-class names so plain aliases ("Branch") are never
+			// misrouted through fuzzy class matching.
+			ClaireonNameResolver::FNameResolveResult R;
+			Resolved = ClaireonNameResolver::ResolveClassName(NodeType, UEdGraphNode::StaticClass(), R);
+		}
+		if (!IsValid(Resolved))
 		{
 			return;
 		}
@@ -299,7 +358,7 @@ namespace ClaireonBPGraphInternal
 {
 	UEdGraphNode* SelectEntryNodeForSwitch(const UBlueprint* Blueprint, UEdGraph* Graph)
 	{
-		if (!Graph)
+		if (!IsValid(Graph))
 		{
 			return nullptr;
 		}
@@ -315,7 +374,7 @@ namespace ClaireonBPGraphInternal
 				}
 			}
 		}
-		else if (Blueprint && Blueprint->FunctionGraphs.Contains(Graph))
+		else if (IsValid(Blueprint) && Blueprint->FunctionGraphs.Contains(Graph))
 		{
 			for (UEdGraphNode* Node : Graph->Nodes)
 			{
@@ -325,11 +384,11 @@ namespace ClaireonBPGraphInternal
 				}
 			}
 		}
-		else if (Blueprint && Blueprint->MacroGraphs.Contains(Graph))
+		else if (IsValid(Blueprint) && Blueprint->MacroGraphs.Contains(Graph))
 		{
 			for (UEdGraphNode* Node : Graph->Nodes)
 			{
-				if (UK2Node_Tunnel* Tunnel = Cast<UK2Node_Tunnel>(Node))
+				if (UK2Node_Tunnel* Tunnel = Cast<UK2Node_Tunnel>(Node); IsValid(Tunnel))
 				{
 					bool bHasInputPin = false;
 					for (UEdGraphPin* Pin : Tunnel->Pins)
@@ -356,10 +415,109 @@ namespace ClaireonBPGraphInternal
 	{
 		FGuid CorrectedGuid;
 		UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, RequestedGuid, &CorrectedGuid);
-		if (Node && CorrectedGuid.IsValid() && Data)
+		if (IsValid(Node) && CorrectedGuid.IsValid() && Data)
 		{
 			Data->GuidCorrections.Add(RequestedGuid, CorrectedGuid);
 		}
 		return Node;
+	}
+
+	UEdGraphNode* FindNodeForOperationStr(UEdGraph* Graph, const FString& NodeGuidStr, FBlueprintEditToolData* Data,
+	                                      FString& OutError, const TCHAR* FieldName)
+	{
+		UEdGraphNode* OutNode = nullptr;
+		FGuid CorrectedFullGuid;
+		if (!ClaireonBlueprintHelpers::ResolveNodeGuidString(Graph, NodeGuidStr, OutNode, OutError, FieldName, &CorrectedFullGuid))
+		{
+			return nullptr;
+		}
+
+		// Preserve the pre-existing A-field recompile-recovery bookkeeping: only a
+		// full-GUID input that got A-field-corrected produces a valid CorrectedFullGuid.
+		// Prefix-resolved lookups leave it invalid and record no correction.
+		if (Data && CorrectedFullGuid.IsValid())
+		{
+			FGuid RequestedGuid;
+			FGuid::Parse(NodeGuidStr, RequestedGuid);
+			Data->GuidCorrections.Add(RequestedGuid, CorrectedFullGuid);
+		}
+		return OutNode;
+	}
+
+	int32 ScrubTrashedPinLinks(UBlueprint* Blueprint, TArray<FString>& OutDetails)
+	{
+		if (!IsValid(Blueprint))
+		{
+			return 0;
+		}
+
+		int32 Removed = 0;
+		TArray<UEdGraph*> AllGraphs;
+		Blueprint->GetAllGraphs(AllGraphs);
+		for (UEdGraph* Graph : AllGraphs)
+		{
+			if (!IsValid(Graph))
+			{
+				continue;
+			}
+			for (UEdGraphNode* Node : Graph->Nodes)
+			{
+				if (!IsValid(Node))
+				{
+					continue;
+				}
+				for (UEdGraphPin* Pin : Node->Pins)
+				{
+					if (!Pin || Pin->WasTrashed())
+					{
+						continue;
+					}
+					for (int32 LinkIdx = Pin->LinkedTo.Num() - 1; LinkIdx >= 0; --LinkIdx)
+					{
+						UEdGraphPin* Linked = Pin->LinkedTo[LinkIdx];
+						if (!Linked || Linked->WasTrashed())
+						{
+							OutDetails.Add(FString::Printf(
+								TEXT("Removed stale link on pin '%s' of node '%s' (graph '%s'): linked pin %s"),
+								*Pin->PinName.ToString(),
+								*Node->GetNodeTitle(ENodeTitleType::ListView).ToString(),
+								*Graph->GetName(),
+								Linked ? *FString::Printf(TEXT("'%s' was trashed"), *Linked->PinName.ToString()) : TEXT("was null")));
+							Node->Modify();
+							Pin->LinkedTo.RemoveAt(LinkIdx);
+							++Removed;
+						}
+					}
+					// A trashed pin lingering in SubPins would also serialize; drop it.
+					for (int32 SubIdx = Pin->SubPins.Num() - 1; SubIdx >= 0; --SubIdx)
+					{
+						UEdGraphPin* Sub = Pin->SubPins[SubIdx];
+						if (!Sub || Sub->WasTrashed())
+						{
+							OutDetails.Add(FString::Printf(
+								TEXT("Removed trashed sub-pin entry under pin '%s' of node '%s' (graph '%s')"),
+								*Pin->PinName.ToString(),
+								*Node->GetNodeTitle(ENodeTitleType::ListView).ToString(),
+								*Graph->GetName()));
+							Node->Modify();
+							Pin->SubPins.RemoveAt(SubIdx);
+							++Removed;
+						}
+					}
+					if (Pin->ParentPin && Pin->ParentPin->WasTrashed())
+					{
+						OutDetails.Add(FString::Printf(
+							TEXT("Cleared trashed parent-pin reference on pin '%s' of node '%s' (graph '%s')"),
+							*Pin->PinName.ToString(),
+							*Node->GetNodeTitle(ENodeTitleType::ListView).ToString(),
+							*Graph->GetName()));
+						Node->Modify();
+						Pin->ParentPin = nullptr;
+						++Removed;
+					}
+				}
+			}
+		}
+		return Removed;
 	}
 }

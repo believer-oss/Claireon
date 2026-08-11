@@ -107,10 +107,10 @@ FToolResult ClaireonLandscapeEditToolBase::BuildStateResponse(const FString& Ses
 	}
 
 	const FString LandscapeProxyPath = Data->LandscapeProxy.IsValid() ? Data->LandscapeProxy->GetPathName() : FString();
-	FString SessionHintSummaryTag;
-	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResultData, Data->ConsecutiveAssetPathCalls, LandscapeProxyPath, SessionId, SessionHintSummaryTag);
+	TSharedPtr<FJsonObject> SessionHint;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResultData, Data->ConsecutiveAssetPathCalls, LandscapeProxyPath, SessionId, GetName(), SessionHint);
 
 	const FString Summary = FString::Printf(
 		TEXT("Session %s: %s"), *SessionId, *Data->LastOperationStatus);
-	return MakeSuccessResult(ResultData, Summary + SessionHintSummaryTag);
+	return MakeSuccessResultWithHint(ResultData, Summary, SessionHint);
 }

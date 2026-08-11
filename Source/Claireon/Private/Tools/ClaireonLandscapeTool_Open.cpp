@@ -31,13 +31,13 @@ TSharedPtr<FJsonObject> ClaireonLandscapeTool_Open::GetInputSchema() const
 
 FToolResult ClaireonLandscapeTool_Open::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("Editor not available"));
 	}
 
 	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
+	if (!IsValid(World))
 	{
 		return MakeErrorResult(TEXT("No editor world loaded"));
 	}
@@ -85,6 +85,24 @@ FToolResult ClaireonLandscapeTool_Open::Execute(const TSharedPtr<FJsonObject>& A
 				*SessionResult.BlockingSession->ToolName, *SessionResult.BlockingSession->SessionId);
 		}
 		return MakeErrorResult(FString::Printf(TEXT("Landscape is locked by %s"), *BlockInfo));
+	}
+	// Defect guard: this used to handle only BlockedByOtherTool. On
+	// InvalidAssetPath (OpenSession's CanonicalizePath rejected the path) SessionId
+	// is empty, and falling through returned a SUCCESS state response carrying an
+	// empty session_id -- an unusable handle with no error. This is reachable in
+	// normal use: CanonicalizePath rejects anything not under /Game/, and actors in
+	// an unsaved map live under /Temp/Untitled_N, so "File > New Level, then call
+	// this tool" used to yield a bogus success. Every non-success result must
+	// produce an error here.
+	if (SessionResult.Result == EOpenSessionResult::InvalidAssetPath)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Invalid asset path: %s"), *ActorPath));
+	}
+	if (SessionResult.Result != EOpenSessionResult::Success && SessionResult.Result != EOpenSessionResult::ReusedExistingSession)
+	{
+		return MakeErrorResult(FString::Printf(
+			TEXT("Failed to open a session for %s (unexpected OpenSession result %d)"),
+			*ActorPath, static_cast<int32>(SessionResult.Result)));
 	}
 
 	const FString SessionId = SessionResult.SessionId;

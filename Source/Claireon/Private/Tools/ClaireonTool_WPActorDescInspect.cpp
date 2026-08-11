@@ -20,14 +20,11 @@
 FString ClaireonTool_WPActorDescInspect::GetDescription() const
 {
 	return TEXT(
-		"Inspects FWorldPartitionActorDesc entries from the in-memory descriptor list "
-		"of UWorldPartition. Returns fields not visible via uobject_inspect: "
-		"bIsUsingDataLayerAsset, raw DataLayers (FName array as stored on disk), "
-		"HasResolvedDataLayerInstanceNames, resolved instance names, and the computed "
-		"DataLayersID hash (0 = no-layer cell = always loaded). "
-		"Primary use: diagnose actors loaded despite their data layer being Unloaded. "
-		"Filter by base_class_filter (substring match on Blueprint class asset name) "
-		"and/or actor_guid (exact FGuid string, e.g. 'AABBCCDD-EEFF0011-...').");
+		"Inspect FWorldPartitionActorDesc entries in UWorldPartition's in-memory descriptor "
+		"list. Returns fields uobject_inspect cannot see: bIsUsingDataLayerAsset, raw "
+		"on-disk DataLayers, resolved instance names, and the DataLayersID hash "
+		"(0 = always-loaded cell). Diagnoses actors loaded despite an Unloaded data layer. "
+		"Filters: base_class_filter, actor_guid. Read-only / non-session.");
 }
 
 TArray<FString> ClaireonTool_WPActorDescInspect::GetSearchKeywords() const
@@ -100,7 +97,7 @@ IClaireonTool::FToolResult ClaireonTool_WPActorDescInspect::Execute(const TShare
 		}
 		if (!WorldNameFilter.IsEmpty())
 		{
-			const FString WPPath = WP->GetPackage() ? WP->GetPackage()->GetName() : WP->GetName();
+			const FString WPPath = IsValid(WP->GetPackage()) ? WP->GetPackage()->GetName() : WP->GetName();
 			if (!WPPath.Contains(WorldNameFilter, ESearchCase::IgnoreCase))
 			{
 				continue;
@@ -110,7 +107,7 @@ IClaireonTool::FToolResult ClaireonTool_WPActorDescInspect::Execute(const TShare
 		break;
 	}
 
-	if (!TargetWP)
+	if (!IsValid(TargetWP))
 	{
 		return MakeErrorResult(WorldNameFilter.IsEmpty()
 			? TEXT("No UWorldPartition found in loaded objects.")
@@ -123,7 +120,7 @@ IClaireonTool::FToolResult ClaireonTool_WPActorDescInspect::Execute(const TShare
 
 	auto ProcessContainer = [&](UActorDescContainerInstance* ContainerInstance)
 	{
-		if (!ContainerInstance)
+		if (!IsValid(ContainerInstance))
 		{
 			return;
 		}

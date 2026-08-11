@@ -23,7 +23,10 @@ FString FClaireonCameraAssetTool_AddNode::GetOperation() const { return TEXT("ad
 
 FString FClaireonCameraAssetTool_AddNode::GetDescription() const
 {
-	return TEXT("Add a UCameraNode subclass instance to a rig (as root or as a child of an existing array-parent node).");
+	return TEXT("Add a UCameraNode subclass instance to one rig of a UCameraAsset, either as the rig root (empty "
+		"parent_node_id) or as a child of an existing UArrayCameraNode parent, optionally after a named "
+		"sibling. Returns the new node_id. Non-session: the asset is addressed by asset_path and the write is "
+		"transactional; there is no camera_asset_open -- persist with camera_asset_save.");
 }
 
 TSharedPtr<FJsonObject> FClaireonCameraAssetTool_AddNode::GetInputSchema() const
@@ -76,7 +79,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_AddNode::Execute(const TShar
 	}
 
 	UCameraAsset* Asset = LoadObject<UCameraAsset>(nullptr, *Canon);
-	if (!Asset)
+	if (!IsValid(Asset))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Camera asset not found: %s"), *Canon));
 	}
@@ -89,13 +92,13 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_AddNode::Execute(const TShar
 			RigIndex, Rigs.Num()));
 	}
 	UCameraRigAsset* Rig = Rigs[RigIndex];
-	if (!Rig)
+	if (!IsValid(Rig))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Rig at index %d is null"), RigIndex));
 	}
 
 	UClass* NodeClass = ClaireonCameraAssetHelpers::ResolveNodeClass(NodeClassName);
-	if (!NodeClass)
+	if (!IsValid(NodeClass))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Unknown class '%s' (must be a concrete UCameraNode subclass)"),
@@ -128,14 +131,14 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_AddNode::Execute(const TShar
 		FString HelperError;
 		UObject* Created = ClaireonPropertyUtils::SetInstancedSubObject(
 			Rig, NodeClass, TEXT("RootNode"), HelperError);
-		if (!Created)
+		if (!IsValid(Created))
 		{
 			Transaction.Cancel();
 			return MakeErrorResult(FString::Printf(
 				TEXT("SetInstancedSubObject(RootNode) failed: %s"), *HelperError));
 		}
 		NewNode = Cast<UCameraNode>(Created);
-		if (!NewNode)
+		if (!IsValid(NewNode))
 		{
 			Transaction.Cancel();
 			return MakeErrorResult(TEXT("Internal error: SetInstancedSubObject returned a non-UCameraNode"));
@@ -146,7 +149,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_AddNode::Execute(const TShar
 	{
 		FString ResolveError;
 		UCameraNode* Parent = ClaireonCameraAssetHelpers::ResolveNode(Rig, ParentNodeId, ResolveError);
-		if (!Parent)
+		if (!IsValid(Parent))
 		{
 			Transaction.Cancel();
 			return MakeErrorResult(FString::Printf(
@@ -155,7 +158,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_AddNode::Execute(const TShar
 		}
 
 		UArrayCameraNode* ArrayParent = Cast<UArrayCameraNode>(Parent);
-		if (!ArrayParent)
+		if (!IsValid(ArrayParent))
 		{
 			Transaction.Cancel();
 			return MakeErrorResult(FString::Printf(
@@ -176,7 +179,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_AddNode::Execute(const TShar
 
 		UCameraNode* Created = NewObject<UCameraNode>(
 			Rig, NodeClass, NAME_None, RF_Transactional);
-		if (!Created)
+		if (!IsValid(Created))
 		{
 			Transaction.Cancel();
 			return MakeErrorResult(TEXT("NewObject<UCameraNode> returned null"));

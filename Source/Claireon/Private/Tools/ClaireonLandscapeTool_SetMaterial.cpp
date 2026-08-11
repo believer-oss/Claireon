@@ -49,7 +49,7 @@ FToolResult ClaireonLandscapeTool_SetMaterial::Execute(const TSharedPtr<FJsonObj
 	MaterialPath = MaterialPathResolve.ResolvedPath.Path;
 
 	UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, *MaterialPath);
-	if (!Material)
+	if (!IsValid(Material))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Material '%s' not found"), *MaterialPath));
 	}

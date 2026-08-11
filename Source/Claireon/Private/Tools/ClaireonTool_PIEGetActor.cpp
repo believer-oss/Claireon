@@ -4,6 +4,7 @@
 #include "Tools/ClaireonTool_PIEGetActor.h"
 #include "ClaireonLog.h"
 #include "ClaireonPIEManager.h"
+#include "ClaireonPIEWorldResolver.h"
 
 #include "Components/ActorComponent.h"
 #include "Dom/JsonObject.h"
@@ -42,6 +43,9 @@ TSharedPtr<FJsonObject> ClaireonTool_PIEGetActor::GetInputSchema() const
 	IncludeDetailsProp->SetBoolField(TEXT("default"), false);
 	Properties->SetObjectField(TEXT("includeDetails"), IncludeDetailsProp);
 
+	// pie_instance / net_mode - optional PIE world selectors (shared contract).
+	ClaireonPIEWorldResolver::AddSchemaParams(Properties);
+
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	// Required fields
@@ -63,31 +67,23 @@ IClaireonTool::FToolResult ClaireonTool_PIEGetActor::Execute(const TSharedPtr<FJ
 	bool bIncludeDetails = false;
 	Arguments->TryGetBoolField(TEXT("includeDetails"), bIncludeDetails);
 
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("GEditor is not available"));
 	}
 
-	// Find the PIE world
-	UWorld* PIEWorld = nullptr;
-	for (const FWorldContext& Context : GEngine->GetWorldContexts())
+	// Find the PIE world (honors optional pie_instance / net_mode selectors)
+	FString PIEResolveError;
+	UWorld* PIEWorld = ClaireonPIEWorldResolver::ResolvePIEWorld(Arguments, PIEResolveError);
+	if (!IsValid(PIEWorld))
 	{
-		if (Context.WorldType == EWorldType::PIE && Context.World())
-		{
-			PIEWorld = Context.World();
-			break;
-		}
-	}
-
-	if (!PIEWorld)
-	{
-		return MakeErrorResult(TEXT("No active PIE session"));
+		return MakeErrorResult(PIEResolveError);
 	}
 
 	// Resolve the actor ID
 	FClaireonPIEManager& PIEManager = FClaireonPIEManager::Get();
 	AActor* Actor = PIEManager.ResolveActorId(ActorId, PIEWorld);
-	if (!Actor)
+	if (!IsValid(Actor))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Actor not found for ID: %s"), *ActorId));
 	}
@@ -122,7 +118,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEGetActor::Execute(const TSharedPtr<FJ
 		Actor->GetComponents(Components);
 		for (UActorComponent* Comp : Components)
 		{
-			if (Comp)
+			if (IsValid(Comp))
 			{
 				ComponentsArray.Add(MakeShared<FJsonValueString>(
 					FString::Printf(TEXT("%s (%s)"), *Comp->GetName(), *Comp->GetClass()->GetName())));

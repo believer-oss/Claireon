@@ -71,13 +71,13 @@ FToolResult ClaireonNiagaraTool_AddModule::Execute(const TSharedPtr<FJsonObject>
 	}
 
 	UNiagaraScript* Script = ClaireonNiagaraHelpers::ResolveModuleScript(ModuleName, Error);
-	if (!Script)
+	if (!IsValid(Script))
 	{
 		return MakeErrorResult(Error);
 	}
 
 	UNiagaraNodeOutput* OutputNode = ClaireonNiagaraHelpers::GetStackOutputNode(System, EmitterIndex, Usage, Error);
-	if (!OutputNode)
+	if (!IsValid(OutputNode))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -89,7 +89,7 @@ FToolResult ClaireonNiagaraTool_AddModule::Execute(const TSharedPtr<FJsonObject>
 
 	System->MarkPackageDirty();
 
-	if (!NewModuleNode)
+	if (!IsValid(NewModuleNode))
 	{
 		return MakeErrorResult(TEXT("AddScriptModuleToStack returned null - module could not be added"));
 	}

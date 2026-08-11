@@ -58,20 +58,20 @@ FToolResult ClaireonWidgetBPTool_MoveWidget::Execute(const TSharedPtr<FJsonObjec
 	Params->TryGetNumberField(TEXT("index"), InsertIndex);
 
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
-	if (!WBP || !WBP->WidgetTree)
+	if (!IsValid(WBP) || !WBP->WidgetTree)
 	{
 		return MakeErrorResult(TEXT("Widget Blueprint or WidgetTree is no longer valid"));
 	}
 	UWidgetTree* Tree = WBP->WidgetTree;
 
 	UWidget* Widget = ClaireonWidgetHelpers::FindWidgetByName(Tree, FName(*WidgetName));
-	if (!Widget)
+	if (!IsValid(Widget))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Widget '%s' not found"), *WidgetName));
 	}
 
 	UWidget* NewParentWidget = ClaireonWidgetHelpers::FindWidgetByName(Tree, FName(*NewParentName));
-	if (!NewParentWidget)
+	if (!IsValid(NewParentWidget))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("New parent widget '%s' not found"), *NewParentName));
 	}

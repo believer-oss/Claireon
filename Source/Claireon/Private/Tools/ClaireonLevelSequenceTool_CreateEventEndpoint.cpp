@@ -16,8 +16,9 @@ FString ClaireonLevelSequenceTool_CreateEventEndpoint::GetOperation() const { re
 
 FString ClaireonLevelSequenceTool_CreateEventEndpoint::GetDescription() const
 {
-	return TEXT("Create (or ensure) a Director Blueprint event endpoint function on the sequence. "
-				"Signature is either NoParams or BoundObject (single UObject* parameter).");
+	return TEXT("Create (or ensure) a Director Blueprint event endpoint function on the sequence, with "
+				"signature either NoParams or BoundObject (single UObject* parameter). Bind event keys to "
+				"it with level_sequence_add_event_key. Session-mode tool: open via level_sequence_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonLevelSequenceTool_CreateEventEndpoint::GetInputSchema() const
@@ -80,7 +81,7 @@ FToolResult ClaireonLevelSequenceTool_CreateEventEndpoint::Execute(const TShared
 	Data->LastOperationStatus = FString::Printf(TEXT("Created event endpoint '%s' (%s) on %s"),
 		*EndpointName,
 		Signature == ESequenceEventEndpointSignature::BoundObject ? TEXT("BoundObject") : TEXT("NoParams"),
-		DirectorBP ? *DirectorBP->GetName() : TEXT("(null)"));
+		IsValid(DirectorBP) ? *DirectorBP->GetName() : TEXT("(null)"));
 
 	FToolResult Result = BuildStateResponse(SessionId, Data);
 	if (!Result.bIsError && Result.Data.IsValid())
@@ -89,7 +90,7 @@ FToolResult ClaireonLevelSequenceTool_CreateEventEndpoint::Execute(const TShared
 		Result.Data->SetStringField(TEXT("endpoint_name"), EndpointName);
 		Result.Data->SetStringField(TEXT("signature"),
 			Signature == ESequenceEventEndpointSignature::BoundObject ? TEXT("BoundObject") : TEXT("NoParams"));
-		if (DirectorBP && DirectorBP->GeneratedClass)
+		if (IsValid(DirectorBP) && IsValid(DirectorBP->GeneratedClass))
 		{
 			Result.Data->SetStringField(TEXT("function_class"), DirectorBP->GeneratedClass->GetPathName());
 		}

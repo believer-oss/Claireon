@@ -9,9 +9,10 @@ FString ClaireonTool_FeedbackSubmit::GetOperation() const { return TEXT("submit"
 
 FString ClaireonTool_FeedbackSubmit::GetDescription() const
 {
-	return TEXT("Record feedback about MCP tools, workflows, bugs, or feature suggestions. "
-		"Feedback is persisted locally and aggregated into periodic reports. "
-		"One submission per session is sufficient.");
+	return TEXT("Send feedback about Claireon tools, workflows, bugs, or feature suggestions. Args: text "
+		"(required), is_bug, is_suggestion, related_tools, related_features. Feedback is persisted locally "
+		"and aggregated into periodic reports. Stateless / non-session: opens no editing session and needs "
+		"no editor state. One submission per session is sufficient.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_FeedbackSubmit::GetInputSchema() const
@@ -27,6 +28,15 @@ TSharedPtr<FJsonObject> ClaireonTool_FeedbackSubmit::GetInputSchema() const
 	TextProp->SetStringField(TEXT("description"),
 		TEXT("The feedback text. Be specific: what worked, what was confusing, bugs encountered, or feature suggestions."));
 	Properties->SetObjectField(TEXT("text"), TextProp);
+
+	// feedback - accepted alias for text. Execute has always read it; it was
+	// never declared, so the argument gate would reject the one spelling the
+	// tool's own name invites callers to try.
+	TSharedPtr<FJsonObject> AliasProp = MakeShared<FJsonObject>();
+	AliasProp->SetStringField(TEXT("type"), TEXT("string"));
+	AliasProp->SetStringField(TEXT("description"),
+		TEXT("Deprecated alias for 'text'. Used only when 'text' is absent or empty. Prefer 'text'."));
+	Properties->SetObjectField(TEXT("feedback"), AliasProp);
 
 	// is_bug - optional
 	TSharedPtr<FJsonObject> IsBugProp = MakeShared<FJsonObject>();

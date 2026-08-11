@@ -35,7 +35,7 @@ FToolResult ClaireonInputTool_RemoveActionTrigger::Execute(const TSharedPtr<FJso
 	}
 
 	UInputAction* IA = RequireInputAction(Data, Error);
-	if (!IA)
+	if (!IsValid(IA))
 	{
 		return MakeErrorResult(Error);
 	}

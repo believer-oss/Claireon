@@ -46,7 +46,7 @@ import threading
 import time
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
 # Shared constants (MUST match the C++ side -- see ClaireonProxyConstants.h
@@ -176,9 +176,9 @@ def canonicalize_worktree(worktree_root: str) -> str:
     """Canonicalize a worktree path for hashing. Windows-first, lowercase.
 
     Resolves junctions and symlinks via os.path.realpath so that a worktree
-    reached via a junction (e.g. W:\\yara) and via its underlying realpath
-    (e.g. D:\\git\\yara) hash to the SAME port. The PowerShell mirror in
-    Initialize-WorktreeMCP.ps1::Get-ProxyDefaultMcpPort uses
+    reached via a junction (e.g. W:\\project) and via its underlying realpath
+    (e.g. D:\\git\\project) hash to the SAME port. The PowerShell mirror
+    (Get-ProxyDefaultMcpPort, implemented by PowerShell launchers) uses
     GetFinalPathNameByHandle (P/Invoke, Resolve-WorktreeFinalPath helper)
     for the same reason. Both sides MUST resolve links; do not switch this
     back to os.path.abspath, which would diverge from PowerShell on
@@ -1051,7 +1051,7 @@ def _validate_admin_headers(handler: BaseHTTPRequestHandler) -> bool:
 def handle_admin_health() -> Tuple[int, Dict[str, Any]]:
     """GET /admin/health -- spawn probe target.
 
-    Caller (editor or Initialize-WorktreeMCP.ps1) hits this to distinguish
+    Caller (editor or an external launcher) hits this to distinguish
     'Claireon's proxy is up' from 'something else is on PROXY_REG_PORT'.
     """
     with SESSION_LOCK:
@@ -1218,8 +1218,8 @@ def _try_bind_mcp_listener(canonical: str, port: int) -> Optional[ThreadingHTTPS
     the bound server on success or None on failure.
 
     A successful bind also persists Saved/Claireon/proxy.json under the
-    worktree so legacy consumers (today's Initialize-WorktreeMCP and
-    .mcp.json readers) keep working.
+    worktree so legacy consumers (external launchers and .mcp.json
+    readers) keep working.
     """
     # Defense against the Windows loopback-vs-wildcard non-exclusivity quirk:
     # if a Claireon editor in DirectConnect mode is already listening on this
@@ -1590,6 +1590,57 @@ WARMING_UP_TEXT = (
     "to long-poll until the editor is fully ready."
 )
 
+# T6: every not-forwarded outcome used to answer with FALLBACK_TEXT, which reads
+# as "there is no editor". That is wrong, and differently wrong, in every case
+# except the one it was written for -- an editor stuck loading was reported as an
+# editor that had never been started, sending people to relaunch something that
+# was already running.
+#
+# Only states the proxy can actually TELL APART from evidence it holds are listed.
+# "crashed" and "closed" are deliberately collapsed into `evicted`: both present
+# as a port that stopped answering, and both have the same remedy, so splitting
+# them would mean guessing. The rule for adding a state here is that some observed
+# signal must distinguish it -- not that it is a distinct thing that can happen.
+STATE_TEXT = {
+    # No session, no pending launch: nothing has ever been here.
+    "no_editor": FALLBACK_TEXT,
+    # launch_editor fired, the process has not registered yet, and the auto-wait
+    # ran out. The editor is coming up -- a cold asset-registry scan can hold the
+    # game thread well past the wait window.
+    "starting": (
+        f"Editor is still starting and did not register within "
+        f"{_LAUNCH_PENDING_TIMEOUT_SECONDS:.0f}s. It is launching, not absent -- do NOT "
+        "relaunch it. A cold start (asset registry scan, shader/DDC work) routinely "
+        "runs longer than this. Call proxy(command='wait_for_editor') to keep waiting, "
+        "or proxy(command='status') to see where it is."
+    ),
+    # Session registered, wt.ready still False after the wait: the process is up
+    # but its Python bridge never finished.
+    "loading": (
+        f"Editor is registered but still warming up -- its Python bridge has not become "
+        f"ready (waited up to {_LAUNCH_PENDING_TIMEOUT_SECONDS:.0f}s). The editor is running, so "
+        "relaunching will only restart the wait. Common causes: a cold DDC or asset "
+        "compilation pass holding the game thread, or a modal dialog blocking startup "
+        "(the Restore Packages prompt does this indefinitely -- check for a dialog). "
+        "Call proxy(command='wait_for_editor') to keep waiting."
+    ),
+    # We held a session and the port refused/reset on every attempt.
+    "evicted": (
+        "Editor was running and its MCP listener stopped answering, so the session was "
+        "dropped. That usually means the editor crashed or was closed -- check "
+        "Saved/Logs for a callstack before relaunching, since an immediate relaunch will "
+        "hit the same crash. Relaunch with "
+        "Scripts\\Utilities\\Invoke-EditorBuildAndLaunch.ps1 -UseMCPProxy -SkipBuild."
+    ),
+    # Registered, ready, accepting connections -- but not answering in time.
+    "unresponsive": (
+        "Editor is registered and reachable but did not answer in time. It is alive and "
+        "blocked, not gone -- something is holding the game thread (a long tool call, a "
+        "modal dialog, or a synchronous asset scan). Relaunching would lose that state; "
+        "check the editor window first."
+    ),
+}
+
 
 # UPDATE_HERE_WHEN_ADDING_NEW_MCP_METHOD: keep ClaireonServer.cpp
 # DispatchRequest and claireon_proxy.py FORWARDED_METHODS in sync.
@@ -1618,6 +1669,21 @@ def _fallback_tool_result() -> Dict[str, Any]:
     return {
         "content": [{"type": "text", "text": FALLBACK_TEXT}],
         "isError": True,
+    }
+
+
+def _state_tool_result(state: str) -> Dict[str, Any]:
+    """T6: an error result naming which not-forwarded state we are actually in.
+
+    `state` must be a key of STATE_TEXT. Unknown keys fall back to FALLBACK_TEXT
+    rather than raising -- a wrong message is better than a 500 from the proxy.
+    """
+    return {
+        "content": [{"type": "text", "text": STATE_TEXT.get(state, FALLBACK_TEXT)}],
+        "isError": True,
+        # Machine-readable alongside the prose so a caller can branch without
+        # string-matching text that is expected to keep improving.
+        "editorState": state,
     }
 
 
@@ -1674,7 +1740,8 @@ def _proxy_text_result(text: str, *, is_error: bool = False) -> Dict[str, Any]:
 PROXY_HELP_TEXT = (
     "proxy meta-tool subcommands:\n"
     "  help                          List subcommands (this message). Default when 'command' is omitted.\n"
-    "  launch_editor                 Build & launch the Unreal editor for this worktree.\n"
+    "  launch_editor                 Build & launch the Unreal editor for this worktree via the\n"
+    "                                project's .claireon/launch_editor.json command.\n"
     "                                args: { skip_build: bool=false }\n"
     "  read_log                      Return the last N lines of proxy.log.\n"
     "                                args: { lines: int=200 }\n"
@@ -1688,8 +1755,8 @@ PROXY_HELP_TEXT = (
     "                                args: { timeout_seconds: float=120, max_heartbeat_age_seconds: float=10 }\n"
 )
 # (Stage 012) `restart` subcommand removed; the singleton runs continuously
-# (Stage 009 D2/D3) and does not have a fresh-spawn shortcut. Use
-# Invoke-MultiWorktreeProxyMigration.ps1 if you need to wipe leftover state.
+# (Stage 009 D2/D3) and does not have a fresh-spawn shortcut. Stop the proxy
+# process and delete its runtime dir if you need to wipe leftover state.
 
 
 def _spawn_detached(cmd: list) -> int:
@@ -1732,8 +1799,93 @@ def _resolve_powershell_exe() -> Optional[str]:
     return None
 
 
-def _scripts_utilities_dir(worktree_root: str) -> str:
-    return os.path.join(worktree_root, "Scripts", "Utilities")
+# Per-worktree editor-launch config consumed by the `launch_editor` proxy
+# subcommand. The plugin does not ship an editor build/launch script; the
+# hosting project declares how to build+launch its editor via this file.
+_LAUNCH_EDITOR_CONFIG_RELPATH = os.path.join(".claireon", "launch_editor.json")
+
+
+def _launch_editor_config_path(worktree_root: str) -> str:
+    override = os.environ.get("CLAIREON_LAUNCH_EDITOR_CONFIG")
+    if override:
+        return override
+    return os.path.join(worktree_root, _LAUNCH_EDITOR_CONFIG_RELPATH)
+
+
+def _resolve_launch_editor_command(
+    worktree_root: str, skip_build: bool
+) -> Tuple[Optional[List[str]], Optional[str]]:
+    """Build the argv for the hosting project's editor build+launch helper.
+
+    The proxy is project-agnostic: it does not know how to build or launch
+    any particular editor. The hosting project supplies that knowledge in
+    <worktree>/.claireon/launch_editor.json (or the file named by the
+    CLAIREON_LAUNCH_EDITOR_CONFIG environment variable):
+
+        {
+          "command": ["{powershell}", "-NoProfile", "-File",
+                      "{worktree_root}/Scripts/LaunchEditor.ps1",
+                      "-ProjectPath", "{project_path}"],
+          "skip_build_args": ["-SkipBuild"]
+        }
+
+    Placeholders substituted per argument:
+      {worktree_root}  absolute worktree root
+      {project_path}   absolute path to the worktree's .uproject (passing it
+                       explicitly keeps the helper's project discovery away
+                       from the proxy's inherited CWD, which belongs to the
+                       worktree that first spawned the singleton)
+      {powershell}     resolved pwsh.exe / powershell.exe path
+
+    "skip_build_args" (optional) is appended when the caller passes
+    skip_build=true. Returns (argv, None) on success, (None, reason) on
+    failure.
+    """
+    config_path = _launch_editor_config_path(worktree_root)
+    if not os.path.isfile(config_path):
+        return None, (
+            f"no editor launch config found at {config_path}. The proxy does "
+            "not ship an editor build/launch script; create that file with "
+            'the shape {"command": [...argv...], "skip_build_args": [...]} '
+            "(placeholders per argument: {worktree_root}, {project_path}, "
+            "{powershell}), or point the CLAIREON_LAUNCH_EDITOR_CONFIG "
+            "environment variable at an equivalent file."
+        )
+    try:
+        with open(config_path, "r", encoding="utf-8") as fh:
+            config = json.load(fh)
+    except (OSError, ValueError) as exc:
+        return None, f"failed to read {config_path}: {exc!r}"
+    command = config.get("command") if isinstance(config, dict) else None
+    if (not isinstance(command, list) or not command
+            or not all(isinstance(a, str) for a in command)):
+        return None, (
+            f"{config_path}: 'command' must be a non-empty array of strings.")
+    skip_args = config.get("skip_build_args") or []
+    if (not isinstance(skip_args, list)
+            or not all(isinstance(a, str) for a in skip_args)):
+        return None, (
+            f"{config_path}: 'skip_build_args' must be an array of strings.")
+    argv = list(command) + (list(skip_args) if skip_build else [])
+    substitutions = {"{worktree_root}": worktree_root}
+    if any("{project_path}" in a for a in argv):
+        project_file = _resolve_uproject(worktree_root)
+        if not project_file:
+            return None, (
+                f"no .uproject found at worktree root {worktree_root} "
+                "(required to expand {project_path}).")
+        substitutions["{project_path}"] = project_file
+    if any("{powershell}" in a for a in argv):
+        ps = _resolve_powershell_exe()
+        if not ps:
+            return None, "PowerShell not found; cannot expand {powershell}."
+        substitutions["{powershell}"] = ps
+    resolved = []
+    for arg in argv:
+        for key, value in substitutions.items():
+            arg = arg.replace(key, value)
+        resolved.append(arg)
+    return resolved, None
 
 
 def _resolve_uproject(worktree_root: str) -> Optional[str]:
@@ -2058,15 +2210,15 @@ def _handle_proxy_command(
         return _jsonrpc_result(request_id, _proxy_text_result(tail))
 
     # (Stage 012) `restart` subcommand removed -- the singleton runs until
-    # SIGINT/SIGTERM (D2/D3). Use Invoke-MultiWorktreeProxyMigration.ps1 if
-    # you need to wipe leftover state.
+    # SIGINT/SIGTERM (D2/D3). Stop the proxy process and delete its runtime
+    # dir if you need to wipe leftover state.
 
     if command == "wait_for_editor":
         # Long-poll until an editor session is registered for this worktree
         # with a heartbeat newer than max_heartbeat_age_seconds. Returns the
         # same payload as `status` on success. Use this instead of bash poll
         # loops over MCP tool calls when waiting for the editor to bind after
-        # Invoke-EditorBuildAndLaunch.ps1 -UseMCPProxy.
+        # launch_editor (or an external editor launch) kicked off a build.
         try:
             timeout_seconds = float(sub_args.get("timeout_seconds", 120.0))
         except (TypeError, ValueError):
@@ -2114,8 +2266,7 @@ def _handle_proxy_command(
                 return _jsonrpc_result(request_id, _proxy_text_result(
                     f"wait_for_editor: timed out after {timeout_seconds:.1f}s waiting for an editor"
                     f" with a heartbeat newer than {max_age:.1f}s. Launch the editor if it isn't running:"
-                    f" call this tool with command='launch_editor' or run"
-                    f" Scripts\\Utilities\\Invoke-EditorBuildAndLaunch.ps1 -UseMCPProxy.",
+                    f" call this tool with command='launch_editor'.",
                     is_error=True))
             # Sleep until next tick or deadline, whichever is sooner. Short
             # interval keeps responsiveness high without burning the proxy
@@ -2127,25 +2278,11 @@ def _handle_proxy_command(
             return _jsonrpc_result(request_id, _proxy_text_result(
                 "launch_editor requires a registered editor session for this listener port.",
                 is_error=True))
-        ps = _resolve_powershell_exe()
-        if not ps:
+        cmd, resolve_error = _resolve_launch_editor_command(
+            worktree_root, bool(sub_args.get("skip_build")))
+        if resolve_error:
             return _jsonrpc_result(request_id, _proxy_text_result(
-                "PowerShell not found; cannot launch editor.", is_error=True))
-        script = os.path.join(_scripts_utilities_dir(worktree_root), "Invoke-EditorBuildAndLaunch.ps1")
-        if not os.path.isfile(script):
-            return _jsonrpc_result(request_id, _proxy_text_result(
-                f"Invoke-EditorBuildAndLaunch.ps1 not found at {script}", is_error=True))
-        # Pass -ProjectPath explicitly so the launcher project-finder is never
-        # called with the proxy's inherited CWD (which belongs to the worktree
-        # that first spawned the singleton, not necessarily this one).
-        project_file = _resolve_uproject(worktree_root)
-        if not project_file:
-            return _jsonrpc_result(request_id, _proxy_text_result(
-                f"no .uproject found at worktree root {worktree_root}", is_error=True))
-        cmd = [ps, "-NoProfile", "-File", script,
-               "-ProjectPath", project_file, "-UseMCPProxy"]
-        if bool(sub_args.get("skip_build")):
-            cmd.append("-SkipBuild")
+                resolve_error, is_error=True))
         try:
             new_pid = _spawn_detached(cmd)
         except OSError as exc:
@@ -2244,8 +2381,7 @@ def _check_warming_up(listener_port: Optional[int]) -> Optional[str]:
             return (
                 "No editor session is registered for this proxy port. "
                 "Likely causes:\n"
-                "  1. Editor not yet started -- call proxy(command='launch_editor') or run "
-                "Invoke-EditorBuildAndLaunch.ps1 -UseMCPProxy.\n"
+                "  1. Editor not yet started -- call proxy(command='launch_editor').\n"
                 "  2. Editor is in direct-connect mode on the same port as the proxy "
                 "(port collision). Relaunch with -UseMCPProxy to re-bind via the proxy.\n"
                 "  3. Proxy lost track of the editor registration -- call "
@@ -2357,6 +2493,9 @@ def _forward_payload_to_editor(
     global singleton_session
     request_id = payload.get("id")
     should_auto_wait = False
+    # T6: which startup phase the auto-wait is covering, so a timeout can say
+    # which one it timed out in instead of claiming there is no editor.
+    wait_state = "starting"
     with SESSION_LOCK:
         evict_singleton_stale_session_locked()
         session_snapshot = _resolve_session_for_listener(listener_port)
@@ -2370,6 +2509,7 @@ def _forward_payload_to_editor(
                     # Auto-wait instead of erroring -- both phases of the startup
                     # sequence (no-session and warming-up) deserve the same treatment.
                     should_auto_wait = True
+                    wait_state = "loading"
                 else:
                     # Port collision or other unresolvable condition (I10); auto-wait
                     # cannot fix this. Return the actionable diagnostic immediately.
@@ -2381,8 +2521,10 @@ def _forward_payload_to_editor(
                 # No session yet but launch_editor was recently invoked.
                 # Defer the fallback and block-poll outside the lock.
                 should_auto_wait = True
+                wait_state = "starting"
             else:
-                return _jsonrpc_result(request_id, _fallback_tool_result())
+                # Genuinely nothing here: no session, no pending launch.
+                return _jsonrpc_result(request_id, _state_tool_result("no_editor"))
 
     # Auto-wait: covers two startup phases --
     #   1. launch_pending_ts set, no session yet (editor process starting)
@@ -2391,7 +2533,10 @@ def _forward_payload_to_editor(
     if should_auto_wait:
         session_snapshot = _auto_wait_for_session(listener_port)
         if session_snapshot is None:
-            return _jsonrpc_result(request_id, _fallback_tool_result())
+            # T6: the editor IS starting or loading -- we watched it for the whole
+            # wait window. Reporting "build and launch the editor first" here was the
+            # reported bug: it sends the caller to relaunch a running editor.
+            return _jsonrpc_result(request_id, _state_tool_result(wait_state))
 
     raw = json.dumps(payload).encode("utf-8")
     last_exc: Optional[Exception] = None
@@ -2487,7 +2632,25 @@ def _forward_payload_to_editor(
                         evicted_pid, evicted_start,
                     )
                 singleton_session = None
-        return _jsonrpc_result(request_id, _fallback_tool_result())
+        # T6: an editor WAS here and its listener stopped answering. That is a
+        # different fact from "no editor was ever started", and it points at a
+        # crash log rather than at a relaunch.
+        #
+        # But only call it `evicted` if the session had actually come up. A session
+        # that never reached ready and whose port refuses is an editor still coming
+        # up -- its MCP listener is not accepting YET. Reporting that as a crash sends
+        # the caller to hunt a callstack that does not exist.
+        # Only refined on the per-worktree path, where wt.ready is maintained by the
+        # real registration handshake. The legacy singleton path tracks no ready flag,
+        # so there it stays `evicted` rather than being guessed at.
+        evicted_state = "evicted"
+        with SESSION_LOCK:
+            canonical = session_snapshot.get("canonical_worktree")
+            if canonical is not None:
+                wt = RUNTIME["worktrees"].get(canonical)
+                if wt is not None and not wt.ready:
+                    evicted_state = "loading"
+        return _jsonrpc_result(request_id, _state_tool_result(evicted_state))
 
     log.error(
         "forward failed after retries editor_pid=%s start_time_ns=%s err=%r",
@@ -2495,7 +2658,15 @@ def _forward_payload_to_editor(
         session_snapshot.get("editor_start_time_ns"),
         last_exc,
     )
-    return _jsonrpc_error(request_id, -32000, "Editor connection failed")
+    # T6: reached when the connection was neither refused nor reset -- the listener
+    # accepted and then did not answer. The editor is alive and blocked. Kept as a
+    # JSON-RPC error (unchanged wire shape) with a message that names the state
+    # instead of the generic "connection failed".
+    return _jsonrpc_error(
+        request_id,
+        -32000,
+        "Editor unresponsive: connection accepted but no reply. " + STATE_TEXT["unresponsive"],
+    )
 
 
 def forward_tool_call(

@@ -110,7 +110,7 @@ TArray<FString> ClaireonBlueprintGraphTool_Compile::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_Compile::GetDescription() const
 {
-    return TEXT("Compiles the Blueprint of the current session and reports structured errors and warnings. Most-common pitfall: assuming compile == save -- it does not write to disk; call bp_save (or close, which auto-saves) to persist the compiled state. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+    return TEXT("Compile the Blueprint of the current session and report structured errors and warnings. Most-common pitfall: assuming compile == save -- it does not write to disk; call bp_save (or close, which auto-saves) to persist the compiled state. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Compile::GetInputSchema() const
@@ -133,7 +133,7 @@ FToolResult ClaireonBlueprintGraphTool_Compile::Execute(const TSharedPtr<FJsonOb
         return Error;
     }
 	UBlueprint* Blueprint = Data->Blueprint.Get();
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
 	}
@@ -239,7 +239,7 @@ FToolResult ClaireonBlueprintGraphTool_Compile::Execute(const TSharedPtr<FJsonOb
 					// "name the failing node" use case since compile errors
 					// reference live K2 nodes in the open Blueprint.
 					if (UEdGraphNode* GraphNode = FindObject<UEdGraphNode>(
-						/*Outer=*/nullptr, *ObjToken.GetOriginalObjectPathName()))
+						/*Outer=*/nullptr, *ObjToken.GetOriginalObjectPathName()); IsValid(GraphNode))
 					{
 						EntryObj->SetStringField(TEXT("node_guid"),
 							GraphNode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));

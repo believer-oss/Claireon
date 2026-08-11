@@ -51,7 +51,7 @@ IClaireonTool::FToolResult ClaireonTool_GameplayTagsReload::Execute(const TShare
 
 	// 3-5. Read settings, force a disk re-read of the default config, then rebuild the tree.
 	UGameplayTagsSettings* Settings = GetMutableDefault<UGameplayTagsSettings>();
-	if (!Settings)
+	if (!IsValid(Settings))
 	{
 		return MakeErrorResult(TEXT("Failed to resolve UGameplayTagsSettings default object."));
 	}

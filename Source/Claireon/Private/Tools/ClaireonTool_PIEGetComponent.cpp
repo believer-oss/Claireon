@@ -4,6 +4,7 @@
 #include "Tools/ClaireonTool_PIEGetComponent.h"
 #include "ClaireonLog.h"
 #include "ClaireonPIEManager.h"
+#include "ClaireonPIEWorldResolver.h"
 
 #include "Components/ActorComponent.h"
 #include "Dom/JsonObject.h"
@@ -50,6 +51,9 @@ TSharedPtr<FJsonObject> ClaireonTool_PIEGetComponent::GetInputSchema() const
 	IncludeDetailsProp->SetBoolField(TEXT("default"), false);
 	Properties->SetObjectField(TEXT("includeDetails"), IncludeDetailsProp);
 
+	// pie_instance / net_mode - optional PIE world selectors (shared contract).
+	ClaireonPIEWorldResolver::AddSchemaParams(Properties);
+
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
 	// Required fields
@@ -63,9 +67,9 @@ TSharedPtr<FJsonObject> ClaireonTool_PIEGetComponent::GetInputSchema() const
 
 IClaireonTool::FToolResult ClaireonTool_PIEGetComponent::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	UE_LOG(LogClaireon, Display, TEXT("[MCP] editor.pie.getComponentFromActor"));
+	UE_LOG(LogClaireon, Display, TEXT("[MCP] pie_get_component"));
 
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("Editor is not available"));
 	}
@@ -90,27 +94,20 @@ IClaireonTool::FToolResult ClaireonTool_PIEGetComponent::Execute(const TSharedPt
 		bIncludeDetails = Arguments->GetBoolField(TEXT("includeDetails"));
 	}
 
-	// Find PIE world
-	UWorld* PIEWorld = nullptr;
-	for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
+	// Find PIE world (honors optional pie_instance / net_mode selectors)
+	FString PIEResolveError;
+	UWorld* PIEWorld = ClaireonPIEWorldResolver::ResolvePIEWorld(Arguments, PIEResolveError);
+	if (!IsValid(PIEWorld))
 	{
-		if (WorldContext.WorldType == EWorldType::PIE && WorldContext.World())
-		{
-			PIEWorld = WorldContext.World();
-			break;
-		}
-	}
-
-	if (!PIEWorld)
-	{
-		return MakeErrorResult(TEXT("PIE world not found. PIE may still be initializing."));
+		return MakeErrorResult(FString::Printf(
+			TEXT("%s PIE may still be initializing."), *PIEResolveError));
 	}
 
 	// Resolve the actor
 	FClaireonPIEManager& PIEManager = FClaireonPIEManager::Get();
 	AActor* Actor = PIEManager.ResolveActorId(ActorId, PIEWorld);
 
-	if (!Actor)
+	if (!IsValid(Actor))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Could not resolve actor '%s'. The actor may have been destroyed or the ID is stale."),
@@ -124,7 +121,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEGetComponent::Execute(const TSharedPt
 
 	for (UActorComponent* Component : Components)
 	{
-		if (!Component)
+		if (!IsValid(Component))
 		{
 			continue;
 		}
@@ -141,14 +138,14 @@ IClaireonTool::FToolResult ClaireonTool_PIEGetComponent::Execute(const TSharedPt
 	FString Output;
 	Output += FString::Printf(TEXT("actorId: %s\n"), *ActorId);
 	Output += FString::Printf(TEXT("searchClass: %s\n"), *ComponentClassName);
-	Output += FString::Printf(TEXT("found: %s\n"), FoundComponent ? TEXT("true") : TEXT("false"));
+	Output += FString::Printf(TEXT("found: %s\n"), IsValid(FoundComponent) ? TEXT("true") : TEXT("false"));
 
-	if (!FoundComponent)
+	if (!IsValid(FoundComponent))
 	{
 		Output += TEXT("availableComponents:\n");
 		for (const UActorComponent* Component : Components)
 		{
-			if (Component)
+			if (IsValid(Component))
 			{
 				Output += FString::Printf(TEXT("  - %s (%s)\n"),
 					*Component->GetName(), *Component->GetClass()->GetName());
@@ -163,7 +160,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEGetComponent::Execute(const TSharedPt
 
 	// Class hierarchy
 	FString ClassHierarchy;
-	for (UClass* Class = FoundComponent->GetClass(); Class; Class = Class->GetSuperClass())
+	for (UClass* Class = FoundComponent->GetClass(); IsValid(Class); Class = Class->GetSuperClass())
 	{
 		if (!ClassHierarchy.IsEmpty())
 		{

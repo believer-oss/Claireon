@@ -22,10 +22,11 @@ FString FClaireonAudioTool_AttachAudioComponent::GetOperation() const { return T
 
 FString FClaireonAudioTool_AttachAudioComponent::GetDescription() const
 {
-	return TEXT("Attach a new UAudioComponent to an existing actor (looked up by GetActorLabel), bound to a USoundBase. "
+	return TEXT("Add a new UAudioComponent to an existing actor (looked up by GetActorLabel), bound to a USoundBase. "
 	            "Optional 'component_name' overrides the auto-generated 'AudioComponent_<N>'. "
 	            "Optional 'auto_activate' (default true) controls AC->bAutoActivate. "
-	            "Wrapped in FScopedTransaction so editor undo works.");
+	            "Stateless / non-session: edits the current editor world directly inside an FScopedTransaction "
+	            "(editor undo works), so no open session is required.");
 }
 
 TSharedPtr<FJsonObject> FClaireonAudioTool_AttachAudioComponent::GetInputSchema() const
@@ -35,17 +36,12 @@ TSharedPtr<FJsonObject> FClaireonAudioTool_AttachAudioComponent::GetInputSchema(
 
 	TSharedPtr<FJsonObject> Properties = MakeShared<FJsonObject>();
 
-	for (const TCHAR* Field : { TEXT("actor_name"), TEXT("sound_asset_path"), TEXT("component_name") })
-	{
-		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
-		P->SetStringField(TEXT("type"), TEXT("string"));
-		Properties->SetObjectField(Field, P);
-	}
-	{
-		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
-		P->SetStringField(TEXT("type"), TEXT("boolean"));
-		Properties->SetObjectField(TEXT("auto_activate"), P);
-	}
+	// Every parameter carries a description: an undescribed one is invisible in
+	// help and in the MCP schema, so a caller can only find it by reading source.
+	ClaireonAudioSchema::AddString(Properties, TEXT("actor_name"), TEXT("Target actor, by label or name."));
+	ClaireonAudioSchema::AddString(Properties, TEXT("sound_asset_path"), TEXT("Sound asset to place or attach (e.g. /Game/Audio/S_Ambient)."));
+	ClaireonAudioSchema::AddString(Properties, TEXT("component_name"), TEXT("Name for the newly attached audio component."));
+	ClaireonAudioSchema::AddBoolean(Properties, TEXT("auto_activate"), TEXT("Whether the created audio component auto-activates."));
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
 
@@ -59,7 +55,7 @@ TSharedPtr<FJsonObject> FClaireonAudioTool_AttachAudioComponent::GetInputSchema(
 
 FToolResult FClaireonAudioTool_AttachAudioComponent::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor || !GEditor->GetEditorWorldContext().World())
+	if (!IsValid(GEditor) || !IsValid(GEditor->GetEditorWorldContext().World()))
 	{
 		return MakeErrorResult(TEXT("attach_audio_component requires an active editor world"));
 	}
@@ -82,10 +78,10 @@ FToolResult FClaireonAudioTool_AttachAudioComponent::Execute(const TSharedPtr<FJ
 	}
 	FString LoadError;
 	USoundBase* Sound = ClaireonAudioApplyHelpers::LoadSoundBase(SoundPath, LoadError);
-	if (!Sound) return MakeErrorResult(LoadError);
+	if (!IsValid(Sound)) return MakeErrorResult(LoadError);
 
 	AActor* Target = ClaireonAudioApplyHelpers::FindActorByLabel(World, ActorName);
-	if (!Target) return MakeErrorResult(FString::Printf(TEXT("Actor '%s' not found in editor world"), *ActorName));
+	if (!IsValid(Target)) return MakeErrorResult(FString::Printf(TEXT("Actor '%s' not found in editor world"), *ActorName));
 
 	bool bAutoActivate = true;
 	Arguments->TryGetBoolField(TEXT("auto_activate"), bAutoActivate);
@@ -97,7 +93,7 @@ FToolResult FClaireonAudioTool_AttachAudioComponent::Execute(const TSharedPtr<FJ
 		{
 			for (UActorComponent* C : Target->GetComponents())
 			{
-				if (C && C->GetName() == Name) return true;
+				if (IsValid(C) && C->GetName() == Name) return true;
 			}
 			return false;
 		};
@@ -117,9 +113,9 @@ FToolResult FClaireonAudioTool_AttachAudioComponent::Execute(const TSharedPtr<FJ
 	Target->Modify();
 
 	UAudioComponent* AC = NewObject<UAudioComponent>(Target, *ComponentName, RF_Transactional);
-	if (!AC) return MakeErrorResult(TEXT("NewObject<UAudioComponent> failed"));
+	if (!IsValid(AC)) return MakeErrorResult(TEXT("NewObject<UAudioComponent> failed"));
 
-	if (USceneComponent* Root = Target->GetRootComponent())
+	if (USceneComponent* Root = Target->GetRootComponent(); IsValid(Root))
 	{
 		AC->AttachToComponent(Root, FAttachmentTransformRules::KeepRelativeTransform);
 	}

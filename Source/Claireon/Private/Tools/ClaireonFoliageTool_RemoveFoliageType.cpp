@@ -42,7 +42,7 @@ FToolResult ClaireonFoliageTool_RemoveFoliageType::Execute(const TSharedPtr<FJso
 
 	AInstancedFoliageActor* IFA = Data->FoliageActor.Get();
 	UFoliageType* FoundType = FindFoliageTypeInActor(IFA, TypeName);
-	if (!FoundType)
+	if (!IsValid(FoundType))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Foliage type '%s' not found in this level"), *TypeName));
 	}

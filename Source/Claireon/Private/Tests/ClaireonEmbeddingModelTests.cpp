@@ -61,7 +61,11 @@ namespace Cl628EmbTestNS
 // ---------------------------------------------------------------------------
 // Smoke 1: model loads and produces a shaped, nonzero, unit-norm vector.
 // ---------------------------------------------------------------------------
-UNTEST_UNIT(Claireon, Embedder, LoadsAndEmbeds)
+// Budget: loading the ONNX model and standing up the ORT CPU runtime costs ~0.5s. The bare
+// UNTEST_UNIT default of 0.50ms (FUntestUnitFixture::DefaultTimeoutMs) is not a deliberate
+// perf assertion -- the assertions below all pass, only the budget was blown. Do not
+// restore the default.
+UNTEST_UNIT_OPTS(Claireon, Embedder, LoadsAndEmbeds, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace Cl628EmbTestNS;
 
@@ -101,7 +105,9 @@ UNTEST_UNIT(Claireon, Embedder, LoadsAndEmbeds)
 // duplicate than to an unrelated one. cos(A,B) > cos(A,C).
 //   A = "create table"        B = "create table list"     C = "open system file"
 // ---------------------------------------------------------------------------
-UNTEST_UNIT(Claireon, Embedder, RelativeCosineSane)
+// Budget: model load plus three inference passes (~0.5s). Not a perf assertion; do not
+// restore the 0.50ms default.
+UNTEST_UNIT_OPTS(Claireon, Embedder, RelativeCosineSane, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace Cl628EmbTestNS;
 

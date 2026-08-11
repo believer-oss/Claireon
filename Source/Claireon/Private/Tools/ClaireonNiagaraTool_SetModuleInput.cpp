@@ -140,14 +140,14 @@ FToolResult ClaireonNiagaraTool_SetModuleInput::Execute(const TSharedPtr<FJsonOb
 		{
 			FString ResolvedValue = Value;
 			UNiagaraGraph* SwitchGraph = ModuleNode->GetCalledGraph();
-			if (SwitchGraph)
+			if (IsValid(SwitchGraph))
 			{
 				for (const FNiagaraVariable& SwitchVar : SwitchGraph->FindStaticSwitchInputs())
 				{
 					if (SwitchVar.GetName().IsEqual(FName(*SwitchName)))
 					{
 						UEnum* SwitchEnum = SwitchVar.GetType().GetEnum();
-						if (SwitchEnum)
+						if (IsValid(SwitchEnum))
 						{
 							for (int32 e = 0; e < SwitchEnum->NumEnums() - 1; ++e)
 							{
@@ -189,7 +189,7 @@ FToolResult ClaireonNiagaraTool_SetModuleInput::Execute(const TSharedPtr<FJsonOb
 			AvailableInputs += Var.GetName().ToString();
 		}
 		UNiagaraGraph* CalledGraph = ModuleNode->GetCalledGraph();
-		if (CalledGraph)
+		if (IsValid(CalledGraph))
 		{
 			for (const FNiagaraVariable& SwitchVar : CalledGraph->FindStaticSwitchInputs())
 			{
@@ -216,7 +216,7 @@ FToolResult ClaireonNiagaraTool_SetModuleInput::Execute(const TSharedPtr<FJsonOb
 
 	FGuid ScriptVarId;
 	UNiagaraScriptSource* FunctionScriptSource = ModuleNode->GetFunctionScriptSource();
-	if (FunctionScriptSource && FunctionScriptSource->NodeGraph)
+	if (IsValid(FunctionScriptSource) && FunctionScriptSource->NodeGraph)
 	{
 		FNiagaraVariable LookupVar = *MatchedVar;
 		TOptional<FNiagaraVariableMetaData> MetaData = FunctionScriptSource->NodeGraph->GetMetaData(LookupVar);
@@ -237,7 +237,7 @@ FToolResult ClaireonNiagaraTool_SetModuleInput::Execute(const TSharedPtr<FJsonOb
 		if (OverridePin.LinkedTo.Num() == 1)
 		{
 			UEdGraphNode* LinkedNode = OverridePin.LinkedTo[0]->GetOwningNode();
-			if (UNiagaraNodeInput* InputNode = Cast<UNiagaraNodeInput>(LinkedNode))
+			if (UNiagaraNodeInput* InputNode = Cast<UNiagaraNodeInput>(LinkedNode); IsValid(InputNode))
 			{
 				FProperty* DIProp = FindFProperty<FProperty>(UNiagaraNodeInput::StaticClass(), TEXT("DataInterface"));
 				if (DIProp)
@@ -272,7 +272,7 @@ FToolResult ClaireonNiagaraTool_SetModuleInput::Execute(const TSharedPtr<FJsonOb
 				}
 			}
 
-			if (UNiagaraDataInterfaceCurve* ExistingCurve = Cast<UNiagaraDataInterfaceCurve>(ExistingDI))
+			if (UNiagaraDataInterfaceCurve* ExistingCurve = Cast<UNiagaraDataInterfaceCurve>(ExistingDI); IsValid(ExistingCurve))
 			{
 				ExistingCurve->Modify();
 				ExistingCurve->Curve = NewCurve;
@@ -285,7 +285,7 @@ FToolResult ClaireonNiagaraTool_SetModuleInput::Execute(const TSharedPtr<FJsonOb
 				}
 				UNiagaraDataInterface* OutDI = nullptr;
 				FNiagaraStackGraphUtilities::SetDataInterfaceValueForFunctionInput(OverridePin, UNiagaraDataInterfaceCurve::StaticClass(), InputName, OutDI, ScriptVarId);
-				if (UNiagaraDataInterfaceCurve* TargetCurve = Cast<UNiagaraDataInterfaceCurve>(OutDI))
+				if (UNiagaraDataInterfaceCurve* TargetCurve = Cast<UNiagaraDataInterfaceCurve>(OutDI); IsValid(TargetCurve))
 				{
 					TargetCurve->Curve = NewCurve;
 				}
@@ -319,7 +319,7 @@ FToolResult ClaireonNiagaraTool_SetModuleInput::Execute(const TSharedPtr<FJsonOb
 				}
 			};
 
-			if (UNiagaraDataInterfaceColorCurve* ExistingColorCurve = Cast<UNiagaraDataInterfaceColorCurve>(ExistingDI))
+			if (UNiagaraDataInterfaceColorCurve* ExistingColorCurve = Cast<UNiagaraDataInterfaceColorCurve>(ExistingDI); IsValid(ExistingColorCurve))
 			{
 				ExistingColorCurve->Modify();
 				PopulateChannel(TEXT("r"), ExistingColorCurve->RedCurve);
@@ -335,7 +335,7 @@ FToolResult ClaireonNiagaraTool_SetModuleInput::Execute(const TSharedPtr<FJsonOb
 				}
 				UNiagaraDataInterface* OutDI = nullptr;
 				FNiagaraStackGraphUtilities::SetDataInterfaceValueForFunctionInput(OverridePin, UNiagaraDataInterfaceColorCurve::StaticClass(), InputName, OutDI, ScriptVarId);
-				if (UNiagaraDataInterfaceColorCurve* TargetColorCurve = Cast<UNiagaraDataInterfaceColorCurve>(OutDI))
+				if (UNiagaraDataInterfaceColorCurve* TargetColorCurve = Cast<UNiagaraDataInterfaceColorCurve>(OutDI); IsValid(TargetColorCurve))
 				{
 					PopulateChannel(TEXT("r"), TargetColorCurve->RedCurve);
 					PopulateChannel(TEXT("g"), TargetColorCurve->GreenCurve);
@@ -362,7 +362,7 @@ FToolResult ClaireonNiagaraTool_SetModuleInput::Execute(const TSharedPtr<FJsonOb
 	Pin.Modify();
 	Pin.DefaultValue = Value;
 
-	if (UNiagaraNode* OwningNode = Cast<UNiagaraNode>(Pin.GetOwningNode()))
+	if (UNiagaraNode* OwningNode = Cast<UNiagaraNode>(Pin.GetOwningNode()); IsValid(OwningNode))
 	{
 		OwningNode->MarkNodeRequiresSynchronization(TEXT("MCP set_module_input"), true);
 	}

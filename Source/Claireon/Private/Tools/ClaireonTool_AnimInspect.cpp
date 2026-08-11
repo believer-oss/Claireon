@@ -33,7 +33,7 @@ TSharedPtr<FJsonObject> ClaireonTool_AnimInspect::GetInputSchema() const
 	TSharedPtr<FJsonObject> AssetPathProp = MakeShared<FJsonObject>();
 	AssetPathProp->SetStringField(TEXT("type"), TEXT("string"));
 	AssetPathProp->SetStringField(TEXT("description"),
-		TEXT("Unreal asset path to the animation (e.g. /Game/Char/STELLA/Anim/AM_Combo)"));
+		TEXT("Unreal asset path to the animation (e.g. /Game/Characters/Hero/Anim/AM_Combo)"));
 	Properties->SetObjectField(TEXT("asset_path"), AssetPathProp);
 
 	// detail_level - optional
@@ -108,7 +108,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimInspect::Execute(const TSharedPtr<FJ
 	FString AssetType;
 	FString Error;
 	UAnimSequenceBase* Anim = ClaireonAnimHelpers::LoadAnimAsset(AssetPath, AssetType, Error);
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -157,7 +157,7 @@ IClaireonTool::FToolResult ClaireonTool_AnimInspect::Execute(const TSharedPtr<FJ
 
 	int32 SectionCount = 0;
 	int32 SlotCount = 0;
-	if (const UAnimMontage* Montage = Cast<UAnimMontage>(Anim))
+	if (const UAnimMontage* Montage = Cast<UAnimMontage>(Anim); IsValid(Montage))
 	{
 		SectionCount = Montage->CompositeSections.Num();
 		SlotCount = Montage->SlotAnimTracks.Num();
@@ -167,19 +167,19 @@ IClaireonTool::FToolResult ClaireonTool_AnimInspect::Execute(const TSharedPtr<FJ
 	bool bHasRootMotion = false;
 	bool bIsAdditive = false;
 	int32 ModifierCount = 0;
-	if (const UAnimSequence* AnimSeq = Cast<UAnimSequence>(Anim))
+	if (const UAnimSequence* AnimSeq = Cast<UAnimSequence>(Anim); IsValid(AnimSeq))
 	{
 		SyncMarkerCount = AnimSeq->AuthoredSyncMarkers.Num();
 		bHasRootMotion = AnimSeq->bEnableRootMotion;
 		bIsAdditive = (AnimSeq->AdditiveAnimType != AAT_None);
-		if (const UAnimationModifiersAssetUserData* ModUserData = const_cast<UAnimSequence*>(AnimSeq)->GetAssetUserData<UAnimationModifiersAssetUserData>())
+		if (const UAnimationModifiersAssetUserData* ModUserData = const_cast<UAnimSequence*>(AnimSeq)->GetAssetUserData<UAnimationModifiersAssetUserData>(); IsValid(ModUserData))
 		{
 			ModifierCount = ModUserData->GetAnimationModifierInstances().Num();
 		}
 	}
 
 	const int32 MetadataCount = Anim->GetMetaData().Num();
-	const FString SkeletonPath = Anim->GetSkeleton() ? Anim->GetSkeleton()->GetPathName() : TEXT("None");
+	const FString SkeletonPath = IsValid(Anim->GetSkeleton()) ? Anim->GetSkeleton()->GetPathName() : TEXT("None");
 
 	// 7. Build JSON response
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();

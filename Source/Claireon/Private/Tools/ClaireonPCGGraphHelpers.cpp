@@ -30,14 +30,14 @@ UPCGGraph* ClaireonPCGGraphHelpers::LoadPCGGraphAsset(const FString& AssetPath, 
 
 	FSoftObjectPath SoftPath(ResolvedPath);
 	UObject* LoadedObj = SoftPath.TryLoad();
-	if (!LoadedObj)
+	if (!IsValid(LoadedObj))
 	{
 		OutError = FString::Printf(TEXT("Failed to load asset at path: %s"), *ResolvedPath);
 		return nullptr;
 	}
 
 	UPCGGraph* Graph = Cast<UPCGGraph>(LoadedObj);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		OutError = FString::Printf(TEXT("Asset at %s is not a PCG Graph (actual type: %s)"), *ResolvedPath, *LoadedObj->GetClass()->GetName());
 		return nullptr;
@@ -52,7 +52,7 @@ UPCGGraph* ClaireonPCGGraphHelpers::LoadPCGGraphAsset(const FString& AssetPath, 
 
 UPCGNode* ClaireonPCGGraphHelpers::FindNodeByIdentifier(UPCGGraph* Graph, const FString& Identifier, int32& OutIndex)
 {
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		OutIndex = INDEX_NONE;
 		return nullptr;
@@ -75,7 +75,7 @@ UPCGNode* ClaireonPCGGraphHelpers::FindNodeByIdentifier(UPCGGraph* Graph, const 
 	if (Identifier.Equals(TEXT("input"), ESearchCase::IgnoreCase) || Identifier.Equals(TEXT("GraphInput"), ESearchCase::IgnoreCase))
 	{
 		UPCGNode* InputNode = Graph->GetInputNode();
-		if (InputNode)
+		if (IsValid(InputNode))
 		{
 			OutIndex = Nodes.IndexOfByKey(InputNode);
 			return InputNode;
@@ -84,7 +84,7 @@ UPCGNode* ClaireonPCGGraphHelpers::FindNodeByIdentifier(UPCGGraph* Graph, const 
 	if (Identifier.Equals(TEXT("output"), ESearchCase::IgnoreCase) || Identifier.Equals(TEXT("GraphOutput"), ESearchCase::IgnoreCase))
 	{
 		UPCGNode* OutputNode = Graph->GetOutputNode();
-		if (OutputNode)
+		if (IsValid(OutputNode))
 		{
 			OutIndex = Nodes.IndexOfByKey(OutputNode);
 			return OutputNode;
@@ -95,7 +95,7 @@ UPCGNode* ClaireonPCGGraphHelpers::FindNodeByIdentifier(UPCGGraph* Graph, const 
 	for (int32 i = 0; i < Nodes.Num(); ++i)
 	{
 		UPCGNode* Node = Nodes[i];
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			continue;
 		}
@@ -122,7 +122,7 @@ UPCGNode* ClaireonPCGGraphHelpers::FindNodeByIdentifier(UPCGGraph* Graph, const 
 
 FString ClaireonPCGGraphHelpers::GetNodeDisplayName(const UPCGNode* Node)
 {
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return TEXT("(null)");
 	}
@@ -133,7 +133,7 @@ FString ClaireonPCGGraphHelpers::GetNodeDisplayName(const UPCGNode* Node)
 	}
 
 	const UPCGSettings* Settings = Node->GetSettings();
-	if (Settings)
+	if (IsValid(Settings))
 	{
 		return GetSettingsShortName(Settings);
 	}
@@ -143,7 +143,7 @@ FString ClaireonPCGGraphHelpers::GetNodeDisplayName(const UPCGNode* Node)
 
 FString ClaireonPCGGraphHelpers::GetSettingsShortName(const UPCGSettings* Settings)
 {
-	if (!Settings)
+	if (!IsValid(Settings))
 	{
 		return TEXT("Unknown");
 	}
@@ -184,7 +184,7 @@ UClass* ClaireonPCGGraphHelpers::ResolveSettingsClass(const FString& ClassName, 
 	{
 		ClaireonNameResolver::FNameResolveResult NameResult;
 		UClass* FoundClass = ClaireonNameResolver::ResolveClassName(Candidate, UPCGSettings::StaticClass(), NameResult);
-		if (FoundClass)
+		if (IsValid(FoundClass))
 		{
 			return FoundClass;
 		}
@@ -200,7 +200,7 @@ UClass* ClaireonPCGGraphHelpers::ResolveSettingsClass(const FString& ClassName, 
 
 FString ClaireonPCGGraphHelpers::FormatGraphStructure(const UPCGGraph* Graph, const FString& DetailLevel)
 {
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return TEXT("(null graph)");
 	}
@@ -214,7 +214,7 @@ FString ClaireonPCGGraphHelpers::FormatGraphStructure(const UPCGGraph* Graph, co
 	Output += FString::Printf(TEXT("Nodes: %d\n\n"), Nodes.Num());
 
 	// Show input node
-	if (UPCGNode* InputNode = Graph->GetInputNode())
+	if (UPCGNode* InputNode = Graph->GetInputNode(); IsValid(InputNode))
 	{
 		Output += FormatNodeDetail(Graph, InputNode, INDEX_NONE, bFull);
 		Output += TEXT("\n");
@@ -224,7 +224,7 @@ FString ClaireonPCGGraphHelpers::FormatGraphStructure(const UPCGGraph* Graph, co
 	for (int32 i = 0; i < Nodes.Num(); ++i)
 	{
 		const UPCGNode* Node = Nodes[i];
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			continue;
 		}
@@ -247,7 +247,7 @@ FString ClaireonPCGGraphHelpers::FormatGraphStructure(const UPCGGraph* Graph, co
 	}
 
 	// Show output node
-	if (UPCGNode* OutputNode = Graph->GetOutputNode())
+	if (UPCGNode* OutputNode = Graph->GetOutputNode(); IsValid(OutputNode))
 	{
 		Output += FormatNodeDetail(Graph, OutputNode, INDEX_NONE, bFull);
 		Output += TEXT("\n");
@@ -258,7 +258,7 @@ FString ClaireonPCGGraphHelpers::FormatGraphStructure(const UPCGGraph* Graph, co
 
 FString ClaireonPCGGraphHelpers::FormatNodeDetail(const UPCGGraph* Graph, const UPCGNode* Node, int32 NodeIndex, bool bIncludeProperties)
 {
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return TEXT("(null node)\n");
 	}
@@ -266,8 +266,8 @@ FString ClaireonPCGGraphHelpers::FormatNodeDetail(const UPCGGraph* Graph, const 
 	FString Output;
 
 	// Node header
-	bool bIsInput = (Graph && Node == Graph->GetInputNode());
-	bool bIsOutput = (Graph && Node == Graph->GetOutputNode());
+	bool bIsInput = (IsValid(Graph) && Node == Graph->GetInputNode());
+	bool bIsOutput = (IsValid(Graph) && Node == Graph->GetOutputNode());
 
 	if (bIsInput)
 	{
@@ -287,7 +287,7 @@ FString ClaireonPCGGraphHelpers::FormatNodeDetail(const UPCGGraph* Graph, const 
 	}
 
 	const UPCGSettings* Settings = Node->GetSettings();
-	if (Settings && !bIsInput && !bIsOutput)
+	if (IsValid(Settings) && !bIsInput && !bIsOutput)
 	{
 		Output += FString::Printf(TEXT(" (%s)"), *Settings->GetClass()->GetName());
 	}
@@ -318,7 +318,7 @@ FString ClaireonPCGGraphHelpers::FormatNodeDetail(const UPCGGraph* Graph, const 
 	}
 
 	// Properties
-	if (bIncludeProperties && Settings)
+	if (bIncludeProperties && IsValid(Settings))
 	{
 		FString Props = ReadNodeProperties(Node);
 		if (!Props.IsEmpty())
@@ -339,7 +339,7 @@ FString ClaireonPCGGraphHelpers::FormatNodeDetail(const UPCGGraph* Graph, const 
 
 FString ClaireonPCGGraphHelpers::FormatPinConnections(const UPCGGraph* Graph, const UPCGPin* Pin)
 {
-	if (!Pin || !Pin->IsConnected())
+	if (!IsValid(Pin) || !Pin->IsConnected())
 	{
 		return TEXT("");
 	}
@@ -355,7 +355,7 @@ FString ClaireonPCGGraphHelpers::FormatPinConnections(const UPCGGraph* Graph, co
 		}
 
 		const UPCGPin* OtherPin = Edge->GetOtherPin(Pin);
-		if (!OtherPin || !OtherPin->Node)
+		if (!IsValid(OtherPin) || !OtherPin->Node)
 		{
 			continue;
 		}
@@ -363,18 +363,18 @@ FString ClaireonPCGGraphHelpers::FormatPinConnections(const UPCGGraph* Graph, co
 		const UPCGNode* OtherNode = OtherPin->Node;
 		FString OtherNodeName;
 
-		if (Graph && OtherNode == Graph->GetInputNode())
+		if (IsValid(Graph) && OtherNode == Graph->GetInputNode())
 		{
 			OtherNodeName = TEXT("GraphInput");
 		}
-		else if (Graph && OtherNode == Graph->GetOutputNode())
+		else if (IsValid(Graph) && OtherNode == Graph->GetOutputNode())
 		{
 			OtherNodeName = TEXT("GraphOutput");
 		}
 		else
 		{
 			int32 OtherIndex = INDEX_NONE;
-			if (Graph)
+			if (IsValid(Graph))
 			{
 				OtherIndex = Graph->GetNodes().IndexOfByKey(OtherNode);
 			}
@@ -407,13 +407,13 @@ FString ClaireonPCGGraphHelpers::FormatPinConnections(const UPCGGraph* Graph, co
 
 FString ClaireonPCGGraphHelpers::ReadNodeProperties(const UPCGNode* Node)
 {
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return TEXT("");
 	}
 
 	const UPCGSettings* Settings = Node->GetSettings();
-	if (!Settings)
+	if (!IsValid(Settings))
 	{
 		return TEXT("");
 	}
@@ -454,14 +454,14 @@ FString ClaireonPCGGraphHelpers::ReadNodeProperties(const UPCGNode* Node)
 
 bool ClaireonPCGGraphHelpers::SetNodeProperty(UPCGNode* Node, const FString& PropertyName, const FString& PropertyValue, FString& OutError)
 {
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		OutError = TEXT("Node is null");
 		return false;
 	}
 
 	UPCGSettings* Settings = Node->GetSettings();
-	if (!Settings)
+	if (!IsValid(Settings))
 	{
 		OutError = TEXT("Node has no settings object");
 		return false;
@@ -504,7 +504,7 @@ bool ClaireonPCGGraphHelpers::SetNodeProperty(UPCGNode* Node, const FString& Pro
 
 void ClaireonPCGGraphHelpers::NotifyGraphChanged(UPCGGraph* Graph)
 {
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return;
 	}
@@ -525,7 +525,7 @@ TArray<FString> ClaireonPCGGraphHelpers::GetAvailableSettingsClasses()
 
 	for (const UClass* Class : DerivedClasses)
 	{
-		if (!Class || Class->HasAnyClassFlags(CLASS_Abstract | CLASS_Deprecated))
+		if (!IsValid(Class) || Class->HasAnyClassFlags(CLASS_Abstract | CLASS_Deprecated))
 		{
 			continue;
 		}

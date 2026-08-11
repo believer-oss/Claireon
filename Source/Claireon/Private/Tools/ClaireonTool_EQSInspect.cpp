@@ -13,11 +13,11 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-namespace
+namespace ClaireonTool_EQSInspect_Private
 {
 	FString FormatContextClass(TSubclassOf<UEnvQueryContext> ContextClass)
 	{
-		if (!ContextClass)
+		if (!IsValid(ContextClass))
 		{
 			return TEXT("(none)");
 		}
@@ -28,7 +28,7 @@ namespace
 
 	FString FormatNodeProperties(const UObject* Node, const FString& Indent)
 	{
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			return FString();
 		}
@@ -76,7 +76,8 @@ namespace
 
 		return Output;
 	}
-} // anonymous namespace
+} // namespace ClaireonTool_EQSInspect_Private
+using namespace ClaireonTool_EQSInspect_Private;
 
 FString ClaireonTool_EQSInspect::GetCategory() const { return TEXT("eqs"); }
 FString ClaireonTool_EQSInspect::GetOperation() const { return TEXT("inspect"); }
@@ -86,7 +87,8 @@ FString ClaireonTool_EQSInspect::GetDescription() const
 	return TEXT("Read the structure of an Environment Query System (EQS) asset. "
 				"Displays all options (generators + tests), context class references, "
 				"scoring functions, and filter settings. Useful for identifying "
-				"blackboard-based vs Trajan-based context references.");
+				"blackboard-based vs game-specific context references. "
+				"Stateless / read-only / non-session: never mutates and requires no open session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_EQSInspect::GetInputSchema() const
@@ -140,7 +142,7 @@ IClaireonTool::FToolResult ClaireonTool_EQSInspect::Execute(const TSharedPtr<FJs
 
 	FString LoadError;
 	UEnvQuery* Query = ClaireonBehaviorTreeHelpers::LoadEQSAsset(AssetPath, LoadError);
-	if (!Query)
+	if (!IsValid(Query))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -153,7 +155,7 @@ IClaireonTool::FToolResult ClaireonTool_EQSInspect::Execute(const TSharedPtr<FJs
 	for (int32 OptionIdx = 0; OptionIdx < Options.Num(); ++OptionIdx)
 	{
 		const UEnvQueryOption* Option = Options[OptionIdx];
-		if (!Option)
+		if (!IsValid(Option))
 		{
 			continue;
 		}
@@ -180,7 +182,7 @@ IClaireonTool::FToolResult ClaireonTool_EQSInspect::Execute(const TSharedPtr<FJs
 		for (int32 TestIdx = 0; TestIdx < Option->Tests.Num(); ++TestIdx)
 		{
 			const UEnvQueryTest* Test = Option->Tests[TestIdx];
-			if (!Test)
+			if (!IsValid(Test))
 			{
 				continue;
 			}

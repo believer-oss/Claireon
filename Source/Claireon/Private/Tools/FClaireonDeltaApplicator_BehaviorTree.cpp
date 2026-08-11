@@ -33,16 +33,16 @@ namespace ClaireonDeltaApplicator_BehaviorTree_anon
 	{
 		OutMatchCount = 0;
 		UBehaviorTreeGraphNode* Found = nullptr;
-		if (!Graph) { return nullptr; }
+		if (!IsValid(Graph)) { return nullptr; }
 		for (UEdGraphNode* EdNode : Graph->Nodes)
 		{
 			UBehaviorTreeGraphNode* BTNode = Cast<UBehaviorTreeGraphNode>(EdNode);
-			if (!BTNode) { continue; }
+			if (!IsValid(BTNode)) { continue; }
 			const FString Title = BTNode->GetNodeTitle(ENodeTitleType::ListView).ToString();
 			if (Title.Equals(Name, ESearchCase::IgnoreCase))
 			{
 				++OutMatchCount;
-				if (!Found) { Found = BTNode; }
+				if (!IsValid(Found)) { Found = BTNode; }
 			}
 		}
 		return Found;
@@ -69,7 +69,7 @@ UBehaviorTreeGraphNode* FClaireonDeltaApplicator_BehaviorTree::ResolveNodeRef(
 	FGuid Guid;
 	if (FGuid::Parse(Resolved, Guid))
 	{
-		if (UBehaviorTreeGraphNode* Node = ClaireonBehaviorTreeHelpers::FindGraphNodeByGuid(Graph, Guid))
+		if (UBehaviorTreeGraphNode* Node = ClaireonBehaviorTreeHelpers::FindGraphNodeByGuid(Graph, Guid); IsValid(Node))
 		{
 			return Node;
 		}
@@ -84,7 +84,7 @@ UBehaviorTreeGraphNode* FClaireonDeltaApplicator_BehaviorTree::ResolveNodeRef(
 			*Ref, MatchCount);
 		return nullptr;
 	}
-	if (ByName) { return ByName; }
+	if (IsValid(ByName)) { return ByName; }
 
 	OutError = FString::Printf(TEXT("behaviortree_apply_delta: node reference '%s' not found"), *Ref);
 	return nullptr;
@@ -130,12 +130,12 @@ bool FClaireonDeltaApplicator_BehaviorTree::OpenOrReuseSession(const TSharedPtr<
 	}
 
 	UBehaviorTree* BT = ClaireonBehaviorTreeHelpers::LoadBehaviorTreeAsset(AssetPathArg, OutError);
-	if (!BT)
+	if (!IsValid(BT))
 	{
 		return false;
 	}
 	UBehaviorTreeGraph* Graph = ClaireonBehaviorTreeHelpers::GetBTGraph(BT, OutError);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return false;
 	}
@@ -176,7 +176,7 @@ bool FClaireonDeltaApplicator_BehaviorTree::ApplyPhase1_Disconnect(const FString
 	(void)SessionId;
 
 	UBehaviorTreeGraph* Graph = CachedGraph.Get();
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		AddError(TEXT("behaviortree_apply_delta: graph is no longer valid"));
 		return false;
@@ -202,7 +202,7 @@ bool FClaireonDeltaApplicator_BehaviorTree::ApplyPhase1_Disconnect(const FString
 
 		FString ResolveError;
 		UBehaviorTreeGraphNode* ChildNode = ResolveNodeRef(Graph, ChildRef, ResolveError);
-		if (!ChildNode)
+		if (!IsValid(ChildNode))
 		{
 			AddError(ResolveError);
 			return false;
@@ -210,7 +210,7 @@ bool FClaireonDeltaApplicator_BehaviorTree::ApplyPhase1_Disconnect(const FString
 
 		// Break only the link to ParentNode (selective disconnect).
 		UBehaviorTreeGraphNode* ParentNode = ResolveNodeRef(Graph, ParentRef, ResolveError);
-		if (!ParentNode)
+		if (!IsValid(ParentNode))
 		{
 			AddError(ResolveError);
 			return false;
@@ -245,7 +245,7 @@ bool FClaireonDeltaApplicator_BehaviorTree::ApplyPhase2_Remove(const FString& Se
 	(void)SessionId;
 
 	UBehaviorTreeGraph* Graph = CachedGraph.Get();
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		AddError(TEXT("behaviortree_apply_delta: graph is no longer valid"));
 		return false;
@@ -273,7 +273,7 @@ bool FClaireonDeltaApplicator_BehaviorTree::ApplyPhase2_Remove(const FString& Se
 
 		FString ResolveError;
 		UBehaviorTreeGraphNode* Node = ResolveNodeRef(Graph, Ref, ResolveError);
-		if (!Node)
+		if (!IsValid(Node))
 		{
 			AddError(ResolveError);
 			return false;
@@ -305,7 +305,7 @@ bool FClaireonDeltaApplicator_BehaviorTree::ApplyPhase3_Create(const FString& Se
 	(void)SessionId;
 
 	UBehaviorTreeGraph* Graph = CachedGraph.Get();
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		AddError(TEXT("behaviortree_apply_delta: graph is no longer valid"));
 		return false;
@@ -331,7 +331,7 @@ bool FClaireonDeltaApplicator_BehaviorTree::ApplyPhase3_Create(const FString& Se
 
 		ClaireonNameResolver::FNameResolveResult NameResult;
 		UClass* NodeClass = ClaireonNameResolver::ResolveClassName(ClassName, UBTNode::StaticClass(), NameResult);
-		if (!NodeClass)
+		if (!IsValid(NodeClass))
 		{
 			AddError(FString::Printf(TEXT("behaviortree_apply_delta: nodes[%d]: failed to resolve class '%s': %s"),
 				i, *ClassName, *NameResult.Error));
@@ -341,7 +341,7 @@ bool FClaireonDeltaApplicator_BehaviorTree::ApplyPhase3_Create(const FString& Se
 		FString CreateError;
 		UBehaviorTreeGraphNode* NewNode = ClaireonBehaviorTreeHelpers::CreateGraphNodeForClass(
 			Graph, NodeClass, FVector2D(i * 200.0, 0.0), CreateError);
-		if (!NewNode)
+		if (!IsValid(NewNode))
 		{
 			AddError(FString::Printf(TEXT("behaviortree_apply_delta: nodes[%d]: %s"), i, *CreateError));
 			return false;
@@ -363,7 +363,7 @@ bool FClaireonDeltaApplicator_BehaviorTree::ApplyPhase3_Create(const FString& Se
 		{
 			FString ResolveError;
 			UBehaviorTreeGraphNode* ParentNode = ResolveNodeRef(Graph, ParentRef, ResolveError);
-			if (ParentNode)
+			if (IsValid(ParentNode))
 			{
 				FString ConnError;
 				if (!ClaireonBehaviorTreeHelpers::ConnectNodes(ParentNode, NewNode, -1, ConnError))
@@ -382,7 +382,7 @@ bool FClaireonDeltaApplicator_BehaviorTree::ApplyPhase3_Create(const FString& Se
 		if (Obj->TryGetObjectField(TEXT("properties"), PropsPtr) && PropsPtr && PropsPtr->IsValid())
 		{
 			UBTNode* InstNode = Cast<UBTNode>(NewNode->NodeInstance);
-			if (InstNode)
+			if (IsValid(InstNode))
 			{
 				for (const auto& Prop : (*PropsPtr)->Values)
 				{
@@ -409,7 +409,7 @@ bool FClaireonDeltaApplicator_BehaviorTree::ApplyPhase4_Connect(const FString& S
 	(void)SessionId;
 
 	UBehaviorTreeGraph* Graph = CachedGraph.Get();
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		AddError(TEXT("behaviortree_apply_delta: graph is no longer valid"));
 		return false;
@@ -441,13 +441,13 @@ bool FClaireonDeltaApplicator_BehaviorTree::ApplyPhase4_Connect(const FString& S
 
 		FString ResolveError;
 		UBehaviorTreeGraphNode* ParentNode = ResolveNodeRef(Graph, ParentRef, ResolveError);
-		if (!ParentNode)
+		if (!IsValid(ParentNode))
 		{
 			AddError(ResolveError);
 			return false;
 		}
 		UBehaviorTreeGraphNode* ChildNode = ResolveNodeRef(Graph, ChildRef, ResolveError);
-		if (!ChildNode)
+		if (!IsValid(ChildNode))
 		{
 			AddError(ResolveError);
 			return false;
@@ -468,7 +468,7 @@ void FClaireonDeltaApplicator_BehaviorTree::FinalizeSession(const FString& Sessi
 {
 	(void)SessionId;
 	UBehaviorTreeGraph* Graph = CachedGraph.Get();
-	if (Graph)
+	if (IsValid(Graph))
 	{
 		Graph->UpdateAsset();
 	}
@@ -487,11 +487,11 @@ void FClaireonDeltaApplicator_BehaviorTree::Phase3CleanupOnFailure(const FString
 {
 	(void)SessionId;
 	UBehaviorTreeGraph* Graph = CachedGraph.Get();
-	if (!Graph) { return; }
+	if (!IsValid(Graph)) { return; }
 	for (const TWeakObjectPtr<UBehaviorTreeGraphNode>& Weak : CreatedNodesThisCall)
 	{
 		UBehaviorTreeGraphNode* Node = Weak.Get();
-		if (Node && IsValid(Node) && Graph->Nodes.Contains(Node))
+		if (IsValid(Node) && IsValid(Node) && Graph->Nodes.Contains(Node))
 		{
 			for (UEdGraphPin* Pin : Node->Pins)
 			{

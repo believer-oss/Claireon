@@ -8,3 +8,28 @@ UClaireonTestAsyncAction* UClaireonTestAsyncAction::ClaireonTestAsyncDelay(UObje
 {
 	return NewObject<UClaireonTestAsyncAction>();
 }
+
+UClaireonTestGameplayTask* UClaireonTestGameplayTask::ClaireonTestWaitForThing(
+	UObject* /*WorldContextObject*/, float /*Duration*/)
+{
+	return NewObject<UClaireonTestGameplayTask>();
+}
+
+UClaireonTestGameplayTask* UClaireonTestGameplayTask::ClaireonTestSpawnThing(
+	UObject* /*WorldContextObject*/, TSubclassOf<AActor> /*Class*/)
+{
+	return NewObject<UClaireonTestGameplayTask>();
+}
+
+// Non-trivial bodies on purpose: these exist so the override tools see a parent
+// implementation that an event override would shadow.
+void AClaireonNativeEventOverrideFixtureActor::ApplyNativeDefault_Implementation()
+{
+	NativeCounter += 1;
+	SetActorHiddenInGame(NativeCounter % 2 == 0);
+}
+
+int32 AClaireonNativeEventOverrideFixtureActor::ComputeNativeValue_Implementation()
+{
+	return NativeCounter * 7 + 1;
+}

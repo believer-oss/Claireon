@@ -31,16 +31,16 @@
 #include "K2Node_Knot.h"
 #include "EdGraphNode_Comment.h"
 
-// Ã¢Â”Â€Ã¢Â”Â€ Local Helpers Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€
+// -- Local Helpers -------------------------------------------------------
 
-namespace
+namespace ClaireonTool_BlueprintDiff_Private
 {
 
 /** Collect all graphs from a Blueprint into a name->graph map. */
 TMap<FString, UEdGraph*> CollectGraphs(const UBlueprint* Blueprint)
 {
 	TMap<FString, UEdGraph*> Result;
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return Result;
 	}
@@ -49,7 +49,7 @@ TMap<FString, UEdGraph*> CollectGraphs(const UBlueprint* Blueprint)
 	{
 		for (UEdGraph* Graph : Graphs)
 		{
-			if (Graph)
+			if (IsValid(Graph))
 			{
 				Result.Add(Graph->GetName(), Graph);
 			}
@@ -66,7 +66,7 @@ TMap<FString, UEdGraph*> CollectGraphs(const UBlueprint* Blueprint)
 /** Recursively build SCS hierarchy without UI widgets. */
 void BuildSCSHierarchyRecursive(USCS_Node* Node, TArray<int32>& TreeAddress, TArray<FSCSResolvedIdentifier>& Out)
 {
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return;
 	}
@@ -93,7 +93,7 @@ void BuildSCSHierarchyRecursive(USCS_Node* Node, TArray<int32>& TreeAddress, TAr
 TArray<FSCSResolvedIdentifier> BuildSCSHierarchy(const UBlueprint* Blueprint)
 {
 	TArray<FSCSResolvedIdentifier> Hierarchy;
-	if (!Blueprint || !Blueprint->SimpleConstructionScript)
+	if (!IsValid(Blueprint) || !Blueprint->SimpleConstructionScript)
 	{
 		return Hierarchy;
 	}
@@ -241,22 +241,22 @@ void BuildSpecNodeEntry(const TSharedPtr<FJsonObject>& NodeObj, FSpecNodeEntry& 
 /** Extract a signature entry from a live Blueprint graph node. */
 void BuildAssetNodeEntry(const UEdGraphNode* Node, FSpecNodeEntry& Out)
 {
-	if (!Node)
+	if (!IsValid(Node))
 	{
 		return;
 	}
 
-	if (const UK2Node_CallFunction* CallNode = Cast<UK2Node_CallFunction>(Node))
+	if (const UK2Node_CallFunction* CallNode = Cast<UK2Node_CallFunction>(Node); IsValid(CallNode))
 	{
 		Out.TypeTag = TEXT("CallFunction");
 		Out.Key = CallNode->FunctionReference.GetMemberName().ToString();
 	}
-	else if (const UK2Node_VariableGet* GetNode = Cast<UK2Node_VariableGet>(Node))
+	else if (const UK2Node_VariableGet* GetNode = Cast<UK2Node_VariableGet>(Node); IsValid(GetNode))
 	{
 		Out.TypeTag = TEXT("VariableGet");
 		Out.Key = GetNode->VariableReference.GetMemberName().ToString();
 	}
-	else if (const UK2Node_VariableSet* SetNode = Cast<UK2Node_VariableSet>(Node))
+	else if (const UK2Node_VariableSet* SetNode = Cast<UK2Node_VariableSet>(Node); IsValid(SetNode))
 	{
 		Out.TypeTag = TEXT("VariableSet");
 		Out.Key = SetNode->VariableReference.GetMemberName().ToString();
@@ -269,15 +269,15 @@ void BuildAssetNodeEntry(const UEdGraphNode* Node, FSpecNodeEntry& Out)
 	{
 		Out.TypeTag = TEXT("ExecutionSequence");
 	}
-	else if (const UK2Node_CustomEvent* EventNode = Cast<UK2Node_CustomEvent>(Node))
+	else if (const UK2Node_CustomEvent* EventNode = Cast<UK2Node_CustomEvent>(Node); IsValid(EventNode))
 	{
 		Out.TypeTag = TEXT("CustomEvent");
 		Out.Key = EventNode->CustomFunctionName.ToString();
 	}
-	else if (const UK2Node_DynamicCast* CastNode = Cast<UK2Node_DynamicCast>(Node))
+	else if (const UK2Node_DynamicCast* CastNode = Cast<UK2Node_DynamicCast>(Node); IsValid(CastNode))
 	{
 		Out.TypeTag = TEXT("DynamicCast");
-		Out.Key = CastNode->TargetType ? CastNode->TargetType->GetName() : FString();
+		Out.Key = IsValid(CastNode->TargetType) ? CastNode->TargetType->GetName() : FString();
 	}
 	else if (Node->IsA<UK2Node_Knot>())
 	{
@@ -411,11 +411,11 @@ FString ComputeSpecDiff(UBlueprint* Blueprint, const TSharedPtr<FJsonObject>& Sp
 	// --- Build asset node entries (from the target graph) ---
 	TArray<FSpecNodeEntry> AssetNodes;
 	TArray<UEdGraphNode*> AssetNodePtrs;
-	if (Graph)
+	if (IsValid(Graph))
 	{
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
-			if (!Node) continue;
+			if (!IsValid(Node)) continue;
 			FSpecNodeEntry Entry;
 			BuildAssetNodeEntry(Node, Entry);
 			AssetNodes.Add(MoveTemp(Entry));
@@ -524,7 +524,7 @@ FString ComputeSpecDiff(UBlueprint* Blueprint, const TSharedPtr<FJsonObject>& Sp
 	}
 
 	TArray<FSpecConnectionEntry> AssetConnections;
-	if (Graph)
+	if (IsValid(Graph))
 	{
 		TMap<UEdGraphNode*, FString> AssetNodeToSig;
 		for (int32 i = 0; i < AssetNodePtrs.Num(); ++i)
@@ -533,7 +533,7 @@ FString ComputeSpecDiff(UBlueprint* Blueprint, const TSharedPtr<FJsonObject>& Sp
 		}
 		for (UEdGraphNode* Node : AssetNodePtrs)
 		{
-			if (!Node) continue;
+			if (!IsValid(Node)) continue;
 			const FString* SrcSig = AssetNodeToSig.Find(Node);
 			if (!SrcSig) continue;
 			for (UEdGraphPin* Pin : Node->Pins)
@@ -541,7 +541,7 @@ FString ComputeSpecDiff(UBlueprint* Blueprint, const TSharedPtr<FJsonObject>& Sp
 				if (!Pin || Pin->Direction != EGPD_Output) continue;
 				for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
 				{
-					if (!LinkedPin || !LinkedPin->GetOwningNode()) continue;
+					if (!LinkedPin || !IsValid(LinkedPin->GetOwningNode())) continue;
 					const FString* TgtSig = AssetNodeToSig.Find(LinkedPin->GetOwningNode());
 					if (!TgtSig) continue;
 					FSpecConnectionEntry Conn;
@@ -646,9 +646,10 @@ FString ComputeSpecDiff(UBlueprint* Blueprint, const TSharedPtr<FJsonObject>& Sp
 	return Out;
 }
 
-} // anonymous namespace
+} // namespace ClaireonTool_BlueprintDiff_Private
+using namespace ClaireonTool_BlueprintDiff_Private;
 
-// Ã¢Â”Â€Ã¢Â”Â€ Tool Interface Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€Ã¢Â”Â€
+// -- Tool Interface ------------------------------------------------------
 
 FString ClaireonTool_BlueprintDiff::GetCategory() const { return kBPCategory; }
 FString ClaireonTool_BlueprintDiff::GetOperation() const { return TEXT("diff"); }
@@ -660,13 +661,10 @@ TArray<FString> ClaireonTool_BlueprintDiff::GetSearchKeywords() const
 
 FString ClaireonTool_BlueprintDiff::GetDescription() const
 {
-	return TEXT("Full Blueprint comparison: graphs, CDO properties, and SCS components. "
-		"Supports loading Blueprints from the current editor state or from git revisions. "
-		"Each side is an asset path with an optional git revision. "
-		"Use 'sections' to select which parts to compare (graphs, cdo, scs). "
-		"Use 'resolution' for output detail level: exists, summary, or detailed. "
-		"Supply 'spec_json' to run apply_spec-vs-asset diff mode (read-only; compares an "
-		"apply_spec payload against asset_path_a without mutating the Blueprint). Immediate-mode tool: no session required.");
+	return TEXT("Compare two Blueprints across graphs, CDO properties, and SCS components. Each side is an asset path "
+		"plus an optional git revision, so editor state and commits can be mixed. Scope output with 'sections' "
+		"(graphs, cdo, scs), 'resolution' (exists, summary, detailed), and 'property_filter'. Pass 'spec_json' to "
+		"diff an apply_spec payload against asset_path_a. Read-only / non-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_BlueprintDiff::GetInputSchema() const
@@ -703,7 +701,12 @@ TSharedPtr<FJsonObject> ClaireonTool_BlueprintDiff::GetInputSchema() const
 	// resolution (optional)
 	TSharedPtr<FJsonObject> ResProp = MakeShared<FJsonObject>();
 	ResProp->SetStringField(TEXT("type"), TEXT("string"));
-	ResProp->SetStringField(TEXT("description"), TEXT("Output detail level: 'exists', 'summary', 'detailed'. Default: summary."));
+	ResProp->SetStringField(TEXT("description"), TEXT(
+		"Output detail level. 'exists' and 'summary' return section counters plus a "
+		"'differs' bool; 'detailed' additionally returns per-graph breakdowns with "
+		"per-node change descriptions ('graphs' array), changed component names "
+		"('scs.changed_components'), and changed CDO field names ('cdo.changed_fields'). "
+		"Unknown values are an error. Default: summary."));
 	{
 		TArray<TSharedPtr<FJsonValue>> EnumValues;
 		EnumValues.Add(MakeShared<FJsonValueString>(TEXT("exists")));
@@ -716,7 +719,9 @@ TSharedPtr<FJsonObject> ClaireonTool_BlueprintDiff::GetInputSchema() const
 	// sections (optional)
 	TSharedPtr<FJsonObject> SectionsProp = MakeShared<FJsonObject>();
 	SectionsProp->SetStringField(TEXT("type"), TEXT("array"));
-	SectionsProp->SetStringField(TEXT("description"), TEXT("Which sections to include: 'graphs', 'cdo', 'scs'. Default: all three."));
+	SectionsProp->SetStringField(TEXT("description"), TEXT(
+		"Which sections to include: 'graphs', 'cdo', 'scs'. Unknown values and an "
+		"empty array are errors (they would silently diff nothing). Default: all three."));
 	{
 		TSharedPtr<FJsonObject> ItemSchema = MakeShared<FJsonObject>();
 		ItemSchema->SetStringField(TEXT("type"), TEXT("string"));
@@ -732,7 +737,11 @@ TSharedPtr<FJsonObject> ClaireonTool_BlueprintDiff::GetInputSchema() const
 	// property_filter (optional)
 	TSharedPtr<FJsonObject> FilterProp = MakeShared<FJsonObject>();
 	FilterProp->SetStringField(TEXT("type"), TEXT("array"));
-	FilterProp->SetStringField(TEXT("description"), TEXT("Optional list of property names to filter CDO/SCS diffs."));
+	FilterProp->SetStringField(TEXT("description"), TEXT(
+		"Optional list of names restricting the 'cdo' section (CDO property names) and "
+		"the 'scs' section (component variable names). Case-insensitive exact match. "
+		"Errors if provided when neither 'cdo' nor 'scs' is among the diffed sections. "
+		"Not applied to graph diffs."));
 	{
 		TSharedPtr<FJsonObject> ItemSchema = MakeShared<FJsonObject>();
 		ItemSchema->SetStringField(TEXT("type"), TEXT("string"));
@@ -789,7 +798,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintDiff::Execute(const TSharedPtr<
 		}
 
 		UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *PathA);
-		if (!Blueprint)
+		if (!IsValid(Blueprint))
 		{
 			return MakeErrorResult(FString::Printf(
 				TEXT("Blueprint not found at path: %s"), *PathA));
@@ -839,23 +848,67 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintDiff::Execute(const TSharedPtr<
 		return MakeErrorResult(ResError);
 	}
 
-	// Section filter
+	// Section filter. Unknown or empty selections are hard errors: silently
+	// diffing nothing would produce a false "no differences" verdict.
 	bool bDiffGraphs = true;
 	bool bDiffCDO = true;
 	bool bDiffSCS = true;
-	const TArray<TSharedPtr<FJsonValue>>* SectionsArray = nullptr;
-	if (Arguments->TryGetArrayField(TEXT("sections"), SectionsArray) && SectionsArray)
+	bool bSectionsExplicit = false;
+	if (Arguments->HasField(TEXT("sections")))
 	{
+		const TArray<TSharedPtr<FJsonValue>>* SectionsArray = nullptr;
+		if (!Arguments->TryGetArrayField(TEXT("sections"), SectionsArray) || !SectionsArray)
+		{
+			return MakeErrorResult(TEXT("'sections' must be an array of strings. Valid sections: 'graphs', 'cdo', 'scs'."));
+		}
+		if (SectionsArray->Num() == 0)
+		{
+			return MakeErrorResult(TEXT("'sections' is empty: nothing would be diffed. Specify at least one of 'graphs', 'cdo', 'scs', or omit the field to diff all three."));
+		}
+		bSectionsExplicit = true;
 		bDiffGraphs = bDiffCDO = bDiffSCS = false;
 		for (const TSharedPtr<FJsonValue>& Val : *SectionsArray)
 		{
 			FString Sec;
-			if (Val->TryGetString(Sec))
+			if (!Val.IsValid() || !Val->TryGetString(Sec))
 			{
-				if (Sec == TEXT("graphs")) bDiffGraphs = true;
-				else if (Sec == TEXT("cdo")) bDiffCDO = true;
-				else if (Sec == TEXT("scs")) bDiffSCS = true;
+				return MakeErrorResult(TEXT("'sections' entries must be strings. Valid sections: 'graphs', 'cdo', 'scs'."));
 			}
+			if (Sec == TEXT("graphs")) bDiffGraphs = true;
+			else if (Sec == TEXT("cdo")) bDiffCDO = true;
+			else if (Sec == TEXT("scs")) bDiffSCS = true;
+			else
+			{
+				return MakeErrorResult(FString::Printf(
+					TEXT("Unknown section '%s'. Valid sections: 'graphs', 'cdo', 'scs'."), *Sec));
+			}
+		}
+	}
+
+	// property_filter restricts the cdo (property names) and scs (component
+	// variable names) sections. Names are matched case-insensitively. It is an
+	// error to supply it when neither filterable section is selected -- the
+	// parameter would otherwise be silently dead.
+	TSet<FString> PropertyFilter;
+	if (Arguments->HasField(TEXT("property_filter")))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* FilterArray = nullptr;
+		if (!Arguments->TryGetArrayField(TEXT("property_filter"), FilterArray) || !FilterArray)
+		{
+			return MakeErrorResult(TEXT("'property_filter' must be an array of property/component name strings."));
+		}
+		for (const TSharedPtr<FJsonValue>& Val : *FilterArray)
+		{
+			FString FilterName;
+			if (!Val.IsValid() || !Val->TryGetString(FilterName) || FilterName.IsEmpty())
+			{
+				return MakeErrorResult(TEXT("'property_filter' entries must be non-empty strings."));
+			}
+			PropertyFilter.Add(FilterName.ToLower());
+		}
+		if (PropertyFilter.Num() > 0 && !bDiffCDO && !bDiffSCS)
+		{
+			return MakeErrorResult(TEXT("'property_filter' only applies to the 'cdo' and 'scs' sections, but neither is selected in 'sections'."));
 		}
 	}
 
@@ -878,7 +931,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintDiff::Execute(const TSharedPtr<
 	const UBlueprint* BPA = Cast<UBlueprint>(SideA.Object);
 	const UBlueprint* BPB = Cast<UBlueprint>(SideB.Object);
 
-	if (!BPA || !BPB)
+	if (!IsValid(BPA) || !IsValid(BPB))
 	{
 		return MakeErrorResult(TEXT("One or both assets are not Blueprints"));
 	}
@@ -887,6 +940,17 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintDiff::Execute(const TSharedPtr<
 	int32 NodesRemoved = 0;
 	int32 NodesChanged = 0;
 	int32 ConnectionsChanged = 0;
+	int32 GraphsAdded = 0;
+	int32 GraphsRemoved = 0;
+	int32 SCSComponentsAdded = 0;
+	int32 SCSComponentsRemoved = 0;
+	int32 SCSComponentsChanged = 0;
+	int32 CDOFieldsChanged = 0;
+	bool bCDOAvailable = true;
+
+	const bool bDetailed = (Resolution == ClaireonDiffHelpers::EDiffResolution::Detailed);
+	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+	Data->SetStringField(TEXT("path"), PathA);
 
 	// Graph diff
 	if (bDiffGraphs)
@@ -894,12 +958,26 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintDiff::Execute(const TSharedPtr<
 		TMap<FString, UEdGraph*> GraphsA = CollectGraphs(BPA);
 		TMap<FString, UEdGraph*> GraphsB = CollectGraphs(BPB);
 
+		TArray<TSharedPtr<FJsonValue>> PerGraphArray;
+
 		for (const auto& PairA : GraphsA)
 		{
 			UEdGraph** GraphBPtr = GraphsB.Find(PairA.Key);
 			if (!GraphBPtr)
 			{
-				NodesRemoved++;
+				// A graph missing on side B removes every node it contained, so
+				// the counters agree with the equivalent in-place node deletions.
+				const int32 RemovedNodeCount = PairA.Value ? PairA.Value->Nodes.Num() : 0;
+				NodesRemoved += RemovedNodeCount;
+				GraphsRemoved++;
+				if (bDetailed)
+				{
+					TSharedPtr<FJsonObject> GraphEntry = MakeShared<FJsonObject>();
+					GraphEntry->SetStringField(TEXT("graph"), PairA.Key);
+					GraphEntry->SetStringField(TEXT("status"), TEXT("removed"));
+					GraphEntry->SetNumberField(TEXT("node_count"), RemovedNodeCount);
+					PerGraphArray.Add(MakeShared<FJsonValueObject>(GraphEntry));
+				}
 				continue;
 			}
 
@@ -907,37 +985,262 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintDiff::Execute(const TSharedPtr<
 			TArray<FDiffSingleResult> DiffResults;
 			FGraphDiffControl::DiffGraphs(PairA.Value, *GraphBPtr, DiffResults);
 
+			int32 GraphAdded = 0, GraphRemoved = 0, GraphChanged = 0, GraphConnections = 0;
 			for (const FDiffSingleResult& Diff : DiffResults)
 			{
 				switch (Diff.Category)
 				{
-				case EDiffType::ADDITION:    NodesAdded++; break;
-				case EDiffType::SUBTRACTION: NodesRemoved++; break;
-				case EDiffType::MODIFICATION: NodesChanged++; break;
-				default: ConnectionsChanged++; break;
+				case EDiffType::ADDITION:    GraphAdded++; break;
+				case EDiffType::SUBTRACTION: GraphRemoved++; break;
+				case EDiffType::MODIFICATION: GraphChanged++; break;
+				default: GraphConnections++; break;
 				}
+			}
+			NodesAdded += GraphAdded;
+			NodesRemoved += GraphRemoved;
+			NodesChanged += GraphChanged;
+			ConnectionsChanged += GraphConnections;
+
+			if (bDetailed && (GraphAdded || GraphRemoved || GraphChanged || GraphConnections))
+			{
+				TSharedPtr<FJsonObject> GraphEntry = MakeShared<FJsonObject>();
+				GraphEntry->SetStringField(TEXT("graph"), PairA.Key);
+				GraphEntry->SetNumberField(TEXT("nodes_added"), GraphAdded);
+				GraphEntry->SetNumberField(TEXT("nodes_removed"), GraphRemoved);
+				GraphEntry->SetNumberField(TEXT("nodes_changed"), GraphChanged);
+				GraphEntry->SetNumberField(TEXT("connections_changed"), GraphConnections);
+
+				// Per-node change list: one entry per underlying diff result.
+				TArray<TSharedPtr<FJsonValue>> ChangeList;
+				for (const FDiffSingleResult& Diff : DiffResults)
+				{
+					TSharedPtr<FJsonObject> ChangeObj = MakeShared<FJsonObject>();
+					ChangeObj->SetStringField(TEXT("category"), FormatEDiffCategory(Diff.Category));
+					ChangeObj->SetStringField(TEXT("description"), Diff.DisplayString.ToString());
+					if (IsValid(Diff.Node1))
+					{
+						ChangeObj->SetStringField(TEXT("node_guid"),
+							Diff.Node1->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+					}
+					ChangeList.Add(MakeShared<FJsonValueObject>(ChangeObj));
+				}
+				GraphEntry->SetArrayField(TEXT("changes"), ChangeList);
+				PerGraphArray.Add(MakeShared<FJsonValueObject>(GraphEntry));
 			}
 		}
 
-		// Count graphs only in B (added)
+		// Count graphs only in B (added). A whole-graph addition adds every node
+		// the graph contains, so counts agree with the equivalent in-place edits.
 		for (const auto& PairB : GraphsB)
 		{
 			if (!GraphsA.Contains(PairB.Key))
 			{
-				NodesAdded++;
+				const int32 AddedNodeCount = PairB.Value ? PairB.Value->Nodes.Num() : 0;
+				NodesAdded += AddedNodeCount;
+				GraphsAdded++;
+				if (bDetailed)
+				{
+					TSharedPtr<FJsonObject> GraphEntry = MakeShared<FJsonObject>();
+					GraphEntry->SetStringField(TEXT("graph"), PairB.Key);
+					GraphEntry->SetStringField(TEXT("status"), TEXT("added"));
+					GraphEntry->SetNumberField(TEXT("node_count"), AddedNodeCount);
+					PerGraphArray.Add(MakeShared<FJsonValueObject>(GraphEntry));
+				}
 			}
+		}
+
+		if (bDetailed)
+		{
+			Data->SetArrayField(TEXT("graphs"), PerGraphArray);
 		}
 	}
 
-	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
-	Data->SetStringField(TEXT("path"), PathA);
+	// SCS diff: compare declared component hierarchies by variable name.
+	if (bDiffSCS)
+	{
+		struct FSCSEntry { FString ClassName; FString ParentName; };
+		auto CollectSCS = [](const UBlueprint* BP) -> TMap<FString, FSCSEntry>
+		{
+			TMap<FString, FSCSEntry> Result;
+			if (!BP->SimpleConstructionScript)
+			{
+				return Result;
+			}
+			for (USCS_Node* Node : BP->SimpleConstructionScript->GetAllNodes())
+			{
+				if (!IsValid(Node)) continue;
+				FSCSEntry Entry;
+				Entry.ClassName = Node->ComponentClass ? Node->ComponentClass->GetName() : FString();
+				for (USCS_Node* Candidate : BP->SimpleConstructionScript->GetAllNodes())
+				{
+					if (IsValid(Candidate) && Candidate->GetChildNodes().Contains(Node))
+					{
+						Entry.ParentName = Candidate->GetVariableName().ToString();
+						break;
+					}
+				}
+				Result.Add(Node->GetVariableName().ToString(), Entry);
+			}
+			return Result;
+		};
+
+		const TMap<FString, FSCSEntry> ComponentsA = CollectSCS(BPA);
+		const TMap<FString, FSCSEntry> ComponentsB = CollectSCS(BPB);
+
+		TArray<TSharedPtr<FJsonValue>> ChangedList;
+		for (const auto& PairA : ComponentsA)
+		{
+			if (PropertyFilter.Num() > 0 && !PropertyFilter.Contains(PairA.Key.ToLower()))
+			{
+				continue;
+			}
+			const FSCSEntry* EntryB = ComponentsB.Find(PairA.Key);
+			if (!EntryB)
+			{
+				SCSComponentsRemoved++;
+				if (bDetailed) ChangedList.Add(MakeShared<FJsonValueString>(PairA.Key + TEXT(" (removed)")));
+			}
+			else if (EntryB->ClassName != PairA.Value.ClassName || EntryB->ParentName != PairA.Value.ParentName)
+			{
+				SCSComponentsChanged++;
+				if (bDetailed) ChangedList.Add(MakeShared<FJsonValueString>(PairA.Key + TEXT(" (changed)")));
+			}
+		}
+		for (const auto& PairB : ComponentsB)
+		{
+			if (PropertyFilter.Num() > 0 && !PropertyFilter.Contains(PairB.Key.ToLower()))
+			{
+				continue;
+			}
+			if (!ComponentsA.Contains(PairB.Key))
+			{
+				SCSComponentsAdded++;
+				if (bDetailed) ChangedList.Add(MakeShared<FJsonValueString>(PairB.Key + TEXT(" (added)")));
+			}
+		}
+
+		TSharedPtr<FJsonObject> SCSObj = MakeShared<FJsonObject>();
+		SCSObj->SetNumberField(TEXT("components_added"), SCSComponentsAdded);
+		SCSObj->SetNumberField(TEXT("components_removed"), SCSComponentsRemoved);
+		SCSObj->SetNumberField(TEXT("components_changed"), SCSComponentsChanged);
+		if (bDetailed)
+		{
+			SCSObj->SetArrayField(TEXT("changed_components"), ChangedList);
+		}
+		Data->SetObjectField(TEXT("scs"), SCSObj);
+	}
+
+	// CDO diff: compare same-named property values (text export form) between the
+	// two default objects. Properties present on only one side count as changed.
+	if (bDiffCDO)
+	{
+		TArray<TSharedPtr<FJsonValue>> ChangedFields;
+
+		UObject* CdoA = IsValid((BPA->GeneratedClass)) ? BPA->GeneratedClass->GetDefaultObject() : nullptr;
+		UObject* CdoB = IsValid((BPB->GeneratedClass)) ? BPB->GeneratedClass->GetDefaultObject() : nullptr;
+		if (!IsValid(CdoA) || !IsValid(CdoB))
+		{
+			// Fail loudly: a CDO diff that could not run must never read as
+			// "0 fields changed".
+			const FString CdoUnavailable = FString::Printf(
+				TEXT("cdo diff requested but side %s has no compiled GeneratedClass default object (compile the Blueprint first)."),
+				!IsValid(CdoA) ? TEXT("A") : TEXT("B"));
+			if (bSectionsExplicit)
+			{
+				return MakeErrorResult(CdoUnavailable);
+			}
+			bCDOAvailable = false;
+			TSharedPtr<FJsonObject> CDOObj = MakeShared<FJsonObject>();
+			CDOObj->SetBoolField(TEXT("available"), false);
+			CDOObj->SetStringField(TEXT("reason"), CdoUnavailable);
+			Data->SetObjectField(TEXT("cdo"), CDOObj);
+		}
+		else
+		{
+			for (TFieldIterator<FProperty> PropIt(CdoA->GetClass()); PropIt; ++PropIt)
+			{
+				FProperty* PropA = *PropIt;
+				if (!PropA || PropA->HasAnyPropertyFlags(CPF_Transient | CPF_DuplicateTransient | CPF_NonPIEDuplicateTransient))
+				{
+					continue;
+				}
+				if (PropertyFilter.Num() > 0 && !PropertyFilter.Contains(PropA->GetName().ToLower()))
+				{
+					continue;
+				}
+				FProperty* PropB = CdoB->GetClass()->FindPropertyByName(PropA->GetFName());
+				if (!PropB || PropB->GetClass() != PropA->GetClass())
+				{
+					CDOFieldsChanged++;
+					if (bDetailed) ChangedFields.Add(MakeShared<FJsonValueString>(PropA->GetName() + TEXT(" (missing or retyped)")));
+					continue;
+				}
+				FString ValueA, ValueB;
+				PropA->ExportTextItem_Direct(ValueA, PropA->ContainerPtrToValuePtr<void>(CdoA), nullptr, CdoA, PPF_None);
+				PropB->ExportTextItem_Direct(ValueB, PropB->ContainerPtrToValuePtr<void>(CdoB), nullptr, CdoB, PPF_None);
+				if (ValueA != ValueB)
+				{
+					CDOFieldsChanged++;
+					if (bDetailed) ChangedFields.Add(MakeShared<FJsonValueString>(PropA->GetName()));
+				}
+			}
+
+			TSharedPtr<FJsonObject> CDOObj = MakeShared<FJsonObject>();
+			CDOObj->SetBoolField(TEXT("available"), true);
+			CDOObj->SetNumberField(TEXT("fields_changed"), CDOFieldsChanged);
+			if (bDetailed)
+			{
+				CDOObj->SetArrayField(TEXT("changed_fields"), ChangedFields);
+			}
+			Data->SetObjectField(TEXT("cdo"), CDOObj);
+		}
+	}
+
 	Data->SetNumberField(TEXT("nodes_added"), NodesAdded);
 	Data->SetNumberField(TEXT("nodes_removed"), NodesRemoved);
 	Data->SetNumberField(TEXT("nodes_changed"), NodesChanged);
 	Data->SetNumberField(TEXT("connections_changed"), ConnectionsChanged);
+	if (bDiffGraphs)
+	{
+		Data->SetNumberField(TEXT("graphs_added"), GraphsAdded);
+		Data->SetNumberField(TEXT("graphs_removed"), GraphsRemoved);
+	}
 
-	const FString Summary = FString::Printf(TEXT("BP diff: %d nodes added, %d removed, %d changed"),
-		NodesAdded, NodesRemoved, NodesChanged);
+	// Convenience verdict across every section that actually ran. Note: when a
+	// property_filter is set this only reflects the filtered scope.
+	const bool bDiffers =
+		(NodesAdded + NodesRemoved + NodesChanged + ConnectionsChanged +
+		 GraphsAdded + GraphsRemoved +
+		 SCSComponentsAdded + SCSComponentsRemoved + SCSComponentsChanged +
+		 CDOFieldsChanged) > 0;
+	Data->SetBoolField(TEXT("differs"), bDiffers);
+
+	// Summary reflects only the sections that were diffed so a cdo/scs-only run
+	// never claims "0 nodes" as the whole verdict.
+	TArray<FString> SummaryParts;
+	if (bDiffGraphs)
+	{
+		FString GraphsPart = FString::Printf(TEXT("%d nodes added, %d removed, %d changed"),
+			NodesAdded, NodesRemoved, NodesChanged);
+		if (GraphsAdded > 0 || GraphsRemoved > 0)
+		{
+			GraphsPart += FString::Printf(TEXT(" (%d graphs added, %d graphs removed)"),
+				GraphsAdded, GraphsRemoved);
+		}
+		SummaryParts.Add(GraphsPart);
+	}
+	if (bDiffSCS)
+	{
+		SummaryParts.Add(FString::Printf(TEXT("scs: %d components added, %d removed, %d changed"),
+			SCSComponentsAdded, SCSComponentsRemoved, SCSComponentsChanged));
+	}
+	if (bDiffCDO)
+	{
+		SummaryParts.Add(bCDOAvailable
+			? FString::Printf(TEXT("cdo: %d fields changed"), CDOFieldsChanged)
+			: FString(TEXT("cdo: unavailable (no compiled CDO)")));
+	}
+	const FString Summary = FString::Printf(TEXT("BP diff: %s"), *FString::Join(SummaryParts, TEXT("; ")));
 
 	return MakeSuccessResult(Data, Summary);
 }

@@ -32,7 +32,7 @@ namespace ClaireonDeltaApplicator_Material_anon
 		if (const FString* Found = IdMap.Find(Ref)) { Resolved = *Found; }
 		int32 Index = INDEX_NONE;
 		UMaterialExpression* Expr = ClaireonMaterialHelpers::FindExpressionByIdentifier(Material, Resolved, Index);
-		if (!Expr)
+		if (!IsValid(Expr))
 		{
 			OutError = FString::Printf(TEXT("expression not found: '%s' (resolved: '%s')"), *Ref, *Resolved);
 			return nullptr;
@@ -75,7 +75,7 @@ bool FClaireonDeltaApplicator_Material::OpenOrReuseSession(const TSharedPtr<FJso
 	}
 
 	UMaterial* Material = ClaireonMaterialHelpers::LoadMaterialAsset(AssetPathArg, OutError);
-	if (!Material) { return false; }
+	if (!IsValid(Material)) { return false; }
 
 	ClaireonMaterialEditToolBase::EnsureDelegateRegistered();
 
@@ -110,7 +110,7 @@ bool FClaireonDeltaApplicator_Material::ApplyPhase1_Disconnect(const FString& Se
 	using namespace ClaireonDeltaApplicator_Material_anon;
 	(void)SessionId;
 	UMaterial* Mat = CachedMaterial.Get();
-	if (!Mat)
+	if (!IsValid(Mat))
 	{
 		AddError(TEXT("material_apply_delta: material is no longer valid"));
 		return false;
@@ -135,7 +135,7 @@ bool FClaireonDeltaApplicator_Material::ApplyPhase1_Disconnect(const FString& Se
 		}
 		FString ResolveErr;
 		UMaterialExpression* ToExpr = MatDelta_ResolveExpr(Mat, ToRef, GetIdMap(), ResolveErr);
-		if (!ToExpr)
+		if (!IsValid(ToExpr))
 		{
 			AddError(FString::Printf(TEXT("material_apply_delta: disconnect[%d]: %s"), i, *ResolveErr));
 			return false;
@@ -157,7 +157,7 @@ bool FClaireonDeltaApplicator_Material::ApplyPhase2_Remove(const FString& Sessio
 	using namespace ClaireonDeltaApplicator_Material_anon;
 	(void)SessionId;
 	UMaterial* Mat = CachedMaterial.Get();
-	if (!Mat)
+	if (!IsValid(Mat))
 	{
 		AddError(TEXT("material_apply_delta: material is no longer valid"));
 		return false;
@@ -187,7 +187,7 @@ bool FClaireonDeltaApplicator_Material::ApplyPhase2_Remove(const FString& Sessio
 		}
 		FString ResolveErr;
 		UMaterialExpression* Expr = MatDelta_ResolveExpr(Mat, Ref, GetIdMap(), ResolveErr);
-		if (!Expr)
+		if (!IsValid(Expr))
 		{
 			AddError(FString::Printf(TEXT("material_apply_delta: remove_nodes[%d]: %s"), i, *ResolveErr));
 			return false;
@@ -204,7 +204,7 @@ bool FClaireonDeltaApplicator_Material::ApplyPhase3_Create(const FString& Sessio
 	using namespace ClaireonDeltaApplicator_Material_anon;
 	(void)SessionId;
 	UMaterial* Mat = CachedMaterial.Get();
-	if (!Mat)
+	if (!IsValid(Mat))
 	{
 		AddError(TEXT("material_apply_delta: material is no longer valid"));
 		return false;
@@ -230,7 +230,7 @@ bool FClaireonDeltaApplicator_Material::ApplyPhase3_Create(const FString& Sessio
 
 		FString ResolveErr;
 		UClass* ExprClass = ClaireonMaterialHelpers::ResolveExpressionClass(ClassStr, ResolveErr);
-		if (!ExprClass)
+		if (!IsValid(ExprClass))
 		{
 			AddError(FString::Printf(TEXT("material_apply_delta: nodes[%d]: %s"), i, *ResolveErr));
 			return false;
@@ -243,7 +243,7 @@ bool FClaireonDeltaApplicator_Material::ApplyPhase3_Create(const FString& Sessio
 
 		UMaterialExpression* Expr = UMaterialEditingLibrary::CreateMaterialExpression(
 			Mat, ExprClass, static_cast<int32>(X), static_cast<int32>(Y));
-		if (!Expr)
+		if (!IsValid(Expr))
 		{
 			AddError(FString::Printf(TEXT("material_apply_delta: nodes[%d]: CreateMaterialExpression returned null for class '%s'"),
 				i, *ClassStr));
@@ -286,7 +286,7 @@ bool FClaireonDeltaApplicator_Material::ApplyPhase4_Connect(const FString& Sessi
 	using namespace ClaireonDeltaApplicator_Material_anon;
 	(void)SessionId;
 	UMaterial* Mat = CachedMaterial.Get();
-	if (!Mat)
+	if (!IsValid(Mat))
 	{
 		AddError(TEXT("material_apply_delta: material is no longer valid"));
 		return false;
@@ -310,7 +310,7 @@ bool FClaireonDeltaApplicator_Material::ApplyPhase4_Connect(const FString& Sessi
 		}
 		FString FromErr;
 		UMaterialExpression* FromExpr = MatDelta_ResolveExpr(Mat, FromRef, GetIdMap(), FromErr);
-		if (!FromExpr)
+		if (!IsValid(FromExpr))
 		{
 			AddError(FString::Printf(TEXT("material_apply_delta: connections[%d]: %s"), i, *FromErr));
 			return false;
@@ -344,7 +344,7 @@ bool FClaireonDeltaApplicator_Material::ApplyPhase4_Connect(const FString& Sessi
 		}
 		FString ToErr;
 		UMaterialExpression* ToExpr = MatDelta_ResolveExpr(Mat, ToRef, GetIdMap(), ToErr);
-		if (!ToExpr)
+		if (!IsValid(ToExpr))
 		{
 			AddError(FString::Printf(TEXT("material_apply_delta: connections[%d]: %s"), i, *ToErr));
 			return false;
@@ -365,7 +365,7 @@ void FClaireonDeltaApplicator_Material::FinalizeSession(const FString& SessionId
 {
 	(void)SessionId;
 	UMaterial* Mat = CachedMaterial.Get();
-	if (Mat) { Mat->MarkPackageDirty(); }
+	if (IsValid(Mat)) { Mat->MarkPackageDirty(); }
 }
 
 void FClaireonDeltaApplicator_Material::CloseSessionIfOwned(const FString& SessionId)
@@ -381,11 +381,11 @@ void FClaireonDeltaApplicator_Material::Phase3CleanupOnFailure(const FString& Se
 {
 	(void)SessionId;
 	UMaterial* Mat = CachedMaterial.Get();
-	if (!Mat) { return; }
+	if (!IsValid(Mat)) { return; }
 	for (const TWeakObjectPtr<UMaterialExpression>& Weak : CreatedExpressionsThisCall)
 	{
 		UMaterialExpression* Expr = Weak.Get();
-		if (Expr)
+		if (IsValid(Expr))
 		{
 			UMaterialEditingLibrary::DeleteMaterialExpression(Mat, Expr);
 		}

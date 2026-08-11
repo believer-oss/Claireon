@@ -18,11 +18,11 @@ FString ClaireonTool_MaterialRenameParameter::GetDescription() const
 	// matches old_name (case-insensitive), and rewrites it. The change is applied
 	// inside a transaction; the material is recompiled by the caller (or via a
 	// follow-up material_compile call).
-	return TEXT("Rename a parameter expression on a UMaterial. Walks expressions, "
-				"finds the one whose ParameterName matches `old_name` (case-insensitive), "
-				"and rewrites it to `new_name`. Wraps the change in an Undo transaction "
-				"and marks the package dirty. Caller should follow up with material_compile + "
-				"asset save. Refuses to run while PIE is active.");
+	return TEXT("Rename a parameter expression on a UMaterial. Finds the expression whose ParameterName "
+				"matches `old_name` (case-insensitive) and rewrites it to `new_name`, inside an Undo "
+				"transaction, and marks the package dirty; follow up with material_compile plus an asset "
+				"save. Refuses to run during PIE. Stateless / non-session: writes the asset at asset_path "
+				"directly, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_MaterialRenameParameter::GetInputSchema() const
@@ -78,7 +78,7 @@ IClaireonTool::FToolResult ClaireonTool_MaterialRenameParameter::Execute(const T
 
 	FString LoadError;
 	UMaterial* Material = ClaireonMaterialHelpers::LoadMaterialAsset(AssetPath, LoadError);
-	if (!Material)
+	if (!IsValid(Material))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -91,7 +91,7 @@ IClaireonTool::FToolResult ClaireonTool_MaterialRenameParameter::Execute(const T
 	for (int32 i = 0; i < Expressions.Num(); ++i)
 	{
 		UMaterialExpression* Expr = Expressions[i];
-		if (!Expr || !Expr->HasAParameterName())
+		if (!IsValid(Expr) || !Expr->HasAParameterName())
 		{
 			continue;
 		}
@@ -103,7 +103,7 @@ IClaireonTool::FToolResult ClaireonTool_MaterialRenameParameter::Execute(const T
 		}
 	}
 
-	if (!Hit)
+	if (!IsValid(Hit))
 	{
 		Transaction.Cancel();
 		return MakeErrorResult(FString::Printf(

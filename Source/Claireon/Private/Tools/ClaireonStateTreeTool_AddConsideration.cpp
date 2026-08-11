@@ -41,7 +41,7 @@ FToolResult ClaireonStateTreeTool_AddConsideration::Execute(const TSharedPtr<FJs
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	FGuid StateId;
@@ -53,11 +53,11 @@ FToolResult ClaireonStateTreeTool_AddConsideration::Execute(const TSharedPtr<FJs
 		return MakeErrorResult(TEXT("Missing parameter: node_type"));
 
 	UStateTreeState* State = ClaireonStateTreeHelpers::FindStateById(EditorData, StateId);
-	if (!State)
+	if (!IsValid(State))
 		return MakeErrorResult(TEXT("State not found"));
 
 	UScriptStruct* NodeStruct = ClaireonStateTreeHelpers::ResolveNodeStruct(NodeType, Error);
-	if (!NodeStruct)
+	if (!IsValid(NodeStruct))
 		return MakeErrorResult(Error);
 
 	FStateTreeEditorNode NewNode;

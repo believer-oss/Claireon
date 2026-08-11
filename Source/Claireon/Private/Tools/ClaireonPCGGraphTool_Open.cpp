@@ -54,7 +54,7 @@ FToolResult ClaireonPCGGraphTool_Open::Execute(const TSharedPtr<FJsonObject>& Ar
 
 	FString Error;
 	UPCGGraph* Graph = ClaireonPCGGraphHelpers::LoadPCGGraphAsset(AssetPath, Error);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(Error);
 	}

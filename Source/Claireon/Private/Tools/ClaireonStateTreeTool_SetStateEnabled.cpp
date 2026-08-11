@@ -39,7 +39,7 @@ FToolResult ClaireonStateTreeTool_SetStateEnabled::Execute(const TSharedPtr<FJso
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	FGuid StateId;
@@ -50,7 +50,7 @@ FToolResult ClaireonStateTreeTool_SetStateEnabled::Execute(const TSharedPtr<FJso
 	Arguments->TryGetBoolField(TEXT("enabled"), bEnabled);
 
 	UStateTreeState* State = ClaireonStateTreeHelpers::FindStateById(EditorData, StateId);
-	if (!State)
+	if (!IsValid(State))
 		return MakeErrorResult(TEXT("State not found"));
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Set State Enabled")));

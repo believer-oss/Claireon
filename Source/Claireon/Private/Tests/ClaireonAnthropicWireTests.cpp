@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 #if WITH_UNTESTED
 
@@ -96,7 +96,7 @@ UNTEST_UNIT_OPTS(Claireon, AnthropicWire, GenericSpillRendersPathAndPreview, UNT
 	FScopedTestRoot Scope(TEXT("GenericSpillRendersPathAndPreview"));
 
 	const UClaireonSettings* S = UClaireonSettings::Get();
-	const int32 Threshold = S ? S->ResultSpillThresholdBytes : 8192;
+	const int32 Threshold = IsValid(S) ? S->ResultSpillThresholdBytes : 8192;
 
 	IClaireonTool::FToolResult R = MakeGenericDataResult(Threshold * 2);
 	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
@@ -131,7 +131,7 @@ UNTEST_UNIT_OPTS(Claireon, AnthropicWire, PythonStdoutOnlySpillXml, UNTEST_TIMEO
 	FScopedTestRoot Scope(TEXT("PythonStdoutOnlySpillXml"));
 
 	const UClaireonSettings* S = UClaireonSettings::Get();
-	const int32 Threshold = S ? S->ResultSpillThresholdBytes : 8192;
+	const int32 Threshold = IsValid(S) ? S->ResultSpillThresholdBytes : 8192;
 
 	const FString Big = FString::ChrN(Threshold * 2, TEXT('s'));
 	const FString SmallUELog = TEXT("small uelog line");
@@ -168,7 +168,7 @@ UNTEST_UNIT_OPTS(Claireon, AnthropicWire, PythonBothStreamsSpillXml, UNTEST_TIME
 	FScopedTestRoot Scope(TEXT("PythonBothStreamsSpillXml"));
 
 	const UClaireonSettings* S = UClaireonSettings::Get();
-	const int32 Threshold = S ? S->ResultSpillThresholdBytes : 8192;
+	const int32 Threshold = IsValid(S) ? S->ResultSpillThresholdBytes : 8192;
 
 	const FString BigStdout = FString::ChrN(Threshold * 2, TEXT('s'));
 	const FString BigUELog  = FString::ChrN(Threshold * 2, TEXT('u'));
@@ -224,7 +224,7 @@ UNTEST_UNIT_OPTS(Claireon, AnthropicWire, TruncatedDiagnosticsBodyContainsPath, 
 	FScopedTestRoot Scope(TEXT("TruncatedDiagnosticsBodyContainsPath"));
 
 	const UClaireonSettings* S = UClaireonSettings::Get();
-	const int32 Threshold = S ? S->ResultSpillThresholdBytes : 8192;
+	const int32 Threshold = IsValid(S) ? S->ResultSpillThresholdBytes : 8192;
 
 	IClaireonTool::FToolResult R = MakeGenericDataResult(Threshold * 2);
 	IClaireonTool::FToolResult Routed = FClaireonOutputGate::RouteResult(
@@ -281,7 +281,10 @@ namespace ClaireonAnthropicWireHintTestHelpers_Wave001
 	}
 }
 
-UNTEST_UNIT(Claireon, AnthropicWire, HintFieldAbsentWhenNull)
+// Budget: the bare UNTEST_UNIT default is 0.50ms (FUntestUnitFixture::DefaultTimeoutMs),
+// which is not a deliberate perf assertion. Too tight now that the tool registry is
+// populated process-wide and this test does real work -- do not restore the default.
+UNTEST_UNIT_OPTS(Claireon, AnthropicWire, HintFieldAbsentWhenNull, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonAnthropicWireHintTestHelpers_Wave001;
 
@@ -304,7 +307,7 @@ UNTEST_UNIT(Claireon, AnthropicWire, HintFieldAbsentWhenNull)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, AnthropicWire, HintFieldPresentOnSuccessWhenPopulated)
+UNTEST_UNIT_OPTS(Claireon, AnthropicWire, HintFieldPresentOnSuccessWhenPopulated, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonAnthropicWireHintTestHelpers_Wave001;
 
@@ -342,7 +345,7 @@ UNTEST_UNIT(Claireon, AnthropicWire, HintFieldPresentOnSuccessWhenPopulated)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, AnthropicWire, HintFieldPresentOnErrorWhenPopulated)
+UNTEST_UNIT_OPTS(Claireon, AnthropicWire, HintFieldPresentOnErrorWhenPopulated, UNTEST_TIMEOUTMS(10000))
 {
 	using namespace ClaireonAnthropicWireHintTestHelpers_Wave001;
 
@@ -389,7 +392,7 @@ UNTEST_UNIT(Claireon, AnthropicWire, HintFieldPresentOnErrorWhenPopulated)
 // (BuildResultEnvelope only serves the Python-side claireon.* envelope).
 // ===========================================================================
 
-UNTEST_UNIT(Claireon, AnthropicWire, HintRenderedInExecuteResultXml)
+UNTEST_UNIT_OPTS(Claireon, AnthropicWire, HintRenderedInExecuteResultXml, UNTEST_TIMEOUTMS(10000))
 {
 	IClaireonTool::FToolResult Result;
 	Result.Summary = TEXT("ok");
@@ -411,7 +414,7 @@ UNTEST_UNIT(Claireon, AnthropicWire, HintRenderedInExecuteResultXml)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, AnthropicWire, HintRenderedInErrorXmlAndAbsentWhenNull)
+UNTEST_UNIT_OPTS(Claireon, AnthropicWire, HintRenderedInErrorXmlAndAbsentWhenNull, UNTEST_TIMEOUTMS(10000))
 {
 	// Error path carries the hint too.
 	IClaireonTool::FToolResult ErrResult;

@@ -77,7 +77,7 @@ bool FClaireonSpecApplicator_Niagara::OpenOrCreateAsset(const FString& AssetPath
 	const FString ResolvedPath = ResolveResult.ResolvedPath.Path;
 
 	UNiagaraSystem* NS = ClaireonNiagaraHelpers::LoadNiagaraSystemAsset(ResolvedPath, OutError);
-	if (!NS)
+	if (!IsValid(NS))
 	{
 		return false;
 	}
@@ -107,7 +107,7 @@ bool FClaireonSpecApplicator_Niagara::OpenOrCreateAsset(const FString& AssetPath
 bool FClaireonSpecApplicator_Niagara::ApplyPass1_CreateEntities(const FString& SessionId, const TSharedPtr<FJsonObject>& Spec)
 {
 	UNiagaraSystem* NS = System.Get();
-	if (!NS)
+	if (!IsValid(NS))
 	{
 		AddError(TEXT("NiagaraSystem is no longer valid"));
 		return false;
@@ -205,7 +205,7 @@ bool FClaireonSpecApplicator_Niagara::ApplyPass1_CreateEntities(const FString& S
 bool FClaireonSpecApplicator_Niagara::ApplyPass2_WireRelationships(const FString& SessionId, const TSharedPtr<FJsonObject>& Spec)
 {
 	UNiagaraSystem* NS = System.Get();
-	if (!NS)
+	if (!IsValid(NS))
 	{
 		AddError(TEXT("NiagaraSystem is no longer valid"));
 		return false;
@@ -225,7 +225,7 @@ bool FClaireonSpecApplicator_Niagara::ApplyPass2_WireRelationships(const FString
 bool FClaireonSpecApplicator_Niagara::CompileAsset(const FString& SessionId, FString& OutError)
 {
 	UNiagaraSystem* NS = System.Get();
-	if (!NS)
+	if (!IsValid(NS))
 	{
 		OutError = TEXT("NiagaraSystem is no longer valid");
 		return false;
@@ -238,7 +238,7 @@ bool FClaireonSpecApplicator_Niagara::CompileAsset(const FString& SessionId, FSt
 bool FClaireonSpecApplicator_Niagara::SaveAsset(const FString& SessionId, FString& OutError)
 {
 	UNiagaraSystem* NS = System.Get();
-	if (!NS)
+	if (!IsValid(NS))
 	{
 		OutError = TEXT("NiagaraSystem is no longer valid");
 		return false;

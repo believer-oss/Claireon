@@ -12,7 +12,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-namespace
+namespace ClaireonAttenuationTool_SetProperty_Private
 {
 	// discriminator-prefixed file-local helper to avoid unity collisions with similarly-named
 	// helpers across cohort files (e.g. ClaireonConcurrencyTool_SetProperty.cpp uses the same shape).
@@ -35,6 +35,7 @@ namespace
 		return FString();
 	}
 }
+using namespace ClaireonAttenuationTool_SetProperty_Private;
 
 FString FClaireonAttenuationTool_SetProperty::GetCategory() const { return TEXT("attenuation"); }
 FString FClaireonAttenuationTool_SetProperty::GetOperation() const { return TEXT("set_property"); }
@@ -72,15 +73,9 @@ IClaireonTool::FToolResult FClaireonAttenuationTool_SetProperty::Execute(const T
 	FString PropertyPath;
 	if (!Arguments->TryGetStringField(TEXT("property_path"), PropertyPath) || PropertyPath.IsEmpty())
 	{
-		// Backward-compat: also accept field_name (matches bundled tool param shape).
-		FString FieldName;
-		if (!Arguments->TryGetStringField(TEXT("field_name"), FieldName) || FieldName.IsEmpty())
-		{
-			return MakeErrorResult(TEXT("Missing required parameter: property_path"));
-		}
-		PropertyPath = FString::Printf(TEXT("Attenuation.%s"), *FieldName);
+		return MakeErrorResult(TEXT("Missing required parameter: property_path"));
 	}
-	else if (!PropertyPath.StartsWith(TEXT("Attenuation.")))
+	if (!PropertyPath.StartsWith(TEXT("Attenuation.")))
 	{
 		PropertyPath = FString::Printf(TEXT("Attenuation.%s"), *PropertyPath);
 	}
@@ -95,12 +90,12 @@ IClaireonTool::FToolResult FClaireonAttenuationTool_SetProperty::Execute(const T
 	FString Error;
 	EClaireonAudioAssetKind Kind = EClaireonAudioAssetKind::Unknown;
 	UObject* Loaded = ClaireonAudioHelpers::LoadAudioAsset(AssetPath, Kind, Error);
-	if (!Loaded)
+	if (!IsValid(Loaded))
 	{
 		return MakeErrorResult(Error);
 	}
 	USoundAttenuation* Att = Cast<USoundAttenuation>(Loaded);
-	if (!Att || Kind != EClaireonAudioAssetKind::Attenuation)
+	if (!IsValid(Att) || Kind != EClaireonAudioAssetKind::Attenuation)
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset is not a SoundAttenuation: %s"), *AssetPath));
 	}

@@ -16,7 +16,9 @@ FString FClaireonCameraAssetTool_Duplicate::GetOperation() const { return TEXT("
 
 FString FClaireonCameraAssetTool_Duplicate::GetDescription() const
 {
-	return TEXT("Duplicate an existing UCameraAsset to a new /Game/ path. Errors if source missing or destination exists.");
+	return TEXT("Duplicate the UCameraAsset at source_path to dest_path, erroring if the source is missing or the "
+		"destination already exists. Non-session: both assets are addressed by path and there is no "
+		"camera_asset_open -- persist the copy with camera_asset_save.");
 }
 
 TSharedPtr<FJsonObject> FClaireonCameraAssetTool_Duplicate::GetInputSchema() const
@@ -66,7 +68,7 @@ IClaireonTool::FToolResult FClaireonCameraAssetTool_Duplicate::Execute(const TSh
 	}
 
 	UObject* Dup = UEditorAssetLibrary::DuplicateAsset(CanonSrc, CanonDest);
-	if (!Dup)
+	if (!IsValid(Dup))
 	{
 		return MakeErrorResult(TEXT("UEditorAssetLibrary::DuplicateAsset returned null"));
 	}

@@ -52,7 +52,7 @@ FToolResult ClaireonWidgetBPTool_RemoveAnimationTrack::Execute(const TSharedPtr<
         return BeginError;
     }
     UWidgetBlueprint* WBP = Data ? Data->WidgetBlueprint.Get() : nullptr;
-    if (!WBP)
+    if (!IsValid(WBP))
     {
         return MakeErrorResult(TEXT("widget blueprint unavailable on session"));
     }
@@ -72,7 +72,7 @@ FToolResult ClaireonWidgetBPTool_RemoveAnimationTrack::Execute(const TSharedPtr<
     }
 
     UWidgetAnimation* Anim = Claireon::WidgetAnimation::FindWidgetAnimationByName(WBP, AnimationName);
-    if (!Anim)
+    if (!IsValid(Anim))
     {
         return MakeErrorResult(FString::Printf(TEXT("animation '%s' not found on %s"), *AnimationName, *WBP->GetName()));
     }

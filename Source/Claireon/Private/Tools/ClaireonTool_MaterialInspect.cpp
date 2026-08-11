@@ -23,7 +23,8 @@ FString ClaireonTool_MaterialInspect::GetDescription() const
 				"Displays shading model, blend mode, material domain, usage flags, "
 				"parameter table, expression list, and material attribute connections. "
 				"Use detail='summary' for a compact overview or detail='full' to also "
-				"include the per-expression dump with positions and connections.");
+				"include the per-expression dump with positions and connections. "
+				"Stateless / read-only / non-session: never mutates and requires no open session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_MaterialInspect::GetInputSchema() const
@@ -91,7 +92,7 @@ FToolResult ClaireonTool_MaterialInspect::Execute(const TSharedPtr<FJsonObject>&
 
 	FString LoadError;
 	UMaterial* Material = ClaireonMaterialHelpers::LoadMaterialAsset(AssetPath, LoadError);
-	if (!Material)
+	if (!IsValid(Material))
 	{
 		return MakeErrorResult(LoadError);
 	}

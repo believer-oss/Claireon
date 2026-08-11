@@ -34,7 +34,7 @@ static int32 PruneOrphanReroutesInGraph(UBlueprint* Blueprint, UEdGraph* Graph)
 	TArray<UK2Node_Knot*> AllKnots;
 	for (UEdGraphNode* Node : Graph->Nodes)
 	{
-		if (UK2Node_Knot* Knot = Cast<UK2Node_Knot>(Node))
+		if (UK2Node_Knot* Knot = Cast<UK2Node_Knot>(Node); IsValid(Knot))
 		{
 			AllKnots.Add(Knot);
 		}
@@ -60,8 +60,8 @@ static int32 PruneOrphanReroutesInGraph(UBlueprint* Blueprint, UEdGraph* Graph)
 			if (!Pin) continue;
 			for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
 			{
-				if (!LinkedPin || !LinkedPin->GetOwningNode()) continue;
-				if (UK2Node_Knot* LinkedKnot = Cast<UK2Node_Knot>(LinkedPin->GetOwningNode()))
+				if (!LinkedPin || !IsValid(LinkedPin->GetOwningNode())) continue;
+				if (UK2Node_Knot* LinkedKnot = Cast<UK2Node_Knot>(LinkedPin->GetOwningNode()); IsValid(LinkedKnot))
 				{
 					KnotNeighbors[Knot].AddUnique(LinkedKnot);
 				}
@@ -189,7 +189,7 @@ FToolResult ClaireonBlueprintGraphTool_PruneReroutes::Execute(const TSharedPtr<F
 
 		UBlueprint* Blueprint = Data->Blueprint.Get();
 		UEdGraph* Graph = Data->Graph.Get();
-		if (!Blueprint || !Graph)
+		if (!IsValid(Blueprint) || !IsValid(Graph))
 		{
 			return MakeErrorResult(TEXT("Blueprint or Graph is no longer valid"));
 		}
@@ -218,13 +218,13 @@ FToolResult ClaireonBlueprintGraphTool_PruneReroutes::Execute(const TSharedPtr<F
 	}
 
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to load Blueprint: %s"), *AssetPath));
 	}
 
 	UEdGraph* Graph = ClaireonBlueprintHelpers::FindGraphByName(Blueprint, GraphName);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Graph '%s' not found in %s"), *GraphName, *AssetPath));
 	}

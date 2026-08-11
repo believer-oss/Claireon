@@ -48,7 +48,7 @@ FToolResult ClaireonEQSTool_CreateNew::Execute(const TSharedPtr<FJsonObject>& Ar
 
 	// Check that asset does not already exist
 	FSoftObjectPath SoftPath(AssetPath);
-	if (SoftPath.TryLoad())
+	if (IsValid(SoftPath.TryLoad()))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset already exists at path: %s. Use 'open' instead."), *AssetPath));
 	}
@@ -60,13 +60,13 @@ FToolResult ClaireonEQSTool_CreateNew::Execute(const TSharedPtr<FJsonObject>& Ar
 	FString AssetName = FPackageName::GetShortName(PackagePath);
 
 	UPackage* Package = CreatePackage(*PackagePath);
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to create package: %s"), *PackagePath));
 	}
 
 	UEnvQuery* Query = NewObject<UEnvQuery>(Package, *AssetName, RF_Public | RF_Standalone);
-	if (!Query)
+	if (!IsValid(Query))
 	{
 		return MakeErrorResult(TEXT("Failed to create EQS Query"));
 	}
@@ -93,6 +93,21 @@ FToolResult ClaireonEQSTool_CreateNew::Execute(const TSharedPtr<FJsonObject>& Ar
 	{
 		const FMCPSession& Blocker = OpenResult.BlockingSession.GetValue();
 		return MakeErrorResult(FString::Printf(TEXT("Asset is locked by %s session %s"), *Blocker.ToolName, *Blocker.SessionId));
+	}
+	// Defect guard: this used to handle only BlockedByOtherTool. On
+	// InvalidAssetPath (OpenSession's CanonicalizePath rejected the path, e.g. a
+	// path outside /Game/) SessionId is empty, and falling through returned a
+	// SUCCESS response carrying an empty session_id -- an unusable handle with no
+	// error. Every non-success result must produce an error here.
+	if (OpenResult.Result == EOpenSessionResult::InvalidAssetPath)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Invalid asset path: %s"), *ResolvedAssetPath));
+	}
+	if (OpenResult.Result != EOpenSessionResult::Success && OpenResult.Result != EOpenSessionResult::ReusedExistingSession)
+	{
+		return MakeErrorResult(FString::Printf(
+			TEXT("Failed to open a session for %s (unexpected OpenSession result %d)"),
+			*ResolvedAssetPath, static_cast<int32>(OpenResult.Result)));
 	}
 	const FString SessionId = OpenResult.SessionId;
 

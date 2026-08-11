@@ -64,7 +64,7 @@ IClaireonTool::FToolResult ClaireonTool_MaterialListExpressions::Execute(const T
 
 	FString LoadError;
 	UMaterial* Material = ClaireonMaterialHelpers::LoadMaterialAsset(AssetPath, LoadError);
-	if (!Material)
+	if (!IsValid(Material))
 	{
 		return MakeErrorResult(LoadError);
 	}
@@ -74,7 +74,7 @@ IClaireonTool::FToolResult ClaireonTool_MaterialListExpressions::Execute(const T
 	for (int32 i = 0; i < Expressions.Num(); ++i)
 	{
 		UMaterialExpression* Expr = Expressions[i];
-		if (!Expr)
+		if (!IsValid(Expr))
 		{
 			continue;
 		}

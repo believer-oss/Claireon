@@ -8,18 +8,19 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-namespace
+namespace ClaireonMaterialTool_SetShadingModel_Private
 {
 	static bool ParseShadingModel_SetShadingModel(const FString& Str, EMaterialShadingModel& OutModel)
 	{
 		const UEnum* Enum = StaticEnum<EMaterialShadingModel>();
-		if (!Enum) return false;
+		if (!IsValid(Enum)) return false;
 		const int64 Val = Enum->GetValueByNameString(Str);
 		if (Val == INDEX_NONE) return false;
 		OutModel = static_cast<EMaterialShadingModel>(Val);
 		return true;
 	}
 }
+using namespace ClaireonMaterialTool_SetShadingModel_Private;
 
 FString ClaireonMaterialTool_SetShadingModel::GetOperation() const { return TEXT("set_shading_model"); }
 

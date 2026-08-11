@@ -53,19 +53,19 @@ IClaireonTool::FToolResult FClaireonSoundMixTool_AddClassAdjuster::Execute(const
 	FString Error;
 	EClaireonAudioAssetKind Kind = EClaireonAudioAssetKind::Unknown;
 	UObject* Loaded = ClaireonAudioHelpers::LoadAudioAsset(AssetPath, Kind, Error);
-	if (!Loaded)
+	if (!IsValid(Loaded))
 	{
 		return MakeErrorResult(Error);
 	}
 	USoundMix* Mix = Cast<USoundMix>(Loaded);
-	if (!Mix || Kind != EClaireonAudioAssetKind::SoundMix)
+	if (!IsValid(Mix) || Kind != EClaireonAudioAssetKind::SoundMix)
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset is not a SoundMix: %s"), *AssetPath));
 	}
 
 	const ClaireonPathResolver::FResolveResult Resolved = ClaireonPathResolver::Resolve(TargetPath);
 	USoundClass* Target = Resolved.bSuccess ? LoadObject<USoundClass>(nullptr, *Resolved.ResolvedPath.Path) : nullptr;
-	if (!Target)
+	if (!IsValid(Target))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Could not load SoundClass at %s"), *TargetPath));
 	}

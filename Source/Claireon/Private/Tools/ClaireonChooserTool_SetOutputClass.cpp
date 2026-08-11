@@ -40,7 +40,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserSetOutputClass::Execute(const TSh
 
 	FString Error;
 	UChooserTable* Chooser = ClaireonChooserHelpers::LoadChooserTableAsset(AssetPath, Error);
-	if (!Chooser)
+	if (!IsValid(Chooser))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -49,8 +49,8 @@ IClaireonTool::FToolResult ClaireonTool_ChooserSetOutputClass::Execute(const TSh
 	Chooser->Modify();
 
 	UClass* OutputClass = FindObject<UClass>(nullptr, *OutputClassStr);
-	if (!OutputClass) OutputClass = LoadObject<UClass>(nullptr, *OutputClassStr);
-	if (!OutputClass)
+	if (!IsValid(OutputClass)) OutputClass = LoadObject<UClass>(nullptr, *OutputClassStr);
+	if (!IsValid(OutputClass))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Could not find class: %s"), *OutputClassStr));
 	}

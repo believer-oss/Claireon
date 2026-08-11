@@ -9,7 +9,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-namespace
+namespace ClaireonSkeletonTools_Metadata_Private
 {
 	TSharedPtr<FJsonObject> BuildMetadataSnapshot(const USkeleton* Skeleton, const FString& LastOperation)
 	{
@@ -19,6 +19,7 @@ namespace
 		return Out;
 	}
 }
+using namespace ClaireonSkeletonTools_Metadata_Private;
 
 // ============================================================================
 // Animation notify names
@@ -30,8 +31,9 @@ FString ClaireonSkeletonTool_AddAnimationNotify::GetOperation() const { return T
 
 FString ClaireonSkeletonTool_AddAnimationNotify::GetDescription() const
 {
-	return TEXT("Add a skeleton-level animation notify name (editor-only cache). "
-				"Once registered, any animation using this skeleton can place a skeleton-style notify with this name.");
+	return TEXT("Add a skeleton-level animation notify name to the skeleton's editor-only notify cache. Once registered, any animation using this skeleton can place "
+				"a skeleton-style notify with that name. Takes skeleton_path and notify_name. Stateless / non-session: writes the skeleton directly by path in one "
+				"transaction, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_AddAnimationNotify::GetInputSchema() const
@@ -47,7 +49,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_AddAnimationNotify::Execute(cons
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString NotifyNameStr;
 	if (!Arguments->TryGetStringField(TEXT("notify_name"), NotifyNameStr) || NotifyNameStr.IsEmpty())
@@ -74,7 +76,9 @@ FString ClaireonSkeletonTool_RemoveAnimationNotify::GetOperation() const { retur
 
 FString ClaireonSkeletonTool_RemoveAnimationNotify::GetDescription() const
 {
-    return TEXT("Remove a skeleton-level animation notify name from the cache in the open session. Session-mode tool: open via skeleton_open first.");
+	return TEXT("Remove a skeleton-level animation notify name from the skeleton's editor-only notify cache by notify_name; fails if that name is not "
+				"registered on the skeleton. Stateless / non-session: writes the skeleton directly by skeleton_path in one transaction, no open session "
+				"required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RemoveAnimationNotify::GetInputSchema() const
@@ -90,7 +94,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RemoveAnimationNotify::Execute(c
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString NotifyNameStr;
 	if (!Arguments->TryGetStringField(TEXT("notify_name"), NotifyNameStr) || NotifyNameStr.IsEmpty())
@@ -121,7 +125,9 @@ FString ClaireonSkeletonTool_RenameAnimationNotify::GetOperation() const { retur
 
 FString ClaireonSkeletonTool_RenameAnimationNotify::GetDescription() const
 {
-    return TEXT("Rename a skeleton-level animation notify name in the open session. Session-mode tool: open via skeleton_open first.");
+	return TEXT("Rename a skeleton-level animation notify name in the skeleton's editor-only notify cache from old_name to new_name; fails if old_name is "
+				"not registered on the skeleton. Stateless / non-session: writes the skeleton directly by skeleton_path in one transaction, no open "
+				"session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RenameAnimationNotify::GetInputSchema() const
@@ -138,7 +144,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RenameAnimationNotify::Execute(c
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString OldStr, NewStr;
 	if (!Arguments->TryGetStringField(TEXT("old_name"), OldStr) || OldStr.IsEmpty())
@@ -176,8 +182,9 @@ FString ClaireonSkeletonTool_AddCurveMetadata::GetOperation() const { return TEX
 
 FString ClaireonSkeletonTool_AddCurveMetadata::GetDescription() const
 {
-	return TEXT("Add a curve metadata entry on the skeleton. Creates an entry with default flags (not material, not morph target, no linked bones, MaxLOD=0xff). "
-				"Use skeleton_set_curve_metadata_flags to configure it after creation.");
+	return TEXT("Add a curve metadata entry to a skeleton by curve_name, created with default flags (not material, not morph target, no linked bones, MaxLOD=0xff); "
+				"fails if the entry already exists. Configure it afterwards with skeleton_set_curve_metadata_flags. Stateless / non-session: writes the skeleton "
+				"directly by skeleton_path in one transaction, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_AddCurveMetadata::GetInputSchema() const
@@ -193,7 +200,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_AddCurveMetadata::Execute(const 
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString CurveNameStr;
 	if (!Arguments->TryGetStringField(TEXT("curve_name"), CurveNameStr) || CurveNameStr.IsEmpty())
@@ -220,7 +227,8 @@ FString ClaireonSkeletonTool_RemoveCurveMetadata::GetOperation() const { return 
 
 FString ClaireonSkeletonTool_RemoveCurveMetadata::GetDescription() const
 {
-    return TEXT("Remove a curve metadata entry from the skeleton in the open session. Session-mode tool: open via skeleton_open first.");
+	return TEXT("Remove a curve metadata entry from a skeleton by curve_name; fails if no such entry exists, and is editor-only. Stateless / non-session: "
+				"writes the skeleton directly by skeleton_path in one transaction, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RemoveCurveMetadata::GetInputSchema() const
@@ -236,7 +244,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RemoveCurveMetadata::Execute(con
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString CurveNameStr;
 	if (!Arguments->TryGetStringField(TEXT("curve_name"), CurveNameStr) || CurveNameStr.IsEmpty())
@@ -266,7 +274,9 @@ FString ClaireonSkeletonTool_RenameCurveMetadata::GetOperation() const { return 
 
 FString ClaireonSkeletonTool_RenameCurveMetadata::GetDescription() const
 {
-    return TEXT("Rename a curve metadata entry. Preserves the entry's flags/linked bones/max LOD under the new name. Session-mode tool: open via skeleton_open first.");
+	return TEXT("Rename a curve metadata entry from old_name to new_name, preserving the entry's flags, linked bones, and max LOD; fails if old_name is not "
+				"found or new_name already exists. Stateless / non-session: writes the skeleton directly by skeleton_path in one transaction, no open "
+				"session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_RenameCurveMetadata::GetInputSchema() const
@@ -283,7 +293,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_RenameCurveMetadata::Execute(con
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString OldStr, NewStr;
 	if (!Arguments->TryGetStringField(TEXT("old_name"), OldStr) || OldStr.IsEmpty())
@@ -316,8 +326,9 @@ FString ClaireonSkeletonTool_SetCurveMetadataFlags::GetOperation() const { retur
 
 FString ClaireonSkeletonTool_SetCurveMetadataFlags::GetDescription() const
 {
-	return TEXT("Update curve metadata fields on an existing entry. Any combination of material/morph_target/max_lod/linked_bones may be supplied; "
-				"omitted fields are left unchanged. linked_bones is an array of bone name strings.");
+	return TEXT("Update fields on an existing curve metadata entry. Any combination of material, morph_target, max_lod (0..255) and linked_bones (an "
+				"array of bone name strings that replaces the current list) may be supplied; omitted fields are left unchanged and supplying none is an error. "
+				"Stateless / non-session: writes the skeleton directly by skeleton_path in one transaction, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonSkeletonTool_SetCurveMetadataFlags::GetInputSchema() const
@@ -337,7 +348,7 @@ IClaireonTool::FToolResult ClaireonSkeletonTool_SetCurveMetadataFlags::Execute(c
 	FString SkeletonPath; Arguments->TryGetStringField(TEXT("skeleton_path"), SkeletonPath);
 	FString LoadError;
 	USkeleton* Skeleton = ClaireonSkeletonHelpers::LoadSkeleton(SkeletonPath, LoadError);
-	if (!Skeleton) return MakeErrorResult(LoadError);
+	if (!IsValid(Skeleton)) return MakeErrorResult(LoadError);
 
 	FString CurveNameStr;
 	if (!Arguments->TryGetStringField(TEXT("curve_name"), CurveNameStr) || CurveNameStr.IsEmpty())

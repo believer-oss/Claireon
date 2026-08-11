@@ -24,10 +24,10 @@ FString ClaireonTool_SetSplinePoints::GetCategory() const
 
 FString ClaireonTool_SetSplinePoints::GetDescription() const
 {
-	return TEXT("Set the points on a USplineComponent attached to an actor in the editor world. "
-				"Replaces all existing spline points with the provided array. "
-				"Supports per-point spline type (Linear, Curve, Constant, CurveClamped, CurveCustomTangent), "
-				"closed loop toggle, and undo via FScopedTransaction.");
+	return TEXT("Set the points on a USplineComponent attached to an actor in the editor world, replacing all "
+				"existing points with the provided array. The actor is addressed by actor_label, the component "
+				"by optional component_name (first spline found otherwise). Supports per-point spline type and "
+				"a closed-loop toggle. Non-session and immediate: one undoable transaction, no open session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_SetSplinePoints::GetInputSchema() const
@@ -78,7 +78,7 @@ TSharedPtr<FJsonObject> ClaireonTool_SetSplinePoints::GetInputSchema() const
 	return Schema;
 }
 
-namespace
+namespace ClaireonTool_SetSplinePoints_Private
 {
 	bool ParseSplinePointType(const FString& TypeStr, ESplinePointType::Type& OutType)
 	{
@@ -110,6 +110,7 @@ namespace
 		return false;
 	}
 } // namespace
+using namespace ClaireonTool_SetSplinePoints_Private;
 
 FToolResult ClaireonTool_SetSplinePoints::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
@@ -149,14 +150,14 @@ FToolResult ClaireonTool_SetSplinePoints::Execute(const TSharedPtr<FJsonObject>&
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
 		AActor* Actor = *It;
-		if (Actor && Actor->GetActorLabel() == ActorLabel)
+		if (IsValid(Actor) && Actor->GetActorLabel() == ActorLabel)
 		{
 			TargetActor = Actor;
 			break;
 		}
 	}
 
-	if (!TargetActor)
+	if (!IsValid(TargetActor))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Actor not found with label: %s"), *ActorLabel));
 	}
@@ -172,7 +173,7 @@ FToolResult ClaireonTool_SetSplinePoints::Execute(const TSharedPtr<FJsonObject>&
 		SplineComp = TargetActor->FindComponentByClass<USplineComponent>();
 	}
 
-	if (!SplineComp)
+	if (!IsValid(SplineComp))
 	{
 		if (!ComponentName.IsEmpty())
 		{

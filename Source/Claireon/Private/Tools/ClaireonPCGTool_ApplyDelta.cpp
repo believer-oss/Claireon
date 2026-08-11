@@ -10,7 +10,11 @@ FString FClaireonPCGTool_ApplyDelta::GetOperation() const { return TEXT("apply_d
 
 FString FClaireonPCGTool_ApplyDelta::GetDescription() const
 {
-	return TEXT("Atomic batch pcg modification. Disconnects, removes, creates, and connects in one transactional call. Counterpart to pcg_apply_spec. Execution order: disconnect -> remove -> create -> connect. (Pin names are exact-match -- no fuzzy resolution.)");
+	return TEXT("Apply an atomic batch of PCG graph edits in one transactional call. Execution order: "
+				"disconnect -> remove -> create -> connect; any phase failure cancels the transaction so "
+				"nothing lands. Pin names are exact-match, with no fuzzy resolution. Counterpart to "
+				"pcg_apply_spec. Pass session_id for an already open pcg session (pcg_open), or asset_path "
+				"for a temporary one.");
 }
 
 TSharedPtr<FJsonObject> FClaireonPCGTool_ApplyDelta::GetInputSchema() const

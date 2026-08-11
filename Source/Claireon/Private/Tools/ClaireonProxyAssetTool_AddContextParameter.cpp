@@ -15,8 +15,9 @@ FString ClaireonTool_ProxyAssetAddContextParameter::GetOperation() const { retur
 
 FString ClaireonTool_ProxyAssetAddContextParameter::GetDescription() const
 {
-	return TEXT("Add a context data parameter (struct or class) to a ProxyAsset. "
-		"Direction controls Input / Output / InputOutput.");
+	return TEXT("Add a context data parameter (struct or class, with Input / Output / InputOutput direction) to a "
+		"ProxyAsset and return the new parameter_count. UProxyAsset has no Compile step, so nothing is "
+		"recompiled. Stateless / non-session: writes the asset directly by path, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ProxyAssetAddContextParameter::GetInputSchema() const
@@ -58,7 +59,7 @@ IClaireonTool::FToolResult ClaireonTool_ProxyAssetAddContextParameter::Execute(c
 
 	FString Error;
 	UProxyAsset* ProxyAsset = ClaireonProxyTableHelpers::LoadProxyAsset(AssetPath, Error);
-	if (!ProxyAsset)
+	if (!IsValid(ProxyAsset))
 	{
 		return MakeErrorResult(Error);
 	}

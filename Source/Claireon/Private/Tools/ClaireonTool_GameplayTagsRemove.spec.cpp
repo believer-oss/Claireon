@@ -17,7 +17,7 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/Paths.h"
 
-namespace
+namespace ClaireonTool_GameplayTagsRemove_spec_Private
 {
 	const TCHAR* const RemoveSpec_TransientSource = TEXT("ClaireonSpecGameplayTags.ini");
 
@@ -65,6 +65,7 @@ namespace
 		return true;
 	}
 }
+using namespace ClaireonTool_GameplayTagsRemove_spec_Private;
 
 // =====================================================================================
 // Test 1: Round-trip add -> remove. Depends on claireon.gameplay_tags_add.
@@ -72,7 +73,7 @@ namespace
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonGameplayTagsRemoveTest_RoundTrip,
 	"Claireon.GameplayTagsRemove.RoundTrip",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonGameplayTagsRemoveTest_RoundTrip::RunTest(const FString& /*Parameters*/)
 {
@@ -157,7 +158,7 @@ bool FClaireonGameplayTagsRemoveTest_RoundTrip::RunTest(const FString& /*Paramet
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonGameplayTagsRemoveTest_UnknownTag,
 	"Claireon.GameplayTagsRemove.UnknownTag",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonGameplayTagsRemoveTest_UnknownTag::RunTest(const FString& /*Parameters*/)
 {

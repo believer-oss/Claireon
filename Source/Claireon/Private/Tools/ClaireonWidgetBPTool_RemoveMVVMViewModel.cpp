@@ -39,7 +39,7 @@ FToolResult ClaireonWidgetBPTool_RemoveMVVMViewModel::Execute(const TSharedPtr<F
         return Error;
     }
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
-	if (!WBP)
+	if (!IsValid(WBP))
 	{
 		return MakeErrorResult(TEXT("Widget Blueprint is no longer valid"));
 	}
@@ -51,7 +51,7 @@ FToolResult ClaireonWidgetBPTool_RemoveMVVMViewModel::Execute(const TSharedPtr<F
 	}
 
 	const UMVVMBlueprintView* View = ClaireonWidgetHelpers::GetMVVMBlueprintView(WBP);
-	if (!View)
+	if (!IsValid(View))
 	{
 		return MakeErrorResult(TEXT("No MVVM Blueprint View exists on this widget blueprint"));
 	}

@@ -128,7 +128,7 @@ FToolResult ClaireonNiagaraTool_GetModuleInputs::Execute(const TSharedPtr<FJsonO
 	}
 
 	UNiagaraGraph* CalledGraph = ModuleNode->GetCalledGraph();
-	if (CalledGraph)
+	if (IsValid(CalledGraph))
 	{
 		TArray<FNiagaraVariable> SwitchVars = CalledGraph->FindStaticSwitchInputs();
 		if (SwitchVars.Num() > 0)
@@ -142,7 +142,7 @@ FToolResult ClaireonNiagaraTool_GetModuleInputs::Execute(const TSharedPtr<FJsonO
 
 				FString DisplayValue = SwitchValue;
 				UEnum* SwitchEnum = SwitchVar.GetType().GetEnum();
-				if (SwitchEnum)
+				if (IsValid(SwitchEnum))
 				{
 					for (int32 e = 0; e < SwitchEnum->NumEnums() - 1; ++e)
 					{
@@ -155,7 +155,7 @@ FToolResult ClaireonNiagaraTool_GetModuleInputs::Execute(const TSharedPtr<FJsonO
 				}
 
 				FString ValidValues;
-				if (SwitchEnum)
+				if (IsValid(SwitchEnum))
 				{
 					for (int32 e = 0; e < SwitchEnum->NumEnums() - 1; ++e)
 					{

@@ -19,7 +19,7 @@
 #include "RenderUtils.h"
 #include "UObject/UnrealType.h"
 
-namespace
+namespace ClaireonSpecApplicator_Material_Private
 {
 	/** Accepted parameter_type strings for parameter_defaults entries. */
 	static bool SpecApplicatorMaterial_IsAcceptedParameterType(const FString& Type)
@@ -35,7 +35,7 @@ namespace
 	static bool SpecApplicatorMaterial_ParseShadingModel(const FString& Str, EMaterialShadingModel& OutModel)
 	{
 		const UEnum* Enum = StaticEnum<EMaterialShadingModel>();
-		if (!Enum)
+		if (!IsValid(Enum))
 		{
 			return false;
 		}
@@ -52,7 +52,7 @@ namespace
 	static bool SpecApplicatorMaterial_ParseBlendMode(const FString& Str, EBlendMode& OutMode)
 	{
 		const UEnum* Enum = StaticEnum<EBlendMode>();
-		if (!Enum)
+		if (!IsValid(Enum))
 		{
 			return false;
 		}
@@ -80,7 +80,8 @@ namespace
 		};
 		return Known.Contains(Attr);
 	}
-} // anonymous namespace
+} // namespace ClaireonSpecApplicator_Material_Private
+using namespace ClaireonSpecApplicator_Material_Private;
 
 bool FClaireonSpecApplicator_Material::ValidateToolSpec(const TSharedPtr<FJsonObject>& Spec, TArray<FString>& OutErrors)
 {
@@ -121,7 +122,7 @@ bool FClaireonSpecApplicator_Material::ValidateToolSpec(const TSharedPtr<FJsonOb
 				continue;
 			}
 			FString ResolveErr;
-			if (!ClaireonMaterialHelpers::ResolveExpressionClass(ClassStr, ResolveErr))
+			if (!IsValid(ClaireonMaterialHelpers::ResolveExpressionClass(ClassStr, ResolveErr)))
 			{
 				OutErrors.Add(FString::Printf(TEXT("expressions[%d]: unknown expression class '%s'"), i, *ClassStr));
 			}
@@ -251,7 +252,7 @@ bool FClaireonSpecApplicator_Material::OpenOrCreateAsset(const FString& AssetPat
 	const FString ResolvedPath = ResolveResult.ResolvedPath.Path;
 
 	UMaterial* LoadedMaterial = ClaireonMaterialHelpers::LoadMaterialAsset(ResolvedPath, OutError);
-	if (!LoadedMaterial)
+	if (!IsValid(LoadedMaterial))
 	{
 		return false;
 	}
@@ -281,7 +282,7 @@ bool FClaireonSpecApplicator_Material::OpenOrCreateAsset(const FString& AssetPat
 bool FClaireonSpecApplicator_Material::ApplyPass1_CreateEntities(const FString& /*SessionId*/, const TSharedPtr<FJsonObject>& Spec)
 {
 	UMaterial* Mat = Material.Get();
-	if (!Mat)
+	if (!IsValid(Mat))
 	{
 		AddError(TEXT("Material is no longer valid"));
 		return false;
@@ -315,7 +316,7 @@ bool FClaireonSpecApplicator_Material::ApplyPass1_CreateEntities(const FString& 
 
 		FString ResolveErr;
 		UClass* ExprClass = ClaireonMaterialHelpers::ResolveExpressionClass(ClassStr, ResolveErr);
-		if (!ExprClass)
+		if (!IsValid(ExprClass))
 		{
 			RecordEntryFailure(SpecId, ResolveErr);
 			continue;
@@ -327,7 +328,7 @@ bool FClaireonSpecApplicator_Material::ApplyPass1_CreateEntities(const FString& 
 
 		UMaterialExpression* Expr = UMaterialEditingLibrary::CreateMaterialExpression(
 			Mat, ExprClass, static_cast<int32>(X), static_cast<int32>(Y));
-		if (!Expr)
+		if (!IsValid(Expr))
 		{
 			RecordEntryFailure(SpecId,
 				FString::Printf(TEXT("CreateMaterialExpression returned null for class '%s'"), *ClassStr));
@@ -338,7 +339,7 @@ bool FClaireonSpecApplicator_Material::ApplyPass1_CreateEntities(const FString& 
 		FString ParameterName;
 		if (Obj->TryGetStringField(TEXT("parameter_name"), ParameterName) && !ParameterName.IsEmpty())
 		{
-			if (UMaterialExpressionParameter* AsParam = Cast<UMaterialExpressionParameter>(Expr))
+			if (UMaterialExpressionParameter* AsParam = Cast<UMaterialExpressionParameter>(Expr); IsValid(AsParam))
 			{
 				AsParam->Modify();
 				AsParam->ParameterName = FName(*ParameterName);
@@ -392,7 +393,7 @@ bool FClaireonSpecApplicator_Material::ApplyPass1_CreateEntities(const FString& 
 bool FClaireonSpecApplicator_Material::ApplyPass2_WireRelationships(const FString& /*SessionId*/, const TSharedPtr<FJsonObject>& Spec)
 {
 	UMaterial* Mat = Material.Get();
-	if (!Mat)
+	if (!IsValid(Mat))
 	{
 		AddError(TEXT("Material is no longer valid"));
 		return false;
@@ -405,7 +406,7 @@ bool FClaireonSpecApplicator_Material::ApplyPass2_WireRelationships(const FStrin
 		const FString Identifier = MappedId.IsEmpty() ? SpecId : MappedId;
 		int32 OutIndex = INDEX_NONE;
 		UMaterialExpression* Expr = ClaireonMaterialHelpers::FindExpressionByIdentifier(Mat, Identifier, OutIndex);
-		if (!Expr)
+		if (!IsValid(Expr))
 		{
 			OutErr = FString::Printf(TEXT("expression not found: '%s' (resolved id: '%s')"), *SpecId, *Identifier);
 		}
@@ -434,7 +435,7 @@ bool FClaireonSpecApplicator_Material::ApplyPass2_WireRelationships(const FStrin
 			FString FromErr, ToErr;
 			UMaterialExpression* FromExpr = ResolveExpression(FromId, FromErr);
 			UMaterialExpression* ToExpr = ResolveExpression(ToId, ToErr);
-			if (!FromExpr || !ToExpr)
+			if (!IsValid(FromExpr) || !IsValid(ToExpr))
 			{
 				RecordEntryFailure(EntryKey, !FromErr.IsEmpty() ? FromErr : ToErr);
 				continue;
@@ -470,7 +471,7 @@ bool FClaireonSpecApplicator_Material::ApplyPass2_WireRelationships(const FStrin
 
 			FString FromErr;
 			UMaterialExpression* FromExpr = ResolveExpression(FromId, FromErr);
-			if (!FromExpr)
+			if (!IsValid(FromExpr))
 			{
 				RecordEntryFailure(EntryKey, FromErr);
 				continue;
@@ -567,7 +568,7 @@ bool FClaireonSpecApplicator_Material::ApplyPass2_WireRelationships(const FStrin
 				{
 					FSoftObjectPath SoftPath(TexPath);
 					Tex = Cast<UTexture>(SoftPath.TryLoad());
-					if (!Tex)
+					if (!IsValid(Tex))
 					{
 						SetErr = FString::Printf(TEXT("failed to load texture '%s'"), *TexPath);
 					}
@@ -663,7 +664,7 @@ bool FClaireonSpecApplicator_Material::ApplyPass2_WireRelationships(const FStrin
 bool FClaireonSpecApplicator_Material::CompileAsset(const FString& /*SessionId*/, FString& OutError)
 {
 	UMaterial* Mat = Material.Get();
-	if (!Mat)
+	if (!IsValid(Mat))
 	{
 		OutError = TEXT("Material is no longer valid");
 		return false;
@@ -687,7 +688,7 @@ bool FClaireonSpecApplicator_Material::CompileAsset(const FString& /*SessionId*/
 bool FClaireonSpecApplicator_Material::SaveAsset(const FString& /*SessionId*/, FString& OutError)
 {
 	UMaterial* Mat = Material.Get();
-	if (!Mat)
+	if (!IsValid(Mat))
 	{
 		OutError = TEXT("Material is no longer valid");
 		return false;

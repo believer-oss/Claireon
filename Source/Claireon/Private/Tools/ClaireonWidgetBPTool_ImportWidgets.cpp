@@ -53,7 +53,7 @@ FToolResult ClaireonWidgetBPTool_ImportWidgets::Execute(const TSharedPtr<FJsonOb
 	Params->TryGetStringField(TEXT("parent_name"), ParentName);
 
 	UWidgetBlueprint* WBP = Data->WidgetBlueprint.Get();
-	if (!WBP || !WBP->WidgetTree)
+	if (!IsValid(WBP) || !WBP->WidgetTree)
 	{
 		return MakeErrorResult(TEXT("Widget Blueprint or WidgetTree is no longer valid"));
 	}
@@ -77,11 +77,11 @@ FToolResult ClaireonWidgetBPTool_ImportWidgets::Execute(const TSharedPtr<FJsonOb
 	{
 		UWidget* ParentWidget = ClaireonWidgetHelpers::FindWidgetByName(WBP->WidgetTree, FName(*ParentName));
 		UPanelWidget* ParentPanel = Cast<UPanelWidget>(ParentWidget);
-		if (ParentPanel)
+		if (IsValid(ParentPanel))
 		{
 			for (UWidget* Imported : ImportedWidgets)
 			{
-				if (Imported && !Imported->GetParent())
+				if (IsValid(Imported) && !IsValid(Imported->GetParent()))
 				{
 					ParentPanel->AddChild(Imported);
 				}
@@ -96,7 +96,7 @@ FToolResult ClaireonWidgetBPTool_ImportWidgets::Execute(const TSharedPtr<FJsonOb
 	TArray<TSharedPtr<FJsonValue>> ImportedNames;
 	for (UWidget* Imported : ImportedWidgets)
 	{
-		if (Imported)
+		if (IsValid(Imported))
 		{
 			ImportedNames.Add(MakeShared<FJsonValueString>(Imported->GetName()));
 		}

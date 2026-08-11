@@ -32,7 +32,7 @@ FString ClaireonAnimGraphTool_AddState::GetOperation() const { return TEXT("add_
 
 FString ClaireonAnimGraphTool_AddState::GetDescription() const
 {
-    return TEXT("Add a new state to the current state machine graph in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Add a new state to the current state machine graph in the open anim_graph session. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_AddState::GetInputSchema() const
@@ -54,7 +54,7 @@ FToolResult ClaireonAnimGraphTool_AddState::Execute(const TSharedPtr<FJsonObject
 	UAnimBlueprint* AnimBP = Data->AnimBlueprint.Get();
 	UEdGraph* Graph = Data->CurrentGraph.Get();
 	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(Graph);
-	if (!SMGraph)
+	if (!IsValid(SMGraph))
 	{
 		return MakeErrorResult(TEXT("Current graph is not a state machine. Use switch_graph to navigate to a state machine first."));
 	}
@@ -80,7 +80,7 @@ FToolResult ClaireonAnimGraphTool_AddState::Execute(const TSharedPtr<FJsonObject
 	UAnimStateNode* NewState = FEdGraphSchemaAction_NewStateNode::SpawnNodeFromTemplate<UAnimStateNode>(
 		SMGraph, NewObject<UAnimStateNode>(), Position, false);
 
-	if (!NewState)
+	if (!IsValid(NewState))
 	{
 		return MakeErrorResult(TEXT("Failed to create state node"));
 	}
@@ -111,7 +111,7 @@ FString ClaireonAnimGraphTool_RemoveState::GetOperation() const { return TEXT("r
 
 FString ClaireonAnimGraphTool_RemoveState::GetDescription() const
 {
-    return TEXT("Remove a state from the current state machine graph in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Remove a state from the current state machine graph in the open anim_graph session. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_RemoveState::GetInputSchema() const
@@ -132,7 +132,7 @@ FToolResult ClaireonAnimGraphTool_RemoveState::Execute(const TSharedPtr<FJsonObj
 	UAnimBlueprint* AnimBP = Data->AnimBlueprint.Get();
 	UEdGraph* Graph = Data->CurrentGraph.Get();
 	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(Graph);
-	if (!SMGraph)
+	if (!IsValid(SMGraph))
 	{
 		return MakeErrorResult(TEXT("Current graph is not a state machine."));
 	}
@@ -149,14 +149,14 @@ FToolResult ClaireonAnimGraphTool_RemoveState::Execute(const TSharedPtr<FJsonObj
 	UEdGraphNode* FoundNode = nullptr;
 	for (UEdGraphNode* Node : SMGraph->Nodes)
 	{
-		if (Node && Node->NodeGuid == StateGuid)
+		if (IsValid(Node) && Node->NodeGuid == StateGuid)
 		{
 			FoundNode = Node;
 			break;
 		}
 	}
 
-	if (!FoundNode || !FoundNode->IsA<UAnimStateNodeBase>())
+	if (!IsValid(FoundNode) || !FoundNode->IsA<UAnimStateNodeBase>())
 	{
 		return MakeErrorResult(FString::Printf(TEXT("State node not found with GUID: %s"), *StateGuidStr));
 	}
@@ -169,7 +169,7 @@ FToolResult ClaireonAnimGraphTool_RemoveState::Execute(const TSharedPtr<FJsonObj
 		if (!Pin) continue;
 		for (UEdGraphPin* Linked : Pin->LinkedTo)
 		{
-			if (Linked && Linked->GetOwningNode())
+			if (Linked && IsValid(Linked->GetOwningNode()))
 				Data->LastOperationAffectedNodes.Add(Linked->GetOwningNode()->NodeGuid);
 		}
 	}
@@ -181,7 +181,7 @@ FToolResult ClaireonAnimGraphTool_RemoveState::Execute(const TSharedPtr<FJsonObj
 	FoundNode->BreakAllNodeLinks();
 
 	// Remove bound graph if it's a state node
-	if (UAnimStateNode* StateNode = Cast<UAnimStateNode>(FoundNode))
+	if (UAnimStateNode* StateNode = Cast<UAnimStateNode>(FoundNode); IsValid(StateNode))
 	{
 		if (StateNode->BoundGraph)
 		{
@@ -212,7 +212,7 @@ FString ClaireonAnimGraphTool_RenameState::GetOperation() const { return TEXT("r
 
 FString ClaireonAnimGraphTool_RenameState::GetDescription() const
 {
-    return TEXT("Rename a state in the current state machine graph in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Rename a state in the current state machine graph in the open anim_graph session. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_RenameState::GetInputSchema() const
@@ -234,7 +234,7 @@ FToolResult ClaireonAnimGraphTool_RenameState::Execute(const TSharedPtr<FJsonObj
 	UAnimBlueprint* AnimBP = Data->AnimBlueprint.Get();
 	UEdGraph* Graph = Data->CurrentGraph.Get();
 	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(Graph);
-	if (!SMGraph) return MakeErrorResult(TEXT("Current graph is not a state machine."));
+	if (!IsValid(SMGraph)) return MakeErrorResult(TEXT("Current graph is not a state machine."));
 
 	FString StateGuidStr, NewName;
 	if (!Arguments->TryGetStringField(TEXT("state_guid"), StateGuidStr))
@@ -248,13 +248,13 @@ FToolResult ClaireonAnimGraphTool_RenameState::Execute(const TSharedPtr<FJsonObj
 	UAnimStateNode* StateNode = nullptr;
 	for (UEdGraphNode* Node : SMGraph->Nodes)
 	{
-		if (Node && Node->NodeGuid == StateGuid)
+		if (IsValid(Node) && Node->NodeGuid == StateGuid)
 		{
 			StateNode = Cast<UAnimStateNode>(Node);
 			break;
 		}
 	}
-	if (!StateNode) return MakeErrorResult(FString::Printf(TEXT("State not found: %s"), *StateGuidStr));
+	if (!IsValid(StateNode)) return MakeErrorResult(FString::Printf(TEXT("State not found: %s"), *StateGuidStr));
 
 	FString OldName = StateNode->GetNodeTitle(ENodeTitleType::ListView).ToString();
 
@@ -282,7 +282,7 @@ FString ClaireonAnimGraphTool_SetEntryState::GetOperation() const { return TEXT(
 
 FString ClaireonAnimGraphTool_SetEntryState::GetDescription() const
 {
-    return TEXT("Set the entry (default) state in the current state machine graph. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Set the entry (default) state in the current state machine graph. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_SetEntryState::GetInputSchema() const
@@ -303,7 +303,7 @@ FToolResult ClaireonAnimGraphTool_SetEntryState::Execute(const TSharedPtr<FJsonO
 	UAnimBlueprint* AnimBP = Data->AnimBlueprint.Get();
 	UEdGraph* Graph = Data->CurrentGraph.Get();
 	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(Graph);
-	if (!SMGraph) return MakeErrorResult(TEXT("Current graph is not a state machine."));
+	if (!IsValid(SMGraph)) return MakeErrorResult(TEXT("Current graph is not a state machine."));
 
 	FString StateGuidStr;
 	if (!Arguments->TryGetStringField(TEXT("state_guid"), StateGuidStr))
@@ -316,28 +316,28 @@ FToolResult ClaireonAnimGraphTool_SetEntryState::Execute(const TSharedPtr<FJsonO
 	UAnimStateNodeBase* TargetState = nullptr;
 	for (UEdGraphNode* Node : SMGraph->Nodes)
 	{
-		if (Node && Node->NodeGuid == StateGuid)
+		if (IsValid(Node) && Node->NodeGuid == StateGuid)
 		{
 			TargetState = Cast<UAnimStateNodeBase>(Node);
 			break;
 		}
 	}
-	if (!TargetState) return MakeErrorResult(FString::Printf(TEXT("State not found: %s"), *StateGuidStr));
+	if (!IsValid(TargetState)) return MakeErrorResult(FString::Printf(TEXT("State not found: %s"), *StateGuidStr));
 
 	// Find the entry node
 	UAnimStateEntryNode* EntryNode = SMGraph->EntryNode;
-	if (!EntryNode)
+	if (!IsValid(EntryNode))
 	{
 		for (UEdGraphNode* Node : SMGraph->Nodes)
 		{
-			if (UAnimStateEntryNode* Entry = Cast<UAnimStateEntryNode>(Node))
+			if (UAnimStateEntryNode* Entry = Cast<UAnimStateEntryNode>(Node); IsValid(Entry))
 			{
 				EntryNode = Entry;
 				break;
 			}
 		}
 	}
-	if (!EntryNode) return MakeErrorResult(TEXT("Entry node not found in state machine"));
+	if (!IsValid(EntryNode)) return MakeErrorResult(TEXT("Entry node not found in state machine"));
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Set Entry State")));
 	AnimBP->Modify();
@@ -385,7 +385,7 @@ FString ClaireonAnimGraphTool_AddTransition::GetOperation() const { return TEXT(
 
 FString ClaireonAnimGraphTool_AddTransition::GetDescription() const
 {
-    return TEXT("Add a transition between two states in the current state machine graph. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Add a transition between two states in the current state machine graph. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_AddTransition::GetInputSchema() const
@@ -408,7 +408,7 @@ FToolResult ClaireonAnimGraphTool_AddTransition::Execute(const TSharedPtr<FJsonO
 	UAnimBlueprint* AnimBP = Data->AnimBlueprint.Get();
 	UEdGraph* Graph = Data->CurrentGraph.Get();
 	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(Graph);
-	if (!SMGraph) return MakeErrorResult(TEXT("Current graph is not a state machine."));
+	if (!IsValid(SMGraph)) return MakeErrorResult(TEXT("Current graph is not a state machine."));
 
 	FString FromGuidStr, ToGuidStr;
 	if (!Arguments->TryGetStringField(TEXT("from_state_guid"), FromGuidStr))
@@ -424,12 +424,12 @@ FToolResult ClaireonAnimGraphTool_AddTransition::Execute(const TSharedPtr<FJsonO
 	UAnimStateNodeBase* ToState = nullptr;
 	for (UEdGraphNode* Node : SMGraph->Nodes)
 	{
-		if (Node && Node->NodeGuid == FromGuid) FromState = Cast<UAnimStateNodeBase>(Node);
-		if (Node && Node->NodeGuid == ToGuid) ToState = Cast<UAnimStateNodeBase>(Node);
+		if (IsValid(Node) && Node->NodeGuid == FromGuid) FromState = Cast<UAnimStateNodeBase>(Node);
+		if (IsValid(Node) && Node->NodeGuid == ToGuid) ToState = Cast<UAnimStateNodeBase>(Node);
 	}
 
-	if (!FromState) return MakeErrorResult(FString::Printf(TEXT("From state not found: %s"), *FromGuidStr));
-	if (!ToState) return MakeErrorResult(FString::Printf(TEXT("To state not found: %s"), *ToGuidStr));
+	if (!IsValid(FromState)) return MakeErrorResult(FString::Printf(TEXT("From state not found: %s"), *FromGuidStr));
+	if (!IsValid(ToState)) return MakeErrorResult(FString::Printf(TEXT("To state not found: %s"), *ToGuidStr));
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Add Transition")));
 	AnimBP->Modify();
@@ -442,7 +442,7 @@ FToolResult ClaireonAnimGraphTool_AddTransition::Execute(const TSharedPtr<FJsonO
 	UAnimStateTransitionNode* TransNode = FEdGraphSchemaAction_NewStateNode::SpawnNodeFromTemplate<UAnimStateTransitionNode>(
 		SMGraph, NewObject<UAnimStateTransitionNode>(), Location, false);
 
-	if (!TransNode)
+	if (!IsValid(TransNode))
 	{
 		return MakeErrorResult(TEXT("Failed to create transition node"));
 	}
@@ -514,7 +514,7 @@ FString ClaireonAnimGraphTool_RemoveTransition::GetOperation() const { return TE
 
 FString ClaireonAnimGraphTool_RemoveTransition::GetDescription() const
 {
-    return TEXT("Remove a transition from the current state machine graph in the open anim_graph session. Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Remove a transition from the current state machine graph in the open anim_graph session. Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_RemoveTransition::GetInputSchema() const
@@ -535,7 +535,7 @@ FToolResult ClaireonAnimGraphTool_RemoveTransition::Execute(const TSharedPtr<FJs
 	UAnimBlueprint* AnimBP = Data->AnimBlueprint.Get();
 	UEdGraph* Graph = Data->CurrentGraph.Get();
 	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(Graph);
-	if (!SMGraph) return MakeErrorResult(TEXT("Current graph is not a state machine."));
+	if (!IsValid(SMGraph)) return MakeErrorResult(TEXT("Current graph is not a state machine."));
 
 	FString TransGuidStr;
 	if (!Arguments->TryGetStringField(TEXT("transition_guid"), TransGuidStr))
@@ -547,13 +547,13 @@ FToolResult ClaireonAnimGraphTool_RemoveTransition::Execute(const TSharedPtr<FJs
 	UAnimStateTransitionNode* TransNode = nullptr;
 	for (UEdGraphNode* Node : SMGraph->Nodes)
 	{
-		if (Node && Node->NodeGuid == TransGuid)
+		if (IsValid(Node) && Node->NodeGuid == TransGuid)
 		{
 			TransNode = Cast<UAnimStateTransitionNode>(Node);
 			break;
 		}
 	}
-	if (!TransNode) return MakeErrorResult(FString::Printf(TEXT("Transition not found: %s"), *TransGuidStr));
+	if (!IsValid(TransNode)) return MakeErrorResult(FString::Printf(TEXT("Transition not found: %s"), *TransGuidStr));
 
 	FString TransName = TransNode->GetNodeTitle(ENodeTitleType::ListView).ToString();
 
@@ -563,7 +563,7 @@ FToolResult ClaireonAnimGraphTool_RemoveTransition::Execute(const TSharedPtr<FJs
 		if (!Pin) continue;
 		for (UEdGraphPin* Linked : Pin->LinkedTo)
 		{
-			if (Linked && Linked->GetOwningNode())
+			if (Linked && IsValid(Linked->GetOwningNode()))
 				Data->LastOperationAffectedNodes.Add(Linked->GetOwningNode()->NodeGuid);
 		}
 	}
@@ -590,7 +590,7 @@ FString ClaireonAnimGraphTool_SetTransitionProperties::GetOperation() const { re
 
 FString ClaireonAnimGraphTool_SetTransitionProperties::GetDescription() const
 {
-    return TEXT("Set properties on a state machine transition (crossfade duration, blend mode, logic type, shared rules, etc.). Session-mode tool: open via anim_graph_open first.");
+    return TEXT("Set properties on a state machine transition (crossfade duration, blend mode, logic type, shared rules, etc.). Session-mode tool: open via animbp_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_SetTransitionProperties::GetInputSchema() const
@@ -611,7 +611,7 @@ FToolResult ClaireonAnimGraphTool_SetTransitionProperties::Execute(const TShared
 
 	UAnimBlueprint* AnimBP = Data->AnimBlueprint.Get();
 	UEdGraph* Graph = Data->CurrentGraph.Get();
-	if (!AnimBP || !Graph)
+	if (!IsValid(AnimBP) || !IsValid(Graph))
 	{
 		return MakeErrorResult(TEXT("AnimBP or Graph no longer valid"));
 	}
@@ -632,14 +632,14 @@ FToolResult ClaireonAnimGraphTool_SetTransitionProperties::Execute(const TShared
 	UAnimStateTransitionNode* TransNode = nullptr;
 	for (UEdGraphNode* Node : Graph->Nodes)
 	{
-		if (Node && Node->NodeGuid == TransitionGuid)
+		if (IsValid(Node) && Node->NodeGuid == TransitionGuid)
 		{
 			TransNode = Cast<UAnimStateTransitionNode>(Node);
 			break;
 		}
 	}
 
-	if (!TransNode)
+	if (!IsValid(TransNode))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Transition node not found with GUID: %s"), *TransitionGuidStr));
 	}
@@ -755,13 +755,13 @@ FToolResult ClaireonAnimGraphTool_SetTransitionProperties::Execute(const TShared
 			UAnimStateTransitionNode* SourceTransNode = nullptr;
 			for (UEdGraphNode* Node : Graph->Nodes)
 			{
-				if (Node && Node->NodeGuid == SharedGuid)
+				if (IsValid(Node) && Node->NodeGuid == SharedGuid)
 				{
 					SourceTransNode = Cast<UAnimStateTransitionNode>(Node);
 					break;
 				}
 			}
-			if (SourceTransNode && SourceTransNode->bSharedRules)
+			if (IsValid(SourceTransNode) && SourceTransNode->bSharedRules)
 			{
 				TransNode->UseSharedRules(SourceTransNode);
 				ChangedProps.Add(FString::Printf(TEXT("use_shared_rules=%s"), *SourceTransNode->SharedRulesName));
@@ -799,13 +799,13 @@ FToolResult ClaireonAnimGraphTool_SetTransitionProperties::Execute(const TShared
 			UAnimStateTransitionNode* SourceCfNode = nullptr;
 			for (UEdGraphNode* Node : Graph->Nodes)
 			{
-				if (Node && Node->NodeGuid == SharedCfGuid)
+				if (IsValid(Node) && Node->NodeGuid == SharedCfGuid)
 				{
 					SourceCfNode = Cast<UAnimStateTransitionNode>(Node);
 					break;
 				}
 			}
-			if (SourceCfNode && SourceCfNode->bSharedCrossfade)
+			if (IsValid(SourceCfNode) && SourceCfNode->bSharedCrossfade)
 			{
 				TransNode->UseSharedCrossfade(SourceCfNode);
 				ChangedProps.Add(FString::Printf(TEXT("use_shared_crossfade=%s"), *SourceCfNode->SharedCrossfadeName));

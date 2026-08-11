@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_PIETraceStart.h"
+#include "ClaireonTraceNamedEvents.h"
 #include "Dom/JsonObject.h"
 #include "Editor.h"
 #include "ProfilingDebugging/TraceAuxiliary.h"
@@ -52,7 +53,7 @@ TSharedPtr<FJsonObject> ClaireonTool_PIETraceStart::GetInputSchema() const
 
 IClaireonTool::FToolResult ClaireonTool_PIETraceStart::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor || !GEditor->IsPlaySessionInProgress())
+	if (!IsValid(GEditor) || !GEditor->IsPlaySessionInProgress())
 	{
 		return MakeErrorResult(TEXT("PIE is not running"));
 	}
@@ -60,7 +61,7 @@ IClaireonTool::FToolResult ClaireonTool_PIETraceStart::Execute(const TSharedPtr<
 	if (FTraceAuxiliary::IsConnected())
 	{
 		const FString Dest = FTraceAuxiliary::GetTraceDestinationString();
-		return MakeErrorResult(FString::Printf(TEXT("A trace is already recording to: %s. Stop it first with editor.pie.trace.stop"), *Dest));
+		return MakeErrorResult(FString::Printf(TEXT("A trace is already recording to: %s. Stop it first with pie_trace_stop"), *Dest));
 	}
 
 	// Parse arguments
@@ -82,11 +83,32 @@ IClaireonTool::FToolResult ClaireonTool_PIETraceStart::Execute(const TSharedPtr<
 		Channels = TEXT("cpu,frame,bookmark");
 	}
 
+	// Absolutize before anything touches the filesystem. FTraceAuxiliary::Start does not
+	// resolve a relative path the way IPlatformFile does -- it runs the path through
+	// ConvertToAbsolutePathForExternalAppForWrite -- so a relative default like
+	// ProjectSavedDir()/Profiling ("../../../../MyProject/Saved/Profiling") had the directory
+	// created inside the project while the capture itself was written to a different,
+	// out-of-repo location. The traceFilePath reported below was the relative string, which
+	// no other process could resolve back to the file that was actually produced.
+	const FString FullPath = FPaths::ConvertRelativePathToFull(Directory / (Filename + TEXT(".utrace")));
+
 	// Ensure directory exists
 	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
-	PlatformFile.CreateDirectoryTree(*Directory);
+	PlatformFile.CreateDirectoryTree(*FPaths::GetPath(FullPath));
 
-	const FString FullPath = Directory / (Filename + TEXT(".utrace"));
+	// P0-2: force named events on BEFORE the capture starts.
+	//
+	// The engine gates every SCOPE_CYCLE_COUNTER-derived trace event on
+	// GCycleStatsShouldEmitNamedEvents (Stats.h:263), while
+	// TRACE_CPUPROFILER_EVENT_SCOPE is ungated. Without this, a capture is
+	// missing SceneQueryTotal, Physics Tick, World Tick Time and every other
+	// stat-derived scope -- while still returning hundreds of scopes and looking
+	// complete. The absence of SceneQueryTotal is then indistinguishable from
+	// scene queries being cheap, which is how a capture inverts a conclusion.
+	//
+	// Mirrors FSPerfTraceDefaults / FSPerfTraceDebugSubsystem: save, force on,
+	// restore on stop, roll back on a failed start.
+	ClaireonTraceNamedEvents::Push();
 
 	const bool bStarted = FTraceAuxiliary::Start(
 		FTraceAuxiliary::EConnectionType::File,
@@ -96,16 +118,40 @@ IClaireonTool::FToolResult ClaireonTool_PIETraceStart::Execute(const TSharedPtr<
 
 	if (!bStarted)
 	{
+		// Roll back: a failed start must not leave the flag forced on for the
+		// rest of the editor session, silently changing the cost profile of
+		// every later measurement.
+		ClaireonTraceNamedEvents::Pop();
 		return MakeErrorResult(TEXT("Failed to start trace recording. Check channels and output path."));
 	}
 
-	FString Output = FString::Printf(
-		TEXT("status: recording\n")
-		TEXT("traceFilePath: %s\n")
-		TEXT("channels: %s\n")
-		TEXT("message: Trace recording started. Use editor.pie.trace.stop to stop and get results."),
-		*FullPath,
-		*Channels);
+	const bool bStatNamedEvents = ClaireonTraceNamedEvents::IsEnabled();
 
-	return MakeSuccessResult(nullptr, Output);
+	// Data, not just prose: this tool used to return MakeSuccessResult(nullptr, ...)
+	// so traceFilePath was reachable only by parsing the summary.
+	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+	Data->SetStringField(TEXT("status"), TEXT("recording"));
+	Data->SetStringField(TEXT("trace_file_path"), FullPath);
+	Data->SetStringField(TEXT("channels"), Channels);
+	Data->SetBoolField(TEXT("stat_named_events"), bStatNamedEvents);
+
+	const FString Summary = FString::Printf(
+		TEXT("Trace recording started (channels: %s, named events: %s). Stop with pie_trace_stop."),
+		*Channels,
+		bStatNamedEvents ? TEXT("on") : TEXT("off"));
+
+	FToolResult Result = MakeSuccessResult(Data, Summary);
+
+	// The default channel set has no gpu, so a caller who later asks for GPU
+	// scopes gets an empty answer that reads as "GPU work is free".
+	if (!Channels.Contains(TEXT("gpu"), ESearchCase::IgnoreCase))
+	{
+		Result.Warnings.Add(FString::Printf(
+			TEXT("Capturing without the 'gpu' channel (channels: %s), so this trace will contain no GPU "
+			     "timeline events and trace_get_top_scopes(includeGpu=true) will return the same rows as "
+			     "includeGpu=false."),
+			*Channels));
+	}
+
+	return Result;
 }

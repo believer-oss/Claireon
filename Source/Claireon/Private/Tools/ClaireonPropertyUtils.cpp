@@ -6,6 +6,14 @@
 #include "UObject/TextProperty.h"
 #include "UObject/PropertyIterator.h"
 #include "Dom/JsonValue.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetRegistry/IAssetRegistry.h"
+#include "Misc/PackageName.h"
+#include "Modules/ModuleManager.h"
+#include "UObject/SoftObjectPath.h"
+#include "Engine/Blueprint.h"
+#include "Engine/SimpleConstructionScript.h"
+#include "Engine/SCS_Node.h"
 
 namespace ClaireonPropertyUtils
 {
@@ -74,13 +82,59 @@ bool ParsePathSegments(const FString& PropertyPath, TArray<FPathSegment>& OutSeg
 // ---------------------------------------------------------------------------
 // Resolve a property path to a (FProperty*, void*) pair
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// SCS component-template fallback.
+//
+// On a Blueprint CDO the UPROPERTY generated for an SCS component is NULL: component
+// instances are created at construction time, while the authored defaults live on the SCS
+// node's ComponentTemplate. So a path like "<CDO>.MyComp.PrimaryComponentTick" failed at
+// 'MyComp' even though the data plainly exists, and reaching it meant hand-walking
+// SimpleConstructionScript.AllNodes -> InternalVariableName -> ComponentTemplate.
+//
+// Superclasses are walked so components inherited from a parent Blueprint resolve too.
+// ---------------------------------------------------------------------------
+static UObject* Cl625Prop_FindSCSComponentTemplate(UStruct* OwnerStruct, const FString& ComponentName)
+{
+	UClass* AsClass = Cast<UClass>(OwnerStruct);
+	if (!AsClass)
+	{
+		return nullptr;
+	}
+	for (UClass* Cls = AsClass; Cls; Cls = Cls->GetSuperClass())
+	{
+		UBlueprint* Blueprint = Cast<UBlueprint>(Cls->ClassGeneratedBy);
+		if (!Blueprint || !Blueprint->SimpleConstructionScript)
+		{
+			continue;
+		}
+		for (USCS_Node* Node : Blueprint->SimpleConstructionScript->GetAllNodes())
+		{
+			// Match on the variable name, not the template's object name: templates are named
+			// "<Var>_GEN_VARIABLE", which is not what a caller would ever write.
+			if (Node && Node->ComponentTemplate
+				&& Node->GetVariableName().ToString().Equals(ComponentName, ESearchCase::IgnoreCase))
+			{
+				return Node->ComponentTemplate;
+			}
+		}
+	}
+	return nullptr;
+}
+
+// OutOwnerObject, when non-null, receives the innermost UObject the walk
+// stepped into -- the object that actually owns the leaf. It differs from the
+// root whenever the path traverses a component / sub-object / SCS template
+// (e.g. "MyComp.SomeField"), and a caller that needs Modify() or a change
+// notification to land on the right object cannot recover it from the void*
+// container alone.
 bool ResolvePath(
 	UStruct* Struct,
 	void* Container,
 	const TArray<FPathSegment>& Segments,
 	FProperty*& OutProperty,
 	void*& OutContainer,
-	FString& OutError)
+	FString& OutError,
+	UObject** OutOwnerObject = nullptr)
 {
 	UStruct* CurrentStruct = Struct;
 	void* CurrentContainer = Container;
@@ -141,6 +195,7 @@ bool ResolvePath(
 				}
 				CurrentStruct = Obj->GetClass();
 				CurrentContainer = Obj;
+				if (OutOwnerObject) { *OutOwnerObject = Obj; }
 			}
 			else
 			{
@@ -168,11 +223,21 @@ bool ResolvePath(
 				UObject* Obj = ObjProp->GetObjectPropertyValue(ObjProp->ContainerPtrToValuePtr<void>(CurrentContainer));
 				if (!Obj)
 				{
-					OutError = FString::Printf(TEXT("Null object at '%s'"), *Seg.Name);
+					// A null component property on a Blueprint CDO is expected, not an error: the
+					// authored defaults live on the SCS ComponentTemplate, so fall back to it.
+					Obj = Cl625Prop_FindSCSComponentTemplate(CurrentStruct, Seg.Name);
+				}
+				if (!Obj)
+				{
+					OutError = FString::Printf(
+						TEXT("Null object at '%s'. On a Blueprint CDO, component properties are null ")
+						TEXT("until construction, and no SCS ComponentTemplate named '%s' was found either."),
+						*Seg.Name, *Seg.Name);
 					return false;
 				}
 				CurrentStruct = Obj->GetClass();
 				CurrentContainer = Obj;
+				if (OutOwnerObject) { *OutOwnerObject = Obj; }
 			}
 			else
 			{
@@ -317,6 +382,184 @@ FString ReadPropertyByPath(UObject* Object, const FString& PropertyPath, FString
 	return Value;
 }
 
+// Recursively walk a just-imported property value and re-instance any instanced
+// object reference still owned by a FOREIGN object (typically the asset the value
+// text was exported from). ImportText resolves instanced references by path, so
+// replaying an exported value onto a different object would otherwise leave the
+// copy aliasing the SOURCE's instanced subobjects instead of owning its own.
+static void ClaireonPropUtils_InstanceForeignSubobjects(FProperty* Prop, void* ValuePtr, UObject* Owner, int32 Depth)
+{
+	if (!Prop || !ValuePtr || !Owner || Depth > 8)
+	{
+		return;
+	}
+
+	if (FObjectProperty* ObjProp = CastField<FObjectProperty>(Prop))
+	{
+		if (!ObjProp->HasAnyPropertyFlags(CPF_InstancedReference | CPF_PersistentInstance))
+		{
+			return;
+		}
+		UObject* Ref = ObjProp->GetObjectPropertyValue(ValuePtr);
+		if (!Ref || Ref->IsIn(Owner) || Ref->IsA<UClass>() || Ref->HasAnyFlags(RF_ClassDefaultObject))
+		{
+			return;
+		}
+		FName DupName = Ref->GetFName();
+		if (StaticFindObjectFast(nullptr, Owner, DupName))
+		{
+			DupName = MakeUniqueObjectName(Owner, Ref->GetClass(), DupName);
+		}
+		UObject* Dup = StaticDuplicateObject(Ref, Owner, DupName);
+		if (Dup)
+		{
+			Dup->SetFlags(RF_Transactional);
+			if (Owner->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject))
+			{
+				Dup->SetFlags(RF_ArchetypeObject);
+			}
+			ObjProp->SetObjectPropertyValue(ValuePtr, Dup);
+		}
+		return;
+	}
+
+	if (FStructProperty* StructProp = CastField<FStructProperty>(Prop))
+	{
+		for (TFieldIterator<FProperty> It(StructProp->Struct); It; ++It)
+		{
+			if (It->ContainsInstancedObjectProperty())
+			{
+				ClaireonPropUtils_InstanceForeignSubobjects(*It, It->ContainerPtrToValuePtr<void>(ValuePtr), Owner, Depth + 1);
+			}
+		}
+		return;
+	}
+
+	if (FArrayProperty* ArrayProp = CastField<FArrayProperty>(Prop))
+	{
+		if (!ArrayProp->Inner->ContainsInstancedObjectProperty())
+		{
+			return;
+		}
+		FScriptArrayHelper Helper(ArrayProp, ValuePtr);
+		for (int32 Index = 0; Index < Helper.Num(); ++Index)
+		{
+			ClaireonPropUtils_InstanceForeignSubobjects(ArrayProp->Inner, Helper.GetRawPtr(Index), Owner, Depth + 1);
+		}
+		return;
+	}
+
+	if (FSetProperty* SetProp = CastField<FSetProperty>(Prop))
+	{
+		if (!SetProp->ElementProp->ContainsInstancedObjectProperty())
+		{
+			return;
+		}
+		FScriptSetHelper Helper(SetProp, ValuePtr);
+		for (int32 Index = 0; Index < Helper.GetMaxIndex(); ++Index)
+		{
+			if (Helper.IsValidIndex(Index))
+			{
+				ClaireonPropUtils_InstanceForeignSubobjects(SetProp->ElementProp, Helper.GetElementPtr(Index), Owner, Depth + 1);
+			}
+		}
+		// Element identity may have changed (object pointers hash by address).
+		Helper.Rehash();
+		return;
+	}
+
+	if (FMapProperty* MapProp = CastField<FMapProperty>(Prop))
+	{
+		const bool bKeyInstanced = MapProp->KeyProp->ContainsInstancedObjectProperty();
+		const bool bValueInstanced = MapProp->ValueProp->ContainsInstancedObjectProperty();
+		if (!bKeyInstanced && !bValueInstanced)
+		{
+			return;
+		}
+		FScriptMapHelper Helper(MapProp, ValuePtr);
+		for (int32 Index = 0; Index < Helper.GetMaxIndex(); ++Index)
+		{
+			if (!Helper.IsValidIndex(Index))
+			{
+				continue;
+			}
+			if (bKeyInstanced)
+			{
+				ClaireonPropUtils_InstanceForeignSubobjects(MapProp->KeyProp, Helper.GetKeyPtr(Index), Owner, Depth + 1);
+			}
+			if (bValueInstanced)
+			{
+				ClaireonPropUtils_InstanceForeignSubobjects(MapProp->ValueProp, Helper.GetValuePtr(Index), Owner, Depth + 1);
+			}
+		}
+		if (bKeyInstanced)
+		{
+			Helper.Rehash();
+		}
+	}
+}
+
+/**
+ * Canonicalize a dotless asset path ('/Game/Dir/Foo') to Package.Object form
+ * ('/Game/Dir/Foo.Foo') for object-reference leaf writes.
+ *
+ * Hard object refs do not need this -- FObjectPropertyBase::FindImportedObject
+ * appends the leaf name itself. Soft refs DO: FSoftObjectPath::SetPath takes its
+ * "no delimiter found" branch and stores the value package-only, leaving AssetName
+ * as NAME_None. The import reports success and the reference never resolves, so the
+ * write looks like it worked and silently produces a dangling soft pointer.
+ *
+ * Applied to hard refs too, so the canonicalize-or-reject contract is uniform and
+ * testable across object-reference property kinds rather than depending on which
+ * engine path happens to be forgiving.
+ *
+ * Returns false with OutError set when the path names no real asset. There is no
+ * legitimate reason to write an object reference to a path that does not resolve,
+ * so this rejects rather than guessing further.
+ */
+static bool ClaireonPropUtils_CanonicalizeObjectRefValue(
+	const FProperty* LeafProp, const FString& Value, FString& OutValue, FString& OutError)
+{
+	OutValue = Value;
+
+	const bool bObjectRefLeaf =
+		LeafProp
+		&& (LeafProp->IsA<FSoftObjectProperty>()
+			|| LeafProp->IsA<FSoftClassProperty>()
+			|| LeafProp->IsA<FObjectPropertyBase>());
+	if (!bObjectRefLeaf)
+	{
+		return true;
+	}
+
+	// Only top-level content paths are candidates. Empty/None clears, already-dotted
+	// paths, and non-path literals (e.g. a bare class name the resolver handles) pass
+	// through untouched.
+	if (Value.IsEmpty()
+		|| Value == TEXT("None")
+		|| Value.Contains(TEXT("."))
+		|| !Value.StartsWith(TEXT("/")))
+	{
+		return true;
+	}
+
+	const FString CandidatePath = Value + TEXT(".") + FPackageName::GetShortName(Value);
+
+	IAssetRegistry& Registry =
+		FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	const FAssetData AssetData = Registry.GetAssetByObjectPath(FSoftObjectPath(CandidatePath));
+	if (!AssetData.IsValid())
+	{
+		OutError = FString::Printf(
+			TEXT("SoftObjectProperty requires Package.Object form; did you mean '%s'?"),
+			*CandidatePath);
+		return false;
+	}
+
+	OutValue = CandidatePath;
+	return true;
+}
+
 bool WritePropertyByPath(UObject* Object, const FString& PropertyPath, const FString& Value, FString& OutError)
 {
 	if (!Object)
@@ -344,8 +587,80 @@ bool WritePropertyByPath(UObject* Object, const FString& PropertyPath, const FSt
 		ValuePtr = Container;
 	}
 
-	const TCHAR* Result = Prop->ImportText_Direct(*Value, ValuePtr, Object, PPF_None);
-	if (!Result)
+	// An empty value on a container property means "clear". ImportText_Direct
+	// rejects an empty string outright, but exporters legitimately produce one
+	// for a container that is empty on the source and non-empty on the default.
+	if (Value.IsEmpty() && !Segments.Last().IsArrayAccess())
+	{
+		if (FArrayProperty* ArrayProp = CastField<FArrayProperty>(Prop))
+		{
+			FScriptArrayHelper(ArrayProp, ValuePtr).EmptyValues();
+			return true;
+		}
+		if (FSetProperty* SetProp = CastField<FSetProperty>(Prop))
+		{
+			FScriptSetHelper(SetProp, ValuePtr).EmptyElements();
+			return true;
+		}
+		if (FMapProperty* MapProp = CastField<FMapProperty>(Prop))
+		{
+			FScriptMapHelper(MapProp, ValuePtr).EmptyValues();
+			return true;
+		}
+	}
+
+	// Object-reference leaves: canonicalize a dotless /Game path to Package.Object,
+	// or reject. Must happen before the import -- a dotless soft path imports
+	// "successfully" as a package-only reference that never resolves.
+	FString EffectiveValue;
+	if (!ClaireonPropUtils_CanonicalizeObjectRefValue(Prop, Value, EffectiveValue, OutError))
+	{
+		return false;
+	}
+
+	// Mirror a details-panel write: bracket the import with PreEditChange /
+	// PostEditChangeProperty so properties with edit-time side effects take their
+	// notification path (UStaticMeshComponent::StaticMesh otherwise trips the
+	// NotifyIfStaticMeshChanged ensure -- its KnownStaticMesh cache only updates
+	// through the notify). PostEditChangeProperty always runs once PreEditChange
+	// has, even on import failure, so unregister/reregister stays paired.
+	FProperty* TopLevelProp = Object->GetClass()->FindPropertyByName(FName(*Segments[0].Name));
+	Object->PreEditChange(TopLevelProp);
+
+	bool bImported = false;
+	// Properties declared with a native Setter must not be written by raw
+	// ImportText -- import into a scratch value and assign through the setter.
+	const bool bDirectOnObject =
+		Container == static_cast<void*>(Object) && !Segments.Last().IsArrayAccess();
+	if (bDirectOnObject && Prop->HasSetter() && Prop->ArrayDim == 1)
+	{
+		void* Scratch = FMemory::Malloc(Prop->GetSize(), Prop->GetMinAlignment());
+		Prop->InitializeValue(Scratch);
+		bImported = Prop->ImportText_Direct(*EffectiveValue, Scratch, Object, PPF_None) != nullptr;
+		if (bImported)
+		{
+			if (Prop->ContainsInstancedObjectProperty())
+			{
+				ClaireonPropUtils_InstanceForeignSubobjects(Prop, Scratch, Object, 0);
+			}
+			Prop->SetValue_InContainer(Object, Scratch);
+		}
+		Prop->DestroyValue(Scratch);
+		FMemory::Free(Scratch);
+	}
+	else
+	{
+		bImported = Prop->ImportText_Direct(*EffectiveValue, ValuePtr, Object, PPF_None) != nullptr;
+		if (bImported && Prop->ContainsInstancedObjectProperty())
+		{
+			ClaireonPropUtils_InstanceForeignSubobjects(Prop, ValuePtr, Object, 0);
+		}
+	}
+
+	FPropertyChangedEvent ChangedEvent(Prop, EPropertyChangeType::ValueSet);
+	Object->PostEditChangeProperty(ChangedEvent);
+
+	if (!bImported)
 	{
 		OutError = FString::Printf(TEXT("Failed to set '%s' to '%s'"), *PropertyPath, *Value);
 		return false;
@@ -649,9 +964,16 @@ FProperty* ResolvePropertyByPath(
 	UObject* Object,
 	const FString& PropertyPath,
 	void*& OutContainer,
-	FString& OutError)
+	FString& OutError,
+	UObject** OutOwnerObject)
 {
 	OutContainer = nullptr;
+	if (OutOwnerObject)
+	{
+		// Seed with the root: a path that never hops into a sub-object leaves the
+		// root as the owner, and ResolvePath only writes on a hop.
+		*OutOwnerObject = Object;
+	}
 
 	if (!Object)
 	{
@@ -666,7 +988,7 @@ FProperty* ResolvePropertyByPath(
 	}
 
 	FProperty* OutProperty = nullptr;
-	if (!ResolvePath(Object->GetClass(), Object, Segments, OutProperty, OutContainer, OutError))
+	if (!ResolvePath(Object->GetClass(), Object, Segments, OutProperty, OutContainer, OutError, OutOwnerObject))
 	{
 		return nullptr;
 	}

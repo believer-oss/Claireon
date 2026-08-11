@@ -42,7 +42,7 @@ FToolResult ClaireonBehaviorTreeTool_AddService::Execute(const TSharedPtr<FJsonO
 	}
 
 	UBehaviorTreeGraph* Graph = ClaireonBehaviorTreeHelpers::GetBTGraph(Data->BehaviorTree.Get(), Error);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return MakeErrorResult(Error);
 	}
@@ -60,14 +60,14 @@ FToolResult ClaireonBehaviorTreeTool_AddService::Execute(const TSharedPtr<FJsonO
 	}
 
 	UBehaviorTreeGraphNode* ParentGraphNode = ClaireonBehaviorTreeHelpers::FindGraphNodeByGuid(Graph, NodeGuid);
-	if (!ParentGraphNode)
+	if (!IsValid(ParentGraphNode))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Node not found: %s"), *NodeGuid.ToString(EGuidFormats::DigitsWithHyphensLower)));
 	}
 
 	ClaireonNameResolver::FNameResolveResult ServiceNameResult;
 	UClass* ServiceClass = ClaireonNameResolver::ResolveClassName(ServiceClassName, UBTService::StaticClass(), ServiceNameResult);
-	if (!ServiceClass)
+	if (!IsValid(ServiceClass))
 	{
 		return MakeErrorResult(ServiceNameResult.Error);
 	}
@@ -79,7 +79,7 @@ FToolResult ClaireonBehaviorTreeTool_AddService::Execute(const TSharedPtr<FJsonO
 
 	UBehaviorTreeGraphNode* ServiceGraphNode = ClaireonBehaviorTreeHelpers::CreateGraphNodeForClass(Graph, ServiceClass,
 		FVector2D(ParentGraphNode->NodePosX, ParentGraphNode->NodePosY + 50), Error);
-	if (!ServiceGraphNode)
+	if (!IsValid(ServiceGraphNode))
 	{
 		return MakeErrorResult(Error);
 	}

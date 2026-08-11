@@ -40,7 +40,7 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeWidgetTree(UWidgetBluepr
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
-	if (!WidgetBP)
+	if (!IsValid(WidgetBP))
 	{
 		Result->SetStringField(TEXT("error"), TEXT("WidgetBlueprint is null"));
 		return Result;
@@ -50,7 +50,7 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeWidgetTree(UWidgetBluepr
 	Result->SetStringField(TEXT("asset_path"), WidgetBP->GetPathName());
 	Result->SetStringField(TEXT("type"), TEXT("WidgetBlueprint"));
 
-	if (WidgetBP->ParentClass)
+	if (IsValid(WidgetBP->ParentClass))
 	{
 		Result->SetStringField(TEXT("parent_class"), WidgetBP->ParentClass->GetName());
 	}
@@ -61,7 +61,7 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeWidgetTree(UWidgetBluepr
 
 	// Resolve starting widget for serialization
 	UWidgetTree* Tree = WidgetBP->WidgetTree;
-	if (!Tree)
+	if (!IsValid(Tree))
 	{
 		Result->SetStringField(TEXT("error"), TEXT("WidgetTree is null"));
 		return Result;
@@ -73,7 +73,7 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeWidgetTree(UWidgetBluepr
 	if (Options.FilterWidgetName != NAME_None)
 	{
 		UWidget* FilterWidget = FindWidgetByName(Tree, Options.FilterWidgetName);
-		if (FilterWidget)
+		if (IsValid(FilterWidget))
 		{
 			RootWidget = FilterWidget;
 		}
@@ -85,7 +85,7 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeWidgetTree(UWidgetBluepr
 	}
 
 	// Serialize root widget subtree
-	if (RootWidget)
+	if (IsValid(RootWidget))
 	{
 		TSharedPtr<FJsonObject> RootObj = SerializeWidget(RootWidget, Options, 0);
 		Result->SetObjectField(TEXT("root"), RootObj);
@@ -133,7 +133,7 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeWidgetTree(UWidgetBluepr
 		TArray<TSharedPtr<FJsonValue>> AnimationsArray;
 		for (UWidgetAnimation* Anim : WidgetBP->Animations)
 		{
-			if (!Anim)
+			if (!IsValid(Anim))
 			{
 				continue;
 			}
@@ -159,7 +159,7 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeWidget(UWidget* Widget, 
 {
 	TSharedPtr<FJsonObject> WidgetObj = MakeShared<FJsonObject>();
 
-	if (!Widget)
+	if (!IsValid(Widget))
 	{
 		return WidgetObj;
 	}
@@ -216,14 +216,14 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeWidget(UWidget* Widget, 
 	const bool bCanGoDeeper = bDepthUnlimited || (CurrentDepth < Options.MaxDepth);
 
 	UPanelWidget* PanelWidget = Cast<UPanelWidget>(Widget);
-	if (PanelWidget && bCanGoDeeper)
+	if (IsValid(PanelWidget) && bCanGoDeeper)
 	{
 		TArray<TSharedPtr<FJsonValue>> ChildrenArray;
 		const int32 ChildCount = PanelWidget->GetChildrenCount();
 		for (int32 i = 0; i < ChildCount; ++i)
 		{
 			UWidget* Child = PanelWidget->GetChildAt(i);
-			if (Child)
+			if (IsValid(Child))
 			{
 				TSharedPtr<FJsonObject> ChildObj = SerializeWidget(Child, Options, CurrentDepth + 1);
 				ChildrenArray.Add(MakeShared<FJsonValueObject>(ChildObj));
@@ -241,7 +241,7 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeWidget(UWidget* Widget, 
 
 UWidget* ClaireonWidgetHelpers::FindWidgetByName(UWidgetTree* Tree, FName WidgetName)
 {
-	if (!Tree)
+	if (!IsValid(Tree))
 	{
 		return nullptr;
 	}
@@ -270,7 +270,7 @@ UClass* ClaireonWidgetHelpers::ResolveWidgetClass(const FString& WidgetClassStr,
 	{
 		// Try direct LoadClass
 		Result = LoadClass<UWidget>(nullptr, *WidgetClassStr);
-		if (!Result)
+		if (!IsValid(Result))
 		{
 			// Try with _C suffix (generated blueprint class)
 			FString WithSuffix = WidgetClassStr + TEXT("_C");
@@ -279,13 +279,13 @@ UClass* ClaireonWidgetHelpers::ResolveWidgetClass(const FString& WidgetClassStr,
 	}
 
 	// Stage 2: Native class lookup by name (using ClaireonNameResolver)
-	if (!Result)
+	if (!IsValid(Result))
 	{
 		ClaireonNameResolver::FNameResolveResult NameResult;
 		Result = ClaireonNameResolver::ResolveClassName(WidgetClassStr, UWidget::StaticClass(), NameResult);
 	}
 
-	if (Result)
+	if (IsValid(Result))
 	{
 		return Result;
 	}
@@ -295,7 +295,7 @@ UClass* ClaireonWidgetHelpers::ResolveWidgetClass(const FString& WidgetClassStr,
 	for (TObjectIterator<UClass> It; It; ++It)
 	{
 		UClass* Cls = *It;
-		if (!Cls || !Cls->IsChildOf(UWidget::StaticClass()))
+		if (!IsValid(Cls) || !Cls->IsChildOf(UWidget::StaticClass()))
 		{
 			continue;
 		}
@@ -330,13 +330,13 @@ UClass* ClaireonWidgetHelpers::ResolveWidgetClass(const FString& WidgetClassStr,
 
 UWidget* ClaireonWidgetHelpers::CreateWidget(UWidgetTree* Tree, TSubclassOf<UWidget> WidgetClass, FName WidgetName)
 {
-	if (!Tree || !WidgetClass)
+	if (!IsValid(Tree) || !IsValid(WidgetClass))
 	{
 		return nullptr;
 	}
 
 	UWidget* Widget = Tree->ConstructWidget<UWidget>(WidgetClass, WidgetName);
-	if (Widget)
+	if (IsValid(Widget))
 	{
 		NotifyVariableAdded(Cast<UWidgetBlueprint>(Tree->GetOuter()), Widget->GetFName());
 	}
@@ -390,7 +390,7 @@ void ClaireonWidgetHelpers::NotifyVariableRenamed(UWidgetBlueprint* WidgetBP, FN
 
 void ClaireonWidgetHelpers::TrashRemovedWidget(UWidgetBlueprint* WidgetBP, UWidget* Widget)
 {
-	if (!Widget)
+	if (!IsValid(Widget))
 	{
 		return;
 	}
@@ -417,13 +417,13 @@ void ClaireonWidgetHelpers::TrashRemovedWidget(UWidgetBlueprint* WidgetBP, UWidg
 
 UPanelSlot* ClaireonWidgetHelpers::AddChildToPanel(UPanelWidget* Parent, UWidget* Child, const TSharedPtr<FJsonObject>& SlotProperties)
 {
-	if (!Parent || !Child)
+	if (!IsValid(Parent) || !IsValid(Child))
 	{
 		return nullptr;
 	}
 
 	UPanelSlot* Slot = Parent->AddChild(Child);
-	if (Slot && SlotProperties.IsValid())
+	if (IsValid(Slot) && SlotProperties.IsValid())
 	{
 		for (auto& Pair : SlotProperties->Values)
 		{
@@ -455,7 +455,7 @@ UPanelSlot* ClaireonWidgetHelpers::AddChildToPanel(UPanelWidget* Parent, UWidget
 
 FString ClaireonWidgetHelpers::ReadWidgetProperty(UWidget* Widget, const FString& PropertyName, bool& bOutSuccess)
 {
-	if (!Widget)
+	if (!IsValid(Widget))
 	{
 		bOutSuccess = false;
 		return FString();
@@ -481,7 +481,7 @@ FString ClaireonWidgetHelpers::ReadWidgetProperty(UWidget* Widget, const FString
 
 bool ClaireonWidgetHelpers::WriteWidgetProperty(UWidget* Widget, const FString& PropertyName, const FString& Value, FString& OutError)
 {
-	if (!Widget)
+	if (!IsValid(Widget))
 	{
 		OutError = TEXT("Widget is null");
 		return false;
@@ -553,7 +553,7 @@ bool ClaireonWidgetHelpers::WriteWidgetProperty(UWidget* Widget, const FString& 
 
 FString ClaireonWidgetHelpers::ReadSlotProperty(UPanelSlot* Slot, const FString& PropertyName, bool& bOutSuccess)
 {
-	if (!Slot)
+	if (!IsValid(Slot))
 	{
 		bOutSuccess = false;
 		return FString();
@@ -579,7 +579,7 @@ FString ClaireonWidgetHelpers::ReadSlotProperty(UPanelSlot* Slot, const FString&
 
 bool ClaireonWidgetHelpers::WriteSlotProperty(UPanelSlot* Slot, const FString& PropertyName, const FString& Value, FString& OutError)
 {
-	if (!Slot)
+	if (!IsValid(Slot))
 	{
 		OutError = TEXT("Slot is null");
 		return false;
@@ -646,7 +646,7 @@ bool ClaireonWidgetHelpers::ValidateWidgetBPAssetPath(const FString& AssetPath, 
 TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeAnimationDetails(UWidgetAnimation* Anim)
 {
 	TSharedPtr<FJsonObject> AnimObj = MakeShared<FJsonObject>();
-	if (!Anim)
+	if (!IsValid(Anim))
 	{
 		return AnimObj;
 	}
@@ -656,7 +656,7 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeAnimationDetails(UWidget
 	AnimObj->SetNumberField(TEXT("end_time"), Anim->GetEndTime());
 
 	UMovieScene* MovieScene = Anim->GetMovieScene();
-	if (!MovieScene)
+	if (!IsValid(MovieScene))
 	{
 		return AnimObj;
 	}
@@ -687,7 +687,7 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeAnimationDetails(UWidget
 		{
 			for (UMovieSceneTrack* Track : Binding->GetTracks())
 			{
-				if (!Track)
+				if (!IsValid(Track))
 				{
 					continue;
 				}
@@ -745,7 +745,7 @@ FString CreationTypeToString(EMVVMBlueprintViewModelContextCreationType Type)
 // Helper to resolve a ViewModel GUID to its name via the view's contexts
 FString ResolveViewModelName(const UMVVMBlueprintView* View, const FGuid& ViewModelId)
 {
-	if (!View || !ViewModelId.IsValid())
+	if (!IsValid(View) || !ViewModelId.IsValid())
 	{
 		return FString();
 	}
@@ -784,8 +784,8 @@ TSharedPtr<FJsonObject> SerializePropertyPath(const UWidgetBlueprint* WidgetBP, 
 	}
 
 	// Get property path string using the generated class
-	UClass* GeneratedClass = WidgetBP ? WidgetBP->GeneratedClass : nullptr;
-	if (GeneratedClass)
+	UClass* GeneratedClass = IsValid(WidgetBP) ? WidgetBP->GeneratedClass : nullptr;
+	if (IsValid(GeneratedClass))
 	{
 		FString PropertyPathStr = Path.GetPropertyPath(GeneratedClass);
 		PathObj->SetStringField(TEXT("property_path"), PropertyPathStr);
@@ -806,26 +806,26 @@ TSharedPtr<FJsonObject> SerializePropertyPath(const UWidgetBlueprint* WidgetBP, 
 
 UMVVMBlueprintView* ClaireonWidgetHelpers::GetOrCreateMVVMBlueprintView(UWidgetBlueprint* WidgetBP)
 {
-	if (!WidgetBP)
+	if (!IsValid(WidgetBP))
 	{
 		return nullptr;
 	}
 
 	// Try to get existing extension
 	UMVVMWidgetBlueprintExtension_View* Extension = UWidgetBlueprintExtension::GetExtension<UMVVMWidgetBlueprintExtension_View>(WidgetBP);
-	if (!Extension)
+	if (!IsValid(Extension))
 	{
 		// Create the extension via RequestExtension (the engine's proper way to add extensions)
 		Extension = UWidgetBlueprintExtension::RequestExtension<UMVVMWidgetBlueprintExtension_View>(WidgetBP);
 	}
 
-	if (!Extension)
+	if (!IsValid(Extension))
 	{
 		return nullptr;
 	}
 
 	UMVVMBlueprintView* View = Extension->GetBlueprintView();
-	if (!View)
+	if (!IsValid(View))
 	{
 		Extension->CreateBlueprintViewInstance();
 		View = Extension->GetBlueprintView();
@@ -840,13 +840,13 @@ UMVVMBlueprintView* ClaireonWidgetHelpers::GetOrCreateMVVMBlueprintView(UWidgetB
 
 const UMVVMBlueprintView* ClaireonWidgetHelpers::GetMVVMBlueprintView(const UWidgetBlueprint* WidgetBP)
 {
-	if (!WidgetBP)
+	if (!IsValid(WidgetBP))
 	{
 		return nullptr;
 	}
 
 	const UMVVMWidgetBlueprintExtension_View* Extension = UWidgetBlueprintExtension::GetExtension<UMVVMWidgetBlueprintExtension_View>(WidgetBP);
-	if (!Extension)
+	if (!IsValid(Extension))
 	{
 		return nullptr;
 	}
@@ -864,7 +864,7 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeMVVMViewModelContexts(co
 	TArray<TSharedPtr<FJsonValue>> ViewModelsArray;
 
 	const UMVVMBlueprintView* View = GetMVVMBlueprintView(WidgetBP);
-	if (!View)
+	if (!IsValid(View))
 	{
 		Result->SetArrayField(TEXT("viewmodels"), ViewModelsArray);
 		Result->SetNumberField(TEXT("count"), 0);
@@ -878,7 +878,7 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeMVVMViewModelContexts(co
 		ContextObj->SetStringField(TEXT("name"), Context.GetViewModelName().ToString());
 
 		UClass* VMClass = Context.GetViewModelClass();
-		ContextObj->SetStringField(TEXT("class"), VMClass ? VMClass->GetPathName() : TEXT("null"));
+		ContextObj->SetStringField(TEXT("class"), IsValid(VMClass) ? VMClass->GetPathName() : TEXT("null"));
 
 		ContextObj->SetStringField(TEXT("creation_type"), ClaireonWidgetHelpersInternal::CreationTypeToString(Context.CreationType));
 		ContextObj->SetBoolField(TEXT("optional"), Context.bOptional);
@@ -901,7 +901,7 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeMVVMBindings(const UWidg
 	TArray<TSharedPtr<FJsonValue>> BindingsArray;
 
 	const UMVVMBlueprintView* View = GetMVVMBlueprintView(WidgetBP);
-	if (!View)
+	if (!IsValid(View))
 	{
 		Result->SetArrayField(TEXT("bindings"), BindingsArray);
 		Result->SetNumberField(TEXT("count"), 0);
@@ -929,8 +929,11 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeMVVMBinding(const UWidge
 
 	const UMVVMBlueprintView* View = GetMVVMBlueprintView(WidgetBP);
 
-	// Binding ID
-	BindingObj->SetStringField(TEXT("id"), Binding.BindingId.ToString());
+	// Binding ID. Field is `binding_id` (not `id`) to match the argument name every
+	// MVVM binding tool already accepts (edit_mvvm_binding, remove_mvvm_binding), so a
+	// returned id round-trips into the next call without renaming. See C7 in
+	// Docs/llm/todo/claireon-product-defects.md.
+	BindingObj->SetStringField(TEXT("binding_id"), Binding.BindingId.ToString());
 
 	// Source path
 	BindingObj->SetObjectField(TEXT("source"), ClaireonWidgetHelpersInternal::SerializePropertyPath(WidgetBP, View, Binding.SourcePath));
@@ -947,10 +950,10 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeMVVMBinding(const UWidge
 
 	// Conversion info
 	TSharedPtr<FJsonObject> ConversionObj = MakeShared<FJsonObject>();
-	UClass* GeneratedClass = WidgetBP ? WidgetBP->GeneratedClass : nullptr;
+	UClass* GeneratedClass = IsValid(WidgetBP) ? WidgetBP->GeneratedClass : nullptr;
 
 	UMVVMBlueprintViewConversionFunction* S2D = Binding.Conversion.GetConversionFunction(/*bSourceToDestination=*/ true);
-	if (S2D && S2D->IsValid(WidgetBP))
+	if (IsValid(S2D) && S2D->IsValid(WidgetBP))
 	{
 		FName FuncName = S2D->GetCompiledFunctionName(GeneratedClass);
 		ConversionObj->SetStringField(TEXT("source_to_destination"), FuncName.ToString());
@@ -961,7 +964,7 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeMVVMBinding(const UWidge
 	}
 
 	UMVVMBlueprintViewConversionFunction* D2S = Binding.Conversion.GetConversionFunction(/*bSourceToDestination=*/ false);
-	if (D2S && D2S->IsValid(WidgetBP))
+	if (IsValid(D2S) && D2S->IsValid(WidgetBP))
 	{
 		FName FuncName = D2S->GetCompiledFunctionName(GeneratedClass);
 		ConversionObj->SetStringField(TEXT("destination_to_source"), FuncName.ToString());
@@ -987,23 +990,23 @@ bool ClaireonWidgetHelpers::MoveWidget(
 	int32 InsertIndex,
 	FString& OutError)
 {
-	if (!WidgetBP || !WidgetBP->WidgetTree)
+	if (!IsValid(WidgetBP) || !WidgetBP->WidgetTree)
 	{
 		OutError = TEXT("Widget Blueprint or WidgetTree is no longer valid");
 		return false;
 	}
-	if (!WidgetToMove)
+	if (!IsValid(WidgetToMove))
 	{
 		OutError = TEXT("WidgetToMove is null");
 		return false;
 	}
-	if (!NewParent)
+	if (!IsValid(NewParent))
 	{
 		OutError = TEXT("NewParent is null");
 		return false;
 	}
 	UPanelWidget* NewParentPanel = Cast<UPanelWidget>(NewParent);
-	if (!NewParentPanel)
+	if (!IsValid(NewParentPanel))
 	{
 		OutError = FString::Printf(TEXT("New parent widget '%s' is not a panel widget"), *NewParent->GetName());
 		return false;
@@ -1013,7 +1016,7 @@ bool ClaireonWidgetHelpers::MoveWidget(
 	Tree->SetFlags(RF_Transactional);
 	Tree->Modify();
 
-	if (UPanelWidget* OldParent = Cast<UPanelWidget>(WidgetToMove->GetParent()))
+	if (UPanelWidget* OldParent = Cast<UPanelWidget>(WidgetToMove->GetParent()); IsValid(OldParent))
 	{
 		OldParent->RemoveChild(WidgetToMove);
 	}

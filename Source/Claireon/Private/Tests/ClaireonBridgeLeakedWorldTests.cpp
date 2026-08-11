@@ -41,7 +41,7 @@ namespace ClaireonBridgeLeakedWorldTestsLocal
 		for (const TCHAR* Candidate : Candidates)
 		{
 			UPackage* Loaded = LoadPackage(nullptr, Candidate, LOAD_None);
-			if (Loaded)
+			if (IsValid(Loaded))
 			{
 				return Loaded;
 			}
@@ -62,13 +62,22 @@ UNTEST_UNIT_OPTS(Claireon, BridgeLeakedWorld, NoLeaksReturnsTrue, UNTEST_TIMEOUT
 UNTEST_UNIT_OPTS(Claireon, BridgeLeakedWorld, NonDirtyLeakUnloads, UNTEST_TIMEOUTMS(30000))
 {
 	UPackage* Loaded = ClaireonBridgeLeakedWorldTestsLocal::TryLoadTestMapPackage();
-	if (!Loaded)
+	if (!IsValid(Loaded))
 	{
 		// No test map available in this build. Skip.
 		UE_LOG(LogClaireon, Display,
 			TEXT("[Test] BridgeLeakedWorld.NonDirtyLeakUnloads: no test map asset; skipping."));
 		co_return;
 	}
+	// Root cause of the historical failure (test defect, no product bug): loading
+	// one of these engine template maps leaves the package DIRTY (the load path
+	// runs actor/world fixups that mark it), so EnsureNoLeakedWorlds correctly
+	// routed it to the dirty bucket -- "detected, will not auto-unload" -- and
+	// returned false. The fixture this test wants is a NON-dirty leaked world, so
+	// state that explicitly instead of assuming a fresh load is clean. Safe: the
+	// package is never saved, and DirtyLeakReportedNotUnloaded below sets its own
+	// dirty flag rather than relying on load-time state.
+	Loaded->SetDirtyFlag(false);
 	TWeakObjectPtr<UPackage> Weak(Loaded);
 
 	TArray<FClaireonLeakedWorld> Remaining;
@@ -82,7 +91,7 @@ UNTEST_UNIT_OPTS(Claireon, BridgeLeakedWorld, NonDirtyLeakUnloads, UNTEST_TIMEOU
 UNTEST_UNIT_OPTS(Claireon, BridgeLeakedWorld, DirtyLeakReportedNotUnloaded, UNTEST_TIMEOUTMS(30000))
 {
 	UPackage* Loaded = ClaireonBridgeLeakedWorldTestsLocal::TryLoadTestMapPackage();
-	if (!Loaded)
+	if (!IsValid(Loaded))
 	{
 		UE_LOG(LogClaireon, Display,
 			TEXT("[Test] BridgeLeakedWorld.DirtyLeakReportedNotUnloaded: no test map asset; skipping."));
@@ -111,7 +120,7 @@ UNTEST_UNIT_OPTS(Claireon, BridgeLeakedWorld, DirtyLeakReportedNotUnloaded, UNTE
 	UNTEST_ASSERT_TRUE(StillLoaded != nullptr);
 
 	// Cleanup: clear dirty flag and unload so later tests start clean.
-	if (StillLoaded)
+	if (IsValid(StillLoaded))
 	{
 		StillLoaded->SetDirtyFlag(false);
 		TArray<UPackage*> Cleanup;

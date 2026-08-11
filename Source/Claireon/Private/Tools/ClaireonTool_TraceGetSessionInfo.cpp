@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonTool_TraceGetSessionInfo.h"
 #include "ClaireonLog.h"
+#include "ClaireonTraceCaptureManifest.h"
 #include "ClaireonTraceSession.h"
 #include "TraceServices/Model/AnalysisSession.h"
 #include "TraceServices/Model/Frames.h"
@@ -25,7 +26,7 @@ TSharedPtr<FJsonObject> ClaireonTool_TraceGetSessionInfo::GetInputSchema() const
 
 	TSharedPtr<FJsonObject> SessionIdProp = MakeShared<FJsonObject>();
 	SessionIdProp->SetStringField(TEXT("type"), TEXT("string"));
-	SessionIdProp->SetStringField(TEXT("description"), TEXT("The session ID returned by editor.trace.open"));
+	SessionIdProp->SetStringField(TEXT("description"), TEXT("The session ID returned by trace_open"));
 	Properties->SetObjectField(TEXT("sessionId"), SessionIdProp);
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
@@ -39,7 +40,7 @@ TSharedPtr<FJsonObject> ClaireonTool_TraceGetSessionInfo::GetInputSchema() const
 
 IClaireonTool::FToolResult ClaireonTool_TraceGetSessionInfo::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	UE_LOG(LogClaireon, Display, TEXT("[MCP] editor.trace.getSessionInfo"));
+	UE_LOG(LogClaireon, Display, TEXT("[MCP] trace_get_session_info"));
 
 	FString SessionId;
 	if (!Arguments.IsValid() || !Arguments->TryGetStringField(TEXT("sessionId"), SessionId))
@@ -63,20 +64,23 @@ IClaireonTool::FToolResult ClaireonTool_TraceGetSessionInfo::Execute(const TShar
 	const TraceServices::IFrameProvider* FrameProvider = Session->GetFrameProvider();
 	const TraceServices::IThreadProvider* ThreadProvider = Session->GetThreadProvider();
 
-	FString Output;
-	Output += FString::Printf(TEXT("sessionId: %s\n"), *Session->SessionId);
-	Output += FString::Printf(TEXT("filePath: %s\n"), *Session->FilePath);
-	Output += FString::Printf(TEXT("durationSeconds: %.3f\n"), Session->AnalysisSession->GetDurationSeconds());
-	Output += FString::Printf(TEXT("analysisComplete: %s\n"),
-		Session->AnalysisSession->IsAnalysisComplete() ? TEXT("true") : TEXT("false"));
+	// P0-6d: this tool used to return MakeSuccessResult(nullptr, <prose dump>).
+	// A null Data becomes {} in the Python envelope, so every field below was
+	// reachable only by re-parsing a human-formatted string. Data is now the
+	// primary channel and the summary is reduced to one line.
+	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+	Data->SetStringField(TEXT("session_id"), Session->SessionId);
+	Data->SetStringField(TEXT("file_path"), Session->FilePath);
+	Data->SetNumberField(TEXT("duration_seconds"), Session->AnalysisSession->GetDurationSeconds());
+	Data->SetBoolField(TEXT("analysis_complete"), Session->AnalysisSession->IsAnalysisComplete());
 
 	// Frame counts
 	if (FrameProvider)
 	{
-		const uint64 GameFrameCount = FrameProvider->GetFrameCount(ETraceFrameType::TraceFrameType_Game);
-		const uint64 RenderFrameCount = FrameProvider->GetFrameCount(ETraceFrameType::TraceFrameType_Rendering);
-		Output += FString::Printf(TEXT("gameFrameCount: %llu\n"), GameFrameCount);
-		Output += FString::Printf(TEXT("renderFrameCount: %llu\n"), RenderFrameCount);
+		Data->SetNumberField(TEXT("game_frame_count"),
+			static_cast<double>(FrameProvider->GetFrameCount(ETraceFrameType::TraceFrameType_Game)));
+		Data->SetNumberField(TEXT("render_frame_count"),
+			static_cast<double>(FrameProvider->GetFrameCount(ETraceFrameType::TraceFrameType_Rendering)));
 	}
 
 	// Thread count
@@ -87,26 +91,40 @@ IClaireonTool::FToolResult ClaireonTool_TraceGetSessionInfo::Execute(const TShar
 		{
 			ThreadCount++;
 		});
-		Output += FString::Printf(TEXT("threadCount: %d\n"), ThreadCount);
+		Data->SetNumberField(TEXT("thread_count"), ThreadCount);
 	}
 
-	// Metadata
-	Output += TEXT("\n--- Metadata ---\n");
-	Session->AnalysisSession->EnumerateMetadata([&Output](const TraceServices::FTraceSessionMetadata& Metadata)
+	// Metadata, as an object rather than a formatted block.
+	TSharedPtr<FJsonObject> MetadataObj = MakeShared<FJsonObject>();
+	Session->AnalysisSession->EnumerateMetadata([&MetadataObj](const TraceServices::FTraceSessionMetadata& Metadata)
 	{
+		const FString Key = Metadata.Name.ToString();
 		switch (Metadata.Type)
 		{
 		case TraceServices::FTraceSessionMetadata::EType::String:
-			Output += FString::Printf(TEXT("%s: %s\n"), *Metadata.Name.ToString(), *Metadata.StringValue);
+			MetadataObj->SetStringField(Key, Metadata.StringValue);
 			break;
 		case TraceServices::FTraceSessionMetadata::EType::Int64:
-			Output += FString::Printf(TEXT("%s: %lld\n"), *Metadata.Name.ToString(), Metadata.Int64Value);
+			// int64 past 2^53 loses precision as a JSON number; emit as a string
+			// so a large value round-trips exactly instead of silently drifting.
+			MetadataObj->SetStringField(Key, FString::Printf(TEXT("%lld"), Metadata.Int64Value));
 			break;
 		case TraceServices::FTraceSessionMetadata::EType::Double:
-			Output += FString::Printf(TEXT("%s: %.3f\n"), *Metadata.Name.ToString(), Metadata.DoubleValue);
+			MetadataObj->SetNumberField(Key, Metadata.DoubleValue);
 			break;
 		}
 	});
+	Data->SetObjectField(TEXT("metadata"), MetadataObj);
 
-	return MakeSuccessResult(nullptr, Output);
+	// P0-6c: a caller who reconnects to an existing session must be able to
+	// learn what the capture contains without re-opening the trace.
+	Data->SetObjectField(TEXT("capture_manifest"),
+		ClaireonTraceCaptureManifest::Build(*Session->AnalysisSession));
+
+	const FString Summary = FString::Printf(TEXT("Trace session %s: %.3fs, analysis %s"),
+		*Session->SessionId,
+		Session->AnalysisSession->GetDurationSeconds(),
+		Session->AnalysisSession->IsAnalysisComplete() ? TEXT("complete") : TEXT("in progress"));
+
+	return MakeSuccessResult(Data, Summary);
 }

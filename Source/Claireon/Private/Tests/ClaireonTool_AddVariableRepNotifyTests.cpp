@@ -18,6 +18,7 @@
 
 #include "Untest.h"
 
+#include "Tools/ClaireonAssetUtils.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddVariable.h"
 #include "Tools/ClaireonBlueprintGraphTool_SetVariableProperties.h"
 #include "Tools/ClaireonBlueprintGraphTool_Create.h"
@@ -32,13 +33,15 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "ObjectTools.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "UObject/SoftObjectPath.h"
 #include "UObject/UnrealType.h"
 
-namespace
+#include "ClaireonTestAssetDeletion.h"
+namespace ClaireonTool_AddVariableRepNotifyTests_Private
 {
 
 static const TCHAR* TestBPPath_Default    = TEXT("/Game/__MCPTests/BP_RepNotify_Default");
@@ -47,34 +50,67 @@ static const TCHAR* TestBPPath_Idempotent = TEXT("/Game/__MCPTests/BP_RepNotify_
 static const TCHAR* TestBPPath_Snake      = TEXT("/Game/__MCPTests/BP_RepNotify_Snake");
 static const TCHAR* TestBPPath_NoGraph    = TEXT("/Game/__MCPTests/BP_RepNotify_NoGraph");
 
-// Delete the asset at AssetPath if it exists.
+// True only when the fixture actually has a .uasset on disk.
+//
+// The fixture below is built in an in-memory package and deliberately NOT saved:
+// nothing in this suite reads the asset back from disk, and neither
+// bp_add_variable nor bp_set_variable_properties saves (only bp_save /
+// bp_close_all reach CompileAndSaveSession, and these tests never call them).
+// Deleting an in-memory fixture buys nothing, and every
+// ObjectTools::ForceDeleteObjects call runs a whole-object-graph referencer scan,
+// which is the trigger for the nondeterministic Niagara-serialization crash
+// documented in Docs/llm/todo/claireon-untest-harness-reliability.md item 1.
+//
+// The check is kept rather than dropping the delete outright because
+// /Game/__MCPTests is deliberately NOT gitignored: a stale .uasset left by an
+// older build (this helper's fixture used to be saved with UPackage::Save) or a
+// crashed run must still be cleaned so `git status --porcelain -- Content/` stays
+// empty.
+bool RepNotifyTests_HasFileOnDisk(const FString& AssetOrPackagePath)
+{
+	const FString PackageName = FPackageName::ObjectPathToPackageName(AssetOrPackagePath);
+	FString FileName;
+	if (!FPackageName::TryConvertLongPackageNameToFilename(
+			PackageName, FileName, FPackageName::GetAssetPackageExtension()))
+	{
+		return false;
+	}
+	return FPaths::FileExists(FileName);
+}
+
+// Delete the asset at AssetPath if it exists on disk.
 void CleanupBlueprintAsset(const FString& AssetPath)
 {
+	// In-memory fixture: nothing on disk, nothing to clean, no referencer scan.
+	if (!RepNotifyTests_HasFileOnDisk(AssetPath))
+	{
+		return;
+	}
+
 	const FString ObjectPath = AssetPath + TEXT(".") + FPackageName::GetShortName(AssetPath);
-	if (UObject* Asset = FSoftObjectPath(ObjectPath).TryLoad())
+	if (UObject* Asset = FSoftObjectPath(ObjectPath).TryLoad(); IsValid(Asset))
 	{
 		TArray<UObject*> AssetsToDelete;
 		AssetsToDelete.Add(Asset);
-		ObjectTools::ForceDeleteObjects(AssetsToDelete, false);
+		ClaireonTestAssetDeletion::DeleteObjectsForTest(AssetsToDelete);
 	}
 }
 
-// Create a plain AActor-parented Blueprint on disk at AssetPath.
+// Create a pristine plain AActor-parented Blueprint in an in-memory package at
+// AssetPath. Evicting whatever occupies the name instead of reusing or deleting it
+// is the same idiom bp_create uses (ClaireonBlueprintHelpers::CreateBlueprint) and,
+// unlike a delete, it runs no referencer scan.
 UBlueprint* CreatePlainActorBlueprint(const FString& AssetPath)
 {
-	const FString ObjectPath = AssetPath + TEXT(".") + FPackageName::GetShortName(AssetPath);
-	if (UBlueprint* Existing = Cast<UBlueprint>(FSoftObjectPath(ObjectPath).TryLoad()))
-	{
-		return Existing;
-	}
-
 	UPackage* Package = CreatePackage(*AssetPath);
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		return nullptr;
 	}
 
 	const FString AssetName = FPackageName::GetShortName(AssetPath);
+	ClaireonAssetUtils::EvictInMemoryObject(Package, AssetName);
+
 	UBlueprint* BP = FKismetEditorUtilities::CreateBlueprint(
 		AActor::StaticClass(),
 		Package,
@@ -84,7 +120,7 @@ UBlueprint* CreatePlainActorBlueprint(const FString& AssetPath)
 		UBlueprintGeneratedClass::StaticClass(),
 		NAME_None);
 
-	if (!BP)
+	if (!IsValid(BP))
 	{
 		return nullptr;
 	}
@@ -92,19 +128,13 @@ UBlueprint* CreatePlainActorBlueprint(const FString& AssetPath)
 	FAssetRegistryModule::AssetCreated(BP);
 	BP->MarkPackageDirty();
 
-	const FString PackageFileName = FPackageName::LongPackageNameToFilename(
-		AssetPath, FPackageName::GetAssetPackageExtension());
-	FSavePackageArgs SaveArgs;
-	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
-	UPackage::Save(Package, BP, *PackageFileName, SaveArgs);
-
 	return BP;
 }
 
 // Look up the FBPVariableDescription for VarName on Blueprint, or nullptr.
 const FBPVariableDescription* FindVarDesc(UBlueprint* Blueprint, const TCHAR* VarName)
 {
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return nullptr;
 	}
@@ -122,14 +152,14 @@ const FBPVariableDescription* FindVarDesc(UBlueprint* Blueprint, const TCHAR* Va
 // Return true if Blueprint->FunctionGraphs contains a graph with the given name.
 bool HasFunctionGraph(UBlueprint* Blueprint, const TCHAR* GraphName)
 {
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return false;
 	}
 	const FName GraphFName(GraphName);
 	for (const UEdGraph* G : Blueprint->FunctionGraphs)
 	{
-		if (G && G->GetFName() == GraphFName)
+		if (IsValid(G) && G->GetFName() == GraphFName)
 		{
 			return true;
 		}
@@ -140,14 +170,14 @@ bool HasFunctionGraph(UBlueprint* Blueprint, const TCHAR* GraphName)
 // Find the UEdGraph named GraphName in Blueprint->FunctionGraphs, or nullptr.
 UEdGraph* FindFunctionGraph(UBlueprint* Blueprint, const TCHAR* GraphName)
 {
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return nullptr;
 	}
 	const FName GraphFName(GraphName);
 	for (UEdGraph* G : Blueprint->FunctionGraphs)
 	{
-		if (G && G->GetFName() == GraphFName)
+		if (IsValid(G) && G->GetFName() == GraphFName)
 		{
 			return G;
 		}
@@ -188,7 +218,8 @@ TSharedPtr<FJsonObject> MakeSetVarPropsArgs(const TCHAR* AssetPath, const TCHAR*
 	return Args;
 }
 
-} // anonymous namespace
+} // namespace ClaireonTool_AddVariableRepNotifyTests_Private
+using namespace ClaireonTool_AddVariableRepNotifyTests_Private;
 
 // ============================================================================
 // Test 1: AddVariable creates default OnRep_<Name> handler

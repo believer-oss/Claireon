@@ -38,7 +38,7 @@ FToolResult ClaireonStateTreeTool_RemoveGlobalTask::Execute(const TSharedPtr<FJs
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	FGuid NodeId;

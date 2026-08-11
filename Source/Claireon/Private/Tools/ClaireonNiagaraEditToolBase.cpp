@@ -120,8 +120,8 @@ FToolResult ClaireonNiagaraEditToolBase::BuildStateResponse(const FString& Sessi
 	RespData->SetStringField(TEXT("last_operation_status"), Data->LastOperationStatus);
 	RespData->SetNumberField(TEXT("focused_emitter_index"), Data->FocusedEmitterIndex);
 
-	FString SessionHintSummaryTag;
-	ClaireonAssetUtils::EmitSessionHintIfNeeded(RespData, Data->ConsecutiveAssetPathCalls, System->GetPathName(), SessionId, SessionHintSummaryTag);
+	TSharedPtr<FJsonObject> SessionHint;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(RespData, Data->ConsecutiveAssetPathCalls, System->GetPathName(), SessionId, GetName(), SessionHint);
 
-	return MakeSuccessResult(RespData, Output + SessionHintSummaryTag);
+	return MakeSuccessResultWithHint(RespData, Output, SessionHint);
 }

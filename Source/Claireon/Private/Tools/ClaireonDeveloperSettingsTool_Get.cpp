@@ -11,7 +11,7 @@
 #include "UObject/Class.h"
 #include "UObject/UObjectIterator.h"
 
-namespace
+namespace ClaireonDeveloperSettingsTool_Get_Private
 {
 	// DevSettingsGet_: discriminator-prefixed file-local helpers to avoid unity-batch
 	// symbol collisions with similarly-shaped helpers in cohort files.
@@ -26,7 +26,7 @@ namespace
 	 */
 	bool DevSettingsGet_ClassMatches(const UClass* Class, const FString& Identifier)
 	{
-		if (!Class || Identifier.IsEmpty())
+		if (!IsValid(Class) || Identifier.IsEmpty())
 		{
 			return false;
 		}
@@ -60,7 +60,7 @@ namespace
 		for (TObjectIterator<UClass> It; It; ++It)
 		{
 			UClass* Class = *It;
-			if (!Class || !Class->IsChildOf(UDeveloperSettings::StaticClass()))
+			if (!IsValid(Class) || !Class->IsChildOf(UDeveloperSettings::StaticClass()))
 			{
 				continue;
 			}
@@ -76,6 +76,7 @@ namespace
 		return nullptr;
 	}
 } // namespace
+using namespace ClaireonDeveloperSettingsTool_Get_Private;
 
 FString FClaireonDeveloperSettingsTool_Get::GetCategory() const { return TEXT("developer_settings"); }
 FString FClaireonDeveloperSettingsTool_Get::GetOperation() const { return TEXT("get"); }
@@ -84,9 +85,9 @@ FString FClaireonDeveloperSettingsTool_Get::GetDescription() const
 {
 	return TEXT(
 		"Return the CDO of any UDeveloperSettings subclass as a JSON property dump (config-resolved values). "
-		"class_path accepts: full object path (/Script/Module.ClassName), bare class name, "
-		"U-prefixed class name (UFoo), or INI section name. "
-		"Finds classes in Private editor modules that are invisible to Python by iterating all loaded UClass objects."
+		"class_path accepts a full object path (/Script/Module.ClassName), bare class name, U-prefixed name "
+		"(UFoo), or INI section name. Iterates all loaded UClass objects, so it also finds settings in "
+		"Private editor modules that are invisible to Python. Stateless / read-only / non-session."
 	);
 }
 
@@ -113,14 +114,14 @@ IClaireonTool::FToolResult FClaireonDeveloperSettingsTool_Get::Execute(const TSh
 	}
 
 	UClass* ResolvedClass = DevSettingsGet_ResolveClass(ClassPath);
-	if (!ResolvedClass)
+	if (!IsValid(ResolvedClass))
 	{
 		// Disambiguate: if the identifier names a real, loaded class that simply isn't a
 		// UDeveloperSettings subclass, say so explicitly rather than "no match found".
 		UClass* AnyClass = ClassPath.StartsWith(TEXT("/Script/"))
 			? LoadObject<UClass>(nullptr, *ClassPath)
 			: ClaireonAssetUtils::ResolveClassName(ClassPath);
-		if (AnyClass && !AnyClass->IsChildOf(UDeveloperSettings::StaticClass()))
+		if (IsValid(AnyClass) && !AnyClass->IsChildOf(UDeveloperSettings::StaticClass()))
 		{
 			return MakeErrorResult(FString::Printf(
 				TEXT("Class '%s' is not a UDeveloperSettings subclass."), *AnyClass->GetName()));
@@ -133,7 +134,7 @@ IClaireonTool::FToolResult FClaireonDeveloperSettingsTool_Get::Execute(const TSh
 	}
 
 	UObject* CDO = ResolvedClass->GetDefaultObject(/*bCreateIfNeeded=*/true);
-	if (!CDO)
+	if (!IsValid(CDO))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("GetDefaultObject returned null for %s"), *ResolvedClass->GetName()));
 	}

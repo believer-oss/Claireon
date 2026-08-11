@@ -117,7 +117,7 @@ FToolResult ClaireonMaterialTool_SetParameterDefault::Execute(const TSharedPtr<F
 		{
 			FSoftObjectPath SoftPath(TexPath);
 			Tex = Cast<UTexture>(SoftPath.TryLoad());
-			if (!Tex)
+			if (!IsValid(Tex))
 			{
 				return MakeErrorResult(FString::Printf(TEXT("Failed to load texture '%s'"), *TexPath));
 			}

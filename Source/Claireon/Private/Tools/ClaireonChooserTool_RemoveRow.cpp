@@ -44,7 +44,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserRemoveRow::Execute(const TSharedP
 
 	FString Error;
 	UChooserTable* Chooser = ClaireonChooserHelpers::LoadChooserTableAsset(AssetPath, Error);
-	if (!Chooser)
+	if (!IsValid(Chooser))
 	{
 		return MakeErrorResult(Error);
 	}

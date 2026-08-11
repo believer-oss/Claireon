@@ -101,11 +101,11 @@ void ClaireonAnimGraphEditToolBase::SnapshotPinConnections(FAnimGraphEditToolDat
 {
 	Data->PreOpPinConnections.Empty();
 	UEdGraph* Graph = Data->CurrentGraph.Get();
-	if (!Graph) return;
+	if (!IsValid(Graph)) return;
 
 	for (UEdGraphNode* Node : Graph->Nodes)
 	{
-		if (!Node) continue;
+		if (!IsValid(Node)) continue;
 		TMap<FName, TArray<FString>> NodePins;
 		for (UEdGraphPin* Pin : Node->Pins)
 		{
@@ -113,7 +113,7 @@ void ClaireonAnimGraphEditToolBase::SnapshotPinConnections(FAnimGraphEditToolDat
 			TArray<FString> ConnectedTitles;
 			for (UEdGraphPin* Linked : Pin->LinkedTo)
 			{
-				if (Linked && Linked->GetOwningNode())
+				if (Linked && IsValid(Linked->GetOwningNode()))
 				{
 					ConnectedTitles.Add(Linked->GetOwningNode()->GetNodeTitle(ENodeTitleType::ListView).ToString());
 				}
@@ -135,7 +135,7 @@ FToolResult ClaireonAnimGraphEditToolBase::BuildStateResponse(const FString& Ses
 {
 	UAnimBlueprint* AnimBP = Data->AnimBlueprint.Get();
 	UEdGraph* Graph = Data->CurrentGraph.Get();
-	if (!AnimBP || !Graph)
+	if (!IsValid(AnimBP) || !IsValid(Graph))
 	{
 		return MakeErrorResult(TEXT("AnimBP or Graph no longer valid"));
 	}
@@ -184,7 +184,7 @@ FToolResult ClaireonAnimGraphEditToolBase::BuildStateResponse(const FString& Ses
 	{
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
-			if (!Node) continue;
+			if (!IsValid(Node)) continue;
 			if (Data->LastOperationAffectedNodes.Contains(Node->NodeGuid))
 			{
 				TSharedPtr<FJsonObject> NodeObj = ClaireonAnimGraphHelpers::SerializeAnimGraphNode(Node, DetailLevel, AnimBP);
@@ -196,7 +196,7 @@ FToolResult ClaireonAnimGraphEditToolBase::BuildStateResponse(const FString& Ses
 	{
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
-			if (!Node) continue;
+			if (!IsValid(Node)) continue;
 			TSharedPtr<FJsonObject> NodeObj = ClaireonAnimGraphHelpers::SerializeAnimGraphNode(Node, DetailLevel, AnimBP);
 			if (NodeObj) NodesArray.Add(MakeShared<FJsonValueObject>(NodeObj));
 		}
@@ -217,10 +217,10 @@ FToolResult ClaireonAnimGraphEditToolBase::BuildStateResponse(const FString& Ses
 		Result->SetObjectField(TEXT("guid_corrections"), Corrections);
 	}
 
-	FString SessionHintSummaryTag;
-	ClaireonAssetUtils::EmitSessionHintIfNeeded(Result, Data->ConsecutiveAssetPathCalls, AnimBP->GetPathName(), SessionId, SessionHintSummaryTag);
+	TSharedPtr<FJsonObject> SessionHint;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(Result, Data->ConsecutiveAssetPathCalls, AnimBP->GetPathName(), SessionId, GetName(), SessionHint);
 
-	return MakeSuccessResult(Result, Data->Cursor.LastOperationStatus + SessionHintSummaryTag);
+	return MakeSuccessResultWithHint(Result, Data->Cursor.LastOperationStatus, SessionHint);
 }
 
 // ============================================================================
@@ -229,10 +229,10 @@ FToolResult ClaireonAnimGraphEditToolBase::BuildStateResponse(const FString& Ses
 
 void ClaireonAnimGraphEditToolBase::RefreshBlueprintEditorInPlace(UBlueprint* Blueprint)
 {
-	if (!Blueprint || !GEditor) return;
+	if (!IsValid(Blueprint) || !IsValid(GEditor)) return;
 
 	UAssetEditorSubsystem* Subsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
-	if (!Subsystem) return;
+	if (!IsValid(Subsystem)) return;
 
 	IAssetEditorInstance* EditorInstance = Subsystem->FindEditorForAsset(Blueprint, false);
 	if (!EditorInstance) return;

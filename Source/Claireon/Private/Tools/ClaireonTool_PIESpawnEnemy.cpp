@@ -97,7 +97,7 @@ IClaireonTool::FToolResult ClaireonTool_PIESpawnEnemy::Execute(const TSharedPtr<
 		return MakeErrorResult(TEXT("Missing required argument: pawnDataPath"));
 	}
 
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("GEditor is not available"));
 	}
@@ -106,14 +106,14 @@ IClaireonTool::FToolResult ClaireonTool_PIESpawnEnemy::Execute(const TSharedPtr<
 	UWorld* PIEWorld = nullptr;
 	for (const FWorldContext& Context : GEngine->GetWorldContexts())
 	{
-		if (Context.WorldType == EWorldType::PIE && Context.World())
+		if (Context.WorldType == EWorldType::PIE && IsValid(Context.World()))
 		{
 			PIEWorld = Context.World();
 			break;
 		}
 	}
 
-	if (!PIEWorld)
+	if (!IsValid(PIEWorld))
 	{
 		return MakeErrorResult(TEXT("No active PIE session"));
 	}
@@ -138,7 +138,7 @@ IClaireonTool::FToolResult ClaireonTool_PIESpawnEnemy::Execute(const TSharedPtr<
 		{
 			FClaireonPIEManager& PIEManager = FClaireonPIEManager::Get();
 			AActor* RelActor = PIEManager.ResolveActorId(RelativeActorId, PIEWorld);
-			if (RelActor)
+			if (IsValid(RelActor))
 			{
 				double Distance = 500.0;
 				Arguments->TryGetNumberField(TEXT("distance"), Distance);
@@ -163,19 +163,19 @@ IClaireonTool::FToolResult ClaireonTool_PIESpawnEnemy::Execute(const TSharedPtr<
 
 	// Try loading as a Blueprint
 	UObject* LoadedObject = StaticLoadObject(UObject::StaticClass(), nullptr, *PawnDataPath);
-	if (LoadedObject)
+	if (IsValid(LoadedObject))
 	{
-		if (UBlueprint* BP = Cast<UBlueprint>(LoadedObject))
+		if (UBlueprint* BP = Cast<UBlueprint>(LoadedObject); IsValid(BP))
 		{
 			SpawnClass = BP->GeneratedClass;
 		}
-		else if (UClass* DirectClass = Cast<UClass>(LoadedObject))
+		else if (UClass* DirectClass = Cast<UClass>(LoadedObject); IsValid(DirectClass))
 		{
 			SpawnClass = DirectClass;
 		}
 	}
 
-	if (!SpawnClass)
+	if (!IsValid(SpawnClass))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Could not load spawn class from: %s"), *PawnDataPath));
@@ -193,7 +193,7 @@ IClaireonTool::FToolResult ClaireonTool_PIESpawnEnemy::Execute(const TSharedPtr<
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
 	AActor* SpawnedActor = PIEWorld->SpawnActor<AActor>(SpawnClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
-	if (!SpawnedActor)
+	if (!IsValid(SpawnedActor))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Failed to spawn actor of class: %s"), *SpawnClass->GetName()));

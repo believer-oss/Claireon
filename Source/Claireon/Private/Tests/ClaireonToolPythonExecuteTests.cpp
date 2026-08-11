@@ -19,34 +19,53 @@
 #include "Untest.h"
 #include "Tools/ClaireonTool_ExecutePython.h"
 #include "Tools/IClaireonTool.h"
-#include "IClaireonToolProvider.h"
-#include "Features/IModularFeatures.h"
+#include "ClaireonModule.h"
+#include "ClaireonServer.h"
 #include "Dom/JsonObject.h"
 #include "ClaireonToolSearchIndex.h"
 
 namespace PyHintTests622_Helpers
 {
-	/** Pick any registered tool name (other than the meta tools) so TypeError
-	 *  patterns referencing a real tool produce a hint.  Returns empty when
-	 *  no provider is registered (test should bail in that case). */
+	/**
+	 * Pick any registered tool name (other than the meta tools) so TypeError
+	 * patterns referencing a real tool produce a hint.
+	 *
+	 * THE GATE THIS FEEDS. BuildHintFromLogs only emits a TypeError hint when
+	 * the name parsed out of the traceback is a REGISTERED tool -- see
+	 * Cl622PyHintInternal::Cl622Py_IsRegisteredTool, which reads
+	 * FClaireonModule::Get().GetServer()->GetTools(). So the name handed back
+	 * here must come from that same registry, or the test could feed the gate a
+	 * name it legitimately rejects and blame the hint code.
+	 *
+	 * The old body read the IClaireonToolProvider modular features instead --
+	 * a DIFFERENT source from the gate -- and the callers treated an empty
+	 * result as "treat as a pass since the gate is what we're verifying", which
+	 * is not a pass at all: Untest has no skip primitive, so that early
+	 * co_return scored as a PASS while the hint path went entirely unexercised.
+	 *
+	 * EnsureServerForTest() is the seam that builds and populates the registry
+	 * headlessly (StartupModule() early-returns under IsRunningCommandlet(), so
+	 * GetServer() is null until someone calls the seam). Calling it here makes
+	 * both this pick AND the production gate deterministic instead of dependent
+	 * on whether some earlier test in the process happened to call it. An empty
+	 * return is now a broken seam, and every caller hard-fails on it.
+	 */
 	static FString PyHintTests622_PickAnyRegisteredToolName()
 	{
-		TArray<IClaireonToolProvider*> Providers = IModularFeatures::Get()
-			.GetModularFeatureImplementations<IClaireonToolProvider>(
-				IClaireonToolProvider::FeatureName);
-		for (IClaireonToolProvider* Provider : Providers)
+		FClaireonServer* Server = FClaireonModule::Get().EnsureServerForTest();
+		if (Server == nullptr)
 		{
-			if (!Provider) { continue; }
-			for (const TSharedPtr<IClaireonTool>& Tool : Provider->GetTools())
+			return FString();
+		}
+		for (const TPair<FString, TSharedPtr<IClaireonTool>>& Pair : Server->GetTools())
+		{
+			if (!Pair.Value.IsValid()) { continue; }
+			const FString Name = Pair.Value->GetName();
+			if (Name == TEXT("python_execute") || Name == TEXT("tool_search"))
 			{
-				if (!Tool.IsValid()) { continue; }
-				const FString Name = Tool->GetName();
-				if (Name == TEXT("python_execute") || Name == TEXT("tool_search"))
-				{
-					continue;
-				}
-				return Name;
+				continue;
 			}
+			return Name;
 		}
 		return FString();
 	}
@@ -174,28 +193,39 @@ UNTEST_UNIT_OPTS(Claireon, PythonExecuteHint, AttributeErrorOnClaireonModuleProd
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PythonExecuteHint, TypeErrorUnexpectedKwargProducesHint)
+// Budget: PickAnyRegisteredToolName() now builds the tool registry through
+// EnsureServerForTest() on first use, which is far more than the 0.50ms bare
+// UNTEST_UNIT default (FUntestUnitFixture::DefaultTimeoutMs) allows. That
+// default is not a perf assertion -- do not restore it.
+UNTEST_UNIT_OPTS(Claireon, PythonExecuteHint, TypeErrorUnexpectedKwargProducesHint, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace PyHintTests622_Helpers;
 
+	// The registry is populated by the seam inside the helper, so an empty pick
+	// means the seam is broken -- fail. An early co_return here would be scored
+	// as a PASS and would hide the loss of the entire TypeError hint path.
 	const FString ToolName = PyHintTests622_PickAnyRegisteredToolName();
 	if (ToolName.IsEmpty())
 	{
-		// No registered tools means we can't validate the registered-tool
-		// gate.  Treat as a pass since the gate is what we're verifying.
-		co_return;
+		UE_LOG(LogTemp, Error,
+			TEXT("[PythonExecuteHint] tool registry is empty after EnsureServerForTest(); "
+			     "the registered-tool gate could not be exercised"));
 	}
+	UNTEST_ASSERT_FALSE(ToolName.IsEmpty());
 
 	const FString Logs = PyHintTests622_BuildTypeErrorUnexpectedKwargTraceback(
 		ToolName, TEXT("foo"));
 
 	TSharedPtr<FJsonObject> Hint = ClaireonTool_ExecutePython::BuildHintFromLogs(Logs);
 
-	UNTEST_EXPECT_TRUE(Hint.IsValid());
+	// ASSERT, not EXPECT: ToolName is a genuinely registered tool, so the
+	// registered-tool gate MUST let this through and a hint MUST be emitted. On
+	// EXPECT the `if` below would swallow every remaining assertion.
+	UNTEST_ASSERT_TRUE(Hint.IsValid());
 	if (Hint.IsValid())
 	{
 		const TSharedPtr<FJsonObject>* ArgsObj = nullptr;
-		UNTEST_EXPECT_TRUE(Hint->TryGetObjectField(TEXT("args"), ArgsObj));
+		UNTEST_ASSERT_TRUE(Hint->TryGetObjectField(TEXT("args"), ArgsObj));
 		if (ArgsObj && ArgsObj->IsValid())
 		{
 			FString NameField;
@@ -216,21 +246,28 @@ UNTEST_UNIT(Claireon, PythonExecuteHint, TypeErrorUnexpectedKwargProducesHint)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PythonExecuteHint, TypeErrorMissingPositionalProducesHint)
+// Budget: see TypeErrorUnexpectedKwargProducesHint -- the helper may build the
+// tool registry, which the 0.50ms bare default cannot cover.
+UNTEST_UNIT_OPTS(Claireon, PythonExecuteHint, TypeErrorMissingPositionalProducesHint, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace PyHintTests622_Helpers;
 
+	// Empty means the EnsureServerForTest() seam inside the helper is broken.
+	// Fail: an early co_return is scored as a PASS.
 	const FString ToolName = PyHintTests622_PickAnyRegisteredToolName();
 	if (ToolName.IsEmpty())
 	{
-		co_return;
+		UE_LOG(LogTemp, Error,
+			TEXT("[PythonExecuteHint] tool registry is empty after EnsureServerForTest(); "
+			     "the missing-positional hint path could not be exercised"));
 	}
+	UNTEST_ASSERT_FALSE(ToolName.IsEmpty());
 
 	const FString Logs = PyHintTests622_BuildTypeErrorMissingPositionalTraceback(ToolName);
 
 	TSharedPtr<FJsonObject> Hint = ClaireonTool_ExecutePython::BuildHintFromLogs(Logs);
 
-	UNTEST_EXPECT_TRUE(Hint.IsValid());
+	UNTEST_ASSERT_TRUE(Hint.IsValid());
 	if (Hint.IsValid())
 	{
 		FString ReasonField;
@@ -242,7 +279,7 @@ UNTEST_UNIT(Claireon, PythonExecuteHint, TypeErrorMissingPositionalProducesHint)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PythonExecuteHint, SyntaxErrorSuppressesHint)
+UNTEST_UNIT_OPTS(Claireon, PythonExecuteHint, SyntaxErrorSuppressesHint, UNTEST_TIMEOUTMS(10000))
 {
 	const FString Logs = TEXT(
 		"Traceback (most recent call last):\n"
@@ -257,7 +294,9 @@ UNTEST_UNIT(Claireon, PythonExecuteHint, SyntaxErrorSuppressesHint)
 	co_return;
 }
 
-UNTEST_UNIT_OPTS(Claireon, PythonExecuteHint, ColdStartBestMatchAppearsWhenCatalogAvailable, UNTEST_TIMEOUTMS(10000))
+// Budget raised from 10s: the helper may now build the tool registry via
+// EnsureServerForTest() on top of the cold FClaireonToolSearchIndex build.
+UNTEST_UNIT_OPTS(Claireon, PythonExecuteHint, ColdStartBestMatchAppearsWhenCatalogAvailable, UNTEST_TIMEOUTMS(30000))
 {
 	using namespace PyHintTests622_Helpers;
 
@@ -271,8 +310,11 @@ UNTEST_UNIT_OPTS(Claireon, PythonExecuteHint, ColdStartBestMatchAppearsWhenCatal
 	const FString AnyToolName = PyHintTests622_PickAnyRegisteredToolName();
 	if (AnyToolName.IsEmpty())
 	{
-		co_return;
+		UE_LOG(LogTemp, Error,
+			TEXT("[PythonExecuteHint] tool registry is empty after EnsureServerForTest(); "
+			     "the cold-start best-match path could not be exercised"));
 	}
+	UNTEST_ASSERT_FALSE(AnyToolName.IsEmpty());
 
 	// Construct a typo-like query by mutating one character of the
 	// registered tool name to a near-by character so the bounded
@@ -286,7 +328,10 @@ UNTEST_UNIT_OPTS(Claireon, PythonExecuteHint, ColdStartBestMatchAppearsWhenCatal
 	const FString Logs = PyHintTests622_BuildNameErrorTraceback(Typo);
 
 	TSharedPtr<FJsonObject> Hint = ClaireonTool_ExecutePython::BuildHintFromLogs(Logs);
-	UNTEST_EXPECT_TRUE(Hint.IsValid());
+	// ASSERT: the NameError channel fires on the `claireon.<X>` call context in
+	// the traceback, independently of whether <X> is registered, so a hint is
+	// mandatory here. On EXPECT the `if` would swallow the reason assertion.
+	UNTEST_ASSERT_TRUE(Hint.IsValid());
 	if (Hint.IsValid())
 	{
 		FString ReasonField;
@@ -305,7 +350,7 @@ UNTEST_UNIT_OPTS(Claireon, PythonExecuteHint, ColdStartBestMatchAppearsWhenCatal
 
 // Script-content channel: raw user code containing get_editor_property earns
 // a hint toward claireon.uobject_inspect, independent of execution outcome.
-UNTEST_UNIT(Claireon, PythonExecuteHint, GetEditorPropertyInScriptProducesHint)
+UNTEST_UNIT_OPTS(Claireon, PythonExecuteHint, GetEditorPropertyInScriptProducesHint, UNTEST_TIMEOUTMS(10000))
 {
 	const FString Code = TEXT(
 		"import unreal\n"
@@ -328,7 +373,7 @@ UNTEST_UNIT(Claireon, PythonExecuteHint, GetEditorPropertyInScriptProducesHint)
 	co_return;
 }
 
-UNTEST_UNIT(Claireon, PythonExecuteHint, ScriptWithoutGetEditorPropertyProducesNoHint)
+UNTEST_UNIT_OPTS(Claireon, PythonExecuteHint, ScriptWithoutGetEditorPropertyProducesNoHint, UNTEST_TIMEOUTMS(10000))
 {
 	// set_editor_property must NOT trigger the get_editor_property nudge.
 	const FString Code = TEXT(

@@ -9,7 +9,7 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-namespace
+namespace ClaireonMaterialInstanceTool_ClearParameterOverride_Private
 {
 	static bool ParseMICParameterTypeString(const FString& Type, EMaterialParameterType& OutType, FString& OutPerTypeToolName)
 	{
@@ -46,15 +46,17 @@ namespace
 		return false;
 	}
 }
+using namespace ClaireonMaterialInstanceTool_ClearParameterOverride_Private;
 
 FString ClaireonMaterialInstanceTool_ClearParameterOverride::GetOperation() const { return TEXT("instance_clear_parameter_override"); }
 
 FString ClaireonMaterialInstanceTool_ClearParameterOverride::GetDescription() const
 {
-	return TEXT("DEPRECATED: dispatches on parameter_type. Use the per-type tools instead: "
-	            "instance_clear_scalar_override, instance_clear_vector_override, "
-	            "instance_clear_texture_override, instance_clear_static_switch_override, "
-	            "instance_clear_static_component_mask_override. Session-mode tool: open via material_instance_open first.");
+	return TEXT("Clear a parameter override on a UMaterialInstanceConstant so the value falls back to the "
+	            "parent, dispatching on parameter_type. DEPRECATED: use the per-type tools instead -- "
+	            "material_instance_instance_clear_{scalar,vector,texture,static_switch,"
+	            "static_component_mask}_override. Session-mode tool: requires an open session, opened via "
+	            "material_instance_instance_open first.");
 }
 
 TSharedPtr<FJsonObject> ClaireonMaterialInstanceTool_ClearParameterOverride::GetInputSchema() const

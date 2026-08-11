@@ -25,7 +25,7 @@ namespace ClaireonBlueprintGraphInterfaceImpl
         }
 
         UBlueprint* Blueprint = Data->Blueprint.Get();
-        if (!Blueprint)
+        if (!IsValid(Blueprint))
         {
             return IClaireonTool::MakeErrorResult(TEXT("Blueprint is no longer valid"));
         }

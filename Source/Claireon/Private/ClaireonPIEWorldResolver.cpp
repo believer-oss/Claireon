@@ -155,7 +155,7 @@ int32 SelectPIEContextIndex(TArrayView<const FPIEContextCandidate> Candidates, c
 
 UWorld* ResolvePIEWorld(const TSharedPtr<FJsonObject>& Arguments, FString& OutError)
 {
-	if (UWorld* OverrideWorld = GClaireonPIEWorldResolver_TestOverrideWorld.Get())
+	if (UWorld* OverrideWorld = GClaireonPIEWorldResolver_TestOverrideWorld.Get(); IsValid(OverrideWorld))
 	{
 		return OverrideWorld;
 	}
@@ -166,7 +166,7 @@ UWorld* ResolvePIEWorld(const TSharedPtr<FJsonObject>& Arguments, FString& OutEr
 		return nullptr;
 	}
 
-	if (!GEngine)
+	if (!IsValid(GEngine))
 	{
 		OutError = TEXT("GEngine is not available; cannot enumerate PIE world contexts.");
 		return nullptr;
@@ -186,7 +186,7 @@ UWorld* ResolvePIEWorld(const TSharedPtr<FJsonObject>& Arguments, FString& OutEr
 
 		UWorld* ContextWorld = WorldContext.World();
 		Candidate.bHasWorld = (ContextWorld != nullptr);
-		if (ContextWorld)
+		if (IsValid(ContextWorld))
 		{
 			const ENetMode NetMode = ContextWorld->GetNetMode();
 			// A standalone PIE world is both the authority and the local

@@ -51,7 +51,7 @@ UEdGraphNode* ResolveNodeRef(
 	if (FGuid::Parse(Ref, ParsedGuid) && ParsedGuid.IsValid())
 	{
 		UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, ParsedGuid);
-		if (Node) return Node;
+		if (IsValid(Node)) return Node;
 	}
 
 	// Try title match
@@ -62,11 +62,20 @@ UEdGraphNode* ResolveNodeRef(
 	}
 	if (Matches.Num() > 1)
 	{
-		OutError = FString::Printf(TEXT("Multiple nodes match title '%s' — use GUID or local ID instead"), *Ref);
+		OutError = ClaireonBlueprintHelpers::FormatTitleMatchFailure(
+			Graph, Ref, Matches, TEXT("a GUID or local ID"));
 		return nullptr;
 	}
 
-	OutError = FString::Printf(TEXT("Node reference '%s' not found (checked: local IDs, GUIDs, titles)"), *Ref);
+	// Keep the local-ID/GUID context in the sentence -- the generic title-only message would
+	// lose it -- and append the title suggestions when there are any.
+	const FString Suggestions = ClaireonBlueprintHelpers::FormatTitleSuggestions(
+		Graph, Ref, TEXT("a GUID or local ID"));
+	OutError = FString::Printf(TEXT("Node reference '%s' not found (checked: local IDs, GUIDs, titles)."), *Ref);
+	if (!Suggestions.IsEmpty())
+	{
+		OutError += TEXT(" ") + Suggestions;
+	}
 	return nullptr;
 }
 
@@ -111,10 +120,10 @@ FString ClaireonAnimGraphTool_ApplyDelta::GetOperation() const { return TEXT("ap
 
 FString ClaireonAnimGraphTool_ApplyDelta::GetDescription() const
 {
-	return TEXT("Atomic batch graph construction and modification. Disconnects, removes, creates nodes, "
-		"and connects pins in one call. New nodes are referenced by local 'id'; existing nodes by GUID or title. "
-		"Execution order: disconnect → remove → create → connect. "
-		"Returns full graph state with id_map showing local-id → GUID mappings.");
+	return TEXT("Apply a batch of animation graph edits in one call against the open Animation Blueprint session. "
+		"Session-mode tool: open via animbp_open first and pass its session_id. Execution order is fixed: "
+		"disconnect -> remove_nodes -> nodes (create) -> connections. New nodes are referenced by local 'id', "
+		"existing nodes by GUID or title. Returns full graph state with id_map of local-id -> GUID.");
 }
 
 TSharedPtr<FJsonObject> ClaireonAnimGraphTool_ApplyDelta::GetInputSchema() const
@@ -137,13 +146,13 @@ FToolResult ClaireonAnimGraphTool_ApplyDelta::Execute(const TSharedPtr<FJsonObje
 
 	UAnimBlueprint* AnimBP = Data->AnimBlueprint.Get();
 	UEdGraph* Graph = Data->CurrentGraph.Get();
-	if (!AnimBP || !Graph)
+	if (!IsValid(AnimBP) || !IsValid(Graph))
 	{
 		return MakeErrorResult(TEXT("AnimBP or Graph no longer valid"));
 	}
 
 	const UEdGraphSchema* Schema = Graph->GetSchema();
-	if (!Schema)
+	if (!IsValid(Schema))
 	{
 		return MakeErrorResult(TEXT("Graph has no schema"));
 	}
@@ -174,7 +183,7 @@ FToolResult ClaireonAnimGraphTool_ApplyDelta::Execute(const TSharedPtr<FJsonObje
 			TMap<FString, UEdGraphNode*> EmptyMap; // No local IDs yet
 			FString FindError;
 			UEdGraphNode* Node = ClaireonAnimGraphTools_BatchInternal::ResolveNodeRef(NodeRef, EmptyMap, Graph, FindError);
-			if (!Node)
+			if (!IsValid(Node))
 			{
 				Warnings.Add(FString::Printf(TEXT("disconnect: %s"), *FindError));
 				continue;
@@ -191,7 +200,7 @@ FToolResult ClaireonAnimGraphTool_ApplyDelta::Execute(const TSharedPtr<FJsonObje
 			{
 				// Selective disconnect
 				UEdGraphNode* TargetNode = ClaireonAnimGraphTools_BatchInternal::ResolveNodeRef(TargetRef, EmptyMap, Graph, FindError);
-				if (TargetNode)
+				if (IsValid(TargetNode))
 				{
 					for (int32 i = Pin->LinkedTo.Num() - 1; i >= 0; --i)
 					{
@@ -207,7 +216,7 @@ FToolResult ClaireonAnimGraphTool_ApplyDelta::Execute(const TSharedPtr<FJsonObje
 			{
 				for (UEdGraphPin* Linked : Pin->LinkedTo)
 				{
-					if (Linked && Linked->GetOwningNode())
+					if (Linked && IsValid(Linked->GetOwningNode()))
 						Data->LastOperationAffectedNodes.Add(Linked->GetOwningNode()->NodeGuid);
 				}
 				Pin->BreakAllPinLinks();
@@ -231,7 +240,7 @@ FToolResult ClaireonAnimGraphTool_ApplyDelta::Execute(const TSharedPtr<FJsonObje
 
 			FString FindError;
 			UEdGraphNode* Node = ClaireonAnimGraphTools_BatchInternal::ResolveNodeRef(NodeRef, EmptyMap, Graph, FindError);
-			if (!Node)
+			if (!IsValid(Node))
 			{
 				Warnings.Add(FString::Printf(TEXT("remove: %s"), *FindError));
 				continue;
@@ -243,7 +252,7 @@ FToolResult ClaireonAnimGraphTool_ApplyDelta::Execute(const TSharedPtr<FJsonObje
 				if (!Pin) continue;
 				for (UEdGraphPin* Linked : Pin->LinkedTo)
 				{
-					if (Linked && Linked->GetOwningNode())
+					if (Linked && IsValid(Linked->GetOwningNode()))
 						Data->LastOperationAffectedNodes.Add(Linked->GetOwningNode()->NodeGuid);
 				}
 			}
@@ -283,11 +292,11 @@ FToolResult ClaireonAnimGraphTool_ApplyDelta::Execute(const TSharedPtr<FJsonObje
 			// Resolve class — try UAnimGraphNode_Base first, then UK2Node for K2 nodes
 			ClaireonNameResolver::FNameResolveResult ResolveResult;
 			UClass* NodeClass = ClaireonNameResolver::ResolveClassName(ClassName, UAnimGraphNode_Base::StaticClass(), ResolveResult);
-			if (!NodeClass)
+			if (!IsValid(NodeClass))
 			{
 				ClaireonNameResolver::FNameResolveResult K2Result;
 				NodeClass = ClaireonNameResolver::ResolveClassName(ClassName, UK2Node::StaticClass(), K2Result);
-				if (NodeClass)
+				if (IsValid(NodeClass))
 				{
 					ResolveResult = K2Result;
 				}
@@ -312,7 +321,7 @@ FToolResult ClaireonAnimGraphTool_ApplyDelta::Execute(const TSharedPtr<FJsonObje
 
 			// Create node (supports both UAnimGraphNode_Base and UK2Node subclasses)
 			UEdGraphNode* NewNode = NewObject<UEdGraphNode>(Graph, NodeClass);
-			if (!NewNode)
+			if (!IsValid(NewNode))
 			{
 				return MakeErrorResult(FString::Printf(TEXT("Node '%s': failed to create %s"), *LocalId, *NodeClass->GetName()));
 			}
@@ -379,13 +388,13 @@ FToolResult ClaireonAnimGraphTool_ApplyDelta::Execute(const TSharedPtr<FJsonObje
 
 			FString FindError;
 			UEdGraphNode* FromNode = ClaireonAnimGraphTools_BatchInternal::ResolveNodeRef(FromRef, LocalIdMap, Graph, FindError);
-			if (!FromNode)
+			if (!IsValid(FromNode))
 			{
 				return MakeErrorResult(FString::Printf(TEXT("Connection from '%s': %s"), *FromRef, *FindError));
 			}
 
 			UEdGraphNode* ToNode = ClaireonAnimGraphTools_BatchInternal::ResolveNodeRef(ToRef, LocalIdMap, Graph, FindError);
-			if (!ToNode)
+			if (!IsValid(ToNode))
 			{
 				return MakeErrorResult(FString::Printf(TEXT("Connection to '%s': %s"), *ToRef, *FindError));
 			}

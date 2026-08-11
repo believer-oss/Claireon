@@ -38,7 +38,7 @@ FString FClaireonFeedbackReport::GenerateReportFilename()
 // ---------------------------------------------------------------------------
 // Per-entry data used for cross-worktree merge + sort
 // ---------------------------------------------------------------------------
-namespace
+namespace ClaireonFeedbackReport_Private
 {
 	struct FClaireonFeedbackEntryData_R
 	{
@@ -126,6 +126,7 @@ namespace
 		return Result;
 	}
 } // namespace
+using namespace ClaireonFeedbackReport_Private;
 
 FString FClaireonFeedbackReport::AggregateFeedbackEntries(const TArray<FString>& FeedbackDirs, int32 MaxEntries)
 {
@@ -208,8 +209,8 @@ void FClaireonFeedbackReport::Generate(bool bAllWorktrees, FOnFeedbackReportComp
 {
 	// Validate API key
 	const UClaireonSettings* Settings = UClaireonSettings::Get();
-	const FString ApiKey = Settings ? Settings->GetAnthropicApiKey() : FString();
-	if (!Settings || ApiKey.IsEmpty())
+	const FString ApiKey = IsValid(Settings) ? Settings->GetAnthropicApiKey() : FString();
+	if (!IsValid(Settings) || ApiKey.IsEmpty())
 	{
 		OnComplete.ExecuteIfBound(false, TEXT("No API key configured. Set your Anthropic API key in Editor Preferences > Plugins > Claireon."));
 		return;

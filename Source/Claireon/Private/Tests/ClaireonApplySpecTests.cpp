@@ -8,6 +8,9 @@
 #if WITH_UNTESTED
 
 #include "Untest.h"
+#include "ClaireonTestDataAssertions.h"
+#include "ClaireonTestSchemaDiscovery.h"
+#include "Tools/ClaireonPCGGraphHelpers.h"
 #include "Tools/IClaireonTool.h"
 
 // Edit tools (apply_spec targets -- decomposed per-system tools)
@@ -16,6 +19,7 @@
 #include "Tools/ClaireonBlueprintGraphTool_Create.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddVariable.h"
 #include "Tools/ClaireonStateTreeTool_ApplySpec.h"
+#include "Tools/ClaireonStateTreeTool_Create.h"
 #include "Tools/ClaireonBlackboardTool_ApplySpec.h"
 #include "Tools/ClaireonEQSTool_ApplySpec.h"
 #include "Tools/ClaireonNiagaraTool_ApplySpec.h"
@@ -36,24 +40,44 @@
 // UE includes
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
+#include "Serialization/JsonSerializer.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "EditorAssetLibrary.h"
 #include "Engine/Blueprint.h"
+#include "Misc/PackageName.h"
 #include "Misc/ScopeExit.h"
 #include "ObjectTools.h"
+#include "PCGGraph.h"
+#include "PCGNode.h"
+#include "UObject/Package.h"
 
+#include "ClaireonTestAssetDeletion.h"
 // ---------------------------------------------------------------------------
-// Test asset paths -- existing game assets used for apply_spec tests
+// Test asset paths
+//
+// NOTHING here may point at real content that a test then mutates. apply_spec
+// writes through to the asset, so pointing a test at shipping content dirties
+// tracked .uasset files on every run AND makes the suite order-dependent: a
+// later test inspects whatever an earlier one left behind. That is exactly how
+// EQS.InspectStrafe came to pass in isolation and fail in the full run.
+//
+// The rule: a Source* path is READ-ONLY and is duplicated into /Game/__MCPTests;
+// only the duplicate is ever edited, and it is deleted on the way out. The
+// Niagara pair below established this pattern; BT/BB/EQS/ST now follow it.
 // ---------------------------------------------------------------------------
-static const TCHAR* ApplySpecTestBTPath        = TEXT("/Game/BP/AI/BT/BT_CombatAttacking_Default");
-static const TCHAR* ApplySpecTestBBPath        = TEXT("/Game/BP/AI/BT/BB_AI_Default");
-static const TCHAR* ApplySpecTestEQSPath       = TEXT("/Game/BP/AI/EQS/EQS_CombatWaiting_Strafe");
+static const TCHAR* ApplySpecSourceBTPath      = TEXT("/Game/BP/AI/BT/BT_CombatAttacking_Default");
+static const TCHAR* ApplySpecTestBTPath        = TEXT("/Game/__MCPTests/BT_ApplySpecTest");
+static const TCHAR* ApplySpecSourceBBPath      = TEXT("/Game/BP/AI/BT/BB_AI_Default");
+static const TCHAR* ApplySpecTestBBPath        = TEXT("/Game/__MCPTests/BB_ApplySpecTest");
+static const TCHAR* ApplySpecSourceEQSPath     = TEXT("/Game/BP/AI/EQS/EQS_CombatWaiting_Strafe");
+static const TCHAR* ApplySpecTestEQSPath       = TEXT("/Game/__MCPTests/EQS_ApplySpecTest");
+// No Source pair for StateTree: there is no StateTree asset in the repo to copy
+// (/Game/BP/AI/ST/ is empty), so the fixture is built by statetree_create.
+static const TCHAR* ApplySpecTestSTPath        = TEXT("/Game/__MCPTests/ST_ApplySpecTest");
 static const TCHAR* ApplySpecTestBPPath        = TEXT("/Game/__MCPTests/BP_ApplySpecTest");
 static const TCHAR* ApplySpecTestBPParityPath_A = TEXT("/Game/__MCPTests/BP_ApplySpecTest_ParityA");
 static const TCHAR* ApplySpecTestBPParityPath_B = TEXT("/Game/__MCPTests/BP_ApplySpecTest_ParityB");
-static const TCHAR* ApplySpecTestSTPath        = TEXT("/Game/BP/AI/ST/ST_TestDummy");
-// niagara apply_spec SAVES the asset (ClaireonSpecApplicator_Niagara), so the test
-// must never run against real content -- it duplicates this source into
-// /Game/__MCPTests and deletes the duplicate when done.
 static const TCHAR* ApplySpecSourceNiagaraPath = TEXT("/Game/Art_Lib/VOL/NS_LocalVolumeFog");
 static const TCHAR* ApplySpecTestNiagaraPath   = TEXT("/Game/__MCPTests/NS_ApplySpecTest");
 static const TCHAR* ApplySpecTestWidgetPath    = TEXT("/Game/__MCPTests/WBP_ApplySpecTest");
@@ -62,7 +86,7 @@ static const TCHAR* ApplySpecTestPCGPath       = TEXT("/Game/__MCPTests/PCG_Appl
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-namespace
+namespace ClaireonApplySpecTests_Private
 {
 
 // Decomposed *_apply_spec tools take flat args (no operation/params wrapper).
@@ -183,18 +207,112 @@ bool VerifyApplySpecResult(const IClaireonTool::FToolResult& Result, int32 Expec
 	return true;
 }
 
+// Delete a fixture this test created.
+//
+// DeleteObjectsUnchecked, NOT ForceDeleteObjects. ForceDeleteObjects runs
+// RecursiveRetrieveReferencers, which walks EVERY live UObject with a reference-finding
+// archive (FReferencerFinderArchive on the default path, FFindReferencersArchive under
+// Editor.UseLegacyGetReferencersForDeletion). Both of those call UObject::Serialize on
+// each candidate, and serializing a resident UNiagaraEmitter that way crashes with an
+// access violation inside its nested struct arrays -- reproducibly, whenever any earlier
+// test has pulled a Niagara asset into memory. That crash killed whole suite runs, not
+// just the deleting test, and flipping the CVar only moves it between the two archives.
+//
+// The reference check buys nothing here: the fixture was created moments ago by this
+// test and cannot have acquired outside referencers. DeleteObjectsUnchecked skips the
+// scan (bPerformReferenceCheck=false) and still deletes the package from disk via
+// CleanupAfterSuccessfulDelete, so cleanup semantics are unchanged.
 void CleanupTestAsset(const FString& AssetPath)
 {
 	UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *AssetPath);
-	if (Asset)
+	if (IsValid(Asset))
 	{
 		TArray<UObject*> AssetsToDelete;
 		AssetsToDelete.Add(Asset);
-		ObjectTools::ForceDeleteObjects(AssetsToDelete, false);
+		ClaireonTestAssetDeletion::DeleteObjectsForTest(AssetsToDelete);
 	}
 }
 
-} // anonymous namespace
+// Serialize a tool result's structured Data to JSON so a test can assert that
+// something it created shows up in the tool's output.
+//
+// Do NOT use GetContentAsString() for this. Every inspect tool's text content is
+// just a summary line -- behaviortree_inspect emits "<AssetName>: <N> nodes",
+// blackboard_inspect "<AssetName>: <N> keys (...)", eqs_inspect
+// "<AssetName>: <N> generator(s), <N> test(s)". A node class or key name can
+// never appear in those strings, so asserting Contains("Selector") against the
+// content is unpassable by construction no matter what the tool did. The node
+// and key detail lives in Data (Data.structure, Data.own_keys, Data.generators,
+// ...), which is what this serializes.
+FString ApplySpecTest_DataToString(const IClaireonTool::FToolResult& Result)
+{
+	if (!Result.Data.IsValid())
+	{
+		return FString();
+	}
+	FString Out;
+	const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+		TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Out);
+	FJsonSerializer::Serialize(Result.Data.ToSharedRef(), Writer);
+	return Out;
+}
+
+// Duplicate SourcePath -> DestPath, deleting any pre-existing DestPath first.
+//
+// The leading delete is not paranoia: /Game/__MCPTests is NOT gitignored and
+// survives between runs, so a run that dies mid-test leaves a mutated fixture
+// that the next run would otherwise inherit and assert against.
+// Build an EMPTY PCG graph asset at DestPath, deleting anything already there.
+//
+// Nothing in the repo ever created /Game/__MCPTests/PCG_ApplySpecTest, so
+// ApplySpec_PCG was permanently skipped: apply_spec failed with "Failed to open",
+// the test logged a warning and co_returned, and Untest scored that as a PASS.
+// There is no pcg_create tool to build the fixture with and no reason to commit a
+// tracked PCG graph for a test to mutate, so synthesize it here.
+//
+// NewObject<UPCGGraph> is exactly what the editor's own factory does
+// (UPCGGraphFactory::FactoryCreateNew is a one-line NewObject), so this is a
+// faithful empty graph, not an approximation.
+//
+// The package is real rather than in-memory-only on purpose: apply_spec's
+// SaveAsset() calls UEditorLoadingAndSavingUtils::SavePackages unconditionally,
+// so an unmountable /Memory/ package would only produce a save failure. The
+// caller must therefore delete it on the way out, exactly like the duplicated
+// BT/BB/EQS/Niagara fixtures above.
+bool EnsureFreshPCGGraph(const TCHAR* DestPath)
+{
+	CleanupTestAsset(DestPath);
+
+	UPackage* Package = CreatePackage(DestPath);
+	if (!IsValid(Package))
+	{
+		return false;
+	}
+
+	const FString AssetName = FPackageName::GetShortName(FString(DestPath));
+	UPCGGraph* Graph = NewObject<UPCGGraph>(
+		Package,
+		UPCGGraph::StaticClass(),
+		FName(*AssetName),
+		RF_Public | RF_Standalone | RF_Transactional);
+	if (!IsValid(Graph))
+	{
+		return false;
+	}
+
+	FAssetRegistryModule::AssetCreated(Graph);
+	Package->MarkPackageDirty();
+	return true;
+}
+
+bool EnsureFreshDuplicate(const TCHAR* SourcePath, const TCHAR* DestPath)
+{
+	CleanupTestAsset(DestPath);
+	return UEditorAssetLibrary::DuplicateAsset(SourcePath, DestPath) != nullptr;
+}
+
+} // namespace ClaireonApplySpecTests_Private
+using namespace ClaireonApplySpecTests_Private;
 
 // ============================================================================
 // BehaviorTree -- apply_spec creates nodes in an existing BT
@@ -202,6 +320,9 @@ void CleanupTestAsset(const FString& AssetPath)
 
 UNTEST_UNIT_OPTS(Claireon, ApplySpec_BehaviorTree, CreateNodesFromSpec, UNTEST_TIMEOUTMS(30000))
 {
+	UNTEST_ASSERT_TRUE(EnsureFreshDuplicate(ApplySpecSourceBTPath, ApplySpecTestBTPath));
+	ON_SCOPE_EXIT { CleanupTestAsset(ApplySpecTestBTPath); };
+
 	ClaireonBehaviorTreeTool_ApplySpec Tool;
 
 	// Spec: Selector with two Wait task children
@@ -227,7 +348,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_BehaviorTree, CreateNodesFromSpec, UNTEST_T
 	ClaireonTool_BehaviorTreeInspect InspectTool;
 	auto InspectResult = InspectTool.Execute(MakeInspectArgs(ApplySpecTestBTPath));
 	UNTEST_ASSERT_FALSE(InspectResult.bIsError);
-	FString InspectText = InspectResult.GetContentAsString();
+	FString InspectText = ApplySpecTest_DataToString(InspectResult);
 	UNTEST_EXPECT_TRUE(InspectText.Contains(TEXT("Selector")));
 	UNTEST_EXPECT_TRUE(InspectText.Contains(TEXT("Wait")));
 
@@ -294,7 +415,11 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_Blueprint, CreateGraphFromSpec, UNTEST_TIME
 	InspectArgs->SetStringField(TEXT("graph_name"), TEXT("EventGraph"));
 	auto InspectResult = InspectTool.Execute(InspectArgs);
 	UNTEST_ASSERT_FALSE(InspectResult.bIsError);
-	UNTEST_EXPECT_TRUE(InspectResult.GetContentAsString().Contains(TEXT("PrintString")));
+	// "Print String", not "PrintString": get_blueprint_graph reports node_title from
+	// the K2 node's display title, which is spaced. The spec asks for the function
+	// KismetSystemLibrary.PrintString, but nothing in the response echoes that
+	// member name verbatim.
+	UNTEST_EXPECT_TRUE(ApplySpecTest_DataToString(InspectResult).Contains(TEXT("Print String")));
 
 	CleanupTestAsset(ApplySpecTestBPPath);
 	co_return;
@@ -306,6 +431,9 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_Blueprint, CreateGraphFromSpec, UNTEST_TIME
 
 UNTEST_UNIT_OPTS(Claireon, ApplySpec_Blackboard, CreateKeysFromSpec, UNTEST_TIMEOUTMS(30000))
 {
+	UNTEST_ASSERT_TRUE(EnsureFreshDuplicate(ApplySpecSourceBBPath, ApplySpecTestBBPath));
+	ON_SCOPE_EXIT { CleanupTestAsset(ApplySpecTestBBPath); };
+
 	ClaireonBlackboardTool_ApplySpec Tool;
 
 	// Spec: 3 keys of different types
@@ -351,7 +479,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_Blackboard, CreateKeysFromSpec, UNTEST_TIME
 	ClaireonTool_BehaviorTreeInspectBlackboard InspectTool;
 	auto InspectResult = InspectTool.Execute(MakeInspectArgs(ApplySpecTestBBPath));
 	UNTEST_ASSERT_FALSE(InspectResult.bIsError);
-	FString InspectText = InspectResult.GetContentAsString();
+	FString InspectText = ApplySpecTest_DataToString(InspectResult);
 	UNTEST_EXPECT_TRUE(InspectText.Contains(TEXT("TestTarget")));
 	UNTEST_EXPECT_TRUE(InspectText.Contains(TEXT("TestInCombat")));
 	UNTEST_EXPECT_TRUE(InspectText.Contains(TEXT("TestHealthThreshold")));
@@ -365,6 +493,9 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_Blackboard, CreateKeysFromSpec, UNTEST_TIME
 
 UNTEST_UNIT_OPTS(Claireon, ApplySpec_EQS, CreateOptionsFromSpec, UNTEST_TIMEOUTMS(30000))
 {
+	UNTEST_ASSERT_TRUE(EnsureFreshDuplicate(ApplySpecSourceEQSPath, ApplySpecTestEQSPath));
+	ON_SCOPE_EXIT { CleanupTestAsset(ApplySpecTestEQSPath); };
+
 	ClaireonEQSTool_ApplySpec Tool;
 
 	// Spec: 1 option with SimpleGrid generator and Distance test
@@ -406,7 +537,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_EQS, CreateOptionsFromSpec, UNTEST_TIMEOUTM
 	ClaireonTool_EQSInspect InspectTool;
 	auto InspectResult = InspectTool.Execute(MakeInspectArgs(ApplySpecTestEQSPath));
 	UNTEST_ASSERT_FALSE(InspectResult.bIsError);
-	UNTEST_EXPECT_TRUE(InspectResult.GetContentAsString().Contains(TEXT("SimpleGrid")));
+	UNTEST_EXPECT_TRUE(ApplySpecTest_DataToString(InspectResult).Contains(TEXT("SimpleGrid")));
 
 	co_return;
 }
@@ -417,6 +548,33 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_EQS, CreateOptionsFromSpec, UNTEST_TIMEOUTM
 
 UNTEST_UNIT_OPTS(Claireon, ApplySpec_StateTree, CreateStatesFromSpec, UNTEST_TIMEOUTMS(30000))
 {
+	// This test used to target /Game/BP/AI/ST/ST_TestDummy, which does not exist
+	// anywhere in the repo -- /Game/BP/AI/ST/ is empty and nothing is tracked
+	// there. apply_spec therefore failed on a missing asset, which is why this
+	// test's failure looked different from its siblings'. Build the fixture with
+	// statetree_create instead of adding a tracked asset for a test to mutate.
+	CleanupTestAsset(ApplySpecTestSTPath);
+	{
+		// UStateTreeSchema itself is the abstract base and the factory rejects it, so
+		// the fixture needs a concrete subclass. Claireon ships none of its own, so
+		// discover one from the running project (ClaireonTestSchemaDiscovery). Soft
+		// dependency: if no concrete schema is loaded, skip rather than fail.
+		const FString SchemaClassPath = ClaireonTestSchemaDiscovery::FindConcreteStateTreeSchemaClassPath();
+		ClaireonStateTreeTool_Create CreateTool;
+		TSharedPtr<FJsonObject> CreateArgs = MakeShared<FJsonObject>();
+		CreateArgs->SetStringField(TEXT("asset_path"), ApplySpecTestSTPath);
+		CreateArgs->SetStringField(TEXT("schema_class_path"), SchemaClassPath);
+		const auto CreateResult = CreateTool.Execute(CreateArgs);
+		if (CreateResult.bIsError)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("[ApplySpec_StateTree] Could not create a StateTree fixture (%s); skipping."),
+				*CreateResult.ErrorMessage);
+			co_return;
+		}
+	}
+	ON_SCOPE_EXIT { CleanupTestAsset(ApplySpecTestSTPath); };
+
 	ClaireonStateTreeTool_ApplySpec Tool;
 
 	// Spec: 2 root-level states
@@ -452,7 +610,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_StateTree, CreateStatesFromSpec, UNTEST_TIM
 	ClaireonTool_StateTreeInspect InspectTool;
 	auto InspectResult = InspectTool.Execute(MakeInspectArgs(ApplySpecTestSTPath));
 	UNTEST_ASSERT_FALSE(InspectResult.bIsError);
-	FString InspectText = InspectResult.GetContentAsString();
+	FString InspectText = ApplySpecTest_DataToString(InspectResult);
 	UNTEST_EXPECT_TRUE(InspectText.Contains(TEXT("TestIdle")));
 	UNTEST_EXPECT_TRUE(InspectText.Contains(TEXT("TestCombat")));
 
@@ -468,12 +626,12 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_Niagara, CreateParametersFromSpec, UNTEST_T
 	// apply_spec saves the target package; work on a throwaway duplicate.
 	if (UEditorAssetLibrary::DoesAssetExist(ApplySpecTestNiagaraPath))
 	{
-		UEditorAssetLibrary::DeleteAsset(ApplySpecTestNiagaraPath);
+		ClaireonTestAssetDeletion::DeleteAssetForTest(ApplySpecTestNiagaraPath);
 	}
 	UNTEST_ASSERT_TRUE(UEditorAssetLibrary::DuplicateAsset(ApplySpecSourceNiagaraPath, ApplySpecTestNiagaraPath) != nullptr);
 	ON_SCOPE_EXIT
 	{
-		UEditorAssetLibrary::DeleteAsset(ApplySpecTestNiagaraPath);
+		ClaireonTestAssetDeletion::DeleteAssetForTest(ApplySpecTestNiagaraPath);
 	};
 
 	ClaireonNiagaraTool_ApplySpec Tool;
@@ -531,6 +689,13 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_Niagara, CreateParametersFromSpec, UNTEST_T
 
 UNTEST_UNIT_OPTS(Claireon, ApplySpec_PCG, CreateNodesFromSpec, UNTEST_TIMEOUTMS(30000))
 {
+	// The fixture is built here rather than assumed to exist: nothing in the repo
+	// ever created /Game/__MCPTests/PCG_ApplySpecTest, so this test spent its whole
+	// life on the "Test asset not found, skipping" branch -- which Untest scores as
+	// a PASS. See EnsureFreshPCGGraph for why the package is real, not in-memory.
+	UNTEST_ASSERT_TRUE(EnsureFreshPCGGraph(ApplySpecTestPCGPath));
+	ON_SCOPE_EXIT { CleanupTestAsset(ApplySpecTestPCGPath); };
+
 	ClaireonPCGGraphTool_ApplySpec Tool;
 
 	// Spec: 2 PCG nodes with a connection
@@ -567,21 +732,46 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_PCG, CreateNodesFromSpec, UNTEST_TIMEOUTMS(
 	Args->SetObjectField(TEXT("spec"), Spec);
 	auto Result = Tool.Execute(Args);
 
-	// PCG test asset might not exist -- handle gracefully
-	if (Result.bIsError && Result.GetContentAsString().Contains(TEXT("Failed to open")))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[ApplySpec_PCG] Test asset not found at %s, skipping"), ApplySpecTestPCGPath);
-		co_return;
-	}
-
+	// No "asset might not exist" branch any more: the fixture was created above, so
+	// a "Failed to open" here is a real failure, not an environment we tolerate.
 	UNTEST_ASSERT_TRUE(VerifyApplySpecResult(Result, 2));
 
 	const TSharedPtr<FJsonObject>* Mappings = nullptr;
-	UNTEST_ASSERT_TRUE(Result.Data->TryGetObjectField(TEXT("id_mappings"), Mappings));
+	UNTEST_CLAIREON_DATA_OBJECT(Result, "id_mappings", Mappings);
 	UNTEST_EXPECT_TRUE((*Mappings)->HasField(TEXT("surf_sampler")));
 	UNTEST_EXPECT_TRUE((*Mappings)->HasField(TEXT("static_mesh")));
 
-	// Verify via inspect
+	// Verify against the graph the tool actually wrote. The fixture started EMPTY,
+	// so the node count is exact, and the connection from Pass 2 must be live on
+	// both ends. Previously the only post-condition was "inspect returned no
+	// error", which an inspect of an empty graph satisfies just as well.
+	FString LoadError;
+	UPCGGraph* Graph = ClaireonPCGGraphHelpers::LoadPCGGraphAsset(ApplySpecTestPCGPath, LoadError);
+	UNTEST_ASSERT_PTR(Graph);
+
+	const TArray<UPCGNode*>& GraphNodes = Graph->GetNodes();
+	UNTEST_ASSERT_EQ(GraphNodes.Num(), 2);
+
+	int32 ConnectedOutPins = 0;
+	int32 ConnectedInPins = 0;
+	for (UPCGNode* Node : GraphNodes)
+	{
+		if (!IsValid(Node))
+		{
+			continue;
+		}
+		if (Node->IsOutputPinConnected(TEXT("Out")))
+		{
+			++ConnectedOutPins;
+		}
+		if (Node->IsInputPinConnected(TEXT("In")))
+		{
+			++ConnectedInPins;
+		}
+	}
+	UNTEST_EXPECT_EQ(ConnectedOutPins, 1);
+	UNTEST_EXPECT_EQ(ConnectedInPins, 1);
+
 	ClaireonTool_PCGGraphInspect InspectTool;
 	auto InspectResult = InspectTool.Execute(MakeInspectArgs(ApplySpecTestPCGPath));
 	UNTEST_ASSERT_FALSE(InspectResult.bIsError);
@@ -653,7 +843,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_WidgetBP, CreateWidgetsFromSpec, UNTEST_TIM
 	ClaireonTool_GetWidgetBPTree InspectTool;
 	auto InspectResult = InspectTool.Execute(MakeInspectArgs(ApplySpecTestWidgetPath));
 	UNTEST_ASSERT_FALSE(InspectResult.bIsError);
-	FString InspectText = InspectResult.GetContentAsString();
+	FString InspectText = ApplySpecTest_DataToString(InspectResult);
 	UNTEST_EXPECT_TRUE(InspectText.Contains(TEXT("CanvasPanel")));
 	UNTEST_EXPECT_TRUE(InspectText.Contains(TEXT("TextBlock")));
 	UNTEST_EXPECT_TRUE(InspectText.Contains(TEXT("Button")));

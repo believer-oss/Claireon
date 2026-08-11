@@ -14,12 +14,12 @@
 
 using FToolResult = IClaireonTool::FToolResult;
 
-namespace
+namespace ClaireonMaterialTool_Create_Private
 {
 	static bool ParseShadingModel_Create(const FString& Str, EMaterialShadingModel& OutModel)
 	{
 		const UEnum* Enum = StaticEnum<EMaterialShadingModel>();
-		if (!Enum) return false;
+		if (!IsValid(Enum)) return false;
 		const int64 Val = Enum->GetValueByNameString(Str);
 		if (Val == INDEX_NONE) return false;
 		OutModel = static_cast<EMaterialShadingModel>(Val);
@@ -29,13 +29,14 @@ namespace
 	static bool ParseMaterialDomain_Create(const FString& Str, EMaterialDomain& OutDomain)
 	{
 		const UEnum* Enum = StaticEnum<EMaterialDomain>();
-		if (!Enum) return false;
+		if (!IsValid(Enum)) return false;
 		const int64 Val = Enum->GetValueByNameString(Str);
 		if (Val == INDEX_NONE) return false;
 		OutDomain = static_cast<EMaterialDomain>(Val);
 		return true;
 	}
 }
+using namespace ClaireonMaterialTool_Create_Private;
 
 FString ClaireonMaterialTool_Create::GetOperation() const { return TEXT("create"); }
 
@@ -69,7 +70,7 @@ FToolResult ClaireonMaterialTool_Create::Execute(const TSharedPtr<FJsonObject>& 
 
 	const FString FullObjectPath = FString::Printf(TEXT("%s/%s.%s"), *PackagePath, *AssetName, *AssetName);
 	FSoftObjectPath SoftPath(FullObjectPath);
-	if (SoftPath.TryLoad())
+	if (IsValid(SoftPath.TryLoad()))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Asset already exists at path: %s. Use 'open' instead."), *FullObjectPath));
 	}
@@ -78,7 +79,7 @@ FToolResult ClaireonMaterialTool_Create::Execute(const TSharedPtr<FJsonObject>& 
 	UMaterialFactoryNew* Factory = NewObject<UMaterialFactoryNew>();
 	UObject* NewAsset = AssetTools.CreateAsset(AssetName, PackagePath, UMaterial::StaticClass(), Factory);
 	UMaterial* NewMaterial = Cast<UMaterial>(NewAsset);
-	if (!NewMaterial)
+	if (!IsValid(NewMaterial))
 	{
 		return MakeErrorResult(TEXT("Failed to create UMaterial via AssetTools.CreateAsset"));
 	}
@@ -114,6 +115,21 @@ FToolResult ClaireonMaterialTool_Create::Execute(const TSharedPtr<FJsonObject>& 
 	{
 		const FMCPSession& Blocker = OpenResult.BlockingSession.GetValue();
 		return MakeErrorResult(FString::Printf(TEXT("Asset is locked by %s session %s"), *Blocker.ToolName, *Blocker.SessionId));
+	}
+	// Defect guard: this used to handle only BlockedByOtherTool. On
+	// InvalidAssetPath (OpenSession's CanonicalizePath rejected the path, e.g. a
+	// path outside /Game/) SessionId is empty, and falling through returned a
+	// SUCCESS response carrying an empty session_id -- an unusable handle with no
+	// error. Every non-success result must produce an error here.
+	if (OpenResult.Result == EOpenSessionResult::InvalidAssetPath)
+	{
+		return MakeErrorResult(FString::Printf(TEXT("Invalid asset path: %s"), *ResolvedPath));
+	}
+	if (OpenResult.Result != EOpenSessionResult::Success && OpenResult.Result != EOpenSessionResult::ReusedExistingSession)
+	{
+		return MakeErrorResult(FString::Printf(
+			TEXT("Failed to open a session for %s (unexpected OpenSession result %d)"),
+			*ResolvedPath, static_cast<int32>(OpenResult.Result)));
 	}
 	const FString SessionId = OpenResult.SessionId;
 

@@ -21,6 +21,7 @@
 #if WITH_UNTESTED
 
 #include "Untest.h"
+#include "IPythonScriptPlugin.h"
 #include "ClaireonBridge.h"
 #include "ClaireonLog.h"
 #include "ClaireonModule.h"
@@ -62,24 +63,49 @@ namespace ClaireonBridgeBootstrapCompletenessTestsNS
 	}
 }
 
+// Root cause of the historical failure (test defect, no product bug): this body
+// used StartServer()/GetServer(), but in commandlet mode StartupModule()
+// short-circuits on the GIsEditor/IsRunningCommandlet guard, so Server is never
+// constructed. StartServer() logged "called before Server was constructed" and
+// returned, GetServer() stayed null, and UNTEST_ASSERT_PTR fired BEFORE the
+// zero-registry skip could run. EnsureServerForTest() is the established seam
+// (ClaireonPythonBridgeBootstrapTests.cpp) that constructs and populates the
+// registry headlessly, so this test now does real work in commandlet runs.
 UNTEST_UNIT_OPTS(Claireon, BridgeBootstrapCompleteness, ClaireonModuleAllMatchesRegisteredCount, UNTEST_TIMEOUTMS(20000))
 {
 	using namespace ClaireonBridgeBootstrapCompletenessTestsNS;
 
 	FClaireonModule& Module = FClaireonModule::Get();
-	const bool bWeStartedServer = !Module.IsServerRunning();
-	if (bWeStartedServer)
-	{
-		Module.StartServer();
-	}
-	FClaireonServer* Server = Module.GetServer();
+	FClaireonServer* Server = Module.EnsureServerForTest();
 	UNTEST_ASSERT_PTR(Server);
 
 	const TMap<FString, TSharedPtr<IClaireonTool>>& Tools = Server->GetTools();
-	// Skip in commandlet/headless where the registry is empty.
+	// EnsureServerForTest() registers the builtin provider unconditionally and
+	// populates the registry process-wide, so an empty registry here is a broken
+	// seam, not an environment we have to tolerate. The previous body logged a
+	// loud "SKIPPED" and co_returned -- and Untest has no skip primitive, so
+	// that scored as a PASS. This file is the one every auditor cites as the
+	// correct template, so it has to hard-fail: fail, do not skip.
 	if (Tools.Num() == 0)
 	{
-		if (bWeStartedServer) { Module.StopServer(); }
+		UE_LOG(LogClaireon, Error,
+			TEXT("[BootstrapCompleteness] tool registry is EMPTY after EnsureServerForTest(); "
+			     "the registry seam regressed and the parity check did not run"));
+	}
+	UNTEST_ASSERT_GT(Tools.Num(), 0);
+
+	// RebuildClaireonModule() and python_execute both need a live interpreter.
+	// This is the one precondition in this test that is genuinely outside its
+	// control: PythonScriptPlugin can be disabled by project configuration, and
+	// there is nothing the test can do about that. It therefore stays a skip --
+	// at Warning, so the log is the only way to distinguish "the parity check
+	// ran" from "it silently did not", and never at Display.
+	IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get();
+	if (!PythonPlugin || !PythonPlugin->IsPythonAvailable())
+	{
+		UE_LOG(LogClaireon, Warning,
+			TEXT("[BootstrapCompleteness] SKIPPED -- Python is not available in this "
+			     "configuration; parity check did NOT run"));
 		co_return;
 	}
 
@@ -104,6 +130,18 @@ UNTEST_UNIT_OPTS(Claireon, BridgeBootstrapCompleteness, ClaireonModuleAllMatches
 			UE_LOG(LogClaireon, Error,
 				TEXT("[BootstrapCompleteness] tool '%s' has invalid bare-identifier name '%s' (legacy prefix or empty)"),
 				*Pair.Key, *Name);
+			continue;
+		}
+		// The bootstrap also drops any tool whose GetInputSchema() is null (it
+		// cannot generate a signature without one). Mirror that skip here or the
+		// coverage-parity assert below would fail on a bootstrap that behaved
+		// exactly as designed. Log it: a null schema is still a tool defect worth
+		// seeing, just not the one this test guards.
+		if (!Tool->GetInputSchema().IsValid())
+		{
+			UE_LOG(LogClaireon, Warning,
+				TEXT("[BootstrapCompleteness] tool '%s' returns a null GetInputSchema(); the bootstrap skips it, so it is excluded from the parity count"),
+				*Pair.Key);
 			continue;
 		}
 		ExpectedPerNamespace.FindOrAdd(Namespace, 0)++;
@@ -159,7 +197,6 @@ UNTEST_UNIT_OPTS(Claireon, BridgeBootstrapCompleteness, ClaireonModuleAllMatches
 		UNTEST_EXPECT_EQ(AllLen, ExpectedCount);
 	}
 
-	if (bWeStartedServer) { Module.StopServer(); }
 	co_return;
 }
 

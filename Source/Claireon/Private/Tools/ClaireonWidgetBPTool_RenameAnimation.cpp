@@ -42,7 +42,7 @@ FToolResult ClaireonWidgetBPTool_RenameAnimation::Execute(const TSharedPtr<FJson
         return BeginError;
     }
     UWidgetBlueprint* WBP = Data ? Data->WidgetBlueprint.Get() : nullptr;
-    if (!WBP)
+    if (!IsValid(WBP))
     {
         return MakeErrorResult(TEXT("widget blueprint unavailable on session"));
     }

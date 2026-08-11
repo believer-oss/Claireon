@@ -70,6 +70,8 @@
 #include "Tools/ClaireonTool_StructInspect.h"
 #include "Tools/ClaireonTool_UObjectInspect.h"
 #include "Tools/ClaireonTool_UObjectReferencers.h"
+#include "Tools/ClaireonTool_UObjectSetProperty.h"
+#include "Tools/ClaireonTool_ComponentReregister.h"
 #include "Tools/ClaireonTool_WPActorDescInspect.h"
 #include "Tools/ClaireonTool_WPGenerateStreaming.h"
 #include "Tools/ClaireonTool_UClassCheckAsyncActionDelegateSignatures.h"
@@ -95,6 +97,8 @@
 #include "Tools/ClaireonBlueprintGraphTool_SplitPin.h"
 #include "Tools/ClaireonBlueprintGraphTool_RecombinePin.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddVariable.h"
+#include "Tools/ClaireonBlueprintGraphTool_AddLocalVariable.h"
+#include "Tools/ClaireonBlueprintGraphTool_TimelineAddTrack.h"
 #include "Tools/ClaireonBlueprintGraphTool_SetVariableProperties.h"
 #include "Tools/ClaireonBlueprintGraphTool_RemoveVariable.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddComponent.h"
@@ -117,9 +121,12 @@
 #include "Tools/ClaireonBlueprintGraphTool_Save.h"
 #include "Tools/ClaireonBlueprintGraphTool_Format.h"
 #include "Tools/ClaireonBlueprintGraphTool_Close.h"
+#include "Tools/ClaireonBlueprintGraphTool_CloseAll.h"
 #include "Tools/ClaireonBlueprintGraphTool_MoveNode.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddFunction.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddFunctionOverride.h"
+#include "Tools/ClaireonBlueprintGraphTool_AddMacro.h"
+#include "Tools/ClaireonBlueprintGraphTool_ListNodeTypes.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddInterface.h"
 #include "Tools/ClaireonBlueprintGraphTool_ImplementInterface.h"
 #include "Tools/ClaireonBlueprintGraphTool_RemoveInterface.h"
@@ -135,6 +142,7 @@
 #include "Tools/ClaireonTool_PIEStart.h"
 #include "Tools/ClaireonTool_PIEStop.h"
 #include "Tools/ClaireonTool_PIEStatus.h"
+#include "Tools/ClaireonTool_PIESetPaused.h"
 #include "Tools/ClaireonTool_PIEGetPlayerPawn.h"
 #include "Tools/ClaireonTool_PIEGetActor.h"
 #include "Tools/ClaireonTool_PIERegisterActor.h"
@@ -147,7 +155,7 @@
 #include "Tools/ClaireonTool_PIEUnregisterDamageListener.h"
 #include "Tools/ClaireonTool_PIEAITargetInfo.h"
 #include "Tools/ClaireonTool_PIETestAbility.h"
-// Runtime GAS tools (engine GAS API only -- no FSGame dependency).
+// Runtime GAS tools (engine GAS API only -- no host-game dependency).
 #include "Tools/ClaireonTool_GasInspect.h"
 #include "Tools/ClaireonTool_GasApplyEffect.h"
 #include "Tools/ClaireonTool_GasRemoveEffect.h"
@@ -172,14 +180,13 @@
 #include "Tools/ClaireonTool_AssetFindActorsByLabel.h"
 #include "Tools/ClaireonTool_MaterialListExpressions.h"
 #include "Tools/ClaireonTool_MaterialRenameParameter.h"
-// Live-coding helper
 // Enum fixup + raw property read
 #include "Tools/ClaireonTool_FixupStaleEnumValues.h"
 #include "Tools/ClaireonTool_GetEditorPropertyRaw.h"
 // CDO property setter via FProperty (TSubclassOf workaround)
-#include "Tools/ClaireonTool_BlueprintSetCdoProperty.h"
 #include "Tools/ClaireonTool_LogTail.h"
 #include "Tools/ClaireonTool_LogSearch.h"
+#include "Tools/ClaireonTool_LogCategories.h"
 #include "Tools/ClaireonTool_MessageLogGet.h"
 #include "Tools/ClaireonTool_TestRun.h"
 #include "Tools/ClaireonTool_TestList.h"
@@ -524,6 +531,10 @@
 #include "Tools/ClaireonDataAssetTool_Create.h"
 #include "Tools/ClaireonTool_AssetExists.h"
 #include "Tools/ClaireonDeveloperSettingsTool_Get.h"
+#include "Tools/ClaireonCurveTool_Create.h"
+#include "Tools/ClaireonCurveTool_AddKey.h"
+#include "Tools/ClaireonCurveTool_SetKeys.h"
+#include "Tools/ClaireonCurveTool_ClearKeys.h"
 
 // Data Table MCP tools
 #include "Tools/ClaireonTool_DataTableSearch.h"
@@ -542,12 +553,15 @@
 #include "Tools/ClaireonTool_DataTableImportJson.h"
 #include "Tools/ClaireonTool_DataTableExportCsv.h"
 #include "Tools/ClaireonTool_DataTableImportCsv.h"
+#include "Tools/ClaireonTool_DataTableCompositeRefresh.h"
+#include "Tools/ClaireonTool_DataTableCompositeInspect.h"
 
 // Flythrough camera MCP tools
 #include "Tools/ClaireonTool_FlythroughStart.h"
 #include "Tools/ClaireonTool_FlythroughStop.h"
 #include "Tools/ClaireonTool_FlythroughStatus.h"
 #include "Tools/ClaireonTool_PIEScreenshot.h"
+#include "Tools/ClaireonTool_SlateScreenshot.h"
 #include "Tools/ClaireonTool_PIETraceStart.h"
 #include "Tools/ClaireonTool_PIETraceStop.h"
 
@@ -1043,7 +1057,7 @@ namespace ClaireonLaunch
 		// via Config/DefaultEditorPerProjectUserSettings.ini).
 		FString ExtraFlags;
 		FString InitialPromptArg;
-		if (const UClaireonSettings* LaunchSettings = UClaireonSettings::Get())
+		if (const UClaireonSettings* LaunchSettings = UClaireonSettings::Get(); IsValid(LaunchSettings))
 		{
 			if (LaunchSettings->bLaunchSkipPermissions)
 			{
@@ -1194,7 +1208,7 @@ namespace ClaireonLaunch
 					else
 					{
 						Notify(LOCTEXT("ClaireonLaunchProxyRecoveryFailed",
-							"MCP proxy recovery failed. Restart it via "
+							"MCP proxy recovery failed. Restart it via the plugin's "
 							"Scripts/Utilities/Start-MCPProxy.ps1 and try again."));
 					}
 				});
@@ -1317,6 +1331,8 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_GameplayTagsReload>());
 	Tools.Add(MakeShared<ClaireonTool_StructInspect>());
 	Tools.Add(MakeShared<ClaireonTool_UObjectInspect>());
+	Tools.Add(MakeShared<ClaireonTool_UObjectSetProperty>());
+	Tools.Add(MakeShared<ClaireonTool_ComponentReregister>());
 	Tools.Add(MakeShared<ClaireonTool_UObjectReferencers>());
 	Tools.Add(MakeShared<ClaireonTool_WPActorDescInspect>());
 	Tools.Add(MakeShared<ClaireonTool_WPGenerateStreaming>());
@@ -1349,6 +1365,8 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SplitPin>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_RecombinePin>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_AddVariable>());
+	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_AddLocalVariable>());
+	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_TimelineAddTrack>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SetVariableProperties>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_RemoveVariable>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_AddComponent>());
@@ -1371,9 +1389,12 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_Save>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_Format>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_Close>());
+	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_CloseAll>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_MoveNode>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_AddFunction>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_AddFunctionOverride>());
+	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_AddMacro>());
+	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_ListNodeTypes>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_AddInterface>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_ImplementInterface>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_RemoveInterface>());
@@ -1389,6 +1410,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_PIEStart>());
 	Tools.Add(MakeShared<ClaireonTool_PIEStop>());
 	Tools.Add(MakeShared<ClaireonTool_PIEStatus>());
+	Tools.Add(MakeShared<ClaireonTool_PIESetPaused>());
 	Tools.Add(MakeShared<ClaireonTool_PIEGetPlayerPawn>());
 	Tools.Add(MakeShared<ClaireonTool_PIEGetActor>());
 	Tools.Add(MakeShared<ClaireonTool_PIERegisterActor>());
@@ -1418,6 +1440,8 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_FlythroughStop>());
 	Tools.Add(MakeShared<ClaireonTool_FlythroughStatus>());
 	Tools.Add(MakeShared<ClaireonTool_PIEScreenshot>());
+	// Slate/editor-viewport visual capture harness (window UI + level 3D viewport)
+	Tools.Add(MakeShared<ClaireonTool_SlateScreenshot>());
 
 	// Runtime Diagnostics (snapshot CMC / anim / motion-warp / tick state on a paused-PIE pawn)
 	Tools.Add(MakeShared<ClaireonTool_CMCInspectState>());
@@ -1536,14 +1560,14 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_AssetFindActorsByLabel>());
 	Tools.Add(MakeShared<ClaireonTool_MaterialListExpressions>());
 	Tools.Add(MakeShared<ClaireonTool_MaterialRenameParameter>());
-	// Live-coding helper
 	// Enum fixup + raw property read
 	Tools.Add(MakeShared<ClaireonTool_FixupStaleEnumValues>());
 	Tools.Add(MakeShared<ClaireonTool_GetEditorPropertyRaw>());
-	// CDO property setter (TSubclassOf workaround)
-	Tools.Add(MakeShared<ClaireonTool_BlueprintSetCdoProperty>());
+	// CDO property setter: the legacy TSubclassOf-workaround tool was removed; the
+	// resolver-backed ClaireonTool_SetBlueprintCDOProperty below is the only one.
 	Tools.Add(MakeShared<ClaireonTool_LogTail>());
 	Tools.Add(MakeShared<ClaireonTool_LogSearch>());
+	Tools.Add(MakeShared<ClaireonTool_LogCategories>());
 	Tools.Add(MakeShared<ClaireonTool_MessageLogGet>());
 	Tools.Add(MakeShared<ClaireonTool_TestRun>());
 	Tools.Add(MakeShared<ClaireonTool_TestList>());
@@ -1889,6 +1913,12 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_AssetExists>());
 	Tools.Add(MakeShared<FClaireonDeveloperSettingsTool_Get>());
 
+	// Curve tools (4)
+	Tools.Add(MakeShared<FClaireonCurveTool_Create>());
+	Tools.Add(MakeShared<FClaireonCurveTool_AddKey>());
+	Tools.Add(MakeShared<FClaireonCurveTool_SetKeys>());
+	Tools.Add(MakeShared<FClaireonCurveTool_ClearKeys>());
+
 	// PCG Graph MCP tools
 	Tools.Add(MakeShared<ClaireonTool_PCGGraphInspect>());
 
@@ -2026,6 +2056,8 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_DataTableImportJson>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableExportCsv>());
 	Tools.Add(MakeShared<ClaireonTool_DataTableImportCsv>());
+	Tools.Add(MakeShared<ClaireonTool_DataTableCompositeRefresh>());
+	Tools.Add(MakeShared<ClaireonTool_DataTableCompositeInspect>());
 
 	// Chooser Table MCP tools
 	Tools.Add(MakeShared<ClaireonTool_ChooserInspect>());
@@ -2275,7 +2307,7 @@ void FClaireonModule::ShutdownModule()
 	{
 		if (UObjectInitialized())
 		{
-			if (UClaireonSettings* MutableSettings = GetMutableDefault<UClaireonSettings>())
+			if (UClaireonSettings* MutableSettings = GetMutableDefault<UClaireonSettings>(); IsValid(MutableSettings))
 			{
 				MutableSettings->OnSettingsChanged.Remove(SettingsChangedHandle);
 			}
@@ -2350,7 +2382,7 @@ void FClaireonModule::StartServer()
 	//   2. UClaireonSettings::bEnableProxy (default false).
 	const bool bProxyEnabledByCLI = FParse::Param(FCommandLine::Get(), TEXT("EnableMCPProxy"));
 	bool bEnableProxy = false;
-	if (const UClaireonSettings* Settings = UClaireonSettings::Get())
+	if (const UClaireonSettings* Settings = UClaireonSettings::Get(); IsValid(Settings))
 	{
 		bEnableProxy = Settings->bEnableProxy;
 	}
@@ -2540,9 +2572,8 @@ void FClaireonModule::StartServer()
 	{
 		UE_LOG(LogClaireon, Error,
 			TEXT("[MCP] Port %u is held by an unknown process and no Claireon ")
-			TEXT("proxy is running on 43017. Free the port (or run ")
-			TEXT("Scripts/Utilities/Invoke-MultiWorktreeProxyMigration.ps1) ")
-			TEXT("and relaunch the editor."),
+			TEXT("proxy is running on 43017. Free the port (stop the stale ")
+			TEXT("owner process) and relaunch the editor."),
 			static_cast<uint32>(PreferredPort));
 		FClaireonBridge::SetToolRegistry(nullptr);
 		Server.Reset();
@@ -2742,13 +2773,29 @@ void FClaireonModule::CollectToolsFromProvider(IClaireonToolProvider* Provider)
 
 		const FString ToolName = Tool->GetName();
 
-		// Check for name collision and log a warning
+		// Name collision across providers: refuse, do not overwrite.
+		//
+		// This is the single merge point into the registry, for both boot and
+		// dynamic registration, and it used to warn and then overwrite anyway --
+		// so whichever provider registered last silently won and callers of the
+		// shadowed tool got a different tool than the one they named. Which
+		// provider that is depends on module load order, so the same call could
+		// behave differently between two editor sessions.
+		//
+		// Keeping the FIRST registration makes the outcome deterministic and
+		// leaves the already-working tool working; the Error names both providers
+		// so the duplicate is fixable. This check is boot-time, so unlike a
+		// test-time sweep it also sees FSEditor's tools, whose registration is
+		// commandlet-gated and therefore invisible to the test runner.
 		const TMap<FString, FName>& SourceMap = Server->GetToolSourceMap();
 		if (const FName* ExistingSource = SourceMap.Find(ToolName))
 		{
-			UE_LOG(LogClaireon, Warning,
-				TEXT("[MCP] Tool name collision: '%s' from provider '%s' overrides existing from '%s'"),
+			UE_LOG(LogClaireon, Error,
+				TEXT("[MCP] Tool name collision: '%s' from provider '%s' collides with the tool already "
+					 "registered by '%s'. Keeping the existing one; the new registration is REFUSED. "
+					 "Rename one tool's category/operation pair."),
 				*ToolName, *ProviderName.ToString(), *ExistingSource->ToString());
+			continue;
 		}
 
 		Server->RegisterTool(Tool, ProviderName);
@@ -2817,7 +2864,7 @@ void FClaireonModule::RegisterMenus()
 	static const FName ClaireonSection(TEXT("LevelEditor.LevelEditorToolBar.User.Claireon"));
 
 	UToolMenu* Toolbar = UToolMenus::Get()->ExtendMenu(ToolbarSection);
-	if (!Toolbar)
+	if (!IsValid(Toolbar))
 	{
 		return;
 	}
@@ -3026,7 +3073,7 @@ void FClaireonModule::RegisterMenus()
 	{
 		UToolMenu* WindowMenu = UToolMenus::Get()->ExtendMenu(
 			"LevelEditor.MainMenu.Window.General.Miscellaneous");
-		if (WindowMenu)
+		if (IsValid(WindowMenu))
 		{
 			FToolMenuSection& WindowSection = WindowMenu->FindOrAddSection("WindowLayout");
 			WindowSection.AddMenuEntry(

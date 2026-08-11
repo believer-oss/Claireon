@@ -59,13 +59,13 @@ TSharedPtr<FJsonObject> ClaireonLandscapeTool_ImportWeightmap::GetInputSchema() 
 
 IClaireonTool::FToolResult ClaireonLandscapeTool_ImportWeightmap::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("Editor not available"));
 	}
 
 	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
+	if (!IsValid(World))
 	{
 		return MakeErrorResult(TEXT("No editor world loaded"));
 	}
@@ -135,7 +135,7 @@ IClaireonTool::FToolResult ClaireonLandscapeTool_ImportWeightmap::Execute(const 
 		}
 	}
 
-	if (!TargetLayerInfo)
+	if (!IsValid(TargetLayerInfo))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Layer '%s' not found. Available: %s"),

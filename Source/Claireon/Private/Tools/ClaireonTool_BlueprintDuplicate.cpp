@@ -39,16 +39,12 @@ FString ClaireonTool_BlueprintDuplicate::GetOperation() const { return TEXT("dup
 FString ClaireonTool_BlueprintDuplicate::GetDescription() const
 {
 	return TEXT(
-		"Duplicate a Blueprint asset (Blueprint, AnimBlueprint, WidgetBlueprint, or any "
-		"UBlueprint-derived class) to a new path. Resolves source and destination via "
-		"ClaireonPathResolver, validates the source is in the Blueprint family, performs "
-		"IAssetTools::DuplicateAsset, notifies AssetRegistry::AssetCreated, and saves "
-		"the duplicate to disk. When rename_dependencies=true, rewrites the duplicate's "
-		"internal soft references (FSoftObjectPath, FSoftClassPath, TSoftObjectPtr<T>, "
-		"FPrimaryAssetId/FPrimaryAssetType) that point back at the source package so they "
-		"point at the new package. The destination folder is created automatically if it "
-		"does not exist. The source may be open in the editor; the duplicate is not "
-		"opened automatically. Immediate-mode tool: no session required."
+		"Duplicate a Blueprint, AnimBlueprint, WidgetBlueprint, or any UBlueprint subclass "
+		"to a new path, creating missing folders and saving the copy to disk. "
+		"rename_dependencies=true also repoints soft references inside the copy "
+		"(FSoftObjectPath, FSoftClassPath, TSoftObjectPtr, FPrimaryAssetId) from the "
+		"source package to the new one. The duplicate is not opened. Immediate-mode: no "
+		"open session required."
 	);
 }
 
@@ -70,7 +66,7 @@ TSharedPtr<FJsonObject> ClaireonTool_BlueprintDuplicate::GetInputSchema() const
 	DestPathProp->SetStringField(TEXT("type"), TEXT("string"));
 	DestPathProp->SetStringField(TEXT("description"),
 		TEXT("Absolute or Claireon-resolvable path for the destination Blueprint (e.g. "
-			 "/Game/Sandbox/BP_Hero_Clone). The destination folder is created automatically "
+			 "/Game/__MCPTests/BP_Hero_Clone). The destination folder is created automatically "
 			 "if it does not already exist."));
 	Properties->SetObjectField(TEXT("dest_path"), DestPathProp);
 
@@ -139,7 +135,7 @@ bool TryRewriteSoftObjectPath(FSoftObjectPath& InOutPath, const FString& SourceP
 
 void RewriteSelfReferences(UObject* NewAsset, const FString& SourcePackagePath, const FString& DestPackagePath)
 {
-	if (!NewAsset)
+	if (!IsValid(NewAsset))
 	{
 		return;
 	}
@@ -229,7 +225,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintDuplicate::Execute(const TShare
 	Arguments->TryGetBoolField(TEXT("rename_dependencies"), bRenameDependencies);
 
 	// 5. Editor availability
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("Editor not available"));
 	}
@@ -288,7 +284,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintDuplicate::Execute(const TShare
 	if (!bBranch1)
 	{
 		LoadedSource = FSoftObjectPath(SourcePath).TryLoad();
-		if (LoadedSource && LoadedSource->GetClass()->IsChildOf(UBlueprint::StaticClass()))
+		if (IsValid(LoadedSource) && LoadedSource->GetClass()->IsChildOf(UBlueprint::StaticClass()))
 		{
 			AcceptBranch = TEXT("IsChildOf<UBlueprint>");
 			bBranch2 = true;
@@ -321,7 +317,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintDuplicate::Execute(const TShare
 	{
 		LoadedSource = FSoftObjectPath(SourcePath).TryLoad();
 	}
-	if (!LoadedSource)
+	if (!IsValid(LoadedSource))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to duplicate Blueprint to %s"), *DestPath));
 	}
@@ -333,7 +329,7 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintDuplicate::Execute(const TShare
 	// 16. Duplicate via IAssetTools::DuplicateAsset
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	UObject* NewAsset = AssetToolsModule.Get().DuplicateAsset(DestName, DestFolder, LoadedSource);
-	if (!NewAsset)
+	if (!IsValid(NewAsset))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("Failed to duplicate Blueprint to %s"), *DestPath));
 	}

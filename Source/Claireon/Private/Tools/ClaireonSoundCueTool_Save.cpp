@@ -45,11 +45,11 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_Save::Execute(const TSharedPtr<
 		return MakeErrorResult(FString::Printf(TEXT("SoundCue session not found: %s"), *SessionId));
 	}
 	UObject* Asset = Data->Asset.Get();
-	if (!Asset) return MakeErrorResult(TEXT("Asset is no longer valid"));
+	if (!IsValid(Asset)) return MakeErrorResult(TEXT("Asset is no longer valid"));
 	UPackage* Package = Asset->GetOutermost();
-	if (!Package) return MakeErrorResult(TEXT("Asset has no package"));
+	if (!IsValid(Package)) return MakeErrorResult(TEXT("Asset has no package"));
 
-	if (USoundCue* Cue = Cast<USoundCue>(Asset))
+	if (USoundCue* Cue = Cast<USoundCue>(Asset); IsValid(Cue))
 	{
 #if WITH_EDITOR
 		if (Cue->SoundCueGraph)

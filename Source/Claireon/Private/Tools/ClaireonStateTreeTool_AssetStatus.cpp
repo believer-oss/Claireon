@@ -16,12 +16,12 @@ FString FClaireonStateTreeTool_AssetStatus::GetOperation() const { return TEXT("
 
 FString FClaireonStateTreeTool_AssetStatus::GetDescription() const
 {
-	return TEXT("E10: stateless StateTree health check. Returns "
+	return TEXT("Check a StateTree asset's health by path. Returns "
 				"{ready_to_run, last_compiled_editor_data_hash, cold_load_valid}. "
 				"ready_to_run mirrors UStateTree::IsReadyToRun() on the in-memory copy. "
-				"cold_load_valid re-loads the asset from disk into a fresh package and checks "
-				"IsReadyToRun() there, catching the E7 'saved but not compiled' regression. "
-				"Distinct from claireon.statetree_status which inspects an open session.");
+				"cold_load_valid re-loads from disk into a fresh package and checks there, "
+				"catching the 'saved but not compiled' regression. Stateless / non-session, "
+				"unlike statetree_status, which reads an open session.");
 }
 
 TSharedPtr<FJsonObject> FClaireonStateTreeTool_AssetStatus::GetInputSchema() const
@@ -42,7 +42,7 @@ IClaireonTool::FToolResult FClaireonStateTreeTool_AssetStatus::Execute(const TSh
 
 	FString LoadError;
 	UStateTree* StateTree = ClaireonStateTreeHelpers::LoadStateTreeAsset(AssetPath, LoadError);
-	if (!StateTree)
+	if (!IsValid(StateTree))
 	{
 		return MakeErrorResult(LoadError);
 	}

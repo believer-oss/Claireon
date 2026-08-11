@@ -33,7 +33,7 @@
 // Helpers -- local to this TU
 // ----------------------------------------------------------------------------
 
-namespace
+namespace ClaireonSpecApplicator_LevelSequence_Private
 {
 	// Canonicalize a JSON value to a stable string for value-equality comparisons
 	// of keyframe payloads. Mirrors the serialization F2 uses on the input side.
@@ -107,7 +107,7 @@ namespace
 			return nullptr;
 		}
 		UPackage* Package = CreatePackage(*PkgName);
-		if (!Package)
+		if (!IsValid(Package))
 		{
 			OutError = FString::Printf(TEXT("CreatePackage failed: %s"), *PkgName);
 			return nullptr;
@@ -116,7 +116,7 @@ namespace
 		ULevelSequence* NewSeq = NewObject<ULevelSequence>(
 			Package, FName(*AssetName),
 			RF_Public | RF_Standalone | RF_Transactional);
-		if (!NewSeq)
+		if (!IsValid(NewSeq))
 		{
 			OutError = TEXT("NewObject<ULevelSequence> failed");
 			return nullptr;
@@ -130,7 +130,7 @@ namespace
 	// (row_index, start_frame). Returns INDEX_NONE if no matching section exists.
 	int32 SpecApplicatorLevelSequence_FindSectionIndexByIdentity(const UMovieSceneTrack* Track, int32 RowIndex, int32 StartFrame)
 	{
-		if (!Track)
+		if (!IsValid(Track))
 		{
 			return INDEX_NONE;
 		}
@@ -155,6 +155,7 @@ namespace
 		return INDEX_NONE;
 	}
 }
+using namespace ClaireonSpecApplicator_LevelSequence_Private;
 
 // ----------------------------------------------------------------------------
 // ValidateToolSpec
@@ -230,7 +231,7 @@ bool FClaireonSpecApplicator_LevelSequence::OpenOrCreateAsset(const FString& Ass
 
 	FString LoadError;
 	ULevelSequence* LS = FClaireonSequenceHelpers::LoadLevelSequenceAsset(Resolved, LoadError);
-	if (!LS)
+	if (!IsValid(LS))
 	{
 		// Fall back to creation: Claireon's apply_spec is create-if-missing by default.
 		FString CreateError;
@@ -241,7 +242,7 @@ bool FClaireonSpecApplicator_LevelSequence::OpenOrCreateAsset(const FString& Ass
 			PackageName = PackageName.Left(Dot);
 		}
 		LS = CreateLevelSequenceAtPath(PackageName, CreateError);
-		if (!LS)
+		if (!IsValid(LS))
 		{
 			OutError = FString::Printf(TEXT("load failed (%s) and create failed (%s)"),
 				*LoadError, *CreateError);
@@ -280,13 +281,13 @@ bool FClaireonSpecApplicator_LevelSequence::OpenOrCreateAsset(const FString& Ass
 bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FString& SessionId, const TSharedPtr<FJsonObject>& Spec)
 {
 	ULevelSequence* LS = Sequence.Get();
-	if (!LS)
+	if (!IsValid(LS))
 	{
 		AddError(TEXT("Level Sequence is no longer valid"));
 		return false;
 	}
 	UMovieScene* MovieScene = LS->GetMovieScene();
-	if (!MovieScene)
+	if (!IsValid(MovieScene))
 	{
 		AddError(TEXT("Level Sequence has no MovieScene"));
 		return false;
@@ -383,12 +384,12 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 				if (!ObjectClassPath.IsEmpty())
 				{
 					ObjectClass = FindObject<UClass>(nullptr, *ObjectClassPath);
-					if (!ObjectClass)
+					if (!IsValid(ObjectClass))
 					{
 						ObjectClass = LoadObject<UClass>(nullptr, *ObjectClassPath);
 					}
 				}
-				if (!ObjectClass)
+				if (!IsValid(ObjectClass))
 				{
 					RecordEntryFailure(FString::Printf(TEXT("binding:%s"), *Label),
 						FString::Printf(TEXT("cannot resolve object_class '%s'"), *ObjectClassPath));
@@ -452,14 +453,14 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 				for (int32 TrackIdx = CurTracks.Num() - 1; TrackIdx >= 0; --TrackIdx)
 				{
 					UMovieSceneTrack* T = CurTracks[TrackIdx];
-					if (!T) continue;
+					if (!IsValid(T)) continue;
 					// Recover a spec type name via our helper. If none, leave it alone.
 					FString FoundType;
 					for (const auto& Pair : { TEXT("transform"), TEXT("visibility"), TEXT("event"),
 											   TEXT("audio"), TEXT("camera_cut"), TEXT("float") })
 					{
 						UClass* C = FClaireonSequenceHelpers::ResolveTrackClass(Pair);
-						if (C && T->GetClass() == C)
+						if (IsValid(C) && T->GetClass() == C)
 						{
 							FoundType = FString(Pair).ToLower();
 							break;
@@ -488,7 +489,7 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 				if (Type.IsEmpty()) continue;
 
 				UClass* TrackClass = FClaireonSequenceHelpers::ResolveTrackClass(Type);
-				if (!TrackClass)
+				if (!IsValid(TrackClass))
 				{
 					RecordEntryFailure(
 						FString::Printf(TEXT("track:%s:%s"), *Label, *Type),
@@ -503,14 +504,14 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 					FetchCurrentTracks(CurTracks);
 					for (UMovieSceneTrack* T : CurTracks)
 					{
-						if (T && T->GetClass() == TrackClass)
+						if (IsValid(T) && T->GetClass() == TrackClass)
 						{
 							Track = T;
 							break;
 						}
 					}
 				}
-				if (!Track)
+				if (!IsValid(Track))
 				{
 					FString Err;
 					if (!Claireon::SequenceEdit::ApplyAddTrack(LS, BindingGuid, TrackClass, Track, Err))
@@ -521,9 +522,9 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 					}
 					RecordEntrySuccess(
 						FString::Printf(TEXT("track:%s:%s:add"), *Label, *Type),
-						Track ? Track->GetName() : FString());
+						IsValid(Track) ? Track->GetName() : FString());
 				}
-				if (!Track) continue;
+				if (!IsValid(Track)) continue;
 
 				// --- Section convergence within this track ---
 				const TArray<TSharedPtr<FJsonValue>>* SpecSections = nullptr;
@@ -548,7 +549,7 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 					for (int32 i = CurSections.Num() - 1; i >= 0; --i)
 					{
 						UMovieSceneSection* S = CurSections[i];
-						if (!S) continue;
+						if (!IsValid(S)) continue;
 						const TRange<FFrameNumber> R = S->GetRange();
 						if (!R.GetLowerBound().IsClosed()) continue;
 						const FString Id = FString::Printf(TEXT("%d:%d"),
@@ -594,7 +595,7 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 					{
 						Section = Track->GetAllSections()[SecIdx];
 					}
-					if (!Section) continue;
+					if (!IsValid(Section)) continue;
 
 					// --- Keyframe convergence ---
 					const TArray<TSharedPtr<FJsonValue>>* SpecKeys = nullptr;
@@ -660,9 +661,9 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 							if (!EndpointName.IsEmpty())
 							{
 								UBlueprint* DirBP = LS->GetDirectorBlueprint();
-								UClass* DirClass = DirBP ? Cast<UClass>(DirBP->GeneratedClass) : nullptr;
-								UFunction* Fn = DirClass ? DirClass->FindFunctionByName(FName(*EndpointName)) : nullptr;
-								if (!Fn)
+								UClass* DirClass = IsValid(DirBP) ? Cast<UClass>(DirBP->GeneratedClass) : nullptr;
+								UFunction* Fn = IsValid(DirClass) ? DirClass->FindFunctionByName(FName(*EndpointName)) : nullptr;
+								if (!IsValid(Fn))
 								{
 									RecordEntryFailure(
 										FString::Printf(TEXT("keyframe:%s:%s:%d:%s"), *Label, *Type, Frame, *EndpointName),
@@ -801,13 +802,13 @@ bool FClaireonSpecApplicator_LevelSequence::CompileAsset(const FString& SessionI
 bool FClaireonSpecApplicator_LevelSequence::SaveAsset(const FString& SessionId, FString& OutError)
 {
 	ULevelSequence* LS = Sequence.Get();
-	if (!LS)
+	if (!IsValid(LS))
 	{
 		OutError = TEXT("sequence pointer invalidated");
 		return false;
 	}
 	UPackage* Package = LS->GetOutermost();
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		OutError = TEXT("sequence has no package");
 		return false;

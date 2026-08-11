@@ -22,10 +22,10 @@ FString ClaireonTool_GasInspect::GetOperation() const { return TEXT("runtime_ins
 
 FString ClaireonTool_GasInspect::GetDescription() const
 {
-	return TEXT("Full snapshot of a live PIE actor's AbilitySystemComponent: granted abilities, "
-		"active gameplay effects (with stable effect_handle_id for gas_remove_effect), attributes "
-		"(base + current), and owned gameplay tags. Defaults to the server (authoritative) world; "
-		"pass net_mode='client' to inspect client-side prediction. Read-only; requires PIE.");
+	return TEXT("Inspect a live PIE actor's AbilitySystemComponent: granted abilities, active gameplay effects "
+		"(with stable effect_handle_id for gas_remove_effect), attributes (base + current), and owned "
+		"gameplay tags; narrow with sections. Read-only and non-session, but requires a live PIE session. "
+		"net_mode defaults to the server world; pass 'client' to see client-side prediction.");
 }
 
 EClaireonToolSessionMode ClaireonTool_GasInspect::GetSessionMode() const
@@ -103,7 +103,7 @@ IClaireonTool::FToolResult ClaireonTool_GasInspect::Execute(const TSharedPtr<FJs
 			Obj->SetNumberField(TEXT("input_id"), Spec.InputID);
 			Obj->SetBoolField(TEXT("is_active"), Spec.IsActive());
 			const UObject* Source = Spec.SourceObject.Get();
-			Obj->SetStringField(TEXT("source_object"), Source ? Source->GetName() : TEXT(""));
+			Obj->SetStringField(TEXT("source_object"), IsValid(Source) ? Source->GetName() : TEXT(""));
 			AbilitiesJson.Add(MakeShared<FJsonValueObject>(Obj));
 		}
 		AbilityCount = AbilitiesJson.Num();
@@ -112,7 +112,7 @@ IClaireonTool::FToolResult ClaireonTool_GasInspect::Execute(const TSharedPtr<FJs
 
 	if (bWantEffects)
 	{
-		const float WorldTime = Target.World ? Target.World->GetTimeSeconds() : 0.0f;
+		const float WorldTime = IsValid(Target.World) ? Target.World->GetTimeSeconds() : 0.0f;
 		TArray<TSharedPtr<FJsonValue>> EffectsJson;
 		TArray<FActiveGameplayEffectHandle> Handles = ASC->GetActiveEffects(FGameplayEffectQuery());
 		for (const FActiveGameplayEffectHandle& Handle : Handles)
@@ -137,7 +137,7 @@ IClaireonTool::FToolResult ClaireonTool_GasInspect::Execute(const TSharedPtr<FJs
 			Obj->SetArrayField(TEXT("granted_tags"), GrantedJson);
 
 			const UObject* Source = Active->Spec.GetContext().GetSourceObject();
-			Obj->SetStringField(TEXT("source"), Source ? Source->GetName() : TEXT(""));
+			Obj->SetStringField(TEXT("source"), IsValid(Source) ? Source->GetName() : TEXT(""));
 			EffectsJson.Add(MakeShared<FJsonValueObject>(Obj));
 		}
 		EffectCount = EffectsJson.Num();
@@ -154,7 +154,7 @@ IClaireonTool::FToolResult ClaireonTool_GasInspect::Execute(const TSharedPtr<FJs
 			if (!Attr.IsValid()) { continue; }
 			TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 			const UClass* SetClass = Attr.GetAttributeSetClass();
-			Obj->SetStringField(TEXT("set"), SetClass ? SetClass->GetName() : TEXT(""));
+			Obj->SetStringField(TEXT("set"), IsValid(SetClass) ? SetClass->GetName() : TEXT(""));
 			Obj->SetStringField(TEXT("name"), Attr.GetName());
 			Obj->SetNumberField(TEXT("base_value"), ASC->GetNumericAttributeBase(Attr));
 			Obj->SetNumberField(TEXT("current_value"), ASC->GetNumericAttribute(Attr));

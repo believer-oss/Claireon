@@ -22,15 +22,11 @@ FString FClaireonMetaSoundTool_DumpGraph::GetOperation() const { return TEXT("du
 
 FString FClaireonMetaSoundTool_DumpGraph::GetDescription() const
 {
-	return TEXT("Stateless dump of a MetaSound asset's graph (UMetaSoundSource or UMetaSoundPatch). "
-				"Walks IMetaSoundDocumentInterface to emit "
-				"{nodes:[{id, class_id, name}], edges:[{from_node, from_vertex, to_node, to_vertex}], "
-				"inputs:[{name, type_name}], outputs:[{name, type_name}], interfaces:[...]}. "
-				"D5: \"is this asset what we expected\" without blind probes via the Python builder. "
-				"D6 workaround: bypasses the broken Python tuple shapes "
-				"(find_graph_input_node, get_node_output_data, find_or_begin_building all return "
-				"tuples that Python users must destructure -- this tool reads the document directly "
-				"and emits flat JSON).");
+	return TEXT("Read a MetaSound asset's graph (UMetaSoundSource or UMetaSoundPatch) by walking "
+				"IMetaSoundDocumentInterface. Emits {nodes:[{id,class_id,name}], "
+				"edges:[{from_node,from_vertex,to_node,to_vertex}], inputs:[{name,type_name}], "
+				"outputs:[{name,type_name}], interfaces:[...]}. Prefer it over the Python builder's "
+				"tuple-returning accessors. Stateless / read-only / non-session: no open session required.");
 }
 
 TSharedPtr<FJsonObject> FClaireonMetaSoundTool_DumpGraph::GetInputSchema() const

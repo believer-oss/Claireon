@@ -17,7 +17,7 @@
 #include "Dom/JsonValue.h"
 #include "Engine/Blueprint.h"
 
-namespace
+namespace ClaireonTool_GetBlueprintProperties_spec_Private
 {
 	FString GetPropSpec_ExtractSessionId(const FString& Text)
 	{
@@ -29,6 +29,7 @@ namespace
 		return Text.Mid(Start, End - Start).TrimStartAndEnd();
 	}
 }
+using namespace ClaireonTool_GetBlueprintProperties_spec_Private;
 
 // =====================================================================================
 // ITEM_03 Test 3: properties alias coverage. Variables/functions/components entries
@@ -37,7 +38,7 @@ namespace
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetBlueprintPropertiesTest_FieldAliases_EntityPrefixed,
 	"Claireon.GetBlueprintProperties.FieldAliases.EntityPrefixed",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FGetBlueprintPropertiesTest_FieldAliases_EntityPrefixed::RunTest(const FString& Parameters)
 {

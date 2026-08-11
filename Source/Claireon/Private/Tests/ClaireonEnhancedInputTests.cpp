@@ -27,37 +27,73 @@
 #include "InputModifiers.h"
 #include "InputTriggers.h"
 #include "UObject/Package.h"
+#include "UObject/SoftObjectPath.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "HAL/FileManager.h"
+#include "Misc/PackageName.h"
+#include "ObjectTools.h"
 
+#include "ClaireonTestAssetDeletion.h"
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-namespace
+namespace ClaireonEnhancedInputTests_Private
 {
-	/** Extract session ID from the text-based edit tool response.
-	 *  The response contains "Session: <id>" on a line. */
+	/** Extract the session ID from an input-edit tool response.
+	 *
+	 *  Reads the structured Data payload, which is where every input-edit tool puts
+	 *  the id (ClaireonInputEditToolBase::BuildStateResponse sets Data->session_id).
+	 *
+	 *  This used to scan Result.ErrorMessage for a "Session: " marker, which could
+	 *  never work: ErrorMessage is only populated by MakeErrorResult, so on the
+	 *  SUCCESS path it is always empty and the scan always returned FString(). Every
+	 *  test that opened a session therefore failed its first assert
+	 *  (SessionId.IsEmpty() should be false) no matter what the tool did. The
+	 *  "Session: <id>" line does exist, but in Result.Summary; parsing Data is both
+	 *  correct and not formatting-dependent.
+	 */
 	FString ExtractInputEditSessionId(const IClaireonTool::FToolResult& Result)
 	{
-		const FString& Output = Result.ErrorMessage;
-		static const FString Marker = TEXT("Session: ");
-		int32 Start = Output.Find(Marker);
-		if (Start == INDEX_NONE)
+		if (Result.bIsError || !Result.Data.IsValid())
 		{
 			return FString();
 		}
-		Start += Marker.Len();
-		int32 End = Output.Find(TEXT("\n"), ESearchCase::IgnoreCase, ESearchDir::FromStart, Start);
-		if (End == INDEX_NONE)
+		FString SessionId;
+		Result.Data->TryGetStringField(TEXT("session_id"), SessionId);
+		return SessionId;
+	}
+
+	/** Delete a fixture asset and its on-disk package.
+	 *
+	 *  Required BEFORE creating as well as after: /Game/__MCPTests is NOT gitignored and
+	 *  survives between runs, and ClaireonInputTool_Create saves the package it
+	 *  creates. A fixture left behind by an earlier (or crashed) run makes the next
+	 *  'create' fail with "Asset already exists at path ... Use 'open' instead."
+	 *  Same pattern as ClaireonListGraphsDataEnvelopeTests.cpp. */
+	void CleanupInputAsset(const FString& AssetPath)
+	{
+		const FString ObjectPath = AssetPath + TEXT(".") + FPackageName::GetShortName(AssetPath);
+		if (UObject* Asset = FSoftObjectPath(ObjectPath).TryLoad(); IsValid(Asset))
 		{
-			End = Output.Len();
+			TArray<UObject*> AssetsToDelete;
+			AssetsToDelete.Add(Asset);
+			ClaireonTestAssetDeletion::DeleteObjectsForTest(AssetsToDelete);
 		}
-		return Output.Mid(Start, End - Start).TrimStartAndEnd();
+		// ForceDeleteObjects can leave the saved package file behind in editor-less
+		// runs, so remove it directly and keep /Game/__MCPTests from accumulating.
+		const FString PackageFileName = FPackageName::LongPackageNameToFilename(
+			AssetPath, FPackageName::GetAssetPackageExtension());
+		if (IFileManager::Get().FileExists(*PackageFileName))
+		{
+			IFileManager::Get().Delete(*PackageFileName, /*RequireExists=*/false, /*EvenReadOnly=*/true);
+		}
 	}
 
 	/** Create a transient test Input Action via the create tool. Returns session ID. */
 	FString CreateTestIA(const FString& Path)
 	{
+		CleanupInputAsset(Path);
 		ClaireonInputTool_Create Tool;
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 		Args->SetStringField(TEXT("asset_path"), Path);
@@ -69,6 +105,7 @@ namespace
 	/** Create a transient test IMC via the create tool. Returns session ID. */
 	FString CreateTestIMC(const FString& Path)
 	{
+		CleanupInputAsset(Path);
 		ClaireonInputTool_Create Tool;
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 		Args->SetStringField(TEXT("asset_path"), Path);
@@ -96,6 +133,7 @@ namespace
 		return Tool.Execute(Args);
 	}
 }
+using namespace ClaireonEnhancedInputTests_Private;
 
 // ============================================================================
 // input_inspect
@@ -153,7 +191,8 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, StatusInvalidSessionId, UNTEST_TIMEOUT
 
 UNTEST_UNIT_OPTS(Claireon, EnhancedInput, CreateInputAction, UNTEST_TIMEOUTMS(15000))
 {
-	FString SessionId = CreateTestIA(TEXT("/Game/__MCPTests/IA_TestCreate"));
+	const FString AssetPath = TEXT("/Game/__MCPTests/IA_TestCreate");
+	FString SessionId = CreateTestIA(AssetPath);
 	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
 
 	// Status should work
@@ -162,18 +201,59 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, CreateInputAction, UNTEST_TIMEOUTMS(15
 
 	// Close
 	CloseInputSession(SessionId);
+	CleanupInputAsset(AssetPath);
 	co_return;
 }
 
 UNTEST_UNIT_OPTS(Claireon, EnhancedInput, CreateMappingContext, UNTEST_TIMEOUTMS(15000))
 {
-	FString SessionId = CreateTestIMC(TEXT("/Game/__MCPTests/IMC_TestCreate"));
+	const FString AssetPath = TEXT("/Game/__MCPTests/IMC_TestCreate");
+	FString SessionId = CreateTestIMC(AssetPath);
 	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
 
 	auto StatusResult = ExecuteInputTool<ClaireonInputTool_Status>(SessionId);
 	UNTEST_EXPECT_TRUE(StatusResult.GetContentAsString().Contains(TEXT("Input Mapping Context")));
 
 	CloseInputSession(SessionId);
+	CleanupInputAsset(AssetPath);
+	co_return;
+}
+
+/** input_create must never report success with an empty session handle.
+ *
+ *  FClaireonSessionManager::CanonicalizePath rejects every path outside /Game/,
+ *  which is what makes OpenSession return InvalidAssetPath. ClaireonPathResolver
+ *  itself accepts /Temp/ (it is a real in-memory mount), so a /Temp/ path sails
+ *  through the tool's own path handling and asset creation and only trips at
+ *  OpenSession -- the exact combination that used to matter: the tool handled
+ *  only BlockedByOtherTool and fell through to BuildStateResponse with an empty
+ *  SessionId, handing the caller a SUCCESS response carrying an unusable handle.
+ */
+UNTEST_UNIT_OPTS(Claireon, EnhancedInput, CreateOutsideGameMountErrorsInsteadOfEmptySession, UNTEST_TIMEOUTMS(15000))
+{
+	const FString AssetPath = TEXT("/Temp/__MCPTests/IA_OutsideGameMount");
+	CleanupInputAsset(AssetPath);
+
+	ClaireonInputTool_Create Tool;
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("asset_path"), AssetPath);
+	Args->SetStringField(TEXT("asset_type"), TEXT("input_action"));
+	auto Result = Tool.Execute(Args);
+
+	// The invariant, stated so it holds no matter which non-success result
+	// OpenSession picks: a non-error response must carry a usable session id.
+	const FString SessionId = ExtractInputEditSessionId(Result);
+	UNTEST_EXPECT_FALSE(!Result.bIsError && SessionId.IsEmpty());
+
+	// And the specific behaviour we want: a clear error naming the path.
+	UNTEST_EXPECT_TRUE(Result.bIsError);
+	UNTEST_EXPECT_TRUE(Result.GetContentAsString().Contains(TEXT("Invalid asset path")));
+
+	if (!SessionId.IsEmpty())
+	{
+		CloseInputSession(SessionId);
+	}
+	CleanupInputAsset(AssetPath);
 	co_return;
 }
 
@@ -183,7 +263,8 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, CreateMappingContext, UNTEST_TIMEOUTMS
 
 UNTEST_UNIT_OPTS(Claireon, EnhancedInput, SetValueType, UNTEST_TIMEOUTMS(15000))
 {
-	FString SessionId = CreateTestIA(TEXT("/Game/__MCPTests/IA_TestValueType"));
+	const FString AssetPath = TEXT("/Game/__MCPTests/IA_TestValueType");
+	FString SessionId = CreateTestIA(AssetPath);
 	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
 
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
@@ -197,6 +278,7 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, SetValueType, UNTEST_TIMEOUTMS(15000))
 	UNTEST_EXPECT_TRUE(Result.GetContentAsString().Contains(TEXT("Boolean")));
 
 	CloseInputSession(SessionId);
+	CleanupInputAsset(AssetPath);
 	co_return;
 }
 
@@ -206,7 +288,8 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, SetValueType, UNTEST_TIMEOUTMS(15000))
 
 UNTEST_UNIT_OPTS(Claireon, EnhancedInput, AddRemoveActionTriggers, UNTEST_TIMEOUTMS(15000))
 {
-	FString SessionId = CreateTestIA(TEXT("/Game/__MCPTests/IA_TestTriggers"));
+	const FString AssetPath = TEXT("/Game/__MCPTests/IA_TestTriggers");
+	FString SessionId = CreateTestIA(AssetPath);
 	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
 
 	// Add Down trigger
@@ -236,6 +319,7 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, AddRemoveActionTriggers, UNTEST_TIMEOU
 	UNTEST_EXPECT_TRUE(Result.GetContentAsString().Contains(TEXT("out of range")));
 
 	CloseInputSession(SessionId);
+	CleanupInputAsset(AssetPath);
 	co_return;
 }
 
@@ -245,7 +329,8 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, AddRemoveActionTriggers, UNTEST_TIMEOU
 
 UNTEST_UNIT_OPTS(Claireon, EnhancedInput, AddRemoveActionModifiers, UNTEST_TIMEOUTMS(15000))
 {
-	FString SessionId = CreateTestIA(TEXT("/Game/__MCPTests/IA_TestModifiers"));
+	const FString AssetPath = TEXT("/Game/__MCPTests/IA_TestModifiers");
+	FString SessionId = CreateTestIA(AssetPath);
 	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
 
 	// Add DeadZone modifier
@@ -268,6 +353,7 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, AddRemoveActionModifiers, UNTEST_TIMEO
 	UNTEST_EXPECT_TRUE(Output.Contains(TEXT("InputModifierNegate")));
 
 	CloseInputSession(SessionId);
+	CleanupInputAsset(AssetPath);
 	co_return;
 }
 
@@ -277,7 +363,8 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, AddRemoveActionModifiers, UNTEST_TIMEO
 
 UNTEST_UNIT_OPTS(Claireon, EnhancedInput, IAOperationsOnIMCSession, UNTEST_TIMEOUTMS(15000))
 {
-	FString SessionId = CreateTestIMC(TEXT("/Game/__MCPTests/IMC_TestCrossType"));
+	const FString AssetPath = TEXT("/Game/__MCPTests/IMC_TestCrossType");
+	FString SessionId = CreateTestIMC(AssetPath);
 	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
 
 	// set_value_type on IMC should error
@@ -288,23 +375,26 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, IAOperationsOnIMCSession, UNTEST_TIMEO
 	UNTEST_EXPECT_TRUE(Result.GetContentAsString().Contains(TEXT("Input Action")));
 
 	CloseInputSession(SessionId);
+	CleanupInputAsset(AssetPath);
 	co_return;
 }
 
 UNTEST_UNIT_OPTS(Claireon, EnhancedInput, IMCOperationsOnIASession, UNTEST_TIMEOUTMS(15000))
 {
-	FString SessionId = CreateTestIA(TEXT("/Game/__MCPTests/IA_TestCrossType2"));
+	const FString AssetPath = TEXT("/Game/__MCPTests/IA_TestCrossType2");
+	FString SessionId = CreateTestIA(AssetPath);
 	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
 
 	// add_mapping on IA should error
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("action_path"), TEXT("/Game/__MCPTests/IA_TestCrossType2"));
+	Args->SetStringField(TEXT("action_path"), AssetPath);
 	Args->SetStringField(TEXT("key"), TEXT("W"));
 	auto Result = ExecuteInputTool<ClaireonInputTool_AddMapping>(SessionId, Args);
 	UNTEST_EXPECT_TRUE(Result.bIsError);
 	UNTEST_EXPECT_TRUE(Result.GetContentAsString().Contains(TEXT("Mapping Context")));
 
 	CloseInputSession(SessionId);
+	CleanupInputAsset(AssetPath);
 	co_return;
 }
 
@@ -315,27 +405,32 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, IMCOperationsOnIASession, UNTEST_TIMEO
 UNTEST_UNIT_OPTS(Claireon, EnhancedInput, AddRemoveMappings, UNTEST_TIMEOUTMS(20000))
 {
 	// Create an IA to reference
-	FString IASessionId = CreateTestIA(TEXT("/Game/__MCPTests/IA_ForMapping"));
+	const FString IAPath = TEXT("/Game/__MCPTests/IA_ForMapping");
+	const FString IMCPath = TEXT("/Game/__MCPTests/IMC_TestMappings");
+	FString IASessionId = CreateTestIA(IAPath);
 	UNTEST_ASSERT_FALSE(IASessionId.IsEmpty());
 	// Save the IA so it can be loaded by the IMC tool
 	ExecuteInputTool<ClaireonInputTool_Save>(IASessionId);
 
 	// Create IMC
-	FString IMCSessionId = CreateTestIMC(TEXT("/Game/__MCPTests/IMC_TestMappings"));
+	FString IMCSessionId = CreateTestIMC(IMCPath);
 	UNTEST_ASSERT_FALSE(IMCSessionId.IsEmpty());
 
 	// Add mapping: IA_ForMapping -> W
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("action_path"), TEXT("/Game/__MCPTests/IA_ForMapping"));
+	Args->SetStringField(TEXT("action_path"), IAPath);
 	Args->SetStringField(TEXT("key"), TEXT("W"));
 	auto Result = ExecuteInputTool<ClaireonInputTool_AddMapping>(IMCSessionId, Args);
 	FString Output = Result.GetContentAsString();
 	UNTEST_EXPECT_TRUE(Output.Contains(TEXT("IA_ForMapping")));
-	UNTEST_EXPECT_TRUE(Output.Contains(TEXT("W")));
+	// Match the formatted mapping line ("| Key: W\n"), not a bare "W": a bare
+	// single-character Contains() is satisfied by unrelated text in the state
+	// dump and so asserts nothing.
+	UNTEST_EXPECT_TRUE(Output.Contains(TEXT("Key: W\n")));
 
 	// Add second mapping with SpaceBar
 	Args = MakeShared<FJsonObject>();
-	Args->SetStringField(TEXT("action_path"), TEXT("/Game/__MCPTests/IA_ForMapping"));
+	Args->SetStringField(TEXT("action_path"), IAPath);
 	Args->SetStringField(TEXT("key"), TEXT("SpaceBar"));
 	Result = ExecuteInputTool<ClaireonInputTool_AddMapping>(IMCSessionId, Args);
 	UNTEST_EXPECT_TRUE(Result.GetContentAsString().Contains(TEXT("SpaceBar")));
@@ -345,7 +440,9 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, AddRemoveMappings, UNTEST_TIMEOUTMS(20
 	Args->SetNumberField(TEXT("index"), 0);
 	Args->SetStringField(TEXT("key"), TEXT("S"));
 	Result = ExecuteInputTool<ClaireonInputTool_SetMappingKey>(IMCSessionId, Args);
-	UNTEST_EXPECT_TRUE(Result.GetContentAsString().Contains(TEXT("S")));
+	// Same reason as above: "Key: S\n" pins the rebound mapping line and cannot be
+	// satisfied by the "SpaceBar" mapping or by surrounding prose.
+	UNTEST_EXPECT_TRUE(Result.GetContentAsString().Contains(TEXT("Key: S\n")));
 
 	// Remove mapping 0
 	Args = MakeShared<FJsonObject>();
@@ -357,6 +454,10 @@ UNTEST_UNIT_OPTS(Claireon, EnhancedInput, AddRemoveMappings, UNTEST_TIMEOUTMS(20
 
 	CloseInputSession(IMCSessionId);
 	CloseInputSession(IASessionId);
+	// IMC first: it references the IA, so deleting the referencer first avoids
+	// ForceDeleteObjects having to null out a live reference.
+	CleanupInputAsset(IMCPath);
+	CleanupInputAsset(IAPath);
 	co_return;
 }
 

@@ -7,6 +7,146 @@
 #include "ClaireonSettings.h"
 #include "FindInBlueprintManager.h"
 #include "HAL/PlatformProcess.h"
+#include "HAL/PlatformTime.h"
+#include "Misc/ScopeExit.h"
+#include "Templates/Function.h"
+
+#include <atomic>
+
+// ---------------------------------------------------------------------------
+// ClaireonSearchWait -- testable wait/guard helpers for bp_search.
+//
+// External linkage on purpose: ClaireonSearchTimeoutContractTests.cpp
+// (Private/Tests/) and ClaireonTool_SearchInBlueprintsIndexStatus.cpp
+// re-declare these signatures instead of including a header. Keep the
+// declarations in those files in sync with the definitions here.
+// ---------------------------------------------------------------------------
+namespace ClaireonSearchWait
+{
+
+// File-scope state. bp_search executes on the game thread (the MCP server
+// marshals Execute there), but the flags are atomic so a guard probe from
+// another thread can never race.
+static std::atomic<bool> GClaireonSearchInFlight{ false };
+static std::atomic<bool> GClaireonAnySearchCompletedThisSession{ false };
+
+// Timed-out FStreamSearch workers that did not drain within the grace period
+// are parked here (game thread only) so their destructor does not block on a
+// still-running thread. Pruned at the start of the next bp_search call.
+static TArray<TSharedPtr<FStreamSearch>> GClaireonOrphanedStreamSearches;
+
+/**
+ * Core wait loop for bp_search, extracted so it can be unit-tested with an
+ * injected clock and search stub (no engine FiB machinery required).
+ *
+ * Contract:
+ * - The timeout is a HARD bound on simulated/observed time: there is exactly
+ *   one wait cycle and never a hidden retry.
+ * - On expiry, StopAndDrain is invoked exactly once BEFORE returning false.
+ * - PumpIndexing runs once per poll iteration so deferred FiB indexing (which
+ *   only advances in FFindInBlueprintSearchManager's game-thread Tick) can
+ *   make progress while the game thread is otherwise blocked here.
+ *
+ * @return true if IsComplete() became true before the timeout expired.
+ */
+bool WaitForSearchWithHardTimeout(
+	double TimeoutSeconds,
+	const TFunction<bool()>& IsComplete,
+	const TFunction<double()>& GetTimeSeconds,
+	const TFunction<void()>& PumpIndexing,
+	const TFunction<void()>& Yield,
+	const TFunction<void()>& StopAndDrain,
+	double& OutElapsedSeconds)
+{
+	check(IsComplete);
+	check(GetTimeSeconds);
+
+	const double StartSeconds = GetTimeSeconds();
+	while (!IsComplete())
+	{
+		const double ElapsedSeconds = GetTimeSeconds() - StartSeconds;
+		if (ElapsedSeconds >= TimeoutSeconds)
+		{
+			if (StopAndDrain)
+			{
+				StopAndDrain();
+			}
+			OutElapsedSeconds = ElapsedSeconds;
+			return false;
+		}
+
+		if (PumpIndexing)
+		{
+			PumpIndexing();
+		}
+		if (Yield)
+		{
+			Yield();
+		}
+	}
+
+	OutElapsedSeconds = GetTimeSeconds() - StartSeconds;
+	return true;
+}
+
+/** Attempts to mark a bp_search as in flight. Returns false if one already is. */
+bool TryAcquireSearchInFlightGuard()
+{
+	bool bExpected = false;
+	return GClaireonSearchInFlight.compare_exchange_strong(bExpected, true);
+}
+
+/** Releases the in-flight guard taken by TryAcquireSearchInFlightGuard(). */
+void ReleaseSearchInFlightGuard()
+{
+	GClaireonSearchInFlight.store(false);
+}
+
+/** Returns true while a bp_search is in flight. */
+bool IsSearchInFlight()
+{
+	return GClaireonSearchInFlight.load();
+}
+
+/** Records that a stream search ran to completion this editor session. */
+void MarkSearchCompletedThisSession()
+{
+	GClaireonAnySearchCompletedThisSession.store(true);
+}
+
+/**
+ * True once any bp_search stream search has completed this editor session.
+ * Read by bp_search_index_status: until this is true, the first search may
+ * still trigger the FiB manager's deferred full-corpus indexing pass, whose
+ * backlog is not observable through any public engine API.
+ */
+bool HasAnySearchCompletedThisSession()
+{
+	return GClaireonAnySearchCompletedThisSession.load();
+}
+
+/** Test seam: clears the session-completion marker. */
+void ResetSearchCompletedThisSessionForTests()
+{
+	GClaireonAnySearchCompletedThisSession.store(false);
+}
+
+/** Drops parked timed-out searches whose worker threads have since finished. */
+static void ClaireonSearchWait_PruneOrphanedSearches()
+{
+	GClaireonOrphanedStreamSearches.RemoveAll([](const TSharedPtr<FStreamSearch>& Search)
+	{
+		return !Search.IsValid() || Search->IsComplete();
+	});
+}
+
+/** Parks a stopped-but-not-yet-drained search for deferred cleanup. */
+static void ClaireonSearchWait_ParkOrphanedSearch(TSharedPtr<FStreamSearch> Search)
+{
+	GClaireonOrphanedStreamSearches.Add(MoveTemp(Search));
+}
+
+} // namespace ClaireonSearchWait
 
 FString ClaireonTool_SearchInBlueprints::GetCategory() const { return kBPCategory; }
 FString ClaireonTool_SearchInBlueprints::GetOperation() const { return TEXT("search"); }
@@ -66,7 +206,7 @@ TSharedPtr<FJsonObject> ClaireonTool_SearchInBlueprints::GetInputSchema() const
 	// timeout - optional per-call override
 	TSharedPtr<FJsonObject> TimeoutProp = MakeShared<FJsonObject>();
 	TimeoutProp->SetStringField(TEXT("type"), TEXT("number"));
-	TimeoutProp->SetStringField(TEXT("description"), TEXT("Search timeout in seconds (default: from settings, typically 30). Increase if FiB index is still building."));
+	TimeoutProp->SetStringField(TEXT("description"), TEXT("Search timeout in seconds (default: from settings, typically 30). HARD bound: on expiry the search is stopped and a timeout error is returned immediately -- there is no hidden retry. Increase if the FiB index is still building (see bp_search_index_status)."));
 	Properties->SetObjectField(TEXT("timeout"), TimeoutProp);
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
@@ -115,6 +255,19 @@ IClaireonTool::FToolResult ClaireonTool_SearchInBlueprints::Execute(const TShare
 		MaxResults = FMath::Clamp(static_cast<int32>(Arguments->GetNumberField(TEXT("max_results"))), 1, 200);
 	}
 
+	// Reentrancy guard: a stream search monopolizes the FiB manager and (via
+	// the pumped wait below) the game thread. Client retries of a slow search
+	// used to stack behind the server's game-thread lock and re-run the same
+	// expensive scan back-to-back; reject overlap up front instead.
+	if (!ClaireonSearchWait::TryAcquireSearchInFlightGuard())
+	{
+		return MakeErrorResult(TEXT("bp_search is busy: another Blueprint search is already in flight. Concurrent searches are not supported; wait for the in-flight search to complete or time out, then retry."));
+	}
+	ON_SCOPE_EXIT { ClaireonSearchWait::ReleaseSearchInFlightGuard(); };
+
+	// Drop any previously timed-out searches whose workers have since finished.
+	ClaireonSearchWait::ClaireonSearchWait_PruneOrphanedSearches();
+
 	// Run search via FFindInBlueprintSearchManager.
 	FFindInBlueprintSearchManager& SearchManager = FFindInBlueprintSearchManager::Get();
 
@@ -130,6 +283,13 @@ IClaireonTool::FToolResult ClaireonTool_SearchInBlueprints::Execute(const TShare
 	// because Execute() may already be running inside a game-thread task graph
 	// task (e.g. when invoked via the REPL client's AsyncTask dispatch), and
 	// re-entrant task processing triggers a fatal recursion guard assertion.
+	//
+	// FiB DEFERRED INDEXING only advances inside FFindInBlueprintSearchManager's
+	// game-thread Tick. While Execute() blocks the game thread here, the engine
+	// tick loop never runs, so a plain sleep-poll would starve the very indexing
+	// it is waiting for. We therefore pump the manager's Tick manually, one
+	// bounded slice per poll iteration. Calling the manager's Tick directly is
+	// NOT task-graph processing, so the recursion guard above does not apply.
 	double MaxWaitSeconds = GetDefault<UClaireonSettings>()->BlueprintSearchTimeoutSeconds;
 	// Per-call timeout override
 	double TimeoutOverride = 0.0;
@@ -138,37 +298,69 @@ IClaireonTool::FToolResult ClaireonTool_SearchInBlueprints::Execute(const TShare
 		MaxWaitSeconds = TimeoutOverride;
 	}
 
-	// Helper lambda: poll a stream search with timeout
-	auto WaitForSearch = [](TSharedPtr<FStreamSearch>& Search, double Timeout) -> bool
-	{
-		const double Start = FPlatformTime::Seconds();
-		while (!Search->IsComplete())
+	const bool bOnGameThread = IsInGameThread();
+	double ElapsedSeconds = 0.0;
+	const bool bCompleted = ClaireonSearchWait::WaitForSearchWithHardTimeout(
+		MaxWaitSeconds,
+		/*IsComplete*/ [&StreamSearch]()
 		{
-			if (FPlatformTime::Seconds() - Start > Timeout)
+			return StreamSearch->IsComplete();
+		},
+		/*GetTimeSeconds*/ []()
+		{
+			return FPlatformTime::Seconds();
+		},
+		/*PumpIndexing*/ [&SearchManager, bOnGameThread]()
+		{
+			if (bOnGameThread)
 			{
-				return false; // timed out
+				SearchManager.Tick(0.01f);
 			}
-			FPlatformProcess::Sleep(0.01f); // 10ms yield
-		}
-		return true; // completed
-	};
-
-	if (!WaitForSearch(StreamSearch, MaxWaitSeconds))
-	{
-		// Retry once — the FiB index may still be building after editor startup
-		UE_LOG(LogClaireon, Warning, TEXT("[SearchInBlueprints] Search timed out after %.0fs — retrying once for query: %s"),
-			MaxWaitSeconds, *Query);
-
-		FPlatformProcess::Sleep(2.0f);
-		StreamSearch = MakeShared<FStreamSearch>(Query, SearchOptions);
-
-		if (!WaitForSearch(StreamSearch, MaxWaitSeconds))
+		},
+		/*Yield*/ []()
 		{
-			return MakeErrorResult(FString::Printf(
-				TEXT("Blueprint search timed out after retry (%.0fs x2). The FiB index may still be building. Try again later."),
-				MaxWaitSeconds));
-		}
+			FPlatformProcess::Sleep(0.01f); // 10ms yield
+		},
+		/*StopAndDrain*/ [&StreamSearch, &SearchManager]()
+		{
+			// Unregister the query from the manager first so the worker's next
+			// ContinueSearchQuery() returns false and its Run() loop exits.
+			SearchManager.EnsureSearchQueryEnds(StreamSearch.Get());
+			StreamSearch->Stop();
+
+			// Bounded drain WITHOUT task-graph processing (FStreamSearch::
+			// EnsureCompletion calls ProcessThreadUntilIdle, which would hit
+			// the recursion guard described above). If the worker is blocked
+			// on a game-thread task it can only finish after we return, so
+			// park the search rather than blocking in its destructor.
+			const double DrainDeadline = FPlatformTime::Seconds() + 2.0;
+			while (!StreamSearch->IsComplete() && FPlatformTime::Seconds() < DrainDeadline)
+			{
+				FPlatformProcess::Sleep(0.01f);
+			}
+			if (!StreamSearch->IsComplete())
+			{
+				UE_LOG(LogClaireon, Warning,
+					TEXT("[SearchInBlueprints] Stream search worker did not drain within 2s of Stop(); parking it for deferred cleanup."));
+				ClaireonSearchWait::ClaireonSearchWait_ParkOrphanedSearch(StreamSearch);
+			}
+		},
+		ElapsedSeconds);
+
+	if (!bCompleted)
+	{
+		UE_LOG(LogClaireon, Warning, TEXT("[SearchInBlueprints] Search timed out after %.1fs (hard bound, no retry) for query: %s"),
+			ElapsedSeconds, *Query);
+
+		return MakeErrorResult(FString::Printf(
+			TEXT("Blueprint search timed out after %.0fs (hard bound, no retry). The search was stopped and unregistered. The FiB index may still be building -- check bp_search_index_status, or retry with a larger 'timeout'. Query: %s"),
+			MaxWaitSeconds, *Query));
 	}
+
+	// A search ran to completion: from here on the FiB deferred-indexing
+	// backlog has been flushed, so index_status can stop warning about
+	// first-search cost.
+	ClaireonSearchWait::MarkSearchCompletedThisSession();
 
 	StreamSearch->GetFilteredItems(RawResults);
 

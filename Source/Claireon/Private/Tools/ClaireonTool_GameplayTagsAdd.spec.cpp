@@ -15,7 +15,7 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/Paths.h"
 
-namespace
+namespace ClaireonTool_GameplayTagsAdd_spec_Private
 {
 	const TCHAR* const AddSpec_TransientSource = TEXT("ClaireonSpecGameplayTags.ini");
 
@@ -61,6 +61,7 @@ namespace
 		return Args;
 	}
 }
+using namespace ClaireonTool_GameplayTagsAdd_spec_Private;
 
 // =====================================================================================
 // Test 1: Add a single tag with a dev_comment.
@@ -68,7 +69,7 @@ namespace
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonGameplayTagsAddTest_SingleTagWithComment,
 	"Claireon.GameplayTagsAdd.SingleTagWithComment",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonGameplayTagsAddTest_SingleTagWithComment::RunTest(const FString& /*Parameters*/)
 {
@@ -116,7 +117,7 @@ bool FClaireonGameplayTagsAddTest_SingleTagWithComment::RunTest(const FString& /
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonGameplayTagsAddTest_BatchOfThree,
 	"Claireon.GameplayTagsAdd.BatchOfThree",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonGameplayTagsAddTest_BatchOfThree::RunTest(const FString& /*Parameters*/)
 {
@@ -174,7 +175,7 @@ bool FClaireonGameplayTagsAddTest_BatchOfThree::RunTest(const FString& /*Paramet
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonGameplayTagsAddTest_AlreadyExists,
 	"Claireon.GameplayTagsAdd.AlreadyExists",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonGameplayTagsAddTest_AlreadyExists::RunTest(const FString& /*Parameters*/)
 {
@@ -240,7 +241,7 @@ bool FClaireonGameplayTagsAddTest_AlreadyExists::RunTest(const FString& /*Parame
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonGameplayTagsAddTest_CoalescedRefresh,
 	"Claireon.GameplayTagsAdd.CoalescedRefresh",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonGameplayTagsAddTest_CoalescedRefresh::RunTest(const FString& /*Parameters*/)
 {
@@ -286,7 +287,7 @@ bool FClaireonGameplayTagsAddTest_CoalescedRefresh::RunTest(const FString& /*Par
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonGameplayTagsAddTest_MissingTags,
 	"Claireon.GameplayTagsAdd.MissingTags",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonGameplayTagsAddTest_MissingTags::RunTest(const FString& /*Parameters*/)
 {
@@ -308,7 +309,7 @@ bool FClaireonGameplayTagsAddTest_MissingTags::RunTest(const FString& /*Paramete
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonGameplayTagsAddTest_UnknownField,
 	"Claireon.GameplayTagsAdd.UnknownField",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonGameplayTagsAddTest_UnknownField::RunTest(const FString& /*Parameters*/)
 {
@@ -333,7 +334,7 @@ bool FClaireonGameplayTagsAddTest_UnknownField::RunTest(const FString& /*Paramet
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonGameplayTagsAddTest_NonArrayTags,
 	"Claireon.GameplayTagsAdd.NonArrayTags",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonGameplayTagsAddTest_NonArrayTags::RunTest(const FString& /*Parameters*/)
 {
@@ -356,7 +357,7 @@ bool FClaireonGameplayTagsAddTest_NonArrayTags::RunTest(const FString& /*Paramet
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClaireonGameplayTagsAddTest_InvalidString,
 	"Claireon.GameplayTagsAdd.InvalidString",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::EngineFilter)
 
 bool FClaireonGameplayTagsAddTest_InvalidString::RunTest(const FString& /*Parameters*/)
 {

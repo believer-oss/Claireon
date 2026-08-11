@@ -79,6 +79,19 @@ For workflows where the editor restarts often (rebuilds, crashes, live-coding re
 
 The proxy can also run without any editor: `Scripts/Utilities/Start-MCPProxy.ps1` spawns (or attaches to) the singleton and binds the current worktree's port, no Unreal launch required. Editor-less, the proxy serves the `proxy` meta-tool and the file-backed prompts (e.g. `workflow`) directly from disk; `tool_search` and `python_execute` answer once an editor registers (start one from the client with `proxy(command='launch_editor')`).
 
+`proxy(command='launch_editor')` is project-agnostic: the plugin ships no editor build/launch script. The hosting project declares its own in `<worktree>/.claireon/launch_editor.json` (location overridable via the `CLAIREON_LAUNCH_EDITOR_CONFIG` environment variable):
+
+```json
+{
+  "command": ["{powershell}", "-NoProfile", "-File",
+              "{worktree_root}/Scripts/LaunchEditor.ps1",
+              "-ProjectPath", "{project_path}"],
+  "skip_build_args": ["-SkipBuild"]
+}
+```
+
+Placeholders substituted per argument: `{worktree_root}` (absolute worktree root), `{project_path}` (the worktree's `.uproject`), `{powershell}` (resolved `pwsh.exe`/`powershell.exe`). `skip_build_args` is appended when the caller passes `skip_build: true`.
+
 ### Connecting Claude Code
 
 Once the server is running, configure Claude Code to connect. Take the port from `Saved/Claireon/MCPServer.json` -- it is stable for a given checkout path, so the config can be committed to your project's `.mcp.json` once and forgotten:

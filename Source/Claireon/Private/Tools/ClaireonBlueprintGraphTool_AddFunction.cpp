@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 The Claireon Contributors
+// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonBlueprintGraphTool_AddFunction.h"
@@ -35,8 +35,12 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddFunction::GetInputSchema()
 	Builder.AddString(TEXT("asset_path"), TEXT("Blueprint asset path (alternative to session_id)."), false);
 	Builder.AddString(TEXT("function_name"), TEXT("Name of the function to create."), true);
 	Builder.AddBoolean(TEXT("is_pure"), TEXT("If true, the function is pure (no exec pins)."));
-	Builder.AddObject(TEXT("inputs"), TEXT("Array of input params: [{name, type}]. Type uses ParseVariableType format (float, bool, int, etc.)."));
-	Builder.AddObject(TEXT("outputs"), TEXT("Array of output params: [{name, type}]. Use name='ReturnValue' for the return value."));
+	// AddArray, not AddObject: the code reads these as arrays and always did.
+	// Declaring them as objects told callers a dict was acceptable, and a dict
+	// was then dropped without a word -- the function came back pinless and
+	// successful.
+	Builder.AddArray(TEXT("inputs"), TEXT("Array of input params: [{name, type}]. Type uses ParseVariableType format (float, bool, int, etc.)."));
+	Builder.AddArray(TEXT("outputs"), TEXT("Array of output params: [{name, type}]. Use name='ReturnValue' for the return value."));
 	Builder.AddString(TEXT("category"), TEXT("Optional function category (appears in My Blueprint pane)."));
 	Builder.AddString(TEXT("access_specifier"), TEXT("Optional: 'Public' | 'Protected' | 'Private' (default 'Public')."));
 	Builder.AddBoolean(TEXT("is_const"), TEXT("If true, the function is marked const."));
@@ -73,7 +77,7 @@ FToolResult ClaireonBlueprintGraphTool_AddFunction::AddFunction_Impl(
 	}
 
 	UBlueprint* Blueprint = Data->Blueprint.Get();
-	if (!Blueprint)
+	if (!IsValid(Blueprint))
 	{
 		return MakeErrorResult(TEXT("Blueprint is no longer valid"));
 	}
@@ -82,7 +86,7 @@ FToolResult ClaireonBlueprintGraphTool_AddFunction::AddFunction_Impl(
 	const FName FuncFName(*FunctionName);
 	for (UEdGraph* ExistingGraph : Blueprint->FunctionGraphs)
 	{
-		if (ExistingGraph && ExistingGraph->GetFName() == FuncFName)
+		if (IsValid(ExistingGraph) && ExistingGraph->GetFName() == FuncFName)
 		{
 			return MakeErrorResult(FString::Printf(
 				TEXT("Function '%s' already exists as function graph"), *FunctionName));
@@ -130,7 +134,7 @@ FToolResult ClaireonBlueprintGraphTool_AddFunction::AddFunction_Impl(
 
 	UEdGraph* NewGraph = FBlueprintEditorUtils::CreateNewGraph(
 		Blueprint, FuncFName, UEdGraph::StaticClass(), UEdGraphSchema_K2::StaticClass());
-	if (!NewGraph)
+	if (!IsValid(NewGraph))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Failed to create function graph '%s'"), *FunctionName));
@@ -144,7 +148,7 @@ FToolResult ClaireonBlueprintGraphTool_AddFunction::AddFunction_Impl(
 		NewGraph->GetNodesOfClass<UK2Node_FunctionEntry>(EntryNodes);
 		if (EntryNodes.Num() > 0) { EntryNode = EntryNodes[0]; }
 	}
-	if (!EntryNode)
+	if (!IsValid(EntryNode))
 	{
 		return MakeErrorResult(FString::Printf(
 			TEXT("Failed to find entry node in new function graph '%s'"), *FunctionName));
@@ -168,16 +172,35 @@ FToolResult ClaireonBlueprintGraphTool_AddFunction::AddFunction_Impl(
 
 	// === 7. Input params (output pins on entry node) ===
 	const TArray<TSharedPtr<FJsonValue>>* InputsArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("inputs"), InputsArray))
+	// A supplied-but-unreadable value is an error, not a no-op. A dict here used
+	// to fall straight through and produce a pinless function reported as created.
+	if (Params->HasField(TEXT("inputs")) && !Params->TryGetArrayField(TEXT("inputs"), InputsArray))
 	{
+		return MakeErrorResult(TEXT("'inputs' must be an array of {name, type} objects, e.g. [{\"name\":\"Amount\",\"type\":\"float\"}]."));
+	}
+	if (InputsArray != nullptr)
+	{
+		int32 InputIndex = 0;
 		for (const TSharedPtr<FJsonValue>& InputVal : *InputsArray)
 		{
+			const int32 ThisIndex = InputIndex++;
 			const TSharedPtr<FJsonObject>* InputObj = nullptr;
-			if (!InputVal.IsValid() || !InputVal->TryGetObject(InputObj)) continue;
+			if (!InputVal.IsValid() || !InputVal->TryGetObject(InputObj))
+			{
+				return MakeErrorResult(FString::Printf(
+					TEXT("inputs[%d] must be an object with 'name' and 'type'."), ThisIndex));
+			}
 
 			FString ParamName, ParamType;
-			if (!(*InputObj)->TryGetStringField(TEXT("name"), ParamName)) continue;
-			if (!(*InputObj)->TryGetStringField(TEXT("type"), ParamType)) continue;
+			if (!(*InputObj)->TryGetStringField(TEXT("name"), ParamName) || ParamName.IsEmpty())
+			{
+				return MakeErrorResult(FString::Printf(TEXT("inputs[%d] is missing 'name'."), ThisIndex));
+			}
+			if (!(*InputObj)->TryGetStringField(TEXT("type"), ParamType) || ParamType.IsEmpty())
+			{
+				return MakeErrorResult(FString::Printf(
+					TEXT("inputs[%d] ('%s') is missing 'type'."), ThisIndex, *ParamName));
+			}
 
 			ClaireonBlueprintHelpers::FParseVariableTypeResult Parse = ClaireonBlueprintHelpers::ParseVariableTypeChecked(ParamType);
 			if (!Parse.bSucceeded)
@@ -199,19 +222,39 @@ FToolResult ClaireonBlueprintGraphTool_AddFunction::AddFunction_Impl(
 	// === 8. Output params (input pins on result node) ===
 	UK2Node_FunctionResult* ResultNode = nullptr;
 	const TArray<TSharedPtr<FJsonValue>>* OutputsArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("outputs"), OutputsArray) && OutputsArray->Num() > 0)
+	if (Params->HasField(TEXT("outputs")) && !Params->TryGetArrayField(TEXT("outputs"), OutputsArray))
+	{
+		return MakeErrorResult(TEXT("'outputs' must be an array of {name, type} objects, e.g. [{\"name\":\"ReturnValue\",\"type\":\"bool\"}]."));
+	}
+	if (OutputsArray != nullptr && OutputsArray->Num() > 0)
 	{
 		ResultNode = FBlueprintEditorUtils::FindOrCreateFunctionResultNode(EntryNode);
-		if (ResultNode)
+		if (!IsValid(ResultNode))
 		{
+			return MakeErrorResult(TEXT("Failed to create the function result node; output params could not be added."));
+		}
+		{
+			int32 OutputIndex = 0;
 			for (const TSharedPtr<FJsonValue>& OutputVal : *OutputsArray)
 			{
+				const int32 ThisIndex = OutputIndex++;
 				const TSharedPtr<FJsonObject>* OutputObj = nullptr;
-				if (!OutputVal.IsValid() || !OutputVal->TryGetObject(OutputObj)) continue;
+				if (!OutputVal.IsValid() || !OutputVal->TryGetObject(OutputObj))
+				{
+					return MakeErrorResult(FString::Printf(
+						TEXT("outputs[%d] must be an object with 'name' and 'type'."), ThisIndex));
+				}
 
 				FString ParamName, ParamType;
-				if (!(*OutputObj)->TryGetStringField(TEXT("name"), ParamName)) continue;
-				if (!(*OutputObj)->TryGetStringField(TEXT("type"), ParamType)) continue;
+				if (!(*OutputObj)->TryGetStringField(TEXT("name"), ParamName) || ParamName.IsEmpty())
+				{
+					return MakeErrorResult(FString::Printf(TEXT("outputs[%d] is missing 'name'."), ThisIndex));
+				}
+				if (!(*OutputObj)->TryGetStringField(TEXT("type"), ParamType) || ParamType.IsEmpty())
+				{
+					return MakeErrorResult(FString::Printf(
+						TEXT("outputs[%d] ('%s') is missing 'type'."), ThisIndex, *ParamName));
+				}
 
 				ClaireonBlueprintHelpers::FParseVariableTypeResult Parse = ClaireonBlueprintHelpers::ParseVariableTypeChecked(ParamType);
 				if (!Parse.bSucceeded)
@@ -233,7 +276,7 @@ FToolResult ClaireonBlueprintGraphTool_AddFunction::AddFunction_Impl(
 
 	// === 9. Reconstruct + mark structurally modified ===
 	EntryNode->ReconstructNode();
-	if (ResultNode) { ResultNode->ReconstructNode(); }
+	if (IsValid(ResultNode)) { ResultNode->ReconstructNode(); }
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 
 	// === 10. Switch session cursor onto the new graph (mirrors AddFunctionOverride native path) ===
@@ -257,7 +300,7 @@ FToolResult ClaireonBlueprintGraphTool_AddFunction::AddFunction_Impl(
 
 	// === 11. Track affected nodes for response_mode="changed" ===
 	Data->LastOperationAffectedNodes.Add(EntryNode->NodeGuid);
-	if (ResultNode) { Data->LastOperationAffectedNodes.Add(ResultNode->NodeGuid); }
+	if (IsValid(ResultNode)) { Data->LastOperationAffectedNodes.Add(ResultNode->NodeGuid); }
 
 	return BuildStateResponse(SessionId, Data);
 }

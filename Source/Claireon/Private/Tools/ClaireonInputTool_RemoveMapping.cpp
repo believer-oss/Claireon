@@ -36,7 +36,7 @@ FToolResult ClaireonInputTool_RemoveMapping::Execute(const TSharedPtr<FJsonObjec
 	}
 
 	UInputMappingContext* IMC = RequireMappingContext(Data, Error);
-	if (!IMC)
+	if (!IsValid(IMC))
 	{
 		return MakeErrorResult(Error);
 	}

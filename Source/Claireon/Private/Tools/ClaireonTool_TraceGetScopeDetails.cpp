@@ -23,7 +23,16 @@ FString ClaireonTool_TraceGetScopeDetails::GetOperation() const { return TEXT("g
 
 FString ClaireonTool_TraceGetScopeDetails::GetDescription() const
 {
-    return TEXT("Get per-occurrence timing for a specific scope name. Shows when and how long each invocation took. Stateless / read-only / non-session: reads from an open trace handle.");
+    // C4 hardening: the previous text promised per-invocation timing ("when and how long
+    // each invocation took"). The tool only ever reads an AGGREGATION table -- there is no
+    // per-invocation timestamp or duration anywhere in the implementation or the response.
+    // Kept under the 400-char P5 description cap that DescriptionLint enforces; the
+    // per-field caveats are repeated on the individual schema fields.
+    return TEXT("Get AGGREGATED timing stats, not per-invocation, for timer names containing scopeName over "
+                "an optional frame range. matches[] carries total_ms/avg_ms/max_ms/call_count per timer name, "
+                "aggregated across the interval; no per-occurrence timestamp or depth exists. Top-level totals "
+                "cover only the top maxResults matches. callers[]/callees[] are always empty. Stateless, "
+                "read-only, non-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_TraceGetScopeDetails::GetInputSchema() const
@@ -36,7 +45,7 @@ TSharedPtr<FJsonObject> ClaireonTool_TraceGetScopeDetails::GetInputSchema() cons
 	// sessionId - required
 	TSharedPtr<FJsonObject> SessionIdProp = MakeShared<FJsonObject>();
 	SessionIdProp->SetStringField(TEXT("type"), TEXT("string"));
-	SessionIdProp->SetStringField(TEXT("description"), TEXT("The session ID returned by editor.trace.open"));
+	SessionIdProp->SetStringField(TEXT("description"), TEXT("The session ID returned by trace_open"));
 	Properties->SetObjectField(TEXT("sessionId"), SessionIdProp);
 
 	// scopeName - required
@@ -61,7 +70,11 @@ TSharedPtr<FJsonObject> ClaireonTool_TraceGetScopeDetails::GetInputSchema() cons
 	// maxResults - optional
 	TSharedPtr<FJsonObject> MaxResultsProp = MakeShared<FJsonObject>();
 	MaxResultsProp->SetStringField(TEXT("type"), TEXT("integer"));
-	MaxResultsProp->SetStringField(TEXT("description"), TEXT("Maximum number of occurrences to return (default: 200)"));
+	MaxResultsProp->SetStringField(TEXT("description"),
+		TEXT("Maximum number of MATCHING TIMER NAMES to return (default: 200); NOT occurrences -- this tool ")
+		TEXT("has no per-occurrence data. matches[] is truncated to the top maxResults by total_ms, and the ")
+		TEXT("top-level total_ms/avg_ms/call_count summary is computed from that already-truncated set, not ")
+		TEXT("from every timer name that matched scopeName."));
 	Properties->SetObjectField(TEXT("maxResults"), MaxResultsProp);
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
@@ -213,6 +226,9 @@ IClaireonTool::FToolResult ClaireonTool_TraceGetScopeDetails::Execute(const TSha
 	Data->SetNumberField(TEXT("avg_ms"), AvgMs);
 	Data->SetNumberField(TEXT("call_count"), (double)CallCount);
 	Data->SetArrayField(TEXT("matches"), MatchesArray);
+	// C4 hardening note: reserved, always-empty placeholders -- call-graph analysis
+	// (who calls this scope / what this scope calls) is not implemented. See
+	// GetDescription(). Kept rather than dropped for wire-format stability.
 	Data->SetArrayField(TEXT("callers"), TArray<TSharedPtr<FJsonValue>>());
 	Data->SetArrayField(TEXT("callees"), TArray<TSharedPtr<FJsonValue>>());
 

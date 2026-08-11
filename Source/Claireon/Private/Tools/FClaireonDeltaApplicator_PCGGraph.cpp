@@ -24,7 +24,7 @@ namespace ClaireonDeltaApplicator_PCG_anon
 
 	static bool PCGDelta_HasExactOutputPin(const UPCGNode* Node, const FString& Label)
 	{
-		if (!Node) { return false; }
+		if (!IsValid(Node)) { return false; }
 		for (const TObjectPtr<UPCGPin>& Pin : Node->GetOutputPins())
 		{
 			if (Pin && Pin->Properties.Label.ToString() == Label) { return true; }
@@ -34,7 +34,7 @@ namespace ClaireonDeltaApplicator_PCG_anon
 
 	static bool PCGDelta_HasExactInputPin(const UPCGNode* Node, const FString& Label)
 	{
-		if (!Node) { return false; }
+		if (!IsValid(Node)) { return false; }
 		for (const TObjectPtr<UPCGPin>& Pin : Node->GetInputPins())
 		{
 			if (Pin && Pin->Properties.Label.ToString() == Label) { return true; }
@@ -56,7 +56,7 @@ UPCGNode* FClaireonDeltaApplicator_PCGGraph::ResolveNodeRef(
 	const FString Resolved = const_cast<FClaireonDeltaApplicator_PCGGraph*>(this)->ResolveLocalId(Ref);
 
 	int32 Index = INDEX_NONE;
-	if (UPCGNode* Node = ClaireonPCGGraphHelpers::FindNodeByIdentifier(Graph, Resolved, Index))
+	if (UPCGNode* Node = ClaireonPCGGraphHelpers::FindNodeByIdentifier(Graph, Resolved, Index); IsValid(Node))
 	{
 		return Node;
 	}
@@ -98,7 +98,7 @@ bool FClaireonDeltaApplicator_PCGGraph::OpenOrReuseSession(const TSharedPtr<FJso
 	}
 
 	UPCGGraph* Graph = ClaireonPCGGraphHelpers::LoadPCGGraphAsset(AssetPathArg, OutError);
-	if (!Graph) { return false; }
+	if (!IsValid(Graph)) { return false; }
 
 	ClaireonPCGGraphEditToolBase::EnsureDelegateRegistered();
 
@@ -133,7 +133,7 @@ bool FClaireonDeltaApplicator_PCGGraph::ApplyPhase1_Disconnect(const FString& Se
 	using namespace ClaireonDeltaApplicator_PCG_anon;
 	(void)SessionId;
 	UPCGGraph* Graph = CachedGraph.Get();
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		AddError(TEXT("pcg_apply_delta: graph is no longer valid"));
 		return false;
@@ -159,9 +159,9 @@ bool FClaireonDeltaApplicator_PCGGraph::ApplyPhase1_Disconnect(const FString& Se
 		}
 		FString ResolveError;
 		UPCGNode* SourceNode = ResolveNodeRef(Graph, SN, ResolveError);
-		if (!SourceNode) { AddError(ResolveError); return false; }
+		if (!IsValid(SourceNode)) { AddError(ResolveError); return false; }
 		UPCGNode* TargetNode = ResolveNodeRef(Graph, TN, ResolveError);
-		if (!TargetNode) { AddError(ResolveError); return false; }
+		if (!IsValid(TargetNode)) { AddError(ResolveError); return false; }
 
 		// Exact-match pin name validation
 		if (!PCGDelta_HasExactOutputPin(SourceNode, SP))
@@ -194,7 +194,7 @@ bool FClaireonDeltaApplicator_PCGGraph::ApplyPhase2_Remove(const FString& Sessio
 	using namespace ClaireonDeltaApplicator_PCG_anon;
 	(void)SessionId;
 	UPCGGraph* Graph = CachedGraph.Get();
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		AddError(TEXT("pcg_apply_delta: graph is no longer valid"));
 		return false;
@@ -219,7 +219,7 @@ bool FClaireonDeltaApplicator_PCGGraph::ApplyPhase2_Remove(const FString& Sessio
 		}
 		FString ResolveError;
 		UPCGNode* Node = ResolveNodeRef(Graph, Ref, ResolveError);
-		if (!Node) { AddError(ResolveError); return false; }
+		if (!IsValid(Node)) { AddError(ResolveError); return false; }
 		if (Node == Graph->GetInputNode() || Node == Graph->GetOutputNode())
 		{
 			AddError(TEXT("pcg_apply_delta: cannot remove the graph's built-in Input or Output node"));
@@ -238,7 +238,7 @@ bool FClaireonDeltaApplicator_PCGGraph::ApplyPhase3_Create(const FString& Sessio
 	using namespace ClaireonDeltaApplicator_PCG_anon;
 	(void)SessionId;
 	UPCGGraph* Graph = CachedGraph.Get();
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		AddError(TEXT("pcg_apply_delta: graph is no longer valid"));
 		return false;
@@ -261,14 +261,14 @@ bool FClaireonDeltaApplicator_PCGGraph::ApplyPhase3_Create(const FString& Sessio
 		}
 		FString ResolveError;
 		UClass* SettingsClass = ClaireonPCGGraphHelpers::ResolveSettingsClass(NodeType, ResolveError);
-		if (!SettingsClass)
+		if (!IsValid(SettingsClass))
 		{
 			AddError(FString::Printf(TEXT("pcg_apply_delta: nodes[%d]: %s"), i, *ResolveError));
 			return false;
 		}
 		UPCGSettings* DefaultSettings = nullptr;
 		UPCGNode* NewNode = Graph->AddNodeOfType(TSubclassOf<UPCGSettings>(SettingsClass), DefaultSettings);
-		if (!NewNode)
+		if (!IsValid(NewNode))
 		{
 			AddError(FString::Printf(TEXT("pcg_apply_delta: nodes[%d]: failed to add node of type '%s'"), i, *NodeType));
 			return false;
@@ -306,7 +306,7 @@ bool FClaireonDeltaApplicator_PCGGraph::ApplyPhase4_Connect(const FString& Sessi
 	using namespace ClaireonDeltaApplicator_PCG_anon;
 	(void)SessionId;
 	UPCGGraph* Graph = CachedGraph.Get();
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		AddError(TEXT("pcg_apply_delta: graph is no longer valid"));
 		return false;
@@ -331,9 +331,9 @@ bool FClaireonDeltaApplicator_PCGGraph::ApplyPhase4_Connect(const FString& Sessi
 		}
 		FString ResolveError;
 		UPCGNode* SourceNode = ResolveNodeRef(Graph, SN, ResolveError);
-		if (!SourceNode) { AddError(ResolveError); return false; }
+		if (!IsValid(SourceNode)) { AddError(ResolveError); return false; }
 		UPCGNode* TargetNode = ResolveNodeRef(Graph, TN, ResolveError);
-		if (!TargetNode) { AddError(ResolveError); return false; }
+		if (!IsValid(TargetNode)) { AddError(ResolveError); return false; }
 
 		if (!PCGDelta_HasExactOutputPin(SourceNode, SP))
 		{
@@ -357,7 +357,7 @@ void FClaireonDeltaApplicator_PCGGraph::FinalizeSession(const FString& SessionId
 {
 	(void)SessionId;
 	UPCGGraph* Graph = CachedGraph.Get();
-	if (Graph)
+	if (IsValid(Graph))
 	{
 		ClaireonPCGGraphHelpers::NotifyGraphChanged(Graph);
 	}
@@ -376,11 +376,11 @@ void FClaireonDeltaApplicator_PCGGraph::Phase3CleanupOnFailure(const FString& Se
 {
 	(void)SessionId;
 	UPCGGraph* Graph = CachedGraph.Get();
-	if (!Graph) { return; }
+	if (!IsValid(Graph)) { return; }
 	for (const TWeakObjectPtr<UPCGNode>& Weak : CreatedNodesThisCall)
 	{
 		UPCGNode* Node = Weak.Get();
-		if (Node && IsValid(Node) && Graph->GetNodes().Contains(Node))
+		if (IsValid(Node) && IsValid(Node) && Graph->GetNodes().Contains(Node))
 		{
 			Graph->RemoveNode(Node);
 		}

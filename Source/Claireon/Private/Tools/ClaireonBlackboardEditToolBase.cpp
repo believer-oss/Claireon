@@ -146,11 +146,11 @@ FToolResult ClaireonBlackboardEditToolBase::BuildStateResponse(const FString& Se
 	ResultJson->SetStringField(TEXT("last_operation"), Data->LastOperationStatus);
 	ResultJson->SetStringField(TEXT("blackboard_view"), BBView);
 
-	FString SessionHintSummaryTag;
-	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResultJson, Data->ConsecutiveAssetPathCalls, Data->BlackboardData->GetPathName(), SessionId, SessionHintSummaryTag);
+	TSharedPtr<FJsonObject> SessionHint;
+	ClaireonAssetUtils::EmitSessionHintIfNeeded(ResultJson, Data->ConsecutiveAssetPathCalls, Data->BlackboardData->GetPathName(), SessionId, GetName(), SessionHint);
 
 	const FString Summary = FString::Printf(TEXT("Session %s: %s"),
 		*SessionId.Left(8), *Data->LastOperationStatus);
 
-	return MakeSuccessResult(ResultJson, Summary + SessionHintSummaryTag);
+	return MakeSuccessResultWithHint(ResultJson, Summary, SessionHint);
 }

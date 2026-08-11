@@ -22,8 +22,10 @@ FString ClaireonTool_OpenAssetEditor::GetCategory() const
 
 FString ClaireonTool_OpenAssetEditor::GetDescription() const
 {
-	return TEXT("Safely open asset editor(s) for one or more assets. "
-		"Uses deferred execution to avoid crashes from calling AssetEditorSubsystem directly.");
+	return TEXT("Open the asset editor for one or more assets (asset_path takes a single string or an array). Acts "
+		"immediately on the editor, using deferred execution to avoid the crash from calling "
+		"AssetEditorSubsystem inline. Opens no Claireon editing session -- use the per-domain *_open tools "
+		"when you intend to edit.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_OpenAssetEditor::GetInputSchema() const
@@ -35,6 +37,10 @@ TSharedPtr<FJsonObject> ClaireonTool_OpenAssetEditor::GetInputSchema() const
 
 	// asset_path - required (string or array of strings)
 	TSharedPtr<FJsonObject> PathProp = MakeShared<FJsonObject>();
+	// Declared as string because that is the common form; the array form is
+	// accepted too and is documented in the description. Both are handled at
+	// Execute. A missing "type" left the parameter untyped in the MCP schema.
+	PathProp->SetStringField(TEXT("type"), TEXT("string"));
 	PathProp->SetStringField(TEXT("description"),
 		TEXT("Asset path(s) to open in the editor. Can be a single string or an array of strings. "
 			 "Example: /Game/Characters/BP_Hero"));
@@ -51,7 +57,7 @@ TSharedPtr<FJsonObject> ClaireonTool_OpenAssetEditor::GetInputSchema() const
 
 IClaireonTool::FToolResult ClaireonTool_OpenAssetEditor::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	if (!GEditor)
+	if (!IsValid(GEditor))
 	{
 		return MakeErrorResult(TEXT("Editor not available"));
 	}
@@ -122,12 +128,12 @@ IClaireonTool::FToolResult ClaireonTool_OpenAssetEditor::Execute(const TSharedPt
 		FTickerDelegate::CreateLambda([ValidPaths](float)
 		{
 			UAssetEditorSubsystem* Subsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
-			if (Subsystem)
+			if (IsValid(Subsystem))
 			{
 				for (const FString& Path : ValidPaths)
 				{
 					UObject* Asset = LoadObject<UObject>(nullptr, *Path);
-					if (Asset)
+					if (IsValid(Asset))
 					{
 						Subsystem->OpenEditorForAsset(Asset);
 					}

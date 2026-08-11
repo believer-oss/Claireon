@@ -14,8 +14,9 @@ FString ClaireonTool_ChooserRemoveContextParameter::GetOperation() const { retur
 
 FString ClaireonTool_ChooserRemoveContextParameter::GetDescription() const
 {
-	return TEXT("Remove a context data parameter at the given index from a ChooserTable. "
-		"Triggers a recompile of the chooser bindings.");
+	return TEXT("Remove the context data parameter at the given index from a ChooserTable and recompile its bindings; "
+		"returns the remaining parameter_count. Parameters live on the root chooser. Stateless / non-session: "
+		"writes the asset directly by path, no open session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ChooserRemoveContextParameter::GetInputSchema() const
@@ -43,7 +44,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserRemoveContextParameter::Execute(c
 
 	FString Error;
 	UChooserTable* Chooser = ClaireonChooserHelpers::LoadChooserTableAsset(AssetPath, Error);
-	if (!Chooser)
+	if (!IsValid(Chooser))
 	{
 		return MakeErrorResult(Error);
 	}

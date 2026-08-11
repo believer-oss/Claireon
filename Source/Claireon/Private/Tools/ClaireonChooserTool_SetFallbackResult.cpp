@@ -14,8 +14,10 @@ FString ClaireonTool_ChooserSetFallbackResult::GetOperation() const { return TEX
 
 FString ClaireonTool_ChooserSetFallbackResult::GetDescription() const
 {
-	return TEXT("Set the fallback result on a ChooserTable. The fallback is returned when no row matches. "
-		"Supported types: Asset, SoftAsset, EvaluateChooser, LookupProxy.");
+	return TEXT("Set the fallback result a ChooserTable returns when no row matches. Supported fallback_result_type "
+		"values: Asset, SoftAsset, EvaluateChooser, LookupProxy, with fallback_result_value given as the "
+		"asset / chooser / proxy path. Stateless / non-session: writes the asset directly by path, no open "
+		"session required.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_ChooserSetFallbackResult::GetInputSchema() const
@@ -50,7 +52,7 @@ IClaireonTool::FToolResult ClaireonTool_ChooserSetFallbackResult::Execute(const 
 
 	FString Error;
 	UChooserTable* Chooser = ClaireonChooserHelpers::LoadChooserTableAsset(AssetPath, Error);
-	if (!Chooser)
+	if (!IsValid(Chooser))
 	{
 		return MakeErrorResult(Error);
 	}

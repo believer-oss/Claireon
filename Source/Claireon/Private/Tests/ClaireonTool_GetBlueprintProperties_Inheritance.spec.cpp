@@ -46,11 +46,14 @@
 
 #include "Kismet2/KismetEditorUtilities.h"
 
+#include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "ObjectTools.h"
 #include "UObject/Package.h"
 #include "UObject/SoftObjectPath.h"
 
-namespace
+#include "ClaireonTestAssetDeletion.h"
+namespace ClaireonTool_GetBlueprintProperties_Inheritance_spec_Private
 {
 
 constexpr const TCHAR* SandboxFolder = TEXT("/Game/Tests/ClaireonBPGetProps");
@@ -60,13 +63,44 @@ constexpr const TCHAR* SandboxFolder = TEXT("/Game/Tests/ClaireonBPGetProps");
 // when the linux non-unity build merges multiple .cpp files into one
 // translation unit (Module.Claireon.<N>.cpp), where anonymous namespaces are
 // merged and any duplicate symbol names break compilation.
+// True only when the asset actually has a .uasset on disk.
+//
+// CreateBPWithSphereSCS builds its Blueprint in a package created with
+// CreatePackage() and never saves it, and get_blueprint_properties is a read-only
+// tool with no save call -- so these fixtures live in memory only. Deleting an
+// in-memory fixture buys nothing, and every ObjectTools::ForceDeleteObjects call
+// runs a whole-object-graph referencer scan, which is the trigger for the
+// nondeterministic Niagara-serialization crash documented in
+// Docs/llm/todo/claireon-untest-harness-reliability.md item 1.
+//
+// The check is kept rather than dropping the delete outright so that a stale
+// .uasset left on disk by an older build or a crashed run is still cleaned and
+// `git status --porcelain -- Content/` stays empty.
+bool BPProps_HasFileOnDisk(const FString& AssetOrPackagePath)
+{
+	const FString PackageName = FPackageName::ObjectPathToPackageName(AssetOrPackagePath);
+	FString FileName;
+	if (!FPackageName::TryConvertLongPackageNameToFilename(
+			PackageName, FileName, FPackageName::GetAssetPackageExtension()))
+	{
+		return false;
+	}
+	return FPaths::FileExists(FileName);
+}
+
 void BPProps_DeleteIfExists(const FString& ObjectPath)
 {
-	if (UObject* Asset = FSoftObjectPath(ObjectPath).TryLoad())
+	// In-memory fixture: nothing on disk, nothing to clean, no referencer scan.
+	if (!BPProps_HasFileOnDisk(ObjectPath))
+	{
+		return;
+	}
+
+	if (UObject* Asset = FSoftObjectPath(ObjectPath).TryLoad(); IsValid(Asset))
 	{
 		TArray<UObject*> AssetsToDelete;
 		AssetsToDelete.Add(Asset);
-		ObjectTools::ForceDeleteObjects(AssetsToDelete, false);
+		ClaireonTestAssetDeletion::DeleteObjectsForTest(AssetsToDelete);
 	}
 }
 
@@ -76,7 +110,7 @@ void BPProps_DeleteIfExists(const FString& ObjectPath)
 UBlueprint* CreateBPWithSphereSCS(const FString& PackagePath, const FName SphereName = TEXT("TestSphere"))
 {
 	UPackage* Package = CreatePackage(*PackagePath);
-	if (!Package)
+	if (!IsValid(Package))
 	{
 		return nullptr;
 	}
@@ -90,13 +124,13 @@ UBlueprint* CreateBPWithSphereSCS(const FString& PackagePath, const FName Sphere
 		UBlueprint::StaticClass(),
 		UBlueprintGeneratedClass::StaticClass(),
 		NAME_None);
-	if (!BP || !BP->SimpleConstructionScript)
+	if (!IsValid(BP) || !BP->SimpleConstructionScript)
 	{
 		return nullptr;
 	}
 
 	USCS_Node* SphereNode = BP->SimpleConstructionScript->CreateNode(USphereComponent::StaticClass(), SphereName);
-	if (!SphereNode)
+	if (!IsValid(SphereNode))
 	{
 		return nullptr;
 	}
@@ -245,7 +279,8 @@ bool AllEntriesAreThisBP(const TArray<TSharedPtr<FJsonValue>>* Array, const FStr
 	return true;
 }
 
-} // anonymous namespace
+} // namespace ClaireonTool_GetBlueprintProperties_Inheritance_spec_Private
+using namespace ClaireonTool_GetBlueprintProperties_Inheritance_spec_Private;
 
 // ============================================================================
 // Default mode (include_inherited not passed)
@@ -259,7 +294,7 @@ UNTEST_UNIT_OPTS(Claireon, GetBlueprintProperties, DefaultMode_OnlyThisBPCompone
 
 	UBlueprint* BP = CreateBPWithSphereSCS(PackagePath);
 	UNTEST_ASSERT_PTR(BP);
-	const FString GeneratedClassShort = BP->GeneratedClass ? BP->GeneratedClass->GetName() : FString();
+	const FString GeneratedClassShort = IsValid(BP->GeneratedClass) ? BP->GeneratedClass->GetName() : FString();
 	UNTEST_ASSERT_FALSE(GeneratedClassShort.IsEmpty());
 
 	ClaireonTool_GetBlueprintProperties Tool;
@@ -306,7 +341,7 @@ UNTEST_UNIT_OPTS(Claireon, GetBlueprintProperties, InheritedMode_IncludesNativeS
 
 	UBlueprint* BP = CreateBPWithSphereSCS(PackagePath);
 	UNTEST_ASSERT_PTR(BP);
-	const FString GeneratedClassShort = BP->GeneratedClass ? BP->GeneratedClass->GetName() : FString();
+	const FString GeneratedClassShort = IsValid(BP->GeneratedClass) ? BP->GeneratedClass->GetName() : FString();
 
 	ClaireonTool_GetBlueprintProperties Tool;
 	IClaireonTool::FToolResult Result = Tool.Execute(MakeArgs(PackagePath, /*bIncludeInherited=*/true));
@@ -370,9 +405,10 @@ UNTEST_UNIT_OPTS(Claireon, GetBlueprintProperties, InheritedMode_IncludesNativeS
 
 // ============================================================================
 // Dedupe spot-check: an SCS node with the same FName as a native subobject
-// should win (Source A > Source C). We synthesise this by giving the SCS
-// USphereComponent the same FName ("StaticMeshComponent0") that
-// AStaticMeshActor's native CDO subobject uses.
+// should win (Source A > Source C). We synthesise this by renaming the SCS
+// USphereComponent's variable to the same FName ("StaticMeshComponent0") that
+// AStaticMeshActor's native CDO subobject uses. See the in-body comment for why
+// the rename has to happen after CreateNode rather than being passed to it.
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, GetBlueprintProperties, InheritedMode_SCSWinsOverNative, UNTEST_TIMEOUTMS(60000))
@@ -391,7 +427,39 @@ UNTEST_UNIT_OPTS(Claireon, GetBlueprintProperties, InheritedMode_SCSWinsOverNati
 
 	UBlueprint* BP = CreateBPWithSphereSCS(PackagePath, CollideName);
 	UNTEST_ASSERT_PTR(BP);
-	const FString GeneratedClassShort = BP->GeneratedClass ? BP->GeneratedClass->GetName() : FString();
+	// Raw local: UNTEST_ASSERT_PTR's FUntestContext::ValidPtr has no TObjectPtr overload.
+	USimpleConstructionScript* SCS = BP->SimpleConstructionScript;
+	UNTEST_ASSERT_PTR(SCS);
+	const FString GeneratedClassShort = IsValid(BP->GeneratedClass) ? BP->GeneratedClass->GetName() : FString();
+
+	// Force the FName collision. Passing CollideName to CreateNode cannot produce
+	// it: USimpleConstructionScript::CreateNode funnels the desired name through
+	// GenerateNewComponentName(), whose GenerateListOfExistingNames() seeds the
+	// taken-name set from the first native ancestor CDO's subobjects. So the
+	// desired "StaticMeshComponent0" is seen as taken and uniquified (numeric
+	// suffix bumped -> "StaticMeshComponent1"), which is why the original version
+	// of this test found only the native entry under the colliding name and
+	// asserted is_inherited=false against it.
+	//
+	// The tool's Source A > Source C dedupe branch is still real and reachable
+	// (SCS variable names are only validated against ancestor *Blueprints*, not
+	// against native CDO subobjects -- see USimpleConstructionScript::
+	// ValidateNodeVariableNames, whose conflict branch requires a Blueprint
+	// parent), so drive it by renaming the node in place after the compile.
+	// bRenameTemplate=false keeps the template object's own name alone; only the
+	// SCS variable name -- the key the tool dedupes on -- changes.
+	USCS_Node* CollidingNode = nullptr;
+	for (USCS_Node* Node : SCS->GetAllNodes())
+	{
+		if (IsValid(Node) && Node->ComponentClass == USphereComponent::StaticClass())
+		{
+			CollidingNode = Node;
+			break;
+		}
+	}
+	UNTEST_ASSERT_PTR(CollidingNode);
+	CollidingNode->SetVariableName(CollideName, /*bRenameTemplate=*/false);
+	UNTEST_ASSERT_TRUE(CollidingNode->GetVariableName() == CollideName);
 
 	ClaireonTool_GetBlueprintProperties Tool;
 	IClaireonTool::FToolResult Result = Tool.Execute(MakeArgs(PackagePath, /*bIncludeInherited=*/true));
@@ -450,7 +518,7 @@ UNTEST_UNIT_OPTS(Claireon, GetBlueprintProperties, DefaultMode_VariablesAndFunct
 
 	UBlueprint* BP = CreateBPWithSphereSCS(PackagePath);
 	UNTEST_ASSERT_PTR(BP);
-	const FString GeneratedClassShort = BP->GeneratedClass ? BP->GeneratedClass->GetName() : FString();
+	const FString GeneratedClassShort = IsValid(BP->GeneratedClass) ? BP->GeneratedClass->GetName() : FString();
 
 	ClaireonTool_GetBlueprintProperties Tool;
 	IClaireonTool::FToolResult Result = Tool.Execute(MakeArgs(PackagePath, /*bIncludeInherited=*/false));
@@ -504,7 +572,7 @@ UNTEST_UNIT_OPTS(Claireon, GetBlueprintProperties, InheritedMode_VariablesAndFun
 
 	// Any new entries in inherited-mode arrays must have is_inherited=true and
 	// source_class != this BP's generated class.
-	const FString GeneratedClassShort = BP->GeneratedClass ? BP->GeneratedClass->GetName() : FString();
+	const FString GeneratedClassShort = IsValid(BP->GeneratedClass) ? BP->GeneratedClass->GetName() : FString();
 	auto CountInheritedFromAncestor = [&](const TArray<TSharedPtr<FJsonValue>>* Array) -> int32
 	{
 		int32 Count = 0;

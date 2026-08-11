@@ -33,14 +33,14 @@ UProxyTable* LoadProxyTableAsset(const FString& AssetPath, FString& OutError)
 	const FString ResolvedPath = ResolveResult.ResolvedPath.Path;
 
 	UObject* LoadedObj = FSoftObjectPath(ResolvedPath).TryLoad();
-	if (!LoadedObj)
+	if (!IsValid(LoadedObj))
 	{
 		OutError = FString::Printf(TEXT("Failed to load asset at path: %s"), *ResolvedPath);
 		return nullptr;
 	}
 
 	UProxyTable* ProxyTable = Cast<UProxyTable>(LoadedObj);
-	if (!ProxyTable)
+	if (!IsValid(ProxyTable))
 	{
 		OutError = FString::Printf(TEXT("Asset at %s is not a ProxyTable (actual type: %s)"),
 			*ResolvedPath, *LoadedObj->GetClass()->GetName());
@@ -61,14 +61,14 @@ UProxyAsset* LoadProxyAsset(const FString& AssetPath, FString& OutError)
 	const FString ResolvedPath = ResolveResult.ResolvedPath.Path;
 
 	UObject* LoadedObj = FSoftObjectPath(ResolvedPath).TryLoad();
-	if (!LoadedObj)
+	if (!IsValid(LoadedObj))
 	{
 		OutError = FString::Printf(TEXT("Failed to load asset at path: %s"), *ResolvedPath);
 		return nullptr;
 	}
 
 	UProxyAsset* ProxyAsset = Cast<UProxyAsset>(LoadedObj);
-	if (!ProxyAsset)
+	if (!IsValid(ProxyAsset))
 	{
 		OutError = FString::Printf(TEXT("Asset at %s is not a ProxyAsset (actual type: %s)"),
 			*ResolvedPath, *LoadedObj->GetClass()->GetName());
@@ -80,7 +80,7 @@ UProxyAsset* LoadProxyAsset(const FString& AssetPath, FString& OutError)
 
 bool SaveProxyTable(UProxyTable* ProxyTable, FString& OutError)
 {
-	if (!ProxyTable)
+	if (!IsValid(ProxyTable))
 	{
 		OutError = TEXT("Proxy table is null");
 		return false;
@@ -111,7 +111,7 @@ bool SaveProxyTable(UProxyTable* ProxyTable, FString& OutError)
 
 bool SaveProxyAsset(UProxyAsset* ProxyAsset, FString& OutError)
 {
-	if (!ProxyAsset)
+	if (!IsValid(ProxyAsset))
 	{
 		OutError = TEXT("Proxy asset is null");
 		return false;
@@ -231,7 +231,7 @@ TSharedPtr<FJsonObject> SerializeProxyAssetInfo(const UProxyAsset* ProxyAsset)
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
-	if (!ProxyAsset)
+	if (!IsValid(ProxyAsset))
 	{
 		return Result;
 	}

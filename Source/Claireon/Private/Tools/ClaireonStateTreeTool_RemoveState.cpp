@@ -38,7 +38,7 @@ FToolResult ClaireonStateTreeTool_RemoveState::Execute(const TSharedPtr<FJsonObj
 	}
 
 	UStateTreeEditorData* EditorData = ClaireonStateTreeEditInternal::GetEditorDataFromSession(Data, Error);
-	if (!EditorData)
+	if (!IsValid(EditorData))
 		return MakeErrorResult(Error);
 
 	FGuid StateId;
@@ -48,7 +48,7 @@ FToolResult ClaireonStateTreeTool_RemoveState::Execute(const TSharedPtr<FJsonObj
 	}
 
 	UStateTreeState* State = ClaireonStateTreeHelpers::FindStateById(EditorData, StateId);
-	if (!State)
+	if (!IsValid(State))
 	{
 		return MakeErrorResult(FString::Printf(TEXT("State not found: %s"), *StateId.ToString()));
 	}
@@ -59,7 +59,7 @@ FToolResult ClaireonStateTreeTool_RemoveState::Execute(const TSharedPtr<FJsonObj
 	FString StateName = State->Name.ToString();
 	UStateTreeState* ParentState = Cast<UStateTreeState>(State->GetOuter());
 
-	if (ParentState)
+	if (IsValid(ParentState))
 	{
 		ParentState->Children.Remove(State);
 		Data->FocusedStateId = ParentState->ID;

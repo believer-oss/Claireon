@@ -27,14 +27,19 @@ public:
 
 	/**
 	 * Start the server on the given port.
-	 * @param Port - The port to bind to. If binding fails, retries with incremented ports.
+	 * @param Port - The port to bind to. The first attempt is always exactly this
+	 *               port; if binding fails, retries land on OTHER ports (see below).
 	 * @return true if the server started successfully
 	 *
 	 * Prefer TryStart / StartEphemeral. Start(uint32) is a thin wrapper around
-	 * TryStart(Port, bExclusive=false) for callers that want the incremental
-	 * retry behaviour; new callers (FClaireonModule::StartServer + the smoke
-	 * test) take the explicit single-attempt path so EADDRINUSE can be detected
-	 * and the editor can decide whether to auto-promote into proxy-attached mode.
+	 * TryStart for callers that want retry-on-bind-failure behaviour; new callers
+	 * (FClaireonModule::StartServer + the smoke test) take the explicit
+	 * single-attempt path so EADDRINUSE can be detected and the editor can decide
+	 * whether to auto-promote into proxy-attached mode.
+	 *
+	 * Retries stride by a prime offset rather than +1: Windows reserves contiguous
+	 * 100-port blocks in the ephemeral range, which a +1 walk can never escape.
+	 * Callers that need "this exact port or fail" must call TryStart instead.
 	 */
 	bool Start(uint32 Port);
 
@@ -79,7 +84,16 @@ public:
 	/** Return the active session token (empty when gating is disabled). */
 	const FString& GetSessionToken() const { return SessionToken; }
 
-	/** Stop the server and clean up routes */
+	/**
+	 * Stop the server: unbind routes and delete the port file.
+	 *
+	 * Does NOT release the OS-level listening socket -- FHttpServerModule keeps one
+	 * process-wide listener per port alive for the life of the process, and exposes no
+	 * per-port stop/destroy API (only a process-wide StopAllListeners(), which would also
+	 * stop every other consumer of the shared module -- see the investigation note at the
+	 * top of Stop()'s implementation). A stopped editor therefore keeps squatting its port
+	 * at the OS level until the process exits.
+	 */
 	void Stop();
 
 	/** Whether the server is currently running */

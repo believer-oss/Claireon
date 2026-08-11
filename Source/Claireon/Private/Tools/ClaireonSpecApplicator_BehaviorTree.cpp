@@ -139,14 +139,14 @@ bool FClaireonSpecApplicator_BehaviorTree::OpenOrCreateAsset(const FString& Asse
 
 	// Load BT
 	UBehaviorTree* BT = ClaireonBehaviorTreeHelpers::LoadBehaviorTreeAsset(ResolvedPath, OutError);
-	if (!BT)
+	if (!IsValid(BT))
 	{
 		return false;
 	}
 
 	// Get graph
 	UBehaviorTreeGraph* Graph = ClaireonBehaviorTreeHelpers::GetBTGraph(BT, OutError);
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		return false;
 	}
@@ -179,7 +179,7 @@ bool FClaireonSpecApplicator_BehaviorTree::OpenOrCreateAsset(const FString& Asse
 bool FClaireonSpecApplicator_BehaviorTree::ApplyPass1_CreateEntities(const FString& SessionId, const TSharedPtr<FJsonObject>& Spec)
 {
 	UBehaviorTreeGraph* Graph = BTGraph.Get();
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		AddError(TEXT("BT graph is no longer valid"));
 		return false;
@@ -209,7 +209,7 @@ bool FClaireonSpecApplicator_BehaviorTree::ApplyPass1_CreateEntities(const FStri
 		FString Error;
 		ClaireonNameResolver::FNameResolveResult NameResult;
 		UClass* NodeClass = ClaireonNameResolver::ResolveClassName(NodeType, UBTNode::StaticClass(), NameResult);
-		if (!NodeClass)
+		if (!IsValid(NodeClass))
 		{
 			RecordEntryFailure(SpecId, FString::Printf(TEXT("Failed to resolve class '%s': %s"), *NodeType, *NameResult.Error));
 			// Check if other nodes depend on this one
@@ -221,7 +221,7 @@ bool FClaireonSpecApplicator_BehaviorTree::ApplyPass1_CreateEntities(const FStri
 		FVector2D Position(i * 200.0, 0.0);
 		UBehaviorTreeGraphNode* GraphNode = ClaireonBehaviorTreeHelpers::CreateGraphNodeForClass(
 			Graph, NodeClass, Position, Error);
-		if (!GraphNode)
+		if (!IsValid(GraphNode))
 		{
 			RecordEntryFailure(SpecId, FString::Printf(TEXT("Failed to create node: %s"), *Error));
 			continue;
@@ -242,7 +242,7 @@ bool FClaireonSpecApplicator_BehaviorTree::ApplyPass1_CreateEntities(const FStri
 bool FClaireonSpecApplicator_BehaviorTree::ApplyPass2_WireRelationships(const FString& SessionId, const TSharedPtr<FJsonObject>& Spec)
 {
 	UBehaviorTreeGraph* Graph = BTGraph.Get();
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		AddError(TEXT("BT graph is no longer valid"));
 		return false;
@@ -297,7 +297,7 @@ bool FClaireonSpecApplicator_BehaviorTree::ApplyPass2_WireRelationships(const FS
 		FGuid ChildGuid;
 		FGuid::Parse(ChildGuidStr, ChildGuid);
 		UBehaviorTreeGraphNode* ChildGraphNode = ClaireonBehaviorTreeHelpers::FindGraphNodeByGuid(Graph, ChildGuid);
-		if (!ChildGraphNode)
+		if (!IsValid(ChildGraphNode))
 		{
 			AddWarning(FString::Printf(TEXT("Could not find created node for '%s'"), *SpecId));
 			continue;
@@ -321,7 +321,7 @@ bool FClaireonSpecApplicator_BehaviorTree::ApplyPass2_WireRelationships(const FS
 				FGuid::Parse(ParentGuidStr, ParentGuid);
 				UBehaviorTreeGraphNode* ParentGraphNode = ClaireonBehaviorTreeHelpers::FindGraphNodeByGuid(Graph, ParentGuid);
 
-				if (ParentGraphNode)
+				if (IsValid(ParentGraphNode))
 				{
 					// Determine child index from parent's children array
 					int32 ChildIndex = INDEX_NONE;
@@ -345,7 +345,7 @@ bool FClaireonSpecApplicator_BehaviorTree::ApplyPass2_WireRelationships(const FS
 		{
 			// parent is null -- connect to root node
 			UBehaviorTreeGraphNode_Root* RootNode = ClaireonBehaviorTreeHelpers::FindRootGraphNode(Graph);
-			if (RootNode)
+			if (IsValid(RootNode))
 			{
 				FString ConnectError;
 				if (!ClaireonBehaviorTreeHelpers::ConnectNodes(RootNode, ChildGraphNode, 0, ConnectError))
@@ -371,7 +371,7 @@ bool FClaireonSpecApplicator_BehaviorTree::ApplyPass2_WireRelationships(const FS
 				FString Error;
 				ClaireonNameResolver::FNameResolveResult DecNameResult;
 				UClass* DecClass = ClaireonNameResolver::ResolveClassName(DecType, UBTNode::StaticClass(), DecNameResult);
-				if (!DecClass)
+				if (!IsValid(DecClass))
 				{
 					RecordEntryFailure(DecId, FString::Printf(TEXT("Failed to resolve decorator class: %s"), *DecNameResult.Error));
 					continue;
@@ -386,7 +386,7 @@ bool FClaireonSpecApplicator_BehaviorTree::ApplyPass2_WireRelationships(const FS
 				UBehaviorTreeGraphNode* DecGraphNode = ClaireonBehaviorTreeHelpers::CreateGraphNodeForClass(
 					Graph, DecClass,
 					FVector2D(ChildGraphNode->NodePosX, ChildGraphNode->NodePosY - 50), Error);
-				if (!DecGraphNode)
+				if (!IsValid(DecGraphNode))
 				{
 					RecordEntryFailure(DecId, FString::Printf(TEXT("Failed to create decorator: %s"), *Error));
 					continue;
@@ -404,7 +404,7 @@ bool FClaireonSpecApplicator_BehaviorTree::ApplyPass2_WireRelationships(const FS
 				if (DecObj->TryGetObjectField(TEXT("properties"), PropsPtr) && PropsPtr && PropsPtr->IsValid())
 				{
 					UBTNode* BTNode = Cast<UBTNode>(DecGraphNode->NodeInstance);
-					if (BTNode)
+					if (IsValid(BTNode))
 					{
 						for (const auto& Prop : (*PropsPtr)->Values)
 						{
@@ -439,7 +439,7 @@ bool FClaireonSpecApplicator_BehaviorTree::ApplyPass2_WireRelationships(const FS
 				FString Error;
 				ClaireonNameResolver::FNameResolveResult SvcNameResult;
 				UClass* SvcClass = ClaireonNameResolver::ResolveClassName(SvcType, UBTNode::StaticClass(), SvcNameResult);
-				if (!SvcClass)
+				if (!IsValid(SvcClass))
 				{
 					RecordEntryFailure(SvcId, FString::Printf(TEXT("Failed to resolve service class: %s"), *SvcNameResult.Error));
 					continue;
@@ -454,7 +454,7 @@ bool FClaireonSpecApplicator_BehaviorTree::ApplyPass2_WireRelationships(const FS
 				UBehaviorTreeGraphNode* SvcGraphNode = ClaireonBehaviorTreeHelpers::CreateGraphNodeForClass(
 					Graph, SvcClass,
 					FVector2D(ChildGraphNode->NodePosX, ChildGraphNode->NodePosY + 50), Error);
-				if (!SvcGraphNode)
+				if (!IsValid(SvcGraphNode))
 				{
 					RecordEntryFailure(SvcId, FString::Printf(TEXT("Failed to create service: %s"), *Error));
 					continue;
@@ -472,7 +472,7 @@ bool FClaireonSpecApplicator_BehaviorTree::ApplyPass2_WireRelationships(const FS
 				if (SvcObj->TryGetObjectField(TEXT("properties"), PropsPtr) && PropsPtr && PropsPtr->IsValid())
 				{
 					UBTNode* BTNode = Cast<UBTNode>(SvcGraphNode->NodeInstance);
-					if (BTNode)
+					if (IsValid(BTNode))
 					{
 						for (const auto& Prop : (*PropsPtr)->Values)
 						{
@@ -496,7 +496,7 @@ bool FClaireonSpecApplicator_BehaviorTree::ApplyPass2_WireRelationships(const FS
 		if (NodeObj->TryGetObjectField(TEXT("properties"), PropsPtr) && PropsPtr && PropsPtr->IsValid())
 		{
 			UBTNode* BTNode = Cast<UBTNode>(ChildGraphNode->NodeInstance);
-			if (BTNode)
+			if (IsValid(BTNode))
 			{
 				for (const auto& Prop : (*PropsPtr)->Values)
 				{
@@ -520,7 +520,7 @@ bool FClaireonSpecApplicator_BehaviorTree::ApplyPass2_WireRelationships(const FS
 bool FClaireonSpecApplicator_BehaviorTree::CompileAsset(const FString& SessionId, FString& OutError)
 {
 	UBehaviorTreeGraph* Graph = BTGraph.Get();
-	if (!Graph)
+	if (!IsValid(Graph))
 	{
 		OutError = TEXT("BT graph is no longer valid");
 		return false;
@@ -534,7 +534,7 @@ bool FClaireonSpecApplicator_BehaviorTree::CompileAsset(const FString& SessionId
 bool FClaireonSpecApplicator_BehaviorTree::SaveAsset(const FString& SessionId, FString& OutError)
 {
 	UBehaviorTree* BT = BehaviorTree.Get();
-	if (!BT)
+	if (!IsValid(BT))
 	{
 		OutError = TEXT("BehaviorTree is no longer valid");
 		return false;

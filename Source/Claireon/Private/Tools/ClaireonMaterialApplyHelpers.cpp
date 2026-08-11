@@ -23,7 +23,7 @@ namespace ClaireonMaterialApplyHelpers
 {
 	UMeshComponent* FindMeshComponentOnActor(AActor* Actor, const FString& ComponentName)
 	{
-		if (!Actor)
+		if (!IsValid(Actor))
 		{
 			return nullptr;
 		}
@@ -31,7 +31,7 @@ namespace ClaireonMaterialApplyHelpers
 		Actor->GetComponents<UMeshComponent>(Mesh);
 		for (UMeshComponent* Component : Mesh)
 		{
-			if (Component && Component->GetName().Equals(ComponentName, ESearchCase::IgnoreCase))
+			if (IsValid(Component) && Component->GetName().Equals(ComponentName, ESearchCase::IgnoreCase))
 			{
 				return Component;
 			}
@@ -41,21 +41,21 @@ namespace ClaireonMaterialApplyHelpers
 
 	UMeshComponent* FindMeshComponentOnBlueprint(UBlueprint* Blueprint, const FString& ComponentName)
 	{
-		if (!Blueprint || !Blueprint->SimpleConstructionScript)
+		if (!IsValid(Blueprint) || !Blueprint->SimpleConstructionScript)
 		{
 			return nullptr;
 		}
 		const FName Wanted(*ComponentName);
 		for (USCS_Node* Node : Blueprint->SimpleConstructionScript->GetAllNodes())
 		{
-			if (!Node)
+			if (!IsValid(Node))
 			{
 				continue;
 			}
 			if (Node->GetVariableName() == Wanted ||
 				(Node->ComponentTemplate && Node->ComponentTemplate->GetName().Equals(ComponentName, ESearchCase::IgnoreCase)))
 			{
-				if (UMeshComponent* AsMesh = Cast<UMeshComponent>(Node->ComponentTemplate))
+				if (UMeshComponent* AsMesh = Cast<UMeshComponent>(Node->ComponentTemplate); IsValid(AsMesh))
 				{
 					return AsMesh;
 				}
@@ -66,14 +66,14 @@ namespace ClaireonMaterialApplyHelpers
 
 	AActor* FindActorInEditorWorld(UWorld* World, const FString& ActorName)
 	{
-		if (!World || ActorName.IsEmpty())
+		if (!IsValid(World) || ActorName.IsEmpty())
 		{
 			return nullptr;
 		}
 		for (TActorIterator<AActor> It(World); It; ++It)
 		{
 			AActor* Actor = *It;
-			if (!Actor)
+			if (!IsValid(Actor))
 			{
 				continue;
 			}
@@ -90,12 +90,12 @@ namespace ClaireonMaterialApplyHelpers
 	UMaterialInterface* LoadMaterialByPath(const FString& MaterialPath, FString& OutError)
 	{
 		UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, *MaterialPath);
-		if (!Material)
+		if (!IsValid(Material))
 		{
 			FSoftObjectPath SoftPath(MaterialPath);
 			Material = Cast<UMaterialInterface>(SoftPath.TryLoad());
 		}
-		if (!Material)
+		if (!IsValid(Material))
 		{
 			OutError = FString::Printf(TEXT("Failed to load material '%s'"), *MaterialPath);
 		}
@@ -112,7 +112,7 @@ namespace ClaireonMaterialApplyHelpers
 		UBlueprint* Blueprint)
 	{
 		using FToolResult = IClaireonTool::FToolResult;
-		if (!Material || !MeshComponent)
+		if (!IsValid(Material) || !IsValid(MeshComponent))
 		{
 			return IClaireonTool::MakeErrorResult(TEXT("ApplyMaterialToMeshComponent: null material or component"));
 		}
@@ -131,7 +131,7 @@ namespace ClaireonMaterialApplyHelpers
 		auto CapturePrior = [&PriorMaterials, MeshComponent](int32 Slot)
 		{
 			UMaterialInterface* Prior = MeshComponent->GetMaterial(Slot);
-			PriorMaterials.Add(TPair<int32, FString>(Slot, Prior ? Prior->GetPathName() : FString(TEXT("(none)"))));
+			PriorMaterials.Add(TPair<int32, FString>(Slot, IsValid(Prior) ? Prior->GetPathName() : FString(TEXT("(none)"))));
 		};
 
 		const TCHAR* TransactionLabel = TEXT("[Claireon] Apply Material");
@@ -154,11 +154,11 @@ namespace ClaireonMaterialApplyHelpers
 
 		double CompileMs = -1.0;
 		FString CompileStatus;
-		if (Actor)
+		if (IsValid(Actor))
 		{
 			Actor->MarkPackageDirty();
 		}
-		if (Blueprint)
+		if (IsValid(Blueprint))
 		{
 			Blueprint->MarkPackageDirty();
 			const double StartTime = FPlatformTime::Seconds();
@@ -169,15 +169,15 @@ namespace ClaireonMaterialApplyHelpers
 
 		// Child-blueprint annotation (blueprint targets only).
 		TArray<FString> ChildBlueprintPaths;
-		if (Blueprint && Blueprint->GeneratedClass)
+		if (IsValid(Blueprint) && IsValid(Blueprint->GeneratedClass))
 		{
 			TArray<UClass*> ChildClasses;
 			GetDerivedClasses(Blueprint->GeneratedClass, ChildClasses, /*bRecursive=*/true);
 			for (UClass* Child : ChildClasses)
 			{
-				if (!Child) continue;
+				if (!IsValid(Child)) continue;
 				UBlueprint* ChildBP = UBlueprint::GetBlueprintFromClass(Child);
-				if (ChildBP && ChildBP != Blueprint)
+				if (IsValid(ChildBP) && ChildBP != Blueprint)
 				{
 					ChildBlueprintPaths.AddUnique(ChildBP->GetPathName());
 				}
@@ -195,7 +195,7 @@ namespace ClaireonMaterialApplyHelpers
 		{
 			Output += FString::Printf(TEXT("- Prior Material (slot %d): %s\n"), Prior.Key, *Prior.Value);
 		}
-		if (Blueprint)
+		if (IsValid(Blueprint))
 		{
 			Output += FString::Printf(TEXT("- %s\n"), *CompileStatus);
 		}
@@ -212,13 +212,13 @@ namespace ClaireonMaterialApplyHelpers
 		Data->SetStringField(TEXT("component_name"), ComponentName);
 		Data->SetStringField(TEXT("slot"), SlotLabel);
 		Data->SetStringField(TEXT("new_material_path"), Material->GetPathName());
-		if (Actor)
+		if (IsValid(Actor))
 		{
 			Data->SetStringField(TEXT("target_kind"), TEXT("actor"));
 			Data->SetStringField(TEXT("actor_label"), Actor->GetActorLabel());
 			Data->SetStringField(TEXT("actor_path"), Actor->GetPathName());
 		}
-		if (Blueprint)
+		if (IsValid(Blueprint))
 		{
 			Data->SetStringField(TEXT("target_kind"), TEXT("blueprint"));
 			Data->SetStringField(TEXT("blueprint_path"), Blueprint->GetPathName());
