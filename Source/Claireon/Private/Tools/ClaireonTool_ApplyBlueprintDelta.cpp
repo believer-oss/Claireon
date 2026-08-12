@@ -471,6 +471,17 @@ FToolResult ClaireonTool_ApplyBlueprintDelta::Execute(const TSharedPtr<FJsonObje
 				SpecStatus->SetStringField(TEXT("status"), TEXT("failed"));
 				SpecStatus->SetStringField(TEXT("error"), R.Error);
 				NodeSpecReport.Add(MakeShared<FJsonValueObject>(SpecStatus));
+
+				// Carry the failing node's own warnings out with the error. They were
+				// only collected on the success path below, so an unresolved
+				// function_class -- the actual cause -- was dropped, leaving the
+				// caller with the pin guard's generic "compile the Blueprint and
+				// retry" advice and no mention of the name that failed to resolve.
+				for (const FString& W : R.Warnings)
+				{
+					Warnings.Add(FString::Printf(TEXT("nodes[%d] '%s': %s"), NodeIdx, *LocalId, *W));
+				}
+
 				return CancelAndError(FString::Printf(TEXT("nodes[%d] '%s': %s"), NodeIdx, *LocalId, *R.Error));
 			}
 			for (const FString& W : R.Warnings)

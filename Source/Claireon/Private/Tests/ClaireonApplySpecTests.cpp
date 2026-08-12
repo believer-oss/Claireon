@@ -419,7 +419,17 @@ UNTEST_UNIT_OPTS(Claireon, ApplySpec_Blueprint, CreateGraphFromSpec, UNTEST_TIME
 	// the K2 node's display title, which is spaced. The spec asks for the function
 	// KismetSystemLibrary.PrintString, but nothing in the response echoes that
 	// member name verbatim.
-	UNTEST_EXPECT_TRUE(ApplySpecTest_DataToString(InspectResult).Contains(TEXT("Print String")));
+	const FString InspectDump = ApplySpecTest_DataToString(InspectResult);
+	UNTEST_EXPECT_TRUE(InspectDump.Contains(TEXT("Print String")));
+
+	// A pin name, not just the title. The title alone was satisfied by an UNBOUND
+	// node: the dotted function_name went unsplit, so the node bound to nothing and
+	// "KismetSystemLibrary.PrintString" still rendered as
+	// "Kismet System Library.Print String" -- which contains "Print String". This
+	// test therefore passed for as long as bp_apply_spec was authoring dead nodes,
+	// and only the P1-9d pin guard turned that into a visible failure. InString is
+	// a PrintString parameter, so it exists only if the function actually bound.
+	UNTEST_EXPECT_TRUE(InspectDump.Contains(TEXT("InString")));
 
 	CleanupTestAsset(ApplySpecTestBPPath);
 	co_return;

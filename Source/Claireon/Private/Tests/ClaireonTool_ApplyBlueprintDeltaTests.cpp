@@ -455,8 +455,21 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, VariableGet_TypedOutput, UN
 }
 
 // ============================================================================
-// Bad function_class -- ensures the factory surfaces a resolution warning
-// (was silent pre-fix) and that the node is still created but empty.
+// Bad function_class -- the whole batch must fail, and the failure must name the
+// class that did not resolve.
+//
+// Contract change, 2026-08-12. This test used to assert the opposite: no error,
+// a warning, and "the node is still created but empty". P1-9d replaced that
+// contract -- a zero-pin CallFunction node is dead, so the factory removes it and
+// errors rather than committing it with a success status. The old assertions were
+// pinning the silent-success shape P1-9d exists to remove, and the first
+// whole-band sweep (2026-08-12) is what surfaced the mismatch.
+//
+// What is still asserted, because it is the part that has to survive: the caller
+// is told WHICH name failed. The guard's own error names the function and advises
+// recompiling, which is the wrong diagnosis here, and the factory's
+// class-resolution warning was being dropped on the error path -- fixed
+// alongside this test in ClaireonTool_ApplyBlueprintDelta.cpp.
 // ============================================================================
 
 UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, CallFunction_BadFunctionClass_EmitsWarning, UNTEST_TIMEOUTMS(30000))
@@ -473,34 +486,29 @@ UNTEST_UNIT_OPTS(Claireon, ApplyBlueprintDelta_Pins, CallFunction_BadFunctionCla
 
 	ClaireonTool_ApplyBlueprintDelta Tool;
 	auto Result = Tool.Execute(MakeApplyDeltaArgsSingle(SessionId, Node));
-	UNTEST_ASSERT_FALSE(Result.bIsError);
 
-	bool bFoundWarning = false;
+	// Dead node, so the batch fails rather than reporting a node it left unusable.
+	UNTEST_ASSERT_TRUE(Result.bIsError);
+
+	// The unresolved class must be somewhere the caller will read -- warning or
+	// error text. Checking both, because which one carries it is an
+	// implementation detail; that it reaches the caller at all is the contract.
+	bool bNamesTheBadClass = Result.ErrorMessage.Contains(TEXT("NonexistentClassXYZ"), ESearchCase::IgnoreCase);
 	for (const FString& W : Result.Warnings)
 	{
 		if (W.Contains(TEXT("NonexistentClassXYZ"), ESearchCase::IgnoreCase))
 		{
-			bFoundWarning = true;
+			bNamesTheBadClass = true;
 			break;
 		}
 	}
-	UNTEST_EXPECT_TRUE(bFoundWarning);
+	UNTEST_EXPECT_TRUE(bNamesTheBadClass);
 
-	UEdGraphNode* Created = ResolveCreatedNode(Result, TEXT("bad1"), SessionId);
-	UNTEST_ASSERT_PTR(Created);
-
-	// Function name was bogus too, so pin population should be minimal (no
-	// function parameters were resolvable).  The node still exists -- the
-	// fallback is SetSelfMember with no UFunction found.
-	int32 NonExecPinCount = 0;
-	for (UEdGraphPin* Pin : Created->Pins)
-	{
-		if (Pin && Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
-		{
-			++NonExecPinCount;
-		}
-	}
-	UNTEST_EXPECT_LE(NonExecPinCount, 1); // self pin is ok; function params are not
+	// And the dead node must not have been left behind. ResolveCreatedNode works
+	// off the result's id_mappings, which a failed batch does not populate, so
+	// this checks the graph itself.
+	UEdGraphNode* Leftover = ResolveCreatedNode(Result, TEXT("bad1"), SessionId);
+	UNTEST_EXPECT_TRUE(Leftover == nullptr);
 
 	ApplyGraphTests_CleanupTestAsset(ApplyBPDeltaPinsTestPath);
 	co_return;
