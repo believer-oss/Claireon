@@ -338,6 +338,34 @@ namespace ClaireonBlueprintNodeFactory
 			}
 			Params->TryGetStringField(TEXT("function_class"), FunctionClass);
 
+			// Accept the dotted "Class.Function" spelling in function_name.
+			//
+			// bp_apply_spec's node specs carry `function: "KismetSystemLibrary.PrintString"`,
+			// and ClaireonSpecApplicator_Blueprint renames that field to function_name
+			// verbatim. Nothing then split it, so the lookup below asked for a UFunction
+			// literally named "KismetSystemLibrary.PrintString", never found one, and
+			// authored an unbound node. Before the P1-9d pin guard that node was committed
+			// with a success status, so bp_apply_spec reported applying a CallFunction node
+			// it had actually left dead -- for every dotted spec, silently.
+			//
+			// Splitting here rather than in the applicator fixes bp_add_node and
+			// bp_apply_delta at the same choke point. UFunction names cannot contain a
+			// dot, so the last dot is unambiguously the class/function boundary, and an
+			// explicit function_class always wins over the dotted form.
+			bool bClassCameFromDottedName = false;
+			if (FunctionClass.IsEmpty())
+			{
+				int32 DotIndex = INDEX_NONE;
+				if (FunctionName.FindLastChar(TEXT('.'), DotIndex)
+					&& DotIndex > 0
+					&& DotIndex < FunctionName.Len() - 1)
+				{
+					FunctionClass = FunctionName.Left(DotIndex);
+					FunctionName = FunctionName.Mid(DotIndex + 1);
+					bClassCameFromDottedName = true;
+				}
+			}
+
 			// Resolve owner class up-front. When function_class is supplied but
 			// cannot be resolved, surface a warning instead of silently falling
 			// through to SetSelfMember.
@@ -349,6 +377,15 @@ namespace ClaireonBlueprintNodeFactory
 				if (IsValid(ResolvedOwnerClass))
 				{
 					if (!R.ResolutionNote.IsEmpty()) Out.Warnings.Add(R.ResolutionNote);
+				}
+				else if (bClassCameFromDottedName)
+				{
+					// Name the caller's own spelling. A warning about a function_class
+					// they never wrote reads as a bug in the tool.
+					Out.Warnings.Add(FString::Printf(
+						TEXT("CallFunction: function_name '%s.%s' was read as class '%s' + function '%s', ")
+						TEXT("and that class could not be resolved; falling back to Self. (%s)"),
+						*FunctionClass, *FunctionName, *FunctionClass, *FunctionName, *R.Error));
 				}
 				else
 				{
