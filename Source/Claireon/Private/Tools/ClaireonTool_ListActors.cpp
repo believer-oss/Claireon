@@ -4,6 +4,7 @@
 #include "Tools/ClaireonTool_ListActors.h"
 #include "ClaireonLog.h"
 #include "ClaireonPIEWorldResolver.h"
+#include "ClaireonNameResolver.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -34,8 +35,15 @@ TSharedPtr<FJsonObject> ClaireonTool_ListActors::GetInputSchema() const
 	// class_filter - optional
 	TSharedPtr<FJsonObject> ClassProp = MakeShared<FJsonObject>();
 	ClassProp->SetStringField(TEXT("type"), TEXT("string"));
-	ClassProp->SetStringField(TEXT("description"), TEXT("Filter by actor class name (case-insensitive substring match, e.g. StaticMeshActor, PointLight)"));
+	ClassProp->SetStringField(TEXT("description"), TEXT("Filter by actor class (is-a test; accepts short names, U/A-prefixed names, BP class names and /Script/ paths, e.g. Pawn, StaticMeshActor, BP_Turret_C). Subclasses are included unless include_subclasses=false. When the name does not resolve to a class, falls back to the legacy case-insensitive substring match on class names, disclosed by a warning."));
 	Properties->SetObjectField(TEXT("class_filter"), ClassProp);
+
+	// include_subclasses - optional (P2-8; operator-decided default true)
+	TSharedPtr<FJsonObject> SubclassesProp = MakeShared<FJsonObject>();
+	SubclassesProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	SubclassesProp->SetBoolField(TEXT("default"), true);
+	SubclassesProp->SetStringField(TEXT("description"), TEXT("With class_filter: true (default) matches the class and every subclass (is-a); false matches the exact class only. No effect on the substring fallback or without class_filter."));
+	Properties->SetObjectField(TEXT("include_subclasses"), SubclassesProp);
 
 	// label_pattern - optional
 	TSharedPtr<FJsonObject> LabelProp = MakeShared<FJsonObject>();
@@ -132,10 +140,47 @@ IClaireonTool::FToolResult ClaireonTool_ListActors::Execute(const TSharedPtr<FJs
 		ClassFilter = Arguments->GetStringField(TEXT("class_filter"));
 	}
 
+	// P2-8 (operator decision 2026-08-12): default TRUE -- the honest is-a
+	// semantic. Existing calls can return MORE actors than before.
+	bool bIncludeSubclasses = true;
+	if (Arguments->HasField(TEXT("include_subclasses")))
+	{
+		bIncludeSubclasses = Arguments->GetBoolField(TEXT("include_subclasses"));
+	}
+
 	FString LabelPattern;
 	if (Arguments->HasField(TEXT("label_pattern")))
 	{
 		LabelPattern = Arguments->GetStringField(TEXT("label_pattern"));
+	}
+
+	// P2-8: resolve class_filter to a real UClass and use is-a semantics; the
+	// old case-insensitive substring test missed every BP subclass whose name
+	// lacked the filter text ("Pawn" found no BP pawns) and matched unrelated
+	// classes that happened to contain it. Substring survives ONLY as an
+	// explicit fallback when resolution fails, disclosed via a warning -- the
+	// same call must never silently take either semantic.
+	UClass* ResolvedFilterClass = nullptr;
+	TArray<FString> FilterWarnings;
+	if (!ClassFilter.IsEmpty())
+	{
+		ClaireonNameResolver::FNameResolveResult ClassResult;
+		ResolvedFilterClass = ClaireonNameResolver::ResolveClassName(ClassFilter, AActor::StaticClass(), ClassResult);
+		if (IsValid(ResolvedFilterClass))
+		{
+			if (!ClassResult.ResolutionNote.IsEmpty())
+			{
+				FilterWarnings.Add(ClassResult.ResolutionNote);
+			}
+		}
+		else
+		{
+			FilterWarnings.Add(FString::Printf(
+				TEXT("class_filter '%s' did not resolve to an actor class (%s); falling back to the legacy "
+				     "case-insensitive substring match on class names. include_subclasses has no effect on "
+				     "the fallback."),
+				*ClassFilter, *ClassResult.Error));
+		}
 	}
 
 	// Iterate actors
@@ -154,10 +199,21 @@ IClaireonTool::FToolResult ClaireonTool_ListActors::Execute(const TSharedPtr<FJs
 		const FString ActorObjectName = Actor->GetName();
 		const FString ActorClassName = Actor->GetClass()->GetName();
 
-		// Apply class filter (case-insensitive contains)
+		// Apply class filter: is-a when the filter resolved (P2-8), substring
+		// fallback (disclosed by warning) when it did not.
 		if (!ClassFilter.IsEmpty())
 		{
-			if (!ActorClassName.Contains(ClassFilter, ESearchCase::IgnoreCase))
+			if (IsValid(ResolvedFilterClass))
+			{
+				const bool bMatches = bIncludeSubclasses
+					? Actor->IsA(ResolvedFilterClass)
+					: (Actor->GetClass() == ResolvedFilterClass);
+				if (!bMatches)
+				{
+					continue;
+				}
+			}
+			else if (!ActorClassName.Contains(ClassFilter, ESearchCase::IgnoreCase))
 			{
 				continue;
 			}
@@ -233,5 +289,7 @@ IClaireonTool::FToolResult ClaireonTool_ListActors::Execute(const TSharedPtr<FJs
 		Summary += FString::Printf(TEXT(" (label pattern \"%s\")"), *LabelPattern);
 	}
 
-	return MakeSuccessResult(Data, Summary);
+	FToolResult Result = MakeSuccessResult(Data, Summary);
+	Result.Warnings.Append(FilterWarnings);
+	return Result;
 }

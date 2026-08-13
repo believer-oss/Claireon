@@ -82,7 +82,12 @@ TSharedPtr<FJsonObject> ClaireonTool_UObjectInspect::GetInputSchema() const
 			 "(/Memory/..., /Temp/...)."),
 		true);
 	S.AddString(TEXT("property_path"),
-		TEXT("Dot-path with [N] for TArray indexing (e.g. 'Foo.Bar[0]'). Omit for listing mode."));
+		TEXT("Dot-path with [N] for TArray indexing (e.g. 'Foo.Bar[0]'). Omit for listing mode. "
+			 "Blueprint SCS components resolve from the CDO: with object_path naming a BP class's CDO "
+			 "(the /Script/ or _C form -- a bare asset path coerces to the CDO and says so), "
+			 "'MyComp.SomeField' redirects through the SCS component template automatically; the "
+			 "explicit template path '..._C:MyComp_GEN_VARIABLE' also resolves. (P2-18 docs: both "
+			 "routes existed, neither was documented.)"));
 	S.AddInteger(TEXT("max_depth"),
 		TEXT("Recursion depth for nested structs and instanced sub-objects. Clamped to [0, 8]. Default: 2."));
 	S.AddString(TEXT("filter"),

@@ -106,13 +106,19 @@ TArray<FString> ClaireonBlueprintGraphTool_Close::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_Close::GetDescription() const
 {
-    return TEXT("Close the current Blueprint editing session, releasing the lock and clearing the in-session cursor. Does NOT compile or save -- call bp_save first, or bp_close_all to flush every open bp session. Most-common pitfall: closing a session_id that does not exist (an error, not a no-op); list ids via list_sessions. Accepts session_id or asset_path.");
+    return TEXT("Close the current Blueprint editing session, releasing the lock and clearing the in-session cursor. Does NOT compile or save -- call bp_save first, or bp_close_all to flush every open bp session. Most-common pitfall: closing a session_id that does not exist (an error, not a no-op); list ids via session_list. Accepts session_id or asset_path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_Close::GetInputSchema() const
 {
+    // P2-1: the canonical two-param shape (bp_set_node_property's), not the
+    // bare AddSessionParams helper -- that helper requires session_id and
+    // never declares asset_path, which contradicted this tool's description
+    // and the BeginSessionOp resolution underneath (both accepted all along).
     FToolSchemaBuilder Builder;
-    Builder.AddSessionParams();
+    Builder.AddString(TEXT("session_id"), TEXT("Session id from a prior open/create (or use asset_path to address the session by asset)."), false);
+    Builder.AddString(TEXT("asset_path"), TEXT("Blueprint asset path (alternative to session_id)."), false);
+    Builder.AddBoolean(TEXT("suppress_output"), TEXT("Return brief status instead of full state. Use for intermediate batch operations."));
     return Builder.Build();
 }
 
@@ -149,7 +155,7 @@ FString ClaireonBlueprintGraphTool_Close::GetFullDescription() const
         "bp_* tool with the same id will return an error. "
         "If you want to keep editing, do NOT close -- subsequent open calls "
         "with the same asset_path will reuse the existing session. Use "
-        "list_sessions to enumerate live sessions if unsure.");
+        "session_list to enumerate live sessions if unsure.");
 }
 
 FString ClaireonBlueprintGraphTool_Close::GetExampleUsage() const

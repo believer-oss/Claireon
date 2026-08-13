@@ -118,26 +118,18 @@ TArray<FString> ClaireonBlueprintGraphTool_ApplySpec::GetSearchKeywords() const
     // batch editor, concluded none existed, and filed 'bp_edit_batch' /
     // 'bp_apply_graph_diff' as feature requests -- these keywords make that
     // search land here instead.
-    // "blueprint" is repeated deliberately, in the phrasings callers actually type.
-    // Claireon.ToolDiscoverability.Discoverability_ApplySpecBlueprint requires this tool
-    // in the top 2 for "apply spec blueprint", and it was landing at 6 behind
-    // widgetbp_apply_spec, material_apply_to_blueprint and animbp_apply_delta. Every
-    // *_apply_spec sibling matches "apply" and "spec" equally, so "blueprint" is the only
-    // discriminating term in that query -- and this tool carried it exactly once while the
-    // widget/material tools say it throughout their own docs. Its long GetPatterns() blob
-    // further dilutes term density under BM25 length normalisation.
-    // Do NOT try to fix Discoverability_ApplySpecBlueprint by adding "blueprint" phrasings
-    // here. Measured 2026-08-10, full suite each time:
-    //   as-is                      -> "apply spec blueprint" ranks this [6] (needs <=1) FAIL
-    //                                 "apply graph blueprint" ranks bp_apply_delta [3] PASS
-    //   + "blueprint graph" et al  -> spec [2] PASS, but delta falls to [4]          FAIL
-    //   + "blueprint spec" only    -> spec [2] FAIL and delta still [4]              FAIL
-    // Every *_apply_spec sibling matches "apply" and "spec" equally, so "blueprint" is the
-    // sole discriminator, and any vocabulary that lifts this tool on blueprint queries lifts
-    // it on the graph query too, at bp_apply_delta's expense. It is zero-sum: the two
-    // assertions cannot both be satisfied by editing one tool's keywords. Fixing this needs
-    // field-level boosting in the index (a name/operation match outranking incidental prose),
-    // not more terms here.
+    // Do NOT tune ranking by adding "blueprint" phrasings here. Measured
+    // 2026-08-10 (full suite each time), keyword edits were zero-sum: any
+    // vocabulary that lifted this tool for "apply spec blueprint" dropped
+    // bp_apply_delta for "apply graph blueprint", because every *_apply_spec
+    // sibling matches "apply" and "spec" equally and enrichment plants the
+    // "blueprint" discriminator in the siblings' columns too. Fixed 2026-08-12
+    // (P2-20) in FClaireonToolSearchIndex instead: the query-domain category
+    // boost plus operation-token coverage rank this tool [<=1] for "apply spec
+    // blueprint" while bp_apply_delta holds "apply graph blueprint" -- signals
+    // scored from the verbatim category/operation, outside the FTS5 columns,
+    // where keyword edits cannot perturb them. See
+    // Cl628_CategoryMatchesQueryDomain / Cl628_OperationTokenCoverage.
     return {TEXT("bp"), TEXT("blueprint"), TEXT("batch"), TEXT("bulk"), TEXT("edit"),
             TEXT("edit_batch"), TEXT("apply"), TEXT("spec"), TEXT("diff"),
             TEXT("graph_diff"), TEXT("atomic"), TEXT("transaction"),

@@ -311,6 +311,205 @@ namespace Cl628IdxInternal
 		return FString::Join(Parts, TEXT(" "));
 	}
 	// -------------------------------------------------------------------------
+	// Query-domain category matching (P2-20).
+	//
+	// BM25 over the enriched columns cannot rank a domain-specific tool over
+	// its cross-domain siblings: for "apply spec blueprint" every *_apply_spec
+	// sibling matches "apply" and "spec" equally, and abbreviation enrichment
+	// plants the one discriminating term in the SIBLINGS' columns too (widgetbp
+	// enriches to "widget blueprint", so its name column carries "blueprint" at
+	// the same weight as bp's). Inside the FTS5 document an enrichment-derived
+	// term is indistinguishable from a term the tool owns, so no column weight
+	// can express "this tool's CATEGORY is the domain the query names".
+	//
+	// That signal is therefore scored OUTSIDE the FTS5 columns, from the row's
+	// verbatim (UNINDEXED) category. A category matches the query's domain when:
+	//   (a) its own name appears in the query, as one token ("pcg", "niagara")
+	//       or as 2-3 adjacent tokens ("widget bp" -> widgetbp, "state tree" ->
+	//       statetree, "level sequence" -> level_sequence); or
+	//   (b) the query carries the category's spelled-out head word -- the FIRST
+	//       word of its abbreviation-table expansion ("bp" -> "blueprint ...",
+	//       "widgetbp" -> "widget ...", "pcg" -> "procedural ..."); or
+	//   (c) a query token is itself an abbreviation whose expansion names the
+	//       category verbatim ("vfx" -> "... niagara ...", "cam" ->
+	//       "... camera_asset ...").
+	//
+	// The boost consuming this signal must stay FLAT across matching rows:
+	// every row of a matched category gets the same lift, so the boost reorders
+	// across domains but never within one, and BM25 keeps deciding the order
+	// among a category's own tools.
+	// -------------------------------------------------------------------------
+
+	/** Compare two lowercase words, tolerating one trailing plural 's'
+	 *  ("blueprints" ~ "blueprint"). The bare word must be >= 3 chars so short
+	 *  tokens ("as", "is") never alias. */
+	static bool Cl628_WordsMatchLoose(const FString& A, const FString& B)
+	{
+		if (A == B) { return true; }
+		if (A.Len() == B.Len() + 1 && B.Len() >= 3
+			&& A.EndsWith(TEXT("s"), ESearchCase::CaseSensitive)
+			&& A.StartsWith(B, ESearchCase::CaseSensitive))
+		{
+			return true;
+		}
+		if (B.Len() == A.Len() + 1 && A.Len() >= 3
+			&& B.EndsWith(TEXT("s"), ESearchCase::CaseSensitive)
+			&& B.StartsWith(A, ESearchCase::CaseSensitive))
+		{
+			return true;
+		}
+		return false;
+	}
+
+	/** Normalize a category name for token comparison: lowercase, strip '_'
+	 *  (category "level_sequence" -> "levelsequence", matching what adjacent
+	 *  query tokens "level sequence" concatenate to). */
+	static FString Cl628_NormalizeCategoryName(const FString& Category)
+	{
+		FString S = Category.ToLower();
+		S.ReplaceInline(TEXT("_"), TEXT(""), ESearchCase::CaseSensitive);
+		return S;
+	}
+
+	/**
+	 * True when the query names Category as its domain (rules (a)-(c) above).
+	 * QueryTokens must come from Tokenise() (lowercase alnum words) -- the RAW
+	 * token list, not the len>2-filtered FTS token list, because short tokens
+	 * like "bp" and "st" are exactly the category spellings this looks for.
+	 *
+	 * KnownCategories (normalized via Cl628_NormalizeCategoryName) restricts
+	 * rule (c): a query token that IS a category name is the most precise
+	 * domain statement there is, so its expansion must not drag sibling
+	 * categories into the domain set ("metasound" expands through "audio",
+	 * but a query saying "metasound" means metasound, not audio). Callers
+	 * build the set from the candidate rows; an empty set leaves rule (c)
+	 * unrestricted.
+	 */
+	static bool Cl628_CategoryMatchesQueryDomain(
+		const FString& Category,
+		const TArray<FString>& QueryTokens,
+		const TSet<FString>& KnownCategories)
+	{
+		if (Category.IsEmpty() || QueryTokens.IsEmpty()) { return false; }
+
+		const FString NormCat = Cl628_NormalizeCategoryName(Category);
+
+		// (a) The category's own name, as one token or 2-3 adjacent tokens.
+		for (int32 i = 0; i < QueryTokens.Num(); ++i)
+		{
+			if (QueryTokens[i] == NormCat) { return true; }
+			if (i + 1 < QueryTokens.Num()
+				&& QueryTokens[i] + QueryTokens[i + 1] == NormCat)
+			{
+				return true;
+			}
+			if (i + 2 < QueryTokens.Num()
+				&& QueryTokens[i] + QueryTokens[i + 1] + QueryTokens[i + 2] == NormCat)
+			{
+				return true;
+			}
+		}
+
+		const TMap<FString, TArray<FString>>& Forward = GetForwardMap();
+
+		// (b) The category's spelled-out head word: first word of its expansion.
+		if (const TArray<FString>* Expansion = Forward.Find(Category.ToLower()))
+		{
+			if (Expansion->Num() > 0)
+			{
+				for (const FString& Tok : QueryTokens)
+				{
+					if (Cl628_WordsMatchLoose(Tok, (*Expansion)[0])) { return true; }
+				}
+			}
+		}
+
+		// (c) A query token whose own expansion names the category verbatim --
+		//     unless that token is itself a category name (see doc above).
+		for (const FString& Tok : QueryTokens)
+		{
+			if (KnownCategories.Contains(Tok)) { continue; }
+			if (const TArray<FString>* Expansion = Forward.Find(Tok))
+			{
+				for (const FString& Word : *Expansion)
+				{
+					if (Word == Category || Cl628_NormalizeCategoryName(Word) == NormCat)
+					{
+						return true;
+					}
+				}
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Fraction of a tool's OPERATION tokens present verbatim in the query
+	 * (loose plural match), in [0, 1]. Zero when the operation is empty.
+	 *
+	 * This is the second half of the P2-20 signal: the domain boost is flat
+	 * within a category, so it cannot rank bp_apply_spec over bp_apply_delta
+	 * for "apply spec blueprint" -- prose matches ("spec"* prefix hits on
+	 * "specify"/"specific" in sibling descriptions) outweigh the name token
+	 * under bm25 length normalization. An operation token is a term the tool
+	 * OWNS by construction, so verbatim coverage of it is scored separately
+	 * from anything enrichment or prose can contribute.
+	 */
+	static double Cl628_OperationTokenCoverage(
+		const FString& Operation,
+		const TArray<FString>& QueryTokens)
+	{
+		if (Operation.IsEmpty() || QueryTokens.IsEmpty()) { return 0.0; }
+
+		TArray<FString> OpTokens;
+		Tokenise(Operation, OpTokens);
+		if (OpTokens.IsEmpty()) { return 0.0; }
+
+		int32 Present = 0;
+		for (const FString& OpTok : OpTokens)
+		{
+			for (const FString& QTok : QueryTokens)
+			{
+				if (Cl628_WordsMatchLoose(QTok, OpTok)) { ++Present; break; }
+			}
+		}
+		return static_cast<double>(Present) / static_cast<double>(OpTokens.Num());
+	}
+
+	/**
+	 * Derive the operation part of a "category_operation" tool name. The FTS5
+	 * SELECT constructs raw_name as exactly (category || '_' || operation), so
+	 * stripping the category prefix recovers the verbatim operation without
+	 * widening any structs or SQL. Returns empty when the name does not carry
+	 * the expected prefix.
+	 */
+	static FString Cl628_OperationFromToolName(const FString& ToolName, const FString& Category)
+	{
+		if (Category.IsEmpty()
+			|| ToolName.Len() <= Category.Len() + 1
+			|| !ToolName.StartsWith(Category, ESearchCase::CaseSensitive)
+			|| ToolName[Category.Len()] != TEXT('_'))
+		{
+			return FString();
+		}
+		return ToolName.Mid(Category.Len() + 1);
+	}
+
+	// Boost fractions for the lexical path (FindNearest): a row's NEGATIVE bm25
+	// score is scaled by (1 + domain-fraction * match + op-fraction * coverage),
+	// i.e. made more negative, before ordering. Multiplicative so it is
+	// scale-free across queries: it promotes an owned-term tool past sibling
+	// near-ties (which differ by a few percent) without letting a weak match
+	// leapfrog a dominant one (which leads by far more than the fractions).
+	// Sized by measurement against the discoverability suite + corpus dry-run
+	// (P2-20). The domain fraction is flat across a category's rows; the
+	// operation fraction scales with verbatim coverage of the row's own
+	// operation tokens, which is what discriminates WITHIN a category.
+	static const double Cl628_DomainBoostFraction    = 0.15;
+	static const double Cl628_OperationBoostFraction = 0.10;
+
+	// -------------------------------------------------------------------------
 	// Raw BM25 query result (shared between FindNearest and FindNearestRawRanked).
 	// -------------------------------------------------------------------------
 
@@ -835,11 +1034,26 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolSearchIndex::FindNearest(
 	FString NormalizedQuery = Query.ToLower();
 	NormalizedQuery = NormalizedQuery.Replace(TEXT("-"), TEXT("")).Replace(TEXT("_"), TEXT(""));
 
+	// Raw query tokens for the domain-category signal (P2-20). Deliberately the
+	// unfiltered Tokenise() output: short tokens like "bp" are exactly the
+	// category spellings the domain match looks for.
+	TArray<FString> DomainTokens;
+	Tokenise(Query, DomainTokens);
+
+	// Candidate categories (normalized), for rule (c)'s exact-category-token
+	// restriction in the domain match.
+	TSet<FString> KnownCategories;
+	for (const FRawBm25Result& R : Rows)
+	{
+		KnownCategories.Add(Cl628_NormalizeCategoryName(R.Category));
+	}
+
 	// Categorize rows into three buckets:
 	//   0 = exact normalized name match  (pins to front)
 	//   1 = Levenshtein <= 2 name match  (promoted next)
 	//   2 = normal bm25 results
-	// Within each bucket: score ASC, then name ASC.
+	// Within each bucket: score ASC, then name ASC. The score used for ordering
+	// (and returned on the match) carries the query-domain category boost.
 	struct FScoredRow
 	{
 		int32  OriginalIndex;
@@ -853,6 +1067,24 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolSearchIndex::FindNearest(
 	for (int32 i = 0; i < Rows.Num(); ++i)
 	{
 		const FRawBm25Result& R = Rows[i];
+
+		// Query-domain + operation-coverage boost (P2-20): scale the NEGATIVE
+		// bm25 score. The domain part is flat across a category's rows (so
+		// cross-domain order moves, within-domain does not); the operation part
+		// scales with verbatim coverage of this row's own operation tokens,
+		// which is what separates siblings inside one category.
+		double EffectiveScore = R.Score;
+		if (R.Score < 0.0)
+		{
+			double BoostFraction = 0.0;
+			if (Cl628_CategoryMatchesQueryDomain(R.Category, DomainTokens, KnownCategories))
+			{
+				BoostFraction += Cl628_DomainBoostFraction;
+			}
+			BoostFraction += Cl628_OperationBoostFraction * Cl628_OperationTokenCoverage(
+				Cl628_OperationFromToolName(R.Name, R.Category), DomainTokens);
+			EffectiveScore = R.Score * (1.0 + BoostFraction);
+		}
 
 		// Normalize the candidate name the same way.
 		FString NormName = R.Name.ToLower();
@@ -878,7 +1110,7 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolSearchIndex::FindNearest(
 			Bucket = 2;
 		}
 
-		Scored.Add({ i, Bucket, R.Score, R.Name });
+		Scored.Add({ i, Bucket, EffectiveScore, R.Name });
 	}
 
 	// Sort: bucket ASC, then score ASC (more-negative bm25 = better),
@@ -899,8 +1131,10 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolSearchIndex::FindNearest(
 		FClaireonToolCatalogMatch M;
 		M.Name     = R.Name;
 		M.Category = R.Category;
-		M.Score    = static_cast<float>(R.Score);
-		// Score is the raw FTS5 bm25 value (negative; lower = better).
+		M.Score    = static_cast<float>(Scored[i].Score);
+		// Score is the FTS5 bm25 value with the domain-category boost applied
+		// (still negative; lower = better) -- the value the ordering used, so
+		// scores stay monotonic within each bucket.
 		// RankSource left at default (LexicalOnlyFallback) for existing callers.
 		Out.Add(MoveTemp(M));
 	}
@@ -1291,6 +1525,46 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolSearchIndex::FindNearestHybrid(
 		}
 	}
 
+	// Query-domain + operation-coverage boost (P2-20), the hybrid mirror of the
+	// FindNearest lexical boost. Two additive contributions per fused candidate:
+	//   - domain: flat for every candidate whose verbatim category is the domain
+	//     the query names (see Cl628_CategoryMatchesQueryDomain) -- reorders
+	//     across domains, never within one;
+	//   - operation: scaled by verbatim coverage of the candidate's own
+	//     operation tokens -- separates siblings inside one category.
+	// Each is sized at half the near-exact boost (0.5 / K): together they can
+	// lift an owned-term tool past several adjacent fusion ranks, and they never
+	// outbid a genuine near-exact name match. Recomputed from the live K at use.
+	{
+		TArray<FString> DomainTokens;
+		Tokenise(Query, DomainTokens);
+		if (!DomainTokens.IsEmpty())
+		{
+			// Candidate categories (normalized), for rule (c)'s
+			// exact-category-token restriction in the domain match.
+			TSet<FString> KnownCategories;
+			for (const TPair<FString, FString>& CatPair : CategoryByName)
+			{
+				KnownCategories.Add(Cl628_NormalizeCategoryName(CatPair.Value));
+			}
+
+			const float Cl628_RrfDomainBoost    = 0.5f / Cl628_RrfParams.K;
+			const float Cl628_RrfOperationBoost = 0.5f / Cl628_RrfParams.K;
+			for (TPair<FString, float>& Pair : FusedScores)
+			{
+				const FString* Category = CategoryByName.Find(Pair.Key);
+				if (!Category) { continue; }
+				if (Cl628_CategoryMatchesQueryDomain(*Category, DomainTokens, KnownCategories))
+				{
+					Pair.Value += Cl628_RrfDomainBoost;
+				}
+				Pair.Value += Cl628_RrfOperationBoost
+					* static_cast<float>(Cl628_OperationTokenCoverage(
+						Cl628_OperationFromToolName(Pair.Key, *Category), DomainTokens));
+			}
+		}
+	}
+
 	// Materialize the fused list.
 	//   RankSource: NearExactBoost for the boosted candidate; HybridRRF when semantic
 	//   was ready, LexicalOnlyFallback otherwise.
@@ -1375,6 +1649,22 @@ void FClaireonToolSearchIndex::SetRrfParamsForTest(float K, float LexW, float Se
 void FClaireonToolSearchIndex::ResetRrfParamsForTest()
 {
 	Cl628IdxInternal::Cl628_RrfParams = Cl628IdxInternal::FCl628_RrfParams();
+}
+
+bool FClaireonToolSearchIndex::CategoryMatchesQueryDomainForTest(const FString& Category, const FString& Query)
+{
+	// Empty KnownCategories: the probe exercises rules (a)-(c) unrestricted;
+	// the retrieval paths pass their candidate-category sets.
+	TArray<FString> Tokens;
+	Cl628IdxInternal::Tokenise(Query, Tokens);
+	return Cl628IdxInternal::Cl628_CategoryMatchesQueryDomain(Category, Tokens, TSet<FString>());
+}
+
+double FClaireonToolSearchIndex::OperationTokenCoverageForTest(const FString& Operation, const FString& Query)
+{
+	TArray<FString> Tokens;
+	Cl628IdxInternal::Tokenise(Query, Tokens);
+	return Cl628IdxInternal::Cl628_OperationTokenCoverage(Operation, Tokens);
 }
 #endif
 

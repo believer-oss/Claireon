@@ -14,6 +14,7 @@
 #include "Engine/Blueprint.h"
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SCS_Node.h"
+#include "StructUtils/InstancedStruct.h"
 
 namespace ClaireonPropertyUtils
 {
@@ -679,6 +680,47 @@ TSharedPtr<FJsonValue> PropertyToJsonValue(FProperty* Prop, const void* ValuePtr
 {
 	if (FStructProperty* StructProp = CastField<FStructProperty>(Prop))
 	{
+		// P2-18: FInstancedStruct's payload lives in non-UPROPERTY members, so
+		// reflection-driven recursion renders it {}. Unwrap it: _struct names
+		// the wrapped type (mirroring the _class convention for instanced
+		// sub-objects below) and the fields come from the wrapped struct's own
+		// memory. Callers testing `if not value` on an FInstancedStruct field
+		// flip from falsy to truthy with this change -- read _struct instead.
+		if (StructProp->Struct == TBaseStructure<FInstancedStruct>::Get())
+		{
+			const FInstancedStruct* Instanced = static_cast<const FInstancedStruct*>(ValuePtr);
+			TSharedPtr<FJsonObject> InstObj = MakeShared<FJsonObject>();
+			if (Instanced && Instanced->IsValid())
+			{
+				const UScriptStruct* WrappedStruct = Instanced->GetScriptStruct();
+				InstObj->SetStringField(TEXT("_struct"), WrappedStruct->GetName());
+				if (Depth > 0)
+				{
+					TSharedPtr<FJsonObject> Fields = EnumerateProperties(
+						const_cast<UScriptStruct*>(WrappedStruct), Instanced->GetMemory(), OwnerObject, TEXT(""), Depth - 1);
+					for (auto& Pair : Fields->Values)
+					{
+						InstObj->SetField(Pair.Key, Pair.Value);
+					}
+				}
+				else
+				{
+					// Depth exhausted: keep the working ExportText form so
+					// max_depth=0 (the documented pre-fix workaround) still
+					// yields a non-empty payload.
+					FString Value;
+					Prop->ExportText_Direct(Value, ValuePtr, ValuePtr, nullptr, PPF_None);
+					InstObj->SetStringField(TEXT("_export"), Value);
+				}
+			}
+			else
+			{
+				// An unset FInstancedStruct wraps nothing; say so explicitly.
+				InstObj->SetField(TEXT("_struct"), MakeShared<FJsonValueNull>());
+			}
+			return MakeShared<FJsonValueObject>(InstObj);
+		}
+
 		if (Depth > 0)
 		{
 			TSharedPtr<FJsonObject> StructObj = EnumerateProperties(StructProp->Struct, ValuePtr, OwnerObject, TEXT(""), Depth - 1);

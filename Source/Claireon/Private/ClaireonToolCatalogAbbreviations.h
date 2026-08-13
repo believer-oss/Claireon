@@ -101,6 +101,7 @@ namespace ClaireonToolCatalogAbbreviations
 			{ TEXT("landscape"),      TEXT("landscape terrain heightmap sculpt paint") },
 			{ TEXT("spline"),         TEXT("spline path curve control point") },
 			{ TEXT("pcg"),            TEXT("procedural content generation graph") },
+			{ TEXT("wp"),             TEXT("world partition streaming grid") },
 			{ TEXT("pcg_graph"),      TEXT("pcg procedural content generation graph") },
 			{ TEXT("niagara"),        TEXT("niagara vfx particles effect emitter") },
 			{ TEXT("statetree"),      TEXT("state tree statetree hierarchical") },

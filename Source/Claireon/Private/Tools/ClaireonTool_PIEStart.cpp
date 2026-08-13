@@ -248,10 +248,13 @@ void ClaireonTool_PIEStart::ExecuteDeferredPIEStart(const FString& Payload)
 	FString NetModeStr;
 	PayloadObj->TryGetStringField(TEXT("netMode"), NetModeStr);
 
-	// Optional: load a map first. Run the leaked-World guard BEFORE
-	// LoadMap so a duplicate-asset leak crashes loud-and-clean instead
-	// of fatally asserting in EditorDestroyWorld(). [RESOLVED] D1.
-	if (!MapPath.IsEmpty())
+	// Run the leaked-World guard BEFORE any map load or PIE start so a
+	// duplicate-asset leak crashes loud-and-clean instead of fatally
+	// asserting in EditorDestroyWorld(). [RESOLVED] D1.
+	// P2-9b: the barrier used to sit inside the MapPath branch, so PIE into
+	// the ALREADY-OPEN map never purged leaked Python UObject refs and never
+	// honored the guard -- PIE itself tears the editor world down either way,
+	// so the no-map path needs both just as much.
 	{
 		// Match the deferred-tick barrier already run by
 		// ClaireonTool_ExecutePython before this dispatch -- the second
@@ -267,7 +270,11 @@ void ClaireonTool_PIEStart::ExecuteDeferredPIEStart(const FString& Payload)
 			FClaireonBridge::ReportDeferredActionAbort(Msg);
 			return; // do NOT load map and do NOT start PIE
 		}
+	}
 
+	// Optional: load a map first.
+	if (!MapPath.IsEmpty())
+	{
 		FEditorFileUtils::LoadMap(MapPath);
 	}
 

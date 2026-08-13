@@ -120,12 +120,12 @@ IClaireonTool::FToolResult ClaireonTool_FlythroughStart::Execute(const TSharedPt
 {
 	if (!IsValid(GEditor) || !GEditor->IsPlaySessionInProgress())
 	{
-		return MakeErrorResult(TEXT("PIE is not running. Start a PIE session first with editor.pie.start"));
+		return MakeErrorResult(TEXT("PIE is not running. Start a PIE session first with pie_start"));
 	}
 
 	if (FClaireonFlythroughManager::GetActive())
 	{
-		return MakeErrorResult(TEXT("A flythrough is already active. Stop it first with editor.pie.flythrough.stop"));
+		return MakeErrorResult(TEXT("A flythrough is already active. Stop it first with pie_flythrough_stop"));
 	}
 
 	// Parse waypoints
@@ -271,7 +271,7 @@ IClaireonTool::FToolResult ClaireonTool_FlythroughStart::Execute(const TSharedPt
 		TEXT("waypoints: %d\n")
 		TEXT("totalSplineLength: %.1f\n")
 		TEXT("estimatedDuration: %.1f\n")
-		TEXT("message: Flythrough started. Poll editor.pie.flythrough.getStatus for progress."),
+		TEXT("message: Flythrough started. Poll pie_flythrough_status for progress."),
 		WaypointCount,
 		TotalLength,
 		EstTime);

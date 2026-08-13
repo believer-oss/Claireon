@@ -395,4 +395,32 @@ UNTEST_UNIT_OPTS(Claireon, LogLineParsing, EnumerateRegisteredCategories, UNTEST
     co_return;
 }
 
+// ===========================================================================
+// IsWellFormedLogTimestamp (P2-16)
+// ===========================================================================
+
+UNTEST_UNIT_OPTS(Claireon, LogLineParsing, TimestampShapeCheck, UNTEST_TIMEOUTMS(10000))
+{
+    using ClaireonLogLineParsing::IsWellFormedLogTimestamp;
+
+    // The two shapes -LogTimes writes.
+    UNTEST_EXPECT_TRUE(IsWellFormedLogTimestamp(TEXT("2026.08.12-20.51.24")));
+    UNTEST_EXPECT_TRUE(IsWellFormedLogTimestamp(TEXT("2026.08.12-20.51.24:136")));
+
+    // Rejections: wrong separators, wrong lengths, non-digits, empty.
+    UNTEST_EXPECT_FALSE(IsWellFormedLogTimestamp(TEXT("")));
+    UNTEST_EXPECT_FALSE(IsWellFormedLogTimestamp(TEXT("2026-08-12 20:51:24")));
+    UNTEST_EXPECT_FALSE(IsWellFormedLogTimestamp(TEXT("2026.08.12-20.51.24:13")));
+    UNTEST_EXPECT_FALSE(IsWellFormedLogTimestamp(TEXT("2026.08.12-20.51.2x")));
+    UNTEST_EXPECT_FALSE(IsWellFormedLogTimestamp(TEXT("826]LogTemp")));
+
+    // The property the filter relies on: well-formed stamps order
+    // lexicographically, including a seconds-precision bound against a
+    // millisecond-precision stamp on both sides of the boundary.
+    UNTEST_EXPECT_TRUE(FString(TEXT("2026.08.12-20.51.24:136")) < FString(TEXT("2026.08.12-20.51.25")));
+    UNTEST_EXPECT_TRUE(FString(TEXT("2026.08.12-20.51.24")) < FString(TEXT("2026.08.12-20.51.24:000")));
+    UNTEST_EXPECT_TRUE(FString(TEXT("2026.08.12-20.51.23:999")) < FString(TEXT("2026.08.12-20.51.24")));
+    co_return;
+}
+
 #endif // WITH_UNTESTED

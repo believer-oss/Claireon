@@ -2,12 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonPCGGraphTool_Save.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "Tools/FToolSchemaBuilder.h"
-#include "ClaireonSafeExec.h"
 #include "PCGGraph.h"
 #include "UObject/Package.h"
-#include "FileHelpers.h"
-#include "Misc/PackageName.h"
 
 using FToolResult = IClaireonTool::FToolResult;
 
@@ -49,18 +47,18 @@ FToolResult ClaireonPCGGraphTool_Save::Execute(const TSharedPtr<FJsonObject>& Ar
 		return MakeErrorResult(TEXT("Could not find package for PCG Graph"));
 	}
 
-	FString PackageFilename;
-	if (!FPackageName::DoesPackageExist(Package->GetName(), &PackageFilename))
+	// P2-15: route through ClaireonAssetUtils::SaveAsset, which resolves a save
+	// filename for freshly created in-memory packages instead of erroring from
+	// an un-backstopped DoesPackageExist (the anti-pattern data_asset_create was
+	// cured of). SaveAsset also carries the post-crash guard. This is a write
+	// path, so the status names exactly what was written (P0-7 discipline).
+	FString SaveError;
+	const bool bSaved = ClaireonAssetUtils::SaveAsset(Data->PCGGraph.Get(), SaveError);
+	if (!bSaved)
 	{
-		return MakeErrorResult(FString::Printf(TEXT("Package file not found for: %s"), *Package->GetName()));
+		return MakeErrorResult(SaveError);
 	}
 
-	if (ClaireonSafeExec::DidLastExecutionCrash())
-	{
-		return MakeErrorResult(TEXT("Save blocked: editor state may be corrupted after a previous crash. Restart the editor."));
-	}
-	bool bSaved = UEditorLoadingAndSavingUtils::SavePackages({ Package }, false);
-
-	Data->LastOperationStatus = bSaved ? TEXT("Saved successfully") : TEXT("Save failed");
+	Data->LastOperationStatus = FString::Printf(TEXT("Saved package %s to disk"), *Package->GetName());
 	return BuildStateResponse(SessionId, Data);
 }

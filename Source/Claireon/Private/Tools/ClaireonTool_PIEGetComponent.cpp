@@ -76,7 +76,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEGetComponent::Execute(const TSharedPt
 
 	if (!GEditor->IsPlaySessionInProgress())
 	{
-		return MakeErrorResult(TEXT("PIE is not running. Start a PIE session first with editor.pie.start"));
+		return MakeErrorResult(TEXT("PIE is not running. Start a PIE session first with pie_start"));
 	}
 
 	// Parse required parameters

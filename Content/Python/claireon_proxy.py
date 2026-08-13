@@ -1541,7 +1541,9 @@ STATIC_TOOLS_LIST = [
         "description": (
             "Execute a Python script inside the running Unreal Editor. "
             "The editor's embedded Python runtime has `unreal` available. "
-            "Returns stdout, stderr, and the last-expression value."
+            "Returns captured stdout and stderr; there is no last-expression "
+            "value (the script runs as a file, not a REPL), so print() what "
+            "you need back."
         ),
         "inputSchema": {
             "type": "object",
@@ -1549,6 +1551,18 @@ STATIC_TOOLS_LIST = [
                 "code": {
                     "type": "string",
                     "description": "Python source to execute in the editor.",
+                },
+                # P2-9a: mirror of the editor-side `quiet` parameter. Without it
+                # here, the argument gate accepts quiet over HTTP but proxy
+                # clients never see it exists.
+                "quiet": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": (
+                        "Suppress all advisory hints on this invocation (the "
+                        "<hint> envelope element stays absent). Useful for bulk "
+                        "loops where nudges are noise."
+                    ),
                 },
             },
             "required": ["code"],

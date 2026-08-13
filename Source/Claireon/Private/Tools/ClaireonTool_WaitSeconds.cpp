@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_WaitSeconds.h"
+#include "Tools/ClaireonTool_ExecutePython.h"
 #include "ClaireonLog.h"
 
 #include "Containers/Ticker.h"
@@ -14,10 +15,16 @@ FString ClaireonTool_WaitSeconds::GetOperation() const { return TEXT("wait_secon
 
 FString ClaireonTool_WaitSeconds::GetDescription() const
 {
-	return TEXT("Wait a wall-clock duration while keeping the editor tick alive. Use this instead of `time.sleep`, "
-		"which is intercepted with a RuntimeWarning because it freezes the editor. Blocks for `seconds` "
-		"(clamped to [0.0, 300.0]) then returns; an FTSTicker keeps deferred actions, async loads, and the "
-		"editor UI responsive. Non-session.");
+	// P2-5b: the old text promised "an FTSTicker keeps deferred actions, async
+	// loads, and the editor UI responsive" -- false. This is a blocking
+	// game-thread sleep loop; nothing that needs the game thread progresses
+	// during it. The sanctioned wall-clock yield lives on the DIRECT call path
+	// (between calls the editor ticks freely); inside python_execute it is a
+	// pure stall, which the Execute body warns about.
+	return TEXT("Wait a wall-clock duration (`seconds`, clamped to [0.0, 300.0]) by blocking the game "
+		"thread. Use this instead of `time.sleep`, which is intercepted with a RuntimeWarning. The editor "
+		"does NOT tick during the wait; call it as its own direct tool call between other calls, never "
+		"from inside a python_execute script, where it stalls everything it might be waiting on. Non-session.");
 }
 
 TSharedPtr<FJsonObject> ClaireonTool_WaitSeconds::GetInputSchema() const
@@ -51,10 +58,20 @@ IClaireonTool::FToolResult ClaireonTool_WaitSeconds::Execute(const TSharedPtr<FJ
 	}
 	Seconds = FMath::Clamp(Seconds, 0.0, 300.0);
 
+	// P2-5b: inside python_execute this wait is a pure stall -- Python holds
+	// the game thread, so nothing the caller might be waiting on (deferred
+	// actions, async loads, PIE conditions) can progress. Warn rather than
+	// error for now: the population making this call has been acting on the
+	// old description's false promise, and their scripts should keep running
+	// while the warning steers them to direct tool calls.
+	const bool bInsidePythonExecute = ClaireonTool_ExecutePython::IsPythonExecutionInProgress();
+
 	const double StartTime = FPlatformTime::Seconds();
-	// Poll-sleep pattern shared with ClaireonTool_PIEWaitFor: short Sleep yields the
-	// game thread so the engine tick continues (the editor tick runs on a separate
-	// ticker handle but FTSTicker also drains during Sleep yields).
+	// Blocking poll-sleep. The game thread does NOT tick during this loop; the
+	// yield only matters to the OS scheduler, not to the engine. See the
+	// description rewrite (P2-5b) -- an earlier comment here claimed FTSTicker
+	// drains during Sleep yields, which is wrong: the core ticker runs on the
+	// game thread this loop is holding.
 	const double PollIntervalSec = 0.05; // 50ms
 	while (FPlatformTime::Seconds() - StartTime < Seconds)
 	{
@@ -68,5 +85,14 @@ IClaireonTool::FToolResult ClaireonTool_WaitSeconds::Execute(const TSharedPtr<FJ
 	Data->SetNumberField(TEXT("elapsed_seconds"), Elapsed);
 
 	const FString Summary = FString::Printf(TEXT("Waited %.3fs (requested %.3fs)"), Elapsed, Seconds);
-	return MakeSuccessResult(Data, Summary);
+	FToolResult Result = MakeSuccessResult(Data, Summary);
+	if (bInsidePythonExecute)
+	{
+		Result.Warnings.Add(TEXT(
+			"editor_wait_seconds was called from inside a python_execute script. The editor does not "
+			"tick while Python holds the game thread, so this wait stalled the editor for the full "
+			"duration and nothing it might have been waiting on made progress. Call it as its own "
+			"direct tool call between python_execute calls instead."));
+	}
+	return Result;
 }

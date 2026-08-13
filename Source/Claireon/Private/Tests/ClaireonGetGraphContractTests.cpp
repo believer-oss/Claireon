@@ -33,7 +33,9 @@
 #include "Engine/Blueprint.h"
 #include "GameFramework/Actor.h"
 #include "K2Node_CallFunction.h"
+#include "Internationalization/Regex.h"
 #include "K2Node_FunctionEntry.h"
+#include "K2Node_Knot.h"
 #include "K2Node_VariableGet.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -58,6 +60,8 @@ namespace ClaireonGetGraphContractTestsInternal
 	static const TCHAR* kGetGraphContractBPPath_GuidFormat   = TEXT("/Game/__MCPTests/BP_GetGraphContract_GuidFormat");
 	static const TCHAR* kGetGraphContractBPPath_MaxNodes     = TEXT("/Game/__MCPTests/BP_GetGraphContract_MaxNodes");
 	static const TCHAR* kGetGraphContractBPPath_PinDefaults  = TEXT("/Game/__MCPTests/BP_GetGraphContract_PinDefaults");
+	static const TCHAR* kGetGraphContractBPPath_Knots        = TEXT("/Game/__MCPTests/BP_GetGraphContract_Knots");
+	static const TCHAR* kGetGraphContractBPPath_Outline      = TEXT("/Game/__MCPTests/BP_GetGraphContract_Outline");
 
 	struct FGetGraphContractFixture
 	{
@@ -661,6 +665,156 @@ UNTEST_UNIT_OPTS(Claireon, GetGraphContract, IncludePinDefaultsFalse_SuppressesD
 	UNTEST_EXPECT_FALSE(GetGraphContractAnyPinHasDefaultValue(SuppressGraphObj));
 
 	GetGraphContractCleanupAsset(kGetGraphContractBPPath_PinDefaults);
+	co_return;
+}
+
+// ---------------------------------------------------------------------------
+// P2-13a: resolve_knots emits knot-transparent collapsed edges.
+// Entry -> Knot -> Call is two raw edges; with resolve_knots=true the direct
+// Entry -> Call edge appears too, carrying via_knots=[knot guid], and the raw
+// edges (plus the knot in nodes[]) stay.
+// ---------------------------------------------------------------------------
+UNTEST_UNIT_OPTS(Claireon, GetGraphContract, ResolveKnots_EmitsCollapsedEdge, UNTEST_TIMEOUTMS(60000))
+{
+	FGetGraphContractFixture Fixture;
+	FString FixtureError;
+	const bool bFixtureOk = GetGraphContractBuildFixture(kGetGraphContractBPPath_Knots, Fixture, FixtureError);
+	if (!bFixtureOk) { UE_LOG(LogTemp, Error, TEXT("%s"), *FixtureError); }
+	UNTEST_ASSERT_TRUE(bFixtureOk);
+
+	// Reroute the exec wire through a knot: break Entry.then -> Call.execute,
+	// then Entry.then -> Knot.in, Knot.out -> Call.execute.
+	UEdGraphPin* EntryThen = Fixture.Entry->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+	UEdGraphPin* CallExec = Fixture.Call->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+	UNTEST_ASSERT_PTR(EntryThen);
+	UNTEST_ASSERT_PTR(CallExec);
+	EntryThen->BreakLinkTo(CallExec);
+
+	UK2Node_Knot* Knot = NewObject<UK2Node_Knot>(Fixture.FuncGraph);
+	Fixture.FuncGraph->AddNode(Knot, /*bUserAction=*/false, /*bSelectNewNode=*/false);
+	Knot->CreateNewGuid();
+	Knot->PostPlacedNewNode();
+	Knot->AllocateDefaultPins();
+	UEdGraphPin* KnotIn = Knot->GetInputPin();
+	UEdGraphPin* KnotOut = Knot->GetOutputPin();
+	UNTEST_ASSERT_PTR(KnotIn);
+	UNTEST_ASSERT_PTR(KnotOut);
+	EntryThen->MakeLinkTo(KnotIn);
+	KnotOut->MakeLinkTo(CallExec);
+
+	const FString EntryGuid = Fixture.Entry->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens);
+	const FString CallGuid = Fixture.Call->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens);
+	const FString KnotGuid = Knot->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens);
+
+	ClaireonTool_GetBlueprintGraph Tool;
+
+	// Helper-ish inline scan: find a connection matching from/to, returning its
+	// via_knots count (-1 = edge absent, 0 = raw edge).
+	auto FindEdgeViaCount = [](const TSharedPtr<FJsonObject>& GraphObj, const FString& From, const FString& To) -> int32
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Conns = nullptr;
+		if (!GraphObj.IsValid() || !GraphObj->TryGetArrayField(TEXT("connections"), Conns))
+		{
+			return -1;
+		}
+		for (const TSharedPtr<FJsonValue>& Val : *Conns)
+		{
+			const TSharedPtr<FJsonObject> Obj = Val->AsObject();
+			if (!Obj.IsValid()) { continue; }
+			if (Obj->GetStringField(TEXT("from_node")) != From || Obj->GetStringField(TEXT("to_node")) != To)
+			{
+				continue;
+			}
+			const TArray<TSharedPtr<FJsonValue>>* Via = nullptr;
+			return Obj->TryGetArrayField(TEXT("via_knots"), Via) ? Via->Num() : 0;
+		}
+		return -1;
+	};
+
+	// Without the flag: raw edges only, no collapsed edge.
+	{
+		TSharedPtr<FJsonObject> Args = GetGraphContractMakeArgs(kGetGraphContractBPPath_Knots);
+		const IClaireonTool::FToolResult R = Tool.Execute(Args);
+		const TSharedPtr<FJsonObject> GraphObj = GetGraphContractFirstGraph(R);
+		UNTEST_ASSERT_TRUE(GraphObj.IsValid());
+		UNTEST_EXPECT_EQ(FindEdgeViaCount(GraphObj, EntryGuid, KnotGuid), 0);
+		UNTEST_EXPECT_EQ(FindEdgeViaCount(GraphObj, KnotGuid, CallGuid), 0);
+		UNTEST_EXPECT_EQ(FindEdgeViaCount(GraphObj, EntryGuid, CallGuid), -1);
+	}
+
+	// With the flag: both raw edges survive AND the collapsed edge appears,
+	// naming the traversed knot.
+	{
+		TSharedPtr<FJsonObject> Args = GetGraphContractMakeArgs(kGetGraphContractBPPath_Knots);
+		Args->SetBoolField(TEXT("resolve_knots"), true);
+		const IClaireonTool::FToolResult R = Tool.Execute(Args);
+		const TSharedPtr<FJsonObject> GraphObj = GetGraphContractFirstGraph(R);
+		UNTEST_ASSERT_TRUE(GraphObj.IsValid());
+		UNTEST_EXPECT_EQ(FindEdgeViaCount(GraphObj, EntryGuid, KnotGuid), 0);
+		UNTEST_EXPECT_EQ(FindEdgeViaCount(GraphObj, KnotGuid, CallGuid), 0);
+		UNTEST_EXPECT_EQ(FindEdgeViaCount(GraphObj, EntryGuid, CallGuid), 1);
+
+		// The knot itself stays in nodes[] -- the collapsed view is additive.
+		const TSharedPtr<FJsonObject> KnotNode = GetGraphContractFindNodeByClass(GraphObj, TEXT("K2Node_Knot"));
+		UNTEST_EXPECT_TRUE(KnotNode.IsValid());
+	}
+
+	GetGraphContractCleanupAsset(kGetGraphContractBPPath_Knots);
+	co_return;
+}
+
+// ---------------------------------------------------------------------------
+// P2-13d: 'outline' produces the documented one-line-per-node grammar.
+// The grammar was unreachable from production Execute (only test shims called
+// the producer); this pins that every emitted line matches the documented
+// regex, so the description and the payload can no longer drift apart.
+// ---------------------------------------------------------------------------
+UNTEST_UNIT_OPTS(Claireon, GetGraphContract, Outline_MatchesDocumentedGrammar, UNTEST_TIMEOUTMS(60000))
+{
+	FGetGraphContractFixture Fixture;
+	FString FixtureError;
+	const bool bFixtureOk = GetGraphContractBuildFixture(kGetGraphContractBPPath_Outline, Fixture, FixtureError);
+	if (!bFixtureOk) { UE_LOG(LogTemp, Error, TEXT("%s"), *FixtureError); }
+	UNTEST_ASSERT_TRUE(bFixtureOk);
+
+	ClaireonTool_GetBlueprintGraph Tool;
+	TSharedPtr<FJsonObject> Args = GetGraphContractMakeArgs(kGetGraphContractBPPath_Outline);
+	Args->SetStringField(TEXT("node_detail_level"), TEXT("outline"));
+	const IClaireonTool::FToolResult R = Tool.Execute(Args);
+	const TSharedPtr<FJsonObject> GraphObj = GetGraphContractFirstGraph(R);
+	UNTEST_ASSERT_TRUE(GraphObj.IsValid());
+
+	// The outline payload is the one-liner text, not node objects.
+	UNTEST_EXPECT_FALSE(GraphObj->HasField(TEXT("nodes")));
+	FString Outline;
+	UNTEST_ASSERT_TRUE(GraphObj->TryGetStringField(TEXT("outline"), Outline));
+
+	// The documented regex, applied per line:
+	//   ^\s*(\d+)\.\s+(\w+)\s+([0-9a-fA-F]{8})\s{2}(.+?)\s{2}@\s+\((-?\d+),\s*(-?\d+)\)\s*$
+	const FRegexPattern LinePattern(TEXT("^\\s*(\\d+)\\.\\s+(\\w+)\\s+([0-9a-fA-F]{8})\\s{2}(.+?)\\s{2}@\\s+\\((-?\\d+),\\s*(-?\\d+)\\)\\s*$"));
+	TArray<FString> Lines;
+	Outline.ParseIntoArrayLines(Lines, /*bCullEmpty=*/true);
+
+	int32 NodeLines = 0;
+	for (const FString& Line : Lines)
+	{
+		// Skip any header/footer prose the summary may carry; count and check
+		// every line that claims to be a node row (starts with "<digits>.").
+		FRegexMatcher RowShape(FRegexPattern(TEXT("^\\s*\\d+\\.")), Line);
+		if (!RowShape.FindNext())
+		{
+			continue;
+		}
+		++NodeLines;
+		FRegexMatcher Matcher(LinePattern, Line);
+		const bool bMatches = Matcher.FindNext();
+		if (!bMatches) { UE_LOG(LogTemp, Error, TEXT("outline line fails grammar: '%s'"), *Line); }
+		UNTEST_EXPECT_TRUE(bMatches);
+	}
+	// The fixture has an entry, a call and a variable-get: at least 3 rows.
+	UNTEST_EXPECT_TRUE(NodeLines >= 3);
+
+	GetGraphContractCleanupAsset(kGetGraphContractBPPath_Outline);
 	co_return;
 }
 

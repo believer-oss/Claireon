@@ -380,4 +380,69 @@ UNTEST_UNIT_OPTS(Claireon, UObjectInspect, MaxDepthClamps, UNTEST_TIMEOUTMS(1000
 	co_return;
 }
 
+// ---------------------------------------------------------------------------
+// P2-18: FInstancedStruct unwraps instead of rendering {}.
+// The payload lives in non-UPROPERTY members, so reflection recursion used to
+// yield zero fields; the reader now goes through GetScriptStruct()/GetMemory()
+// and emits _struct (the _class convention's sibling) plus the wrapped fields.
+// ---------------------------------------------------------------------------
+UNTEST_UNIT_OPTS(Claireon, UObjectInspect, InstancedStructUnwraps, UNTEST_TIMEOUTMS(10000))
+{
+	using namespace ClaireonToolUObjectInspectSpec;
+
+	UClaireonUObjectInspectFixture* Fixture = NewObject<UClaireonUObjectInspectFixture>(GetTransientPackage());
+	Fixture->AddToRoot();
+
+	FClaireonUObjectInspectNested Payload;
+	Payload.X = 7;
+	Fixture->Wrapped.InitializeAs<FClaireonUObjectInspectNested>(Payload);
+
+	// Default depth: _struct names the wrapped type and its fields appear.
+	{
+		TSharedPtr<FJsonObject> Args = BuildArgs(Fixture->GetPathName());
+		Args->SetStringField(TEXT("property_path"), TEXT("Wrapped"));
+		const IClaireonTool::FToolResult Result = RunInspect(Args);
+		UNTEST_ASSERT_FALSE(Result.bIsError);
+
+		const TSharedPtr<FJsonObject>* ValueObj = nullptr;
+		UNTEST_ASSERT_TRUE(Result.Data->TryGetObjectField(TEXT("value"), ValueObj));
+		UNTEST_EXPECT_STREQ(*(*ValueObj)->GetStringField(TEXT("_struct")), TEXT("ClaireonUObjectInspectNested"));
+		UNTEST_EXPECT_EQ(static_cast<int32>((*ValueObj)->GetNumberField(TEXT("X"))), 7);
+	}
+
+	// max_depth=0 (the documented pre-fix workaround) stays non-empty via the
+	// ExportText fallback.
+	{
+		TSharedPtr<FJsonObject> Args = BuildArgs(Fixture->GetPathName());
+		Args->SetStringField(TEXT("property_path"), TEXT("Wrapped"));
+		Args->SetNumberField(TEXT("max_depth"), 0);
+		const IClaireonTool::FToolResult Result = RunInspect(Args);
+		UNTEST_ASSERT_FALSE(Result.bIsError);
+
+		const TSharedPtr<FJsonObject>* ValueObj = nullptr;
+		UNTEST_ASSERT_TRUE(Result.Data->TryGetObjectField(TEXT("value"), ValueObj));
+		UNTEST_EXPECT_STREQ(*(*ValueObj)->GetStringField(TEXT("_struct")), TEXT("ClaireonUObjectInspectNested"));
+		FString Exported;
+		UNTEST_ASSERT_TRUE((*ValueObj)->TryGetStringField(TEXT("_export"), Exported));
+		UNTEST_EXPECT_FALSE(Exported.IsEmpty());
+	}
+
+	// An unset FInstancedStruct is explicit about wrapping nothing.
+	{
+		Fixture->Wrapped.Reset();
+		TSharedPtr<FJsonObject> Args = BuildArgs(Fixture->GetPathName());
+		Args->SetStringField(TEXT("property_path"), TEXT("Wrapped"));
+		const IClaireonTool::FToolResult Result = RunInspect(Args);
+		UNTEST_ASSERT_FALSE(Result.bIsError);
+
+		const TSharedPtr<FJsonObject>* ValueObj = nullptr;
+		UNTEST_ASSERT_TRUE(Result.Data->TryGetObjectField(TEXT("value"), ValueObj));
+		UNTEST_ASSERT_TRUE((*ValueObj)->HasField(TEXT("_struct")));
+		UNTEST_EXPECT_TRUE((*ValueObj)->HasTypedField<EJson::Null>(TEXT("_struct")));
+	}
+
+	Fixture->RemoveFromRoot();
+	co_return;
+}
+
 #endif // WITH_UNTESTED

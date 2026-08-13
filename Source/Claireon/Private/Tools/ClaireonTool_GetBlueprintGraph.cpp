@@ -13,6 +13,7 @@
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraphSchema_K2.h"
 #include "K2Node.h" // UK2Node cast at line 484 (N7 pure-call subgraph traversal)
+#include "K2Node_Knot.h" // resolve_knots collapsed edges (P2-13a)
 #include "EdGraphUtilities.h"
 #include "ClaireonBlueprintNodeSerializer.h"
 #include "Animation/AnimBlueprint.h"
@@ -53,6 +54,7 @@ FString ClaireonTool_GetBlueprintGraph::GetFullDescription() const
 				"    At 'full' detail the JSON payload additionally includes an optional 'node_subtitle' field\n"
 				"      (e.g. 'Target is Kismet System Library') when the node FullTitle has a second line.\n"
 				"  include_pin_defaults (optional, default=true): Include default values for unconnected pins at 'full' and 'summary' detail. Pass false to suppress. 'exec'/'outline' never emit defaults.\n"
+				"  resolve_knots (optional, default=false): Additionally emit collapsed edges across reroute knots -- an A -> Knot -> B path adds a connections[] entry from A to B with via_knots:[knot guids]. Raw edges are kept, so the physical wiring stays visible.\n"
 				"  max_nodes (optional, default=0 unlimited): Maximum nodes to include. 0 means all nodes. Capped at 50 when anchor_node_guid is used.\n"
 				"  anchor_node_guid (optional): GUID of a node to anchor BFS traversal. When provided, returns only nodes reachable via exec connections from this node (up to 50). "
 				"Use node_detail_level='exec' on the full graph first to get GUIDs, then anchor + node_detail_level='full' to drill into a specific section.\n"
@@ -92,6 +94,19 @@ TSharedPtr<FJsonObject> ClaireonTool_GetBlueprintGraph::GetInputSchema() const
 	PathProp->SetStringField(TEXT("description"), TEXT("Unreal content path of the Blueprint asset (e.g., /Game/Characters/BP_PlayerCharacter). Must start with /Game/."));
 	Properties->SetObjectField(TEXT("asset_path"), PathProp);
 
+	// session_id - accepted for call-shape parity with the session tools
+	// (P2-1). Inspection is immediate-mode either way: it reads the same live
+	// UObject graph an open session mutates, so holding a session changes
+	// nothing about the result -- but a caller mid-session should not have to
+	// strip the id from an otherwise-uniform argument dict. The P1-2 gate
+	// rejects anything undeclared, which turned this from silently-ignored
+	// into a hard error; declaring it (with this honest text) restores the
+	// ergonomic call without hiding behavior.
+	TSharedPtr<FJsonObject> SessionProp = MakeShared<FJsonObject>();
+	SessionProp->SetStringField(TEXT("type"), TEXT("string"));
+	SessionProp->SetStringField(TEXT("description"), TEXT("Accepted for parity with session tools and otherwise unused: bp_get_graph is sessionless by design and reads the same live graph a session would."));
+	Properties->SetObjectField(TEXT("session_id"), SessionProp);
+
 	// graph_name - optional
 	TSharedPtr<FJsonObject> GraphProp = MakeShared<FJsonObject>();
 	GraphProp->SetStringField(TEXT("type"), TEXT("string"));
@@ -114,6 +129,13 @@ TSharedPtr<FJsonObject> ClaireonTool_GetBlueprintGraph::GetInputSchema() const
 	DefaultsProp->SetStringField(TEXT("type"), TEXT("boolean"));
 	DefaultsProp->SetStringField(TEXT("description"), TEXT("Include default values for unconnected pins in JSON output. Default: true. Applies at 'full' and 'summary' node_detail_level (both emit defaults unless this is explicitly false). At 'exec' and 'outline' detail no pin defaults are emitted regardless of this flag."));
 	Properties->SetObjectField(TEXT("include_pin_defaults"), DefaultsProp);
+
+	// resolve_knots - optional (P2-13a)
+	TSharedPtr<FJsonObject> KnotsProp = MakeShared<FJsonObject>();
+	KnotsProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	KnotsProp->SetBoolField(TEXT("default"), false);
+	KnotsProp->SetStringField(TEXT("description"), TEXT("Also emit knot-transparent edges: for every A -> reroute-knot(s) -> B path, an extra connections[] entry from A to B carrying via_knots (the traversed knot GUIDs in order). Raw knot edges stay in the list. Default: false."));
+	Properties->SetObjectField(TEXT("resolve_knots"), KnotsProp);
 
 	// node_detail_level - optional
 	TSharedPtr<FJsonObject> DetailProp = MakeShared<FJsonObject>();
@@ -297,6 +319,14 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 	if (Arguments->HasField(TEXT("traversal_depth")))
 	{
 		TraversalDepth = static_cast<int32>(Arguments->GetNumberField(TEXT("traversal_depth")));
+	}
+
+	// P2-13a: opt-in knot-transparent view. A -> Knot -> B is two raw edges; a
+	// caller looking for the direct edge concludes "not connected".
+	bool bResolveKnots = false;
+	if (Arguments->HasField(TEXT("resolve_knots")))
+	{
+		bResolveKnots = Arguments->GetBoolField(TEXT("resolve_knots"));
 	}
 
 	FString NodeFilter = TEXT("all");
@@ -512,6 +542,26 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 		// to align with the rest of the BP output surface (node_title,
 		// node_class, node_id, etc.).
 		GraphObj->SetStringField(TEXT("graph_name"), Graph->GetName());
+
+		// P2-13d: 'outline' produces the documented one-line-per-node text.
+		// The grammar promised since the format shipped was produced only by
+		// BuildGraphJsonSummary, which Execute never called -- real outline
+		// output was full node objects, unreachable from its own description.
+		// The CODE side was chosen deliberately: nobody can depend on the
+		// documented shape (it was unreachable), and anyone asking for
+		// 'outline' asked for the compact form its description sells.
+		if (DetailLevel == TEXT("outline"))
+		{
+			GraphObj->SetStringField(TEXT("outline"),
+				BuildGraphJsonSummary(Graph, DetailLevel, MaxNodes, AnchorGuid, TraversalDepth));
+			GraphObj->SetNumberField(TEXT("total_nodes_in_graph"), Graph->Nodes.Num());
+			if (bIncludeT3D)
+			{
+				GraphObj->SetStringField(TEXT("t3d"), BuildGraphT3DExport(Graph));
+			}
+			GraphsArray.Add(MakeShared<FJsonValueObject>(GraphObj));
+			continue;
+		}
 
 		// Build nodes array
 		TArray<TSharedPtr<FJsonValue>> NodesArray;
@@ -910,6 +960,102 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 						ConnObj->SetStringField(TEXT("to_pin"), Pin->PinName.ToString());
 						ConnObj->SetBoolField(TEXT("source_in_set"), false);
 						ConnectionsArray.Add(MakeShared<FJsonValueObject>(ConnObj));
+					}
+				}
+			}
+		}
+
+		// P2-13a: knot-transparent collapsed edges, ADDED alongside the raw
+		// ones (marked by a via_knots array of the traversed knot GUIDs) so
+		// callers looking for the direct A -> B edge find it without losing
+		// the physical wiring. Chains may branch (a knot output fans out);
+		// every terminal non-knot input gets its own collapsed edge. Cycles
+		// of knots are guarded by the visited set and simply emit nothing.
+		if (bResolveKnots)
+		{
+			for (UEdGraphNode* Node : NodesToProcess)
+			{
+				if (!IsValid(Node) || Node->IsA<UK2Node_Knot>())
+				{
+					continue;
+				}
+				for (UEdGraphPin* Pin : Node->Pins)
+				{
+					if (!Pin || Pin->Direction != EGPD_Output)
+					{
+						continue;
+					}
+					for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
+					{
+						UEdGraphNode* FirstTarget = LinkedPin ? LinkedPin->GetOwningNode() : nullptr;
+						if (!IsValid(FirstTarget) || !FirstTarget->IsA<UK2Node_Knot>())
+						{
+							continue;  // direct edges are already in connections[]
+						}
+
+						// Walk the knot chain breadth-first, tracking the knot
+						// path per frontier pin so via_knots stays exact even
+						// when the chain branches.
+						struct FKnotWalkEntry
+						{
+							UEdGraphPin* InputPin = nullptr;  // the knot input we arrived at
+							TArray<FString> ViaKnots;
+						};
+						TArray<FKnotWalkEntry> Frontier;
+						TSet<UEdGraphNode*> VisitedKnots;
+						Frontier.Add({ LinkedPin, {} });
+
+						while (Frontier.Num() > 0)
+						{
+							const FKnotWalkEntry Entry = Frontier.Pop(EAllowShrinking::No);
+							UEdGraphNode* KnotNode = Entry.InputPin->GetOwningNode();
+							if (!IsValid(KnotNode) || VisitedKnots.Contains(KnotNode))
+							{
+								continue;
+							}
+							VisitedKnots.Add(KnotNode);
+
+							TArray<FString> Via = Entry.ViaKnots;
+							Via.Add(KnotNode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+
+							for (UEdGraphPin* KnotPin : KnotNode->Pins)
+							{
+								if (!KnotPin || KnotPin->Direction != EGPD_Output)
+								{
+									continue;
+								}
+								for (UEdGraphPin* NextPin : KnotPin->LinkedTo)
+								{
+									UEdGraphNode* NextNode = NextPin ? NextPin->GetOwningNode() : nullptr;
+									if (!IsValid(NextNode))
+									{
+										continue;
+									}
+									if (NextNode->IsA<UK2Node_Knot>())
+									{
+										Frontier.Add({ NextPin, Via });
+										continue;
+									}
+
+									TSharedPtr<FJsonObject> ConnObj = MakeShared<FJsonObject>();
+									ConnObj->SetStringField(TEXT("from_node"), Node->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+									ConnObj->SetStringField(TEXT("from_pin"), Pin->PinName.ToString());
+									ConnObj->SetStringField(TEXT("to_node"), NextNode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+									ConnObj->SetStringField(TEXT("to_pin"), NextPin->PinName.ToString());
+									TArray<TSharedPtr<FJsonValue>> ViaArr;
+									for (const FString& KnotGuid : Via)
+									{
+										ViaArr.Add(MakeShared<FJsonValueString>(KnotGuid));
+									}
+									ConnObj->SetArrayField(TEXT("via_knots"), ViaArr);
+									if (!ProcessedSet.Contains(NextNode))
+									{
+										ConnObj->SetBoolField(TEXT("target_in_set"), false);
+									}
+									ConnectionsArray.Add(MakeShared<FJsonValueObject>(ConnObj));
+								}
+							}
+						}
 					}
 				}
 			}

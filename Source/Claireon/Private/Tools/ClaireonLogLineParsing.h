@@ -70,6 +70,22 @@ bool ParseCategoryFilterArgs(const TSharedPtr<FJsonObject>& Arguments,
     FCategoryFilter& OutFilter, FString& OutError);
 
 // ---------------------------------------------------------------------------
+// Log timestamp shape check (P2-16).
+//
+// A UE log timestamp is "YYYY.MM.DD-HH.MM.SS" optionally followed by ":mmm"
+// (what FLogLineParser captures from the first bracket when the log was
+// written with -LogTimes). The format is zero-padded fixed-width, so two
+// well-formed stamps order correctly under PLAIN LEXICOGRAPHIC comparison --
+// including a seconds-precision bound against a millisecond-precision stamp
+// (the shorter string sorts before any extension of itself, which gives
+// `since` inclusive-from-that-second and `before` exclusive-of-that-second
+// semantics). No FDateTime conversion is needed or wanted: conversion adds
+// timezone assumptions the log lines themselves do not carry.
+// ---------------------------------------------------------------------------
+
+bool IsWellFormedLogTimestamp(const FString& Stamp);
+
+// ---------------------------------------------------------------------------
 // Enumerate registered log categories via the engine's "LOG LIST" exec.
 // Game-thread only. Returns category name -> verbosity string.
 // Lines that fail to parse are skipped (tolerant whitespace split).

@@ -1706,6 +1706,94 @@ UNTEST_UNIT_OPTS(Claireon, ClaireonToolSearchIndex, PluralSingularRecallRegressi
 }
 
 // ===========================================================================
+// Query-domain category signal (P2-20)
+//
+// Pins Cl628_CategoryMatchesQueryDomain via the test probe. This is the
+// signal behind the FindNearest score boost and the FindNearestHybrid fused
+// boost: a tool whose verbatim category is the domain the query names ranks
+// ahead of cross-domain siblings that merely carry the same enriched terms.
+// Pure function -- no server, no index build.
+// ===========================================================================
+
+UNTEST_UNIT_OPTS(Claireon, ClaireonToolSearchIndex, QueryDomainCategorySignal, UNTEST_TIMEOUTMS(5000.0))
+{
+	// Rule (b): the query carries the category's spelled-out head word.
+	// "blueprint" is bp's expansion head, and NOT widgetbp's or animbp's --
+	// their enrichment also plants "blueprint" in the FTS columns, which is
+	// exactly the ambiguity this signal exists to cut through.
+	UNTEST_EXPECT_TRUE(FClaireonToolSearchIndex::CategoryMatchesQueryDomainForTest(
+		TEXT("bp"), TEXT("apply spec blueprint")));
+	UNTEST_EXPECT_FALSE(FClaireonToolSearchIndex::CategoryMatchesQueryDomainForTest(
+		TEXT("widgetbp"), TEXT("apply spec blueprint")));
+	UNTEST_EXPECT_FALSE(FClaireonToolSearchIndex::CategoryMatchesQueryDomainForTest(
+		TEXT("animbp"), TEXT("apply spec blueprint")));
+	UNTEST_EXPECT_FALSE(FClaireonToolSearchIndex::CategoryMatchesQueryDomainForTest(
+		TEXT("material"), TEXT("apply spec blueprint")));
+
+	// Rule (a): the category's own name as a token, and as adjacent tokens.
+	// Both bp (verbatim "bp") and widgetbp ("widget"+"bp" adjacent) match
+	// "widget bp open"; the boost is flat, so bm25 still orders within the
+	// boosted set (Discoverability_WidgetBpOpen pins the outcome).
+	UNTEST_EXPECT_TRUE(FClaireonToolSearchIndex::CategoryMatchesQueryDomainForTest(
+		TEXT("widgetbp"), TEXT("widget bp open")));
+	UNTEST_EXPECT_TRUE(FClaireonToolSearchIndex::CategoryMatchesQueryDomainForTest(
+		TEXT("bp"), TEXT("widget bp open")));
+	UNTEST_EXPECT_TRUE(FClaireonToolSearchIndex::CategoryMatchesQueryDomainForTest(
+		TEXT("statetree"), TEXT("apply spec state tree")));
+	UNTEST_EXPECT_TRUE(FClaireonToolSearchIndex::CategoryMatchesQueryDomainForTest(
+		TEXT("level_sequence"), TEXT("level sequence rebind actor")));
+	UNTEST_EXPECT_TRUE(FClaireonToolSearchIndex::CategoryMatchesQueryDomainForTest(
+		TEXT("pcg"), TEXT("pcg apply spec")));
+
+	// Rule (b) plural tolerance: "blueprints" still names the bp domain.
+	UNTEST_EXPECT_TRUE(FClaireonToolSearchIndex::CategoryMatchesQueryDomainForTest(
+		TEXT("bp"), TEXT("compile many blueprints")));
+
+	// Rule (b) head word only: "graph" appears MID-expansion for pcg
+	// ("procedural content generation graph") and must not make pcg the domain
+	// of an animation-graph query; animbp's head word "animation" does match.
+	UNTEST_EXPECT_TRUE(FClaireonToolSearchIndex::CategoryMatchesQueryDomainForTest(
+		TEXT("animbp"), TEXT("animation graph add node")));
+	UNTEST_EXPECT_FALSE(FClaireonToolSearchIndex::CategoryMatchesQueryDomainForTest(
+		TEXT("pcg"), TEXT("animation graph add node")));
+
+	// Rule (c): a token whose own expansion names the category verbatim.
+	UNTEST_EXPECT_TRUE(FClaireonToolSearchIndex::CategoryMatchesQueryDomainForTest(
+		TEXT("niagara"), TEXT("vfx spawn effect")));
+	UNTEST_EXPECT_TRUE(FClaireonToolSearchIndex::CategoryMatchesQueryDomainForTest(
+		TEXT("camera_asset"), TEXT("cam add rig")));
+
+	// No domain named: nothing matches.
+	UNTEST_EXPECT_FALSE(FClaireonToolSearchIndex::CategoryMatchesQueryDomainForTest(
+		TEXT("bp"), TEXT("set node property")));
+	UNTEST_EXPECT_FALSE(FClaireonToolSearchIndex::CategoryMatchesQueryDomainForTest(
+		TEXT("bp"), TEXT("")));
+	UNTEST_EXPECT_FALSE(FClaireonToolSearchIndex::CategoryMatchesQueryDomainForTest(
+		TEXT(""), TEXT("apply spec blueprint")));
+
+	// Operation-token coverage: the within-category half of the signal.
+	// "apply spec blueprint" covers ALL of apply_spec's tokens, HALF of
+	// apply_delta's, and NONE of compile_batch's -- which is what ranks
+	// bp_apply_spec over its own category siblings whose descriptions match
+	// "spec"* through prose ("specify", "specific").
+	UNTEST_EXPECT_EQ(FClaireonToolSearchIndex::OperationTokenCoverageForTest(
+		TEXT("apply_spec"), TEXT("apply spec blueprint")), 1.0);
+	UNTEST_EXPECT_EQ(FClaireonToolSearchIndex::OperationTokenCoverageForTest(
+		TEXT("apply_delta"), TEXT("apply spec blueprint")), 0.5);
+	UNTEST_EXPECT_EQ(FClaireonToolSearchIndex::OperationTokenCoverageForTest(
+		TEXT("compile_batch"), TEXT("apply spec blueprint")), 0.0);
+	// Plural tolerance and empties.
+	UNTEST_EXPECT_EQ(FClaireonToolSearchIndex::OperationTokenCoverageForTest(
+		TEXT("compile"), TEXT("compile many blueprints")), 1.0);
+	UNTEST_EXPECT_EQ(FClaireonToolSearchIndex::OperationTokenCoverageForTest(
+		TEXT(""), TEXT("apply spec blueprint")), 0.0);
+	UNTEST_EXPECT_EQ(FClaireonToolSearchIndex::OperationTokenCoverageForTest(
+		TEXT("apply_spec"), TEXT("")), 0.0);
+
+	co_return;
+}
+
+// ===========================================================================
 // RRF tuning sweep (MEASURE + REPORT, DO NOT GATE)
 //
 // Sweeps the runtime-tunable RRF params (FClaireonToolSearchIndex::SetRrfParamsForTest)

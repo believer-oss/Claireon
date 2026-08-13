@@ -40,6 +40,27 @@ THIRD_PARTY_INCLUDES_END
 TAtomic<int32> ClaireonTool_ExecutePython::TempFileCounter(0);
 
 // ---------------------------------------------------------------------------
+// Python execution depth (P2-5b).
+//
+// Game-thread only: ExecPythonCommandEx runs on the game thread and every
+// claireon.* tool dispatched from the script re-enters on the same thread, so
+// a plain int32 needs no synchronization. File-local discriminator prefix
+// (Cl627PyExec_) against unity-batched symbol collisions.
+// ---------------------------------------------------------------------------
+static int32 GCl627PyExec_ExecutionDepth = 0;
+
+struct FCl627PyExec_ScopedExecutionDepth
+{
+	FCl627PyExec_ScopedExecutionDepth() { ++GCl627PyExec_ExecutionDepth; }
+	~FCl627PyExec_ScopedExecutionDepth() { --GCl627PyExec_ExecutionDepth; }
+};
+
+bool ClaireonTool_ExecutePython::IsPythonExecutionInProgress()
+{
+	return GCl627PyExec_ExecutionDepth > 0;
+}
+
+// ---------------------------------------------------------------------------
 // Python execution watchdog.
 //
 // The watchdog runs on a thread-pool thread while ExecPythonCommandEx blocks
@@ -703,7 +724,14 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	// so capturing here covers the entire execution scope.
 	FClaireonLogCapture EngineLogCapture;
 	const double StartTimeSeconds = FPlatformTime::Seconds();
-	const bool bPythonSuccess = IPythonScriptPlugin::Get()->ExecPythonCommandEx(PythonCommand);
+	const bool bPythonSuccess = [&PythonCommand]()
+	{
+		// Depth-scoped flag behind IsPythonExecutionInProgress (P2-5b). A depth
+		// counter, not a bool: claireon.* calls made from the script re-enter
+		// tool dispatch, and a future nested ExecPython must not clear it early.
+		FCl627PyExec_ScopedExecutionDepth ScopedDepth;
+		return IPythonScriptPlugin::Get()->ExecPythonCommandEx(PythonCommand);
+	}();
 	const double DurationMs = (FPlatformTime::Seconds() - StartTimeSeconds) * 1000.0;
 
 	// Signal the watchdog that execution has finished and wait for it to exit.

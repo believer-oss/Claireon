@@ -18,6 +18,7 @@
 #include "ClaireonSessionManager.h"
 #include "ClaireonSafeExec.h"
 #include "Tools/ClaireonBlueprintGraphEditToolBase_Internal.h"
+#include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/PackageName.h"
 #include "UObject/Package.h"
@@ -769,11 +770,25 @@ bool ClaireonBlueprintGraphEditToolBase::ResolveBlueprintAndGraph(
 	OutGraph = ClaireonBlueprintHelpers::FindGraphByName(OutBlueprint, GraphName);
 	if (!IsValid(OutGraph))
 	{
+		// P2-12: a BPTYPE_Normal Blueprint's ubergraph page is not always named
+		// "EventGraph" (anim-notify-state BPs rename it), so the DEFAULT lookup
+		// falls back to the first ubergraph page before erroring.
+		if (!bGraphNameExplicit && OutBlueprint->UbergraphPages.Num() > 0
+			&& IsValid(OutBlueprint->UbergraphPages[0]))
+		{
+			OutGraph = OutBlueprint->UbergraphPages[0];
+			return true;
+		}
+
 		// A MacroLibrary/Interface Blueprint has no EventGraph, and a freshly created
 		// one has no graphs at all -- erroring on the DEFAULT graph name would make
 		// bp_add_macro unable to auto-open the very asset it exists to populate.
 		// Open graph-less instead. An explicitly named missing graph still errors.
-		const bool bSupportsEventGraph = OutBlueprint->BlueprintType == BPTYPE_Normal;
+		// P2-12: the type test is DoesSupportEventGraphs (the sibling code's
+		// idiom), not BlueprintType == BPTYPE_Normal -- the old test let
+		// BPTYPE_LevelScript open graph-less and hard-errored renamed-ubergraph
+		// normal BPs the fallback above now handles.
+		const bool bSupportsEventGraph = FBlueprintEditorUtils::DoesSupportEventGraphs(OutBlueprint);
 		if (bGraphNameExplicit || bSupportsEventGraph)
 		{
 			OutError = MakeErrorResult(FString::Printf(TEXT("Graph '%s' not found in Blueprint %s"), *GraphName, *InOutAssetPath));
