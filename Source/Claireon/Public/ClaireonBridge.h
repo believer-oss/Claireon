@@ -4,6 +4,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "UObject/Package.h"
 #include "Tools/IClaireonTool.h"
 #include <atomic>
 

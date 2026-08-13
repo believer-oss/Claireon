@@ -3,6 +3,7 @@
 #if WITH_UNTESTED
 
 #include "Untest.h"
+#include "UObject/Package.h"
 #include "ClaireonNameResolver.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"

@@ -3,6 +3,7 @@
 #if WITH_UNTESTED
 
 #include "Untest.h"
+#include "UObject/Package.h"
 #include "Tools/IClaireonTool.h"
 #include "Tools/ClaireonTool_SequenceInspect.h"
 #include "Tools/ClaireonTool_SequenceListTrackTypes.h"
