@@ -7,7 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Two rounds of tooling-feedback work. Both rounds ship together.
+## [2.1.0] - 2026-08-13
+
+Two rounds of tooling-feedback work, the 2026-08 P0/P1/P2 defect-triage bands,
+the runtime GAS tool family, and Unreal Engine 5.6/5.7/5.8 compatibility.
+
+### Changed — BREAKING (behavior)
+
+- **Arguments a tool's schema does not declare are now hard errors.** They were
+  silently ignored, so a misspelled optional parameter produced a default-behavior run
+  reported as success. Adding a parameter remains a safe widening; renaming or removing
+  one is now a visible break. A schema with no `properties` object stays permissive.
+- **`level_list_actors` `class_filter` is an is-a test.** The filter resolves the name
+  to a class and matches subclasses (`include_subclasses=false` for exact-class); the
+  legacy case-insensitive substring match survives only as a fallback for names that do
+  not resolve, disclosed by a warning. Result sets can grow (BP subclasses now match)
+  and shrink (unrelated substring matches no longer do).
+- **A colliding `(category, operation)` tool registration is refused** and logs an
+  Error at boot, instead of silently overwriting the earlier tool.
+- **`pie_get_player_pawn` returns structured data** instead of a preformatted string.
 
 ### Changed — BREAKING (wire format)
 
@@ -56,6 +74,23 @@ Two rounds of tooling-feedback work. Both rounds ship together.
 
 ### Added
 
+- **Unreal Engine 5.6, 5.7, and 5.8 compatibility, version-gated.** The plugin builds
+  from clean against stock 5.5 through 5.8 (JSON object keys are spelled portably for
+  5.8's `FSharedString`-keyed `FJsonObject`).
+- **Runtime GAS tool family (`gas_*`)** — inspect and mutate abilities, effects,
+  attributes, and gameplay tags on live PIE actors, defaulting to the server world.
+- **`editor_log_search` `since`/`before` time bounds**, so a search can be scoped to
+  the window an experiment actually ran in.
+- **`bp_get_graph` `resolve_knots` view** — connections reported as if reroute knots
+  were transparent, alongside the raw view.
+- **`bp_set_pin_value` `pin_direction` hint** (defaults to input), disambiguating pins
+  that share a name across directions.
+- **`bp_close` accepts `asset_path`** as an alternative to `session_id`.
+- **`uobject_inspect` unwraps `FInstancedStruct`**, emitting `_struct` plus the wrapped
+  fields instead of an opaque export string; unset wraps emit `_struct: null`.
+- **Tool-search ranking: query-domain and operation-token-coverage signals** scored
+  outside the FTS5 columns, so a domain-specific tool outranks its
+  abbreviation-enriched siblings for its own domain vocabulary.
 - **`uobject_set_property`** — the write counterpart to `uobject_inspect`, with the same
   reflection reach: properties with no Blueprint accessor specifier, protected/private
   fields, transient fields, nested struct members, and array elements, on assets, CDOs,
@@ -85,6 +120,25 @@ Two rounds of tooling-feedback work. Both rounds ship together.
 
 ### Fixed
 
+- **Trace results tell the truth.** Stat-derived scopes reach `pie_trace_start`
+  captures; GPU presence is disclosed from the capture itself rather than the requested
+  channel string; non-finite numbers are replaced with `null` at every result boundary
+  instead of emitting invalid JSON; capture contents and finite aggregates are
+  disclosed on `trace_open`.
+- **Silent-success write paths are closed.** Writes that could not be applied
+  (unresolved functions, unbound nodes, rejected literals) now error or disclose,
+  instead of committing a dead node and reporting `created`; dotted
+  `"Class.Function"` spellings in node specs bind correctly.
+- **The deferred-action autosave names every package it writes** before and after the
+  write, so an implicit save is never invisible.
+- **Actor ids are scoped to their world**, and class arguments coerce to the CDO, so a
+  stale id cannot silently resolve into the wrong world.
+- **`pcg_save` saves freshly created packages**, not just previously saved ones.
+- **The world-transition barrier runs for map-less PIE starts**, not only for
+  `mapPath=` starts.
+- **StateTree runtime components resolve by type, not class-name substring**, so
+  `UStateTreeAIComponent` subclasses are found.
+- **`console_execute` returns the command's log output** instead of a bare success.
 - **World-transition Python purge had never executed.** The barrier compiled its
   multi-statement script under `ExecuteStatement` (CPython `Py_single_input`), so it
   raised `SyntaxError` before running; the return value was discarded and `Unattended`
