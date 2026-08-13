@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "ClaireonREPLWidget.h"
+#include "AssetRegistry/AssetData.h"
 #include "ClaireonServer.h"
 #include "ClaireonModule.h"
 #include "Modules/ModuleManager.h"

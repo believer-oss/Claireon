@@ -12,6 +12,7 @@
 #if WITH_UNTESTED
 
 #include "Untest.h"
+#include "UObject/Package.h"
 #include "ClaireonNameResolver.h"
 #include "ClaireonSessionManager.h"
 #include "Tools/IClaireonTool.h"

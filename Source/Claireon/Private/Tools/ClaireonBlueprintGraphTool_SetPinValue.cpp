@@ -3,6 +3,7 @@
 
 
 #include "Tools/ClaireonBlueprintGraphTool_SetPinValue.h"
+#include "AssetRegistry/AssetData.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "ClaireonBlueprintHelpers.h"
 #include "Dom/JsonObject.h"

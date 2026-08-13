@@ -8,6 +8,7 @@
 #if WITH_UNTESTED
 
 #include "Untest.h"
+#include "UObject/Package.h"
 #include "Tools/IClaireonTool.h"
 #include "Tools/ClaireonMaterialTool_ApplyDelta.h"
 #include "Tools/ClaireonMaterialEditToolBase.h"
