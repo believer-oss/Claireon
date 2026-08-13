@@ -79,14 +79,14 @@ namespace ClaireonToolDiscoverabilityTestsNS
 		return Entries.Num() > 0;
 	}
 
-	/** Log top results for diagnostics when a row fails. */
+	/** Log top results (with scores) for diagnostics when a row fails. */
 	static void LogTop10(const FString& Query)
 	{
 		TArray<FClaireonToolCatalogMatch> Top = FClaireonToolSearchIndex::FindNearest(Query, 20);
 		FString Msg = FString::Printf(TEXT("[ToolDiscoverability] Top-%d for query='%s': "), Top.Num(), *Query);
 		for (int32 i = 0; i < Top.Num(); ++i)
 		{
-			Msg += FString::Printf(TEXT("[%d]%s "), i, *Top[i].Name);
+			Msg += FString::Printf(TEXT("[%d]%s(%.3f) "), i, *Top[i].Name, Top[i].Score);
 		}
 		UE_LOG(LogTemp, Display, TEXT("%s"), *Msg.TrimEnd());
 	}

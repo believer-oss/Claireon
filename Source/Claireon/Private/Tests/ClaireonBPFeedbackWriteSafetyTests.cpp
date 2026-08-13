@@ -1356,4 +1356,84 @@ UNTEST_UNIT_OPTS(Claireon, BPFeedbackWriteSafety, LatentTaskClassPinRefresh_Expo
 	co_return;
 }
 
+// ===========================================================================
+// P2-17: bp_set_pin_value direction handling. The lookup hint defaults to
+// input (the only direction that accepts defaults); an explicit
+// pin_direction='output' resolves output pins and is answered by the
+// output-pin error; a bare OUTPUT-ONLY name keeps that same diagnosis via the
+// unconstrained retry instead of degrading to not-found.
+// ===========================================================================
+
+UNTEST_UNIT_OPTS(Claireon, BPFeedbackWriteSafety, SetPinValue_DirectionHintAndOutputDiagnosis, UNTEST_TIMEOUTMS(60000))
+{
+	using namespace ClaireonWSTTestsInternal;
+
+	const TCHAR* AssetPath = TEXT("/Game/__MCPTests/BP_WST_PinDirection");
+	WST_CleanupAsset(AssetPath);
+
+	const FString SessionId = WST_CreateAndOpenSession(AssetPath);
+	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
+
+	// A Branch node: 'Condition' exists only as an input, 'True' only as an
+	// exec output.
+	FString BranchGuid;
+	{
+		ClaireonBlueprintGraphTool_AddNode AddNodeTool;
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		Args->SetStringField(TEXT("node_type"), TEXT("Branch"));
+		const IClaireonTool::FToolResult R = AddNodeTool.Execute(Args);
+		UNTEST_ASSERT_FALSE(R.bIsError);
+		UNTEST_ASSERT_TRUE(R.Data.IsValid());
+		R.Data->TryGetStringField(TEXT("created_node_guid"), BranchGuid);
+	}
+	UNTEST_ASSERT_FALSE(BranchGuid.IsEmpty());
+
+	auto SetPin = [&SessionId, &BranchGuid](const TCHAR* Pin, const TCHAR* Value, const TCHAR* Direction) -> IClaireonTool::FToolResult
+	{
+		ClaireonBlueprintGraphTool_SetPinValue Tool;
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("session_id"), SessionId);
+		Args->SetStringField(TEXT("node_guid"), BranchGuid);
+		Args->SetStringField(TEXT("pin_name"), Pin);
+		Args->SetStringField(TEXT("value"), Value);
+		if (Direction) { Args->SetStringField(TEXT("pin_direction"), Direction); }
+		return Tool.Execute(Args);
+	};
+
+	// Bare input name writes under the default hint.
+	{
+		const IClaireonTool::FToolResult R = SetPin(TEXT("Condition"), TEXT("true"), nullptr);
+		UNTEST_EXPECT_FALSE(R.bIsError);
+	}
+
+	// Explicit output direction resolves the output pin, and the error names
+	// the actual problem (defaults are input-only), not a lookup failure.
+	// 'then' is the Branch true-exec's INTERNAL pin name (its friendly name is
+	// "True", which the resolver does not treat as a bare name).
+	{
+		const IClaireonTool::FToolResult R = SetPin(TEXT("then"), TEXT("x"), TEXT("output"));
+		UNTEST_ASSERT_TRUE(R.bIsError);
+		UNTEST_EXPECT_TRUE(R.ErrorMessage.Contains(TEXT("output pin")));
+	}
+
+	// Bare output-only name under the default input hint: the unconstrained
+	// retry keeps the output-pin diagnosis.
+	{
+		const IClaireonTool::FToolResult R = SetPin(TEXT("then"), TEXT("x"), nullptr);
+		UNTEST_ASSERT_TRUE(R.bIsError);
+		UNTEST_EXPECT_TRUE(R.ErrorMessage.Contains(TEXT("output pin")));
+	}
+
+	// A junk direction is rejected by name.
+	{
+		const IClaireonTool::FToolResult R = SetPin(TEXT("Condition"), TEXT("true"), TEXT("sideways"));
+		UNTEST_ASSERT_TRUE(R.bIsError);
+		UNTEST_EXPECT_TRUE(R.ErrorMessage.Contains(TEXT("pin_direction")));
+	}
+
+	WST_CleanupAsset(AssetPath);
+	co_return;
+}
+
 #endif // WITH_UNTESTED

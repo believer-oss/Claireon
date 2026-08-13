@@ -323,6 +323,19 @@ TSharedPtr<FJsonObject> ClaireonTool_LogSearch::GetInputSchema() const
 		TEXT("Lines whose parsed log category is in this list are removed before regex matching. Case-insensitive. May be combined with include_categories. Omit or pass [] to exclude nothing. Use log/categories to list valid values."));
 	Properties->SetObjectField(TEXT("exclude_categories"), ExcludeProp);
 
+	// since / before - optional time-range bounds (P2-16).
+	TSharedPtr<FJsonObject> SinceProp = MakeShared<FJsonObject>();
+	SinceProp->SetStringField(TEXT("type"), TEXT("string"));
+	SinceProp->SetStringField(TEXT("description"),
+		TEXT("Only search lines stamped at or after this UE log timestamp ('YYYY.MM.DD-HH.MM.SS' or 'YYYY.MM.DD-HH.MM.SS:mmm'). Log timestamps exist only when the editor runs with -LogTimes (the default); lines without a usable stamp are searched anyway and counted in a warning. Continuation lines inherit the most recent stamped line's time."));
+	Properties->SetObjectField(TEXT("since"), SinceProp);
+
+	TSharedPtr<FJsonObject> BeforeProp = MakeShared<FJsonObject>();
+	BeforeProp->SetStringField(TEXT("type"), TEXT("string"));
+	BeforeProp->SetStringField(TEXT("description"),
+		TEXT("Only search lines stamped strictly before this UE log timestamp (same format and stampless behavior as `since`)."));
+	Properties->SetObjectField(TEXT("before"), BeforeProp);
+
 	// Caller can force the inline response (skipping spill).
 	TSharedPtr<FJsonObject> ForceInlineProp = MakeShared<FJsonObject>();
 	ForceInlineProp->SetStringField(TEXT("type"), TEXT("boolean"));
@@ -380,6 +393,23 @@ IClaireonTool::FToolResult ClaireonTool_LogSearch::Execute(const TSharedPtr<FJso
 		}
 	}
 
+	// Parse time-range bounds (P2-16). Malformed bounds error immediately: a
+	// bound that silently matched nothing would be the silent-no-op class this
+	// parameter exists to avoid.
+	FString Since, Before;
+	Arguments->TryGetStringField(TEXT("since"), Since);
+	Arguments->TryGetStringField(TEXT("before"), Before);
+	for (const FString* Bound : { &Since, &Before })
+	{
+		if (!Bound->IsEmpty() && !ClaireonLogLineParsing::IsWellFormedLogTimestamp(*Bound))
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("Malformed timestamp '%s': expected 'YYYY.MM.DD-HH.MM.SS' or 'YYYY.MM.DD-HH.MM.SS:mmm' (as written by -LogTimes log lines)."),
+				**Bound));
+		}
+	}
+	const bool bTimeFilterActive = !Since.IsEmpty() || !Before.IsEmpty();
+
 	// Locate the log file
 	FString CurrentLogPath = FPlatformOutputDevices::GetAbsoluteLogFilename();
 	if (!FPaths::FileExists(CurrentLogPath))
@@ -415,13 +445,22 @@ IClaireonTool::FToolResult ClaireonTool_LogSearch::Execute(const TSharedPtr<FJso
 	// FilteredLines[i] = index into AllLines (0-based) for the i-th survivor.
 	TArray<int32> FilteredIndices;
 	int32 CategoryExcludedCount = 0;
+	int32 TimeExcludedCount = 0;
+	int32 StamplessSearchedCount = 0;
 	TSet<FString> SeenCategoriesInFile;
-	bool bFilterActive = CategoryFilter.IsActive();
+	const bool bCategoryFilterActive = CategoryFilter.IsActive();
+	// The parse-and-filter view runs when EITHER filter is on; without both,
+	// the no-filter path below stays byte-identical to the original.
+	bool bFilterActive = bCategoryFilterActive || bTimeFilterActive;
 
 	if (bFilterActive)
 	{
 		ClaireonLogLineParsing::FLogLineParser Parser;
 		FilteredIndices.Reserve(AllLines.Num());
+
+		// Carry the most recent stamp forward so continuation lines inherit
+		// their parent line's time (P2-16), mirroring the category carry.
+		FString LastTimestamp;
 
 		for (int32 i = 0; i < AllLines.Num(); ++i)
 		{
@@ -430,14 +469,36 @@ IClaireonTool::FToolResult ClaireonTool_LogSearch::Execute(const TSharedPtr<FJso
 			{
 				SeenCategoriesInFile.Add(Parsed.Category);
 			}
-			if (CategoryFilter.Passes(Parsed.Category))
+			if (!Parsed.Timestamp.IsEmpty()
+				&& ClaireonLogLineParsing::IsWellFormedLogTimestamp(Parsed.Timestamp))
 			{
-				FilteredIndices.Add(i);
+				LastTimestamp = Parsed.Timestamp;
 			}
-			else
+
+			if (!CategoryFilter.Passes(Parsed.Category))
 			{
 				++CategoryExcludedCount;
+				continue;
 			}
+
+			if (bTimeFilterActive)
+			{
+				if (LastTimestamp.IsEmpty())
+				{
+					// No usable stamp (own or inherited): searched anyway and
+					// counted, so a stampless log filters to "everything plus a
+					// warning naming -LogTimes" instead of silently to nothing.
+					++StamplessSearchedCount;
+				}
+				else if ((!Since.IsEmpty() && LastTimestamp < Since)
+					|| (!Before.IsEmpty() && !(LastTimestamp < Before)))
+				{
+					++TimeExcludedCount;
+					continue;
+				}
+			}
+
+			FilteredIndices.Add(i);
 		}
 	}
 
@@ -540,19 +601,31 @@ IClaireonTool::FToolResult ClaireonTool_LogSearch::Execute(const TSharedPtr<FJso
 	// Only meaningful when the filter is active.
 	// ---------------------------------------------------------------------------
 	TArray<FString> Warnings;
-	if (bFilterActive)
+	if (bCategoryFilterActive)
 	{
 		const TMap<FName, FString> Registered = ClaireonLogLineParsing::EnumerateRegisteredLogCategories();
 		Warnings = ClaireonLogLineParsing::ValidateFilterCategories(CategoryFilter, Registered, SeenCategoriesInFile);
 	}
+	if (bTimeFilterActive && StamplessSearchedCount > 0)
+	{
+		Warnings.Add(FString::Printf(
+			TEXT("%d line(s) carried no usable timestamp and were searched despite since/before. ")
+			TEXT("Log timestamps require the editor to run with -LogTimes; without them a time ")
+			TEXT("filter cannot exclude anything."),
+			StamplessSearchedCount));
+	}
 
 	// ---------------------------------------------------------------------------
-	// Build response summary suffix for excluded count.
+	// Build response summary suffix for excluded counts.
 	// ---------------------------------------------------------------------------
 	FString ExcludedSuffix;
 	if (bFilterActive && CategoryExcludedCount > 0)
 	{
 		ExcludedSuffix = FString::Printf(TEXT(" (%d excluded by category filters)"), CategoryExcludedCount);
+	}
+	if (bTimeFilterActive && TimeExcludedCount > 0)
+	{
+		ExcludedSuffix += FString::Printf(TEXT(" (%d excluded by since/before)"), TimeExcludedCount);
 	}
 
 	// ---------------------------------------------------------------------------
@@ -607,6 +680,15 @@ IClaireonTool::FToolResult ClaireonTool_LogSearch::Execute(const TSharedPtr<FJso
 	if (ContextLines > 0)
 	{
 		Data->SetBoolField(TEXT("truncated_per_array"), bTruncated);
+	}
+
+	// Time filter response fields (P2-16, only when a bound was supplied).
+	if (bTimeFilterActive)
+	{
+		if (!Since.IsEmpty())  { Data->SetStringField(TEXT("since"), Since); }
+		if (!Before.IsEmpty()) { Data->SetStringField(TEXT("before"), Before); }
+		Data->SetNumberField(TEXT("time_excluded_count"), TimeExcludedCount);
+		Data->SetNumberField(TEXT("stampless_searched_count"), StamplessSearchedCount);
 	}
 
 	// Category filter response fields (only when filter was active).

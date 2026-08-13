@@ -46,7 +46,7 @@ TSharedPtr<FJsonObject> ClaireonTool_PIEWaitPoll::GetInputSchema() const
 
 IClaireonTool::FToolResult ClaireonTool_PIEWaitPoll::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	UE_LOG(LogClaireon, Display, TEXT("[MCP] editor.pie.waitPoll"));
+	UE_LOG(LogClaireon, Display, TEXT("[MCP] pie_wait_poll"));
 
 	FString WaitId;
 	if (!Arguments.IsValid() || !Arguments->TryGetStringField(TEXT("wait_id"), WaitId) || WaitId.IsEmpty())

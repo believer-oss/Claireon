@@ -51,7 +51,7 @@ TSharedPtr<FJsonObject> ClaireonTool_PIEGetPlayerPawn::GetInputSchema() const
 
 IClaireonTool::FToolResult ClaireonTool_PIEGetPlayerPawn::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	UE_LOG(LogClaireon, Display, TEXT("[MCP] editor.pie.getPlayerPawnByPlayerIndex"));
+	UE_LOG(LogClaireon, Display, TEXT("[MCP] pie_get_player_pawn"));
 
 	if (!IsValid(GEditor))
 	{
@@ -60,7 +60,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEGetPlayerPawn::Execute(const TSharedP
 
 	if (!GEditor->IsPlaySessionInProgress())
 	{
-		return MakeErrorResult(TEXT("PIE is not running. Start a PIE session first with editor.pie.start"));
+		return MakeErrorResult(TEXT("PIE is not running. Start a PIE session first with pie_start"));
 	}
 
 	// Parse parameters
@@ -92,7 +92,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEGetPlayerPawn::Execute(const TSharedP
 
 	if (!IsValid(PIEWorld))
 	{
-		return MakeErrorResult(TEXT("PIE world not found. PIE may still be initializing — use editor.pie.waitFor with condition 'pieReady'"));
+		return MakeErrorResult(TEXT("PIE world not found. PIE may still be initializing — use pie_wait_for with condition 'pieReady'"));
 	}
 
 	// Find player controller at the requested index
@@ -127,13 +127,32 @@ IClaireonTool::FToolResult ClaireonTool_PIEGetPlayerPawn::Execute(const TSharedP
 		Output += TEXT("pawn: (null — pawn has not been spawned yet)\n");
 		Output += FString::Printf(TEXT("controllerClass: %s\n"), *TargetPC->GetClass()->GetName());
 		Output += TEXT("Note: The player controller exists but has no pawn. The pawn may still be initializing. ");
-		Output += TEXT("Use editor.pie.waitFor with condition 'initState' to wait for full initialization.\n");
-		return MakeSuccessResult(nullptr, Output);
+		Output += TEXT("Use pie_wait_for with condition 'initState' to wait for full initialization.\n");
+
+		// P2-4: a machine-readable status alongside the prose, so "controller
+		// exists, pawn not spawned yet" is distinguishable from the error
+		// statuses (no PIE / no world / no controller) without string-matching.
+		TSharedPtr<FJsonObject> NoPawnData = MakeShared<FJsonObject>();
+		NoPawnData->SetStringField(TEXT("status"), TEXT("no_pawn"));
+		NoPawnData->SetBoolField(TEXT("is_valid"), false);
+		NoPawnData->SetNumberField(TEXT("player_index"), PlayerIndex);
+		NoPawnData->SetStringField(TEXT("controller_class"), TargetPC->GetClass()->GetName());
+		return MakeSuccessResult(NoPawnData, Output);
 	}
 
 	// Register with PIE manager for stable ID tracking
 	FClaireonPIEManager& PIEManager = FClaireonPIEManager::Get();
 	const FString ActorId = PIEManager.GetActorId(Pawn);
+
+	// P2-4: structured result. actor_id is the field every downstream PIE tool
+	// consumes; parsing it out of prose was the reported friction.
+	TSharedPtr<FJsonObject> PawnData = MakeShared<FJsonObject>();
+	PawnData->SetStringField(TEXT("status"), TEXT("ok"));
+	PawnData->SetStringField(TEXT("actor_id"), ActorId);
+	PawnData->SetBoolField(TEXT("is_valid"), true);
+	PawnData->SetStringField(TEXT("class_name"), Pawn->GetClass()->GetName());
+	PawnData->SetStringField(TEXT("actor_name"), Pawn->GetName());
+	PawnData->SetNumberField(TEXT("player_index"), PlayerIndex);
 
 	// Build output
 	FString Output;
@@ -171,7 +190,36 @@ IClaireonTool::FToolResult ClaireonTool_PIEGetPlayerPawn::Execute(const TSharedP
 					*Component->GetName(), *Component->GetClass()->GetName());
 			}
 		}
+
+		TSharedPtr<FJsonObject> LocationObj = MakeShared<FJsonObject>();
+		LocationObj->SetNumberField(TEXT("x"), Location.X);
+		LocationObj->SetNumberField(TEXT("y"), Location.Y);
+		LocationObj->SetNumberField(TEXT("z"), Location.Z);
+		PawnData->SetObjectField(TEXT("location"), LocationObj);
+
+		TSharedPtr<FJsonObject> RotationObj = MakeShared<FJsonObject>();
+		RotationObj->SetNumberField(TEXT("pitch"), Rotation.Pitch);
+		RotationObj->SetNumberField(TEXT("yaw"), Rotation.Yaw);
+		RotationObj->SetNumberField(TEXT("roll"), Rotation.Roll);
+		PawnData->SetObjectField(TEXT("rotation"), RotationObj);
+
+		PawnData->SetStringField(TEXT("controller_class"), TargetPC->GetClass()->GetName());
+
+		TArray<TSharedPtr<FJsonValue>> ComponentArr;
+		ComponentArr.Reserve(Components.Num());
+		for (const UActorComponent* Component : Components)
+		{
+			if (IsValid(Component))
+			{
+				TSharedPtr<FJsonObject> CompObj = MakeShared<FJsonObject>();
+				CompObj->SetStringField(TEXT("name"), Component->GetName());
+				CompObj->SetStringField(TEXT("class_name"), Component->GetClass()->GetName());
+				ComponentArr.Add(MakeShared<FJsonValueObject>(CompObj));
+			}
+		}
+		PawnData->SetNumberField(TEXT("component_count"), ComponentArr.Num());
+		PawnData->SetArrayField(TEXT("components"), ComponentArr);
 	}
 
-	return MakeSuccessResult(nullptr, Output);
+	return MakeSuccessResult(PawnData, Output);
 }

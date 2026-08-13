@@ -582,6 +582,7 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetPinValue::GetInputSchema()
     Builder.AddString(TEXT("node_guid"), TEXT("GUID of the node that owns the pin."), true);
     Builder.AddString(TEXT("pin_name"), TEXT("Pin name on that node."), true);
     Builder.AddString(TEXT("value"), TEXT("Default value, encoded as the pin's literal string form."), true);
+    Builder.AddEnum(TEXT("pin_direction"), TEXT("Direction hint for pin_name lookup when an input and an output pin share the name. Defaults to 'input' -- only input pins accept defaults."), { TEXT("input"), TEXT("output") });
     Builder.AddString(TEXT("response_mode"), TEXT("Response verbosity: 'full' | 'changed' | 'status' (default 'changed')."));
     return Builder.Build();
 }
@@ -627,6 +628,27 @@ FToolResult ClaireonBlueprintGraphTool_SetPinValue::SetPinValue_Impl(
 		return MakeErrorResult(TEXT("Missing required field: value"));
 	}
 
+	// P2-17: direction hint for the pin lookup. Defaults to input -- only input
+	// pins accept defaults, so a bare name shared by an in/out pair resolves to
+	// the only pin this tool could act on instead of erroring as ambiguous. An
+	// explicit 'output' is accepted and then answered by the output-pin error
+	// below, which names the actual problem.
+	EEdGraphPinDirection PinDirection = EGPD_Input;
+	FString PinDirectionStr;
+	const bool bPinDirectionExplicit = Params->TryGetStringField(TEXT("pin_direction"), PinDirectionStr);
+	if (bPinDirectionExplicit)
+	{
+		if (PinDirectionStr == TEXT("output"))
+		{
+			PinDirection = EGPD_Output;
+		}
+		else if (PinDirectionStr != TEXT("input"))
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("Invalid pin_direction '%s': expected 'input' or 'output'"), *PinDirectionStr));
+		}
+	}
+
 	// Find node (full GUID or >=8-hex prefix)
 	FString ResolveError;
 	UEdGraphNode* Node = ClaireonBPGraphInternal::FindNodeForOperationStr(Graph, NodeGuidStr, Data, ResolveError);
@@ -635,10 +657,22 @@ FToolResult ClaireonBlueprintGraphTool_SetPinValue::SetPinValue_Impl(
 		return MakeErrorResult(ResolveError);
 	}
 
-	// Resolve pin using fuzzy matching
+	// Resolve pin using fuzzy matching, constrained by the direction hint.
 	TArray<FString> ResolutionWarnings;
 	ClaireonNameResolver::FNameResolveResult SetPinResult;
-	UEdGraphPin* Pin = ClaireonNameResolver::ResolvePinName(Node, PinName, EGPD_MAX, SetPinResult);
+	UEdGraphPin* Pin = ClaireonNameResolver::ResolvePinName(Node, PinName, PinDirection, SetPinResult);
+	if (!Pin && !bPinDirectionExplicit)
+	{
+		// The name may exist only as an output pin. Re-resolve unconstrained so
+		// the output-pin check below names the actual problem ("cannot set a
+		// default on an output pin") instead of a not-found error.
+		ClaireonNameResolver::FNameResolveResult UnconstrainedResult;
+		if (UEdGraphPin* OutputOnly = ClaireonNameResolver::ResolvePinName(Node, PinName, EGPD_MAX, UnconstrainedResult))
+		{
+			Pin = OutputOnly;
+			SetPinResult = UnconstrainedResult;
+		}
+	}
 	if (!Pin)
 	{
 		return MakeErrorResult(SetPinResult.Error);

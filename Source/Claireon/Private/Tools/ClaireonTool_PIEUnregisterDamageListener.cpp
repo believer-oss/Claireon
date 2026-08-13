@@ -43,7 +43,7 @@ TSharedPtr<FJsonObject> ClaireonTool_PIEUnregisterDamageListener::GetInputSchema
 
 IClaireonTool::FToolResult ClaireonTool_PIEUnregisterDamageListener::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	UE_LOG(LogClaireon, Display, TEXT("[MCP] editor.pie.unregisterDamageListener"));
+	UE_LOG(LogClaireon, Display, TEXT("[MCP] pie_unregister_damage_listener"));
 
 	if (!IsValid(GEditor))
 	{

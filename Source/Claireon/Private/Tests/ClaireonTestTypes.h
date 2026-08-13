@@ -5,6 +5,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "StructUtils/InstancedStruct.h"
 #include "UObject/Object.h"
 #include "Components/SceneComponent.h"
 #include "GameFramework/Actor.h"
@@ -102,6 +103,11 @@ public:
 	/** Nested struct for spec case 9. */
 	UPROPERTY()
 	FClaireonUObjectInspectNested Foo;
+
+	/** FInstancedStruct unwrap fixture (P2-18): reflection sees no payload
+	 *  fields, so the reader must go through GetScriptStruct()/GetMemory(). */
+	UPROPERTY()
+	FInstancedStruct Wrapped;
 
 	/** Transient field for spec case 11. */
 	UPROPERTY(Transient)

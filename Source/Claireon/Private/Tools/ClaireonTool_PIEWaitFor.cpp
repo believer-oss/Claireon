@@ -281,7 +281,7 @@ using namespace ClaireonTool_PIEWaitFor_Private;
 
 IClaireonTool::FToolResult ClaireonTool_PIEWaitFor::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	UE_LOG(LogClaireon, Display, TEXT("[MCP] editor.pie.waitFor"));
+	UE_LOG(LogClaireon, Display, TEXT("[MCP] pie_wait_for"));
 
 	// Poll mode: a wait_id from a previous {status:'waiting'} response.
 	// Handled before the GEditor gate because polling only touches the wait

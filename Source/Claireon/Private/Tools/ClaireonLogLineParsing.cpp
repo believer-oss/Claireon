@@ -274,4 +274,36 @@ TArray<FString> ValidateFilterCategories(const FCategoryFilter& Filter,
     return Warnings;
 }
 
+bool IsWellFormedLogTimestamp(const FString& Stamp)
+{
+    // "YYYY.MM.DD-HH.MM.SS" (19 chars) optionally + ":mmm" (23 chars).
+    // Shape-only check: field ranges are the log writer's problem; the
+    // consumer needs ordering, which zero-padded digits give for free.
+    if (Stamp.Len() != 19 && Stamp.Len() != 23)
+    {
+        return false;
+    }
+    static const TCHAR* Template19 = TEXT("dddd.dd.dd-dd.dd.dd");
+    for (int32 i = 0; i < 19; ++i)
+    {
+        if (Template19[i] == TEXT('d'))
+        {
+            if (!FChar::IsDigit(Stamp[i])) { return false; }
+        }
+        else if (Stamp[i] != Template19[i])
+        {
+            return false;
+        }
+    }
+    if (Stamp.Len() == 23)
+    {
+        if (Stamp[19] != TEXT(':')) { return false; }
+        for (int32 i = 20; i < 23; ++i)
+        {
+            if (!FChar::IsDigit(Stamp[i])) { return false; }
+        }
+    }
+    return true;
+}
+
 } // namespace ClaireonLogLineParsing

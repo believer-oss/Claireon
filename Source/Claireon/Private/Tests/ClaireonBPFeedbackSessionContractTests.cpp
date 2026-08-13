@@ -23,7 +23,9 @@
 #include "Tools/ClaireonBlueprintGraphTool_AddNode.h"
 #include "Tools/ClaireonBlueprintGraphTool_ApplySpec.h"
 #include "Tools/ClaireonBlueprintGraphTool_ConnectPins.h"
+#include "Tools/ClaireonBlueprintGraphTool_Compile.h"
 #include "Tools/ClaireonBlueprintGraphTool_Create.h"
+#include "Tools/ClaireonBlueprintGraphTool_Close.h"
 #include "Tools/ClaireonBlueprintGraphTool_CloseAll.h"
 #include "Tools/ClaireonBlueprintGraphTool_Save.h"
 #include "Tools/ClaireonBlueprintGraphTool_Open.h"
@@ -33,6 +35,7 @@
 #include "Tools/IClaireonTool.h"
 #include "ClaireonBlueprintHelpers.h"
 #include "ClaireonBridge.h"
+#include "Kismet2/BlueprintEditorUtils.h"
 #include "ClaireonModule.h"
 #include "ClaireonSessionManager.h"
 #include "IClaireonToolProvider.h"
@@ -1243,6 +1246,123 @@ UNTEST_UNIT_OPTS(Claireon, BPFeedbackSessionContract, ApplySpec_PerNodeGraphTarg
 	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Serialized);
 	UNTEST_ASSERT_TRUE(FJsonSerializer::Serialize(R.Data.ToSharedRef(), Writer));
 	UNTEST_EXPECT_TRUE(Serialized.Contains(TEXT("NoSuchGraph_XYZ")));
+
+	SCT_CleanupAsset(AssetPath);
+	co_return;
+}
+
+// ===========================================================================
+// P2-12: the auto-open default-graph lookup falls back to UbergraphPages[0]
+// when the page is not literally named "EventGraph", and the type test is
+// DoesSupportEventGraphs. P2-1: bp_close accepts asset_path.
+// ===========================================================================
+
+// A BPTYPE_Normal Blueprint whose ubergraph page was renamed compiles via
+// asset_path with no graph_name. Pre-fix this hard-errored on the exact-name
+// "EventGraph" lookup despite UbergraphPages being non-empty (the
+// anim-notify-state shape).
+UNTEST_UNIT_OPTS(Claireon, BPFeedbackSessionContract, Compile_RenamedUbergraphAutoOpens, UNTEST_TIMEOUTMS(60000))
+{
+	const TCHAR* AssetPath = TEXT("/Game/__MCPTests/BP_SCT_RenamedUbergraph");
+	SCT_CleanupAsset(AssetPath);
+
+	// Create, then rename the default ubergraph page directly.
+	{
+		ClaireonBlueprintGraphTool_Create CreateTool;
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("asset_path"), AssetPath);
+		Args->SetStringField(TEXT("parent_class"), TEXT("Actor"));
+		const IClaireonTool::FToolResult R = CreateTool.Execute(Args);
+		UNTEST_ASSERT_FALSE(R.bIsError);
+	}
+	{
+		const FString ObjectPath = FString(AssetPath) + TEXT(".") + FPackageName::GetShortName(AssetPath);
+		UBlueprint* BP = Cast<UBlueprint>(FSoftObjectPath(ObjectPath).TryLoad());
+		UNTEST_ASSERT_TRUE(IsValid(BP));
+		UNTEST_ASSERT_TRUE(BP->UbergraphPages.Num() > 0);
+		FBlueprintEditorUtils::RenameGraph(BP->UbergraphPages[0], TEXT("MainGraph"));
+	}
+	// The create tool auto-opened a session pointing at the old graph; release
+	// it so bp_compile's asset_path path must auto-open fresh.
+	FClaireonSessionManager::Get().ReleaseByAssetPath(AssetPath);
+
+	{
+		ClaireonBlueprintGraphTool_Compile CompileTool;
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("asset_path"), AssetPath);
+		const IClaireonTool::FToolResult R = CompileTool.Execute(Args);
+		UNTEST_EXPECT_FALSE(R.bIsError);
+	}
+
+	SCT_CleanupAsset(AssetPath);
+	co_return;
+}
+
+// An explicitly named missing graph still errors -- the fallback is for the
+// DEFAULT lookup only.
+UNTEST_UNIT_OPTS(Claireon, BPFeedbackSessionContract, Compile_ExplicitMissingGraphStillErrors, UNTEST_TIMEOUTMS(60000))
+{
+	const TCHAR* AssetPath = TEXT("/Game/__MCPTests/BP_SCT_ExplicitMissingGraph");
+	SCT_CleanupAsset(AssetPath);
+
+	{
+		ClaireonBlueprintGraphTool_Create CreateTool;
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("asset_path"), AssetPath);
+		Args->SetStringField(TEXT("parent_class"), TEXT("Actor"));
+		const IClaireonTool::FToolResult R = CreateTool.Execute(Args);
+		UNTEST_ASSERT_FALSE(R.bIsError);
+	}
+	FClaireonSessionManager::Get().ReleaseByAssetPath(AssetPath);
+
+	{
+		ClaireonBlueprintGraphTool_Compile CompileTool;
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("asset_path"), AssetPath);
+		Args->SetStringField(TEXT("graph_name"), TEXT("Nope"));
+		const IClaireonTool::FToolResult R = CompileTool.Execute(Args);
+		UNTEST_EXPECT_TRUE(R.bIsError);
+	}
+
+	SCT_CleanupAsset(AssetPath);
+	co_return;
+}
+
+// P2-1: bp_close(asset_path=...) closes the session the schema used to
+// reject. The description promised it all along; BeginSessionOp accepted it
+// all along; only the schema said no.
+UNTEST_UNIT_OPTS(Claireon, BPFeedbackSessionContract, Close_ByAssetPath_ClosesTheSession, UNTEST_TIMEOUTMS(60000))
+{
+	const TCHAR* AssetPath = TEXT("/Game/__MCPTests/BP_SCT_CloseByAssetPath");
+	SCT_CleanupAsset(AssetPath);
+
+	const FString SessionId = SCT_OpenTestSession(AssetPath);
+	UNTEST_ASSERT_FALSE(SessionId.IsEmpty());
+
+	// Schema declares both, requires neither.
+	{
+		ClaireonBlueprintGraphTool_Close CloseTool;
+		const TSharedPtr<FJsonObject> Schema = CloseTool.GetInputSchema();
+		UNTEST_ASSERT_TRUE(Schema.IsValid());
+		const TSharedPtr<FJsonObject>* Props = nullptr;
+		UNTEST_ASSERT_TRUE(Schema->TryGetObjectField(TEXT("properties"), Props));
+		UNTEST_EXPECT_TRUE((*Props)->HasField(TEXT("session_id")));
+		UNTEST_EXPECT_TRUE((*Props)->HasField(TEXT("asset_path")));
+		const TArray<TSharedPtr<FJsonValue>>* Required = nullptr;
+		if (Schema->TryGetArrayField(TEXT("required"), Required))
+		{
+			UNTEST_EXPECT_EQ(Required->Num(), 0);
+		}
+	}
+
+	{
+		ClaireonBlueprintGraphTool_Close CloseTool;
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("asset_path"), AssetPath);
+		const IClaireonTool::FToolResult R = CloseTool.Execute(Args);
+		UNTEST_EXPECT_FALSE(R.bIsError);
+	}
+	UNTEST_EXPECT_TRUE(FClaireonSessionManager::Get().FindSession(SessionId) == nullptr);
 
 	SCT_CleanupAsset(AssetPath);
 	co_return;

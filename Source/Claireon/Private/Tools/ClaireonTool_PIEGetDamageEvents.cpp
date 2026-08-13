@@ -54,7 +54,7 @@ TSharedPtr<FJsonObject> ClaireonTool_PIEGetDamageEvents::GetInputSchema() const
 
 IClaireonTool::FToolResult ClaireonTool_PIEGetDamageEvents::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	UE_LOG(LogClaireon, Display, TEXT("[MCP] editor.pie.getDamageEvents"));
+	UE_LOG(LogClaireon, Display, TEXT("[MCP] pie_get_damage_events"));
 
 	if (!IsValid(GEditor))
 	{
@@ -63,7 +63,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEGetDamageEvents::Execute(const TShare
 
 	if (!GEditor->IsPlaySessionInProgress())
 	{
-		return MakeErrorResult(TEXT("PIE is not running. Start a PIE session first with editor.pie.start"));
+		return MakeErrorResult(TEXT("PIE is not running. Start a PIE session first with pie_start"));
 	}
 
 	// Parse required parameter

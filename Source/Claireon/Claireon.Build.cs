@@ -32,6 +32,8 @@ public class Claireon : ModuleRules
 			"AssetRegistry",
 			"InputCore",
 			"WorkspaceMenuStructure",
+			"TypedElementFramework", // UTypedElementRegistry flush in test cleanup (P2-21)
+			"TypedElementRuntime",   // UTypedElementSelectionSet swap in test cleanup (P2-21)
 
 			// Blueprint editing tools dependencies
 			"BlueprintGraph",    // UK2Node, UEdGraphSchema_K2

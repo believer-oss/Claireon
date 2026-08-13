@@ -49,7 +49,7 @@ TSharedPtr<FJsonObject> ClaireonTool_PIEAITargetInfo::GetInputSchema() const
 
 IClaireonTool::FToolResult ClaireonTool_PIEAITargetInfo::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	UE_LOG(LogClaireon, Display, TEXT("[MCP] editor.pie.getAITargetInfo"));
+	UE_LOG(LogClaireon, Display, TEXT("[MCP] pie_get_ai_target_info"));
 
 	if (!IsValid(GEditor))
 	{
@@ -58,7 +58,7 @@ IClaireonTool::FToolResult ClaireonTool_PIEAITargetInfo::Execute(const TSharedPt
 
 	if (!GEditor->IsPlaySessionInProgress())
 	{
-		return MakeErrorResult(TEXT("PIE is not running. Start a PIE session first with editor.pie.start"));
+		return MakeErrorResult(TEXT("PIE is not running. Start a PIE session first with pie_start"));
 	}
 
 	// Parse required parameter

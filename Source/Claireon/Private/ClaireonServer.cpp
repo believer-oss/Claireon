@@ -852,7 +852,7 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsCall(const FMCPRequestContex
 	{
 		return FMCPJsonRpcResponse::MakeError(Id, -32000,
 			TEXT("This tool cannot be used while Play In Editor (PIE) is running. "
-				 "Stop PIE first with editor.pie.stop, then retry."));
+				 "Stop PIE first with pie_stop, then retry."));
 	}
 
 	// Block tools that require an editor world

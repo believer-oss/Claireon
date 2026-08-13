@@ -58,7 +58,7 @@ IClaireonTool::FToolResult ClaireonTool_PIERegisterDamageListener::Execute(const
 
 	if (!GEditor->IsPlaySessionInProgress())
 	{
-		return MakeErrorResult(TEXT("PIE is not running. Start a PIE session first with editor.pie.start"));
+		return MakeErrorResult(TEXT("PIE is not running. Start a PIE session first with pie_start"));
 	}
 
 	// Parse required parameter
@@ -147,8 +147,8 @@ IClaireonTool::FToolResult ClaireonTool_PIERegisterDamageListener::Execute(const
 	}
 
 	Output += TEXT("status: registered\n");
-	Output += TEXT("Note: Use editor.pie.getDamageEvents with this listenerId to retrieve damage events. ");
-	Output += TEXT("Use editor.pie.unregisterDamageListener to clean up when done.\n");
+	Output += TEXT("Note: Use pie_get_damage_events with this listenerId to retrieve damage events. ");
+	Output += TEXT("Use pie_unregister_damage_listener to clean up when done.\n");
 
 	return MakeSuccessResult(nullptr, Output);
 }

@@ -121,7 +121,7 @@ IClaireonTool::FToolResult ClaireonTool_PIECheckInitState::Execute(const TShared
 #if !WITH_LYRA_GAME
 	return MakeErrorResult(TEXT("Init state checking requires Lyra integration. This build does not include LyraGame."));
 #else
-	UE_LOG(LogClaireon, Display, TEXT("[MCP] editor.pie.checkInitState"));
+	UE_LOG(LogClaireon, Display, TEXT("[MCP] pie_check_init_state"));
 
 	if (!IsValid(GEditor))
 	{
@@ -130,7 +130,7 @@ IClaireonTool::FToolResult ClaireonTool_PIECheckInitState::Execute(const TShared
 
 	if (!GEditor->IsPlaySessionInProgress())
 	{
-		return MakeErrorResult(TEXT("PIE is not running. Start a PIE session first with editor.pie.start"));
+		return MakeErrorResult(TEXT("PIE is not running. Start a PIE session first with pie_start"));
 	}
 
 	// Parse parameters

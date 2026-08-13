@@ -26,6 +26,15 @@ public:
 	virtual TArray<FString> GetSearchKeywords() const override;
 
 	/**
+	 * True while a python_execute script is running on the game thread.
+	 * Tools that block the game thread (editor_wait_seconds, poll loops)
+	 * consult this to warn: inside python_execute the engine tick cannot run,
+	 * so a blocking wait is a pure stall and no deferred action, async load,
+	 * or wait condition can make progress during it (P2-5b).
+	 */
+	static bool IsPythonExecutionInProgress();
+
+	/**
 	 * Parse a captured python_execute log block for one of four signature-class
 	 * error patterns and produce a structured hint that tool_search can act on.
 	 *
