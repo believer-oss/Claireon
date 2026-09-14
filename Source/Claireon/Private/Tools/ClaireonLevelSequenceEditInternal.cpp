@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "ClaireonLevelSequenceEditInternal.h"
+#include "Tools/ClaireonSequenceHelpers.h"
 #include "Tools/ClaireonLevelSequenceEditToolBase.h"
 #include "LevelSequence.h"
 #include "MovieScene.h"
@@ -62,7 +63,7 @@ namespace ClaireonLevelSequenceInternal
 		{
 			for (int32 i = 0; i < Bindings.Num(); ++i)
 			{
-				if (Bindings[i].GetName() == Label)
+				if (FClaireonSequenceHelpers::GetBindingName(MovieScene, Bindings[i].GetObjectGuid()) == Label)
 				{
 					OutIndex = i;
 					OutGuid = Bindings[i].GetObjectGuid();

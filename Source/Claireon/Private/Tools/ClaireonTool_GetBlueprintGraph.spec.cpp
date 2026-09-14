@@ -781,7 +781,7 @@ bool FGetBlueprintGraphTest_ApplyGraphIdMapFormat::RunTest(const FString& Parame
 	}
 
 	int32 Checked = 0;
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& Kv : (*IdMapObj)->Values)
+	for (const auto& Kv : (*IdMapObj)->Values)
 	{
 		FString GuidStr;
 		if (!Kv.Value.IsValid() || !Kv.Value->TryGetString(GuidStr))

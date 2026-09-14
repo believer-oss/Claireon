@@ -1,20 +1,8 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 //
-// Spec tests for console_execute (P1-6).
-//
-// The defect these pin: a console command's output can arrive on either of two
-// channels -- the FOutputDevice the handler is given, or the log -- and the tool
-// used to report only the first. Commands that report solely through the log
-// (`stat dumpframe`, `obj list`) came back with output: ''.
-//
-// The tests drive a console command registered here whose ONLY output is a
-// UE_LOG line, so the two channels are unambiguously separated. Engine commands
-// were rejected as fixtures because they straddle both channels: `LOG LIST`,
-// which the catalog suggested, actually writes to Ar (LogSuppressionInterface.cpp
-// Exec_Runtime), so it would have passed against the unfixed code.
-//
-// PIE dispatch (APlayerController::ConsoleCommand) is verified manually.
+// Use a log-only command to test output capture independently of FOutputDevice.
+// PIE dispatch requires manual verification.
 
 #if WITH_UNTESTED
 
@@ -25,8 +13,6 @@
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
 
-// File-local namespace (NOT raw `namespace { ... }`) to avoid unity-batched
-// symbol collisions across other Tests TUs.
 namespace ClaireonToolConsoleExecuteSpec
 {
 static const TCHAR* const kCommandName = TEXT("Claireon.Test.EmitLogOnly");

@@ -4,6 +4,7 @@
 #include "ClaireonSessionManager.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonLog.h"
+#include "Misc/PackageName.h"
 
 FClaireonSessionManager& FClaireonSessionManager::Get()
 {
@@ -475,10 +476,16 @@ FString FClaireonSessionManager::CanonicalizePath(const FString& InPath, bool bA
 		return Result.ResolvedPath.PackagePath;
 	}
 
-	// Session locking only applies to /Game/ assets
-	if (!Result.ResolvedPath.Path.StartsWith(TEXT("/Game/")))
+	// Session locking applies to editable content roots: /Game/ plus any mounted plugin
+	// content (/<PluginName>/). Engine, script, and transient roots stay rejected.
+	static const TSet<FName> RejectedMountPoints = {
+		FName(TEXT("Engine")), FName(TEXT("Script")), FName(TEXT("Temp")),
+		FName(TEXT("Memory")), FName(TEXT("Config"))
+	};
+	const FName MountPoint = FPackageName::GetPackageMountPoint(Result.ResolvedPath.Path);
+	if (MountPoint.IsNone() || RejectedMountPoints.Contains(MountPoint))
 	{
-		UE_LOG(LogClaireon, Warning, TEXT("Path canonicalization rejected non-/Game/ path: '%s'"), *InPath);
+		UE_LOG(LogClaireon, Warning, TEXT("Path canonicalization rejected non-content-root path: '%s'"), *InPath);
 		return FString();
 	}
 

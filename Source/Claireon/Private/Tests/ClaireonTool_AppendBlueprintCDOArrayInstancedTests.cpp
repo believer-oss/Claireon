@@ -40,20 +40,8 @@ namespace ClaireonTool_AppendBlueprintCDOArrayInstancedTests_Private
 	static const TCHAR* CollectorElementClassPath = TEXT("/Script/Claireon.ClaireonAppendInstancedElement");
 	static const TCHAR* CollectorsArrayProperty = TEXT("Collectors");
 
-	// True only when the fixture actually has a .uasset on disk.
-	//
-	// The fixture below is built in an in-memory package and deliberately NOT
-	// saved: nothing in this suite reads the asset back from disk, and
-	// append_blueprint_cdo_array_instanced has no save call of its own. Deleting an
-	// in-memory fixture buys nothing, and every ObjectTools::ForceDeleteObjects
-	// call runs a whole-object-graph referencer scan, which is the trigger for the
-	// nondeterministic Niagara-serialization crash documented in
-	// Docs/llm/todo/claireon-untest-harness-reliability.md item 1.
-	//
-	// The check is kept rather than dropping the delete outright because
-	// /Game/__MCPTests is deliberately NOT gitignored: a stale .uasset left by an
-	// older build (this helper used to call UPackage::Save) or a crashed run must
-	// still be cleaned so `git status --porcelain -- Content/` stays empty.
+	// Delete only on-disk fixtures. In-memory deletion triggers a global referencer
+	// scan that can crash on resident Niagara objects; stale files still need cleanup.
 	bool AppendTests_HasFileOnDisk(const FString& AssetOrPackagePath)
 	{
 		const FString PackageName = FPackageName::ObjectPathToPackageName(AssetOrPackagePath);

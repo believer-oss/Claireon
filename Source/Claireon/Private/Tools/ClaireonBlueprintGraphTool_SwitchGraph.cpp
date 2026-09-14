@@ -64,6 +64,7 @@
 #include "Curves/CurveVector.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "BlueprintEditor.h"
 #include "EdGraphUtilities.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -95,6 +96,64 @@
 #define LOCTEXT_NAMESPACE "ClaireonBlueprintGraphEditToolBase"
 
 using FToolResult = IClaireonTool::FToolResult;
+
+namespace ClaireonBPSwitchGraphInternal
+{
+    // Prefix helpers to avoid unity-build collisions.
+
+    // Observe live editor focus separately from the session cursor.
+    struct FEditorFocusReport
+    {
+        // Post-request focus: <unbound> without a live editor, <none> without a focused graph.
+        FString FocusedGraphName = TEXT("<unbound>");
+
+        // Whether this call requested editor focus.
+        bool bFocusChangeRequested = false;
+
+        // Describe the observed focus and request outcome consistently on both switch paths.
+        FString DescribeAgainst(const UEdGraph* TargetGraph) const
+        {
+            if (!bFocusChangeRequested)
+            {
+                return TEXT("no live editor bound to confirm focus");
+            }
+            if (IsValid(TargetGraph) && FocusedGraphName == TargetGraph->GetName())
+            {
+                return TEXT("editor confirms focus there");
+            }
+            return FString::Printf(TEXT("editor is still focused on %s after the request"), *FocusedGraphName);
+        }
+    };
+
+    // Request focus only through a live binding; otherwise the helper could open a replacement editor.
+    // Report immediate observed focus without pumping the engine loop.
+    FEditorFocusReport RequestEditorFocus(FBlueprintEditToolData* Data, UEdGraph* TargetGraph)
+    {
+        FEditorFocusReport Report;
+        if (!Data || !IsValid(TargetGraph))
+        {
+            return Report;
+        }
+
+        const EClaireonEditorBindingStatus Status = Data->EditorBinding.Revalidate(TargetGraph);
+        if (Status == EClaireonEditorBindingStatus::NotBound
+            || Status == EClaireonEditorBindingStatus::BoundEditorClosed)
+        {
+            return Report;
+        }
+
+        FKismetEditorUtilities::BringKismetToFocusAttentionOnObject(TargetGraph);
+        Report.bFocusChangeRequested = true;
+
+        if (TSharedPtr<FBlueprintEditor> PinnedEditor = Data->EditorBinding.Editor.Pin())
+        {
+            UEdGraph* ActuallyFocused = PinnedEditor->GetFocusedGraph();
+            Report.FocusedGraphName = IsValid(ActuallyFocused) ? ActuallyFocused->GetName() : TEXT("<none>");
+        }
+
+        return Report;
+    }
+}
 
 
 FString ClaireonBlueprintGraphTool_SwitchGraph::GetOperation() const { return TEXT("switch_graph"); }
@@ -148,17 +207,27 @@ FToolResult ClaireonBlueprintGraphTool_SwitchGraph::Execute(const TSharedPtr<FJs
 
 	if (NewGraph == Data->Graph.Get())
 	{
-		Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Already on graph %s"), *GraphName);
-		return BuildStateResponse(SessionId, Data);
+		// Read editor focus even when the session is already on the target graph.
+		const ClaireonBPSwitchGraphInternal::FEditorFocusReport FocusReport =
+			ClaireonBPSwitchGraphInternal::RequestEditorFocus(Data, NewGraph);
+
+		Data->Cursor.LastOperationStatus = FString::Printf(
+			TEXT("Already on graph %s (%s)"), *GraphName, *FocusReport.DescribeAgainst(NewGraph));
+
+		FToolResult Result = BuildStateResponse(SessionId, Data);
+		if (Result.Data.IsValid())
+		{
+			Result.Data->SetStringField(TEXT("editor_focused_graph"), FocusReport.FocusedGraphName);
+			Result.Data->SetBoolField(TEXT("focus_change_requested"), FocusReport.bFocusChangeRequested);
+		}
+		return Result;
 	}
 
-	// Preserve history across the switch: push the OLD graph's focused node.
 	Data->Cursor.PushHistory(Data->Cursor.GraphName);
 
 	Data->Graph = NewGraph;
 	Data->Cursor.GraphName = NewGraph->GetName();
 
-	// Initialize cursor to the new graph's entry node.
 	UEdGraphNode* EntryNode = ClaireonBPGraphInternal::SelectEntryNodeForSwitch(Blueprint, NewGraph);
 	if (IsValid(EntryNode))
 	{
@@ -180,11 +249,21 @@ FToolResult ClaireonBlueprintGraphTool_SwitchGraph::Execute(const TSharedPtr<FJs
 		Data->Cursor.FocusedPinName = NAME_None;
 	}
 
-	Data->Cursor.LastOperationStatus = FString::Printf(
-		TEXT("Switched to graph %s (%d nodes)"),
-		*GraphName, NewGraph->Nodes.Num());
+	// Report whether the live editor followed the session switch.
+	const ClaireonBPSwitchGraphInternal::FEditorFocusReport FocusReport =
+		ClaireonBPSwitchGraphInternal::RequestEditorFocus(Data, NewGraph);
 
-	return BuildStateResponse(SessionId, Data);
+	Data->Cursor.LastOperationStatus = FString::Printf(
+		TEXT("Switched to graph %s (%d nodes) (%s)"),
+		*GraphName, NewGraph->Nodes.Num(), *FocusReport.DescribeAgainst(NewGraph));
+
+	FToolResult Result = BuildStateResponse(SessionId, Data);
+	if (Result.Data.IsValid())
+	{
+		Result.Data->SetStringField(TEXT("editor_focused_graph"), FocusReport.FocusedGraphName);
+		Result.Data->SetBoolField(TEXT("focus_change_requested"), FocusReport.bFocusChangeRequested);
+	}
+	return Result;
 }
 
 #undef LOCTEXT_NAMESPACE

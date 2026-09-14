@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonMaterialTool_Open.h"
+#include "ClaireonScopedAssetEditor.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "Tools/ClaireonMaterialHelpers.h"
 #include "Tools/ClaireonAssetUtils.h"
@@ -65,7 +66,7 @@ FToolResult ClaireonMaterialTool_Open::Execute(const TSharedPtr<FJsonObject>& Ar
 	}
 	ToolData.Add(SessionId, MoveTemp(NewData));
 
-	ClaireonAssetUtils::OpenAssetEditorIfHeadless(Material);
+	ClaireonAssetEditorWindow::OpenForSession(Material);
 
 	FMaterialEditToolData* Data = ToolData.Find(SessionId);
 	return BuildStateResponse(SessionId, Data);

@@ -27,6 +27,9 @@ struct CLAIREON_API FToolSchemaBuilder
 	void AddArray(const FString& Name, const FString& Description, bool bRequired = false);
 	void AddEnum(const FString& Name, const FString& Description, const TArray<FString>& Values, bool bRequired = false);
 
+	/** Accept a string or an array of strings using JSON Schema's type-array form. */
+	void AddStringOrStringArray(const FString& Name, const FString& Description, bool bRequired = false);
+
 	/** Finalize and return the schema. Sets the required array if any fields were marked required. */
 	TSharedPtr<FJsonObject> Build();
 

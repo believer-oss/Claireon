@@ -446,8 +446,8 @@ UNTEST_UNIT_OPTS(Claireon, DirectConnect, SmokeToolsList, UNTEST_TIMEOUTMS(30000
 // the life of the process; there is no per-port stop/destroy API reachable
 // from plugin code, only a process-wide StopAllListeners() that would also
 // take down every other consumer of the shared module in this editor process
-// (FSRemoteStatusSubsystem, FriendshipperHttpRouter, FSAssetImporter,
-// PragmaActiveDebugServer all bind their own ports on the same singleton --
+// (in a consuming project a remote-status subsystem, a source-control HTTP router,
+// an asset importer and an SDK debug server all bind their own ports on the same singleton --
 // see the note on FClaireonServer::Stop()'s implementation). So what
 // Second->Start(BoundFirst) below actually exercises is "the still-listening
 // FHttpListener for this port is found again via GetHttpRouter() and handed

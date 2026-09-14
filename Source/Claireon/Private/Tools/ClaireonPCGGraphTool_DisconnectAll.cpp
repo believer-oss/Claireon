@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonPCGGraphTool_DisconnectAll.h"
+#include "Tools/ClaireonPCGEditorSync.h"
 #include "Tools/ClaireonPCGGraphHelpers.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "PCGGraph.h"
@@ -60,6 +61,9 @@ FToolResult ClaireonPCGGraphTool_DisconnectAll::Execute(const TSharedPtr<FJsonOb
 	FString Direction;
 	Arguments->TryGetStringField(TEXT("direction"), Direction);
 
+	// See pcg_connect: settle a pending editor rebuild before the engine notifies native nodes.
+	ClaireonPCGEditorSync::SettlePendingReconstruct(Data->PCGGraph.Get());
+
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Disconnect All PCG Pins")));
 
 	bool bRemoved = false;
@@ -76,7 +80,7 @@ FToolResult ClaireonPCGGraphTool_DisconnectAll::Execute(const TSharedPtr<FJsonOb
 
 	if (bRemoved)
 	{
-		ClaireonPCGGraphHelpers::NotifyGraphChanged(Data->PCGGraph.Get());
+		ClaireonPCGGraphHelpers::NotifyGraphChanged(Data->PCGGraph.Get(), ClaireonPCGGraphHelpers::EPCGGraphEditOp::DisconnectAll);
 	}
 
 	Data->LastOperationStatus = FString::Printf(TEXT("Disconnected all edges on %s.\"%s\"%s"),

@@ -9,6 +9,12 @@ namespace ClaireonTransactionGroupState
 {
 	bool bGroupActive = false;
 	FString ActiveGroupLabel;
+	FGuid ActiveGroupTransactionId;
+
+	FString MakeGroupTitle(const FString& Label)
+	{
+		return FString::Printf(TEXT("[Claireon] %s"), *Label);
+	}
 
 	void ResetGroupState()
 	{
@@ -22,5 +28,6 @@ namespace ClaireonTransactionGroupState
 		}
 		bGroupActive = false;
 		ActiveGroupLabel.Empty();
+		ActiveGroupTransactionId.Invalidate();
 	}
 }

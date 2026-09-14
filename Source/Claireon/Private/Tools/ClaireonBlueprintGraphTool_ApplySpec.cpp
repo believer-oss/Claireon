@@ -113,23 +113,7 @@ FString ClaireonBlueprintGraphTool_ApplySpec::GetDescription() const
 
 TArray<FString> ClaireonBlueprintGraphTool_ApplySpec::GetSearchKeywords() const
 {
-    // Vocabulary callers use when they want a bulk primitive and do not yet
-    // know this tool's name. The July 2026 friction sessions searched for a
-    // batch editor, concluded none existed, and filed 'bp_edit_batch' /
-    // 'bp_apply_graph_diff' as feature requests -- these keywords make that
-    // search land here instead.
-    // Do NOT tune ranking by adding "blueprint" phrasings here. Measured
-    // 2026-08-10 (full suite each time), keyword edits were zero-sum: any
-    // vocabulary that lifted this tool for "apply spec blueprint" dropped
-    // bp_apply_delta for "apply graph blueprint", because every *_apply_spec
-    // sibling matches "apply" and "spec" equally and enrichment plants the
-    // "blueprint" discriminator in the siblings' columns too. Fixed 2026-08-12
-    // (P2-20) in FClaireonToolSearchIndex instead: the query-domain category
-    // boost plus operation-token coverage rank this tool [<=1] for "apply spec
-    // blueprint" while bp_apply_delta holds "apply graph blueprint" -- signals
-    // scored from the verbatim category/operation, outside the FTS5 columns,
-    // where keyword edits cannot perturb them. See
-    // Cl628_CategoryMatchesQueryDomain / Cl628_OperationTokenCoverage.
+    // Domain and operation ranking belong in FClaireonToolSearchIndex; keywords supply discovery vocabulary.
     return {TEXT("bp"), TEXT("blueprint"), TEXT("batch"), TEXT("bulk"), TEXT("edit"),
             TEXT("edit_batch"), TEXT("apply"), TEXT("spec"), TEXT("diff"),
             TEXT("graph_diff"), TEXT("atomic"), TEXT("transaction"),
@@ -174,7 +158,7 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_ApplySpec::GetInputSchema() c
 {
     FToolSchemaBuilder Builder;
     Builder.AddString(TEXT("asset_path"), TEXT("Target Blueprint asset path."), true);
-    Builder.AddObject(TEXT("spec"), TEXT("Declarative Blueprint specification object. nodes[] entries take an optional 'graph' field naming the target graph for that node (default: the Blueprint's EventGraph); an unresolvable name fails only that entry. connections[] and nodes[].pin_defaults resolve each node against the graph it was created in."), true);
+    Builder.AddObject(TEXT("spec"), TEXT("Declarative Blueprint specification object. Optional top-level 'prefer_local_gets' (default true) replaces a long wire from a variable read with a fresh get placed next to the consumer, when the read sits more than 512 units away -- set false for literal wiring. nodes[] entries take an optional 'graph' field naming the target graph for that node (default: the Blueprint's EventGraph); an unresolvable name fails only that entry. connections[] and nodes[].pin_defaults resolve each node against the graph it was created in."), true);
     Builder.AddBoolean(TEXT("dry_run"), TEXT("If true, only validate the spec without applying."));
     return Builder.Build();
 }

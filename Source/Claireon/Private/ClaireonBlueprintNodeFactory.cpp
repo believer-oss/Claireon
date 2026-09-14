@@ -510,6 +510,22 @@ namespace ClaireonBlueprintNodeFactory
 					// skeleton class (card repro: SetHiddenInGame self-bound on
 					// SceneComponent-owning actor) get their UFunction reference.
 					N->FunctionReference.SetSelfMember(FName(*FunctionName));
+
+					// An interface self-call invokes the local implementation. Warn about message
+					// syntax without guessing which behavior the caller intended.
+					for (const FBPInterfaceDescription& IfaceDesc : Blueprint->ImplementedInterfaces)
+					{
+						UClass* IfaceClass = IfaceDesc.Interface.Get();
+						if (!IsValid(IfaceClass) || !IsValid(IfaceClass->FindFunctionByName(FName(*FunctionName))))
+						{
+							continue;
+						}
+						Out.Warnings.Add(FString::Printf(
+							TEXT("CallFunction: '%s' is a function of implemented interface %s, and with no function_class this node calls THIS Blueprint's own implementation on Self. ")
+							TEXT("To send an interface message to another object instead, pass function_class='%s' and wire its target pin."),
+							*FunctionName, *IfaceClass->GetName(), *IfaceClass->GetName()));
+						break;
+					}
 				}
 				NewNode = N;
 				Desc = FString::Printf(TEXT("CallFunction: %s (%s)"), *FunctionName, *NodeClass->GetName());
@@ -775,11 +791,7 @@ namespace ClaireonBlueprintNodeFactory
 				}
 				else
 				{
-					// Not a member: fall back to the SESSION graph's local scope when it
-					// is a function graph (has a K2Node_FunctionEntry).
-					// TODO(WI-1): document this implicit member/local/parameter fallback
-					// in bp_add_node's input schema (ClaireonBlueprintGraphTool_AddNode.cpp
-					// is owned by WI-1 and cannot be edited from this work item).
+					// Fall back to the session function graph's local scope.
 					UK2Node_FunctionEntry* SessionEntry = nullptr;
 					for (UEdGraphNode* GraphNode : Graph->Nodes)
 					{
@@ -960,6 +972,21 @@ namespace ClaireonBlueprintNodeFactory
 				Out.Error = TEXT("CustomEvent: missing required field 'event_name'");
 				return Out;
 			}
+
+			// Refuse name conflicts without substituting a different kind of node.
+			const ClaireonBlueprintHelpers::FCustomEventNameConflict Conflict =
+				ClaireonBlueprintHelpers::FindCustomEventNameConflict(Blueprint, EventName);
+			if (Conflict.IsConflict())
+			{
+				Out.Error = FString::Printf(TEXT("CustomEvent '%s': %s %s"),
+					*EventName, *Conflict.Explanation, *Conflict.Remedy);
+				if (!Conflict.ResolutionNote.IsEmpty())
+				{
+					Out.Error += FString::Printf(TEXT(" (%s)"), *Conflict.ResolutionNote);
+				}
+				return Out;
+			}
+
 			UK2Node_CustomEvent* N = NewObject<UK2Node_CustomEvent>(Graph);
 			N->CustomFunctionName = FName(*EventName);
 			NewNode = N;
@@ -1562,7 +1589,7 @@ namespace ClaireonBlueprintNodeFactory
 			}
 		}
 
-		// -------- Function-call bind validation (P1-9d) --------
+		// -------- Function-call bind validation --------
 		// Same failure shape as the variable guard above, one class over. The
 		// factory resolves the UFunction loudly up front, but a FunctionReference
 		// can still fail to bind during AllocateDefaultPins (skeleton class not yet

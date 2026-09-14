@@ -6,13 +6,8 @@
 #include "Tools/IClaireonTool.h"
 
 /**
- * Frame-duration aggregation, split out of Execute so it can be tested without
- * a capture (P0-6a).
- *
- * An open frame carries EndTime = +inf, so its duration is non-finite. Summing
- * that poisons avg_ms outright and max_ms whenever the value is +inf, turning a
- * truncated capture into a confident wrong reading rather than a visible error.
- * The aggregate now skips non-finite frames and reports which ones it skipped.
+ * Aggregate finite frame durations and report skipped indices. Open frames have
+ * an infinite end time, which would otherwise corrupt averages and maxima.
  */
 namespace ClaireonTraceFrameStats
 {

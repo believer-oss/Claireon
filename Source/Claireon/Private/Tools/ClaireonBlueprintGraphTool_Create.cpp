@@ -285,6 +285,11 @@ FToolResult ClaireonBlueprintGraphTool_Create::Execute(const TSharedPtr<FJsonObj
 	FBlueprintEditToolData NewData;
 	NewData.Blueprint = Blueprint;
 	NewData.Graph = EventGraph;
+	// Opening the editor before the creation stack unwinds can assert during library
+	// loading. Defer opening until a later bp_open call.
+	NewData.EditorWindow.Reason =
+		TEXT("bp_create does not open the editor for an asset it created in the same call "
+		     "(it trips a reentrant-load assertion); call bp_open to get a window");
 	// Null for MacroLibrary/Interface, which have no ubergraph at all.
 	NewData.Cursor.GraphName = IsValid(EventGraph) ? EventGraph->GetName() : FString();
 	NewData.Cursor.ViewportCenter = FVector2D(0.0f, 0.0f);

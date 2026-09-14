@@ -382,7 +382,7 @@ UNTEST_UNIT_OPTS(Claireon, DescriptionLint, NoRetiredDottedToolNamesInDescriptio
 			const TSharedPtr<FJsonObject>* Properties = nullptr;
 			if (Schema->TryGetObjectField(TEXT("properties"), Properties) && Properties && Properties->IsValid())
 			{
-				for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*Properties)->Values)
+				for (const auto& Pair : (*Properties)->Values)
 				{
 					const TSharedPtr<FJsonObject>* PropObj = nullptr;
 					FString PropDescription;

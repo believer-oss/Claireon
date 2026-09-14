@@ -116,26 +116,13 @@ void DeleteIfExists(const FString& ObjectPath)
 	}
 }
 
-// Deletes any stale leftover at this suite's known destination paths, exactly once per
-// process, before the first functional test's body runs. A function-local static
-// initializer (rather than hooking a specific "first" test by declaration order) means
-// this fires correctly no matter which functional test happens to run first under a
-// narrower -TestFilter.
-//
-// This does NOT make any single delete safer -- deleting a Niagara-referencing duplicate
-// (Functional_AcceptanceCaseMatchesParentProposal) is exactly as likely to hit the
-// GetAllReferencersIncludingWeak crash as before. What it fixes is a crashed run's
-// leftover poisoning `git status --porcelain -- Content/` indefinitely: the next run's
-// sweep clears it before this suite has loaded anything Niagara-related, which is the
-// safe place to do it (see Docs/llm/todo/claireon-untest-harness-reliability.md item 1).
+// Sweep known stale destinations once, regardless of test order. Run before this
+// suite loads Niagara assets; later deletion can still crash in the referencer scan.
 void SweepStaleDestinationFixturesOnce()
 {
 	static const bool bSwept = []() -> bool
 	{
-		// Kept in sync by hand with the DestPackage/DestPath literals in the functional
-		// tests below; a path missing here just means that one test does not benefit
-		// from the cross-run sweep (its own per-test pre-flight DeleteIfExists still
-		// protects it exactly as before).
+		// Keep these paths in sync with the functional tests below.
 		static const TCHAR* KnownDestinationPaths[] =
 		{
 			TEXT("/Game/__MCPTests/BP_DoesNotExist_Clone.BP_DoesNotExist_Clone"),
@@ -543,16 +530,8 @@ UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_RenameDependenciesTrue
 
 UNTEST_UNIT_OPTS(Claireon, BlueprintDuplicate, Functional_AcceptanceCaseMatchesParentProposal, UNTEST_TIMEOUTMS(60000))
 {
-	// Parent-proposal acceptance case: duplicate a real, on-disk project UBlueprint
-	// (auto-discovered) and verify the clone is created. Skip (pass) if the project has
-	// no UBlueprint to duplicate.
-	//
-	// CRASH NOTE: duplicating a Blueprint that references Niagara systems loads those
-	// assets into memory, making the end-of-test DeleteIfExists a reproducible trigger for
-	// the GetAllReferencersIncludingWeak referencer-scan crash (see the file-level comment
-	// and Docs/llm/todo/claireon-untest-harness-reliability.md item 1). bp_duplicate
-	// unconditionally saves the destination to disk, so the delete cannot be avoided;
-	// SweepStaleDestinationFixturesOnce() clears any crashed-run leftover on the next run.
+	// bp_duplicate saves the destination. Its required cleanup can crash in the
+	// referencer scan when the source loads Niagara assets; sweep leftovers on the next run.
 	SweepStaleDestinationFixturesOnce();
 
 	const FString SourceObject = ClaireonTestAssetDiscovery::FindProjectBlueprintObjectPath();

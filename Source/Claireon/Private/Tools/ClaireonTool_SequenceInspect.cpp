@@ -166,11 +166,11 @@ IClaireonTool::FToolResult ClaireonTool_SequenceInspect::Execute(const TSharedPt
 
 	// Bindings
 	TArray<TSharedPtr<FJsonValue>> BindingsArr;
-	const TArray<FMovieSceneBinding>& Bindings = MovieScene->GetBindings();
+	const TArray<FMovieSceneBinding>& Bindings = static_cast<const UMovieScene*>(MovieScene)->GetBindings();
 	for (const FMovieSceneBinding& Binding : Bindings)
 	{
 		TSharedPtr<FJsonObject> BObj = MakeShared<FJsonObject>();
-		BObj->SetStringField(TEXT("name"), Binding.GetName());
+		BObj->SetStringField(TEXT("name"), FClaireonSequenceHelpers::GetBindingName(MovieScene, Binding.GetObjectGuid()));
 		BObj->SetStringField(TEXT("guid"),
 			Binding.GetObjectGuid().ToString(EGuidFormats::DigitsWithHyphens));
 

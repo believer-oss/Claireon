@@ -7,11 +7,44 @@
 #include "Serialization/JsonWriter.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 
-// File-local helpers.  Prefixed `ClXmlFmt_` (not bare names in an anonymous
-// namespace) so unity batching cannot collide them with helpers from sibling
-// translation units.
+// Prefix file-local helpers to avoid unity-build collisions.
 namespace ClaireonXmlFormatterInternal
 {
+	/** Escape XML attribute values. */
+	static FString ClXmlFmt_EscapeAttr(const FString& Value)
+	{
+		FString Escaped = Value;
+		Escaped.ReplaceInline(TEXT("&"), TEXT("&amp;"), ESearchCase::CaseSensitive);
+		Escaped.ReplaceInline(TEXT("<"), TEXT("&lt;"), ESearchCase::CaseSensitive);
+		Escaped.ReplaceInline(TEXT(">"), TEXT("&gt;"), ESearchCase::CaseSensitive);
+		Escaped.ReplaceInline(TEXT("\""), TEXT("&quot;"), ESearchCase::CaseSensitive);
+		return Escaped;
+	}
+
+	/** Omit empty tool/key attributes and counts <= 1. */
+	static FString ClXmlF_OpenTagWithAdvisoryAttrs(
+		const TCHAR* ElementName,
+		const FString& SourceTool,
+		int32 OccurrenceCount,
+		const FString& Key)
+	{
+		FString Tag = FString::Printf(TEXT("<%s"), ElementName);
+		if (!SourceTool.IsEmpty())
+		{
+			Tag += FString::Printf(TEXT(" tool=\"%s\""), *ClXmlFmt_EscapeAttr(SourceTool));
+		}
+		if (OccurrenceCount > 1)
+		{
+			Tag += FString::Printf(TEXT(" count=\"%d\""), OccurrenceCount);
+		}
+		if (!Key.IsEmpty())
+		{
+			Tag += FString::Printf(TEXT(" key=\"%s\""), *ClXmlFmt_EscapeAttr(Key));
+		}
+		Tag += TEXT(">");
+		return Tag;
+	}
+
 	/**
 	 * Parse an Output-Gate spill manifest (Result.Data with __mcp_spilled__ ==
 	 * true) into FClaireonSpillStream entries.  Returns true when the manifest
@@ -151,14 +184,10 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 			Suggestion = TEXT("Review the error message and logs. Use tool_search() to discover available tools.");
 		}
 
-		Xml = FormatErrorResult(Result.ErrorMessage, ErrorCode, Suggestion, Result.Logs, Result.UELog);
+		Xml = FormatErrorResult(Result.ErrorMessage, ErrorCode, Suggestion, Result.Logs, Result.UELog,
+			Result.Data, Result.Summary, Result.Warnings);
 
-		// Surface the Output-Gate spill manifest on the error branch too
-		// (WI-14): when the gate spilled any stream of a FAILING result (the
-		// python_execute error path routes ErrorMessage/stdout through the
-		// gate), the error envelope must tell the caller where the full text
-		// lives on disk.  Previously the __mcp_spilled__ check existed only on
-		// the success branch, so error responses never mentioned the spill file.
+		// Include spill locations for failed results.
 		TArray<FClaireonSpillStream> ErrorSpillStreams;
 		if (ClaireonXmlFormatterInternal::ClXmlFmt_ParseSpilledStreams(Result.Data, ErrorSpillStreams)
 			&& ErrorSpillStreams.Num() > 0)
@@ -193,16 +222,14 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 					SpillSummary = TEXT("Result data exceeded inline threshold and was written to disk.");
 				}
 
-				Xml = FormatSpilledResult(SpillSummary, Streams, Result.Logs, Result.UELog);
+				Xml = FormatSpilledResult(SpillSummary, Streams, Result.Logs, Result.UELog, Result.Warnings);
 			}
 		}
 
 		if (!bIsSpilled)
 		{
-			// Standard success path
 			Xml = TEXT("<execute-result status=\"success\">\n");
 
-			// Summary first (required on success)
 			FString Summary = Result.Summary;
 			if (Summary.IsEmpty())
 			{
@@ -224,13 +251,11 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 				Xml += TEXT("<data>\n") + DataJson + TEXT("\n</data>\n");
 			}
 
-			// Warnings
 			for (const FString& Warning : Result.Warnings)
 			{
 				Xml += TEXT("<warning>\n") + Warning + TEXT("\n</warning>\n");
 			}
 
-			// Logs
 			if (!Result.Logs.IsEmpty())
 			{
 				Xml += TEXT("<logs>\n") + Result.Logs + TEXT("\n</logs>\n");
@@ -246,56 +271,124 @@ FString FClaireonXmlFormatter::FormatExecuteResult(const IClaireonTool::FToolRes
 		}
 	}
 
-	// Hint envelope (success AND error paths; also spilled results). The tool
-	// attached a structured nudge (e.g. python_execute's tool_search /
-	// uobject_inspect hints); without this block the MCP HTTP transport drops
-	// Result.Hint entirely (BuildResultEnvelope only serves the Python-side
-	// claireon.* call envelope). Insert before the LAST closing tag so log text
-	// that happens to contain the tag cannot misplace it.
-	if (Result.Hint.IsValid())
+	// Append hints and inner-call advisories on every result path.
+	// Use the last closing tag so tag-like log text cannot displace them.
 	{
-		FString HintJson;
-		TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> HintWriter =
-			TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&HintJson);
-		FJsonSerializer::Serialize(Result.Hint.ToSharedRef(), HintWriter);
-		HintWriter->Close();
+		FString TailXml;
 
-		const FString HintXml = TEXT("<hint>\n") + HintJson + TEXT("\n</hint>\n");
-		const int32 CloseAt = Xml.Find(TEXT("</execute-result>"),
-			ESearchCase::CaseSensitive, ESearchDir::FromEnd);
-		if (CloseAt >= 0)
+		for (const TSharedPtr<FJsonObject>& Hint : Result.Hints)
 		{
-			Xml.InsertAt(CloseAt, HintXml);
+			if (!Hint.IsValid())
+			{
+				continue;
+			}
+			FString HintJson;
+			TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> HintWriter =
+				TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&HintJson);
+			FJsonSerializer::Serialize(Hint.ToSharedRef(), HintWriter);
+			HintWriter->Close();
+
+			FString KeyValue;
+			Hint->TryGetStringField(TEXT("key"), KeyValue);
+			TailXml += ClaireonXmlFormatterInternal::ClXmlF_OpenTagWithAdvisoryAttrs(
+				TEXT("hint"), FString(), 1, KeyValue);
+			TailXml += TEXT("\n") + HintJson + TEXT("\n</hint>\n");
 		}
-		else
+
+		// Inner-call advisories carry their source tool and occurrence count.
+		for (const FClaireonAdvisory& Advisory : Result.InnerAdvisories)
 		{
-			Xml += HintXml;
+			if (Advisory.Kind == EClaireonAdvisoryKind::Warning)
+			{
+				TailXml += ClaireonXmlFormatterInternal::ClXmlF_OpenTagWithAdvisoryAttrs(
+					TEXT("warning"), Advisory.SourceTool, Advisory.OccurrenceCount, FString());
+				TailXml += TEXT("\n") + Advisory.Text + TEXT("\n</warning>\n");
+			}
+			else if (Advisory.Kind == EClaireonAdvisoryKind::Hint && Advisory.Payload.IsValid())
+			{
+				FString HintJson;
+				TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> HintWriter =
+					TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&HintJson);
+				FJsonSerializer::Serialize(Advisory.Payload.ToSharedRef(), HintWriter);
+				HintWriter->Close();
+
+				TailXml += ClaireonXmlFormatterInternal::ClXmlF_OpenTagWithAdvisoryAttrs(
+					TEXT("hint"), Advisory.SourceTool, Advisory.OccurrenceCount,
+					Advisory.HintKey.IsNone() ? FString() : Advisory.HintKey.ToString());
+				TailXml += TEXT("\n") + HintJson + TEXT("\n</hint>\n");
+			}
+			// Summary advisories never reach this array (they render into <summary>).
+		}
+
+		if (!TailXml.IsEmpty())
+		{
+			const int32 CloseAt = Xml.Find(TEXT("</execute-result>"),
+				ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+			if (CloseAt >= 0)
+			{
+				Xml.InsertAt(CloseAt, TailXml);
+			}
+			else
+			{
+				Xml += TailXml;
+			}
 		}
 	}
 
 	return Xml;
 }
 
-FString FClaireonXmlFormatter::FormatErrorResult(const FString& Error, const FString& ErrorCode, const FString& Suggestion, const FString& Logs, const FString& UELog)
+FString FClaireonXmlFormatter::FormatErrorResult(
+	const FString& Error,
+	const FString& ErrorCode,
+	const FString& Suggestion,
+	const FString& Logs,
+	const FString& UELog,
+	const TSharedPtr<FJsonObject>& Data,
+	const FString& Summary,
+	const TArray<FString>& Warnings)
 {
 	FString Xml = TEXT("<execute-result status=\"error\">\n");
 
-	// Error first (required on failure)
 	Xml += TEXT("<error code=\"") + ErrorCode + TEXT("\">\n") + Error + TEXT("\n</error>\n");
 
-	// Suggestion
 	if (!Suggestion.IsEmpty())
 	{
 		Xml += TEXT("<suggestion>\n") + Suggestion + TEXT("\n</suggestion>\n");
 	}
 
-	// Logs
+	// Optional summaries can carry spill locations on errors.
+	if (!Summary.IsEmpty())
+	{
+		Xml += TEXT("<summary>\n") + Summary + TEXT("\n</summary>\n");
+	}
+
+	// Spilled data is read from disk; do not serialize the manifest as inline data.
+	if (Data.IsValid())
+	{
+		bool bIsSpilled = false;
+		Data->TryGetBoolField(TEXT("__mcp_spilled__"), bIsSpilled);
+		if (!bIsSpilled)
+		{
+			FString DataJson;
+			TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> DataWriter =
+				TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&DataJson);
+			FJsonSerializer::Serialize(Data.ToSharedRef(), DataWriter);
+			DataWriter->Close();
+			Xml += TEXT("<data>\n") + DataJson + TEXT("\n</data>\n");
+		}
+	}
+
+	for (const FString& Warning : Warnings)
+	{
+		Xml += TEXT("<warning>\n") + Warning + TEXT("\n</warning>\n");
+	}
+
 	if (!Logs.IsEmpty())
 	{
 		Xml += TEXT("<logs>\n") + Logs + TEXT("\n</logs>\n");
 	}
 
-	// Engine UE_LOG output
 	if (!UELog.IsEmpty())
 	{
 		Xml += TEXT("  <ue_log>") + UELog + TEXT("</ue_log>\n");
@@ -309,13 +402,19 @@ FString FClaireonXmlFormatter::FormatSpilledResult(
 	const FString& Summary,
 	const TArray<FClaireonSpillStream>& Streams,
 	const FString& InlineLogs,
-	const FString& InlineUELog)
+	const FString& InlineUELog,
+	const TArray<FString>& Warnings)
 {
 	FString Xml = TEXT("<execute-result status=\"success\">\n");
 
 	Xml += TEXT("<summary>\n") + Summary + TEXT("\n</summary>\n");
 
 	Xml += ClaireonXmlFormatterInternal::ClXmlFmt_BuildSpilledStreamsBlock(Streams);
+
+	for (const FString& Warning : Warnings)
+	{
+		Xml += TEXT("<warning>\n") + Warning + TEXT("\n</warning>\n");
+	}
 
 	// Inline logs / UE log (only those that stayed inline -- spilled streams cleared these).
 	if (!InlineLogs.IsEmpty())

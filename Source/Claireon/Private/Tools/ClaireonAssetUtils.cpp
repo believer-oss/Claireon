@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonAssetUtils.h"
+#include "Tools/IClaireonTool.h"
 #include "ClaireonLog.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSafeExec.h"
@@ -11,6 +12,7 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Dom/JsonValue.h"
 #include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "Subsystems/AssetEditorSubsystem.h"
@@ -24,23 +26,70 @@ namespace ClaireonAssetUtils
 // Map of CDO -> Blueprint for save routing
 static TMap<TWeakObjectPtr<UObject>, TWeakObjectPtr<UBlueprint>> GCDOToBlueprintMap;
 
-// AssetUtils_: file-local discriminator prefix (unity-batch collision safety).
-// Resolve the on-disk filename a package should be saved to. For packages that
-// already exist on disk, DoesPackageExist returns their current filename. For
-// freshly created in-memory packages (e.g. data_asset_create) there is no disk
-// file yet, so DoesPackageExist is false even though the package is perfectly
-// saveable -- fall back to synthesizing the target filename from the mounted
-// long package name. Fails only when the package name is under no mounted
-// content root (nowhere on disk to save it).
-static bool AssetUtils_ResolvePackageSaveFilename(const UPackage* Package, FString& OutFileName, FString& OutError)
+// Resolve the on-disk filename a package should be saved to. For packages that already exist on
+// disk, DoesPackageExist returns their current filename. For freshly created in-memory packages
+// (e.g. data_asset_create, or a level authored in a demo) there is no disk file yet, so
+// DoesPackageExist is false even though the package is perfectly saveable -- fall back to
+// synthesizing the target filename from the mounted long package name, at the extension the
+// package's own ContainsMap() calls for. Fails when the package name is under no mounted content
+// root, or when a shadow package with the wrong extension already owns the name.
+bool ResolvePackageSaveFilename(const UPackage* Package, FString& OutFileName, FString& OutError)
 {
+	if (!IsValid(Package))
+	{
+		OutError = TEXT("Cannot resolve a save filename: package is null");
+		return false;
+	}
+
 	const FString PackageName = Package->GetName();
+
+	// The extension has to come from the package, because nothing else can supply it.
+	//
+	// A package file records no extension internally -- it is chosen by whoever calls
+	// SavePackage(Package, Asset, *Filename, Args). A level's package is an ordinary UPackage
+	// that happens to carry PKG_ContainsMap, so nothing forces .umap on it. And name-based
+	// resolution searches .uasset FIRST: FPackagePath::GetPossibleExtensions returns a slice
+	// starting at EPackageExtension::Asset (PackagePath.cpp:304-318).
+	//
+	// Those three facts compose into a silent corruption. One save that hardcodes the asset
+	// extension writes /Game/Foo/L_Bar to L_Bar.uasset; from that moment every resolution by
+	// package name finds the shadow first, the .umap is orphaned, and every later save lands in
+	// the shadow. The engine's own UEditorAssetSubsystem::SaveAsset does not have this problem
+	// -- it delegates to UEditorLoadingAndSavingUtils::SavePackages, which synthesizes .umap for
+	// a world package with no existing filename (FileHelpers.cpp:716).
+	const bool bIsMap = Package->ContainsMap();
+	const FString RequiredExtension = bIsMap
+		? FPackageName::GetMapPackageExtension()
+		: FPackageName::GetAssetPackageExtension();
+
 	if (FPackageName::DoesPackageExist(PackageName, &OutFileName))
 	{
+		// DoesPackageExist resolves by NAME, so once a shadow exists it hands back the wrong
+		// file and saving into it deepens the damage. Refuse instead: the symptoms of carrying
+		// on are why this costs an hour to find -- the save reports success, no package reports
+		// dirty, actors appear not to persist across a reload, and the stray file reads as
+		// BuiltData in git. The tell is a size/date inversion, a large recent .uasset beside a
+		// small stale .umap.
+		const FString FoundExtension = FPaths::GetExtension(OutFileName, /*bIncludeDot=*/true);
+		if (!FoundExtension.IsEmpty() && !FoundExtension.Equals(RequiredExtension, ESearchCase::IgnoreCase))
+		{
+			OutError = FString::Printf(
+				TEXT("Refusing to save package '%s': it %s a map, but the file resolved by package "
+					 "name is '%s'. A shadow package with the wrong extension already exists, and "
+					 "every save by name lands in it while the '%s' file is orphaned. Fix the files "
+					 "on disk first -- switch the editor off this package, rename the shadow to the "
+					 "correct extension, and delete the orphan."),
+				*PackageName,
+				bIsMap ? TEXT("IS") : TEXT("is NOT"),
+				*OutFileName,
+				*RequiredExtension);
+			OutFileName.Reset();
+			return false;
+		}
 		return true;
 	}
-	if (FPackageName::TryConvertLongPackageNameToFilename(
-			PackageName, OutFileName, FPackageName::GetAssetPackageExtension()))
+
+	if (FPackageName::TryConvertLongPackageNameToFilename(PackageName, OutFileName, RequiredExtension))
 	{
 		return true;
 	}
@@ -60,7 +109,7 @@ UObject* LoadAssetForEditing(const FString& AssetPath, FString& OutError)
 	}
 	const FString ResolvedPath = ResolveResult.ResolvedPath.Path;
 
-	// Try loading as Blueprint first
+	// Immediate edit calls need the loaded Blueprint and CDO before routing the operation and its save.
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *ResolvedPath);
 	if (IsValid(Blueprint))
 	{
@@ -237,13 +286,15 @@ bool SaveAsset(UObject* Asset, FString& OutError)
 
 		UPackage* Package = Blueprint->GetOutermost();
 		FString PackageFileName;
-		if (!AssetUtils_ResolvePackageSaveFilename(Package, PackageFileName, OutError))
+		if (!ResolvePackageSaveFilename(Package, PackageFileName, OutError))
 		{
 			return false;
 		}
 
 		FSavePackageArgs SaveArgs;
 		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		// Return I/O failures to the caller so its mutation result survives save failure.
+		SaveArgs.SaveFlags |= SAVE_NoError;
 		FSavePackageResultStruct Result = UPackage::Save(Package, Blueprint, *PackageFileName, SaveArgs);
 		if (Result.Result != ESavePackageResult::Success)
 		{
@@ -258,13 +309,15 @@ bool SaveAsset(UObject* Asset, FString& OutError)
 	Package->MarkPackageDirty();
 
 	FString PackageFileName;
-	if (!AssetUtils_ResolvePackageSaveFilename(Package, PackageFileName, OutError))
+	if (!ResolvePackageSaveFilename(Package, PackageFileName, OutError))
 	{
 		return false;
 	}
 
 	FSavePackageArgs SaveArgs;
 	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+	// Return I/O failures to the caller so its mutation result survives save failure.
+	SaveArgs.SaveFlags |= SAVE_NoError;
 	FSavePackageResultStruct Result = UPackage::Save(Package, Asset, *PackageFileName, SaveArgs);
 	if (Result.Result != ESavePackageResult::Success)
 	{
@@ -296,15 +349,6 @@ void RefreshAssetEditorIfOpen(UObject* Asset)
 	}
 }
 
-void OpenAssetEditorIfHeadless(UObject* Asset)
-{
-	if (!IsValid(Asset) || !IsValid(GEditor)) return;
-	if (!GIsEditor || IsRunningCommandlet()) return;
-	UAssetEditorSubsystem* Subsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
-	if (!IsValid(Subsystem)) return;
-	Subsystem->OpenEditorForAsset(Asset);
-}
-
 void EmitSessionHintIfNeeded(
 	TSharedPtr<FJsonObject>& ResponseData,
 	int32 ConsecutiveAssetPathCalls,
@@ -326,13 +370,9 @@ void EmitSessionHintIfNeeded(
 			*SessionId);
 		ResponseData->SetStringField(TEXT("session_hint"), HintText);
 
-		// Carried on FToolResult::Hint rather than appended to Summary: every caller here is a
-		// BuildStateResponse whose Summary IS serialized JSON, and the old "\n\n[hint] ..."
-		// suffix made it unparseable. No 'args' -- the right next call differs per tool, and
-		// ValidateHint requires only a non-empty 'tool'.
-		OutHint = MakeShared<FJsonObject>();
-		OutHint->SetStringField(TEXT("tool"), ToolName);
-		OutHint->SetStringField(TEXT("message"), HintText);
+		// Keep hints separate from Summary, which contains serialized JSON. Omit args
+		// because the next call depends on the tool.
+		OutHint = IClaireonTool::MakeGuidanceHint(ToolName, HintText);
 	}
 }
 

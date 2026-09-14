@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonLevelSequenceTool_Open.h"
+#include "ClaireonScopedAssetEditor.h"
 #include "Tools/ClaireonSequenceHelpers.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "Tools/ClaireonAssetUtils.h"
@@ -103,7 +104,7 @@ FToolResult ClaireonLevelSequenceTool_Open::Execute(const TSharedPtr<FJsonObject
 	NewData.bSuppressOutput = false;
 	ToolData.Add(SessionId, MoveTemp(NewData));
 
-	ClaireonAssetUtils::OpenAssetEditorIfHeadless(Sequence);
+	ClaireonAssetEditorWindow::OpenForSession(Sequence);
 
 	return BuildStateResponse(SessionId, ToolData.Find(SessionId));
 }

@@ -37,19 +37,7 @@
 namespace ClaireonTool_EditBlueprintGraph_SavedFixtures
 {
 
-// Delete a fixture this spec deliberately SAVED, so it does not leak into Content/.
-//
-// /Game/__MCPTests is deliberately not gitignored -- a leaked fixture is meant to be
-// visible in `git status --porcelain -- Content/` rather than silently accumulating, so
-// the fix for a leak is to clean up, never to add an ignore rule. (An ignore rule would
-// not even work by accident here: the root .gitignore is an allowlist whose `!*.uasset`
-// re-includes anything under Content/.)
-//
-// Only the handful of tests that call operation='save' need this. Most fixtures in this
-// spec live in in-memory packages and never reach disk; deleting those buys nothing and
-// costs a whole-object-graph referencer scan, which is the trigger for the crash
-// documented in Docs/llm/todo/claireon-untest-harness-reliability.md. Hence the
-// FileExists gate: scan only when there is really a file to remove.
+// Delete only saved fixtures; deleting an in-memory fixture needlessly invokes referencer scanning.
 void DeleteSavedFixture(const FString& AssetPath)
 {
 	FString Filename;
@@ -139,12 +127,7 @@ using namespace ClaireonTool_EditBlueprintGraph_SavedFixtures;
 
 namespace ClaireonTool_EditBlueprintGraph_spec_Private1
 {
-	/**
-	 * Flatten the {operation, session_id, params:{...}} envelope into the flat
-	 * {session_id, ...fields} shape each decomposed tool's Execute expects.
-	 * Drops "operation" itself (it is only used to pick a tool) but preserves
-	 * every other top-level field (e.g. session_id) plus all params.* fields.
-	 */
+	/** Flatten the bundled envelope for decomposed tools, dropping operation and merging params. */
 	static TSharedPtr<FJsonObject> BPFlattenBundledEnvelope(const TSharedPtr<FJsonObject>& Envelope)
 	{
 		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -153,7 +136,7 @@ namespace ClaireonTool_EditBlueprintGraph_spec_Private1
 			return Result;
 		}
 
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Kv : Envelope->Values)
+		for (const auto& Kv : Envelope->Values)
 		{
 			if (Kv.Key == TEXT("operation") || Kv.Key == TEXT("params"))
 			{
@@ -165,7 +148,7 @@ namespace ClaireonTool_EditBlueprintGraph_spec_Private1
 		const TSharedPtr<FJsonObject>* ParamsObj = nullptr;
 		if (Envelope->TryGetObjectField(TEXT("params"), ParamsObj) && ParamsObj && ParamsObj->IsValid())
 		{
-			for (const TPair<FString, TSharedPtr<FJsonValue>>& Kv : (*ParamsObj)->Values)
+			for (const auto& Kv : (*ParamsObj)->Values)
 			{
 				Result->SetField(Kv.Key, Kv.Value);
 			}
@@ -174,14 +157,7 @@ namespace ClaireonTool_EditBlueprintGraph_spec_Private1
 		return Result;
 	}
 
-	/**
-	 * Read envelope.operation and route to the matching decomposed tool,
-	 * forwarding the flattened args. Returns a Tool result directly so
-	 * call sites can consume it.
-	 *
-	 * Unknown operations return an error result -- the ErrorHandling test
-	 * asserts this "reject invalid_operation" behavior.
-	 */
+	/** Dispatch a bundled operation to its decomposed tool; reject unknown operations. */
 	static IClaireonTool::FToolResult DispatchBundledEnvelope(const TSharedPtr<FJsonObject>& Envelope)
 	{
 		FString Operation;
@@ -216,7 +192,7 @@ namespace ClaireonTool_EditBlueprintGraph_spec_Private1
 		CLAIREON_DISPATCH_CASE("import_nodes",            ClaireonBlueprintGraphTool_ImportNodes);
 		CLAIREON_DISPATCH_CASE("inspect_node",            ClaireonBlueprintGraphTool_InspectNode);
 		CLAIREON_DISPATCH_CASE("list_graphs",             ClaireonBlueprintGraphTool_ListGraphs);
-		CLAIREON_DISPATCH_CASE("move_cursor",             ClaireonBlueprintGraphTool_MoveCursor);
+		CLAIREON_DISPATCH_CASE("cursor_move",             ClaireonBlueprintGraphTool_MoveCursor);
 		CLAIREON_DISPATCH_CASE("move_node",               ClaireonBlueprintGraphTool_MoveNode);
 		CLAIREON_DISPATCH_CASE("open",                    ClaireonBlueprintGraphTool_Open);
 		CLAIREON_DISPATCH_CASE("recombine_pin",           ClaireonBlueprintGraphTool_RecombinePin);
@@ -229,9 +205,9 @@ namespace ClaireonTool_EditBlueprintGraph_spec_Private1
 		CLAIREON_DISPATCH_CASE("rename_component",        ClaireonBlueprintGraphTool_RenameComponent);
 		CLAIREON_DISPATCH_CASE("reparent_component",      ClaireonBlueprintGraphTool_ReparentComponent);
 		CLAIREON_DISPATCH_CASE("save",                    ClaireonBlueprintGraphTool_Save);
-		CLAIREON_DISPATCH_CASE("select_nearest_node",     ClaireonBlueprintGraphTool_SelectNearestNode);
-		CLAIREON_DISPATCH_CASE("select_node",             ClaireonBlueprintGraphTool_SelectNode);
-		CLAIREON_DISPATCH_CASE("select_pin",              ClaireonBlueprintGraphTool_SelectPin);
+		CLAIREON_DISPATCH_CASE("cursor_to_nearest_node",  ClaireonBlueprintGraphTool_SelectNearestNode);
+		CLAIREON_DISPATCH_CASE("cursor_to_node",          ClaireonBlueprintGraphTool_SelectNode);
+		CLAIREON_DISPATCH_CASE("cursor_to_pin",           ClaireonBlueprintGraphTool_SelectPin);
 		CLAIREON_DISPATCH_CASE("set_gameplay_tags",       ClaireonBlueprintGraphTool_SetGameplayTags);
 		CLAIREON_DISPATCH_CASE("set_pin_value",           ClaireonBlueprintGraphTool_SetPinValue);
 		CLAIREON_DISPATCH_CASE("set_property",            ClaireonBlueprintGraphTool_SetProperty);
@@ -5576,11 +5552,8 @@ bool FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd::RunTest(c
 		return false;
 	}
 
-	// Note: add_node above already anchored the cursor on EventGraph/PrintString,
-	// so we don't need an explicit select_node here. switch_graph below will
-	// push that anchor into history.
+	// add_node anchors the cursor on EventGraph/PrintString.
 
-	// Switch to Func1; this pushes "EventGraph/PrintString" onto history.
 	{
 		auto R = SwitchGraph(SessionId, Func1);
 		if (R.bIsError)
@@ -5597,11 +5570,8 @@ bool FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd::RunTest(c
 		return false;
 	}
 
-	// The switch_graph above anchored the cursor on Func1's entry node
-	// (which FirstNodeGuidOnGraph returns as the first node), so no explicit
-	// select_node is needed. switch_graph below will push that anchor.
+	// switch_graph anchors the cursor on the function entry.
 
-	// Switch to Func2 (no select -- we just want another history breadcrumb).
 	{
 		auto R = SwitchGraph(SessionId, Func2);
 		if (R.bIsError)
@@ -5611,7 +5581,6 @@ bool FEditBlueprintGraphTest_SwitchGraph_CursorBackCrossGraphEndToEnd::RunTest(c
 		}
 	}
 
-	// cursor_back #1 -> should land on Func1 at node B.
 	{
 		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 		Args->SetStringField(TEXT("operation"), TEXT("cursor_back"));
@@ -6900,18 +6869,16 @@ bool FEditBlueprintGraphTest_ComponentDetails_ResponseModeSurvival::RunTest(cons
 
 namespace ClaireonTool_EditBlueprintGraph_spec_Private5
 {
-	// Scan the get_state summary body for the line containing a given GUID fragment
-	// (short GUID or full). Returns the matched line or empty. The summary format at
-	// ClaireonBlueprintGraphEditToolBase.cpp:363 does not embed GUID in the visible line,
-	// so tests verify by reading NodePosX/Y on the live graph instead. This helper is
-	// retained for callers that inspect summary text.
 	bool ExtractLineContainingTitle(const FString& Summary, const FString& Title, FString& OutLine)
 	{
 		TArray<FString> Lines;
 		Summary.ParseIntoArray(Lines, TEXT("\n"), true);
+		// Titles are matched with spaces removed: the engine renders 'Print String' or
+		// 'PrintString' depending on whether friendly names apply in this process.
+		const FString Wanted = Title.Replace(TEXT(" "), TEXT(""));
 		for (const FString& L : Lines)
 		{
-			if (L.Contains(Title))
+			if (L.Replace(TEXT(" "), TEXT("")).Contains(Wanted))
 			{
 				OutLine = L;
 				return true;
@@ -7286,10 +7253,7 @@ bool FEditBlueprintGraphTest_SessionHint_FiresAtSix::RunTest(const FString& Para
 		return false;
 	}
 
-	// The hint must ALSO be on Result.Hint, which is the channel the bridge reads.
-	// It is deliberately NOT concatenated into Summary any more; the sibling
-	// StructuredHintContract test owns that contract in full.
-	if (!R6.Hint.IsValid())
+	if (R6.Hints.IsEmpty())
 	{
 		AddError(TEXT("Data.session_hint was set but Result.Hint was not"));
 		return false;
@@ -7298,12 +7262,6 @@ bool FEditBlueprintGraphTest_SessionHint_FiresAtSix::RunTest(const FString& Para
 	return true;
 }
 
-// =====================================================================================
-// ITEM_06 Test 2: the structured-hint contract. Was "inline tag compactness", which
-// asserted a "[hint] ..." fragment under 200 chars inside Summary; that tag was removed
-// because it corrupted every JSON-Summary family. Now asserts the channel that replaced
-// it, and guards against the concatenation coming back.
-// =====================================================================================
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FEditBlueprintGraphTest_SessionHint_StructuredHintContract,
 	"Claireon.EditBlueprintGraph.SessionHint.StructuredHintContract",
@@ -7325,31 +7283,24 @@ bool FEditBlueprintGraphTest_SessionHint_StructuredHintContract::RunTest(const F
 	auto R = CallGetStateByAssetPath(AssetPath);
 	const FString Summary = R.GetContentAsString();
 
-	// The hint rides on FToolResult::Hint, never on Summary.
-	//
-	// This test used to require a compact "[hint] ..." tag inside Summary. That tag was
-	// deliberately removed: for every family whose Summary IS serialized JSON, appending
-	// it made the content channel unparseable, and because the hint only fires on the
-	// sixth consecutive call it broke in production rather than in testing. There is no
-	// "compact form" any more -- the full text goes in Hint.message -- so the old length
-	// bound has no successor and is not reinstated here.
-	if (!R.Hint.IsValid())
+	// Hints use the structured channel; appending them to Summary would corrupt JSON summaries.
+	if (R.Hints.IsEmpty())
 	{
 		AddError(TEXT("Result.Hint not populated on call 6"));
 		return false;
 	}
 
 	FString HintTool;
-	if (!R.Hint->TryGetStringField(TEXT("tool"), HintTool) || HintTool.IsEmpty())
+	if (!R.Hints[0]->TryGetStringField(TEXT("tool"), HintTool) || HintTool.IsEmpty())
 	{
 		AddError(TEXT("Result.Hint missing a non-empty 'tool' field (ValidateHint requires it)"));
 		return false;
 	}
 
 	FString HintMessage;
-	if (!R.Hint->TryGetStringField(TEXT("message"), HintMessage) || HintMessage.IsEmpty())
+	if (!R.Hints[0]->TryGetStringField(TEXT("reason"), HintMessage) || HintMessage.IsEmpty())
 	{
-		AddError(TEXT("Result.Hint missing a non-empty 'message' field"));
+		AddError(TEXT("Result.Hint missing a non-empty 'reason' field"));
 		return false;
 	}
 
@@ -7362,12 +7313,10 @@ bool FEditBlueprintGraphTest_SessionHint_StructuredHintContract::RunTest(const F
 	}
 	if (DataHint != HintMessage)
 	{
-		AddError(TEXT("Result.Hint.message and Data.session_hint disagree"));
+		AddError(TEXT("Result.Hint.reason and Data.session_hint disagree"));
 		return false;
 	}
 
-	// Regression guard: reintroducing the concatenation would silently corrupt every
-	// JSON-Summary family again, and only on the sixth call.
 	if (Summary.Contains(TEXT("[hint]")))
 	{
 		AddError(TEXT("Summary contains an inline [hint] tag; hints must ride on Result.Hint only"));

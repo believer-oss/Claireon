@@ -38,6 +38,7 @@ import json
 import logging
 import logging.handlers
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -577,6 +578,9 @@ class Session:
     editor_mcp_token: str
     build_id: str
     last_forward_status: int = 0
+    # First registration wall time for this identity, preserved on re-registration.
+    # Bounds crash-report attribution; 0.0 disables the bound for legacy sessions.
+    registered_wall: float = 0.0
 
 
 @dataclass
@@ -600,22 +604,27 @@ class WorktreeState:
 
     canonical_worktree: str
     mcp_port: int
+    # Case-preserving filesystem root; canonical_worktree is a lowercase routing key.
+    # Empty until registration supplies it.
+    worktree_root: str = ""
     mcp_server: Optional[ThreadingHTTPServer] = None
     session: Optional[Session] = None
     last_seen_ns: int = 0
     version_hash: str = ""
     _evicted_by: Optional[Tuple[int, int]] = None
-    # I4: True once the editor POSTs /editor/ready (tool catalog
-    # populated + Python bridge initialized). False on fresh register so
-    # the fallback shows "editor warming up" rather than "build and launch".
+    # Set by /editor/ready after catalog and bridge initialization.
+    # Preserved for the same (pid, start_time_ns); reset for a new process.
     ready: bool = False
-    # Tool count reported at /editor/ready; 0 until ready.
+    # Tool count from /editor/ready, preserved across same-session re-registration.
     tool_count: int = 0
     # Monotonic timestamp set by the launch_editor proxy command after spawning
     # the editor process. The first forwarded tool call will auto-wait up to
     # _LAUNCH_PENDING_TIMEOUT_SECONDS instead of returning the "build and launch
     # the editor first" error. Cleared to 0.0 when a session registers.
     launch_pending_ts: float = 0.0
+    # Identity and monotonic time of orderly deregistration, used by forwards racing
+    # shutdown to distinguish a close from a crash. Cleared on registration.
+    _deregistered: Optional[Tuple[int, str, float]] = None
 
 
 # Runtime context shared with handler classes. Populated by main() before
@@ -769,12 +778,19 @@ def handle_register(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
             RUNTIME["worktrees"][canonical_req] = wt
             if wt.mcp_port:
                 RUNTIME["mcp_port_to_worktree"][wt.mcp_port] = canonical_req
+        wt.worktree_root = os.path.realpath(str(body["worktree_root"]))
 
-        # D6 newest-wins: if a session already holds this worktree, evict
-        # it. Drop a one-shot breadcrumb so the displaced editor's next
-        # heartbeat sees evicted_by and walks to Failed without staleness
-        # ambiguity.
-        if wt.session is not None:
+        # Compare identities before replacing wt.session.
+        is_same_session = (
+            wt.session is not None
+            and (wt.session.editor_pid, wt.session.start_time_ns) == (editor_pid, editor_start)
+        )
+
+        # A new session evicts the previous one. Same-session registration must preserve
+        # the eviction notice until the displaced process reads it on its next heartbeat.
+        if is_same_session:
+            pass
+        elif wt.session is not None:
             evicted = wt.session
             log.info(
                 "[worktree=%s] evicted previous session "
@@ -788,21 +804,39 @@ def handle_register(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
             )
             wt._evicted_by = (editor_pid, editor_start)
         else:
-            # No prior session. Clear any stale breadcrumb defensively;
-            # in practice it is already None.
             wt._evicted_by = None
 
+        # Preserve the lower bound for crash reports across same-session registration.
+        prior_registered_wall = (
+            wt.session.registered_wall
+            if (is_same_session and wt.session is not None)
+            else 0.0
+        )
         wt.session = Session(
             editor_pid=editor_pid,
             start_time_ns=editor_start,
             editor_mcp_port=int(body["editor_mcp_port"]),
             editor_mcp_token=str(body["editor_mcp_token"]),
             build_id=str(body["build_id"]),
+            registered_wall=prior_registered_wall or time.time(),
         )
-        # I4: new session is not ready until /editor/ready is received.
-        wt.ready = False
-        wt.tool_count = 0
-        # Clear any pending-launch marker now that the editor has registered.
+        if is_same_session:
+            # Preserve readiness: Python initialization does not fire again on re-registration.
+            log.info(
+                "register: same-session re-register worktree=%s editor_pid=%d "
+                "start_time_ns=%s -- preserving ready=%s tool_count=%d",
+                canonical_req,
+                editor_pid,
+                editor_start,
+                wt.ready,
+                wt.tool_count,
+            )
+        else:
+            # I4: new session is not ready until /editor/ready is received.
+            wt.ready = False
+            wt.tool_count = 0
+        # Clear the prior session's shutdown record.
+        wt._deregistered = None
         wt.launch_pending_ts = 0.0
         wt.last_seen_ns = int(_mono_now() * 1_000_000_000)
         wt.version_hash = str(body["proxy_version"])
@@ -814,6 +848,7 @@ def handle_register(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
             "pid": editor_pid,
             "worktree_root": body["worktree_root"],
             "start_time_ns": editor_start,
+            "registered_wall": wt.session.registered_wall,
             "build_id": body["build_id"],
             "proxy_version": body["proxy_version"],
             "editor_mcp_port": body["editor_mcp_port"],
@@ -926,6 +961,8 @@ def handle_deregister(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
             )
             wt.session = None
             wt._evicted_by = None
+            # Record orderly shutdown for forwards already in flight.
+            wt._deregistered = (pid, start_time_ns, _mono_now())
 
             # Compatibility shim: clear singleton_session if it was tracking
             # this same session. The singleton-mirror readers expect the
@@ -982,7 +1019,56 @@ def handle_editor_ready(body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
     return 200, {"ok": True}
 
 
-def _read_json_body(handler: BaseHTTPRequestHandler) -> Optional[Dict[str, Any]]:
+_ASTRAL_JSON_TOOLS = frozenset(
+    "astral_matrix_" + operation for operation in
+    ("author", "inspect", "validate", "add_node", "remove_node", "set_property", "reparent", "save")
+)
+
+
+class _JsonObjectPairs(list):
+    """Distinguish objects from arrays before exact duplicate keys are discarded."""
+
+
+class _AstralJsonKeyError(ValueError):
+    def __init__(self, key: str, request_id: Any) -> None:
+        super().__init__(f"Duplicate JSON member {key!r} in one object.")
+        self.request_id = request_id
+
+
+def _parse_mcp_request(raw: bytes) -> Any:
+    root = json.loads(raw.decode("utf-8"), object_pairs_hook=_JsonObjectPairs)
+    methods = []
+    names = []
+    ids = []
+    if isinstance(root, _JsonObjectPairs):
+        for key, value in root:
+            if key.lower() == "method":
+                methods.append(value)
+            elif key.lower() == "id":
+                ids.append(value)
+            elif key.lower() == "params" and isinstance(value, _JsonObjectPairs):
+                names.extend(v for k, v in value if k.lower() == "name")
+    is_astral = (any(isinstance(m, str) and m.lower() == "tools/call" for m in methods)
+                 and any(isinstance(n, str) and n.lower() in _ASTRAL_JSON_TOOLS for n in names))
+    request_id = ids[0] if len(ids) == 1 and type(ids[0]) in (str, int, float, type(None)) else None
+
+    def materialize(value: Any) -> Any:
+        if isinstance(value, _JsonObjectPairs):
+            result = {}
+            for key, item in value:
+                # Case-distinct keys survive Python and are checked by the UE raw reader.
+                if is_astral and key in result:
+                    raise _AstralJsonKeyError(key, request_id)
+                result[key] = materialize(item)
+            return result
+        if isinstance(value, list):
+            return [materialize(item) for item in value]
+        return value
+
+    return materialize(root)
+
+
+def _read_json_body(handler: BaseHTTPRequestHandler, *, guard_astral: bool = False) -> Optional[Dict[str, Any]]:
     """Read + parse a JSON request body; None if absent or malformed."""
     try:
         length = int(handler.headers.get("Content-Length") or 0)
@@ -992,7 +1078,7 @@ def _read_json_body(handler: BaseHTTPRequestHandler) -> Optional[Dict[str, Any]]
         return {}
     raw = handler.rfile.read(length)
     try:
-        parsed = json.loads(raw.decode("utf-8"))
+        parsed = _parse_mcp_request(raw) if guard_astral else json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
         return None
     if not isinstance(parsed, dict):
@@ -1604,17 +1690,8 @@ WARMING_UP_TEXT = (
     "to long-poll until the editor is fully ready."
 )
 
-# T6: every not-forwarded outcome used to answer with FALLBACK_TEXT, which reads
-# as "there is no editor". That is wrong, and differently wrong, in every case
-# except the one it was written for -- an editor stuck loading was reported as an
-# editor that had never been started, sending people to relaunch something that
-# was already running.
-#
-# Only states the proxy can actually TELL APART from evidence it holds are listed.
-# "crashed" and "closed" are deliberately collapsed into `evicted`: both present
-# as a port that stopped answering, and both have the same remedy, so splitting
-# them would mean guessing. The rule for adding a state here is that some observed
-# signal must distinguish it -- not that it is a distinct thing that can happen.
+# Non-forwarded states must be distinguished by observed signals.
+# The legacy evicted state applies when classification lacks a usable identity.
 STATE_TEXT = {
     # No session, no pending launch: nothing has ever been here.
     "no_editor": FALLBACK_TEXT,
@@ -1638,13 +1715,42 @@ STATE_TEXT = {
         "(the Restore Packages prompt does this indefinitely -- check for a dialog). "
         "Call proxy(command='wait_for_editor') to keep waiting."
     ),
-    # We held a session and the port refused/reset on every attempt.
+    # We held a session and the port refused/reset on every attempt, and no
+    # evidence distinguishes crash from close. Retained as the honest answer on
+    # the legacy singleton path, which holds no worktree state to classify with.
     "evicted": (
         "Editor was running and its MCP listener stopped answering, so the session was "
         "dropped. That usually means the editor crashed or was closed -- check "
         "Saved/Logs for a callstack before relaunching, since an immediate relaunch will "
         "hit the same crash. Relaunch with "
         "Scripts\\Utilities\\Invoke-EditorBuildAndLaunch.ps1 -UseMCPProxy -SkipBuild."
+    ),
+    # Classify using deregistration, process identity, and matching crash reports;
+    # otherwise report editor_terminated_unknown.
+    "editor_closed": (
+        "Editor shut down cleanly and deregistered; this call raced the shutdown. "
+        "Nothing crashed and there is no callstack to read. Relaunch when you need it "
+        "again with Scripts\\Utilities\\Invoke-EditorBuildAndLaunch.ps1 -UseMCPProxy "
+        "-SkipBuild."
+    ),
+    "editor_crashed": (
+        "Editor crashed: the process is gone and a crash report names its process id. "
+        "Read the report before relaunching -- an immediate relaunch will usually hit "
+        "the same fault. Relaunch with "
+        "Scripts\\Utilities\\Invoke-EditorBuildAndLaunch.ps1 -UseMCPProxy -SkipBuild."
+    ),
+    "editor_terminated_unknown": (
+        "Editor process is gone and no crash report names it, so whether it faulted or "
+        "was killed is not established -- treat the cause as unknown rather than "
+        "assuming a crash. A crash report can also still be in flight; check "
+        "Saved/Crashes and Saved/Logs. Relaunch with "
+        "Scripts\\Utilities\\Invoke-EditorBuildAndLaunch.ps1 -UseMCPProxy -SkipBuild."
+    ),
+    "editor_listener_stopped": (
+        "Editor process is still alive but its MCP listener stopped answering. The "
+        "editor is running, so do not relaunch it -- that would lose its state for a "
+        "fault that is in the listener, not the process. Check the editor window and "
+        "Saved/Logs for the server shutting down or failing to rebind."
     ),
     # Registered, ready, accepting connections -- but not answering in time.
     "unresponsive": (
@@ -1686,19 +1792,212 @@ def _fallback_tool_result() -> Dict[str, Any]:
     }
 
 
-def _state_tool_result(state: str) -> Dict[str, Any]:
-    """T6: an error result naming which not-forwarded state we are actually in.
+def _state_tool_result(
+    state: str,
+    detail: Optional[str] = None,
+    evidence: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """An error result naming which not-forwarded state we are actually in.
 
     `state` must be a key of STATE_TEXT. Unknown keys fall back to FALLBACK_TEXT
     rather than raising -- a wrong message is better than a 500 from the proxy.
+
+    `detail` is appended to the prose as
+    a post-mortem pointer (the crash-report directory, the pid that is still
+    alive); `evidence` is the machine-readable record of which signals decided
+    the state, surfaced as `editorTermination`. Both are omitted for the states
+    that carry no per-call evidence, so the existing wire shape is unchanged
+    wherever it was already correct.
     """
-    return {
-        "content": [{"type": "text", "text": STATE_TEXT.get(state, FALLBACK_TEXT)}],
+    text = STATE_TEXT.get(state, FALLBACK_TEXT)
+    if detail:
+        text = f"{text}\n{detail}"
+    result: Dict[str, Any] = {
+        "content": [{"type": "text", "text": text}],
         "isError": True,
         # Machine-readable alongside the prose so a caller can branch without
         # string-matching text that is expected to keep improving.
         "editorState": state,
     }
+    if evidence:
+        result["editorTermination"] = evidence
+    return result
+
+
+# Editor-death classification uses deregistration, OS process identity, and
+# crash reports matching the registered PID and registration-time bound.
+# Insufficient evidence yields editor_terminated_unknown.
+
+# Substring, not equality: Windows reports `unrealeditor.exe`, Linux
+# `unrealeditor`, and both `UnrealEditor-Win64-DebugGame.exe` and plain
+# `UnrealEditor.exe` are the same editor for this purpose.
+_EDITOR_IMAGE_SUBSTRING = "unrealeditor"
+
+# The clean-shutdown breadcrumb is only meaningful for a forward that raced the
+# shutdown. Beyond this window it is stale -- a new editor should have
+# registered and cleared it -- so it is ignored rather than trusted.
+_DEREGISTER_BREADCRUMB_MAX_AGE_SECONDS = 120.0
+
+# Crash reports are scanned newest-first and capped: this runs on a failure
+# path where the caller is already waiting, and a long-lived worktree
+# accumulates hundreds of report directories.
+_CRASH_REPORT_SCAN_LIMIT = 40
+
+_CRASH_REPORT_PID_RE = re.compile(r"<ProcessId>\s*(\d+)\s*</ProcessId>")
+
+
+def _crash_reports_dir(worktree_root: str) -> str:
+    return os.path.join(worktree_root, "Saved", "Crashes")
+
+
+# Slack for filesystem timestamp granularity and the delay before registration.
+_CRASH_REPORT_MIN_MTIME_SLACK_SECONDS = 120.0
+
+
+def _find_crash_report_for_pid(
+    worktree_root: str, pid: int, min_mtime: float = 0.0
+) -> Optional[str]:
+    """Return the newest crash-report directory whose CrashContext names `pid`.
+
+    Exact attribution, not recency: a crash report that belongs to some other
+    editor -- another worktree's, or this worktree's previous session -- must
+    not be reported as this session's callstack.
+
+    `min_mtime` (wall clock, from the session's registration) closes the pid-
+    reuse hole in the opposite direction: an OLD report naming a since-reused
+    pid is a PREVIOUS process's crash, not this session's. Reports whose mtime
+    predates min_mtime (minus slack) are skipped. 0.0 disables the bound for
+    callers with no registration record.
+    """
+    crashes_dir = _crash_reports_dir(worktree_root)
+    try:
+        entries = [
+            os.path.join(crashes_dir, name) for name in os.listdir(crashes_dir)
+        ]
+    except OSError:
+        return None
+
+    candidates: List[Tuple[float, str]] = []
+    for path in entries:
+        try:
+            if not os.path.isdir(path):
+                continue
+            mtime = os.path.getmtime(path)
+        except OSError:
+            continue
+        if min_mtime > 0.0 and mtime < (min_mtime - _CRASH_REPORT_MIN_MTIME_SLACK_SECONDS):
+            continue
+        candidates.append((mtime, path))
+    candidates.sort(reverse=True)
+
+    for _mtime, path in candidates[:_CRASH_REPORT_SCAN_LIMIT]:
+        context = os.path.join(path, "CrashContext.runtime-xml")
+        try:
+            with open(context, "r", encoding="utf-8", errors="replace") as f:
+                # The context file runs to ~100KB and the pid sits in its
+                # header, so a bounded read is enough and keeps this cheap.
+                head = f.read(65536)
+        except OSError:
+            continue
+        match = _CRASH_REPORT_PID_RE.search(head)
+        if match is not None and int(match.group(1)) == pid:
+            return path
+    return None
+
+
+def _classify_editor_death(
+    canonical: Optional[str],
+    worktree_root: Optional[str],
+    pid: Any,
+    start_time_ns: Any,
+    registered_wall: Any = None,
+) -> Tuple[str, Optional[str], Dict[str, Any]]:
+    """Classify a session whose listener stopped answering.
+
+    Returns (state, detail_text_or_None, evidence). `state` is always a key of
+    STATE_TEXT. Callers hold no lock; this reads WorktreeState under
+    SESSION_LOCK itself and otherwise touches only the OS and the filesystem.
+    """
+    evidence: Dict[str, Any] = {
+        "editor_pid": pid,
+        "start_time_ns": start_time_ns,
+        "deregistered": False,
+        "process_alive": None,
+        "identity_matched": None,
+        "crash_report": None,
+    }
+
+    if not isinstance(pid, int) or pid <= 0:
+        evidence["reason"] = "no_registered_pid"
+        return "evicted", None, evidence
+
+    # Clean deregistration takes precedence for the matching session.
+    if canonical is not None:
+        with SESSION_LOCK:
+            wt = RUNTIME["worktrees"].get(canonical)
+            breadcrumb = wt._deregistered if wt is not None else None
+        if breadcrumb is not None:
+            crumb_pid, crumb_start, crumb_ts = breadcrumb
+            if (crumb_pid, crumb_start) == (pid, start_time_ns) and \
+                    (_mono_now() - crumb_ts) <= _DEREGISTER_BREADCRUMB_MAX_AGE_SECONDS:
+                evidence["deregistered"] = True
+                evidence["reason"] = "clean_deregistration"
+                return "editor_closed", None, evidence
+
+    # An image-name mismatch identifies PID reuse.
+    image = _process_image_name(pid)
+    if image is None:
+        evidence["process_alive"] = False
+        evidence["reason"] = "process_gone"
+    elif _EDITOR_IMAGE_SUBSTRING not in image:
+        evidence["process_alive"] = False
+        evidence["identity_matched"] = False
+        evidence["image_name"] = image
+        evidence["reason"] = "pid_reused_by_other_image"
+    else:
+        live_start = _process_start_time_ns(pid)
+        # "0" means creation time is unavailable; fall back to PID and image name.
+        recorded = str(start_time_ns) if start_time_ns is not None else "0"
+        if recorded not in ("", "0") and live_start is not None \
+                and str(live_start) != recorded:
+            evidence["process_alive"] = False
+            evidence["identity_matched"] = False
+            evidence["image_name"] = image
+            evidence["reason"] = "pid_reused_by_newer_editor"
+        else:
+            evidence["process_alive"] = True
+            evidence["identity_matched"] = True
+            evidence["image_name"] = image
+            evidence["reason"] = "process_alive_listener_gone"
+            detail = (
+                f"The editor process (pid {pid}) is still running; only its MCP "
+                f"listener stopped answering."
+            )
+            return "editor_listener_stopped", detail, evidence
+
+    # Match both PID and registration-time bound (with slack) to exclude old
+    # crash reports for a reused PID.
+    try:
+        min_mtime = float(registered_wall) if registered_wall else 0.0
+    except (TypeError, ValueError):
+        min_mtime = 0.0
+    evidence["crash_report_min_mtime"] = min_mtime
+    report = (
+        _find_crash_report_for_pid(worktree_root, pid, min_mtime)
+        if worktree_root
+        else None
+    )
+    if report is not None:
+        evidence["crash_report"] = report
+        detail = f"Crash report for pid {pid}: {report}"
+        return "editor_crashed", detail, evidence
+
+    detail = (
+        f"No crash report under {_crash_reports_dir(worktree_root)} names pid {pid}."
+        if worktree_root
+        else f"No crash-report directory is known for this session (pid {pid})."
+    )
+    return "editor_terminated_unknown", detail, evidence
 
 
 def _ensure_forward_conn_locked(session: Dict[str, Any]) -> http.client.HTTPConnection:
@@ -2348,6 +2647,7 @@ def _resolve_session_for_listener(listener_port: Optional[int]) -> Optional[Dict
             "editor_mcp_token": wt.session.editor_mcp_token,
             "editor_pid": wt.session.editor_pid,
             "editor_start_time_ns": wt.session.start_time_ns,
+            "registered_wall": wt.session.registered_wall,
             "canonical_worktree": canonical,
         }
     # Legacy / no-listener-port path.
@@ -2358,6 +2658,7 @@ def _resolve_session_for_listener(listener_port: Optional[int]) -> Optional[Dict
         "editor_mcp_token": singleton_session["editor_mcp_token"],
         "editor_pid": singleton_session.get("pid"),
         "editor_start_time_ns": singleton_session.get("start_time_ns"),
+        "registered_wall": singleton_session.get("registered_wall", 0.0),
         "canonical_worktree": None,
     }
 
@@ -2507,8 +2808,6 @@ def _forward_payload_to_editor(
     global singleton_session
     request_id = payload.get("id")
     should_auto_wait = False
-    # T6: which startup phase the auto-wait is covering, so a timeout can say
-    # which one it timed out in instead of claiming there is no editor.
     wait_state = "starting"
     with SESSION_LOCK:
         evict_singleton_stale_session_locked()
@@ -2547,19 +2846,12 @@ def _forward_payload_to_editor(
     if should_auto_wait:
         session_snapshot = _auto_wait_for_session(listener_port)
         if session_snapshot is None:
-            # T6: the editor IS starting or loading -- we watched it for the whole
-            # wait window. Reporting "build and launch the editor first" here was the
-            # reported bug: it sends the caller to relaunch a running editor.
             return _jsonrpc_result(request_id, _state_tool_result(wait_state))
 
     raw = json.dumps(payload).encode("utf-8")
     last_exc: Optional[Exception] = None
-    # Stage 007 (D7): Track clean transport-layer rejections separately
-    # from other failures. ConnectionRefusedError fires when the editor's
-    # MCP listener has gone (port stopped accepting); ConnectionResetError
-    # fires when the listener accepted then immediately RST'd (editor mid-
-    # crash). Either qualifies for synchronous eviction. socket.timeout
-    # does NOT qualify -- a slow tool call may still be in-flight.
+    # Only connection refusal/reset qualifies for synchronous eviction.
+    # A timeout can leave a tool call in flight.
     transport_reject_count = 0
     for attempt in (1, 2):
         try:
@@ -2646,25 +2938,47 @@ def _forward_payload_to_editor(
                         evicted_pid, evicted_start,
                     )
                 singleton_session = None
-        # T6: an editor WAS here and its listener stopped answering. That is a
-        # different fact from "no editor was ever started", and it points at a
-        # crash log rather than at a relaunch.
-        #
-        # But only call it `evicted` if the session had actually come up. A session
-        # that never reached ready and whose port refuses is an editor still coming
-        # up -- its MCP listener is not accepting YET. Reporting that as a crash sends
-        # the caller to hunt a callstack that does not exist.
-        # Only refined on the per-worktree path, where wt.ready is maintained by the
-        # real registration handshake. The legacy singleton path tracks no ready flag,
-        # so there it stays `evicted` rather than being guessed at.
+        # Per-worktree sessions that never became ready report loading.
+        # The legacy singleton path has no readiness flag.
         evicted_state = "evicted"
+        never_ready = False
+        session_worktree_root: Optional[str] = None
         with SESSION_LOCK:
             canonical = session_snapshot.get("canonical_worktree")
             if canonical is not None:
                 wt = RUNTIME["worktrees"].get(canonical)
-                if wt is not None and not wt.ready:
-                    evicted_state = "loading"
-        return _jsonrpc_result(request_id, _state_tool_result(evicted_state))
+                if wt is not None:
+                    session_worktree_root = wt.worktree_root or None
+                    if not wt.ready:
+                        evicted_state = "loading"
+                        never_ready = True
+
+        detail: Optional[str] = None
+        evidence: Optional[Dict[str, Any]] = None
+        if not never_ready:
+            # Use the session's case-preserving root; legacy sessions use the singleton resolver.
+            classified, detail, evidence = _classify_editor_death(
+                session_snapshot.get("canonical_worktree"),
+                session_worktree_root
+                or RUNTIME.get("singleton_worktree_root")
+                or _resolve_active_worktree_root(listener_port),
+                evicted_pid,
+                evicted_start,
+                session_snapshot.get("registered_wall"),
+            )
+            log.info(
+                "editor death classified state=%s reason=%s editor_pid=%s "
+                "start_time_ns=%s crash_report=%s",
+                classified,
+                evidence.get("reason"),
+                evicted_pid,
+                evicted_start,
+                evidence.get("crash_report"),
+            )
+            evicted_state = classified
+        return _jsonrpc_result(
+            request_id, _state_tool_result(evicted_state, detail, evidence)
+        )
 
     log.error(
         "forward failed after retries editor_pid=%s start_time_ns=%s err=%r",
@@ -2672,10 +2986,7 @@ def _forward_payload_to_editor(
         session_snapshot.get("editor_start_time_ns"),
         last_exc,
     )
-    # T6: reached when the connection was neither refused nor reset -- the listener
-    # accepted and then did not answer. The editor is alive and blocked. Kept as a
-    # JSON-RPC error (unchanged wire shape) with a message that names the state
-    # instead of the generic "connection failed".
+    # Keep non-refusal/reset failures in the JSON-RPC error envelope.
     return _jsonrpc_error(
         request_id,
         -32000,
@@ -2804,7 +3115,11 @@ class McpHandler(BaseHTTPRequestHandler):
         })
             return
 
-        body = _read_json_body(self)
+        try:
+            body = _read_json_body(self, guard_astral=True)
+        except _AstralJsonKeyError as exc:
+            self._respond_json(200, _jsonrpc_error(exc.request_id, -32602, str(exc)))
+            return
         if body is None:
             self._respond_json(
                 400,

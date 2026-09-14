@@ -85,14 +85,8 @@ public:
 	const FString& GetSessionToken() const { return SessionToken; }
 
 	/**
-	 * Stop the server: unbind routes and delete the port file.
-	 *
-	 * Does NOT release the OS-level listening socket -- FHttpServerModule keeps one
-	 * process-wide listener per port alive for the life of the process, and exposes no
-	 * per-port stop/destroy API (only a process-wide StopAllListeners(), which would also
-	 * stop every other consumer of the shared module -- see the investigation note at the
-	 * top of Stop()'s implementation). A stopped editor therefore keeps squatting its port
-	 * at the OS level until the process exits.
+	 * Unbind routes and delete the port file. The process-wide HTTP module retains the
+	 * listening socket until process exit; its stop API would stop all consumers.
 	 */
 	void Stop();
 
@@ -101,6 +95,68 @@ public:
 
 	/** Get the port the server is listening on */
 	uint32 GetPort() const { return BoundPort; }
+
+	/** Outcome of one content scan. Counts are post-commit registry sizes. */
+	struct FMCPContentLoadReport
+	{
+		int32 NumPrompts = 0;
+		int32 NumResources = 0;
+		/** Files found on disk that yielded no entry: unreadable, unparseable, or missing
+		 *  the frontmatter fields that give them an identity. */
+		TArray<FString> FailedFiles;
+		/** Registry keys retained because their source file is in FailedFiles. */
+		TArray<FString> CarriedForwardKeys;
+		/** Set when the scan could not run at all, in which case the registries are untouched. */
+		FString FatalError;
+	};
+
+	/**
+	 * Rescan Content/MCP on the game thread, committing only after the scan completes.
+	 * Failed files retain their previous entries; a fatal scan failure leaves both registries untouched.
+	 * No client notification is sent, so cached listings must be refreshed explicitly.
+	 */
+	FMCPContentLoadReport ReloadMCPContent();
+
+	/**
+	 * Read registered file-backed resource text with resources/read placeholder substitution.
+	 * Return false for unknown URIs or dynamic resources.
+	 */
+	bool TryGetResourceText(const FString& Uri, FString& OutText) const;
+
+	/**
+	 * Read registered file-backed prompt text with prompts/get placeholder substitution.
+	 * Return false when the name is not registered.
+	 */
+	bool TryGetPromptText(const FString& Name, FString& OutText) const;
+
+	/**
+	 * A served instruction topic. Exactly one of Uri and PromptName is non-empty,
+	 * as selected by bIsResource.
+	 */
+	struct FInstructionTopic
+	{
+		/** Bare slug a caller types, e.g. "blueprint-authoring". */
+		FString Topic;
+		/** Frontmatter `name:`. For a prompt-backed topic this is the registry key. */
+		FString Title;
+		/** Frontmatter `description:`. */
+		FString Summary;
+		/** True when the doc is served by resources/read, false when by prompts/get. */
+		bool bIsResource = true;
+		/** Registry key verbatim, for a resource. Empty for a prompt. Never constructed. */
+		FString Uri;
+		/** Registry key verbatim, for a prompt. Empty for a resource. */
+		FString PromptName;
+	};
+
+	/**
+	 * List served instruction topics from the live registries, sorted by Topic.
+	 * Select resources by the instruction URI prefix and prompts by their .md source path.
+	 */
+	void GetInstructionTopics(TArray<FInstructionTopic>& OutTopics) const;
+
+	/** URI prefix under which instruction resources are registered. */
+	static const TCHAR* GetInstructionUriPrefix() { return TEXT("claireon://instructions/"); }
 
 	/**
 	 * Register a tool with the server. Can be called during or after startup.
@@ -243,17 +299,31 @@ private:
 	/** Dispatch a parsed JSON-RPC request to the appropriate handler */
 	TSharedPtr<FJsonObject> DispatchRequest(const FMCPRequestContext& Context);
 
-	/** Scan Content/MCP/Prompts and Content/MCP/Resources, populating the registries. */
+	/** Load MCP content at startup via ReloadMCPContent and log the report. */
 	void LoadMCPContent();
 
-	/** Load all *.json files under Directory, inserting each into LoadedPrompts keyed by relative-path-without-extension. */
-	void LoadPromptsFromDirectory(const FString& Directory);
+	/** Load all *.json files under Directory into OutPrompts, keyed by relative-path-without-extension.
+	 *  Files that cannot be read or parsed are appended to OutFailedFiles and skipped. */
+	void LoadPromptsFromDirectory(
+		const FString& Directory,
+		TMap<FString, FPromptTemplate>& OutPrompts,
+		TArray<FString>& OutFailedFiles) const;
 
-	/** Load all *.json files under Directory, inserting each into LoadedResources keyed by "claireon://" + relative-path-without-extension. */
-	void LoadResourcesFromDirectory(const FString& Directory);
+	/** Load all *.json files under Directory into OutResources, keyed by "claireon://" + relative-path-without-extension.
+	 *  Files that cannot be read or parsed are appended to OutFailedFiles and skipped. */
+	void LoadResourcesFromDirectory(
+		const FString& Directory,
+		TMap<FString, FResourceTemplate>& OutResources,
+		TArray<FString>& OutFailedFiles) const;
 
-	/** Load all *.md files under Directory, inserting each as a prompt and resource template. */
-	void LoadInstructionsFromDirectory(const FString& Directory);
+	/** Load all *.md files under Directory as prompt or resource templates per their frontmatter.
+	 *  Files with no frontmatter, or missing the field that names them, are appended to
+	 *  OutFailedFiles and skipped. */
+	void LoadInstructionsFromDirectory(
+		const FString& Directory,
+		TMap<FString, FPromptTemplate>& OutPrompts,
+		TMap<FString, FResourceTemplate>& OutResources,
+		TArray<FString>& OutFailedFiles) const;
 
 	/** Replace {{name}} tokens with matching values from Variables. Unknown tokens are left intact. */
 	static FString SubstitutePlaceholders(const FString& Template, const TMap<FString, FString>& Variables);

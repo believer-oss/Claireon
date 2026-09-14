@@ -8,6 +8,7 @@
 #include "Dom/JsonObject.h"
 #include "HAL/ThreadSafeBool.h"
 #include "Containers/Ticker.h"
+#include "Tools/IClaireonTool.h"
 
 class FClaireonServer;
 class FClaireonREPLLogger;
@@ -112,6 +113,12 @@ public:
 	static float CalculateRetryDelay(EAnthropicErrorCategory Category,
 		const FString& RetryAfterHeader, int32 Attempt,
 		float InitialDelay, float MaxDelay);
+
+	/**
+	 * Build REPL tool-result text with error details, data, logs, warnings, and hints.
+	 * Spilled data is represented by the summary rather than serialized again.
+	 */
+	static FString BuildREPLResultText(const IClaireonTool::FToolResult& Result);
 
 	/** Clean up ticker handles. Call from widget destructor before releasing shared pointer. */
 	void Shutdown();

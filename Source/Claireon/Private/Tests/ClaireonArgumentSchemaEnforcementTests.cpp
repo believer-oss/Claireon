@@ -320,7 +320,7 @@ UNTEST_UNIT_OPTS(Claireon, ArgumentSchema, EveryParameterDeclaresTypeAndDescript
 			continue;
 		}
 
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Entry : (*Props)->Values)
+		for (const auto& Entry : (*Props)->Values)
 		{
 			const TSharedPtr<FJsonObject>* PropObj = nullptr;
 			if (!Entry.Value.IsValid() || !Entry.Value->TryGetObject(PropObj) || PropObj == nullptr)
@@ -385,9 +385,10 @@ UNTEST_UNIT_OPTS(Claireon, ArgumentSchema, NonSnakeCaseParameterInventory, UNTES
 			continue;
 		}
 
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Entry : (*Props)->Values)
+		for (const auto& Entry : (*Props)->Values)
 		{
-			if (!IsSnakeCase(Entry.Key))
+			const FString Key(Entry.Key);
+			if (!IsSnakeCase(Key))
 			{
 				Offenders.Add(FString::Printf(TEXT("%s.%s"), *Tool->GetName(), *Entry.Key));
 			}

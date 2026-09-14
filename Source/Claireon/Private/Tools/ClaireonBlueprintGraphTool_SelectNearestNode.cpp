@@ -97,11 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_SelectNearestNode::GetOperation() const { return TEXT("select_nearest_node"); }
+FString ClaireonBlueprintGraphTool_SelectNearestNode::GetOperation() const { return TEXT("cursor_to_nearest_node"); }
 
 FString ClaireonBlueprintGraphTool_SelectNearestNode::GetDescription() const
 {
-    return TEXT("Move the cursor to the node nearest a graph-space position (object with x, y) in the open Blueprint editing session. Requires open session_id from bp_open. Read-only with respect to graph contents (cursor is session state). Useful when chaining new nodes off an existing layout cluster. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+    return TEXT("Move the session cursor to the node nearest a graph-space position (object with x, y). The cursor is the session's anchor for placement and auto-connect. It does NOT change the editor selection (see bp_selection_set) and does not modify the graph. Useful when chaining new nodes off an existing layout cluster. Accepts session_id or asset_path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SelectNearestNode::GetInputSchema() const
@@ -120,7 +120,7 @@ FToolResult ClaireonBlueprintGraphTool_SelectNearestNode::Execute(const TSharedP
     FString SessionId;
     FBlueprintEditToolData* Data = nullptr;
     FToolResult Error;
-    if (!BeginSessionOp(Arguments, TEXT("select_nearest_node"), Params, SessionId, Data, Error))
+    if (!BeginSessionOp(Arguments, TEXT("cursor_to_nearest_node"), Params, SessionId, Data, Error))
     {
         return Error;
     }
@@ -192,6 +192,9 @@ FToolResult ClaireonBlueprintGraphTool_SelectNearestNode::Execute(const TSharedP
 	Data->Cursor.LastOperationStatus = FString::Printf(
 		TEXT("Selected nearest node: %s (distance: %.1f)"),
 		*NodeTitle, MinDistance);
+
+	// Mirror the view without changing selection; a missing window is a no-op.
+	MirrorCursorToView(*Data);
 
 	return BuildStateResponse(SessionId, Data);
 }

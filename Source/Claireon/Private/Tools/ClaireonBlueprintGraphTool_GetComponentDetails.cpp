@@ -191,18 +191,16 @@ FToolResult ClaireonBlueprintGraphTool_GetComponentDetails::Execute(const TShare
 	bool bIncludeDefaults = false;
 	Params->TryGetBoolField(TEXT("include_defaults"), bIncludeDefaults);
 
-	// Find node
-	USCS_Node* Node = SCS->FindSCSNode(FName(*ComponentName));
-	if (!IsValid(Node))
+	// Find node in this Blueprint's SCS or an ancestor's. Read-only: an inherited component
+	// reports this Blueprint's override template if one exists, else the parent's template.
+	ClaireonBlueprintHelpers::FResolvedComponentTemplate Resolved;
+	FString ResolveError;
+	if (!ClaireonBlueprintHelpers::ResolveComponentTemplate(Blueprint, FName(*ComponentName), /*bForWrite=*/false, Resolved, ResolveError))
 	{
-		return MakeErrorResult(FString::Printf(TEXT("Component not found: %s"), *ComponentName));
+		return MakeErrorResult(ResolveError);
 	}
-
-	UActorComponent* ComponentTemplate = Node->ComponentTemplate;
-	if (!IsValid(ComponentTemplate))
-	{
-		return MakeErrorResult(FString::Printf(TEXT("Component '%s' has no template object"), *ComponentName));
-	}
+	USCS_Node* Node = Resolved.Node;
+	UActorComponent* ComponentTemplate = Resolved.Template;
 
 	// Build component details JSON
 	TSharedPtr<FJsonObject> Details = MakeShared<FJsonObject>();
@@ -212,6 +210,8 @@ FToolResult ClaireonBlueprintGraphTool_GetComponentDetails::Execute(const TShare
 	// ComponentBoundEvent (resolves by guid, not by name).
 	Details->SetStringField(TEXT("component_guid"), Node->VariableGuid.ToString());
 	Details->SetStringField(TEXT("class"), ComponentTemplate->GetClass()->GetName());
+	Details->SetBoolField(TEXT("inherited"), Resolved.bInherited);
+	Details->SetBoolField(TEXT("overridden"), Resolved.bOverridden);
 
 	// is_root: check against scene root
 	USCS_Node* SceneRootNode = nullptr;
@@ -317,21 +317,17 @@ FToolResult ClaireonBlueprintGraphTool_GetComponentDetails::Execute(const TShare
 		Result.Data->SetObjectField(TEXT("component"), Details);
 	}
 
-	// Success-path guidance, LATCHED per session by code. With include_defaults=false the
-	// response omits every property equal to the class default, which made "absent" ambiguous
-	// against "explicitly false" -- the distinction that matters for nav auditing. Values are
-	// complete now and each property carries default_value/overridden, but the omission itself
-	// still needs saying out loud.
-	if (!bIncludeDefaults && ShouldEmitLatchedHint(TEXT("bp_get_component_details_defaults_omitted")))
+	if (!bIncludeDefaults)
 	{
 		TSharedPtr<FJsonObject> WithDefaults = CloneHintArgs(Arguments);
 		WithDefaults->SetBoolField(TEXT("include_defaults"), true);
-		Result.Hint = MakeGuidanceHint(GetName(),
+		Result.AddHint(MakeGuidanceHint(GetName(),
 			TEXT("Properties equal to the class default were omitted (include_defaults=false), so an "
 				 "absent property does not mean unset. Re-issue with include_defaults=true for the "
 				 "complete set. Values that ARE returned are full struct values, not archetype deltas, "
 				 "and each carries default_value plus an overridden flag."),
-			WithDefaults);
+			WithDefaults,
+			FName(TEXT("bp_get_component_details_defaults_omitted"))));
 	}
 	return Result;
 }

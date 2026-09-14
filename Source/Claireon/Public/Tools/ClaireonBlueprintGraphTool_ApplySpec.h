@@ -9,7 +9,7 @@
 // at runtime and rejects non-dry-run during PIE; dry_run=true is honored at any time.
 // Declared explicitly (not via DECLARE_BPGRAPH_TOOL_PIE_OK) so the search-metadata
 // overrides below can exist: sessions repeatedly failed to discover this tool when
-// looking for a batch/bulk edit primitive (see Work #6704 round-1 friction report).
+// looking for a batch/bulk edit primitive (per the round-1 tooling-feedback report).
 class CLAIREON_API ClaireonBlueprintGraphTool_ApplySpec : public ClaireonBlueprintGraphEditToolBase
 {
 public:

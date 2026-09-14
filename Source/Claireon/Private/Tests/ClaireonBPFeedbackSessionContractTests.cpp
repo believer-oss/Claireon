@@ -1,8 +1,8 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Baseline pinning test for Workstream D (sessions, overrides, conformance),
-// Stage 001 of the Claireon BP feedback plan (Work #6704).
+// Baseline pinning test for Workstream D (sessions, overrides, conformance)
+// of the Claireon BP feedback plan.
 //
 // F1 core (bp_apply_delta, RESOLVED): a smoke test reproducing the
 // designer report's exact repro shape -- one Sequence node plus three
@@ -239,7 +239,7 @@ UNTEST_UNIT_OPTS(Claireon, BPFeedbackSessionContract, ApplyDelta_SequenceAndThre
 }
 
 // ============================================================================
-// D-1 (Stage 006): session_release accepts session_id, bp_close_all
+// D-1: session_release accepts session_id, bp_close_all
 // compiles+saves+closes every bp session, bp_open discloses blocking_scope,
 // and every recovery hint names parameters the target tool actually accepts.
 // ============================================================================
@@ -263,7 +263,7 @@ namespace ClaireonD1TestsInternal
 		if (!Schema->TryGetObjectField(TEXT("properties"), Properties) || !Properties) { return Names; }
 		for (const auto& Pair : (*Properties)->Values)
 		{
-			Names.Add(Pair.Key);
+			Names.Add(FString(Pair.Key));
 		}
 		return Names;
 	}
@@ -527,7 +527,7 @@ UNTEST_UNIT_OPTS(Claireon, BPFeedbackSessionContract, RecoveryHints_NameParamete
 }
 
 // ============================================================================
-// D-2 (Stage 007): add_function_override reports a structured kind, and an
+// D-2: add_function_override reports a structured kind, and an
 // event override that shadows a non-empty parent body warns, naming the
 // CallParentFunction remedy. A BlueprintImplementableEvent parent has no body
 // by construction and must stay warning-free.
@@ -772,7 +772,7 @@ UNTEST_UNIT_OPTS(Claireon, BPFeedbackSessionContract, Override_BlueprintParentWi
 }
 
 // ============================================================================
-// D-3 (Stage 008): bp_connect_pins accepts the from_*/to_* spelling that
+// D-3: bp_connect_pins accepts the from_*/to_* spelling that
 // bp_apply_delta and bp_get_graph output already use, canonical names win on a
 // mixed call, and no tool documents a tooltip for a parameter it does not
 // declare.
@@ -817,16 +817,17 @@ namespace ClaireonD3TestsInternal
 			{
 				for (const auto& Pair : (*Properties)->Values)
 				{
-					SchemaProps.Add(Pair.Key);
+					SchemaProps.Add(FString(Pair.Key));
 				}
 			}
 		}
 
 		for (const auto& Pair : Tooltips->Values)
 		{
-			if (!SchemaProps.Contains(Pair.Key))
+			const FString Key(Pair.Key);
+			if (!SchemaProps.Contains(Key))
 			{
-				Offenders.Add(Pair.Key);
+				Offenders.Add(Key);
 			}
 		}
 		return Offenders;
@@ -995,7 +996,7 @@ UNTEST_UNIT_OPTS(Claireon, BPFeedbackSessionContract, ToolMetadata_TooltipKeysAr
 }
 
 // ============================================================================
-// D-4 (Stage 009): apply_delta gains a pin_defaults phase and a real
+// D-4: apply_delta gains a pin_defaults phase and a real
 // asset_path auto-open; apply_spec honors per-node graph targeting without
 // silently dropping the wiring for nodes it placed off the default graph.
 // ============================================================================

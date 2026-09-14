@@ -85,7 +85,7 @@ public class Claireon : ModuleRules
 
 			// Asset management tools dependencies
 			"AssetTools",        // IAssetTools, FAssetToolsModule (redirector fixup)
-			"MessageLog",        // FMessageLogModule, IMessageLogListing, FMessageLogListingViewModel for ClaireonTool_MessageLogGet
+			"MessageLog",        // FMessageLogModule, IMessageLogListing, FMessageLogListingViewModel for ClaireonTool_EditorMessageLogGet
 
 			// Test/parsing tools dependencies
 			"XmlParser",         // FXmlFile for JUnit XML parsing
@@ -139,6 +139,9 @@ public class Claireon : ModuleRules
 
 			// Automation framework dependencies
 			"AutomationController", // IAutomationControllerModule, IAutomationControllerManager (test runner)
+			"AutomationWorker",     // IAutomationWorkerModule -- its endpoint is inbox-based, so test_run
+			                        // must tick it itself; the engine only does so from FEngineLoop::Tick,
+			                        // which is parked while a tool call holds the game thread.
 
 			// Chooser / Proxy Table tools dependencies
 			"Chooser",           // UChooserTable, FChooserColumnBase, FObjectChooserBase
@@ -184,6 +187,9 @@ public class Claireon : ModuleRules
 			PrivateIncludePaths.Add(ProxyTableInternal);
 		}
 
+		// PCGEditor reconstruction symbols are not exported. Use the reflected editor
+		// graph path in ClaireonPCGEditorSync instead of linking private APIs.
+
 		// Camera asset tools — optional dependency. GameplayCameras is an Experimental engine
 		// plugin whose API churns across UE versions; gate it like Untested/BlueprintAssist so a
 		// future engine break (or a project that disables it) drops only the camera tools instead
@@ -201,6 +207,7 @@ public class Claireon : ModuleRules
 		}
 
 		// Untested dependencies (Claireon REPL unit tests) — optional
+		bool bUntestedAvailable = false;
 		if (Target.ProjectFile != null)
 		{
 			string UntestedPath = Path.Combine(Target.ProjectFile.Directory.FullName,
@@ -209,6 +216,7 @@ public class Claireon : ModuleRules
 			{
 				PrivateDependencyModuleNames.Add("Untested");
 				PublicDefinitions.Add("WITH_UNTESTED=1");
+				bUntestedAvailable = true;
 			}
 			else
 			{
@@ -220,7 +228,14 @@ public class Claireon : ModuleRules
 			PublicDefinitions.Add("WITH_UNTESTED=0");
 		}
 
-		// Live Coding is Windows-only (matches PLATFORM_WINDOWS guard in ClaireonTool_LiveCodingReload.cpp)
+		// Exclude fault-injection seams from Shipping and Test configurations. Untested
+		// plugin presence alone does not exclude them; ClaireonBPSnapshot checks this guard.
+		bool bClaireonTests = bUntestedAvailable
+			&& Target.Configuration != UnrealTargetConfiguration.Shipping
+			&& Target.Configuration != UnrealTargetConfiguration.Test;
+		PublicDefinitions.Add("WITH_CLAIREON_TESTS=" + (bClaireonTests ? "1" : "0"));
+
+		// Live Coding is Windows-only (matches PLATFORM_WINDOWS guard in ClaireonTool_EditorLiveCodingReloadAsync.cpp)
 		if (Target.Platform == UnrealTargetPlatform.Win64)
 		{
 			PrivateDependencyModuleNames.Add("LiveCoding");

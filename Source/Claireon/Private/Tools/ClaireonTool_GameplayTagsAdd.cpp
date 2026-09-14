@@ -95,9 +95,9 @@ IClaireonTool::FToolResult ClaireonTool_GameplayTagsAdd::Execute(const TSharedPt
 	{
 		return MakeErrorResult(TEXT("claireon.gameplay_tags_add requires a 'tags' argument."));
 	}
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Arguments->Values)
+	for (const auto& Pair : Arguments->Values)
 	{
-		const FString& Key = Pair.Key;
+		const FString Key(Pair.Key);
 		if (!Key.Equals(TEXT("tags"), ESearchCase::IgnoreCase)
 			&& !Key.Equals(TEXT("tag_source"), ESearchCase::IgnoreCase))
 		{

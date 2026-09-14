@@ -422,4 +422,30 @@ UNTEST_UNIT_OPTS(Claireon, SessionManager, PathCanonGameStillWorksWithFlagSet, U
 	co_return;
 }
 
+UNTEST_UNIT_OPTS(Claireon, SessionManager, PathCanonAcceptsPluginContentMount, UNTEST_TIMEOUTMS(5000))
+{
+	// Plugin-mounted content (e.g. this plugin's own /Claireon/ root) is editable content
+	// and must canonicalize + lock like /Game/.
+	ClaireonSessionManagerTest::CleanupAllSessions();
+
+	const FString Canon = FClaireonSessionManager::CanonicalizePath(
+		TEXT("/Claireon/FuzzBaseline/BP_Fuzz_Conductor.BP_Fuzz_Conductor"));
+	UNTEST_EXPECT_TRUE(Canon == TEXT("/Claireon/FuzzBaseline/BP_Fuzz_Conductor"));
+
+	FMCPOpenSessionResult OpenResult = FClaireonSessionManager::Get().OpenSession(
+		TEXT("/Claireon/FuzzBaseline/BP_Fuzz_Conductor"), TEXT("test_edit"));
+	UNTEST_EXPECT_TRUE(OpenResult.Result == EOpenSessionResult::Success);
+
+	ClaireonSessionManagerTest::CleanupAllSessions();
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, SessionManager, PathCanonEngineAndScriptStillRejected, UNTEST_TIMEOUTMS(5000))
+{
+	UNTEST_EXPECT_TRUE(FClaireonSessionManager::CanonicalizePath(TEXT("/Engine/BasicShapes/Cube")).IsEmpty());
+	UNTEST_EXPECT_TRUE(FClaireonSessionManager::CanonicalizePath(TEXT("/Script/Engine.Actor")).IsEmpty());
+	UNTEST_EXPECT_TRUE(FClaireonSessionManager::CanonicalizePath(TEXT("/NotAMountedRoot/Foo")).IsEmpty());
+	co_return;
+}
+
 #endif // WITH_UNTESTED

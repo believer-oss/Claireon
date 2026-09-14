@@ -74,6 +74,7 @@ bool FClaireonDeltaApplicator_PCGGraph::OpenOrReuseSession(const TSharedPtr<FJso
 {
 	CreatedNodesThisCall.Reset();
 	CachedGraph.Reset();
+	NotifyPause.Reset();
 
 	FString SessionIdArg;
 	const bool bHasSessionId = Args->TryGetStringField(TEXT("session_id"), SessionIdArg) && !SessionIdArg.IsEmpty();
@@ -86,6 +87,7 @@ bool FClaireonDeltaApplicator_PCGGraph::OpenOrReuseSession(const TSharedPtr<FJso
 			return false;
 		}
 		CachedGraph = Data->PCGGraph;
+		BeginNotifyBatch(Data->PCGGraph.Get());
 		OutSessionId = SessionIdArg;
 		return true;
 	}
@@ -124,6 +126,7 @@ bool FClaireonDeltaApplicator_PCGGraph::OpenOrReuseSession(const TSharedPtr<FJso
 	ClaireonPCGGraphEditToolBase::ToolData.Add(OpenResult.SessionId, MoveTemp(NewData));
 
 	CachedGraph = Graph;
+	BeginNotifyBatch(Graph);
 	OutSessionId = OpenResult.SessionId;
 	return true;
 }
@@ -353,14 +356,25 @@ bool FClaireonDeltaApplicator_PCGGraph::ApplyPhase4_Connect(const FString& Sessi
 	return true;
 }
 
+void FClaireonDeltaApplicator_PCGGraph::BeginNotifyBatch(UPCGGraph* Graph)
+{
+	if (IsValid(Graph))
+	{
+		NotifyPause = MakeUnique<ClaireonPCGGraphHelpers::FPCGGraphNotifyPauseScope>(Graph);
+	}
+}
+
 void FClaireonDeltaApplicator_PCGGraph::FinalizeSession(const FString& SessionId)
 {
 	(void)SessionId;
 	UPCGGraph* Graph = CachedGraph.Get();
 	if (IsValid(Graph))
 	{
-		ClaireonPCGGraphHelpers::NotifyGraphChanged(Graph);
+		// Combine batch and per-edit flags before releasing the notification pause.
+		ClaireonPCGGraphHelpers::NotifyGraphChanged(Graph, ClaireonPCGGraphHelpers::EPCGGraphEditOp::Batch);
 	}
+
+	NotifyPause.Reset();
 }
 
 void FClaireonDeltaApplicator_PCGGraph::CloseSessionIfOwned(const FString& SessionId)

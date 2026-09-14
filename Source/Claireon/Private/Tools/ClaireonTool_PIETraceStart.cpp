@@ -106,7 +106,7 @@ IClaireonTool::FToolResult ClaireonTool_PIETraceStart::Execute(const TSharedPtr<
 	// complete. The absence of SceneQueryTotal is then indistinguishable from
 	// scene queries being cheap, which is how a capture inverts a conclusion.
 	//
-	// Mirrors FSPerfTraceDefaults / FSPerfTraceDebugSubsystem: save, force on,
+	// Same contract as a project-side perf-trace subsystem: save, force on,
 	// restore on stop, roll back on a failed start.
 	ClaireonTraceNamedEvents::Push();
 

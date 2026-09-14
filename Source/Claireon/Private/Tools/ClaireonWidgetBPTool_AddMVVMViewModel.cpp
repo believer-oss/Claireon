@@ -139,11 +139,6 @@ FToolResult ClaireonWidgetBPTool_AddMVVMViewModel::Execute(const TSharedPtr<FJso
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
 	Data->bModified = true;
 
-	// Return the created context info. The identity field is `name` (not
-	// `viewmodel_name`) to match list_mvvm_viewmodels / SerializeMVVMViewModelContexts,
-	// which is the established convention for named-entity returns elsewhere in the
-	// widgetbp family (e.g. create_animation also returns bare `name`). See C7 in
-	// Docs/llm/todo/claireon-product-defects.md.
 	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
 	ResultObj->SetStringField(TEXT("name"), ViewModelName);
 	ResultObj->SetStringField(TEXT("viewmodel_class"), VMClass->GetPathName());

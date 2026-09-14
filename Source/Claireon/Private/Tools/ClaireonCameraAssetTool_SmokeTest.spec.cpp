@@ -193,27 +193,14 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetSmokeTest_SyntheticFixtureRoundTrip
 bool FCameraAssetSmokeTest_SyntheticFixtureRoundTrip::RunTest(const FString& /*Parameters*/)
 {
 
-	// Declare the engine's save-time validation errors as expected.
-	//
-	// Saving a camera asset runs UCameraAsset validation, which logs at Error verbosity --
-	// and the automation framework turns any captured Error into a failure. Both messages
-	// are correct and neither is fixable from the test:
-	//
-	//   "Camera has no director set"  -- on 5.7+ camera_asset_add_rig installs a
-	//     USingleCameraDirector on demand, but on UE 5.5/5.6 hosts AddRig
-	//     takes the pre-5.7 AddCameraRig() path which installs no director at all. No
-	//     camera_asset tool can set one on this version.
-	//
-	// Only the director error is declared here. This test populates a root node, so the
-	// sibling "has no root node" error never fires -- and an expectation that does not
-	// occur is itself a failure, which is the framework being right: a declaration is a
-	// claim about what happens, not a blanket mute.
-	//
-	// This test is about round-tripping the asset, not about producing a runnable camera,
-	// so the right move is to declare the error rather than suppress LogCameraSystem
-	// wholesale: anything else it reports still fails the test.
+	// Before UE 5.7, add_rig leaves the camera without a director, producing this save-time error.
+	// The fixture has a root node, so a missing-root error is not expected.
+#if UE_VERSION_OLDER_THAN(5, 7, 0)
+	// Occurrences=0 means "at least once", so this is declared only where the message
+	// can actually fire: 5.7+ installs a director on add_rig and never emits it.
 	AddExpectedError(TEXT("Camera has no director set"),
 		EAutomationExpectedErrorFlags::Contains, /*Occurrences=*/0);
+#endif
 	const FString Path = TEXT("/Game/Tests/CA_Synth_Fixture");
 	const FString ChildId = TEXT("Root.Children[0]");
 	const FString PropName = TEXT("FieldOfView.Value");
@@ -355,7 +342,7 @@ bool FCameraAssetSmokeTest_SyntheticFixtureRoundTrip::RunTest(const FString& /*P
 //
 // EXECUTION CAVEAT: this file uses IMPLEMENT_SIMPLE_AUTOMATION_TEST, not UNTEST_UNIT*.
 // The Unreal-automation tests here were historically not discovered by the runner
-// (tracked as Docs/llm/todo/claireon-test-suite-debt.md item 1, which is where the
+// (tracked as Docs/llm/archive/claireon-todo-baseline-2026-09-06/claireon-test-suite-debt.md item 1, which is where the
 // CommandletContext flag below comes from).
 // =====================================================================================
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCameraAssetSmokeTest_DuplicatePrototypeAndAddNode,

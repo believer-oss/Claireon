@@ -329,6 +329,61 @@ namespace ClaireonOutputGateInternal
 		return Out;
 	}
 
+	/** Bound inline metadata separately from spillable data; disclose truncation. */
+	inline constexpr int32 ClOG_SummaryMaxBytes = 2048;
+	inline constexpr int32 ClOG_WarningsMaxEntries = 32;
+	inline constexpr int32 ClOG_WarningsMaxTotalBytes = 8192;
+
+	/**
+	 * Apply after gate-added metadata. Truncate the summary tail to retain the spill
+	 * path prefix. Bulk diagnostics belong in Data, which can spill.
+	 */
+	static void BoundResultMetadata(IClaireonTool::FToolResult& Result)
+	{
+		{
+			const int32 SummaryBytes = Utf8ByteLen(Result.Summary);
+			if (SummaryBytes > ClOG_SummaryMaxBytes)
+			{
+				const FString Marker = FString::Printf(
+					TEXT("... [TRUNCATED: summary was %d bytes, bound is %d]"),
+					SummaryBytes, ClOG_SummaryMaxBytes);
+				const int32 KeepBytes = FMath::Max(0, ClOG_SummaryMaxBytes - Utf8ByteLen(Marker));
+				const TArray<uint8> Bytes = StringToUtf8Bytes(Result.Summary);
+				Result.Summary = Utf8PrefixSafe(Bytes.GetData(), Bytes.Num(), KeepBytes) + Marker;
+			}
+		}
+
+		{
+			// Reserve an entry for the truncation marker.
+			const int32 OriginalNum = Result.Warnings.Num();
+			TArray<FString> Bounded;
+			int32 TotalBytes = 0;
+			bool bTruncated = false;
+
+			for (const FString& Warning : Result.Warnings)
+			{
+				const int32 WarningBytes = Utf8ByteLen(Warning);
+				if (Bounded.Num() >= ClOG_WarningsMaxEntries - 1
+					|| TotalBytes + WarningBytes > ClOG_WarningsMaxTotalBytes)
+				{
+					bTruncated = true;
+					break;
+				}
+				TotalBytes += WarningBytes;
+				Bounded.Add(Warning);
+			}
+
+			if (bTruncated)
+			{
+				Bounded.Add(FString::Printf(
+					TEXT("[TRUNCATED: %d of %d warnings omitted; bounds are %d entries / %d bytes]"),
+					OriginalNum - Bounded.Num(), OriginalNum,
+					ClOG_WarningsMaxEntries, ClOG_WarningsMaxTotalBytes));
+				Result.Warnings = MoveTemp(Bounded);
+			}
+		}
+	}
+
 	/** Build the JSON object carried on the envelope for one spilled stream. */
 	static TSharedPtr<FJsonObject> StreamManifestToJson(const FClaireonSpillStream& Stream)
 	{
@@ -416,6 +471,8 @@ IClaireonTool::FToolResult FClaireonOutputGate::RouteResult(
 	}
 	if (bForceInline)
 	{
+		// force_inline still enforces metadata bounds.
+		BoundResultMetadata(Result);
 		return Result;
 	}
 
@@ -519,6 +576,7 @@ IClaireonTool::FToolResult FClaireonOutputGate::RouteResult(
 
 	if (SpilledStreams.Num() == 0)
 	{
+		BoundResultMetadata(Result);
 		return Result;
 	}
 
@@ -675,6 +733,8 @@ IClaireonTool::FToolResult FClaireonOutputGate::RouteResult(
 	}
 
 	Result.Data = Manifest;
+
+	BoundResultMetadata(Result);
 	return Result;
 }
 

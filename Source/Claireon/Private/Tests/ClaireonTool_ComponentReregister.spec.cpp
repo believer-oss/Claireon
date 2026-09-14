@@ -160,41 +160,39 @@ UNTEST_WORLD(Claireon, ComponentReregister, AcceptsNavPropertyByName)
 		FString(TEXT("bCanEverAffectNavigation")));
 	UNTEST_EXPECT_TRUE(bStillRegistered);
 	// Naming a property means the caller is not being nudged toward one.
-	UNTEST_EXPECT_FALSE(Result.Hint.IsValid());
+	UNTEST_EXPECT_FALSE(Result.Hints.Num() > 0);
 
 	co_return;
 }
 
-UNTEST_WORLD(Claireon, ComponentReregister, LatchesTheMissingChangedPropertyHint)
+UNTEST_WORLD(Claireon, ComponentReregister, EmitsTheKeyedMissingChangedPropertyHintEveryCall)
 {
 	using namespace ClaireonToolComponentReregisterSpec;
 
-	// Success-path guidance must be latched, or a bulk repair loop over many
-	// components repeats the same lesson on every call -- the noise profile that
-	// forced a latch onto the get_editor_property nudge.
 	UWorld* World = UNTEST_GET_WORLD();
 	UNTEST_ASSERT_PTR(World);
 
 	UClaireonUObjectInspectComponent* Component = MakeRegisteredComponent(World);
 	UNTEST_ASSERT_PTR(Component);
 
-	IClaireonTool::ResetHintLatchForTests();
-
 	const FString ComponentPath = Component->GetPathName();
 	IClaireonTool::FToolResult First = RunReregister(BuildArgs(ComponentPath));
 	IClaireonTool::FToolResult Second = RunReregister(BuildArgs(ComponentPath));
 
 	ReleaseComponent(Component);
-	IClaireonTool::ResetHintLatchForTests();
 
 	UNTEST_ASSERT_FALSE(First.bIsError);
-	UNTEST_ASSERT_TRUE(First.Hint.IsValid());
+	UNTEST_ASSERT_TRUE(First.Hints.Num() > 0);
 	FString HintError;
-	UNTEST_EXPECT_TRUE(IClaireonTool::ValidateHint(First.Hint, HintError));
-	UNTEST_EXPECT_EQ(First.Hint->GetStringField(TEXT("tool")), FString(TEXT("component_reregister")));
+	UNTEST_EXPECT_TRUE(IClaireonTool::ValidateHint(First.Hints[0], HintError));
+	UNTEST_EXPECT_EQ(First.Hints[0]->GetStringField(TEXT("tool")), FString(TEXT("component_reregister")));
+	UNTEST_EXPECT_EQ(First.Hints[0]->GetStringField(TEXT("key")),
+		FString(TEXT("component_reregister_no_changed_property")));
 
 	UNTEST_ASSERT_FALSE(Second.bIsError);
-	UNTEST_EXPECT_FALSE(Second.Hint.IsValid());
+	UNTEST_ASSERT_TRUE(Second.Hints.Num() > 0);
+	UNTEST_EXPECT_EQ(Second.Hints[0]->GetStringField(TEXT("key")),
+		FString(TEXT("component_reregister_no_changed_property")));
 
 	co_return;
 }

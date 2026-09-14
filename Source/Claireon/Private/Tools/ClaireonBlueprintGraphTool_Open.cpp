@@ -251,6 +251,10 @@ FToolResult ClaireonBlueprintGraphTool_Open::Execute(const TSharedPtr<FJsonObjec
 				TEXT("[EditBlueprintGraph] Session %s retargeted from graph '%s' to '%s' on %s"),
 				*SessionId, *ExistingGraph->GetName(), *Graph->GetName(), *Blueprint->GetPathName());
 		}
+
+		// New sessions already opened their window in InitToolDataForSession. Reused
+		// sessions include bp_create sessions, whose opening must wait until this call.
+		EnsureSessionEditorWindow(*Data);
 	}
 
 	Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Opened Blueprint %s, Graph %s"), *AssetPath, *GraphName);

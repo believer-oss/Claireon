@@ -310,35 +310,9 @@ namespace Cl628IdxInternal
 
 		return FString::Join(Parts, TEXT(" "));
 	}
-	// -------------------------------------------------------------------------
-	// Query-domain category matching (P2-20).
-	//
-	// BM25 over the enriched columns cannot rank a domain-specific tool over
-	// its cross-domain siblings: for "apply spec blueprint" every *_apply_spec
-	// sibling matches "apply" and "spec" equally, and abbreviation enrichment
-	// plants the one discriminating term in the SIBLINGS' columns too (widgetbp
-	// enriches to "widget blueprint", so its name column carries "blueprint" at
-	// the same weight as bp's). Inside the FTS5 document an enrichment-derived
-	// term is indistinguishable from a term the tool owns, so no column weight
-	// can express "this tool's CATEGORY is the domain the query names".
-	//
-	// That signal is therefore scored OUTSIDE the FTS5 columns, from the row's
-	// verbatim (UNINDEXED) category. A category matches the query's domain when:
-	//   (a) its own name appears in the query, as one token ("pcg", "niagara")
-	//       or as 2-3 adjacent tokens ("widget bp" -> widgetbp, "state tree" ->
-	//       statetree, "level sequence" -> level_sequence); or
-	//   (b) the query carries the category's spelled-out head word -- the FIRST
-	//       word of its abbreviation-table expansion ("bp" -> "blueprint ...",
-	//       "widgetbp" -> "widget ...", "pcg" -> "procedural ..."); or
-	//   (c) a query token is itself an abbreviation whose expansion names the
-	//       category verbatim ("vfx" -> "... niagara ...", "cam" ->
-	//       "... camera_asset ...").
-	//
-	// The boost consuming this signal must stay FLAT across matching rows:
-	// every row of a matched category gets the same lift, so the boost reorders
-	// across domains but never within one, and BM25 keeps deciding the order
-	// among a category's own tools.
-	// -------------------------------------------------------------------------
+	// Score domain matches from verbatim categories outside FTS5: enriched sibling
+	// columns can contain the same domain term. Keep the domain boost uniform within
+	// a category so it does not change that category's internal ranking.
 
 	/** Compare two lowercase words, tolerating one trailing plural 's'
 	 *  ("blueprints" ~ "blueprint"). The bare word must be >= 3 chars so short
@@ -496,16 +470,8 @@ namespace Cl628IdxInternal
 		return ToolName.Mid(Category.Len() + 1);
 	}
 
-	// Boost fractions for the lexical path (FindNearest): a row's NEGATIVE bm25
-	// score is scaled by (1 + domain-fraction * match + op-fraction * coverage),
-	// i.e. made more negative, before ordering. Multiplicative so it is
-	// scale-free across queries: it promotes an owned-term tool past sibling
-	// near-ties (which differ by a few percent) without letting a weak match
-	// leapfrog a dominant one (which leads by far more than the fractions).
-	// Sized by measurement against the discoverability suite + corpus dry-run
-	// (P2-20). The domain fraction is flat across a category's rows; the
-	// operation fraction scales with verbatim coverage of the row's own
-	// operation tokens, which is what discriminates WITHIN a category.
+	// Scale negative BM25 scores by domain match and operation-token coverage.
+	// Multiplicative boosts preserve score scale across queries.
 	static const double Cl628_DomainBoostFraction    = 0.15;
 	static const double Cl628_OperationBoostFraction = 0.10;
 
@@ -1034,9 +1000,7 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolSearchIndex::FindNearest(
 	FString NormalizedQuery = Query.ToLower();
 	NormalizedQuery = NormalizedQuery.Replace(TEXT("-"), TEXT("")).Replace(TEXT("_"), TEXT(""));
 
-	// Raw query tokens for the domain-category signal (P2-20). Deliberately the
-	// unfiltered Tokenise() output: short tokens like "bp" are exactly the
-	// category spellings the domain match looks for.
+	// Keep short domain tokens such as bp; the filtered FTS token list omits them.
 	TArray<FString> DomainTokens;
 	Tokenise(Query, DomainTokens);
 
@@ -1068,11 +1032,7 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolSearchIndex::FindNearest(
 	{
 		const FRawBm25Result& R = Rows[i];
 
-		// Query-domain + operation-coverage boost (P2-20): scale the NEGATIVE
-		// bm25 score. The domain part is flat across a category's rows (so
-		// cross-domain order moves, within-domain does not); the operation part
-		// scales with verbatim coverage of this row's own operation tokens,
-		// which is what separates siblings inside one category.
+		// Scale negative BM25 scores by domain match and operation-token coverage.
 		double EffectiveScore = R.Score;
 		if (R.Score < 0.0)
 		{
@@ -1525,16 +1485,8 @@ TArray<FClaireonToolCatalogMatch> FClaireonToolSearchIndex::FindNearestHybrid(
 		}
 	}
 
-	// Query-domain + operation-coverage boost (P2-20), the hybrid mirror of the
-	// FindNearest lexical boost. Two additive contributions per fused candidate:
-	//   - domain: flat for every candidate whose verbatim category is the domain
-	//     the query names (see Cl628_CategoryMatchesQueryDomain) -- reorders
-	//     across domains, never within one;
-	//   - operation: scaled by verbatim coverage of the candidate's own
-	//     operation tokens -- separates siblings inside one category.
-	// Each is sized at half the near-exact boost (0.5 / K): together they can
-	// lift an owned-term tool past several adjacent fusion ranks, and they never
-	// outbid a genuine near-exact name match. Recomputed from the live K at use.
+	// Add domain and operation-coverage contributions of up to 0.5 / K each.
+	// Together they can equal, but not exceed, the near-exact boost.
 	{
 		TArray<FString> DomainTokens;
 		Tokenise(Query, DomainTokens);

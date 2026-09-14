@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonSpecApplicator_PCGGraph.h"
+#include "Tools/ClaireonPCGEditorSync.h"
 #include "Tools/ClaireonPCGGraphHelpers.h"
 #include "ClaireonPathResolver.h"
 #include "ClaireonSessionManager.h"
@@ -122,6 +123,9 @@ bool FClaireonSpecApplicator_PCGGraph::ApplyPass1_CreateEntities(const FString& 
 		return true;
 	}
 
+	// Coalesce settings-change notifications across this pass.
+	ClaireonPCGGraphHelpers::FPCGGraphNotifyPauseScope NotifyPause(Graph);
+
 	int32 SuccessCount = 0;
 
 	for (int32 i = 0; i < NodesArray->Num(); ++i)
@@ -149,6 +153,8 @@ bool FClaireonSpecApplicator_PCGGraph::ApplyPass1_CreateEntities(const FString& 
 			continue;
 		}
 
+		ClaireonPCGGraphHelpers::AssignDefaultNodePosition(Graph, NewNode);
+
 		// Set properties
 		const TSharedPtr<FJsonObject>* PropsPtr = nullptr;
 		if (NodeObj->TryGetObjectField(TEXT("properties"), PropsPtr) && PropsPtr && (*PropsPtr).IsValid())
@@ -174,7 +180,8 @@ bool FClaireonSpecApplicator_PCGGraph::ApplyPass1_CreateEntities(const FString& 
 		SuccessCount++;
 	}
 
-	ClaireonPCGGraphHelpers::NotifyGraphChanged(Graph);
+	// Accumulates under NotifyPause; fires once when the scope releases below.
+	ClaireonPCGGraphHelpers::NotifyGraphChanged(Graph, ClaireonPCGGraphHelpers::EPCGGraphEditOp::AddNode);
 
 	UE_LOG(LogClaireon, Log, TEXT("[apply_spec:PCGGraph] Pass 1: Created %d/%d nodes"),
 		SuccessCount, NodesArray->Num());
@@ -197,6 +204,9 @@ bool FClaireonSpecApplicator_PCGGraph::ApplyPass2_WireRelationships(const FStrin
 		return true;
 	}
 
+	// Settle editor nodes created in pass 1 before AddEdge rebuilds native boundary links.
+	ClaireonPCGEditorSync::SettlePendingReconstruct(Graph);
+
 	for (int32 i = 0; i < ConnectionsArray->Num(); ++i)
 	{
 		const TSharedPtr<FJsonObject>& ConnObj = (*ConnectionsArray)[i]->AsObject();
@@ -208,37 +218,24 @@ bool FClaireonSpecApplicator_PCGGraph::ApplyPass2_WireRelationships(const FStrin
 		ConnObj->TryGetStringField(TEXT("target_node"), TargetNodeId);
 		ConnObj->TryGetStringField(TEXT("target_pin"), TargetPinLabel);
 
-		// Resolve node IDs to indices
-		FString SourceIndexStr = ResolveId(SourceNodeId);
-		FString TargetIndexStr = ResolveId(TargetNodeId);
+		// Fall back from spec-local IDs to graph identifiers for existing nodes, including Input/Output.
+		const FString SourceMapped = ResolveId(SourceNodeId);
+		const FString TargetMapped = ResolveId(TargetNodeId);
+		const FString SourceLookup = SourceMapped.IsEmpty() ? SourceNodeId : SourceMapped;
+		const FString TargetLookup = TargetMapped.IsEmpty() ? TargetNodeId : TargetMapped;
 
-		if (SourceIndexStr.IsEmpty())
-		{
-			AddWarning(FString::Printf(TEXT("connections[%d]: source_node '%s' not found"), i, *SourceNodeId));
-			continue;
-		}
-		if (TargetIndexStr.IsEmpty())
-		{
-			AddWarning(FString::Printf(TEXT("connections[%d]: target_node '%s' not found"), i, *TargetNodeId));
-			continue;
-		}
-
-		int32 SourceIndex = FCString::Atoi(*SourceIndexStr);
-		int32 TargetIndex = FCString::Atoi(*TargetIndexStr);
-
-		// Find nodes by index -- use FindNodeByIdentifier for robustness
 		int32 DummyIndex;
-		UPCGNode* SourceNode = ClaireonPCGGraphHelpers::FindNodeByIdentifier(Graph, SourceIndexStr, DummyIndex);
-		UPCGNode* TargetNode = ClaireonPCGGraphHelpers::FindNodeByIdentifier(Graph, TargetIndexStr, DummyIndex);
+		UPCGNode* SourceNode = ClaireonPCGGraphHelpers::FindNodeByIdentifier(Graph, SourceLookup, DummyIndex);
+		UPCGNode* TargetNode = ClaireonPCGGraphHelpers::FindNodeByIdentifier(Graph, TargetLookup, DummyIndex);
 
 		if (!IsValid(SourceNode))
 		{
-			AddWarning(FString::Printf(TEXT("connections[%d]: source node index %d not found"), i, SourceIndex));
+			AddError(FString::Printf(TEXT("connections[%d]: source_node '%s' not found"), i, *SourceNodeId));
 			continue;
 		}
 		if (!IsValid(TargetNode))
 		{
-			AddWarning(FString::Printf(TEXT("connections[%d]: target node index %d not found"), i, TargetIndex));
+			AddError(FString::Printf(TEXT("connections[%d]: target_node '%s' not found"), i, *TargetNodeId));
 			continue;
 		}
 
@@ -246,28 +243,31 @@ bool FClaireonSpecApplicator_PCGGraph::ApplyPass2_WireRelationships(const FStrin
 		UPCGPin* SourcePin = SourceNode->GetOutputPin(FName(*SourcePinLabel));
 		if (!IsValid(SourcePin))
 		{
-			AddWarning(FString::Printf(TEXT("connections[%d]: output pin '%s' not found on source node"), i, *SourcePinLabel));
+			AddError(FString::Printf(TEXT("connections[%d]: output pin '%s' not found on source node '%s'"),
+				i, *SourcePinLabel, *SourceNodeId));
 			continue;
 		}
 
 		UPCGPin* TargetPin = TargetNode->GetInputPin(FName(*TargetPinLabel));
 		if (!IsValid(TargetPin))
 		{
-			AddWarning(FString::Printf(TEXT("connections[%d]: input pin '%s' not found on target node"), i, *TargetPinLabel));
+			AddError(FString::Printf(TEXT("connections[%d]: input pin '%s' not found on target node '%s'"),
+				i, *TargetPinLabel, *TargetNodeId));
 			continue;
 		}
 
 		Graph->AddEdge(SourceNode, FName(*SourcePinLabel), TargetNode, FName(*TargetPinLabel));
 	}
 
-	ClaireonPCGGraphHelpers::NotifyGraphChanged(Graph);
+	ClaireonPCGGraphHelpers::NotifyGraphChanged(Graph, ClaireonPCGGraphHelpers::EPCGGraphEditOp::Connect);
 
 	return true;
 }
 
 bool FClaireonSpecApplicator_PCGGraph::CompileAsset(const FString& SessionId, FString& OutError)
 {
-	// PCG graphs do not have explicit compilation. NotifyGraphChanged was called in Pass 2.
+	// PCG graphs do not have explicit compilation. NotifyGraphChanged was called in Pass 2
+	// (Edge|Structural), which evicted the compiled-graph cache recursively.
 	return true;
 }
 

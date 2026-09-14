@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonFoliageTool_Save.h"
+#include "Tools/ClaireonAssetUtils.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "InstancedFoliageActor.h"
 #include "UObject/Package.h"
@@ -41,7 +42,16 @@ FToolResult ClaireonFoliageTool_Save::Execute(const TSharedPtr<FJsonObject>& Arg
 		return MakeErrorResult(TEXT("Failed to get foliage package"));
 	}
 
-	const FString PackageFilename = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+	// Through the shared resolver, not a hardcoded extension. This package is the LEVEL's
+	// package -- GetOutermost() on a landscape proxy, foliage actor or spline outside World
+	// Partition returns the world -- so writing it at .uasset creates a shadow package that
+	// then wins every later lookup by name and orphans the .umap.
+	FString PackageFilename;
+	FString ResolveError;
+	if (!ClaireonAssetUtils::ResolvePackageSaveFilename(Package, PackageFilename, ResolveError))
+	{
+		return MakeErrorResult(ResolveError);
+	}
 	FSavePackageArgs SaveArgs;
 	SaveArgs.TopLevelFlags = RF_Standalone;
 	const FSavePackageResultStruct SaveResult = UPackage::Save(Package, nullptr, *PackageFilename, SaveArgs);

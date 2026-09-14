@@ -361,6 +361,47 @@ class TestRegistrationProtocol(unittest.TestCase):
         # One-shot: the breadcrumb is cleared after the first heartbeat.
         self.assertIsNone(wt._evicted_by)
 
+    def test_same_session_reregister_preserves_eviction_breadcrumb(self) -> None:
+        """A same-session re-register must not touch _evicted_by.
+
+        B evicting A leaves a one-shot breadcrumb that A's NEXT heartbeat is
+        supposed to read. If B then re-registers itself before A gets that far
+        -- a heartbeat failure bouncing B's client to RetryRegister is enough --
+        the breadcrumb has to survive, or A walks to Failed as merely stale and
+        the displacement it needs to know about is lost. That is the exact
+        ambiguity the breadcrumb exists to remove.
+
+        Guards the branch shape in handle_register: the same-session case is its
+        own branch specifically so it neither WRITES the breadcrumb (naming
+        itself as its own evictor, which put a false eviction in proxy.log) nor
+        falls through to the else that CLEARS it."""
+        first = _well_formed_register_body(self.tmp, pid=1111, start_time_ns=100)
+        self.assertEqual(claireon_proxy.handle_register(first)[0], 200)
+
+        second = _well_formed_register_body(self.tmp, pid=2222, start_time_ns=200)
+        self.assertEqual(claireon_proxy.handle_register(second)[0], 200)
+
+        canonical = claireon_proxy.canonicalize_worktree(self.tmp)
+        wt = claireon_proxy.RUNTIME["worktrees"][canonical]
+        self.assertEqual(wt._evicted_by, (2222, "200"))
+
+        # B re-announces itself. Same identity, so nothing was evicted.
+        again = _well_formed_register_body(self.tmp, pid=2222, start_time_ns=200)
+        self.assertEqual(claireon_proxy.handle_register(again)[0], 200)
+        self.assertEqual(
+            wt._evicted_by,
+            (2222, "200"),
+            "a same-session re-register cleared the breadcrumb A still needs",
+        )
+
+        # And A still learns it was displaced, not merely stale.
+        hb_status, hb_resp = claireon_proxy.handle_heartbeat(
+            {"worktree_root": self.tmp, "pid": 1111, "start_time_ns": "100"}
+        )
+        self.assertEqual(hb_status, 200)
+        self.assertFalse(hb_resp["ok"])
+        self.assertEqual(hb_resp["evicted_by"], {"pid": 2222, "start_time_ns": "200"})
+
     def test_register_version_mismatch_is_advisory(self) -> None:
         """Stage 005 (D5): version drift is logged but not rejected."""
         body = _well_formed_register_body(self.tmp, proxy_version="WRONGHASH")
@@ -544,10 +585,15 @@ class TestForwardRoundTrip(unittest.TestCase):
         })
         self.assertIn("result", resp)
         self.assertTrue(resp["result"]["isError"])
-        # T6: this used to assert FALLBACK_TEXT ("build and launch the editor
-        # first"), which is false here -- an editor WAS running and its listener
-        # went away. That is a crash to investigate, not an editor to start.
-        self.assertEqual(resp["result"]["editorState"], "evicted")
+        # The fixture registers Python's PID, not an editor. With no matching crash
+        # report, classification yields editor_terminated_unknown.
+        self.assertEqual(
+            resp["result"]["editorState"], "editor_terminated_unknown"
+        )
+        self.assertEqual(
+            resp["result"]["editorTermination"]["reason"],
+            "pid_reused_by_other_image",
+        )
         self.assertNotEqual(
             resp["result"]["content"][0]["text"], claireon_proxy.FALLBACK_TEXT
         )
@@ -586,9 +632,9 @@ class TestForwardRoundTrip(unittest.TestCase):
             })
         self.assertIn("result", resp)
         self.assertTrue(resp["result"]["isError"])
-        # T6: see test_connection_refused_evicts_session_and_returns_fallback --
-        # a reset listener means the editor died, not that none was started.
-        self.assertEqual(resp["result"]["editorState"], "evicted")
+        self.assertEqual(
+            resp["result"]["editorState"], "editor_terminated_unknown"
+        )
         self.assertNotEqual(
             resp["result"]["content"][0]["text"], claireon_proxy.FALLBACK_TEXT
         )
@@ -641,9 +687,8 @@ class TestEditorStateText(unittest.TestCase):
                 self.assertNotEqual(text, claireon_proxy.FALLBACK_TEXT)
 
     def test_running_states_tell_the_caller_not_to_relaunch(self) -> None:
-        # starting/loading/unresponsive all describe a LIVE editor. Each has to
-        # say so, or the reader reaches for a relaunch and loses editor state.
-        for state in ("starting", "loading", "unresponsive"):
+        for state in ("starting", "loading", "unresponsive",
+                      "editor_listener_stopped"):
             text = claireon_proxy.STATE_TEXT[state].lower()
             self.assertTrue(
                 "not relaunch" in text or "relaunching" in text or "not absent" in text,
@@ -655,10 +700,270 @@ class TestEditorStateText(unittest.TestCase):
         self.assertTrue(result["isError"])
         self.assertEqual(result["content"][0]["text"], claireon_proxy.FALLBACK_TEXT)
 
+    def test_state_result_without_evidence_keeps_its_prior_shape(self) -> None:
+        # States without evidence retain their wire shape.
+        result = claireon_proxy._state_tool_result("no_editor")
+        self.assertEqual(
+            result,
+            {
+                "content": [{"type": "text", "text": claireon_proxy.FALLBACK_TEXT}],
+                "isError": True,
+                "editorState": "no_editor",
+            },
+        )
 
-# ---------------------------------------------------------------------------
-# Stage 009 D2 -- never idle-exit. Replaces the previous 24h auto-exit suite.
-# ---------------------------------------------------------------------------
+    def test_state_result_appends_detail_and_carries_evidence(self) -> None:
+        result = claireon_proxy._state_tool_result(
+            "editor_crashed", "Crash report for pid 7: C:\\x", {"reason": "process_gone"}
+        )
+        text = result["content"][0]["text"]
+        self.assertTrue(text.startswith(claireon_proxy.STATE_TEXT["editor_crashed"]))
+        self.assertIn("Crash report for pid 7: C:\\x", text)
+        self.assertEqual(result["editorTermination"], {"reason": "process_gone"})
+
+
+# Editor-death classification.
+
+
+def _write_crash_report(worktree_root: str, pid: int, name: str) -> str:
+    """Write a minimal UE crash-report directory naming `pid`."""
+    path = os.path.join(worktree_root, "Saved", "Crashes", name)
+    os.makedirs(path, exist_ok=True)
+    with open(
+        os.path.join(path, "CrashContext.runtime-xml"), "w", encoding="utf-8"
+    ) as fh:
+        fh.write(
+            "<FGenericCrashContext><RuntimeProperties>"
+            f"<ProcessId>{pid}</ProcessId>"
+            "</RuntimeProperties></FGenericCrashContext>"
+        )
+    return path
+
+
+class TestEditorDeathClassification(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.mkdtemp(prefix="claireon-proxy-death-")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        _reset_proxy_runtime(self.tmp)
+        self.canonical = claireon_proxy.canonicalize_worktree(self.tmp)
+        self.worktree_root = os.path.realpath(self.tmp)
+        self.pid = 4242
+        self.start = "123456789"
+        body = _well_formed_register_body(
+            self.tmp, pid=self.pid, start_time_ns=self.start
+        )
+        status, resp = claireon_proxy.handle_register(body)
+        self.assertEqual(status, 200)
+        self.assertTrue(resp["accepted"])
+
+    def _classify(self, registered_wall=None):
+        return claireon_proxy._classify_editor_death(
+            self.canonical, self.worktree_root, self.pid, self.start,
+            registered_wall,
+        )
+
+    # -- 1. clean deregistration ------------------------------------------
+
+    def test_deregistered_session_is_closed_not_crashed(self) -> None:
+        claireon_proxy.handle_deregister(
+            {"worktree_root": self.tmp, "pid": self.pid, "start_time_ns": self.start}
+        )
+        # A crash report for this very pid is on disk. Clean deregistration
+        # still wins: the editor said it was leaving.
+        _write_crash_report(self.tmp, self.pid, "UECC-Windows-AAA_0000")
+        state, detail, evidence = self._classify()
+        self.assertEqual(state, "editor_closed")
+        self.assertTrue(evidence["deregistered"])
+        self.assertEqual(evidence["reason"], "clean_deregistration")
+        self.assertIsNone(detail)
+
+    def test_breadcrumb_from_a_different_session_is_ignored(self) -> None:
+        with claireon_proxy.SESSION_LOCK:
+            wt = claireon_proxy.RUNTIME["worktrees"][self.canonical]
+            wt._deregistered = (9999, "555", claireon_proxy._mono_now())
+        with mock.patch.object(claireon_proxy, "_process_image_name",
+                               return_value=None):
+            state, _detail, evidence = self._classify()
+        self.assertNotEqual(state, "editor_closed")
+        self.assertFalse(evidence["deregistered"])
+
+    def test_stale_breadcrumb_is_ignored(self) -> None:
+        age = claireon_proxy._DEREGISTER_BREADCRUMB_MAX_AGE_SECONDS + 1.0
+        with claireon_proxy.SESSION_LOCK:
+            wt = claireon_proxy.RUNTIME["worktrees"][self.canonical]
+            wt._deregistered = (
+                self.pid, self.start, claireon_proxy._mono_now() - age
+            )
+        with mock.patch.object(claireon_proxy, "_process_image_name",
+                               return_value=None):
+            state, _detail, evidence = self._classify()
+        self.assertNotEqual(state, "editor_closed")
+        self.assertFalse(evidence["deregistered"])
+
+    def test_register_clears_the_breadcrumb(self) -> None:
+        claireon_proxy.handle_deregister(
+            {"worktree_root": self.tmp, "pid": self.pid, "start_time_ns": self.start}
+        )
+        claireon_proxy.handle_register(
+            _well_formed_register_body(self.tmp, pid=self.pid, start_time_ns=self.start)
+        )
+        with claireon_proxy.SESSION_LOCK:
+            wt = claireon_proxy.RUNTIME["worktrees"][self.canonical]
+            self.assertIsNone(wt._deregistered)
+
+    # -- 2/3. process liveness and identity --------------------------------
+
+    def test_live_editor_with_dead_listener_is_not_a_death(self) -> None:
+        with mock.patch.object(claireon_proxy, "_process_image_name",
+                               return_value="unrealeditor.exe"), \
+             mock.patch.object(claireon_proxy, "_process_start_time_ns",
+                               return_value=int(self.start)):
+            state, detail, evidence = self._classify()
+        self.assertEqual(state, "editor_listener_stopped")
+        self.assertTrue(evidence["process_alive"])
+        self.assertTrue(evidence["identity_matched"])
+        self.assertIn(str(self.pid), detail)
+
+    def test_pid_reused_by_a_newer_editor_is_not_alive(self) -> None:
+        with mock.patch.object(claireon_proxy, "_process_image_name",
+                               return_value="unrealeditor.exe"), \
+             mock.patch.object(claireon_proxy, "_process_start_time_ns",
+                               return_value=int(self.start) + 1):
+            state, _detail, evidence = self._classify()
+        self.assertEqual(state, "editor_terminated_unknown")
+        self.assertFalse(evidence["process_alive"])
+        self.assertEqual(evidence["reason"], "pid_reused_by_newer_editor")
+
+    def test_zero_start_time_falls_back_to_pid_plus_image(self) -> None:
+        with mock.patch.object(claireon_proxy, "_process_image_name",
+                               return_value="unrealeditor.exe"), \
+             mock.patch.object(claireon_proxy, "_process_start_time_ns",
+                               return_value=987654321):
+            state, _detail, evidence = claireon_proxy._classify_editor_death(
+                self.canonical, self.worktree_root, self.pid, "0"
+            )
+        self.assertEqual(state, "editor_listener_stopped")
+        self.assertTrue(evidence["identity_matched"])
+
+    # -- 4. crash-report attribution ---------------------------------------
+
+    def test_crash_report_naming_this_pid_reports_a_crash(self) -> None:
+        path = _write_crash_report(self.tmp, self.pid, "UECC-Windows-BBB_0000")
+        with mock.patch.object(claireon_proxy, "_process_image_name",
+                               return_value=None):
+            state, detail, evidence = self._classify()
+        self.assertEqual(state, "editor_crashed")
+        self.assertEqual(evidence["crash_report"], path)
+        self.assertFalse(evidence["process_alive"])
+        self.assertIn(path, detail)
+
+    def test_crash_report_for_another_pid_is_not_borrowed(self) -> None:
+        _write_crash_report(self.tmp, self.pid + 1, "UECC-Windows-CCC_0000")
+        with mock.patch.object(claireon_proxy, "_process_image_name",
+                               return_value=None):
+            state, detail, evidence = self._classify()
+        self.assertEqual(state, "editor_terminated_unknown")
+        self.assertIsNone(evidence["crash_report"])
+        self.assertIn(str(self.pid), detail)
+
+    def test_gone_process_with_no_report_is_unknown_not_crashed(self) -> None:
+        with mock.patch.object(claireon_proxy, "_process_image_name",
+                               return_value=None):
+            state, _detail, evidence = self._classify()
+        self.assertEqual(state, "editor_terminated_unknown")
+        self.assertEqual(evidence["reason"], "process_gone")
+
+    def test_report_predating_registration_is_not_borrowed_after_pid_reuse(self) -> None:
+        path = _write_crash_report(self.tmp, self.pid, "UECC-Windows-OLD_0000")
+        stale = time.time() - 3600.0
+        os.utime(path, (stale, stale))
+        registered = time.time()  # this session registered just now
+        with mock.patch.object(claireon_proxy, "_process_image_name",
+                               return_value=None):
+            state, _detail, evidence = self._classify(registered_wall=registered)
+        self.assertEqual(state, "editor_terminated_unknown")
+        self.assertIsNone(evidence["crash_report"])
+        self.assertEqual(evidence["crash_report_min_mtime"], registered)
+
+    def test_fresh_report_is_still_attributed_after_pid_reuse(self) -> None:
+        registered = time.time() - 300.0
+        path = _write_crash_report(self.tmp, self.pid, "UECC-Windows-FRESH_0000")
+        with mock.patch.object(claireon_proxy, "_process_image_name",
+                               return_value="unrealeditor.exe"), \
+             mock.patch.object(claireon_proxy, "_process_start_time_ns",
+                               return_value=int(self.start) + 1):
+            state, detail, evidence = self._classify(registered_wall=registered)
+        self.assertEqual(state, "editor_crashed")
+        self.assertEqual(evidence["crash_report"], path)
+        self.assertIn(path, detail)
+
+    def test_registration_records_and_preserves_the_wall_clock(self) -> None:
+        with claireon_proxy.SESSION_LOCK:
+            wt = claireon_proxy.RUNTIME["worktrees"][self.canonical]
+            first_wall = wt.session.registered_wall
+        self.assertGreater(first_wall, 0.0)
+
+        status, _resp = claireon_proxy.handle_register(
+            _well_formed_register_body(self.tmp, pid=self.pid, start_time_ns=self.start)
+        )
+        self.assertEqual(status, 200)
+        with claireon_proxy.SESSION_LOCK:
+            wt = claireon_proxy.RUNTIME["worktrees"][self.canonical]
+            self.assertEqual(wt.session.registered_wall, first_wall)
+
+    def test_missing_pid_stays_collapsed(self) -> None:
+        state, detail, evidence = claireon_proxy._classify_editor_death(
+            self.canonical, self.worktree_root, None, self.start
+        )
+        self.assertEqual(state, "evicted")
+        self.assertIsNone(detail)
+        self.assertEqual(evidence["reason"], "no_registered_pid")
+
+    # -- the wire ----------------------------------------------------------
+
+    def test_classification_reaches_the_forwarded_result(self) -> None:
+        path = _write_crash_report(self.tmp, self.pid, "UECC-Windows-DDD_0000")
+        with claireon_proxy.SESSION_LOCK:
+            wt = claireon_proxy.RUNTIME["worktrees"][self.canonical]
+            wt.ready = True
+            wt.mcp_port = 50021
+            claireon_proxy.RUNTIME["mcp_port_to_worktree"][50021] = self.canonical
+        with mock.patch.object(claireon_proxy, "_forward_once",
+                               side_effect=ConnectionRefusedError("gone")), \
+             mock.patch.object(claireon_proxy, "_process_image_name",
+                               return_value=None):
+            resp = claireon_proxy.forward_tool_call({
+                "jsonrpc": "2.0",
+                "id": 7,
+                "method": "tools/call",
+                "params": {"name": "python_execute", "arguments": {"code": "1"}},
+            }, listener_port=50021)
+        result = resp["result"]
+        self.assertTrue(result["isError"])
+        self.assertEqual(result["editorState"], "editor_crashed")
+        self.assertEqual(result["editorTermination"]["crash_report"], path)
+        self.assertEqual(result["editorTermination"]["editor_pid"], self.pid)
+        self.assertIn(path, result["content"][0]["text"])
+
+    def test_never_ready_session_is_not_classified_as_a_death(self) -> None:
+        _write_crash_report(self.tmp, self.pid, "UECC-Windows-EEE_0000")
+        with claireon_proxy.SESSION_LOCK:
+            wt = claireon_proxy.RUNTIME["worktrees"][self.canonical]
+            wt.ready = False
+            wt.mcp_port = 50022
+            claireon_proxy.RUNTIME["mcp_port_to_worktree"][50022] = self.canonical
+        with mock.patch.object(claireon_proxy, "_forward_once",
+                               side_effect=ConnectionRefusedError("not up yet")):
+            resp = claireon_proxy.forward_tool_call({
+                "jsonrpc": "2.0",
+                "id": 8,
+                "method": "tools/call",
+                "params": {"name": "python_execute", "arguments": {"code": "1"}},
+            }, listener_port=50022)
+        self.assertEqual(resp["result"]["editorState"], "loading")
+        self.assertNotIn("editorTermination", resp["result"])
+
+
 
 
 class TestNeverIdleExit(unittest.TestCase):
@@ -1768,6 +2073,42 @@ class TestReadyFlag(unittest.TestCase):
         with claireon_proxy.SESSION_LOCK:
             wt2 = claireon_proxy.RUNTIME["worktrees"][canonical]
             self.assertFalse(wt2.ready)
+
+    def test_ready_preserved_on_same_session_reregister(self) -> None:
+        """Invariant: readiness describes a PROCESS's tool catalog, not a
+        registration event. A re-register carrying the SAME (pid,
+        start_time_ns) as the session already held -- e.g. a heartbeat
+        hiccup bouncing the editor's client to RetryRegister -- is that one
+        process re-announcing itself, not a new process taking the slot, so
+        ready/tool_count must survive it. Only a register from a genuinely
+        different identity may reset them (test_ready_flag_resets_on_new_session
+        above)."""
+        body = self._register(start_time_ns=555)
+        claireon_proxy.handle_editor_ready({
+            "worktree_root": self.tmp,
+            "pid": body["pid"],
+            "start_time_ns": body["start_time_ns"],
+            "tool_count": 17,
+        })
+        canonical = claireon_proxy.canonicalize_worktree(self.tmp)
+        with claireon_proxy.SESSION_LOCK:
+            wt = claireon_proxy.RUNTIME["worktrees"][canonical]
+            self.assertTrue(wt.ready)
+            self.assertEqual(wt.tool_count, 17)
+
+        # Same identity re-registers. Must be preserved, not zeroed.
+        self._register(start_time_ns=555)
+        with claireon_proxy.SESSION_LOCK:
+            wt = claireon_proxy.RUNTIME["worktrees"][canonical]
+            self.assertTrue(wt.ready)
+            self.assertEqual(wt.tool_count, 17)
+
+        # A different identity registering afterward still resets it.
+        self._register(start_time_ns=556)
+        with claireon_proxy.SESSION_LOCK:
+            wt = claireon_proxy.RUNTIME["worktrees"][canonical]
+            self.assertFalse(wt.ready)
+            self.assertEqual(wt.tool_count, 0)
 
     def test_static_tools_list_is_exactly_three_tools(self) -> None:
         """The MCP tool surface is exactly tool_search, python_execute, proxy."""

@@ -73,7 +73,7 @@ protected:
 	/**
 	 * Shared pre-op wrapping used by every session-requiring decomposed tool.
 	 * Handles: params unwrap (legacy nested "params"), suppress_output/response_mode
-	 * parsing, ResolveOrOpenSession, TouchSession, PreOpPinConnections snapshot,
+	 * parsing, ResolveOrOpenSession, TouchSession, the operation-start graph snapshot,
 	 * and LastOperationAffectedNodes clearing. Returns false on error (OutError populated).
 	 */
 	bool BeginSessionOp(
@@ -147,6 +147,19 @@ protected:
 
 	void InitToolDataForSession(const FString& SessionId, UBlueprint* Blueprint, UEdGraph* Graph);
 
+	/**
+	 * Open and bind an editor only if the session has never bound one. A dead binding
+	 * requires a new session to prevent silent retargeting. Record availability
+	 * failures, including commandlet use, in Data.EditorWindow.
+	 */
+	static void EnsureSessionEditorWindow(FBlueprintEditToolData& Data);
+
+	/**
+	 * Bring the cursor node into view without changing selection or reading it back
+	 * into the cursor. Missing windows, dead bindings, and missing nodes are no-ops.
+	 */
+	static void MirrorCursorToView(FBlueprintEditToolData& Data);
+
 	void ValidateCursor(FBlueprintEditToolData* Data);
 
 	FString BuildAvailableGraphsList(const UBlueprint* Blueprint) const;
@@ -192,6 +205,18 @@ public:
 	public: \
 		FString GetOperation() const override; \
 		FString GetDescription() const override; \
+		TSharedPtr<FJsonObject> GetInputSchema() const override; \
+		FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override; \
+	}
+
+// Variant for tools with an extended GetFullDescription override.
+#define DECLARE_BPGRAPH_TOOL_FULLDESC(ClassName) \
+	class CLAIREON_API ClassName : public ClaireonBlueprintGraphEditToolBase \
+	{ \
+	public: \
+		FString GetOperation() const override; \
+		FString GetDescription() const override; \
+		FString GetFullDescription() const override; \
 		TSharedPtr<FJsonObject> GetInputSchema() const override; \
 		FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) override; \
 	}

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonWidgetBPTool_Open.h"
+#include "ClaireonScopedAssetEditor.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "Tools/ClaireonAssetUtils.h"
 #include "Dom/JsonObject.h"
@@ -111,7 +112,7 @@ FToolResult ClaireonWidgetBPTool_Open::Execute(const TSharedPtr<FJsonObject>& Ar
 
 	UE_LOG(LogClaireon, Log, TEXT("[EditWidgetBP] Opened session %s for %s"), *SessionId, *AssetPath);
 
-	ClaireonAssetUtils::OpenAssetEditorIfHeadless(WBP);
+	ClaireonAssetEditorWindow::OpenForSession(WBP);
 
 	FWidgetBPEditToolData* LiveData = ToolData.Find(SessionId);
 	if (!LiveData)

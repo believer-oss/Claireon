@@ -37,7 +37,7 @@ IClaireonTool::FToolResult ClaireonTool_GameplayTagsReload::Execute(const TShare
 	// 1. Reject unknown top-level args.
 	if (Arguments.IsValid())
 	{
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Arguments->Values)
+		for (const auto& Pair : Arguments->Values)
 		{
 			return MakeErrorResult(FString::Printf(TEXT("Unknown argument: %s"), *Pair.Key));
 		}

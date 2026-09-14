@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonLandscapeTool_Create.h"
+#include "Tools/ClaireonLandscapeHelpers.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "ClaireonSessionManager.h"
 #include "ClaireonPathResolver.h"
@@ -99,26 +100,17 @@ FToolResult ClaireonLandscapeTool_Create::Execute(const TSharedPtr<FJsonObject>&
 	NewLandscape->SetActorLocation(Location);
 	NewLandscape->SetActorScale3D(Scale);
 
-	// Initialize flat heightmap
-	TArray<uint16> HeightData;
-	HeightData.SetNumUninitialized(Size * Size);
-	FMemory::Memset(HeightData.GetData(), 0, Size * Size * sizeof(uint16));
-	for (int32 i = 0; i < HeightData.Num(); ++i)
-	{
-		HeightData[i] = 32768; // Zero height
-	}
-
 	const int32 MinX = 0;
 	const int32 MinY = 0;
 	const int32 MaxX = Size - 1;
 	const int32 MaxY = Size - 1;
 
-	FGuid ImportGuid = FGuid::NewGuid();
-	TMap<FGuid, TArray<uint16>> HeightDataMap;
-	HeightDataMap.Add(ImportGuid, MoveTemp(HeightData));
+	// Import requires a valid landscape GUID; payload maps use the separate base-layer GUID.
+	const FGuid ImportGuid = FGuid::NewGuid();
 
+	TMap<FGuid, TArray<uint16>> HeightDataMap;
 	TMap<FGuid, TArray<FLandscapeImportLayerInfo>> MaterialLayerInfos;
-	MaterialLayerInfos.Add(ImportGuid, TArray<FLandscapeImportLayerInfo>());
+	ClaireonLandscapeHelpers::BuildFlatLandscapeImportData(Size, HeightDataMap, MaterialLayerInfos);
 
 	TArray<FLandscapeLayer> EmptyLayers;
 	NewLandscape->Import(

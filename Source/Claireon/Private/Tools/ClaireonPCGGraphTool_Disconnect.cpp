@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonPCGGraphTool_Disconnect.h"
+#include "Tools/ClaireonPCGEditorSync.h"
 #include "Tools/ClaireonPCGGraphHelpers.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "PCGGraph.h"
@@ -59,6 +60,9 @@ FToolResult ClaireonPCGGraphTool_Disconnect::Execute(const TSharedPtr<FJsonObjec
 		return MakeErrorResult(TEXT("Source or target node not found"));
 	}
 
+	// See pcg_connect: settle a pending editor rebuild before the engine notifies native nodes.
+	ClaireonPCGEditorSync::SettlePendingReconstruct(Data->PCGGraph.Get());
+
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Disconnect PCG Pins")));
 	bool bRemoved = Data->PCGGraph->RemoveEdge(FromNode, FName(*FromPinLabel), ToNode, FName(*ToPinLabel));
 
@@ -67,7 +71,7 @@ FToolResult ClaireonPCGGraphTool_Disconnect::Execute(const TSharedPtr<FJsonObjec
 		return MakeErrorResult(TEXT("No matching edge found to remove"));
 	}
 
-	ClaireonPCGGraphHelpers::NotifyGraphChanged(Data->PCGGraph.Get());
+	ClaireonPCGGraphHelpers::NotifyGraphChanged(Data->PCGGraph.Get(), ClaireonPCGGraphHelpers::EPCGGraphEditOp::Disconnect);
 
 	Data->LastOperationStatus = FString::Printf(TEXT("Disconnected %s.\"%s\" -> %s.\"%s\""),
 		*ClaireonPCGGraphHelpers::GetNodeDisplayName(FromNode), *FromPinLabel,

@@ -53,7 +53,7 @@ bool JsonSanitizeTests_IsNullField(const TSharedPtr<FJsonObject>& Object, const 
 	{
 		return false;
 	}
-	const TSharedPtr<FJsonValue>* Found = Object->Values.Find(FieldName);
+	const TSharedPtr<FJsonValue>* Found = Object->Values.Find(*FieldName);
 	return Found != nullptr && Found->IsValid() && (*Found)->Type == EJson::Null;
 }
 

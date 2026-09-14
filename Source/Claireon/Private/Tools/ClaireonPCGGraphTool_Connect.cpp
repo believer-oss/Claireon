@@ -2,11 +2,15 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonPCGGraphTool_Connect.h"
+#include "Tools/ClaireonPCGEditorSync.h"
 #include "Tools/ClaireonPCGGraphHelpers.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "PCGGraph.h"
 #include "PCGNode.h"
 #include "PCGPin.h"
+#include "PCGEdge.h"
+#include "Elements/PCGUserParameterGet.h"
+#include "StructUtils/PropertyBag.h"
 #include "ScopedTransaction.h"
 
 using FToolResult = IClaireonTool::FToolResult;
@@ -117,9 +121,54 @@ FToolResult ClaireonPCGGraphTool_Connect::Execute(const TSharedPtr<FJsonObject>&
 			*ClaireonPCGGraphHelpers::GetNodeDisplayName(ToNode), *ToPinLabel));
 	}
 
+	// An unbound parameter getter still advertises an output pin, but the editor
+	// cannot create its links. Validate the property GUID before adding an edge.
+	if (const UPCGUserParameterGetSettings* GetSettings =
+			Cast<UPCGUserParameterGetSettings>(FromNode->GetSettings()))
+	{
+		const FInstancedPropertyBag* Bag = Data->PCGGraph->GetUserParametersStruct();
+		const bool bBound =
+			Bag && GetSettings->PropertyGuid.IsValid() && Bag->FindPropertyDescByID(GetSettings->PropertyGuid);
+		if (!bBound)
+		{
+			return MakeErrorResult(FString::Printf(
+				TEXT("Node %s is a Get Graph Parameter bound to no live graph parameter (PropertyGuid "
+					 "%s), so the link would be accepted by the graph and rejected by the editor. Set "
+					 "its PropertyGuid first -- pcg_set_node_property accepts the parameter NAME and "
+					 "resolves it, and pcg_add_user_parameter returns property_guid."),
+				*ClaireonPCGGraphHelpers::GetNodeDisplayName(FromNode),
+				GetSettings->PropertyGuid.IsValid() ? *GetSettings->PropertyGuid.ToString(EGuidFormats::Digits)
+													: TEXT("unset")));
+		}
+	}
+
+	// Settle pending reconstruction so newly added peers have editor nodes before
+	// AddEdge triggers native Input/Output link rebuilding.
+	ClaireonPCGEditorSync::SettlePendingReconstruct(Data->PCGGraph.Get());
+
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Connect PCG Pins")));
 	Data->PCGGraph->AddEdge(FromNode, FName(*FromPinLabel), ToNode, FName(*ToPinLabel));
-	ClaireonPCGGraphHelpers::NotifyGraphChanged(Data->PCGGraph.Get());
+
+	// AddEdge returns void and may reject a pair silently; verify the edge exists.
+	bool bEdgeLanded = false;
+	for (const TObjectPtr<UPCGEdge>& Edge : FromPin->Edges)
+	{
+		if (Edge && Edge->GetOtherPin(FromPin) == ToPin)
+		{
+			bEdgeLanded = true;
+			break;
+		}
+	}
+	if (!bEdgeLanded)
+	{
+		Transaction.Cancel();
+		return MakeErrorResult(FString::Printf(
+			TEXT("AddEdge did not produce a link %s.\"%s\" -> %s.\"%s\""),
+			*ClaireonPCGGraphHelpers::GetNodeDisplayName(FromNode), *FromPinLabel,
+			*ClaireonPCGGraphHelpers::GetNodeDisplayName(ToNode), *ToPinLabel));
+	}
+
+	ClaireonPCGGraphHelpers::NotifyGraphChanged(Data->PCGGraph.Get(), ClaireonPCGGraphHelpers::EPCGGraphEditOp::Connect);
 
 	Data->LastOperationStatus = FString::Printf(TEXT("Connected %s.\"%s\" -> %s.\"%s\""),
 		*ClaireonPCGGraphHelpers::GetNodeDisplayName(FromNode), *FromPinLabel,

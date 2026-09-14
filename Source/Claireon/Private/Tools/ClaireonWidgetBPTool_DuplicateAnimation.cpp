@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonWidgetBPTool_DuplicateAnimation.h"
+#include "ClaireonWidgetHelpers.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "ClaireonWidgetAnimationHandlers.h"
 #include "Animation/WidgetAnimation.h"
@@ -87,6 +88,7 @@ FToolResult ClaireonWidgetBPTool_DuplicateAnimation::Execute(const TSharedPtr<FJ
 
     WBP->Modify();
     WBP->Animations.Add(Dup);
+    ClaireonWidgetHelpers::NotifyVariableAdded(WBP, Dup->GetFName());
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
     Data->bModified = true;
 

@@ -12,16 +12,10 @@
 #include "Internationalization/Regex.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
-#include "Tools/ClaireonTool_LogSearch.h"
+#include "Tools/ClaireonTool_EditorLogSearch.h"
 
-// ---------------------------------------------------------------------------
-// WI-15: editor_log_search encoding support.
-//
-// Drives the external-linkage decode/read helpers defined in
-// ClaireonTool_LogSearch.cpp. The tool itself always reads the live editor
-// log path (FPlatformOutputDevices), so the encoding contract is exercised
-// through the extracted helpers against temp files written in each encoding.
-// ---------------------------------------------------------------------------
+// Exercise decode/read helpers against encoded temporary files; the tool itself
+// always reads the live editor log.
 namespace ClaireonLogSearchEncoding
 {
 	FString DecodeLogBytes(const uint8* Bytes, int64 NumBytes);
@@ -287,7 +281,7 @@ UNTEST_UNIT_OPTS(Claireon, LogSearchEncoding, ExecuteSmokeOnLiveLog, UNTEST_TIME
 	// End-to-end wiring check through the tool's Execute contract. The tool
 	// always targets the live editor/commandlet log, so only assert on the
 	// branch that applies in this runner.
-	ClaireonTool_LogSearch Tool;
+	ClaireonTool_EditorLogSearch Tool;
 	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
 	Args->SetStringField(TEXT("pattern"), TEXT("."));
 	Args->SetNumberField(TEXT("max_results"), 1);
@@ -326,12 +320,7 @@ UNTEST_UNIT_OPTS(Claireon, LogSearchEncoding, ReadMissingFileFailsLoudly, UNTEST
 	co_return;
 }
 
-// ===========================================================================
-// C6 hardening: bounded tail reads. Uses ReadLogFileLinesBounded directly with a
-// tiny MaxTailBytes so truncation is exercised without writing a 64 MiB fixture;
-// production code always calls through ReadLogFileLines, which pins the real
-// bound (MaxLogSearchTailBytes, ~64 MiB, in ClaireonTool_LogSearch.cpp).
-// ===========================================================================
+// Use a small tail limit to test truncation without a 64 MiB fixture.
 
 UNTEST_UNIT_OPTS(Claireon, LogSearchEncoding, BoundedReadDropsPartialFirstLine, UNTEST_TIMEOUTMS(30000))
 {

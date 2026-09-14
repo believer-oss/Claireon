@@ -342,7 +342,7 @@ UNTEST_UNIT_OPTS(Claireon, NotifyClassResolve, AddNotify_InstantShortName_Create
 	co_return;
 }
 
-// The FSANS_ApplyGameplayEffects regression shape end-to-end: a native state
+// The misnamed native notify-state regression shape end-to-end: a native state
 // class whose name defeats the legacy heuristic must still resolve and be
 // classified state (with the old code this errored under every spelling).
 UNTEST_UNIT_OPTS(Claireon, NotifyClassResolve, AddNotify_FSANSShapeName_CreatesStateSubObject, UNTEST_TIMEOUTMS(30000))

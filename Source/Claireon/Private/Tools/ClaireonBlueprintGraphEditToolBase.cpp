@@ -20,6 +20,7 @@
 #include "Tools/ClaireonBlueprintGraphEditToolBase_Internal.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "GraphEditor.h"
 #include "Misc/PackageName.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
@@ -31,9 +32,52 @@ using FToolResult = IClaireonTool::FToolResult;
 TMap<FString, FBlueprintEditToolData> ClaireonBlueprintGraphEditToolBase::ToolData;
 bool ClaireonBlueprintGraphEditToolBase::bDelegateRegistered = false;
 
-// ============================================================================
-// Session Delegate
-// ============================================================================
+// Prefix helpers to avoid unity-build collisions.
+namespace ClaireonBlueprintGraphEditToolBaseInternal
+{
+
+/** Identity of a link endpoint. */
+FString BPEditBase_EndpointKey(const FGuid& NodeGuid, const FGuid& PinId)
+{
+	return FString::Printf(TEXT("%s/%s"),
+		*NodeGuid.ToString(EGuidFormats::DigitsWithHyphens),
+		*PinId.ToString(EGuidFormats::DigitsWithHyphens));
+}
+
+/**
+ * Label live endpoints by title and deleted endpoints by captured class and GUID.
+ * Labels do not participate in identity comparison.
+ */
+FString BPEditBase_DescribeEndpoint(UEdGraph* Graph, const FClaireonBPSnapshot& PreOp, const FGuid& NodeGuid)
+{
+	if (UEdGraphNode* Live = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, NodeGuid); IsValid(Live))
+	{
+		return Live->GetNodeTitle(ENodeTitleType::FullTitle).ToString();
+	}
+	if (const FClaireonBPNodeSnapshot* PreNode = PreOp.FindNode(NodeGuid))
+	{
+		FString ClassName = PreNode->NodeClassPath;
+		int32 DotIndex = INDEX_NONE;
+		if (ClassName.FindLastChar(TEXT('.'), DotIndex))
+		{
+			ClassName = ClassName.RightChop(DotIndex + 1);
+		}
+		return FString::Printf(TEXT("deleted %s [GUID: %s]"),
+			*ClassName, *NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+	}
+	return FString::Printf(TEXT("[GUID: %s]"), *NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+}
+
+/** Log asset and phase on entry so the last line identifies where a failure occurred. */
+FString BPEditBase_SaveLogPrefix(const UBlueprint* Blueprint, const TCHAR* Phase)
+{
+	// Use object paths to distinguish assets sharing a package.
+	const FString AssetPath = IsValid(Blueprint) ? Blueprint->GetPathName() : TEXT("(unresolved)");
+	return FString::Printf(TEXT("[EditBlueprintGraph] Save phase=%s asset=%s:"), Phase, *AssetPath);
+}
+
+} // namespace ClaireonBlueprintGraphEditToolBaseInternal
+
 
 void ClaireonBlueprintGraphEditToolBase::HandleSessionClosed(const FMCPSessionClosedInfo& Info)
 {
@@ -43,9 +87,6 @@ void ClaireonBlueprintGraphEditToolBase::HandleSessionClosed(const FMCPSessionCl
 	}
 }
 
-// ============================================================================
-// Session / cursor helpers
-// ============================================================================
 
 FString ClaireonBlueprintGraphEditToolBase::BuildAvailableGraphsList(const UBlueprint* Blueprint) const
 {
@@ -69,10 +110,13 @@ bool ClaireonBlueprintGraphEditToolBase::CompileAndSaveSession(
 	FString& OutSavedPathOrError,
 	TArray<FString>& OutWarnings)
 {
+	using ClaireonBlueprintGraphEditToolBaseInternal::BPEditBase_SaveLogPrefix;
+
 	UBlueprint* Blueprint = Data ? Data->Blueprint.Get() : nullptr;
 	if (!IsValid(Blueprint))
 	{
-		UE_LOG(LogClaireon, Warning, TEXT("[EditBlueprintGraph] Save: Blueprint is no longer valid"));
+		UE_LOG(LogClaireon, Warning, TEXT("%s Blueprint is no longer valid"),
+			*BPEditBase_SaveLogPrefix(nullptr, TEXT("resolve")));
 		OutSavedPathOrError = TEXT("Blueprint is no longer valid");
 		return false;
 	}
@@ -80,40 +124,41 @@ bool ClaireonBlueprintGraphEditToolBase::CompileAndSaveSession(
 	UPackage* Package = Blueprint->GetOutermost();
 	if (!IsValid(Package))
 	{
-		UE_LOG(LogClaireon, Warning, TEXT("[EditBlueprintGraph] Save: Failed to get package for Blueprint"));
+		UE_LOG(LogClaireon, Warning, TEXT("%s Failed to get package for Blueprint"),
+			*BPEditBase_SaveLogPrefix(Blueprint, TEXT("resolve")));
 		OutSavedPathOrError = TEXT("Failed to get package for Blueprint");
 		return false;
 	}
 
-	// A trashed pin lingering in any live pin's LinkedTo asserts inside SavePackage
-	// (EdGraphPin.cpp "serialized while trashed") and bakes load-crash corruption into
-	// the asset. Scrub stale references before compiling/saving.
+	// Scrub trashed LinkedTo references before compile/save; serializing them can assert or corrupt the asset.
+	UE_LOG(LogClaireon, Log, TEXT("%s Scrubbing trashed pin links"),
+		*BPEditBase_SaveLogPrefix(Blueprint, TEXT("scrub")));
 	TArray<FString> ScrubDetails;
 	const int32 ScrubbedRefs = ClaireonBPGraphInternal::ScrubTrashedPinLinks(Blueprint, ScrubDetails);
 	if (ScrubbedRefs > 0)
 	{
 		for (const FString& Detail : ScrubDetails)
 		{
-			UE_LOG(LogClaireon, Warning, TEXT("[EditBlueprintGraph] Save: %s"), *Detail);
+			UE_LOG(LogClaireon, Warning, TEXT("%s %s"),
+				*BPEditBase_SaveLogPrefix(Blueprint, TEXT("scrub")), *Detail);
 		}
 		OutWarnings.Add(FString::Printf(
 			TEXT("Scrubbed %d stale reference(s) to trashed pins before save (see log for details); the graph had dangling links from a prior split/recombine or reconstruct."),
 			ScrubbedRefs));
 	}
 
-	// Compile the Blueprint to ensure it's in a valid state before saving
-	// This initializes the generated class and ensures the Blueprint is complete
-	UE_LOG(LogClaireon, Log, TEXT("[EditBlueprintGraph] Save: Compiling Blueprint before save"));
+	UE_LOG(LogClaireon, Log, TEXT("%s Compiling Blueprint before save"),
+		*BPEditBase_SaveLogPrefix(Blueprint, TEXT("compile")));
 	FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::SkipGarbageCollection);
 
-	// Ensure package is properly configured for saving
 	Package->SetIsExternallyReferenceable(true);
 	Package->MarkPackageDirty();
 
 	const FString PackageFileName = FPackageName::LongPackageNameToFilename(
 		Package->GetName(), FPackageName::GetAssetPackageExtension());
 
-	UE_LOG(LogClaireon, Log, TEXT("[EditBlueprintGraph] Save: Attempting to save to %s"), *PackageFileName);
+	UE_LOG(LogClaireon, Log, TEXT("%s Attempting to save to %s"),
+		*BPEditBase_SaveLogPrefix(Blueprint, TEXT("save")), *PackageFileName);
 
 	if (ClaireonSafeExec::DidLastExecutionCrash())
 	{
@@ -123,22 +168,20 @@ bool ClaireonBlueprintGraphEditToolBase::CompileAndSaveSession(
 
 	FSavePackageArgs SaveArgs;
 	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
-	SaveArgs.SaveFlags = SAVE_None; // Report errors - we expect save to succeed now
+	SaveArgs.SaveFlags = SAVE_None;
 
 	if (UPackage::SavePackage(Package, Blueprint, *PackageFileName, SaveArgs))
 	{
-		UE_LOG(LogClaireon, Log, TEXT("[EditBlueprintGraph] Save: Successfully saved Blueprint to %s"), *PackageFileName);
+		UE_LOG(LogClaireon, Log, TEXT("%s Successfully saved Blueprint to %s"),
+			*BPEditBase_SaveLogPrefix(Blueprint, TEXT("save")), *PackageFileName);
 		OutSavedPathOrError = PackageFileName;
 		return true;
 	}
 
-	UE_LOG(LogClaireon, Error, TEXT("[EditBlueprintGraph] Save: Failed to save Blueprint to %s"), *PackageFileName);
+	UE_LOG(LogClaireon, Error, TEXT("%s Failed to save Blueprint to %s"),
+		*BPEditBase_SaveLogPrefix(Blueprint, TEXT("save")), *PackageFileName);
 
-	// Zombie editor detection hint. SavePackage on Windows can fail with
-	// ERROR_SHARING_VIOLATION when a previously-crashed editor process still holds
-	// the .uasset file. We can't reliably enumerate other-process handles without
-	// platform-specific code; emit a directive that names the file and points the
-	// caller at the recovery procedure.
+	// A sharing violation can indicate another editor still holds the asset; report the file and recovery procedure.
 	const FString PathHint = FString::Printf(
 		TEXT(" If this is a 'sharing violation' or 'file in use' error, a previously-"
 			 "crashed UnrealEditor process may still be holding %s. Run "
@@ -203,21 +246,25 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 	ResponseData->SetStringField(TEXT("response_mode"), EffectiveMode);
 	if (bReadOnlyNoSession)
 	{
-		// Stated positively rather than left to be inferred from an empty session_id:
-		// a caller holding "" and passing it back would get "Invalid or expired session_id".
 		ResponseData->SetBoolField(TEXT("read_only"), true);
 	}
 
-	// =========================================================================
-	// Nudge toward explicit open/close discipline after sustained asset_path use.
-	// Threshold: > 5 consecutive auto-opens. Cadence: first hint at call 6, then
-	// every 5 past that (11, 16, ...). Counter resets whenever the caller passes
-	// session_id. See CLAIREON_BP_SESSION_ID_PROPOSAL.md.
-	//
-	// Skipped entirely on the read-only path: the nudge exists to push callers toward
-	// open/close discipline around sessions they are accumulating, and this path opens
-	// none. Advising a caller to close what was never opened is noise.
-	// =========================================================================
+	// Report window effects on every call, including asset_path auto-opens, and revalidate the current binding.
+	{
+		TSharedPtr<FJsonObject> WindowData = MakeShared<FJsonObject>();
+		WindowData->SetStringField(TEXT("state"),
+			ClaireonAssetEditorWindow::ToWireString(Data->EditorWindow.State));
+		if (!Data->EditorWindow.Reason.IsEmpty())
+		{
+			WindowData->SetStringField(TEXT("reason"), Data->EditorWindow.Reason);
+		}
+		WindowData->SetStringField(TEXT("binding"),
+			ClaireonEditorBindingStatusToWireString(Data->EditorBinding.Revalidate(Graph)));
+		ResponseData->SetObjectField(TEXT("editor_window"), WindowData);
+	}
+
+	// Nudge after sustained auto-opens: calls 6, 11, 16, and so on. Explicit session IDs reset the count.
+	// Read-only access creates no session and needs no nudge.
 	TSharedPtr<FJsonObject> SessionHint;
 	if (!bReadOnlyNoSession)
 	{
@@ -294,7 +341,6 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 			UEdGraphNode* AffNode = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, AffGuid);
 			if (!IsValid(AffNode))
 			{
-				// Node was removed — we can't show its current state; skip
 				continue;
 			}
 
@@ -304,9 +350,12 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 			DiffText += FString::Printf(TEXT("[%s] (%s) [GUID: %s]\n"),
 				*NodeTitle, *NodeClass, *AffGuid.ToString());
 
-			// Per-pin diff
+			// Per-pin diff, keyed by PinId and by the connected node's GUID.
 			bool bAnyPinDiff = false;
-			const TMap<FName, TArray<FString>>* PrePinMap = Data->PreOpPinConnections.Find(AffGuid);
+			const FClaireonBPNodeSnapshot* PreNode = Data->PreOpSnapshot.FindNode(AffGuid);
+
+			// Track live pins so removed pre-op pins can also be reported.
+			TSet<FGuid> SeenPinIds;
 
 			for (UEdGraphPin* DiffPin : AffNode->Pins)
 			{
@@ -314,67 +363,122 @@ FToolResult ClaireonBlueprintGraphEditToolBase::BuildStateResponse(const FString
 				{
 					continue;
 				}
+				SeenPinIds.Add(DiffPin->PinId);
 
-				// Current connections for this pin
-				TArray<FString> CurrentConnected;
+				const FString DirArrow = (DiffPin->Direction == EGPD_Output) ? TEXT("->") : TEXT("<-");
+				const FClaireonBPPinSnapshot* PrePin = PreNode ? PreNode->Pins.Find(DiffPin->PinId) : nullptr;
+
+				TSet<FString> CurrentLinks;
+				TMap<FString, FString> CurrentLabels;
 				for (UEdGraphPin* LinkedDiff : DiffPin->LinkedTo)
 				{
-					if (LinkedDiff && IsValid(LinkedDiff->GetOwningNode()))
+					if (!LinkedDiff || !IsValid(LinkedDiff->GetOwningNodeUnchecked()))
 					{
-						CurrentConnected.Add(LinkedDiff->GetOwningNode()->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
+						continue;
+					}
+					const UEdGraphNode* Other = LinkedDiff->GetOwningNodeUnchecked();
+					const FString Key = ClaireonBlueprintGraphEditToolBaseInternal::BPEditBase_EndpointKey(Other->NodeGuid, LinkedDiff->PinId);
+					CurrentLinks.Add(Key);
+					CurrentLabels.Add(Key, Other->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
+				}
+
+				TSet<FString> PreviousLinks;
+				TMap<FString, FGuid> PreviousNodeGuids;
+				if (PrePin)
+				{
+					for (const FClaireonBPLinkEndpoint& Endpoint : PrePin->Links)
+					{
+						const FString Key = ClaireonBlueprintGraphEditToolBaseInternal::BPEditBase_EndpointKey(Endpoint.NodeGuid, Endpoint.PinId);
+						PreviousLinks.Add(Key);
+						PreviousNodeGuids.Add(Key, Endpoint.NodeGuid);
 					}
 				}
 
-				// Pre-op connections for this pin
-				TArray<FString> PreviousConnected;
-				if (PrePinMap)
+				// A preserved PinId makes an in-place name change a rename.
+				if (PrePin && PrePin->PinName != DiffPin->PinName)
 				{
-					const TArray<FString>* PreConns = PrePinMap->Find(DiffPin->PinName);
-					if (PreConns)
-					{
-						PreviousConnected = *PreConns;
-					}
+					DiffText += FString::Printf(TEXT("  RENAMED: %s -> %s(%s)\n"),
+						*PrePin->PinName.ToString(),
+						*DiffPin->PinName.ToString(),
+						*DiffPin->PinType.PinCategory.ToString());
+					bAnyPinDiff = true;
 				}
 
-				// Find added connections (in current but not in previous)
-				for (const FString& CurConn : CurrentConnected)
+				// Report orphan transitions even when pin identity survives.
+				if (DiffPin->bOrphanedPin && (!PrePin || !PrePin->bOrphaned))
 				{
-					if (!PreviousConnected.Contains(CurConn))
+					DiffText += FString::Printf(TEXT("  ORPHANED: %s(%s) (no longer matched by the reconstructed node)\n"),
+						*DiffPin->PinName.ToString(),
+						*DiffPin->PinType.PinCategory.ToString());
+					bAnyPinDiff = true;
+				}
+
+				// Sort rendered entries for deterministic output.
+				TArray<FString> AddedKeys = CurrentLinks.Difference(PreviousLinks).Array();
+				AddedKeys.Sort();
+				TArray<FString> RemovedKeys = PreviousLinks.Difference(CurrentLinks).Array();
+				RemovedKeys.Sort();
+
+				for (const FString& Key : AddedKeys)
+				{
+					DiffText += FString::Printf(TEXT("  ADDED:   %s(%s) %s [%s]\n"),
+						*DiffPin->PinName.ToString(),
+						*DiffPin->PinType.PinCategory.ToString(),
+						*DirArrow,
+						*CurrentLabels[Key]);
+					bAnyPinDiff = true;
+				}
+
+				for (const FString& Key : RemovedKeys)
+				{
+					const FString Label = ClaireonBlueprintGraphEditToolBaseInternal::BPEditBase_DescribeEndpoint(
+						Graph, Data->PreOpSnapshot, PreviousNodeGuids[Key]);
+					DiffText += FString::Printf(TEXT("  REMOVED: %s(%s) %s [%s]%s\n"),
+						*DiffPin->PinName.ToString(),
+						*DiffPin->PinType.PinCategory.ToString(),
+						*DirArrow,
+						*Label,
+						CurrentLinks.IsEmpty() ? TEXT(" (now unconnected)") : TEXT(""));
+					bAnyPinDiff = true;
+				}
+			}
+
+			// Report removed pins and their previous links.
+			if (PreNode)
+			{
+				TArray<const FClaireonBPPinSnapshot*> VanishedPins;
+				for (const TPair<FGuid, FClaireonBPPinSnapshot>& PrePair : PreNode->Pins)
+				{
+					if (!SeenPinIds.Contains(PrePair.Key))
 					{
-						FString DirArrow = (DiffPin->Direction == EGPD_Output) ? TEXT("->") : TEXT("<-");
-						DiffText += FString::Printf(TEXT("  ADDED:   %s(%s) %s [%s]\n"),
-							*DiffPin->PinName.ToString(),
-							*DiffPin->PinType.PinCategory.ToString(),
+						VanishedPins.Add(&PrePair.Value);
+					}
+				}
+				VanishedPins.Sort([](const FClaireonBPPinSnapshot& A, const FClaireonBPPinSnapshot& B)
+				{
+					return A.PinName != B.PinName
+						? A.PinName.LexicalLess(B.PinName)
+						: A.PinId < B.PinId;
+				});
+
+				for (const FClaireonBPPinSnapshot* PrePin : VanishedPins)
+				{
+					const FString DirArrow = PrePin->bIsInput ? TEXT("<-") : TEXT("->");
+					if (PrePin->Links.IsEmpty())
+					{
+						DiffText += FString::Printf(TEXT("  PIN REMOVED: %s\n"),
+							*PrePin->PinName.ToString());
+					}
+					for (const FClaireonBPLinkEndpoint& Endpoint : PrePin->Links)
+					{
+						const FString Label = ClaireonBlueprintGraphEditToolBaseInternal::BPEditBase_DescribeEndpoint(
+							Graph, Data->PreOpSnapshot, Endpoint.NodeGuid);
+						DiffText += FString::Printf(TEXT("  PIN REMOVED: %s %s [%s]\n"),
+							*PrePin->PinName.ToString(),
 							*DirArrow,
-							*CurConn);
-						bAnyPinDiff = true;
+							*Label);
 					}
-				}
-
-				// Find removed connections (in previous but not in current)
-				for (const FString& PrevConn : PreviousConnected)
-				{
-					if (!CurrentConnected.Contains(PrevConn))
-					{
-						FString DirArrow = (DiffPin->Direction == EGPD_Output) ? TEXT("->") : TEXT("<-");
-						if (CurrentConnected.Num() == 0)
-						{
-							DiffText += FString::Printf(TEXT("  REMOVED: %s(%s) %s [%s] (now unconnected)\n"),
-								*DiffPin->PinName.ToString(),
-								*DiffPin->PinType.PinCategory.ToString(),
-								*DirArrow,
-								*PrevConn);
-						}
-						else
-						{
-							DiffText += FString::Printf(TEXT("  REMOVED: %s(%s) %s [%s]\n"),
-								*DiffPin->PinName.ToString(),
-								*DiffPin->PinType.PinCategory.ToString(),
-								*DirArrow,
-								*PrevConn);
-						}
-						bAnyPinDiff = true;
-					}
+					bAnyPinDiff = true;
 				}
 			}
 
@@ -612,17 +716,74 @@ bool ClaireonBlueprintGraphEditToolBase::ResolveTargetNode(
 	return false;
 }
 
+void ClaireonBlueprintGraphEditToolBase::EnsureSessionEditorWindow(FBlueprintEditToolData& Data)
+{
+	UBlueprint* Blueprint = Data.Blueprint.Get();
+	if (!IsValid(Blueprint))
+	{
+		return;
+	}
+	UEdGraph* Graph = Data.Graph.Get();
+
+	const EClaireonEditorBindingStatus Status = Data.EditorBinding.Revalidate(Graph);
+	if (Status == EClaireonEditorBindingStatus::Valid)
+	{
+		// Report already_open per call rather than repeating the session's initial opening effect.
+		Data.EditorWindow.State = EClaireonEditorWindowState::AlreadyOpen;
+		Data.EditorWindow.Availability = EClaireonEditorAvailability::Available;
+		Data.EditorWindow.Reason.Empty();
+		return;
+	}
+	if (Status != EClaireonEditorBindingStatus::NotBound)
+	{
+		// Report a dead binding without adopting another editor or rewriting opening history.
+		return;
+	}
+
+	// Keep the editor open beyond this call for the session.
+	FScopedBlueprintEditor ScopedEditor(Blueprint, /*bInSilent=*/false, /*bInCloseOnDestroy=*/false);
+	Data.EditorWindow = ScopedEditor.GetOpenOutcome();
+	if (ScopedEditor.IsValid() && IsValid(Graph))
+	{
+		Data.EditorBinding.BindTo(Blueprint, Graph,
+			ScopedEditor.GetBlueprintEditor(), ScopedEditor.GetGraphEditor(Graph));
+	}
+}
+
+void ClaireonBlueprintGraphEditToolBase::MirrorCursorToView(FBlueprintEditToolData& Data)
+{
+	UEdGraph* Graph = Data.Graph.Get();
+	if (!IsValid(Graph) || !Data.Cursor.FocusedNodeGuid.IsValid())
+	{
+		return;
+	}
+
+	EClaireonEditorBindingStatus Status = EClaireonEditorBindingStatus::NotBound;
+	TSharedPtr<SGraphEditor> Widget = Data.EditorBinding.ResolveGraphEditor(Graph, Status);
+	if (!Widget.IsValid())
+	{
+		return;
+	}
+
+	UEdGraphNode* Node = ClaireonBlueprintHelpers::FindNodeByGuid(Graph, Data.Cursor.FocusedNodeGuid);
+	if (!IsValid(Node))
+	{
+		return;
+	}
+
+	// Cursor movement must preserve selection; JumpToNode otherwise selects by default.
+	Widget->JumpToNode(Node, /*bRequestRename=*/false, /*bSelectNode=*/false);
+}
+
 void ClaireonBlueprintGraphEditToolBase::InitToolDataForSession(const FString& SessionId, UBlueprint* Blueprint, UEdGraph* Graph)
 {
 	FBlueprintEditToolData NewData;
 	NewData.Blueprint = Blueprint;
 	NewData.Graph = Graph;
-	// Graph is legitimately null for a MacroLibrary/Interface session, which has no
-	// ubergraph and possibly no graphs at all until bp_add_macro runs.
+	// Macro libraries and interfaces may have no graph yet.
 	NewData.Cursor.GraphName = IsValid(Graph) ? Graph->GetName() : FString();
 	NewData.Cursor.ViewportCenter = FVector2D(0.0f, 0.0f);
 
-	// Find first event node to focus cursor
 	if (IsValid(Graph))
 	{
 		TArray<UEdGraphNode*> RootNodes = ClaireonBlueprintHelpers::FindRootNodes(Graph);
@@ -639,9 +800,10 @@ void ClaireonBlueprintGraphEditToolBase::InitToolDataForSession(const FString& S
 		}
 	}
 
+	EnsureSessionEditorWindow(NewData);
+
 	ToolData.Add(SessionId, MoveTemp(NewData));
-	// Caller is responsible for calling ToolData.Find(SessionId) after this
-	// function returns (Add may rehash the map, invalidating any prior pointer).
+	// Re-find ToolData after Add because map rehashing can invalidate prior pointers.
 }
 
 bool ClaireonBlueprintGraphEditToolBase::BeginSessionOp(
@@ -684,38 +846,16 @@ bool ClaireonBlueprintGraphEditToolBase::BeginSessionOp(
 	OutData->bSuppressOutput = bSuppressOutput;
 	OutData->ResponseMode = ResponseMode;
 	OutData->LastOperationAffectedNodes.Empty();
-	// Session data is shared across every bp_* tool, so a status left behind by the
-	// previous op would be echoed as this op's own status by BuildStateResponse.
+	// Reset shared per-operation status before another tool uses the session.
 	OutData->Cursor.LastOperationStatus = FString();
 
-	OutData->PreOpPinConnections.Empty();
+	// Capture after resolution and reset, before the first mutating handler.
+	OutData->PreOpSnapshot = FClaireonBPSnapshot();
 	if (UEdGraph* SnapGraph = OutData->Graph.Get(); IsValid(SnapGraph))
 	{
-		for (UEdGraphNode* SnapNode : SnapGraph->Nodes)
-		{
-			if (!IsValid(SnapNode))
-			{
-				continue;
-			}
-			TMap<FName, TArray<FString>> PinConns;
-			for (UEdGraphPin* SnapPin : SnapNode->Pins)
-			{
-				if (!SnapPin)
-				{
-					continue;
-				}
-				TArray<FString> ConnectedTo;
-				for (UEdGraphPin* LinkedPin : SnapPin->LinkedTo)
-				{
-					if (LinkedPin && IsValid(LinkedPin->GetOwningNode()))
-					{
-						ConnectedTo.Add(LinkedPin->GetOwningNode()->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
-					}
-				}
-				PinConns.Add(SnapPin->PinName, ConnectedTo);
-			}
-			OutData->PreOpPinConnections.Add(SnapNode->NodeGuid, PinConns);
-		}
+		TArray<UEdGraph*> SnapGraphs;
+		SnapGraphs.Add(SnapGraph);
+		ClaireonBPSnapshot::CaptureForChangedDiff(SnapGraphs, OutData->PreOpSnapshot);
 	}
 
 	OutParams = Params;
@@ -847,13 +987,14 @@ bool ClaireonBlueprintGraphEditToolBase::BeginReadOnlySessionOp(
 		return false;
 	}
 
-	// Scratch data, deliberately NOT registered in ToolData: there is no session to key
-	// it by and nothing may outlive this call. One instance per tool object, reset each
-	// time, so the returned pointer stays valid for the caller's duration.
+	// Keep read-only scratch data outside the session map and reset it for each call.
 	ReadOnlyScratchData = FBlueprintEditToolData();
 	ReadOnlyScratchData.Blueprint = Blueprint;
 	ReadOnlyScratchData.Graph = Graph;
 	ReadOnlyScratchData.Cursor.GraphName = IsValid(Graph) ? Graph->GetName() : FString();
+	// Read-only access intentionally opens no window.
+	ReadOnlyScratchData.EditorWindow.Reason =
+		TEXT("this call resolved the asset read-only and registered no session, so it opened no window");
 
 	bool bSuppressOutput = false;
 	Arguments->TryGetBoolField(TEXT("suppress_output"), bSuppressOutput);
@@ -866,8 +1007,6 @@ bool ClaireonBlueprintGraphEditToolBase::BeginReadOnlySessionOp(
 	ReadOnlyScratchData.bSuppressOutput = bSuppressOutput;
 	ReadOnlyScratchData.ResponseMode = ResponseMode;
 
-	// Left at zero on purpose: the auto-open nudge counts consecutive auto-opens, and
-	// this path never opens anything, so there is no discipline to nudge toward.
 	ReadOnlyScratchData.ConsecutiveAssetPathCalls = 0;
 
 	OutSessionId = FString();

@@ -52,22 +52,8 @@ namespace ClaireonBlueprintDiffContractTestsInternal
 // File-local discriminator prefix: BPDiffCT_ (anon namespaces are not isolation
 // under unity batching).
 
-// True only when the fixture actually has a .uasset on disk.
-//
-// BPDiffCT_CreateBP builds its Blueprint in a package created with
-// CreatePackage() and never saves it, and bp_diff does not save either -- so the
-// fixture normally lives in memory only. Deleting an in-memory fixture buys
-// nothing, and every ObjectTools::ForceDeleteObjects call runs a whole-object-graph
-// referencer scan, which is the trigger for the nondeterministic
-// Niagara-serialization crash documented in
-// Docs/llm/todo/claireon-untest-harness-reliability.md item 1. (This suite's
-// SectionsCdo_ReportsCdoDelta_NotSilentNoDiff is one of the tests that crash has
-// landed on.)
-//
-// The check is kept rather than dropping the delete outright because
-// /Game/__MCPTests is deliberately NOT gitignored: a stale .uasset left by an
-// older build or a crashed run must still be cleaned so `git status --porcelain
-// -- Content/` stays empty.
+// Delete only on-disk fixtures. In-memory deletion triggers a global referencer
+// scan that can crash on resident Niagara objects; stale files still need cleanup.
 bool BPDiffCT_HasFileOnDisk(const FString& AssetOrPackagePath)
 {
 	const FString PackageName = FPackageName::ObjectPathToPackageName(AssetOrPackagePath);

@@ -97,11 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_SelectNode::GetOperation() const { return TEXT("select_node"); }
+FString ClaireonBlueprintGraphTool_SelectNode::GetOperation() const { return TEXT("cursor_to_node"); }
 
 FString ClaireonBlueprintGraphTool_SelectNode::GetDescription() const
 {
-    return TEXT("Move the cursor to a specific node by GUID in the open Blueprint editing session. Requires open session_id from bp_open. Read-only with respect to graph contents (cursor is session state). The node_id must be the exact GUID returned by bp_get_state or bp_add_node. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+    return TEXT("Move the session cursor to a node by GUID. The cursor is the session's single anchor: it decides where bp_add_node places a node and, with auto_connect_from_cursor, what it wires to, and bp_cursor_back walks its history. It does NOT change the editor selection (see bp_selection_set) and does not modify the graph. Accepts session_id or asset_path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SelectNode::GetInputSchema() const
@@ -120,7 +120,7 @@ FToolResult ClaireonBlueprintGraphTool_SelectNode::Execute(const TSharedPtr<FJso
     FString SessionId;
     FBlueprintEditToolData* Data = nullptr;
     FToolResult Error;
-    if (!BeginSessionOp(Arguments, TEXT("select_node"), Params, SessionId, Data, Error))
+    if (!BeginSessionOp(Arguments, TEXT("cursor_to_node"), Params, SessionId, Data, Error))
     {
         return Error;
     }
@@ -164,6 +164,9 @@ FToolResult ClaireonBlueprintGraphTool_SelectNode::Execute(const TSharedPtr<FJso
 
 	FString NodeTitle = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();
 	Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Selected node: %s"), *NodeTitle);
+
+	// Mirror the view without changing selection; a missing window is a no-op.
+	MirrorCursorToView(*Data);
 
 	return BuildStateResponse(SessionId, Data);
 }

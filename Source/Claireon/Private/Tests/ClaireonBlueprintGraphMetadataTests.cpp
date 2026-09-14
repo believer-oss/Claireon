@@ -73,7 +73,7 @@ UNTEST_UNIT_OPTS(Claireon, BlueprintGraphMetadata, AllTenToolsHaveRichMetadata, 
 	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_AddNode>(TEXT("bp_add_node")));
 	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_ConnectPins>(TEXT("bp_connect_pins")));
 	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_SetPinValue>(TEXT("bp_set_pin_value")));
-	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_SelectPin>(TEXT("bp_select_pin")));
+	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_SelectPin>(TEXT("bp_cursor_to_pin")));
 	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_AddVariable>(TEXT("bp_add_variable")));
 	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_Save>(TEXT("bp_save")));
 	UNTEST_EXPECT_TRUE(ValidateMetadataLengthsAndContent<ClaireonBlueprintGraphTool_Format>(TEXT("bp_format")));

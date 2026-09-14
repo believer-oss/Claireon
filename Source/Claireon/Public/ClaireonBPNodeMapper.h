@@ -56,7 +56,7 @@ public:
 	// V4-7: Strip "Public/" or "Classes/" prefix from ModuleRelativePath metadata
 	static FString StripModuleRelativePrefix(const FString& Path);
 
-	// Include accumulation (P1-10)
+	// Include accumulation
 	void AddInclude(const FString& Path);
 	const TSet<FString>& GetAccumulatedIncludes() const;
 

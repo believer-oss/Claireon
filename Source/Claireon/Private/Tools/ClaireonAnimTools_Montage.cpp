@@ -18,26 +18,8 @@
 
 namespace ClaireonAnimToolsMontageInternal
 {
-	// Shared post-edit fixup for every montage segment mutation in this file
-	// (add_segment, remove_segment, set_segment_property, retime_segment,
-	// batch_retime). Name carries the ClaireonMontageTool_ discriminator prefix
-	// because anonymous namespaces are not isolation under unity batching
-	// (linux-build-server-v2).
-	//
-	// UAnimMontage::PostEditChangeProperty does NOT recalculate SequenceLength
-	// (the engine only recalcs on PostLoad), so without an explicit recalc the
-	// cached play length goes stale after segment edits: notify adds past the
-	// old length are rejected by GetPlayLength() range checks and playback
-	// truncates. This mirrors the engine's own PostLoad repair pattern:
-	// SetCompositeLength(CalculateSequenceLength()).
-	//
-	// When notify times/durations may have been mutated (the retime paths call
-	// SetTime/SetDuration directly), RefreshCacheData() re-sorts the Notifies
-	// array and rebuilds the notify track cache -- the same call the plugin's
-	// MoveNotify helper treats as mandatory.
-	//
-	// Must run BEFORE any downstream notify-range validation or status
-	// reporting reads GetPlayLength().
+	// PostEditChangeProperty does not recalculate montage length. Repair it before
+	// notify-range validation or status reads; refresh the notify cache after retiming.
 	void ClaireonMontageTool_PostMontageEdit(UAnimMontage* Montage, bool bNotifyTimesMutated)
 	{
 		const float RecalculatedLength = Montage->CalculateSequenceLength();

@@ -107,20 +107,10 @@ public:
 	static void RebuildFromLiveServer();
 
 	/**
-	 * Rank catalog entries against Query using FTS5 bm25, plus the owned-term
-	 * boost (P2-20), applied as a bounded scale on the bm25 score before
-	 * ordering:
-	 *   - query-domain category: a row whose UNINDEXED category is the domain
-	 *     the query names (e.g. "blueprint" -> category bp, "widget bp" ->
-	 *     category widgetbp) gets a flat fraction -- identical for every row of
-	 *     that category, so it reorders across domains but never within one;
-	 *   - operation coverage: a fraction scaled by how much of the row's own
-	 *     operation appears verbatim in the query, which separates siblings
-	 *     inside one category.
-	 * Scores on the returned matches carry the boost.
-	 * Returns at most MaxResults matches.  CategoryFilter restricts results to a
-	 * specific category when non-empty (exact match on the UNINDEXED category column).
-	 * Returns an empty array when the index is empty or no entries matched.
+	 * Rank by FTS5 BM25 with bounded boosts for matching query domains and operation tokens.
+	 * The domain boost is uniform within a category; operation coverage separates siblings.
+	 * Returned scores include both boosts. Return at most MaxResults, optionally restricted
+	 * by exact CategoryFilter. Return empty when the index is empty or no entries match.
 	 */
 	static TArray<FClaireonToolCatalogMatch> FindNearest(
 		const FString& Query,

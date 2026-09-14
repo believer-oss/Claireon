@@ -8,13 +8,7 @@
 #include "Dom/JsonValue.h"
 #include "ClaireonLog.h"
 
-// ---------------------------------------------------------------------------
-// Anonymous-namespace helpers -- all prefixed ClaireonToolLogTailSpec_ to
-// avoid anon-namespace unity-build collisions on linux-build-server-v2.
-// UNTEST_ASSERT_*/UNTEST_EXPECT_* must never appear inside lambdas (they
-// expand to co_return); helpers that need assertions run inline in the test
-// coroutine.
-// ---------------------------------------------------------------------------
+// Keep UNTEST assertions in the test coroutine; they expand to co_return.
 namespace ClaireonTool_LogTail_spec_Private
 {
 	// Build args for the no-filter (baseline) call.
@@ -77,12 +71,9 @@ namespace ClaireonTool_LogTail_spec_Private
 		return Result.Data->TryGetArrayField(TEXT("warnings"), Warnings) && Warnings != nullptr;
 	}
 
-	// Whether the result carries a hint. Reads the structured Result.Hint channel; the former
-	// ad-hoc Data.hint string convention is retired, and checking Data here would silently
-	// pass forever regardless of what the tool emits.
 	bool ClaireonToolLogTailSpec_HasHintField(const IClaireonTool::FToolResult& Result)
 	{
-		return Result.Hint.IsValid();
+		return Result.Hints.Num() > 0;
 	}
 
 	// Get the category_excluded_count field; returns -1 if not present.

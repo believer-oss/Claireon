@@ -199,9 +199,9 @@ IClaireonTool::FToolResult FClaireonDataAssetTool_Create::Execute(const TSharedP
 	const TSharedPtr<FJsonObject>* PropertiesPtr = nullptr;
 	if (Arguments->TryGetObjectField(TEXT("properties"), PropertiesPtr) && PropertiesPtr && PropertiesPtr->IsValid())
 	{
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*PropertiesPtr)->Values)
+		for (const auto& Pair : (*PropertiesPtr)->Values)
 		{
-			const FString& PropertyPath = Pair.Key;
+			const FString PropertyPath(Pair.Key);
 			const FString ValueStr = DataAssetCreate_JsonValueToString(Pair.Value);
 
 			FString WriteError;

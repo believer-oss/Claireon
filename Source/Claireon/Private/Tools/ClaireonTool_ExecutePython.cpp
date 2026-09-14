@@ -5,9 +5,11 @@
 #include "Tools/ClaireonTool_MapOpen.h"
 #include "Tools/ClaireonTool_PIEStart.h"
 #include "Tools/ClaireonTool_PIEStop.h"
-#include "Tools/ClaireonTool_LiveCodingReload.h"
+#include "Tools/ClaireonTool_EditorLiveCodingReloadAsync.h"
 #include "Tools/ClaireonTool_MapDuplicate.h"
+#include "ClaireonAdvisoryCoalesce.h"
 #include "ClaireonBridge.h"
+#include "ClaireonHintRateLimiter.h"
 #include "ClaireonAutoSave.h"
 #include "ClaireonLog.h"
 #include "ClaireonModule.h"
@@ -32,21 +34,13 @@
 #include "Serialization/JsonWriter.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 
-// CPython C API headers for watchdog timeout enforcement
 THIRD_PARTY_INCLUDES_START
 #include "Python.h"
 THIRD_PARTY_INCLUDES_END
 
 TAtomic<int32> ClaireonTool_ExecutePython::TempFileCounter(0);
 
-// ---------------------------------------------------------------------------
-// Python execution depth (P2-5b).
-//
-// Game-thread only: ExecPythonCommandEx runs on the game thread and every
-// claireon.* tool dispatched from the script re-enters on the same thread, so
-// a plain int32 needs no synchronization. File-local discriminator prefix
-// (Cl627PyExec_) against unity-batched symbol collisions.
-// ---------------------------------------------------------------------------
+// Game-thread only; nested tool dispatch re-enters on the same thread.
 static int32 GCl627PyExec_ExecutionDepth = 0;
 
 struct FCl627PyExec_ScopedExecutionDepth
@@ -124,60 +118,16 @@ TSharedPtr<FJsonObject> ClaireonTool_ExecutePython::BuildHintFromScript(const FS
 	return Cl622PyHintInternal::Cl622Py_BuildHintFromScript(Code);
 }
 
-// ---------------------------------------------------------------------------
-// Hint-emission helpers.
-//
-// Parses the Python traceback emitted by the user-script template at :332-343
-// for four signature-class error patterns and constructs an
-// FToolResult::Hint payload that nudges the agent toward tool_search:
-//
-//   - NameError: name '<X>' is not defined        (with claireon.<X> source ctx)
-//   - AttributeError: module 'claireon' has no attribute '<X>'
-//   - TypeError: <tool>() got an unexpected keyword argument '<K>'
-//   - TypeError: <tool>() missing N required positional argument
-//
-// SyntaxError is intentionally not nudged (operator answer D4 + design notes).
-//
-// A second, script-content channel (Cl622Py_BuildHintFromScript) fires on the
-// raw user code regardless of execution outcome: get_editor_property usage is
-// nudged toward claireon.uobject_inspect. Error-derived hints win when both
-// channels match (Result.Hint carries a single object).
-//
-// File-local discriminator: helpers are prefixed `Cl622Py_` to avoid
-// anonymous-namespace collisions under Module.Claireon.<N>.cpp unity batching
-// (project memory: unique anon-NS naming required).
-// ---------------------------------------------------------------------------
+// Error-derived hints take precedence over script-content hints.
 namespace Cl622PyHintInternal
 {
-	/**
-	 * WI-14: session-scoped fire-once latch for the script-content hint
-	 * channel (get_editor_property -> uobject_inspect).  Three feedback
-	 * reports flagged that nudge as noise on legitimate bulk loops: it fired
-	 * on every invocation, success included.  The latch limits the channel to
-	 * at most one hint per editor session.  Error-DERIVED hints (traceback
-	 * pattern matches) are not latched -- they only appear when the pattern is
-	 * actually present in this invocation's output.
-	 *
-	 * Game-thread only (tool Execute is game-thread bound), so a plain bool
-	 * suffices.  Reset seam for tests: ClaireonPyExec_ResetHintSessionStateForTests.
-	 */
-	static bool GCl622Py_ScriptHintFiredThisSession = false;
 
 	static bool Cl622Py_LineMatchesPrefix(const FString& Line, const FString& Prefix)
 	{
 		return Line.StartsWith(Prefix, ESearchCase::CaseSensitive);
 	}
 
-	/** True if the traceback (the lines preceding `ExceptionLineIdx`) shows a
-	 *  `File "...", line ...,` block whose echoed source line references
-	 *  `claireon.<Name>`. The user-script template wraps user code with a fixed
-	 *  prefix, so the echoed source for the failing line in the traceback
-	 *  contains the call expression -- a substring match for "claireon.<Name>"
-	 *  is sufficient.
-	 *
-	 *  We scan a small backward window of up to 6 lines from the exception
-	 *  line so that nested call sites (where the failing frame is several
-	 *  source lines up from the exception line) still match. */
+	/** Check the preceding six traceback lines for a claireon.<Name> call. */
 	static bool Cl622Py_TracebackCallsClaireonOnName(
 		const TArray<FString>& Lines,
 		int32 ExceptionLineIdx,
@@ -423,25 +373,12 @@ namespace Cl622PyHintInternal
 				 "property_path=...) instead -- it bypasses the access-checked editor-property "
 				 "restrictions and can read private/protected and nested members "
 				 "(property_path supports dotted nesting)."));
+		Hint->SetStringField(TEXT("key"), TEXT("claireon.pyexec.get-editor-property-nudge"));
 		return Hint;
 	}
 }
 
-// ---------------------------------------------------------------------------
-// WI-14 hint policy seam.
-//
-// External-linkage free functions (NOT class members) so the Untest harness
-// can forward-declare and drive them without touching the public header:
-// this work item owns only the .cpp files.  Same-module linkage, no export
-// macro needed.
-//
-// Policy:
-//   - bQuiet suppresses ALL hint channels for this invocation.
-//   - Error-derived hints (traceback pattern matches) fire per-occurrence.
-//   - The script-content channel (get_editor_property nudge) fires at most
-//     once per editor session via GCl622Py_ScriptHintFiredThisSession; a
-//     quiet invocation does NOT consume the latch.
-// ---------------------------------------------------------------------------
+// quiet suppresses this invocation's own hints, but not inner-tool advisories.
 TSharedPtr<FJsonObject> ClaireonPyExec_ComputeSessionHint(
 	const FString& Logs,
 	const FString& Code,
@@ -458,22 +395,9 @@ TSharedPtr<FJsonObject> ClaireonPyExec_ComputeSessionHint(
 		return Hint;
 	}
 
-	if (Cl622PyHintInternal::GCl622Py_ScriptHintFiredThisSession)
-	{
-		return nullptr;
-	}
-	Hint = Cl622PyHintInternal::Cl622Py_BuildHintFromScript(Code);
-	if (Hint.IsValid())
-	{
-		Cl622PyHintInternal::GCl622Py_ScriptHintFiredThisSession = true;
-	}
-	return Hint;
+	return Cl622PyHintInternal::Cl622Py_BuildHintFromScript(Code);
 }
 
-void ClaireonPyExec_ResetHintSessionStateForTests()
-{
-	Cl622PyHintInternal::GCl622Py_ScriptHintFiredThisSession = false;
-}
 
 FString ClaireonTool_ExecutePython::GetCategory() const { return TEXT("python"); }
 FString ClaireonTool_ExecutePython::GetOperation() const { return TEXT("execute"); }
@@ -527,20 +451,20 @@ TSharedPtr<FJsonObject> ClaireonTool_ExecutePython::GetInputSchema() const
 
 	TSharedPtr<FJsonObject> Properties = MakeShared<FJsonObject>();
 
-	// code - required
 	TSharedPtr<FJsonObject> CodeProp = MakeShared<FJsonObject>();
 	CodeProp->SetStringField(TEXT("type"), TEXT("string"));
 	CodeProp->SetStringField(TEXT("description"), TEXT("Python code to execute. Has access to 'unreal' module and claireon.* bridge functions."));
 	Properties->SetObjectField(TEXT("code"), CodeProp);
 
-	// quiet - optional
 	TSharedPtr<FJsonObject> QuietProp = MakeShared<FJsonObject>();
 	QuietProp->SetStringField(TEXT("type"), TEXT("boolean"));
 	QuietProp->SetBoolField(TEXT("default"), false);
 	QuietProp->SetStringField(TEXT("description"),
-		TEXT("Suppress all advisory hints on this invocation (the <hint> envelope element stays absent). "
-			 "Useful for bulk loops where nudges like 'use uobject_inspect instead of get_editor_property' "
-			 "are noise. Even without quiet, the get_editor_property nudge fires at most once per editor session."));
+		TEXT("Suppress python_execute's OWN derived hint on this invocation (traceback and "
+			 "script-content nudges like 'use uobject_inspect instead of get_editor_property'). "
+			 "Advisories raised by inner claireon.* tool calls -- their hints, warnings and "
+			 "summaries -- are ALWAYS reported, quiet or not; they are rate-limited per key to "
+			 "at most once per invocation and coalesced with occurrence counts."));
 	Properties->SetObjectField(TEXT("quiet"), QuietProp);
 
 	Schema->SetObjectField(TEXT("properties"), Properties);
@@ -593,19 +517,16 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	bool bQuietHints = false;
 	Arguments->TryGetBoolField(TEXT("quiet"), bQuietHints);
 
-	// Step 2: Ensure bridge is registered
 	FClaireonBridge::EnsureRegistered();
 
-	// Step 2b: Rebuild claireon module if tools changed since last execution
 	if (FClaireonBridge::bClaireonModuleStale.exchange(false))
 	{
 		FClaireonBridge::RebuildClaireonModule();
 	}
 
-	// Step 3: Reset tool call counter
-	FClaireonBridge::ResetToolCallCount();
+	// Preserve outer invocation counters and advisory state across nested Python execution.
+	FClaireonBridgeInvocationScope InvocationScope;
 
-	// Step 4: Generate temp .py file
 	const FString PythonDir = FPaths::ProjectSavedDir() / TEXT("MCP") / TEXT("Python");
 	IFileManager::Get().MakeDirectory(*PythonDir, true);
 
@@ -614,9 +535,7 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 		FPlatformProcess::GetCurrentProcessId(), FileIndex);
 	const FString TempFilePath = PythonDir / TempFileName;
 
-	// Indent user code by 4 spaces so it can be wrapped in try-except.
-	// This lets us capture Python exceptions and surface them to the caller
-	// instead of the opaque "Python execution failed with no error details."
+	// Wrap user code to capture exception details.
 	FString IndentedCode;
 	{
 		TArray<FString> Lines;
@@ -719,24 +638,18 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 			});
 	}
 
-	// Step 7: Execute with engine log capture at the top level.
-	// All claireon.* tool calls within Python flow through ClaireonBridge::MCPCallTool,
-	// so capturing here covers the entire execution scope.
+	// Capture engine logs across the script and its inner tool calls.
 	FClaireonLogCapture EngineLogCapture;
 	const double StartTimeSeconds = FPlatformTime::Seconds();
 	const bool bPythonSuccess = [&PythonCommand]()
 	{
-		// Depth-scoped flag behind IsPythonExecutionInProgress (P2-5b). A depth
-		// counter, not a bool: claireon.* calls made from the script re-enter
-		// tool dispatch, and a future nested ExecPython must not clear it early.
+		// Nested execution must not clear the in-progress flag early.
 		FCl627PyExec_ScopedExecutionDepth ScopedDepth;
 		return IPythonScriptPlugin::Get()->ExecPythonCommandEx(PythonCommand);
 	}();
 	const double DurationMs = (FPlatformTime::Seconds() - StartTimeSeconds) * 1000.0;
 
-	// Signal the watchdog that execution has finished and wait for it to exit.
-	// Must happen before reading bWatchdogFired and before any stack-local the
-	// watchdog references goes out of scope.
+	// Join before reading watchdog results or releasing its referenced stack locals.
 	bWatchdogDone.store(true, std::memory_order_release);
 	if (WatchdogFuture.IsValid())
 	{
@@ -776,7 +689,7 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 						ClaireonTool_PIEStop::ExecuteDeferredPIEStop();
 						break;
 					case EClaireonDeferredActionType::LiveCodingReload:
-						ClaireonTool_LiveCodingReload::ExecuteDeferredLiveCodingReload(Action.Payload);
+						ClaireonTool_EditorLiveCodingReloadAsync::ExecuteDeferredLiveCodingReload(Action.Payload);
 						break;
 					case EClaireonDeferredActionType::DuplicateAndOpenMap:
 						ClaireonTool_MapDuplicate::ExecuteDeferredDuplicateAndOpenMap(Action.Payload);
@@ -793,18 +706,27 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 		}
 	}
 
-	// Step 7c: Drain any deferred-action aborts (e.g. leaked-World
-	// guard refused a map transition).
 	TArray<FString> DeferredAborts = FClaireonBridge::DrainDeferredActionAborts();
 
-	// Step 8: Capture logs (Python stdout/stderr and engine UE_LOG)
 	FString Logs = FToolResult::BuildLogString(PythonCommand.LogOutput);
 	FString EngineOutput = EngineLogCapture.GetCapturedOutput();
 
-	// Step 9: Read tool call count
 	int32 ToolCallCount = FClaireonBridge::GetToolCallCount();
 
-	// Step 9b: Update crash flag based on execution outcome.
+	// Rate-limit hints only. Inner-tool warnings and summaries remain visible regardless of quiet.
+	const TArray<FClaireonAdvisory> InnerAdvisoriesRaw = FClaireonBridge::DrainInnerToolAdvisories();
+	TArray<FClaireonAdvisory> InnerAdvisories = ClaireonAdvisoryCoalesce::Coalesce(InnerAdvisoriesRaw);
+	{
+		const FString& RecipientId = FClaireonBridge::GetCurrentConversationId();
+		InnerAdvisories.RemoveAll([&RecipientId](const FClaireonAdvisory& Advisory)
+		{
+			return Advisory.Kind == EClaireonAdvisoryKind::Hint
+				&& !ClaireonHintRateLimiter::ShouldEmit(Advisory.HintKey, RecipientId);
+		});
+	}
+	UE_LOG(LogClaireon, Verbose, TEXT("[MCP Execute] Side-band advisories: %d surfaced (%d raw)"),
+		InnerAdvisories.Num(), InnerAdvisoriesRaw.Num());
+
 	if (!bPythonSuccess)
 	{
 		FClaireonAutoSave::SetCrashFlag();
@@ -814,7 +736,6 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 		FClaireonAutoSave::ClearCrashFlag();
 	}
 
-	// Clean up temp file
 	IFileManager::Get().Delete(*TempFilePath);
 
 	// Step 10: Build structured FToolResult
@@ -822,10 +743,7 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	FinalResult.Logs = Logs;
 	FinalResult.UELog = EngineOutput;
 
-	// P0-7: disclose any package the pre-deferred-action auto-save wrote. This
-	// runs before the data-population branches below so it cannot be skipped by
-	// an early return on the error path -- a write happened either way, and the
-	// error path is exactly where an unreported write is hardest to notice.
+	// Disclose auto-saved packages on both success and error paths.
 	if (AutoSavedPackages.Num() > 0)
 	{
 		FinalResult.Warnings.Add(FString::Printf(
@@ -834,22 +752,11 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 			AutoSavedPackages.Num(), *FString::Join(AutoSavedPackages, TEXT(", "))));
 	}
 
-	// Scan the traceback (regardless of bPythonSuccess -- the user-script
-	// template's bare-except branch can absorb the exception while still
-	// printing the traceback to stdout, so the hint signal must be available
-	// on both result paths). Result.Hint reaches the wire only when valid
-	// (Python envelope via BuildResultEnvelope; MCP XML via FormatExecuteResult's
-	// <hint> element); null leaves the wire shape byte-identical.
-	// Error-derived hints take precedence; otherwise scan the raw script for
-	// content-based nudges (get_editor_property -> uobject_inspect), which
-	// fire on success too -- but at most once per editor session, and never
-	// when the caller passed quiet=true (WI-14 hint policy; see
-	// ClaireonPyExec_ComputeSessionHint above).
-	FinalResult.Hint = ClaireonPyExec_ComputeSessionHint(Logs, Code, bQuietHints);
+	// Scan on both result paths: the script wrapper can catch an exception and still report execution success.
+	FinalResult.AddHint(ClaireonPyExec_ComputeSessionHint(Logs, Code, bQuietHints));
 
 	if (bTimedOut)
 	{
-		// Timeout — plain text error
 		FinalResult.bIsError = true;
 		FinalResult.ErrorMessage = FString::Printf(
 			TEXT("Execution timed out after %.0fs. Break the operation into smaller steps, "
@@ -914,7 +821,6 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 	}
 	else
 	{
-		// Success -- logs are the primary output
 		FinalResult.Summary = TEXT("Execution completed.");
 		if (ToolCallCount > 0)
 		{
@@ -922,7 +828,38 @@ IClaireonTool::FToolResult ClaireonTool_ExecutePython::Execute(const TSharedPtr<
 		}
 	}
 
-	// Step 11: Record to audit log
+	// Summary rollups appear only on success; warnings and hints are attached on both paths.
+	if (!FinalResult.bIsError)
+	{
+		// Tier 1 needs raw values. Both tiers share a 1400-byte summary budget.
+		const FString Tier1 = ClaireonAdvisoryCoalesce::RenderTier1Rollup(InnerAdvisoriesRaw);
+		const int32 Tier1Bytes = FTCHARToUTF8(*Tier1).Length();
+		FinalResult.Summary += Tier1;
+		FinalResult.Summary += ClaireonAdvisoryCoalesce::RenderSummaryRollup(
+			InnerAdvisories, FMath::Max(0, 1400 - Tier1Bytes));
+	}
+	for (const FClaireonAdvisory& Advisory : InnerAdvisories)
+	{
+		if (Advisory.Kind != EClaireonAdvisoryKind::Summary)
+		{
+			FinalResult.InnerAdvisories.Add(Advisory);
+		}
+	}
+	{
+		// Assert the serialized UTF-8 byte ceiling without truncating or spilling advisories.
+		const int32 AdvisoryBytes =
+			ClaireonAdvisoryCoalesce::MeasureWireAdvisoryBytes(FinalResult.InnerAdvisories);
+		ensureMsgf(AdvisoryBytes <= 4096,
+			TEXT("Side-band advisory block is %d bytes (ceiling 4096); fix the emitters, never spill."),
+			AdvisoryBytes);
+		if (AdvisoryBytes > 4096)
+		{
+			UE_LOG(LogClaireon, Warning,
+				TEXT("[MCP Execute] Side-band advisory block exceeds its ceiling (%d > 4096 bytes); emitted anyway."),
+				AdvisoryBytes);
+		}
+	}
+
 	{
 		bool bSuccess = !FinalResult.bIsError;
 		FString ResultSummary;

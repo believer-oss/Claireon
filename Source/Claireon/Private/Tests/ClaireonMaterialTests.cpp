@@ -88,26 +88,8 @@ namespace ClaireonMaterialTestsImpl
 	}
 
 	/**
-	 * True only when the asset actually has a .uasset on disk.
-	 *
-	 * Every fixture in this suite is created in a package from CreatePackage() (or
-	 * by material_create / material_instance_create, neither of which saves) and
-	 * nothing here ever writes it out: the decomposed material tools have no save
-	 * call at all, the only savers are material_save / material_instance_save
-	 * (never used here) and the apply_spec applicators, which save solely when the
-	 * spec sets save_at_end -- and both parity tests set it to false explicitly.
-	 * So these fixtures live in memory only.
-	 *
-	 * UEditorAssetLibrary::DoesAssetExist answers from the asset registry, which
-	 * includes in-memory assets, so it used to send every fixture through
-	 * DeleteAsset. DeleteAsset checks referencers first, and that
-	 * whole-object-graph referencer scan is the trigger for the nondeterministic
-	 * Niagara-serialization crash documented in
-	 * Docs/llm/todo/claireon-untest-harness-reliability.md item 1.
-	 *
-	 * The check is kept rather than dropping the delete outright so a stale
-	 * .uasset left on disk by an older build or a crashed run is still cleaned and
-	 * `git status --porcelain -- Content/` stays empty.
+	 * Delete only on-disk fixtures. In-memory deletion triggers a global referencer
+	 * scan that can crash on resident Niagara objects; stale files still need cleanup.
 	 */
 	static bool MaterialTests_HasFileOnDisk(const FString& AssetOrPackagePath)
 	{

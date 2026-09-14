@@ -296,10 +296,10 @@ bool FClaireonSpecApplicator_LevelSequence::ApplyPass1_CreateEntities(const FStr
 	// === 1. Build a label -> binding-index map of the current state ===
 	TMap<FString, int32> CurrentBindingIndexByLabel;
 	{
-		const TArray<FMovieSceneBinding>& Bindings = MovieScene->GetBindings();
+		const TArray<FMovieSceneBinding>& Bindings = static_cast<const UMovieScene*>(MovieScene)->GetBindings();
 		for (int32 i = 0; i < Bindings.Num(); ++i)
 		{
-			CurrentBindingIndexByLabel.Add(Bindings[i].GetName(), i);
+			CurrentBindingIndexByLabel.Add(FClaireonSequenceHelpers::GetBindingName(MovieScene, Bindings[i].GetObjectGuid()), i);
 		}
 	}
 

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonBehaviorTreeTool_Open.h"
+#include "ClaireonScopedAssetEditor.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "Tools/ClaireonBehaviorTreeHelpers.h"
 #include "Tools/ClaireonAssetUtils.h"
@@ -89,7 +90,7 @@ FToolResult ClaireonBehaviorTreeTool_Open::Execute(const TSharedPtr<FJsonObject>
 	NewData.LastOperationStatus = TEXT("Session opened");
 	ToolData.Add(SessionId, MoveTemp(NewData));
 
-	ClaireonAssetUtils::OpenAssetEditorIfHeadless(BT);
+	ClaireonAssetEditorWindow::OpenForSession(BT);
 
 	FString StructureText = ClaireonBehaviorTreeHelpers::FormatBTGraphStructure(BTGraph, false);
 

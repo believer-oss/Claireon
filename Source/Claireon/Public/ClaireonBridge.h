@@ -5,6 +5,7 @@
 
 #include "CoreMinimal.h"
 #include "UObject/Package.h"
+#include "ClaireonAdvisory.h"
 #include "Tools/IClaireonTool.h"
 #include <atomic>
 
@@ -73,9 +74,9 @@ public:
 	 *  on-wire shape is identical (data / hint / summary / warnings / logs /
 	 *  ue_log) regardless of success/error.
 	 *
-	 *  The `hint` field is emitted only when `Result.Hint.IsValid()`; absent
-	 *  otherwise so existing wire envelopes stay byte-identical when callers
-	 *  do not populate the field. */
+	 *  The `hints` array (and its legacy first-entry alias `hint`) is emitted only
+	 *  when at least one entry passes ValidateHint; absent otherwise so existing
+	 *  wire envelopes stay byte-identical when callers do not populate the field. */
 	static TSharedPtr<class FJsonObject> BuildResultEnvelope(
 		const IClaireonTool::FToolResult& Result);
 
@@ -90,6 +91,30 @@ public:
 
 	/** Reset the tool call counter (called before each execute) */
 	static void ResetToolCallCount();
+
+	/**
+	 * Game-thread-only accumulator for inner-call hints, warnings, and summaries
+	 * surfaced on the top-level python_execute result.
+	 */
+
+	/** Clear the accumulator (called before each execute, beside ResetToolCallCount). */
+	static void ResetInnerToolAdvisories();
+
+	/**
+	 * Capture advisories on both success and error paths, tagged with source and target.
+	 * Hints failing ValidateHint are excluded.
+	 */
+	static void AppendInnerToolAdvisories(
+		const FString& ToolName,
+		const TSharedPtr<FJsonObject>& Arguments,
+		const IClaireonTool::FToolResult& Result,
+		const IClaireonTool* SourceToolInstance = nullptr);
+
+	/** Drain and return all captured advisories since the last drain, emptying the
+	 *  accumulator. Called by ClaireonTool_ExecutePython::Execute at result-build time. */
+	static TArray<FClaireonAdvisory> DrainInnerToolAdvisories();
+
+	friend class FClaireonBridgeInvocationScope;
 
 	/** Set the conversation id propagated to FClaireonOutputGate::RouteResult for spill
 	 *  file paths.  Called by the Anthropic REPL client before invoking a tool; pass
@@ -240,6 +265,9 @@ private:
 	/** Queue of deferred world-transition actions */
 	static TArray<FClaireonDeferredAction> GDeferredActions;
 
+	/** Per-invocation advisories. Game thread only; async completions must not append. */
+	static TArray<FClaireonAdvisory> GInnerToolAdvisories;
+
 	/** Stores the OnToolsChanged delegate subscription */
 	static FDelegateHandle ToolsChangedHandle;
 
@@ -257,4 +285,24 @@ private:
 
 	/** Accumulator for deferred-action abort messages (drained per python_execute). */
 	static TArray<FString> GDeferredActionAborts;
+};
+
+/**
+ * Save and reset the tool-call counter, advisories, and hint-limiter state for an
+ * invocation, restoring them on destruction. Nested runs count as one outer tool call
+ * and return their own advisories. Game thread only.
+ */
+class CLAIREON_API FClaireonBridgeInvocationScope
+{
+public:
+	FClaireonBridgeInvocationScope();
+	~FClaireonBridgeInvocationScope();
+
+	FClaireonBridgeInvocationScope(const FClaireonBridgeInvocationScope&) = delete;
+	FClaireonBridgeInvocationScope& operator=(const FClaireonBridgeInvocationScope&) = delete;
+
+private:
+	int32 SavedToolCallCount = 0;
+	TArray<FClaireonAdvisory> SavedInnerToolAdvisories;
+	TSet<FString> SavedLimiterScopeState;
 };

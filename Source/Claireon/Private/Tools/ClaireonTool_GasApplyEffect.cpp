@@ -112,7 +112,7 @@ IClaireonTool::FToolResult ClaireonTool_GasApplyEffect::Execute(const TSharedPtr
 	const TSharedPtr<FJsonObject>* MagnitudesObj = nullptr;
 	if (Arguments->TryGetObjectField(TEXT("magnitudes"), MagnitudesObj) && MagnitudesObj && MagnitudesObj->IsValid())
 	{
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*MagnitudesObj)->Values)
+		for (const auto& Pair : (*MagnitudesObj)->Values)
 		{
 			double MagValue = 0.0;
 			if (!Pair.Value.IsValid() || !Pair.Value->TryGetNumber(MagValue))

@@ -11,9 +11,6 @@
 
 namespace ClaireonPIEWorldResolverInternal
 {
-	// Named file-local namespace (NOT a raw anonymous namespace): under
-	// linux-build-server-v2 unity batching, anonymous namespaces from separate
-	// .cpp merge into one TU and collide -- a named namespace is the isolation.
 	TWeakObjectPtr<UWorld> GClaireonPIEWorldResolver_TestOverrideWorld;
 
 	FString ClaireonPIEWorldResolver_DescribeCandidates(TArrayView<const ClaireonPIEWorldResolver::FPIEContextCandidate> Candidates)

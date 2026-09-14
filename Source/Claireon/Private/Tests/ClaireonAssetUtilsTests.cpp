@@ -15,8 +15,16 @@
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/Guid.h"
 #include "Misc/PackageName.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "Misc/ScopeExit.h"
+#include "UObject/Linker.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectGlobals.h"
+
+#if PLATFORM_WINDOWS
+#include "Windows/WindowsHWrapper.h"
+#endif
 
 // ---------------------------------------------------------------------------
 // Loading tests
@@ -261,6 +269,94 @@ UNTEST_UNIT_OPTS(Claireon, AssetUtils_Save, NewInMemoryPackageSavesToDisk, UNTES
 	co_return;
 }
 
+#if PLATFORM_WINDOWS
+UNTEST_UNIT_OPTS(Claireon, AssetUtils_Save, LockedDestinationReturnsErrorAndRetrySavesNativeAndBlueprint, UNTEST_TIMEOUTMS(60000))
+{
+	using namespace ClaireonAssetUtilsSaveTestsImpl;
+	UNTEST_ASSERT_FALSE(ClaireonSafeExec::DidLastExecutionCrash());
+	for (bool bBlueprint : {false, true})
+	{
+		const FString PackagePath = AssetUtilsSaveTests_MakeUniquePackagePath(bBlueprint ? TEXT("LockedBP") : TEXT("LockedNative"));
+		const FString ObjectName = FPackageName::GetShortName(PackagePath);
+		UPackage* Package = CreatePackage(*PackagePath);
+		UNTEST_ASSERT_PTR(Package);
+		UObject* Asset = nullptr;
+		UBlueprint* Blueprint = nullptr;
+		ON_SCOPE_EXIT
+		{
+			ResetLoaders(Package);
+			AssetUtilsSaveTests_Cleanup(Asset, PackagePath);
+		};
+		if (bBlueprint)
+		{
+			Blueprint = FKismetEditorUtilities::CreateBlueprint(AActor::StaticClass(), Package, FName(*ObjectName),
+				BPTYPE_Normal, UBlueprint::StaticClass(), UBlueprintGeneratedClass::StaticClass(), NAME_None);
+			Asset = Blueprint;
+		}
+		else
+		{
+			Asset = NewObject<UClaireonSpecDataAsset>(Package, *ObjectName, RF_Public | RF_Standalone);
+		}
+		UNTEST_ASSERT_PTR(Asset);
+		FString Error;
+		UNTEST_ASSERT_TRUE(ClaireonAssetUtils::SaveAsset(Asset, Error));
+		FString Filename;
+		UNTEST_ASSERT_TRUE(ClaireonAssetUtils::ResolvePackageSaveFilename(Package, Filename, Error));
+		Filename = FPaths::ConvertRelativePathToFull(Filename);
+		TArray<uint8> OriginalBytes;
+		UNTEST_ASSERT_TRUE(FFileHelper::LoadFileToArray(OriginalBytes, *Filename));
+		UNTEST_ASSERT_TRUE(OriginalBytes.Num() > 0);
+
+		UObject* SaveTarget = Asset;
+		if (bBlueprint)
+		{
+			// Populate the real CDO routing map through the public load helper.
+			SaveTarget = ClaireonAssetUtils::LoadAssetForEditing(Asset->GetPathName(), Error);
+			UNTEST_ASSERT_PTR(SaveTarget);
+			UNTEST_ASSERT_TRUE(SaveTarget->HasAnyFlags(RF_ClassDefaultObject));
+			UNTEST_ASSERT_TRUE(SaveTarget == Blueprint->GeneratedClass->GetDefaultObject());
+			Blueprint->BlueprintDescription = TEXT("Unsaved locked-destination edit");
+		}
+		else
+		{
+			CastChecked<UClaireonSpecDataAsset>(Asset)->Description = TEXT("Unsaved locked-destination edit");
+		}
+		Package->MarkPackageDirty();
+		ResetLoaders(Package);
+		{
+			// Deny write/delete sharing: the engine cannot replace the previously saved destination.
+			const HANDLE LockedFile = CreateFileW(*Filename, GENERIC_READ, FILE_SHARE_READ, nullptr,
+				OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+			UNTEST_ASSERT_TRUE(LockedFile != INVALID_HANDLE_VALUE);
+			ON_SCOPE_EXIT { CloseHandle(LockedFile); };
+			Error.Reset();
+			// Deliberately call the helper directly; no SafeExec/SEH wrapper may mask a fatal regression.
+			UNTEST_EXPECT_FALSE(ClaireonAssetUtils::SaveAsset(SaveTarget, Error));
+			const FString ExpectedError = bBlueprint
+				? FString::Printf(TEXT("Failed to save Blueprint package '%s'"), *PackagePath)
+				: FString::Printf(TEXT("Failed to save package '%s'"), *PackagePath);
+			UNTEST_EXPECT_EQ(Error, ExpectedError);
+			UNTEST_EXPECT_TRUE(Package->IsDirty());
+			UNTEST_EXPECT_FALSE(ClaireonSafeExec::DidLastExecutionCrash());
+		}
+		TArray<uint8> FailedBytes;
+		UNTEST_ASSERT_TRUE(FFileHelper::LoadFileToArray(FailedBytes, *Filename));
+		UNTEST_EXPECT_TRUE(FailedBytes == OriginalBytes);
+		UNTEST_EXPECT_EQ(bBlueprint ? Blueprint->BlueprintDescription : CastChecked<UClaireonSpecDataAsset>(Asset)->Description,
+			FString(TEXT("Unsaved locked-destination edit")));
+		Error.Reset();
+		UNTEST_ASSERT_TRUE(ClaireonAssetUtils::SaveAsset(SaveTarget, Error));
+		UNTEST_EXPECT_TRUE(Error.IsEmpty());
+		UNTEST_EXPECT_FALSE(Package->IsDirty());
+		UNTEST_EXPECT_FALSE(ClaireonSafeExec::DidLastExecutionCrash());
+		TArray<uint8> SavedBytes;
+		UNTEST_ASSERT_TRUE(FFileHelper::LoadFileToArray(SavedBytes, *Filename));
+		UNTEST_EXPECT_TRUE(SavedBytes != OriginalBytes);
+	}
+	co_return;
+}
+#endif
+
 // A package under no mounted content root has nowhere on disk to go; the
 // filename fallback must fail loudly and name the package.
 UNTEST_UNIT_OPTS(Claireon, AssetUtils_Save, UnmountedPackagePathErrors, UNTEST_TIMEOUTMS(30000))
@@ -479,6 +575,91 @@ UNTEST_UNIT_OPTS(Claireon, AssetUtils_Evict, FreeNameAndNullPackageAreNoOps, UNT
 	UNTEST_ASSERT_PTR(Bystander);
 	ClaireonAssetUtils::EvictInMemoryObject(Package, TEXT("NothingIsLoadedHere"));
 	UNTEST_EXPECT_TRUE(StaticFindObject(UObject::StaticClass(), Package, TEXT("Bystander")) == Bystander);
+	co_return;
+}
+
+
+// ============================================================================
+// Save-filename resolution must not shadow a map with a .uasset
+// ============================================================================
+
+namespace ClaireonAssetUtilsSaveFilename_Internal
+{
+	/**
+	 * An in-memory package under a mounted root, optionally flagged as containing a map.
+	 *
+	 * Nothing is written to disk: the trap is entirely in which FILENAME gets chosen, so the
+	 * specs assert on the resolved name and never save. Marked transient and garbage on
+	 * teardown so the package name is free for the next spec.
+	 */
+	struct FScratchPackage
+	{
+		UPackage* Package = nullptr;
+
+		FScratchPackage(const TCHAR* LeafName, bool bContainsMap)
+		{
+			const FString Name = FString::Printf(TEXT("/Game/__ClaireonTransient/%s"), LeafName);
+			Package = CreatePackage(*Name);
+			if (IsValid(Package))
+			{
+				Package->SetFlags(RF_Transient);
+				if (bContainsMap)
+				{
+					Package->ThisContainsMap();
+				}
+			}
+		}
+
+		~FScratchPackage()
+		{
+			if (IsValid(Package))
+			{
+				Package->ClearFlags(RF_Public | RF_Standalone);
+				Package->MarkAsGarbage();
+				Package = nullptr;
+			}
+		}
+	};
+}
+
+UNTEST_UNIT_OPTS(Claireon, AssetUtils_SaveFilename, MapPackageResolvesToUmap, UNTEST_TIMEOUTMS(10000))
+{
+	using namespace ClaireonAssetUtilsSaveFilename_Internal;
+
+	// The whole defect in one assertion. A level's package is an ordinary UPackage carrying
+	// PKG_ContainsMap; nothing forces .umap on it, and name-based resolution finds .uasset
+	// first. Synthesizing the asset extension here is what orphans the .umap and sends every
+	// later save into a shadow file.
+	FScratchPackage Scratch(TEXT("SaveFilename_Map"), /*bContainsMap=*/true);
+	UNTEST_ASSERT_PTR(Scratch.Package);
+
+	FString FileName, Error;
+	UNTEST_ASSERT_TRUE(ClaireonAssetUtils::ResolvePackageSaveFilename(Scratch.Package, FileName, Error));
+	UNTEST_EXPECT_TRUE(FileName.EndsWith(FPackageName::GetMapPackageExtension()));
+	UNTEST_EXPECT_FALSE(FileName.EndsWith(FPackageName::GetAssetPackageExtension()));
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, AssetUtils_SaveFilename, AssetPackageResolvesToUasset, UNTEST_TIMEOUTMS(10000))
+{
+	using namespace ClaireonAssetUtilsSaveFilename_Internal;
+
+	// The other half: choosing by ContainsMap() must not change what ordinary assets do, which
+	// is every other Claireon save path.
+	FScratchPackage Scratch(TEXT("SaveFilename_Asset"), /*bContainsMap=*/false);
+	UNTEST_ASSERT_PTR(Scratch.Package);
+
+	FString FileName, Error;
+	UNTEST_ASSERT_TRUE(ClaireonAssetUtils::ResolvePackageSaveFilename(Scratch.Package, FileName, Error));
+	UNTEST_EXPECT_TRUE(FileName.EndsWith(FPackageName::GetAssetPackageExtension()));
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, AssetUtils_SaveFilename, NullPackageIsRefused, UNTEST_TIMEOUTMS(10000))
+{
+	FString FileName, Error;
+	UNTEST_ASSERT_FALSE(ClaireonAssetUtils::ResolvePackageSaveFilename(nullptr, FileName, Error));
+	UNTEST_EXPECT_FALSE(Error.IsEmpty());
 	co_return;
 }
 

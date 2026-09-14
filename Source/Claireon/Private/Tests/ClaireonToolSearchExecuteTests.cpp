@@ -838,9 +838,10 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, CatalogHasEighteenFamilyEntries, U
 	UNTEST_ASSERT_TRUE(Catalog.IsValid());
 
 	int32 NonMetaCount = 0;
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& KV : Catalog->Values)
+	for (const auto& KV : Catalog->Values)
 	{
-		if (KV.Key.StartsWith(TEXT("_"))) { continue; }
+		const FString Key(KV.Key);
+		if (Key.StartsWith(TEXT("_"))) { continue; }
 		++NonMetaCount;
 	}
 	UNTEST_EXPECT_EQ(NonMetaCount, 18);
@@ -869,9 +870,10 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, CatalogToolsMatchRegisteredTools, 
 	UNTEST_ASSERT_TRUE(Catalog.IsValid());
 
 	TSet<FString> CatalogKeys;
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& KV : Catalog->Values)
+	for (const auto& KV : Catalog->Values)
 	{
-		if (KV.Key.StartsWith(TEXT("_"))) { continue; }
+		const FString Key(KV.Key);
+		if (Key.StartsWith(TEXT("_"))) { continue; }
 
 		// apply_delta_only rows (no top-level `tool`, e.g. "animbp") are not
 		// apply_spec families at all -- they must NOT be required to match a
@@ -881,7 +883,7 @@ UNTEST_UNIT_OPTS(Claireon, ToolSearchExecute, CatalogToolsMatchRegisteredTools, 
 		if (KV.Value->TryGetObject(EntryObj) && EntryObj && (*EntryObj).IsValid()
 			&& (*EntryObj)->TryGetStringField(TEXT("tool"), ToolName))
 		{
-			CatalogKeys.Add(KV.Key);
+			CatalogKeys.Add(Key);
 		}
 	}
 

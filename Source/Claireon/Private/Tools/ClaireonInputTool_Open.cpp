@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonInputTool_Open.h"
+#include "ClaireonScopedAssetEditor.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "Tools/ClaireonEnhancedInputHelpers.h"
 #include "Tools/ClaireonAssetUtils.h"
@@ -77,7 +78,7 @@ FToolResult ClaireonInputTool_Open::Execute(const TSharedPtr<FJsonObject>& Argum
 
 	ToolData.Add(SessionId, MoveTemp(NewData));
 
-	ClaireonAssetUtils::OpenAssetEditorIfHeadless(Asset);
+	ClaireonAssetEditorWindow::OpenForSession(Asset);
 
 	FInputEditToolData* Data = ToolData.Find(SessionId);
 	return BuildStateResponse(SessionId, Data);

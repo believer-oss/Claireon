@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Claireon Contributors
+﻿// Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 #if WITH_UNTESTED
 
@@ -1334,7 +1334,7 @@ namespace ClaireonDataTableTests_Private
 		if (!Obj.IsValid()) { return false; }
 		for (const auto& Pair : Obj->Values)
 		{
-			const FString& Key = Pair.Key;
+			const FString Key(Pair.Key);
 			// Look for an underscore followed by digits, then another underscore, then >= 16 hex digits.
 			// The full suffix is 32 chars, but checking for a leading run is sufficient as a signal.
 			int32 Pos = 0;
@@ -1417,7 +1417,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowStructuredPrimitive, UNTEST_TIMEOUTM
 	{
 		const FProperty* Prop = *It;
 		const FString FriendlyName = ClaireonStructReflection::GetFriendlyPropertyName(Prop);
-		const TSharedPtr<FJsonValue>* FieldValPtr = (*ValuesObj)->Values.Find(FriendlyName);
+		const TSharedPtr<FJsonValue>* FieldValPtr = (*ValuesObj)->Values.Find(*FriendlyName);
 		if (!FieldValPtr || !FieldValPtr->IsValid()) { continue; }
 		const TSharedPtr<FJsonValue>& FieldVal = *FieldValPtr;
 
@@ -1579,11 +1579,11 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowStructuredIncludeSchema, UNTEST_TIME
 	UNTEST_ASSERT_TRUE(ValuesObj && (*ValuesObj).IsValid());
 	UNTEST_ASSERT_TRUE(SchemaObj && (*SchemaObj).IsValid());
 
-	// schema keys == values keys.
+	// Convert engine-dependent JSON keys to FString for comparison.
 	TArray<FString> ValueKeys;
-	(*ValuesObj)->Values.GenerateKeyArray(ValueKeys);
+	for (const auto& Pair : (*ValuesObj)->Values) { ValueKeys.Add(FString(*Pair.Key)); }
 	TArray<FString> SchemaKeys;
-	(*SchemaObj)->Values.GenerateKeyArray(SchemaKeys);
+	for (const auto& Pair : (*SchemaObj)->Values) { SchemaKeys.Add(FString(*Pair.Key)); }
 	ValueKeys.Sort();
 	SchemaKeys.Sort();
 	UNTEST_EXPECT_TRUE(ValueKeys == SchemaKeys);
@@ -1607,7 +1607,7 @@ UNTEST_UNIT_OPTS(Claireon, DataTable, GetRowStructuredIncludeSchema, UNTEST_TIME
 		{
 			++StructPropsInRowStruct;
 			const FString Friendly = ClaireonStructReflection::GetFriendlyPropertyName(Prop);
-			const TSharedPtr<FJsonValue>* SchemaValPtr = (*SchemaObj)->Values.Find(Friendly);
+			const TSharedPtr<FJsonValue>* SchemaValPtr = (*SchemaObj)->Values.Find(*Friendly);
 			if (!SchemaValPtr || !SchemaValPtr->IsValid()) { continue; }
 			TSharedPtr<FJsonObject> SchemaFieldObj = (*SchemaValPtr)->AsObject();
 			if (!SchemaFieldObj.IsValid()) { continue; }

@@ -49,8 +49,7 @@
 #include "ClaireonTestAssetDeletion.h"
 namespace ClaireonGetGraphContractTestsInternal
 {
-	// All anon-namespace symbols carry the GetGraphContract discriminator prefix
-	// (anon namespaces are not isolation under unity batching).
+	// Prefix helpers to avoid unity-build collisions.
 
 	static const TCHAR* kGetGraphContractFuncName = TEXT("GetGraphContractFunc");
 	static const TCHAR* kGetGraphContractVarName  = TEXT("ContractTestString");
@@ -62,6 +61,8 @@ namespace ClaireonGetGraphContractTestsInternal
 	static const TCHAR* kGetGraphContractBPPath_PinDefaults  = TEXT("/Game/__MCPTests/BP_GetGraphContract_PinDefaults");
 	static const TCHAR* kGetGraphContractBPPath_Knots        = TEXT("/Game/__MCPTests/BP_GetGraphContract_Knots");
 	static const TCHAR* kGetGraphContractBPPath_Outline      = TEXT("/Game/__MCPTests/BP_GetGraphContract_Outline");
+	static const TCHAR* kGetGraphContractBPPath_KnotBoundary = TEXT("/Game/__MCPTests/BP_GetGraphContract_KnotBoundary");
+	static const TCHAR* kGetGraphContractBPPath_KnotSymmetry = TEXT("/Game/__MCPTests/BP_GetGraphContract_KnotSymmetry");
 
 	struct FGetGraphContractFixture
 	{
@@ -815,6 +816,168 @@ UNTEST_UNIT_OPTS(Claireon, GetGraphContract, Outline_MatchesDocumentedGrammar, U
 	UNTEST_EXPECT_TRUE(NodeLines >= 3);
 
 	GetGraphContractCleanupAsset(kGetGraphContractBPPath_Outline);
+	co_return;
+}
+
+
+// Collapsed edges must include either selected endpoint.
+// Anchor at the consumer with depth zero to exercise an inbound boundary edge.
+UNTEST_UNIT_OPTS(Claireon, GetGraphContract, ResolveKnots_InboundBoundaryEdgeSurvivesSubset,
+	UNTEST_TIMEOUTMS(60000))
+{
+	FGetGraphContractFixture Fixture;
+	FString FixtureError;
+	const bool bFixtureOk = GetGraphContractBuildFixture(
+		kGetGraphContractBPPath_KnotBoundary, Fixture, FixtureError);
+	if (!bFixtureOk) { UE_LOG(LogTemp, Error, TEXT("%s"), *FixtureError); }
+	UNTEST_ASSERT_TRUE(bFixtureOk);
+
+	UEdGraphPin* EntryThen = Fixture.Entry->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+	UEdGraphPin* CallExec = Fixture.Call->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+	UNTEST_ASSERT_PTR(EntryThen);
+	UNTEST_ASSERT_PTR(CallExec);
+	EntryThen->BreakLinkTo(CallExec);
+
+	UK2Node_Knot* Knot = NewObject<UK2Node_Knot>(Fixture.FuncGraph);
+	Fixture.FuncGraph->AddNode(Knot, /*bUserAction=*/false, /*bSelectNewNode=*/false);
+	Knot->CreateNewGuid();
+	Knot->PostPlacedNewNode();
+	Knot->AllocateDefaultPins();
+	UEdGraphPin* KnotIn = Knot->GetInputPin();
+	UEdGraphPin* KnotOut = Knot->GetOutputPin();
+	UNTEST_ASSERT_PTR(KnotIn);
+	UNTEST_ASSERT_PTR(KnotOut);
+	EntryThen->MakeLinkTo(KnotIn);
+	KnotOut->MakeLinkTo(CallExec);
+
+	const FString EntryGuid = Fixture.Entry->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens);
+	const FString CallGuid = Fixture.Call->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens);
+
+	// Find an edge by endpoints and inspect knot and boundary metadata.
+	struct FEdgeFacts
+	{
+		bool bFound = false;
+		int32 ViaKnots = 0;
+		bool bSourceFlaggedOutOfSet = false;
+		bool bTargetFlaggedOutOfSet = false;
+	};
+	auto FindEdge = [](const TSharedPtr<FJsonObject>& GraphObj, const FString& From, const FString& To) -> FEdgeFacts
+	{
+		FEdgeFacts Facts;
+		const TArray<TSharedPtr<FJsonValue>>* Conns = nullptr;
+		if (!GraphObj.IsValid() || !GraphObj->TryGetArrayField(TEXT("connections"), Conns))
+		{
+			return Facts;
+		}
+		for (const TSharedPtr<FJsonValue>& Val : *Conns)
+		{
+			const TSharedPtr<FJsonObject> Obj = Val->AsObject();
+			if (!Obj.IsValid()) { continue; }
+			if (Obj->GetStringField(TEXT("from_node")) != From || Obj->GetStringField(TEXT("to_node")) != To)
+			{
+				continue;
+			}
+			Facts.bFound = true;
+			const TArray<TSharedPtr<FJsonValue>>* Via = nullptr;
+			Facts.ViaKnots = Obj->TryGetArrayField(TEXT("via_knots"), Via) ? Via->Num() : 0;
+			bool bFlag = true;
+			Facts.bSourceFlaggedOutOfSet = Obj->TryGetBoolField(TEXT("source_in_set"), bFlag) && !bFlag;
+			bFlag = true;
+			Facts.bTargetFlaggedOutOfSet = Obj->TryGetBoolField(TEXT("target_in_set"), bFlag) && !bFlag;
+			return Facts;
+		}
+		return Facts;
+	};
+
+	ClaireonTool_GetBlueprintGraph Tool;
+	TSharedPtr<FJsonObject> Args = GetGraphContractMakeArgs(kGetGraphContractBPPath_KnotBoundary);
+	Args->SetBoolField(TEXT("resolve_knots"), true);
+	Args->SetStringField(TEXT("anchor_node_guid"), CallGuid);
+	Args->SetNumberField(TEXT("traversal_depth"), 0);
+	Args->SetBoolField(TEXT("exec_only"), true);
+
+	const IClaireonTool::FToolResult R = Tool.Execute(Args);
+	const TSharedPtr<FJsonObject> GraphObj = GetGraphContractFirstGraph(R);
+	UNTEST_ASSERT_TRUE(GraphObj.IsValid());
+
+	const FEdgeFacts Collapsed = FindEdge(GraphObj, EntryGuid, CallGuid);
+	UNTEST_ASSERT_TRUE(Collapsed.bFound);
+	UNTEST_EXPECT_EQ(Collapsed.ViaKnots, 1);
+
+	UNTEST_EXPECT_TRUE(Collapsed.bSourceFlaggedOutOfSet);
+	UNTEST_EXPECT_FALSE(Collapsed.bTargetFlaggedOutOfSet);
+
+	GetGraphContractCleanupAsset(kGetGraphContractBPPath_KnotBoundary);
+	co_return;
+}
+
+// Exclude collapsed edges touching neither endpoint of the requested set.
+UNTEST_UNIT_OPTS(Claireon, GetGraphContract, ResolveKnots_BoundaryRuleIsSymmetricNotUniversal,
+	UNTEST_TIMEOUTMS(60000))
+{
+	FGetGraphContractFixture Fixture;
+	FString FixtureError;
+	const bool bFixtureOk = GetGraphContractBuildFixture(
+		kGetGraphContractBPPath_KnotSymmetry, Fixture, FixtureError);
+	if (!bFixtureOk) { UE_LOG(LogTemp, Error, TEXT("%s"), *FixtureError); }
+	UNTEST_ASSERT_TRUE(bFixtureOk);
+
+	UEdGraphPin* EntryThen = Fixture.Entry->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+	UEdGraphPin* CallExec = Fixture.Call->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+	UNTEST_ASSERT_PTR(EntryThen);
+	UNTEST_ASSERT_PTR(CallExec);
+	EntryThen->BreakLinkTo(CallExec);
+
+	UK2Node_Knot* Knot = NewObject<UK2Node_Knot>(Fixture.FuncGraph);
+	Fixture.FuncGraph->AddNode(Knot, /*bUserAction=*/false, /*bSelectNewNode=*/false);
+	Knot->CreateNewGuid();
+	Knot->PostPlacedNewNode();
+	Knot->AllocateDefaultPins();
+	EntryThen->MakeLinkTo(Knot->GetInputPin());
+	Knot->GetOutputPin()->MakeLinkTo(CallExec);
+
+	const FString EntryGuid = Fixture.Entry->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens);
+	const FString CallGuid = Fixture.Call->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens);
+
+	ClaireonTool_GetBlueprintGraph Tool;
+	TSharedPtr<FJsonObject> Args = GetGraphContractMakeArgs(kGetGraphContractBPPath_KnotSymmetry);
+	Args->SetBoolField(TEXT("resolve_knots"), true);
+	Args->SetStringField(TEXT("anchor_node_guid"), EntryGuid);
+	Args->SetNumberField(TEXT("traversal_depth"), 0);
+	Args->SetBoolField(TEXT("exec_only"), true);
+
+	const IClaireonTool::FToolResult R = Tool.Execute(Args);
+	const TSharedPtr<FJsonObject> GraphObj = GetGraphContractFirstGraph(R);
+	UNTEST_ASSERT_TRUE(GraphObj.IsValid());
+
+	const TArray<TSharedPtr<FJsonValue>>* Conns = nullptr;
+	UNTEST_ASSERT_TRUE(GraphObj->TryGetArrayField(TEXT("connections"), Conns) && Conns);
+
+	bool bFoundOutbound = false;
+	for (const TSharedPtr<FJsonValue>& Val : *Conns)
+	{
+		const TSharedPtr<FJsonObject> Obj = Val->AsObject();
+		if (!Obj.IsValid()) { continue; }
+		const TArray<TSharedPtr<FJsonValue>>* Via = nullptr;
+		const bool bIsCollapsed = Obj->TryGetArrayField(TEXT("via_knots"), Via) && Via && Via->Num() > 0;
+		if (!bIsCollapsed) { continue; }
+
+		bool bSourceIn = true, bTargetIn = true;
+		Obj->TryGetBoolField(TEXT("source_in_set"), bSourceIn);
+		Obj->TryGetBoolField(TEXT("target_in_set"), bTargetIn);
+		UNTEST_EXPECT_TRUE(bSourceIn || bTargetIn);
+
+		if (Obj->GetStringField(TEXT("from_node")) == EntryGuid
+			&& Obj->GetStringField(TEXT("to_node")) == CallGuid)
+		{
+			bFoundOutbound = true;
+			UNTEST_EXPECT_TRUE(bSourceIn);
+			UNTEST_EXPECT_FALSE(bTargetIn);
+		}
+	}
+	UNTEST_EXPECT_TRUE(bFoundOutbound);
+
+	GetGraphContractCleanupAsset(kGetGraphContractBPPath_KnotSymmetry);
 	co_return;
 }
 

@@ -87,7 +87,7 @@ UNTEST_UNIT_OPTS(Claireon, LogCapture, FiltersByVerbosity, UNTEST_TIMEOUTMS(1000
 // ---------------------------------------------------------------------------
 // LogCapture.LogFloorCapturesDisplayAndLog
 //
-// The floor console_execute uses (P1-6). Console command handlers report at
+// The floor console_execute uses. Console command handlers report at
 // Display/Log, so the default Warning floor drops everything they emit.
 // ---------------------------------------------------------------------------
 

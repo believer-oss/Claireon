@@ -47,9 +47,9 @@ IClaireonTool::FToolResult ClaireonTool_GameplayTagsList::Execute(const TSharedP
 	// Reject unknown fields (case-insensitive match against the declared schema)
 	if (Arguments.IsValid())
 	{
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Arguments->Values)
+		for (const auto& Pair : Arguments->Values)
 		{
-			const FString& Key = Pair.Key;
+			const FString Key(Pair.Key);
 			if (!Key.Equals(TEXT("prefix"), ESearchCase::IgnoreCase)
 				&& !Key.Equals(TEXT("include_source"), ESearchCase::IgnoreCase))
 			{

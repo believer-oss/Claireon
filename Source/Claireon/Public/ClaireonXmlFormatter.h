@@ -26,8 +26,22 @@ public:
 	 */
 	static FString FormatExecuteResult(const IClaireonTool::FToolResult& Result);
 
-	/** Format an error into XML response */
-	static FString FormatErrorResult(const FString& Error, const FString& ErrorCode, const FString& Suggestion, const FString& Logs, const FString& UELog = FString());
+	/**
+	 * Format failure data with the same sanitization and spill handling as success.
+	 *
+	 * @param Data      Structured failure payload or spill manifest; may be null.
+	 * @param Summary   Optional one-line summary.
+	 * @param Warnings  Operation warnings and sanitizer disclosures.
+	 */
+	static FString FormatErrorResult(
+		const FString& Error,
+		const FString& ErrorCode,
+		const FString& Suggestion,
+		const FString& Logs,
+		const FString& UELog = FString(),
+		const TSharedPtr<FJsonObject>& Data = nullptr,
+		const FString& Summary = FString(),
+		const TArray<FString>& Warnings = TArray<FString>());
 
 	/**
 	 * Generate a Python-style type signature from a tool's input schema.
@@ -50,12 +64,14 @@ public:
 	 * @param Streams      Per-stream manifests from FClaireonSpillResult::Streams.
 	 * @param InlineLogs   stdout text that stayed inline (empty when stdout spilled).
 	 * @param InlineUELog  uelog text that stayed inline (empty when uelog spilled).
+	 * @param Warnings     Operation warnings plus the output gate's sanitizer disclosures.
 	 */
 	static FString FormatSpilledResult(
 		const FString& Summary,
 		const TArray<FClaireonSpillStream>& Streams,
 		const FString& InlineLogs,
-		const FString& InlineUELog);
+		const FString& InlineUELog,
+		const TArray<FString>& Warnings);
 
 	/**
 	 * Generate a compact category summary with tool counts and example names.

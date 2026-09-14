@@ -50,22 +50,8 @@ static const TCHAR* TestBPPath_Idempotent = TEXT("/Game/__MCPTests/BP_RepNotify_
 static const TCHAR* TestBPPath_Snake      = TEXT("/Game/__MCPTests/BP_RepNotify_Snake");
 static const TCHAR* TestBPPath_NoGraph    = TEXT("/Game/__MCPTests/BP_RepNotify_NoGraph");
 
-// True only when the fixture actually has a .uasset on disk.
-//
-// The fixture below is built in an in-memory package and deliberately NOT saved:
-// nothing in this suite reads the asset back from disk, and neither
-// bp_add_variable nor bp_set_variable_properties saves (only bp_save /
-// bp_close_all reach CompileAndSaveSession, and these tests never call them).
-// Deleting an in-memory fixture buys nothing, and every
-// ObjectTools::ForceDeleteObjects call runs a whole-object-graph referencer scan,
-// which is the trigger for the nondeterministic Niagara-serialization crash
-// documented in Docs/llm/todo/claireon-untest-harness-reliability.md item 1.
-//
-// The check is kept rather than dropping the delete outright because
-// /Game/__MCPTests is deliberately NOT gitignored: a stale .uasset left by an
-// older build (this helper's fixture used to be saved with UPackage::Save) or a
-// crashed run must still be cleaned so `git status --porcelain -- Content/` stays
-// empty.
+// Delete only on-disk fixtures. In-memory deletion triggers a global referencer
+// scan that can crash on resident Niagara objects; stale files still need cleanup.
 bool RepNotifyTests_HasFileOnDisk(const FString& AssetOrPackagePath)
 {
 	const FString PackageName = FPackageName::ObjectPathToPackageName(AssetOrPackagePath);

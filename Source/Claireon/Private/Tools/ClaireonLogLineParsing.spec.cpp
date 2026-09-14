@@ -9,13 +9,7 @@
 #include "Engine/Engine.h"
 #include "ClaireonLog.h"
 
-// ---------------------------------------------------------------------------
-// Anonymous-namespace helpers -- all prefixed ClaireonLogLineParsingSpec_ to
-// avoid anon-namespace unity-build collisions on linux-build-server-v2.
-// UNTEST_ASSERT_*/UNTEST_EXPECT_* must never appear inside lambdas (they
-// expand to co_return); helpers that need assertions run inline in the test
-// coroutine.
-// ---------------------------------------------------------------------------
+// Keep UNTEST assertions in the test coroutine; they expand to co_return.
 namespace ClaireonLogLineParsing_spec_Private
 {
     // Build a TSharedPtr<FJsonObject> with an include_categories array.
@@ -396,7 +390,7 @@ UNTEST_UNIT_OPTS(Claireon, LogLineParsing, EnumerateRegisteredCategories, UNTEST
 }
 
 // ===========================================================================
-// IsWellFormedLogTimestamp (P2-16)
+// IsWellFormedLogTimestamp
 // ===========================================================================
 
 UNTEST_UNIT_OPTS(Claireon, LogLineParsing, TimestampShapeCheck, UNTEST_TIMEOUTMS(10000))

@@ -21,7 +21,6 @@ struct FAnimGraphEditToolData
 	FBlueprintEditCursor Cursor;
 	FString ResponseMode = TEXT("changed");
 	TSet<FGuid> LastOperationAffectedNodes;
-	TMap<FGuid, TMap<FName, TArray<FString>>> PreOpPinConnections;
 	TMap<FGuid, FGuid> GuidCorrections;
 
 	/** Counts consecutive calls resolved via asset_path (no session_id). Used by EmitSessionHintIfNeeded. */
@@ -50,7 +49,7 @@ public:
 protected:
 	/**
 	 * Validate session and retrieve tool data. Reads session_id from Arguments.
-	 * Also clears per-operation state and snapshots pin connections for "changed" mode.
+	 * Also clears per-operation state.
 	 * Returns false and sets OutError on failure.
 	 */
 	bool RequireSession(
@@ -61,9 +60,6 @@ protected:
 
 	/** Build the standard state response with graph nodes and cursor. */
 	FToolResult BuildStateResponse(const FString& SessionId, FAnimGraphEditToolData* Data);
-
-	/** Snapshot pin connections before a mutation (for "changed" response mode). */
-	void SnapshotPinConnections(FAnimGraphEditToolData* Data);
 
 	/**
 	 * Refresh the Blueprint editor in-place without closing/reopening it (no tab switching).

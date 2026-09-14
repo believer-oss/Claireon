@@ -28,4 +28,7 @@ public:
 
 	// Synonym/abbreviation keywords for tools_search ranking
 	virtual TArray<FString> GetSearchKeywords() const override;
+
+	// Use Last and Histogram aggregation; summing retried batches double-counts assets.
+	virtual bool GetSummaryAggregationSpec(TArray<FClaireonFieldAggregation>& OutSpec) const override;
 };

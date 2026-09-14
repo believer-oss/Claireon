@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonPCGGraphTool_RemoveNode.h"
+#include "Tools/ClaireonPCGEditorSync.h"
 #include "Tools/ClaireonPCGGraphHelpers.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "PCGGraph.h"
@@ -59,9 +60,12 @@ FToolResult ClaireonPCGGraphTool_RemoveNode::Execute(const TSharedPtr<FJsonObjec
 
 	FString RemovedName = ClaireonPCGGraphHelpers::GetNodeDisplayName(Node);
 
+	// See pcg_connect: settle a pending editor rebuild before the engine notifies native nodes.
+	ClaireonPCGEditorSync::SettlePendingReconstruct(Data->PCGGraph.Get());
+
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Remove PCG Node")));
 	Data->PCGGraph->RemoveNode(Node);
-	ClaireonPCGGraphHelpers::NotifyGraphChanged(Data->PCGGraph.Get());
+	ClaireonPCGGraphHelpers::NotifyGraphChanged(Data->PCGGraph.Get(), ClaireonPCGGraphHelpers::EPCGGraphEditOp::RemoveNode);
 
 	Data->LastOperationStatus = FString::Printf(TEXT("Removed node: %s"), *RemovedName);
 

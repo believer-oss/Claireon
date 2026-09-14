@@ -23,7 +23,7 @@ enum class EOpenSessionResult : uint8
  * Touch()es it, so the clock only runs while a session sits genuinely idle --
  * no single operation approaches this bound. 10 minutes keeps abandoned
  * sessions from blocking editor-wide tools for the better part of an hour
- * (the previous 60-minute default; see Work #6704 friction 5).
+ * (the previous 60-minute default).
  * `inline constexpr` (not `static constexpr` class member) per the v2/Linux
  * header rules.
  */
@@ -98,7 +98,8 @@ public:
 	 *        World->PersistentLevel->GetPathName()), not a /Game/ asset. An unsaved level (File >
 	 *        New Level) lives at /Temp/Untitled_N until its first save; without this, every
 	 *        world-locking tool errors immediately on a fresh level with no recovery but saving
-	 *        first. Default false so every other caller keeps rejecting non-/Game/ paths unchanged.
+	 *        first. Default false so every other caller keeps rejecting /Temp/ paths unchanged
+	 *        (content roots -- /Game/ and mounted plugin content -- are always accepted).
 	 * @return Result with session ID and optional blocking session info
 	 */
 	FMCPOpenSessionResult OpenSession(const FString& AssetPath, const FString& ToolName,

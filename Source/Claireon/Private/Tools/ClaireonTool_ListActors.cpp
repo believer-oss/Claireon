@@ -199,7 +199,7 @@ IClaireonTool::FToolResult ClaireonTool_ListActors::Execute(const TSharedPtr<FJs
 		const FString ActorObjectName = Actor->GetName();
 		const FString ActorClassName = Actor->GetClass()->GetName();
 
-		// Apply class filter: is-a when the filter resolved (P2-8), substring
+		// Apply class filter: is-a when the filter resolved, substring
 		// fallback (disclosed by warning) when it did not.
 		if (!ClassFilter.IsEmpty())
 		{

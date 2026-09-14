@@ -30,7 +30,7 @@ public:
 	 * Tools that block the game thread (editor_wait_seconds, poll loops)
 	 * consult this to warn: inside python_execute the engine tick cannot run,
 	 * so a blocking wait is a pure stall and no deferred action, async load,
-	 * or wait condition can make progress during it (P2-5b).
+	 * or wait condition can make progress during it.
 	 */
 	static bool IsPythonExecutionInProgress();
 

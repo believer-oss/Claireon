@@ -329,18 +329,18 @@ IClaireonTool::FToolResult ClaireonTool_LogTail::Execute(const TSharedPtr<FJsonO
 	double ExcludedCount = 0.0;
 	if (Data.IsValid()
 		&& Data->TryGetNumberField(TEXT("category_excluded_count"), ExcludedCount)
-		&& ExcludedCount > 0.0
-		&& ShouldEmitLatchedHint(TEXT("log_category_filter_excluded")))
+		&& ExcludedCount > 0.0)
 	{
 		TSharedPtr<FJsonObject> UnfilteredArgs = CloneHintArgs(Arguments);
 		UnfilteredArgs->RemoveField(TEXT("include_categories"));
 		UnfilteredArgs->RemoveField(TEXT("exclude_categories"));
-		Result.Hint = MakeGuidanceHint(GetName(),
+		Result.AddHint(MakeGuidanceHint(GetName(),
 			FString::Printf(
 				TEXT("%d lines were excluded by category filters. Re-issue without ")
 				TEXT("include_categories/exclude_categories to see all lines."),
 				static_cast<int32>(ExcludedCount)),
-			UnfilteredArgs);
+			UnfilteredArgs,
+			FName(TEXT("log_category_filter_excluded"))));
 	}
 	return Result;
 }

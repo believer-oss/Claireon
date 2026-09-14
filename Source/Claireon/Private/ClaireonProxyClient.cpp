@@ -661,6 +661,14 @@ ERegisterResult FClaireonProxyClient::RegisterOnce()
 		UE_LOG(LogClaireon, Display,
 			TEXT("[MCP Proxy] Registered editor (pid=%u start_time_ns=%lld build=%s)"),
 			FPlatformProcess::GetCurrentProcessId(), StartTimeNs, *CachedBuildId);
+
+		// A restarted proxy loses readiness. Re-announce after registration with a second
+		// synchronous POST; retain the latch on failure for a later registration retry.
+		if (LastReportedToolCount > 0)
+		{
+			NotifyReady(LastReportedToolCount);
+		}
+
 		return ERegisterResult::Accepted;
 	}
 
@@ -762,6 +770,8 @@ bool FClaireonProxyClient::NotifyReady(int32 ToolCount)
 
 	UE_LOG(LogClaireon, Display,
 		TEXT("[MCP Proxy] /editor/ready acknowledged by proxy (tool_count=%d)"), ToolCount);
+
+	LastReportedToolCount = ToolCount;
 	return true;
 }
 

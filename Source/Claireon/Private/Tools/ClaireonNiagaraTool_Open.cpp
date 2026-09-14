@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonNiagaraTool_Open.h"
+#include "ClaireonScopedAssetEditor.h"
 #include "Tools/ClaireonNiagaraHelpers.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "Tools/ClaireonAssetUtils.h"
@@ -77,7 +78,7 @@ FToolResult ClaireonNiagaraTool_Open::Execute(const TSharedPtr<FJsonObject>& Arg
 	}
 	ToolData.Add(SessionId, MoveTemp(NewData));
 
-	ClaireonAssetUtils::OpenAssetEditorIfHeadless(System);
+	ClaireonAssetEditorWindow::OpenForSession(System);
 
 	FNiagaraEditToolData* Data = ToolData.Find(SessionId);
 	return BuildStateResponse(SessionId, Data);

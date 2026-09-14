@@ -5,13 +5,15 @@
 #include "ClaireonAutoSave.h"
 #include "ClaireonLog.h"
 #include "ClaireonBridge.h"
+#include "ClaireonAstralJsonGuard.h"
 #include "ClaireonSafeExec.h"
 #include "Tools/IClaireonTool.h"
 #include "Tools/ClaireonTool_MapOpen.h"
 #include "Tools/ClaireonTool_MapDuplicate.h"
 #include "Tools/ClaireonTool_PIEStart.h"
 #include "Tools/ClaireonTool_PIEStop.h"
-#include "Tools/ClaireonTool_LiveCodingReload.h"
+#include "Tools/ClaireonTool_EditorLiveCodingReloadAsync.h"
+#include "Misc/ScopeExit.h"
 #include "HttpServerModule.h"
 #include "IHttpRouter.h"
 #include "HttpServerResponse.h"
@@ -34,16 +36,12 @@
 
 #include <atomic>
 
-// Start()'s bind-retry budget. Matches StartEphemeral's 32-attempt sweep: with
-// the 1009 stride below, 32 attempts cover the high-port range widely enough to
-// escape any contiguous reservation block.
+// Bind retries use the same attempt budget as StartEphemeral.
 static constexpr uint32 MaxPortRetries = 32;
 
 namespace ClaireonServerInternal
 {
-	// Named file-local namespace (NOT a raw anonymous namespace): under
-	// linux-build-server-v2 unity batching, anonymous namespaces from separate
-	// .cpp merge into one TU and collide.
+	// Use a named namespace to avoid collisions in unity builds.
 
 	// 1009 is prime and larger than the 100-port blocks Windows reserves in the
 	// ephemeral range, so a single retry always leaves the block the previous
@@ -66,14 +64,13 @@ namespace ClaireonServerInternal
 		const uint32 Anchor = FMath::Max(RequestedPort, PortRetryRangeBase) - PortRetryRangeBase;
 		return PortRetryRangeBase + ((Anchor + Attempt * PortRetryStride) % PortRetryRangeSpan);
 	}
+
+	/** Tool execution depth, accessed only on the game thread. */
+	int32 GGameThreadToolDepth = 0;
 } // namespace ClaireonServerInternal
 
-// Tools exposed directly via MCP tools/list / tools/call. The MCP surface is
-// exactly two meta-tools: tool_search and python_execute. Every other
-// registered tool (including the transaction_* family) is reachable only via
-// the claireon.<tool>(...) Python attribute namespace inside python_execute. The
-// proxy advertises the same two bare names; the editor and proxy must stay in
-// lock-step on this set.
+// Expose only tool_search and python_execute on MCP; other tools use claireon.<tool> in Python.
+// Keep this set aligned with the proxy.
 static const TSet<FString> MCPVisibleTools = {
 	TEXT("tool_search"),
 	TEXT("python_execute"),
@@ -277,10 +274,9 @@ void FClaireonServer::Stop()
 	// the socket (FHttpListener::StopListening -> ListenSocket.Reset()) is reachable only through
 	// StopAllListeners(), which iterates and stops EVERY listener in the process -- there is no
 	// per-port stop/destroy. Calling it here would take down every other consumer of the shared
-	// module in this same editor process, confirmed live in this codebase:
-	// FSRemoteStatusSubsystem (Source/FSRemoteStatus), FriendshipperHttpRouter
-	// (Plugins/FriendshipperSourceControl), FSAssetImporter, and PragmaActiveDebugServer
-	// (Plugins/PragmaSDK) all call FHttpServerModule::Get().StartAllListeners() and bind their own
+	// module in this same editor process, confirmed live in a consuming project: a remote-status
+	// subsystem, a source-control plugin's HTTP router, an asset importer, and an SDK debug
+	// server all call FHttpServerModule::Get().StartAllListeners() and bind their own
 	// long-lived ports on the same singleton. A Claireon Stop() that calls StopAllListeners() would
 	// silently kill their listeners too, and re-enabling via StartAllListeners() on the next
 	// Claireon Start() would restart ones Claireon never owned. Unloading the whole HTTPServer
@@ -468,11 +464,13 @@ bool FClaireonServer::HandlePostRequest(const FHttpServerRequest& Request, const
 	// Parse JSON
 	TSharedPtr<FJsonObject> JsonObject;
 	{
-		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(RequestBody);
-		if (!FJsonSerializer::Deserialize(Reader, JsonObject) || !JsonObject.IsValid())
+		const auto Parsed = ClaireonAstralJsonGuard::DeserializeRpc(RequestBody);
+		JsonObject = Parsed.Object;
+		if (!JsonObject.IsValid())
 		{
 			TSharedPtr<FJsonObject> ErrorResponse = FMCPJsonRpcResponse::MakeError(
-				nullptr, FMCPJsonRpcResponse::ParseError, TEXT("Failed to parse JSON body"));
+				Parsed.RequestId, Parsed.bAmbiguousKeys ? FMCPJsonRpcResponse::InvalidParams : FMCPJsonRpcResponse::ParseError,
+				Parsed.bAmbiguousKeys ? Parsed.Error : TEXT("Failed to parse JSON body"));
 			auto Response = FHttpServerResponse::Create(SerializeJson(ErrorResponse), TEXT("application/json"));
 			OnComplete(MoveTemp(Response));
 			return true;
@@ -747,6 +745,7 @@ namespace ClaireonServerInternal
 void AsyncToolTrampoline(void* Context)
 {
 	FAsyncToolSEHContext* Ctx = static_cast<FAsyncToolSEHContext*>(Context);
+	// Track depth outside the SEH frame: /EHsc does not unwind C++ destructors on structured exceptions.
 	Ctx->Promise->SetValue(Ctx->Tool->Execute(*Ctx->Args));
 	*Ctx->bPromiseFulfilled = true;
 }
@@ -885,19 +884,38 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsCall(const FMCPRequestContex
 	UE_LOG(LogClaireon, Log, TEXT("[MCP] Calling tool: %s%s"), *ToolName,
 		bSuppressOutput ? TEXT(" (suppress_output)") : TEXT(""));
 
-	// Execute on game thread with serialization guard
 	IClaireonTool::FToolResult ToolResult;
 	{
 		FScopeLock Lock(&GameThreadCriticalSection);
 
 		if (IsInGameThread())
 		{
-			FClaireonSafeExecResult SafeResult = ClaireonSafeExec::ExecuteTool(FoundTool->Get(), Arguments);
-			ToolResult = MoveTemp(SafeResult.ToolResult);
+			// The critical section allows same-thread reentry. Core-ticker pumping can dispatch nested HTTP calls,
+			// so guard actual game-thread execution, including tools without session locks.
+			if (ClaireonServerInternal::GGameThreadToolDepth > 0)
+			{
+				UE_LOG(LogClaireon, Error,
+					TEXT("[MCP] Refusing re-entrant tool call '%s' (depth %d)."),
+					*ToolName, ClaireonServerInternal::GGameThreadToolDepth);
+				ToolResult.bIsError = true;
+				ToolResult.ErrorMessage = FString::Printf(
+					TEXT("Re-entrant tool call refused: '%s' was dispatched while another tool is still ")
+					TEXT("executing on the game thread. The outer tool pumped the engine loop or core ticker, ")
+					TEXT("which lets the HTTP listener dispatch inside it. Pump FSlateApplication::Tick ")
+					TEXT("instead -- it does not tick the core ticker."), *ToolName);
+			}
+			else
+			{
+				ClaireonServerInternal::GGameThreadToolDepth++;
+				// Unwind depth when safe execution returns from its SEH path.
+				ON_SCOPE_EXIT { ClaireonServerInternal::GGameThreadToolDepth--; };
+
+				FClaireonSafeExecResult SafeResult = ClaireonSafeExec::ExecuteTool(FoundTool->Get(), Arguments);
+				ToolResult = MoveTemp(SafeResult.ToolResult);
+			}
 		}
 		else
 		{
-			// Marshal to game thread
 			TPromise<IClaireonTool::FToolResult> Promise;
 			TFuture<IClaireonTool::FToolResult> Future = Promise.GetFuture();
 
@@ -915,14 +933,19 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsCall(const FMCPRequestContex
 				Ctx.Args = &ArgsCopy;
 				Ctx.Promise = &Promise;
 				Ctx.bPromiseFulfilled = &bPromiseFulfilled;
+				// Bracket the SEH wrapper so depth is decremented after a caught crash.
+				ClaireonServerInternal::GGameThreadToolDepth++;
 				AsyncExceptionCode.store(
 					ExecuteToolAsyncSEH(&ClaireonServerInternal::AsyncToolTrampoline, &Ctx, &bPromiseFulfilled,
 						&Promise, ExMsg, UE_ARRAY_COUNT(ExMsg)),
 					std::memory_order_release);
+				ClaireonServerInternal::GGameThreadToolDepth--;
 			});
 #else
 			AsyncTask(ENamedThreads::GameThread, [ToolPtr, &ArgsCopy, &Promise, &AsyncExceptionCode]()
 			{
+				ClaireonServerInternal::GGameThreadToolDepth++;
+				ON_SCOPE_EXIT { ClaireonServerInternal::GGameThreadToolDepth--; };
 				try
 				{
 					Promise.SetValue(ToolPtr->Execute(ArgsCopy));
@@ -1001,7 +1024,7 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsCall(const FMCPRequestContex
 						ClaireonTool_PIEStop::ExecuteDeferredPIEStop();
 						break;
 					case EClaireonDeferredActionType::LiveCodingReload:
-						ClaireonTool_LiveCodingReload::ExecuteDeferredLiveCodingReload(Action.Payload);
+						ClaireonTool_EditorLiveCodingReloadAsync::ExecuteDeferredLiveCodingReload(Action.Payload);
 						break;
 					case EClaireonDeferredActionType::DuplicateAndOpenMap:
 						ClaireonTool_MapDuplicate::ExecuteDeferredDuplicateAndOpenMap(Action.Payload);
@@ -1036,12 +1059,9 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsCall(const FMCPRequestContex
 		bFeedbackSubmittedThisSession = true;
 	}
 
-	// Route generic-tool results through the disk-spill gate at the transport
-	// boundary, mirroring the REPL path in ClaireonAnthropicClient. Tools never
-	// route internally (the in-process bridge path must see raw Data); the one
-	// exception is python_execute, which routes its own stdout/uelog streams
-	// inside Execute and is skipped here exactly like on the REPL side.
-	if (!ToolResult.bIsError && ToolName != TEXT("python_execute"))
+	// Route successes and errors at the transport boundary, preserving raw Data for in-process callers.
+	// python_execute routes its own streams.
+	if (ToolName != TEXT("python_execute"))
 	{
 		ToolResult = FClaireonOutputGate::RouteResult(
 			MoveTemp(ToolResult),
@@ -1051,8 +1071,7 @@ TSharedPtr<FJsonObject> FClaireonServer::HandleToolsCall(const FMCPRequestContex
 			EClaireonSpillStreamSet::GenericData);
 	}
 
-	// Build MCP tool result — all tools return structured FToolResult fields.
-	// The MCP HTTP path regenerates XML at the transport boundary.
+	// Regenerate XML at the MCP transport boundary.
 	FString ContentText = FClaireonXmlFormatter::FormatExecuteResult(ToolResult);
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -1719,26 +1738,152 @@ void FClaireonServer::ClearDiagnostics()
 
 void FClaireonServer::LoadMCPContent()
 {
-	LoadedPrompts.Empty();
-	LoadedResources.Empty();
+	const FMCPContentLoadReport Report = ReloadMCPContent();
+
+	if (!Report.FatalError.IsEmpty())
+	{
+		UE_LOG(LogClaireon, Warning, TEXT("[MCP] %s -- no content loaded"), *Report.FatalError);
+		return;
+	}
+
+	UE_LOG(LogClaireon, Display, TEXT("[MCP] Loaded %d prompt(s) and %d resource(s)"),
+		Report.NumPrompts, Report.NumResources);
+	for (const FString& Failed : Report.FailedFiles)
+	{
+		UE_LOG(LogClaireon, Warning, TEXT("[MCP] Content file yielded no entry: %s"), *Failed);
+	}
+}
+
+bool FClaireonServer::TryGetResourceText(const FString& Uri, FString& OutText) const
+{
+	const FResourceTemplate* Tmpl = LoadedResources.Find(Uri);
+	if (!Tmpl)
+	{
+		OutText.Reset();
+		return false;
+	}
+	OutText = SubstitutePlaceholders(Tmpl->TextTemplate, BuildRuntimeVariables());
+	return true;
+}
+
+bool FClaireonServer::TryGetPromptText(const FString& Name, FString& OutText) const
+{
+	const FPromptTemplate* Tmpl = LoadedPrompts.Find(Name);
+	if (!Tmpl)
+	{
+		OutText.Reset();
+		return false;
+	}
+	OutText = SubstitutePlaceholders(Tmpl->TextTemplate, BuildRuntimeVariables());
+	return true;
+}
+
+void FClaireonServer::GetInstructionTopics(TArray<FInstructionTopic>& OutTopics) const
+{
+	OutTopics.Reset();
+
+	const FString Prefix = GetInstructionUriPrefix();
+
+	for (const TPair<FString, FResourceTemplate>& Pair : LoadedResources)
+	{
+		if (!Pair.Key.StartsWith(Prefix, ESearchCase::CaseSensitive))
+		{
+			continue;
+		}
+		FInstructionTopic Entry;
+		Entry.Topic = Pair.Key.RightChop(Prefix.Len());
+		Entry.Title = Pair.Value.Name;
+		Entry.Summary = Pair.Value.Description;
+		Entry.bIsResource = true;
+		// Use the registered URI so resources/read resolves it.
+		Entry.Uri = Pair.Key;
+		OutTopics.Add(MoveTemp(Entry));
+	}
+
+	for (const TPair<FString, FPromptTemplate>& Pair : LoadedPrompts)
+	{
+		// Only the instruction loader reads .md files.
+		if (!Pair.Value.SourcePath.EndsWith(TEXT(".md"), ESearchCase::IgnoreCase))
+		{
+			continue;
+		}
+		FInstructionTopic Entry;
+		// The registry key is the frontmatter name accepted by prompts/get.
+		Entry.Topic = Pair.Key;
+		Entry.Title = Pair.Key;
+		Entry.Summary = Pair.Value.Description;
+		Entry.bIsResource = false;
+		Entry.PromptName = Pair.Key;
+		OutTopics.Add(MoveTemp(Entry));
+	}
+
+	// Sort deterministically, resolving slug collisions resource-first as instructions_read does.
+	OutTopics.Sort([](const FInstructionTopic& A, const FInstructionTopic& B)
+	{
+		if (A.Topic != B.Topic) { return A.Topic < B.Topic; }
+		return A.bIsResource && !B.bIsResource;
+	});
+}
+
+FClaireonServer::FMCPContentLoadReport FClaireonServer::ReloadMCPContent()
+{
+	// Registries are accessed on the game thread.
+	check(IsInGameThread());
+
+	FMCPContentLoadReport Report;
 
 	TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("Claireon"));
 	if (!Plugin.IsValid())
 	{
-		UE_LOG(LogClaireon, Warning, TEXT("[MCP] Claireon plugin not found -- no content loaded"));
-		return;
+		// Registries deliberately untouched: a scan that cannot run must not empty them.
+		Report.FatalError = TEXT("Claireon plugin not found");
+		Report.NumPrompts = LoadedPrompts.Num();
+		Report.NumResources = LoadedResources.Num();
+		return Report;
 	}
 
 	const FString ContentRoot = FPaths::Combine(Plugin->GetBaseDir(), TEXT("Content"), TEXT("MCP"));
-	LoadPromptsFromDirectory(FPaths::Combine(ContentRoot, TEXT("Prompts")));
-	LoadResourcesFromDirectory(FPaths::Combine(ContentRoot, TEXT("Resources")));
-	LoadInstructionsFromDirectory(FPaths::Combine(ContentRoot, TEXT("Instructions")));
 
-	UE_LOG(LogClaireon, Display, TEXT("[MCP] Loaded %d prompt(s) and %d resource(s) from %s"),
-		LoadedPrompts.Num(), LoadedResources.Num(), *ContentRoot);
+	// Build replacement registries before publishing them.
+	TMap<FString, FPromptTemplate> NewPrompts;
+	TMap<FString, FResourceTemplate> NewResources;
+
+	LoadPromptsFromDirectory(FPaths::Combine(ContentRoot, TEXT("Prompts")), NewPrompts, Report.FailedFiles);
+	LoadResourcesFromDirectory(FPaths::Combine(ContentRoot, TEXT("Resources")), NewResources, Report.FailedFiles);
+	LoadInstructionsFromDirectory(FPaths::Combine(ContentRoot, TEXT("Instructions")), NewPrompts, NewResources, Report.FailedFiles);
+
+	// Retain the last good entry for failed files, matched by SourcePath because malformed frontmatter may hide its key.
+	for (const TPair<FString, FPromptTemplate>& Existing : LoadedPrompts)
+	{
+		if (!NewPrompts.Contains(Existing.Key) && Report.FailedFiles.Contains(Existing.Value.SourcePath))
+		{
+			NewPrompts.Add(Existing.Key, Existing.Value);
+			Report.CarriedForwardKeys.Add(Existing.Key);
+		}
+	}
+	for (const TPair<FString, FResourceTemplate>& Existing : LoadedResources)
+	{
+		if (!NewResources.Contains(Existing.Key) && Report.FailedFiles.Contains(Existing.Value.SourcePath))
+		{
+			NewResources.Add(Existing.Key, Existing.Value);
+			Report.CarriedForwardKeys.Add(Existing.Key);
+		}
+	}
+
+	Report.CarriedForwardKeys.Sort();
+
+	LoadedPrompts = MoveTemp(NewPrompts);
+	LoadedResources = MoveTemp(NewResources);
+
+	Report.NumPrompts = LoadedPrompts.Num();
+	Report.NumResources = LoadedResources.Num();
+	return Report;
 }
 
-void FClaireonServer::LoadPromptsFromDirectory(const FString& Directory)
+void FClaireonServer::LoadPromptsFromDirectory(
+	const FString& Directory,
+	TMap<FString, FPromptTemplate>& OutPrompts,
+	TArray<FString>& OutFailedFiles) const
 {
 	if (!FPaths::DirectoryExists(Directory))
 	{
@@ -1755,6 +1900,7 @@ void FClaireonServer::LoadPromptsFromDirectory(const FString& Directory)
 		if (!FFileHelper::LoadFileToString(Contents, *AbsPath))
 		{
 			UE_LOG(LogClaireon, Warning, TEXT("[MCP] Failed to read prompt file: %s"), *AbsPath);
+			OutFailedFiles.Add(AbsPath);
 			continue;
 		}
 
@@ -1763,6 +1909,7 @@ void FClaireonServer::LoadPromptsFromDirectory(const FString& Directory)
 		if (!FJsonSerializer::Deserialize(Reader, RootObject) || !RootObject.IsValid())
 		{
 			UE_LOG(LogClaireon, Warning, TEXT("[MCP] Failed to parse prompt JSON: %s"), *AbsPath);
+			OutFailedFiles.Add(AbsPath);
 			continue;
 		}
 
@@ -1782,11 +1929,14 @@ void FClaireonServer::LoadPromptsFromDirectory(const FString& Directory)
 		Tmpl.TextTemplate = RootObject->GetStringField(TEXT("text"));
 		Tmpl.SourcePath = AbsPath;
 
-		LoadedPrompts.Add(PromptName, MoveTemp(Tmpl));
+		OutPrompts.Add(PromptName, MoveTemp(Tmpl));
 	}
 }
 
-void FClaireonServer::LoadResourcesFromDirectory(const FString& Directory)
+void FClaireonServer::LoadResourcesFromDirectory(
+	const FString& Directory,
+	TMap<FString, FResourceTemplate>& OutResources,
+	TArray<FString>& OutFailedFiles) const
 {
 	if (!FPaths::DirectoryExists(Directory))
 	{
@@ -1803,6 +1953,7 @@ void FClaireonServer::LoadResourcesFromDirectory(const FString& Directory)
 		if (!FFileHelper::LoadFileToString(Contents, *AbsPath))
 		{
 			UE_LOG(LogClaireon, Warning, TEXT("[MCP] Failed to read resource file: %s"), *AbsPath);
+			OutFailedFiles.Add(AbsPath);
 			continue;
 		}
 
@@ -1811,6 +1962,7 @@ void FClaireonServer::LoadResourcesFromDirectory(const FString& Directory)
 		if (!FJsonSerializer::Deserialize(Reader, RootObject) || !RootObject.IsValid())
 		{
 			UE_LOG(LogClaireon, Warning, TEXT("[MCP] Failed to parse resource JSON: %s"), *AbsPath);
+			OutFailedFiles.Add(AbsPath);
 			continue;
 		}
 
@@ -1832,11 +1984,15 @@ void FClaireonServer::LoadResourcesFromDirectory(const FString& Directory)
 		Tmpl.TextTemplate = RootObject->GetStringField(TEXT("text"));
 		Tmpl.SourcePath = AbsPath;
 
-		LoadedResources.Add(Uri, MoveTemp(Tmpl));
+		OutResources.Add(Uri, MoveTemp(Tmpl));
 	}
 }
 
-void FClaireonServer::LoadInstructionsFromDirectory(const FString& Directory)
+void FClaireonServer::LoadInstructionsFromDirectory(
+	const FString& Directory,
+	TMap<FString, FPromptTemplate>& OutPrompts,
+	TMap<FString, FResourceTemplate>& OutResources,
+	TArray<FString>& OutFailedFiles) const
 {
 	if (!FPaths::DirectoryExists(Directory))
 	{
@@ -1856,6 +2012,7 @@ void FClaireonServer::LoadInstructionsFromDirectory(const FString& Directory)
 		if (!FFileHelper::LoadFileToString(Contents, *AbsPath))
 		{
 			UE_LOG(LogClaireon, Warning, TEXT("[MCP] Failed to read instruction file: %s"), *AbsPath);
+			OutFailedFiles.Add(AbsPath);
 			continue;
 		}
 
@@ -1904,6 +2061,7 @@ void FClaireonServer::LoadInstructionsFromDirectory(const FString& Directory)
 		{
 			UE_LOG(LogClaireon, Warning,
 				TEXT("[MCP] Instruction file has no YAML frontmatter, skipping: %s"), *AbsPath);
+			OutFailedFiles.Add(AbsPath);
 			continue;
 		}
 		if (Body.IsEmpty())
@@ -1925,6 +2083,7 @@ void FClaireonServer::LoadInstructionsFromDirectory(const FString& Directory)
 			{
 				UE_LOG(LogClaireon, Warning,
 					TEXT("[MCP] Resource instruction missing 'uri' frontmatter field, skipping: %s"), *AbsPath);
+				OutFailedFiles.Add(AbsPath);
 				continue;
 			}
 
@@ -1934,7 +2093,7 @@ void FClaireonServer::LoadInstructionsFromDirectory(const FString& Directory)
 			Tmpl.MimeType    = TEXT("text/markdown");
 			Tmpl.TextTemplate = Body;
 			Tmpl.SourcePath  = AbsPath;
-			LoadedResources.Add(Uri, MoveTemp(Tmpl));
+			OutResources.Add(Uri, MoveTemp(Tmpl));
 			++NumResources;
 		}
 		else // type: prompt (default)
@@ -1946,6 +2105,7 @@ void FClaireonServer::LoadInstructionsFromDirectory(const FString& Directory)
 			{
 				UE_LOG(LogClaireon, Warning,
 					TEXT("[MCP] Prompt instruction missing 'name' frontmatter field, skipping: %s"), *AbsPath);
+				OutFailedFiles.Add(AbsPath);
 				continue;
 			}
 
@@ -1954,7 +2114,7 @@ void FClaireonServer::LoadInstructionsFromDirectory(const FString& Directory)
 			Tmpl.Role         = FM.Contains(TEXT("role")) ? FM[TEXT("role")] : TEXT("user");
 			Tmpl.TextTemplate = Body;
 			Tmpl.SourcePath   = AbsPath;
-			LoadedPrompts.Add(Name, MoveTemp(Tmpl));
+			OutPrompts.Add(Name, MoveTemp(Tmpl));
 			++NumPrompts;
 		}
 	}

@@ -32,6 +32,8 @@
 #include "GameFramework/Actor.h"
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_Variable.h"
+#include "K2Node_VariableGet.h"
+#include "ClaireonBlueprintHelpers.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/PackageName.h"
@@ -43,30 +45,14 @@
 #include "ClaireonTestAssetDeletion.h"
 namespace ClaireonVariableNodeScopeTestsInternal
 {
-	// File-local discriminator prefix 'VarNodeScope' on every anon-namespace
-	// symbol (linux-build-server-v2 unity batching does not isolate anon
-	// namespaces across .cpp files).
+	// Prefix helpers to avoid unity-build collisions.
 
 	static const TCHAR* VarNodeScope_MemberVarName = TEXT("ScopeTestMemberVar");
 	static const TCHAR* VarNodeScope_LocalVarName  = TEXT("ScopeTestLocalVar");
 	static const TCHAR* VarNodeScope_ParamName     = TEXT("ScopeTestParam");
 	static const TCHAR* VarNodeScope_FuncName      = TEXT("ScopeTestFunc");
 
-	// True only when the fixture actually has a .uasset on disk.
-	//
-	// VarNodeScope_CreateActorBP builds its Blueprint in a package created with
-	// CreatePackage() and never saves it, and these tests drive
-	// FBlueprintEditorUtils directly rather than any saving tool -- so the fixture
-	// lives in an in-memory package only. Deleting an in-memory fixture buys
-	// nothing, and every ObjectTools::ForceDeleteObjects call runs a
-	// whole-object-graph referencer scan, which is the trigger for the
-	// nondeterministic Niagara-serialization crash documented in
-	// Docs/llm/todo/claireon-untest-harness-reliability.md item 1.
-	//
-	// The check is kept rather than dropping the delete outright because
-	// /Game/__MCPTests is deliberately NOT gitignored: a stale .uasset left by an
-	// older build or a crashed run must still be cleaned so `git status
-	// --porcelain -- Content/` stays empty.
+	// Delete only fixtures with a file on disk, avoiding unnecessary global referencer scans for unsaved fixtures.
 	bool VarNodeScope_HasFileOnDisk(const FString& AssetOrPackagePath)
 	{
 		const FString PackageName = FPackageName::ObjectPathToPackageName(AssetOrPackagePath);
@@ -320,6 +306,96 @@ UNTEST_UNIT_OPTS(Claireon, VariableNodeScope, Set_LocalVar_BindsWithValuePin, UN
 	UK2Node_Variable* VarNode = Cast<UK2Node_Variable>(R.Node);
 	UNTEST_ASSERT_PTR(VarNode);
 	UNTEST_EXPECT_TRUE(VarNode->VariableReference.IsLocalScope());
+
+	VarNodeScope_CleanupAsset(AssetPath);
+	co_return;
+}
+
+// Failed getter emission must remove its orphan node before returning nullptr.
+UNTEST_UNIT_OPTS(Claireon, VariableNodeScope, EmitLocalParameterGet_UnknownNameLeavesNoNode, UNTEST_TIMEOUTMS(60000))
+{
+	static const TCHAR* AssetPath = TEXT("/Game/__MCPTests/BP_VarNodeScope_EmitLocal");
+	VarNodeScope_CleanupAsset(AssetPath);
+
+	UBlueprint* BP = VarNodeScope_CreateActorBP(AssetPath);
+	UNTEST_ASSERT_PTR(BP);
+	UEdGraph* FuncGraph = VarNodeScope_SetupScopes(BP);
+	UNTEST_ASSERT_PTR(FuncGraph);
+
+	TArray<UK2Node_FunctionEntry*> EntryNodes;
+	FuncGraph->GetNodesOfClass<UK2Node_FunctionEntry>(EntryNodes);
+	UNTEST_ASSERT_TRUE(EntryNodes.Num() == 1);
+	UK2Node_FunctionEntry* Entry = EntryNodes[0];
+
+	UEdGraphPin* TargetPin = Entry->FindPin(UEdGraphSchema_K2::PN_Then);
+	UNTEST_ASSERT_PTR(TargetPin);
+
+	UEdGraphPin* ParamPin = Entry->FindPin(VarNodeScope_ParamName);
+	UNTEST_ASSERT_PTR(ParamPin);
+	const int32 NodesBeforeControl = FuncGraph->Nodes.Num();
+	UEdGraphPin* Emitted = ClaireonBlueprintHelpers::EmitLocalParameterGet(FuncGraph, ParamPin, TargetPin, 0);
+	UNTEST_ASSERT_PTR(Emitted);
+	UNTEST_EXPECT_EQ(FuncGraph->Nodes.Num(), NodesBeforeControl + 1);
+	UNTEST_EXPECT_TRUE(FuncGraph->Nodes.Contains(Emitted->GetOwningNode()));
+	UNTEST_EXPECT_TRUE(Emitted->PinName == FName(VarNodeScope_ParamName));
+
+	// Use a name absent from the function scope so no value pin can be created.
+	const int32 NodesBeforeFailure = FuncGraph->Nodes.Num();
+	UEdGraphPin* NotAParameter = TargetPin;   // "then": an exec pin, no such local exists
+	UEdGraphPin* Missing = ClaireonBlueprintHelpers::EmitLocalParameterGet(FuncGraph, NotAParameter, TargetPin, 1);
+	UNTEST_EXPECT_TRUE(Missing == nullptr);
+	UNTEST_EXPECT_EQ(FuncGraph->Nodes.Num(), NodesBeforeFailure);
+	for (UEdGraphNode* Node : FuncGraph->Nodes)
+	{
+		UNTEST_EXPECT_TRUE(IsValid(Node));
+	}
+
+	VarNodeScope_CleanupAsset(AssetPath);
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, VariableNodeScope, EmitAdjacentVariableGet_StaleReferenceLeavesNoNode, UNTEST_TIMEOUTMS(60000))
+{
+	static const TCHAR* AssetPath = TEXT("/Game/__MCPTests/BP_VarNodeScope_EmitAdjacent");
+	VarNodeScope_CleanupAsset(AssetPath);
+
+	UBlueprint* BP = VarNodeScope_CreateActorBP(AssetPath);
+	UNTEST_ASSERT_PTR(BP);
+	UEdGraph* FuncGraph = VarNodeScope_SetupScopes(BP);
+	UNTEST_ASSERT_PTR(FuncGraph);
+
+	TArray<UK2Node_FunctionEntry*> EntryNodes;
+	FuncGraph->GetNodesOfClass<UK2Node_FunctionEntry>(EntryNodes);
+	UNTEST_ASSERT_TRUE(EntryNodes.Num() == 1);
+	UEdGraphPin* TargetPin = EntryNodes[0]->FindPin(UEdGraphSchema_K2::PN_Then);
+	UNTEST_ASSERT_PTR(TargetPin);
+
+	ClaireonBlueprintNodeFactory::FCreateResult R = ClaireonBlueprintNodeFactory::CreateNode(
+		BP, FuncGraph, VarNodeScope_MakeParams(TEXT("VariableGet"), VarNodeScope_MemberVarName), FVector2D(-2000.0, 0.0));
+	UNTEST_ASSERT_TRUE(R.IsOk());
+	UK2Node_VariableGet* Source = Cast<UK2Node_VariableGet>(R.Node);
+	UNTEST_ASSERT_PTR(Source);
+	UEdGraphPin* SourcePin = VarNodeScope_FindValuePin(Source, VarNodeScope_MemberVarName);
+	UNTEST_ASSERT_PTR(SourcePin);
+
+	const int32 NodesBeforeControl = FuncGraph->Nodes.Num();
+	UEdGraphPin* Emitted = ClaireonBlueprintHelpers::EmitAdjacentVariableGet(FuncGraph, SourcePin, TargetPin, 0);
+	UNTEST_ASSERT_PTR(Emitted);
+	UNTEST_EXPECT_EQ(FuncGraph->Nodes.Num(), NodesBeforeControl + 1);
+	UNTEST_EXPECT_TRUE(FuncGraph->Nodes.Contains(Emitted->GetOwningNode()));
+	UNTEST_EXPECT_TRUE(Emitted->PinName == FName(VarNodeScope_MemberVarName));
+
+	// Use a stale local reference to produce no value pin; missing members may still allocate an invalid pin.
+	Source->VariableReference.SetLocalMember(
+		FName(TEXT("VarNodeScope_NoSuchLocal")), FuncGraph->GetName(), FGuid());
+	const int32 NodesBeforeFailure = FuncGraph->Nodes.Num();
+	UEdGraphPin* Missing = ClaireonBlueprintHelpers::EmitAdjacentVariableGet(FuncGraph, SourcePin, TargetPin, 1);
+	UNTEST_EXPECT_TRUE(Missing == nullptr);
+	UNTEST_EXPECT_EQ(FuncGraph->Nodes.Num(), NodesBeforeFailure);
+	for (UEdGraphNode* Node : FuncGraph->Nodes)
+	{
+		UNTEST_EXPECT_TRUE(IsValid(Node));
+	}
 
 	VarNodeScope_CleanupAsset(AssetPath);
 	co_return;

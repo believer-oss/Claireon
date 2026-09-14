@@ -192,7 +192,12 @@ FToolResult ClaireonBlueprintGraphTool_RemoveVariable::Execute(const TSharedPtr<
 					continue;
 				}
 
+				// Dispatchers are member variables too, but their nodes use DelegateReference.
 				FProperty* Prop = Node->GetClass()->FindPropertyByName(TEXT("VariableReference"));
+				if (!Prop)
+				{
+					Prop = Node->GetClass()->FindPropertyByName(TEXT("DelegateReference"));
+				}
 				if (FStructProperty* StructProp = CastField<FStructProperty>(Prop))
 				{
 					if (StructProp->Struct == FMemberReference::StaticStruct())

@@ -253,10 +253,18 @@ bool FCameraAssetLifecycle_Save_RoundTrip::RunTest(const FString& /*Parameters*/
 	// These tests are about round-tripping the asset, not about producing a runnable
 	// camera, so the right move is to declare the errors rather than suppress them
 	// wholesale: anything else LogCameraSystem reports still fails the test.
+#if UE_VERSION_OLDER_THAN(5, 7, 0)
+	// Occurrences=0 means "at least once", so this is declared only where the message
+	// can actually fire: 5.7+ installs a director on add_rig and never emits it.
 	AddExpectedError(TEXT("Camera has no director set"),
 		EAutomationExpectedErrorFlags::Contains, /*Occurrences=*/0);
+#endif
+#if UE_VERSION_OLDER_THAN(5, 6, 0)
+	// The rig builder stopped emitting this in 5.6 (CameraRigAssetBuilder.cpp has no
+	// MissingRootNode message from 5.6 on); Occurrences=0 means "at least once".
 	AddExpectedError(TEXT("has no root node"),
 		EAutomationExpectedErrorFlags::Contains, /*Occurrences=*/0);
+#endif
 	const FString Path = TEXT("/Game/Tests/CA_Lifecycle_SaveRT");
 	CALifecycleSpec_DeleteIfExists(Path);
 
