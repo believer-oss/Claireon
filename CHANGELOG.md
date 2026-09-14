@@ -7,6 +7,227 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-09-14
+
+Blueprint authoring tools review response: nine review findings (R1-R8, C1) fixed
+with executed regression coverage, plus the follow-up round's transaction-identity
+and recovery-accounting corrections. Unified with the PCG authoring follow-up work
+(generation, data inspection, parameter binding) and the three carried-forward
+mutation-safety items (scoped editor ownership, local-get cleanup, atomic PCG editor
+reconstruction).
+
+### Added
+
+- **`instructions_list` / `instructions_read`** expose the served instruction documents
+  (topic slug, title, summary, wire address; full text by slug) as plain tools, so a caller
+  holding only tool access reads the same bytes the `resources/read` and `prompts/get`
+  transports serve.
+- **`mcp_reload_content`** rescans the plugin's `Content/MCP` tree and refreshes the prompt
+  and resource registries without an editor restart; a document that fails to parse keeps
+  its previously loaded copy.
+- **`level_build_brush`** creates box brush geometry on a placed Volume actor. A volume
+  spawned by `level_place_actor` or `audio_place_audio_volume` has no brush, so its bounds
+  were a zero-extent point and PCG generation domains, reverb and blocking saw nothing.
+- **Side-band advisories.** Hints, warnings and per-call summaries raised by tools invoked
+  from inside one `python_execute` request are captured, de-duplicated (occurrence counts
+  preserved, invariant divergence reported) and rendered as one rollup on the request's
+  result instead of being lost in stdout. Repeated hints are rate-limited per hint key
+  within the request; direct tool calls are unaffected.
+- **`pcg_generate`** runs generation on the placed components bound to a graph (or one
+  actor's component) and waits for it to finish before returning, reporting per-component
+  instance counts. `UPCGComponent::Generate()` only schedules work, so measuring in the
+  call that triggered it read the previous generation. A generation that does not finish
+  within `timeout_ms` is an error, never a success with a flag.
+- **`pcg_inspect_data`** reports the runtime data on a node's output pin after generation:
+  point count, density and Z ranges, and min/max/mean per numeric attribute, with
+  non-numeric attributes named rather than omitted. Inspection is enabled before the
+  generation it reads, because PCG records inspection data only for executions that had
+  it on beforehand.
+- **`pcg_add_user_parameter` returns `property_guid`.** `UPCGUserParameterGetSettings`
+  binds by `PropertyGuid`, not by name, and the graph's parameter bag is not reachable
+  through Python reflection, so the response is the only place that value can come from.
+  `pcg_set_node_property` on `PropertyGuid` accepts the parameter NAME as well as a GUID,
+  resolves it, syncs `PropertyName`, and rebuilds the pins through `SetSettingsInterface`.
+- **`pcg_connect` verifies the edge landed** (`AddEdge` returns void and silently no-ops
+  on a pair it dislikes) and refuses to link from a Get Graph Parameter node bound to no
+  live parameter -- the runtime graph accepted that edge while the editor logged "Could not
+  create link" and the graph generated nothing.
+- **`pcg_apply_spec` connections resolve the graph's own Input/Output boundary**, falling
+  through from spec-local ids to the identifiers `pcg_connect` accepts. A connection the
+  spec asked for and did not get is an error, not a warning.
+- **`pcg_get_node_properties` expands instanced sub-objects** one level
+  (`MeshSelectorParameters.MeshEntries: ...`) so a dotted-path write can be read back in
+  the same language.
+- **Stale-cache guidance**: `pcg_save` hints at `pcg_refresh` whenever live components are
+  bound to the saved graph (they regenerate from the cached compiled graph until it is
+  evicted), and `pcg_set_node_property` says so in its description.
+- **`level_place_actor` reports brushless volumes** (`volumes_without_brush`) and hints at
+  `level_build_brush`: a `SpawnActor`'d volume has zero-extent bounds, so PCG generation
+  domains, reverb and blocking silently see nothing.
+- **`claireon://instructions/pcg-authoring`** resource: the behaviours that make a correct
+  PCG graph look broken over MCP (asynchronous generation, the compiled-graph cache,
+  GUID-bound parameters, settings whose values do not mean what their names suggest).
+
+### Fixed
+
+- **The plugin compiles on stock UE 5.5 through 5.8 again.** Every iteration over
+  `FJsonObject::Values` uses `const auto&` and reads the key through `FString(*Key)`:
+  `FJsonObject::FStringType` exists only from 5.8, a spelled-out `TPair<FString, ...>`
+  is a temporary that clang on 5.8 refuses to bind, and `UE::FSharedString` key arrays
+  do not exist before 5.8. Verified with a clean plugin-only build against stock 5.5, 5.6,
+  5.7 and 5.8 (`WITH_BLUEPRINT_ASSIST=0`, tests excluded).
+- **bp_format compiles against BlueprintAssist 4.5.x and 4.9.x from one source tree.**
+  4.9 (the UE 5.8 release) moved `OnPostFormatting` into `FBAFormatRequest`, replaced
+  `IsCalculatingNodeSize()` with `GetNumberOfPendingNodesToCache()`, renamed
+  `FormatAllEvents()` to `RequestFormatAll()`, and made `FBAInputProcessor::NodeActions`
+  a `TUniquePtr`. `ClaireonBlueprintAssistCompat.h` wraps those four surfaces, selecting
+  by `__has_include("BAGraphHandler/BAFormatRequest.h")` rather than a version number.
+  The interactive transaction baselines accept BlueprintAssist 4.9.1 alongside 4.5.2: the
+  extraction transaction sequences were re-run against 4.9.1 on UE 5.8.2 and observed
+  unchanged, so the version list grew rather than the sequences. DEC-15's canonical
+  by-reference case records the engine's `bIsConst` on Array Add's TargetArray instead of
+  asserting the 5.5 value (5.8 reports false); the assertions that carry the claim, the
+  ArrayParm branch and the by-reference walk, are unchanged.
+- **UE 5.7/5.8 behaviour shifts absorbed in the tools, not the tests.** Node-title
+  lookups (`target_node_title`, `node_title`) fall back to the normalized spelling when the
+  exact one misses, because the engine renders `Print String` or `PrintString` depending on
+  whether friendly names apply in the process; two nodes that normalize alike still report
+  as ambiguous. Enhanced Input set/remove edit the array `GetMappings()` returns (5.7 moved
+  it into `DefaultKeyMappings` and left a deprecated `Mappings` mirror that reflection found
+  first). Level-sequence tools read a binding's name from its possessable or spawnable
+  (`FMovieSceneBinding::GetName()` is deprecated from 5.7 and empty). `widgetbp_duplicate_animation`
+  registers the copy's variable GUID like `create_animation` does, and the GUID bookkeeping
+  applies from 5.6 where the API appeared. Test-side: the camera "no director" expectation
+  is declared only before 5.7 (add_rig installs one from 5.7), and the trace fixture declares
+  5.8's `[MemAlloc] Invalid Tag` analyzer errors expected.
+
+- **A scoped asset-editor open closes exactly the instance it opened.**
+  `FClaireonScopedAssetEditor` closed through `CloseAllEditorsForAsset`, which also took
+  down any editor somebody else opened on the same asset during the scope. It now closes
+  the toolkit it recorded at construction through that toolkit's own `CloseWindow`, only
+  while the subsystem still lists it; an instance the user closed in the meantime is left
+  alone and never dereferenced. Pre-existing editors were already never closed.
+- **Synthesized local gets leave no orphan on failure.** `EmitAdjacentVariableGet` and
+  `EmitLocalParameterGet` added their node before knowing whether it had a value pin
+  (`UK2Node_VariableGet` creates one only when the reference resolves a property) and
+  returned null without removing it; the caller never received the node and could not
+  clean it up. Both now destroy their node on every unsuccessful path.
+- **PCG editor reconstruction is atomic with respect to the editor graph.**
+  `ReconstructOpenEditor` removed orphaned editor nodes before resolving every missing
+  counterpart's class, so an `Unavailable` result could follow a partial mutation. Every
+  class lookup and every replacement node's construction and link now happen before the
+  first removal; `Unavailable` is returned with the view exactly as found, the runtime
+  graph untouched, and a later retry able to complete the same rebuild.
+- **PCG edge and node edits settle the pending editor rebuild first.** The editor-view
+  reconstruct coalesces to the next tick, but a batch of edits in one request (a
+  `python_execute` body, `pcg_apply_spec`'s passes) never ticks between them; an `AddEdge`
+  after an `add_node` notified the natively built Input/Output editor nodes, whose link
+  rebuild looked the new peer up, found nothing, and fired "Could not create link" ensures
+  with the asset editor open. `pcg_connect`, `pcg_disconnect`, `pcg_disconnect_all`,
+  `pcg_remove_node` and the spec applicator now settle the graph's pending rebuild before
+  mutating.
+- **`pcg_inspect_data` compiles on UE 5.8**, where `UPCGSubsystem::GetExecutedStacks` is
+  gone: executed stacks are read from the component's execution-state inspection record.
+- **`pcg_inspect_data` reads every point-data shape and every entry.** From UE 5.6 samplers
+  emit `UPCGPointArrayData`, a sibling of `UPCGPointData`; the tool cast to the latter and
+  reported zero points as a success. It now reads through `UPCGBasePointData` on 5.6+. A
+  point with no metadata entry resolves to the attribute's DEFAULT value and was skipped, so
+  a default 5 and an explicit 9 reported mean 9 and an all-default attribute vanished; every
+  entry now counts.
+- **`pcg_generate` reports each component's own instances**, read from its managed ISM
+  resources. Counting the owner's ISM components attributed every component on a shared
+  actor (and hand-placed instances) to each of them and summed once per component;
+  `owner_ism_instances` / `owner_instances_total` keep the level-visible number, once per
+  distinct owner.
+- **`pcg_inspect_data`'s actor selector is applied before the 32-component cap**, so a
+  requested actor beyond the first 32 is found instead of reported as having no component.
+- **`pcg_add_user_parameter` never leaves a declaration behind on a failed readback.** The
+  post-mutation missing-descriptor error removes a newly declared parameter before
+  cancelling the transaction (cancel is not rollback) and says which of the two states --
+  removed again, or pre-existing and unchanged -- the graph is in.
+- **Landscape test fixtures unregister from `ULandscapeSubsystem`.** A `SpawnActor`'d
+  `ALandscape` has no guid, so `Destroy()` never unregistered it and the subsystem's next
+  tick dereferenced a null `ULandscapeInfo` inside whichever unrelated test ran seconds
+  later. The scoped fixture assigns the guid and builds the info so register/unregister are
+  symmetric.
+- **Tests appended after their `WITH_UNTESTED` guard** in the AssetUtils and PCG gap
+  suites compiled only where the framework is present; the guard now closes the file.
+- **`bp_format` refuses before touching BlueprintAssist-only code** in a build without the
+  plugin, instead of referencing helpers that exist only under `WITH_BLUEPRINT_ASSIST`.
+- **UE 5.8 key lookups**: two `FJsonObject::Values.Find(FString)` sites (`bp_stack_islands`,
+  `bp_lint`) use the TCHAR* spelling that compiles against `UE::FSharedString` keys.
+
+- **`prefer_local_gets` substitution is restricted to pure, receiver-less reads.** A
+  distant variable get with a wired or defaulted Target pin (an explicit receiver), or
+  a validated (impure) get, now keeps its literal wire: the synthesized adjacent get
+  copies only the variable reference and would otherwise silently retarget the read to
+  `self` -- or fail to compile.
+- **`promote_enclosing_locals` refuses split getters** (`split_pin_unsupported`).
+  Promotion rewires only the parent value pin; a struct getter split into field subpins
+  would have had its field consumers silently disconnected and left compiling on
+  default values.
+- **Event extraction preserves internal loopbacks.** A single-entry cyclic body (a
+  Branch retried through a Delay) kept its backedge only by luck of shape; the entry
+  pin's `BreakAllPinLinks` -- which could only ever sever internal edges, since the
+  boundary pairs were already broken from the external side -- is gone.
+- **`transaction_rollback_group` gates its undo on the group transaction's identity**
+  (`FTransactionContext::TransactionId` captured at `begin_group`), never on the display
+  title. An empty group (first mutation refused in preflight) is popped by the engine on
+  close; the rollback now declines with `group_not_at_undo_head` instead of undoing
+  whatever sits at the head -- including a previous same-label group's work.
+- **`bp_format` retention and recovery reporting is measured, not inferred.**
+  `mutation_retained`, `undo_record_available`, and `recovery.undo_count` derive from
+  the transaction buffer (standing entries above the pre-call undo head) and from a
+  positions diff against the pre-mutation snapshot -- never from per-island tallies.
+  A settle-failed island's transaction is counted; a rolled-back island's is not; a
+  clean island's retained format keeps `mutation_retained` true; and
+  `recovery.count_confidence` distinguishes an exact count from one that must be
+  verified against `transaction_history`.
+- **`is_static` preflight distinguishes member ownership from receiver identity.** A
+  helper reading a property through an explicitly wired object parameter is a legal
+  static-function shape and converts; only implicit self-context access refuses.
+- **`bp_lint` variable usage resolves to the declaration's owner.** Another class's
+  same-named property and function-locals no longer fake `written_by_graph` evidence on
+  this Blueprint's variable or suppress its unreferenced finding.
+- **Synthesized PCG editor nodes self-update on native edits.** Nodes the editor-sync
+  creates in an open PCG editor now subscribe to `UPCGNode::OnNodeChangedDelegate`
+  (public runtime API) and rebuild their pins when a Details-panel change lands --
+  previously that binding existed only for natively constructed nodes. Subscriptions
+  are unbound at module shutdown and self-clean when their editor node dies.
+- **Stale operational guidance corrected**: the extraction refusal names
+  `bp_switch_graph` (not the nonexistent `bp_open_graph`); `test_run` documentation
+  states the bridge gate has no autonomous expiry and releases only when a final or
+  cancelling `test_poll` observes completion.
+- **Fuzz-baseline gameplay tags moved out of `UE_DEFINE_GAMEPLAY_TAG`** (refused in an
+  Editor-type module; fired ensures at every DLL load and broke commandlet test
+  discovery) into the plugin's `Config/Tags/ClaireonFuzzTags.ini`, registered via
+  `AddTagIniSearchPath` at module startup, commandlets included.
+
+### Known limitations (recorded, by design or deferred)
+
+- **Undo cannot restore exact post-format positions.** BlueprintAssist adjusts island
+  anchor positions on later settle ticks OUTSIDE any transaction, so undoing every
+  transaction a `bp_format` call opened restores structure exactly (nodes, links,
+  minted reroutes) but can leave small position residue on island roots. The recovery
+  block discloses this; `mutation_retained` counts residue as retained work
+  (`retained_is_untransacted_residue`), and re-running `bp_format` converges it.
+- **PCG synthesized-node affordances deferred**: the dynamic-pin add/remove control,
+  enabled-state visuals, and error badges depend on private, non-reflected editor state
+  that `Construct()` alone can set. Pin/link correctness is unaffected. Deferral,
+  workaround (editor restart constructs natively), and closing options are recorded in
+  [the PCG affordance work item](../../Docs/llm/todo/pcg-synthesized-node-affordances.md).
+- **The two real-asset extraction tests are opt-in.** The plugin ships no game content,
+  so `Claireon.BPEditor.ExtractionSemantics.PureIslandOnTheRealAssetExtractsPure` and
+  `...EnclosingLocalsRefuseOnTheRealAsset` need a project Blueprint to clone. Point them at
+  one with `CLAIREON_TEST_BLUEPRINT` (full object path) and `CLAIREON_TEST_BLUEPRINT_FUNCTION`
+  (a function graph whose island reads enclosing-graph locals). Unset, both pass carrying a
+  warning that names the variable to set -- the automation framework has no Skipped state to
+  report -- so a checkout with no game content is not a red suite. Every other fixture in the
+  suite is synthetic.
+- **Function-properties RPC routing is verified at authoring level only.** The test
+  suite's waiver of runtime client/server routing verification stands and is recorded
+  in the suite itself; this release makes no claim of runtime-verified RPC behavior.
+
 ## [2.1.0] - 2026-08-13
 
 Two rounds of tooling-feedback work, the 2026-08 P0/P1/P2 defect-triage bands,
