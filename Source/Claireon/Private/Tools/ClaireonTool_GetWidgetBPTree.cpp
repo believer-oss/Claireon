@@ -134,11 +134,7 @@ ClaireonTool_GetWidgetBPTree::FToolResult ClaireonTool_GetWidgetBPTree::Execute(
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("asset_path"), AssetPath);
-	// Note: `root_widget`/`widget_count` removed in F3 -- use `widget_tree.root` and walk
-	// it instead. Keep `root_class` and `widget_count` as scalar conveniences alongside the
-	// structured tree so summary-only consumers do not regress.
-	// Field is `widget_tree` (not `tree`) to match the edit family's BuildStateResponse,
-	// which is the larger surface. See C7 in Docs/llm/todo/claireon-product-defects.md.
+	// Keep scalar conveniences alongside widget_tree for summary-only consumers.
 	Data->SetStringField(TEXT("root_class"), RootWidgetClass);
 	Data->SetNumberField(TEXT("widget_count"), WidgetCount);
 	if (TreeObj.IsValid())

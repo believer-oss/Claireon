@@ -39,7 +39,4 @@ private:
 
 	/** Get the Blueprint type name (Normal, AnimBlueprint, WidgetBlueprint, etc.) */
 	static FString GetBlueprintTypeName(const class UBlueprint* Blueprint);
-
-	/** Format a variable type as a human-readable string */
-	static FString FormatVariableType(const struct FEdGraphPinType& PinType);
 };

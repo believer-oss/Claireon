@@ -1706,7 +1706,7 @@ UNTEST_UNIT_OPTS(Claireon, ClaireonToolSearchIndex, PluralSingularRecallRegressi
 }
 
 // ===========================================================================
-// Query-domain category signal (P2-20)
+// Query-domain category signal
 //
 // Pins Cl628_CategoryMatchesQueryDomain via the test probe. This is the
 // signal behind the FindNearest score boost and the FindNearestHybrid fused

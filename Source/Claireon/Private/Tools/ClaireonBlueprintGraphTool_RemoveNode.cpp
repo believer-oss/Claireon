@@ -101,7 +101,7 @@ FString ClaireonBlueprintGraphTool_RemoveNode::GetOperation() const { return TEX
 
 FString ClaireonBlueprintGraphTool_RemoveNode::GetDescription() const
 {
-    return TEXT("Remove a node from the graph. Requires open session_id from bp_open OR pass asset_path for stateless single-shot mode. Transactional. All wires touching the node are dropped; if the node was the cursor target, the cursor is cleared and must be repositioned with bp_select_node. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+    return TEXT("Remove a node from the graph. Requires open session_id from bp_open OR pass asset_path for stateless single-shot mode. Transactional. All wires touching the node are dropped; if the node was the cursor target, the cursor is cleared and must be repositioned with bp_cursor_to_node. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_RemoveNode::GetInputSchema() const

@@ -356,3 +356,26 @@ float HeightUint16ToWorld(uint16 RawHeight)
 }
 
 } // namespace ClaireonLandscapeHelpers
+
+void ClaireonLandscapeHelpers::BuildFlatLandscapeImportData(
+	int32 Size,
+	TMap<FGuid, TArray<uint16>>& OutHeightData,
+	TMap<FGuid, TArray<FLandscapeImportLayerInfo>>& OutLayerInfos)
+{
+	OutHeightData.Reset();
+	OutLayerInfos.Reset();
+
+	if (Size <= 0)
+	{
+		return;
+	}
+
+	// 32768 is the midpoint of the uint16 heightmap encoding, i.e. zero elevation.
+	TArray<uint16> HeightData;
+	HeightData.Init(32768, Size * Size);
+
+	// See the header: the base layer is keyed on the DEFAULT guid, not the landscape guid.
+	const FGuid FinalLayerGuid = FGuid();
+	OutHeightData.Add(FinalLayerGuid, MoveTemp(HeightData));
+	OutLayerInfos.Add(FinalLayerGuid, TArray<FLandscapeImportLayerInfo>());
+}

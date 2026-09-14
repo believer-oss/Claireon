@@ -21,6 +21,7 @@
 #include "EdGraphSchema_K2.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_VariableGet.h"
+#include "K2Node_FunctionEntry.h"
 #include "K2Node_VariableSet.h"
 #include "K2Node_IfThenElse.h"
 #include "K2Node_ExecutionSequence.h"
@@ -48,7 +49,7 @@ static TSharedPtr<FJsonObject> NormalizeNodeSpecForFactory_BlueprintApplicator(
 	TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
 
 	// 1. Copy all fields verbatim.
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& Kv : NodeObj->Values)
+	for (const auto& Kv : NodeObj->Values)
 	{
 		Out->SetField(Kv.Key, Kv.Value);
 	}
@@ -413,6 +414,9 @@ bool FClaireonSpecApplicator_Blueprint::ApplyPass1_CreateEntities(const FString&
 	return true;
 }
 
+// Only distant VariableGet substitution applies here: spec endpoints must be
+// spec-created nodes, so they cannot reference an existing FunctionEntry.
+
 bool FClaireonSpecApplicator_Blueprint::ApplyPass2_WireRelationships(const FString& SessionId, const TSharedPtr<FJsonObject>& Spec)
 {
 	UBlueprint* BP = Blueprint.Get();
@@ -498,6 +502,12 @@ bool FClaireonSpecApplicator_Blueprint::ApplyPass2_WireRelationships(const FStri
 	{
 		const UEdGraphSchema_K2* K2Schema = GetDefault<UEdGraphSchema_K2>();
 
+		bool bPreferLocalGets = true;
+		Spec->TryGetBoolField(TEXT("prefer_local_gets"), bPreferLocalGets);
+
+		// Stagger several gets feeding one consumer so they do not stack.
+		TMap<UEdGraphNode*, int32> LocalGetStack;
+
 		for (int32 i = 0; i < ConnectionsArray->Num(); ++i)
 		{
 			const TSharedPtr<FJsonObject>& ConnObj = (*ConnectionsArray)[i]->AsObject();
@@ -560,6 +570,35 @@ bool FClaireonSpecApplicator_Blueprint::ApplyPass2_WireRelationships(const FStri
 				AddWarning(FString::Printf(TEXT("connections[%d]: target pin '%s' not found on node '%s'"),
 					i, *TargetPinName, *TargetNodeId));
 				continue;
+			}
+
+			if (bPreferLocalGets && ClaireonBlueprintHelpers::IsDistantVariableGetSource(
+					SourcePin, TargetPin, ClaireonBlueprintHelpers::LocalGetDistanceUnits))
+			{
+				const int32 StackIndex = LocalGetStack.FindOrAdd(TargetNode, 0)++;
+				if (UEdGraphPin* LocalGet = ClaireonBlueprintHelpers::EmitAdjacentVariableGet(
+						TargetGraph, SourcePin, TargetPin, StackIndex))
+				{
+					if (K2Schema->CanCreateConnection(LocalGet, TargetPin).Response != CONNECT_RESPONSE_DISALLOW)
+					{
+						SourcePin = LocalGet;
+
+						// Report the new GUID in warnings because this applicator has no affected-node journal.
+						const UEdGraphNode* GetNode = LocalGet->GetOwningNode();
+						AddWarning(FString::Printf(
+							TEXT("connections[%d]: sourced '%s.%s' from a new get placed next to the consumer (prefer_local_gets), node_guid=%s. Set prefer_local_gets=false in the spec for a literal wire."),
+							i, *SourceNodeId, *SourcePinName,
+							IsValid(GetNode)
+								? *GetNode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens)
+								: TEXT("<unknown>")));
+					}
+					else
+					{
+						// Substitution would not connect; keep the literal wire rather than
+						// silently dropping the connection.
+						LocalGet->GetOwningNode()->DestroyNode();
+					}
+				}
 			}
 
 			FPinConnectionResponse Response = K2Schema->CanCreateConnection(SourcePin, TargetPin);

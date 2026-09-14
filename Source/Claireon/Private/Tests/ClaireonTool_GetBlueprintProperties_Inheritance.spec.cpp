@@ -58,24 +58,8 @@ namespace ClaireonTool_GetBlueprintProperties_Inheritance_spec_Private
 
 constexpr const TCHAR* SandboxFolder = TEXT("/Game/Tests/ClaireonBPGetProps");
 
-// File-local helper. Named with a BPProps_ prefix to avoid colliding with the
-// identically-shaped DeleteIfExists in ClaireonTool_BlueprintDuplicateTests.cpp
-// when the linux non-unity build merges multiple .cpp files into one
-// translation unit (Module.Claireon.<N>.cpp), where anonymous namespaces are
-// merged and any duplicate symbol names break compilation.
-// True only when the asset actually has a .uasset on disk.
-//
-// CreateBPWithSphereSCS builds its Blueprint in a package created with
-// CreatePackage() and never saves it, and get_blueprint_properties is a read-only
-// tool with no save call -- so these fixtures live in memory only. Deleting an
-// in-memory fixture buys nothing, and every ObjectTools::ForceDeleteObjects call
-// runs a whole-object-graph referencer scan, which is the trigger for the
-// nondeterministic Niagara-serialization crash documented in
-// Docs/llm/todo/claireon-untest-harness-reliability.md item 1.
-//
-// The check is kept rather than dropping the delete outright so that a stale
-// .uasset left on disk by an older build or a crashed run is still cleaned and
-// `git status --porcelain -- Content/` stays empty.
+// Delete only on-disk fixtures. In-memory deletion triggers a global referencer
+// scan that can crash on resident Niagara objects; stale files still need cleanup.
 bool BPProps_HasFileOnDisk(const FString& AssetOrPackagePath)
 {
 	const FString PackageName = FPackageName::ObjectPathToPackageName(AssetOrPackagePath);

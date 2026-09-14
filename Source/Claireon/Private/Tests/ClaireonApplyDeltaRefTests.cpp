@@ -39,20 +39,8 @@ static const TCHAR* ApplyDeltaRefTestAssetPath = TEXT("/Game/__MCPTests/BP_Apply
 namespace ClaireonApplyDeltaRefTestsInternal
 {
 
-// True only when the fixture actually has a .uasset on disk.
-//
-// This suite's fixture is built by bp_create, whose creation path
-// (ClaireonBlueprintHelpers::CreateBlueprint) never saves, and no tool the tests
-// invoke (bp_open, bp_apply_delta) saves either -- so the fixture normally lives
-// in an in-memory package only. Deleting such a fixture buys nothing, and every
-// ObjectTools::ForceDeleteObjects call runs a whole-object-graph referencer scan,
-// which is the trigger for the nondeterministic Niagara-serialization crash
-// documented in Docs/llm/todo/claireon-untest-harness-reliability.md item 1.
-//
-// The check is kept rather than dropping the delete outright because
-// /Game/__MCPTests is deliberately NOT gitignored: a stale .uasset left by an
-// older build or a crashed run must still be cleaned so `git status --porcelain
-// -- Content/` stays empty.
+// Delete only on-disk fixtures. In-memory deletion triggers a global referencer
+// scan that can crash on resident Niagara objects; stale files still need cleanup.
 bool ApplyDeltaRef_HasFileOnDisk(const FString& AssetOrPackagePath)
 {
 	const FString PackageName = FPackageName::ObjectPathToPackageName(AssetOrPackagePath);

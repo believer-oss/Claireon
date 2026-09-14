@@ -75,9 +75,6 @@ FToolResult ClaireonWidgetBPTool_RemoveMVVMBinding::Execute(const TSharedPtr<FJs
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
 	Data->bModified = true;
 
-	// Field is `binding_id` (not `removed_binding_id`) so every MVVM binding
-	// response -- add, edit, list, remove -- uses the identical key. See C7 in
-	// Docs/llm/todo/claireon-product-defects.md.
 	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
 	ResultObj->SetStringField(TEXT("binding_id"), BindingIdStr);
 

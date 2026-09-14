@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonSoundCueTool_Open.h"
+#include "ClaireonScopedAssetEditor.h"
 #include "Tools/ClaireonAudioHelpers.h"
 #include "Tools/ClaireonAudioSessionRegistry.h"
 #include "Tools/ClaireonAnimEditToolBase.h" // FToolSchemaBuilder
@@ -93,7 +94,7 @@ IClaireonTool::FToolResult FClaireonSoundCueTool_Open::Execute(const TSharedPtr<
 
 	(void)ResolvedKind; // currently unused; reserved for parity with bundled validation messages.
 
-	ClaireonAssetUtils::OpenAssetEditorIfHeadless(Asset);
+	ClaireonAssetEditorWindow::OpenForSession(Asset);
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("session_id"), SessionId);

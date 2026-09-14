@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "ClaireonModule.h"
+#include "ClaireonFuzzTestTags.h"
 #include "ClaireonLog.h"
 #include "ClaireonPIEManager.h"
 #include "ClaireonRichTextStyle.h"
@@ -48,6 +49,9 @@
 #include "Tools/ClaireonTool_AssetSearch.h"
 #include "Tools/ClaireonTool_ExecutePython.h"
 #include "Tools/ClaireonTool_GetBlueprintProperties.h"
+#include "Tools/ClaireonTool_GetVariableProperties.h"
+#include "Tools/ClaireonTool_Lint.h"
+#include "Tools/ClaireonBlueprintGraphTool_Extract.h"
 #include "Tools/ClaireonTool_GetBlueprintGraph.h"
 #include "Tools/ClaireonTool_SearchInBlueprints.h"
 #include "Tools/ClaireonTool_SearchInBlueprintsIndexStatus.h"
@@ -67,6 +71,9 @@
 #include "Tools/ClaireonTool_GameplayTagsAdd.h"
 #include "Tools/ClaireonTool_GameplayTagsRemove.h"
 #include "Tools/ClaireonTool_GameplayTagsReload.h"
+#include "Tools/ClaireonTool_ReloadMCPContent.h"
+#include "Tools/ClaireonTool_InstructionsList.h"
+#include "Tools/ClaireonTool_InstructionsRead.h"
 #include "Tools/ClaireonTool_StructInspect.h"
 #include "Tools/ClaireonTool_UObjectInspect.h"
 #include "Tools/ClaireonTool_UObjectReferencers.h"
@@ -99,6 +106,7 @@
 #include "Tools/ClaireonBlueprintGraphTool_AddVariable.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddLocalVariable.h"
 #include "Tools/ClaireonBlueprintGraphTool_TimelineAddTrack.h"
+#include "Tools/ClaireonBlueprintGraphTool_SetFunctionProperties.h"
 #include "Tools/ClaireonBlueprintGraphTool_SetVariableProperties.h"
 #include "Tools/ClaireonBlueprintGraphTool_RemoveVariable.h"
 #include "Tools/ClaireonBlueprintGraphTool_AddComponent.h"
@@ -113,6 +121,7 @@
 #include "Tools/ClaireonBlueprintGraphTool_SwitchGraph.h"
 #include "Tools/ClaireonBlueprintGraphTool_InspectNode.h"
 #include "Tools/ClaireonBlueprintGraphTool_SelectNode.h"
+#include "Tools/ClaireonBlueprintGraphTool_Selection.h"
 #include "Tools/ClaireonBlueprintGraphTool_SelectPin.h"
 #include "Tools/ClaireonBlueprintGraphTool_SelectNearestNode.h"
 #include "Tools/ClaireonBlueprintGraphTool_GetState.h"
@@ -120,6 +129,7 @@
 #include "Tools/ClaireonBlueprintGraphTool_Compile.h"
 #include "Tools/ClaireonBlueprintGraphTool_Save.h"
 #include "Tools/ClaireonBlueprintGraphTool_Format.h"
+#include "Tools/ClaireonBlueprintGraphTool_StackIslands.h"
 #include "Tools/ClaireonBlueprintGraphTool_Close.h"
 #include "Tools/ClaireonBlueprintGraphTool_CloseAll.h"
 #include "Tools/ClaireonBlueprintGraphTool_MoveNode.h"
@@ -132,11 +142,10 @@
 #include "Tools/ClaireonBlueprintGraphTool_RemoveInterface.h"
 #include "Tools/ClaireonBlueprintGraphTool_ApplySpec.h"
 
-// New tools
 #include "Tools/ClaireonTool_PythonAuditLog.h"
 #include "Tools/ClaireonTool_ProjectInfo.h"
 #include "Tools/ClaireonTool_EngineInfo.h"
-#include "Tools/ClaireonTool_LiveCodingReload.h"
+#include "Tools/ClaireonTool_EditorLiveCodingReloadAsync.h"
 #include "Tools/ClaireonTool_MapOpen.h"
 #include "Tools/ClaireonTool_MapStatus.h"
 #include "Tools/ClaireonTool_PIEStart.h"
@@ -182,12 +191,12 @@
 #include "Tools/ClaireonTool_MaterialRenameParameter.h"
 // Enum fixup + raw property read
 #include "Tools/ClaireonTool_FixupStaleEnumValues.h"
-#include "Tools/ClaireonTool_GetEditorPropertyRaw.h"
+#include "Tools/ClaireonTool_EditorGetEditorPropertyRaw.h"
 // CDO property setter via FProperty (TSubclassOf workaround)
 #include "Tools/ClaireonTool_LogTail.h"
-#include "Tools/ClaireonTool_LogSearch.h"
+#include "Tools/ClaireonTool_EditorLogSearch.h"
 #include "Tools/ClaireonTool_LogCategories.h"
-#include "Tools/ClaireonTool_MessageLogGet.h"
+#include "Tools/ClaireonTool_EditorMessageLogGet.h"
 #include "Tools/ClaireonTool_TestRun.h"
 #include "Tools/ClaireonTool_TestList.h"
 // State Tree MCP tools
@@ -252,6 +261,7 @@
 // Level tools
 #include "Tools/ClaireonTool_ListActors.h"
 #include "Tools/ClaireonTool_LevelSetActorProperty.h"
+#include "Tools/ClaireonTool_LevelBuildBrush.h"
 #include "Tools/ClaireonTool_PlaceActor.h"
 #include "Tools/ClaireonTool_MapDuplicate.h"
 #include "Tools/ClaireonTool_SetSplinePoints.h"
@@ -308,9 +318,9 @@
 #include "Tools/ClaireonWidgetBPTool_AddAnimationKeyframe.h"
 #include "Tools/ClaireonWidgetBPTool_RemoveAnimationKeyframe.h"
 #include "Tools/ClaireonWidgetBPTool_RemoveAnimationTrack.h"
-#include "Tools/ClaireonTool_WaitSeconds.h"
+#include "Tools/ClaireonTool_EditorWaitSeconds.h"
 #include "Tools/ClaireonTool_WorldGetActive.h"
-#include "Tools/ClaireonTool_IsAssetEditorOpen.h"
+#include "Tools/ClaireonTool_EditorIsAssetEditorOpen.h"
 #include "Tools/ClaireonWidgetBPTool_SetAnimationProperty.h"
 
 // Behavior Tree + EQS MCP tools
@@ -566,7 +576,8 @@
 #include "Tools/ClaireonTool_PIETraceStop.h"
 
 // Asset editor tool
-#include "Tools/ClaireonTool_OpenAssetEditor.h"
+#include "Tools/ClaireonTool_EditorCloseAsset.h"
+#include "Tools/ClaireonTool_EditorOpenAsset.h"
 
 // Runtime Diagnostics (snapshot CMC / anim / motion-warp / tick state on a paused-PIE pawn)
 #include "Tools/ClaireonAnimInspectTool.h"
@@ -599,6 +610,7 @@
 #include "Tools/ClaireonTool_PCGGraphInspect.h"
 
 // PCG Graph editing (decomposed -- one tool per operation)
+#include "Tools/ClaireonPCGEditorSync.h"
 #include "Tools/ClaireonPCGGraphTool_Open.h"
 #include "Tools/ClaireonPCGGraphTool_Close.h"
 #include "Tools/ClaireonPCGGraphTool_GetState.h"
@@ -613,7 +625,14 @@
 #include "Tools/ClaireonPCGGraphTool_Focus.h"
 #include "Tools/ClaireonPCGGraphTool_CursorBack.h"
 #include "Tools/ClaireonPCGGraphTool_Save.h"
+#include "Tools/ClaireonPCGGraphTool_Refresh.h"
+#include "Tools/ClaireonPCGGraphTool_Generate.h"
+#include "Tools/ClaireonPCGGraphTool_InspectData.h"
 #include "Tools/ClaireonPCGGraphTool_ApplySpec.h"
+#include "Tools/ClaireonPCGGraphTool_Create.h"
+#include "Tools/ClaireonPCGGraphTool_SetSubgraph.h"
+#include "Tools/ClaireonPCGGraphTool_AddUserParameter.h"
+#include "Tools/ClaireonPCGGraphTool_SetSubgraphOverride.h"
 
 // Enhanced Input MCP tools
 #include "Tools/ClaireonTool_InputInspect.h"
@@ -1329,6 +1348,10 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_GameplayTagsAdd>());
 	Tools.Add(MakeShared<ClaireonTool_GameplayTagsRemove>());
 	Tools.Add(MakeShared<ClaireonTool_GameplayTagsReload>());
+	Tools.Add(MakeShared<ClaireonTool_ReloadMCPContent>());
+	// Expose the shared instruction registries to callers with tool-only access.
+	Tools.Add(MakeShared<ClaireonTool_InstructionsList>());
+	Tools.Add(MakeShared<ClaireonTool_InstructionsRead>());
 	Tools.Add(MakeShared<ClaireonTool_StructInspect>());
 	Tools.Add(MakeShared<ClaireonTool_UObjectInspect>());
 	Tools.Add(MakeShared<ClaireonTool_UObjectSetProperty>());
@@ -1341,6 +1364,12 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 
 	// Blueprint MCP tools
 	Tools.Add(MakeShared<ClaireonTool_GetBlueprintProperties>());
+	Tools.Add(MakeShared<ClaireonTool_GetVariableProperties>());
+	Tools.Add(MakeShared<ClaireonTool_Lint>());
+	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_ExtractFunction>());
+	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_ExtractMacro>());
+	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_ExtractComposite>());
+	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_ExtractEvent>());
 	Tools.Add(MakeShared<ClaireonTool_GetBlueprintGraph>());
 	Tools.Add(MakeShared<ClaireonTool_SearchInBlueprints>());
 	Tools.Add(MakeShared<ClaireonTool_SearchInBlueprintsIndexStatus>());
@@ -1367,6 +1396,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_AddVariable>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_AddLocalVariable>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_TimelineAddTrack>());
+	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SetFunctionProperties>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SetVariableProperties>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_RemoveVariable>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_AddComponent>());
@@ -1383,11 +1413,15 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SelectNode>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SelectPin>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SelectNearestNode>());
+	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SelectionGet>());
+	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SelectionSet>());
+	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_SelectionClear>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_GetState>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_ImportNodes>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_Compile>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_Save>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_Format>());
+	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_StackIslands>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_Close>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_CloseAll>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_MoveNode>());
@@ -1400,11 +1434,10 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_RemoveInterface>());
 	Tools.Add(MakeShared<ClaireonBlueprintGraphTool_ApplySpec>());
 
-	// New tools
 	Tools.Add(MakeShared<ClaireonTool_PythonAuditLog>());
 	Tools.Add(MakeShared<ClaireonTool_ProjectInfo>());
 	Tools.Add(MakeShared<ClaireonTool_EngineInfo>());
-	Tools.Add(MakeShared<ClaireonTool_LiveCodingReload>());
+	Tools.Add(MakeShared<ClaireonTool_EditorLiveCodingReloadAsync>());
 	Tools.Add(MakeShared<ClaireonTool_MapOpen>());
 	Tools.Add(MakeShared<ClaireonTool_MapStatus>());
 	Tools.Add(MakeShared<ClaireonTool_PIEStart>());
@@ -1417,9 +1450,9 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_PIECheckInitState>());
 	Tools.Add(MakeShared<ClaireonTool_PIEWaitFor>());
 	// PIE + world wait/sleep/probe primitives.
-	Tools.Add(MakeShared<ClaireonTool_WaitSeconds>());
+	Tools.Add(MakeShared<ClaireonTool_EditorWaitSeconds>());
 	Tools.Add(MakeShared<ClaireonTool_WorldGetActive>());
-	Tools.Add(MakeShared<ClaireonTool_IsAssetEditorOpen>());
+	Tools.Add(MakeShared<ClaireonTool_EditorIsAssetEditorOpen>());
 	Tools.Add(MakeShared<ClaireonTool_PIESpawnEnemy>());
 	Tools.Add(MakeShared<ClaireonTool_PIEGetComponent>());
 	Tools.Add(MakeShared<ClaireonTool_PIERegisterDamageListener>());
@@ -1458,7 +1491,8 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_AssetValidate>());
 	Tools.Add(MakeShared<ClaireonTool_AssetFixupRedirectors>());
 	Tools.Add(MakeShared<ClaireonTool_AssetCheckInnerNameInvariant>());
-	Tools.Add(MakeShared<ClaireonTool_OpenAssetEditor>());
+	Tools.Add(MakeShared<ClaireonTool_EditorOpenAsset>());
+	Tools.Add(MakeShared<ClaireonTool_EditorCloseAsset>());
 	Tools.Add(MakeShared<ClaireonTool_AnimInspect>());
 	// Animation editing tools (individual operations with focused inputSchema)
 	Tools.Add(MakeShared<ClaireonAnimTool_Open>());
@@ -1562,14 +1596,13 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonTool_MaterialRenameParameter>());
 	// Enum fixup + raw property read
 	Tools.Add(MakeShared<ClaireonTool_FixupStaleEnumValues>());
-	Tools.Add(MakeShared<ClaireonTool_GetEditorPropertyRaw>());
-	// CDO property setter: the legacy TSubclassOf-workaround tool was removed; the
-	// resolver-backed ClaireonTool_SetBlueprintCDOProperty below is the only one.
+	Tools.Add(MakeShared<ClaireonTool_EditorGetEditorPropertyRaw>());
 	Tools.Add(MakeShared<ClaireonTool_LogTail>());
-	Tools.Add(MakeShared<ClaireonTool_LogSearch>());
+	Tools.Add(MakeShared<ClaireonTool_EditorLogSearch>());
 	Tools.Add(MakeShared<ClaireonTool_LogCategories>());
-	Tools.Add(MakeShared<ClaireonTool_MessageLogGet>());
+	Tools.Add(MakeShared<ClaireonTool_EditorMessageLogGet>());
 	Tools.Add(MakeShared<ClaireonTool_TestRun>());
+	Tools.Add(MakeShared<ClaireonTool_TestPoll>());
 	Tools.Add(MakeShared<ClaireonTool_TestList>());
 	// State Tree MCP tools
 	Tools.Add(MakeShared<ClaireonTool_StateTreeInspect>());
@@ -1937,7 +1970,14 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	Tools.Add(MakeShared<ClaireonPCGGraphTool_Focus>());
 	Tools.Add(MakeShared<ClaireonPCGGraphTool_CursorBack>());
 	Tools.Add(MakeShared<ClaireonPCGGraphTool_Save>());
+	Tools.Add(MakeShared<ClaireonPCGGraphTool_Refresh>());
 	Tools.Add(MakeShared<ClaireonPCGGraphTool_ApplySpec>());
+	Tools.Add(MakeShared<ClaireonPCGGraphTool_Create>());
+	Tools.Add(MakeShared<ClaireonPCGGraphTool_SetSubgraph>());
+	Tools.Add(MakeShared<ClaireonPCGGraphTool_AddUserParameter>());
+	Tools.Add(MakeShared<ClaireonPCGGraphTool_SetSubgraphOverride>());
+	Tools.Add(MakeShared<ClaireonPCGGraphTool_Generate>());
+	Tools.Add(MakeShared<ClaireonPCGGraphTool_InspectData>());
 
 	// Enhanced Input MCP tools
 	Tools.Add(MakeShared<ClaireonTool_InputInspect>());
@@ -2015,6 +2055,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	// Level tools
 	Tools.Add(MakeShared<ClaireonTool_ListActors>());
 	Tools.Add(MakeShared<ClaireonTool_LevelSetActorProperty>());
+	Tools.Add(MakeShared<ClaireonTool_LevelBuildBrush>());
 	Tools.Add(MakeShared<ClaireonTool_PlaceActor>());
 	Tools.Add(MakeShared<ClaireonTool_MapDuplicate>());
 	Tools.Add(MakeShared<ClaireonTool_SetSplinePoints>());
@@ -2027,9 +2068,7 @@ TArray<TSharedPtr<IClaireonTool>> FClaireonBuiltinToolProvider::GetTools() const
 	// Meta tools
 	Tools.Add(MakeShared<ClaireonTool_SearchTools>());
 	Tools.Add(MakeShared<ClaireonTool_FeedbackSubmit>());
-	// apply_spec_help is retired: tool_search deep-inspect on any apply_spec /
-	// instance_apply_spec tool embeds the matching ApplySpecCatalog.json entry
-	// under `spec_shape`.
+	// Deep inspection of apply_spec tools includes their ApplySpecCatalog entry as spec_shape.
 
 	// Transaction management (decomposed -- one tool per operation)
 	Tools.Add(MakeShared<ClaireonTool_TransactionUndo>());
@@ -2186,6 +2225,9 @@ FClaireonModule::~FClaireonModule() = default;
 
 void FClaireonModule::StartupModule()
 {
+	// Register before the commandlet return so fuzz fixtures can load their tags.
+	ClaireonFuzzTestTags::RegisterFuzzTestTags();
+
 	if (!GIsEditor || IsRunningCommandlet())
 	{
 		return;
@@ -2193,9 +2235,7 @@ void FClaireonModule::StartupModule()
 
 	SClaireonDiagnosticsWidget::RegisterTabSpawner();
 
-	// Settings registration is handled automatically by UDeveloperSettings via
-	// GetCategoryName() -> "Plugins" and meta=(DisplayName="Claireon").
-	// Manual RegisterSettings was removed -- it caused duplicate entries.
+	// UDeveloperSettings registers these settings automatically.
 
 	FClaireonRichTextStyle::Initialize();
 	FClaireonToolbarStyle::Initialize();
@@ -2285,14 +2325,16 @@ void FClaireonModule::ShutdownModule()
 	ClaireonTransactionGroupState::ResetGroupState();
 
 	FClaireonPIEManager::Get().UnbindEditorDelegates();
+
+	// A pending next-tick reconstruct would call into this module after it unloads.
+	ClaireonPCGEditorSync::ShutdownReconstructScheduler();
+
 	FClaireonRichTextStyle::Shutdown();
 	FClaireonToolbarStyle::Shutdown();
 
-	// Unsubscribe from modular feature events
 	IModularFeatures::Get().OnModularFeatureRegistered().RemoveAll(this);
 	IModularFeatures::Get().OnModularFeatureUnregistered().RemoveAll(this);
 
-	// Unsubscribe from Python initialisation delegate (Spec D).
 	if (PythonInitHandle.IsValid())
 	{
 		if (IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get())

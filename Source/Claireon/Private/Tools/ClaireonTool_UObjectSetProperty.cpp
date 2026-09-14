@@ -266,12 +266,12 @@ IClaireonTool::FToolResult ClaireonTool_UObjectSetProperty::Execute(const TShare
 
 		TSharedPtr<FJsonObject> HintArgs = CloneHintArgs(Arguments);
 		HintArgs->SetBoolField(TEXT("allow_non_editable"), true);
-		Result.Hint = MakeGuidanceHint(
+		Result.AddHint(MakeGuidanceHint(
 			GetName(),
 			FString::Printf(
 				TEXT("'%s' %s; re-issue with allow_non_editable=true if the write is intended."),
 				*PropertyPath, *Why),
-			HintArgs);
+			HintArgs));
 		return Result;
 	}
 

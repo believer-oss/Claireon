@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonMetaSoundTool_Open.h"
+#include "ClaireonScopedAssetEditor.h"
 #include "Tools/ClaireonAudioHelpers.h"
 #include "Tools/ClaireonAudioSessionRegistry.h"
 #include "Tools/ClaireonAnimEditToolBase.h" // FToolSchemaBuilder
@@ -116,7 +117,7 @@ IClaireonTool::FToolResult FClaireonMetaSoundTool_Open::Execute(const TSharedPtr
 	Entry->FocusedNodeIndex = INDEX_NONE;
 	Entry->MetaSoundBuilderHandle = static_cast<void*>(Builder);
 
-	ClaireonAssetUtils::OpenAssetEditorIfHeadless(Asset);
+	ClaireonAssetEditorWindow::OpenForSession(Asset);
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("session_id"), SessionId);

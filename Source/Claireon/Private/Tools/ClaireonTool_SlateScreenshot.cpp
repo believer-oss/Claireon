@@ -14,6 +14,45 @@
 #include "Misc/Paths.h"
 #include "Misc/DateTime.h"
 #include "HAL/PlatformFileManager.h"
+#include "GenericPlatform/GenericWindow.h"
+#include "Rendering/SlateRenderer.h"
+#include "Misc/ScopeExit.h"
+#include "Templates/Function.h"
+
+namespace ClaireonSlateScreenshotPrivate
+{
+	static bool IsCapturableState(bool bNativeValid, bool bHasHandle, bool bSlateVisible,
+		bool bNativeVisible, bool bMinimized, const FVector2D& Size)
+	{
+		return bNativeValid && bHasHandle && bSlateVisible && bNativeVisible && !bMinimized
+			&& FMath::IsFinite(Size.X) && FMath::IsFinite(Size.Y)
+			&& Size.X >= 1 && Size.Y >= 1 && Size.X * Size.Y <= MAX_int32;
+	}
+
+	static bool IsCapturable(const TSharedPtr<SWindow>& Window)
+	{
+		if (!Window) { return false; }
+		const TSharedPtr<FGenericWindow> Native = Window->GetNativeWindow();
+		return IsCapturableState(Native.IsValid(), Native && Native->GetOSWindowHandle() != nullptr,
+			Window->IsVisible(), Native && Native->IsVisible(), Window->IsWindowMinimized(), Window->GetSizeInScreen());
+	}
+
+	// The callbacks isolate request lifetime from native/RHI setup for headless regression tests.
+	static bool CaptureAndRelease(TFunctionRef<bool()> Capture,
+		TFunctionRef<void(TArray<FColor>&)> Detach, TFunctionRef<void()> Flush)
+	{
+		static TArray<FColor> DetachedBuffer;
+		ON_SCOPE_EXIT
+		{
+			// Drain draws reading ScreenshotState before changing it on the game thread.
+			Flush();
+			// UE 5.5 retains the request when its window was not drawn. Null window clears its viewport.
+			Detach(DetachedBuffer);
+			Flush();
+		};
+		return Capture();
+	}
+}
 
 FString ClaireonTool_SlateScreenshot::GetCategory() const { return TEXT("slate"); }
 FString ClaireonTool_SlateScreenshot::GetOperation() const { return TEXT("screenshot"); }
@@ -68,6 +107,10 @@ TSharedPtr<FJsonObject> ClaireonTool_SlateScreenshot::GetInputSchema() const
 
 IClaireonTool::FToolResult ClaireonTool_SlateScreenshot::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
+	if (!IsInGameThread())
+	{
+		return MakeErrorResult(TEXT("Slate screenshot must execute on the game thread"));
+	}
 	if (!FSlateApplication::IsInitialized())
 	{
 		return MakeErrorResult(TEXT("Slate application is not initialized"));
@@ -157,13 +200,17 @@ IClaireonTool::FToolResult ClaireonTool_SlateScreenshot::Execute(const TSharedPt
 		if (WindowSel.IsEmpty() || WindowSel.Equals(TEXT("active"), ESearchCase::IgnoreCase))
 		{
 			TargetWindow = Slate.GetActiveTopLevelWindow();
-			// Fall back to the last (most recently added / front-most) visible window.
-			if (!TargetWindow.IsValid())
+			if (!ClaireonSlateScreenshotPrivate::IsCapturable(TargetWindow))
 			{
+				TargetWindow.Reset();
 				const TArray<TSharedRef<SWindow>> TopWindows = Slate.GetTopLevelWindows();
-				if (TopWindows.Num() > 0)
+				for (int32 Index = TopWindows.Num() - 1; Index >= 0; --Index)
 				{
-					TargetWindow = TopWindows.Last();
+					if (ClaireonSlateScreenshotPrivate::IsCapturable(TopWindows[Index]))
+					{
+						TargetWindow = TopWindows[Index];
+						break;
+					}
 				}
 			}
 		}
@@ -188,8 +235,20 @@ IClaireonTool::FToolResult ClaireonTool_SlateScreenshot::Execute(const TSharedPt
 				WindowSel.IsEmpty() ? TEXT("active") : *WindowSel));
 		}
 
-		// TakeScreenshot returns BGRA.
-		if (!Slate.TakeScreenshot(TargetWindow.ToSharedRef(), ColorData, Size))
+		if (!ClaireonSlateScreenshotPrivate::IsCapturable(TargetWindow))
+		{
+			return MakeErrorResult(FString::Printf(TEXT("Window '%s' is not capturable: it must be visible, "
+				"not minimized, have a valid native handle and a nonzero supported size."), *TargetWindow->GetTitle().ToString()));
+		}
+
+		FSlateRenderer* Renderer = Slate.GetRenderer();
+		if (!Renderer) { return MakeErrorResult(TEXT("Slate renderer is unavailable")); }
+		const bool bCaptured = ClaireonSlateScreenshotPrivate::CaptureAndRelease(
+			[&]() { return Slate.TakeScreenshot(TargetWindow.ToSharedRef(), ColorData, Size); },
+			[&](TArray<FColor>& DetachedBuffer)
+			{ Renderer->PrepareToTakeScreenshot(FIntRect(0, 0, 0, 0), &DetachedBuffer, nullptr); },
+			[&]() { Renderer->FlushCommands(); });
+		if (!bCaptured)
 		{
 			return MakeErrorResult(FString::Printf(
 				TEXT("TakeScreenshot failed for window '%s'"), *TargetWindow->GetTitle().ToString()));
@@ -243,3 +302,72 @@ IClaireonTool::FToolResult ClaireonTool_SlateScreenshot::Execute(const TSharedPt
 		*Target, Size.X, Size.Y, *FullPath);
 	return MakeSuccessResult(Data, Summary);
 }
+
+#if WITH_UNTESTED
+#include "Untest.h"
+
+UNTEST_UNIT_OPTS(Claireon, SlateScreenshot, CaptureAlwaysDetachesAndDrainsBeforeReturning,
+	UNTEST_TIMEOUTMS(30000.0))
+{
+	// Model both a missed viewport (pending request) and an already queued readback.
+	for (bool bCaptureSucceeded : {false, true})
+	{
+		TArray<FColor> Pixels;
+		TArray<FColor>* Pending = nullptr;
+		TArray<FColor>* QueuedReadback = nullptr;
+		bool bViewportPending = false;
+		FString Order;
+		const bool Result = ClaireonSlateScreenshotPrivate::CaptureAndRelease(
+			[&]()
+			{
+				Order += TEXT("capture;");
+				Pending = QueuedReadback = &Pixels;
+				bViewportPending = true;
+				return bCaptureSucceeded;
+			},
+			[&](TArray<FColor>& Sink)
+			{
+				Order += TEXT("detach;");
+				Pending = &Sink;
+				bViewportPending = false;
+			},
+			[&]()
+			{
+				Order += TEXT("flush;");
+				if (QueuedReadback)
+				{
+					QueuedReadback->Add(FColor::Red);
+					QueuedReadback = nullptr;
+				}
+			});
+		UNTEST_EXPECT_TRUE(Result == bCaptureSucceeded);
+		UNTEST_EXPECT_EQ(Order, FString(TEXT("capture;flush;detach;flush;")));
+		UNTEST_EXPECT_TRUE(Pending != nullptr && Pending != &Pixels);
+		UNTEST_EXPECT_FALSE(bViewportPending);
+		UNTEST_EXPECT_TRUE(QueuedReadback == nullptr);
+		UNTEST_EXPECT_EQ(Pixels.Num(), 1);
+		// The replacement storage remains alive after the wrapper returned.
+		Pending->Add(FColor::Blue);
+		Pending->Reset();
+		UNTEST_EXPECT_EQ(Pixels.Num(), 1);
+	}
+	co_return;
+}
+
+UNTEST_UNIT_OPTS(Claireon, SlateScreenshot, UnrenderableWindowsAreNotCaptureCandidates,
+	UNTEST_TIMEOUTMS(30000.0))
+{
+	using namespace ClaireonSlateScreenshotPrivate;
+	const FVector2D Size(800, 600);
+	UNTEST_EXPECT_TRUE(IsCapturableState(true, true, true, true, false, Size));
+	UNTEST_EXPECT_FALSE(IsCapturableState(false, false, true, true, false, Size));
+	UNTEST_EXPECT_FALSE(IsCapturableState(true, false, true, true, false, Size));
+	UNTEST_EXPECT_FALSE(IsCapturableState(true, true, false, true, false, Size));
+	UNTEST_EXPECT_FALSE(IsCapturableState(true, true, true, false, false, Size));
+	UNTEST_EXPECT_FALSE(IsCapturableState(true, true, true, true, true, Size));
+	UNTEST_EXPECT_FALSE(IsCapturableState(true, true, true, true, false, FVector2D(0, 600)));
+	UNTEST_EXPECT_FALSE(IsCapturableState(true, true, true, true, false, FVector2D(800, 0)));
+	UNTEST_EXPECT_FALSE(IsCapturableState(true, true, true, true, false, FVector2D(MAX_int32, MAX_int32)));
+	co_return;
+}
+#endif

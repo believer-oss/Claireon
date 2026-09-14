@@ -70,7 +70,7 @@ bool ParseCategoryFilterArgs(const TSharedPtr<FJsonObject>& Arguments,
     FCategoryFilter& OutFilter, FString& OutError);
 
 // ---------------------------------------------------------------------------
-// Log timestamp shape check (P2-16).
+// Log timestamp shape check.
 //
 // A UE log timestamp is "YYYY.MM.DD-HH.MM.SS" optionally followed by ":mmm"
 // (what FLogLineParser captures from the first bracket when the log was

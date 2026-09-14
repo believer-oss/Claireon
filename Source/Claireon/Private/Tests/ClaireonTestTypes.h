@@ -104,7 +104,7 @@ public:
 	UPROPERTY()
 	FClaireonUObjectInspectNested Foo;
 
-	/** FInstancedStruct unwrap fixture (P2-18): reflection sees no payload
+	/** FInstancedStruct unwrap fixture: reflection sees no payload
 	 *  fields, so the reader must go through GetScriptStruct()/GetMemory(). */
 	UPROPERTY()
 	FInstancedStruct Wrapped;

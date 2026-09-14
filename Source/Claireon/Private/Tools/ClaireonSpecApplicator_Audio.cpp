@@ -251,9 +251,9 @@ bool FClaireonSpecApplicator_Audio::Apply(const TSharedPtr<FJsonObject>& Spec, F
 		};
 
 		// Walk define fields.
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Define->Values)
+		for (const auto& Pair : Define->Values)
 		{
-			const FString& Key = Pair.Key;
+			const FString Key(Pair.Key);
 			const TSharedPtr<FJsonValue>& Val = Pair.Value;
 
 			if (Key.EndsWith(TEXT("_ref")))
@@ -509,9 +509,9 @@ namespace ClaireonSpecApplicator_Audio_Private3
 		const TSharedPtr<FJsonObject>* PropsObj = nullptr;
 		if (Spec->TryGetObjectField(TEXT("properties"), PropsObj) && PropsObj && PropsObj->IsValid())
 		{
-			for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*PropsObj)->Values)
+			for (const auto& Pair : (*PropsObj)->Values)
 			{
-				const FString& Key = Pair.Key;
+				const FString Key(Pair.Key);
 				const FString ValueStr = SpecApplicatorAudio_JsonValueToString(Pair.Value);
 				const FString PropPath = Key.StartsWith(PropertyPrefix)
 					? Key

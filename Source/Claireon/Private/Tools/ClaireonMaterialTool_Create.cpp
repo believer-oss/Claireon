@@ -6,6 +6,7 @@
 #include "Tools/ClaireonMaterialHelpers.h"
 #include "ClaireonSessionManager.h"
 #include "Materials/Material.h"
+#include "MaterialDomain.h"
 #include "Factories/MaterialFactoryNew.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"

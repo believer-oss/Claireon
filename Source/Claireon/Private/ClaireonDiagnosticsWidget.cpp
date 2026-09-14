@@ -150,7 +150,7 @@ namespace ClaireonFeedbackPanel
 		{
 			return true;
 		}
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Object->Values)
+		for (const auto& Pair : Object->Values)
 		{
 			if (!Pair.Value.IsValid())
 			{

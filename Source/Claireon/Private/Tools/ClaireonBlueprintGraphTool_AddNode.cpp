@@ -108,7 +108,11 @@ TArray<FString> ClaireonBlueprintGraphTool_AddNode::GetSearchKeywords() const
 
 FString ClaireonBlueprintGraphTool_AddNode::GetDescription() const
 {
-    return TEXT("Add a node to the current session's graph (CallFunction, VariableGet/Set, control flow, macros, delegates, etc.). Pass auto_connect_from_cursor=true to route the new node's exec pin through the cursor pin when compatible. Save every 1-3 nodes via bp_save to avoid losing work on editor crash. Accepts session_id or asset_path; auto-opens when asset_path is supplied.");
+    return TEXT("Add a node to the session's current graph, or to target_graph when supplied "
+        "(CallFunction, VariableGet/Set, control flow, macros, delegates, and more). "
+        "Pass auto_connect_from_cursor=true to route the new node's exec pin through the "
+        "cursor pin when compatible. Save every 1-3 nodes via bp_save. Accepts session_id "
+        "or asset_path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddNode::GetInputSchema() const
@@ -116,11 +120,13 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_AddNode::GetInputSchema() con
     FToolSchemaBuilder Builder;
     Builder.AddString(TEXT("session_id"), TEXT("Session id from a prior open/create (or use asset_path to auto-open)."), false);
     Builder.AddString(TEXT("asset_path"), TEXT("Blueprint asset path (alternative to session_id)."), false);
+    // target_graph selects an existing graph; graph_name names a new collapsed subgraph.
+    Builder.AddString(TEXT("target_graph"), TEXT("Name of the graph to add the node to. Omit to use the session's current graph. Supplying a different graph switches the session to it for this and subsequent calls, exactly as bp_switch_graph would; the switch is reported in the response."), false);
     Builder.AddString(TEXT("node_type"), TEXT("Node class alias or full name (e.g. CallFunction, AsyncAction, VariableGet, Branch, Sequence, Cast, MacroInstance, MultiGate, FormatText, SwitchGameplayTag, Composite, Timeline, ComponentBoundEvent, AddComponent, EventOverride, or a K2Node_* class name; unknown K2Node classes route through the Generic path)."), true);
     Builder.AddString(TEXT("function_name"), TEXT("Function name. REQUIRED for CallFunction/AsyncAction/CallParentFunction/EventOverride/CreateDelegate; used with function_class on Generic async-task subclasses to initialize proxy fields."));
     Builder.AddString(TEXT("function_class"), TEXT("Class that owns the function (for CallFunction/AsyncAction/Generic async nodes)."));
     Builder.AddString(TEXT("node_class"), TEXT("For CallFunction: exact UK2Node_CallFunction subclass to instantiate (e.g. K2Node_PromotableOperator, K2Node_CallArrayFunction). Overrides the class inferred from the function's metadata; replay callers pass the source node's class."));
-    Builder.AddString(TEXT("variable_name"), TEXT("Variable name for VariableGet/Set."));
+    Builder.AddString(TEXT("variable_name"), TEXT("Variable name for VariableGet/Set. With no member_scope or member_parent, the name is resolved in this order: member variable on the Blueprint, then function-local variable of the session graph, then function input parameter of the session graph -- so a bare name may bind to a local or a parameter rather than a member. Pass member_scope to require a function-local, or member_parent to require an external class member."));
     Builder.AddString(TEXT("member_parent"), TEXT("For VariableGet/Set: external class owning the member (e.g. 'SceneComponent' for RelativeLocation). Omit for self-context members. target_class is accepted as an alias."));
     Builder.AddString(TEXT("member_scope"), TEXT("For VariableGet/Set: function graph name declaring a function-local variable (e.g. 'Get Warp Target Transform'). Use bp_add_local_variable to declare locals."));
     Builder.AddBoolean(TEXT("validated"), TEXT("For VariableGet: create a validated (impure) get with execute/then/else exec pins instead of a pure value tap."));
@@ -188,20 +194,55 @@ FToolResult ClaireonBlueprintGraphTool_AddNode::AddNode_Impl(
 		return MakeErrorResult(TEXT("Blueprint or Graph is no longer valid"));
 	}
 
+	// Resolve target_graph before mutation; an unknown name must not fall back to the current graph.
+	bool bSwitchedToTargetGraph = false;
+	FString TargetGraphReport;
+	{
+		FString TargetGraphName;
+		if (Params->TryGetStringField(TEXT("target_graph"), TargetGraphName) && !TargetGraphName.IsEmpty())
+		{
+			UEdGraph* ResolvedTargetGraph = ClaireonBlueprintHelpers::FindGraphByName(Blueprint, TargetGraphName);
+			if (!IsValid(ResolvedTargetGraph))
+			{
+				const FString AvailableList = BuildAvailableGraphsList(Blueprint);
+				return MakeErrorResult(FString::Printf(
+					TEXT("Graph '%s' not found in Blueprint. Available: %s"),
+					*TargetGraphName, *AvailableList));
+			}
+
+			if (ResolvedTargetGraph != Graph)
+			{
+				// Update both session and local graph pointers before adding the node.
+				Data->Cursor.PushHistory(Data->Cursor.GraphName);
+				Data->Graph = ResolvedTargetGraph;
+				Data->Cursor.GraphName = ResolvedTargetGraph->GetName();
+				Graph = ResolvedTargetGraph;
+				bSwitchedToTargetGraph = true;
+			}
+			TargetGraphReport = ResolvedTargetGraph->GetName();
+		}
+	}
+
+	// Attach targeting results to every success branch, including existing-node returns.
+	auto ReportTargetGraphSwitch = [&TargetGraphReport, &bSwitchedToTargetGraph](FToolResult& Result)
+	{
+		if (!TargetGraphReport.IsEmpty() && Result.Data.IsValid())
+		{
+			Result.Data->SetStringField(TEXT("target_graph"), TargetGraphReport);
+			Result.Data->SetBoolField(TEXT("switched_to_target_graph"), bSwitchedToTargetGraph);
+		}
+	};
+
 	ClaireonMacroShorthand::ResolveIfShorthand(Params);
 	ClaireonNodeTypeAlias::ResolveNodeTypeAlias(Params);
 
-	// Get node_type
 	FString NodeType;
 	if (!Params->TryGetStringField(TEXT("node_type"), NodeType))
 	{
 		return MakeErrorResult(TEXT("Missing required field: node_type"));
 	}
 
-	// SpawnActor spawn-class alias: the factory reads 'actor_class', but an
-	// earlier schema described target_class as the spawn field, so accept both.
-	// Rewrite here (this tool owns the contract; the factory stays untouched).
-	// actor_class wins when both are supplied.
+	// Accept target_class as a SpawnActor alias; actor_class takes precedence.
 	if (NodeType == TEXT("SpawnActor") && !Params->HasField(TEXT("actor_class")))
 	{
 		FString SpawnClassAlias;
@@ -449,12 +490,12 @@ FToolResult ClaireonBlueprintGraphTool_AddNode::AddNode_Impl(
 
 		FToolResult EntryResult = BuildStateResponse(SessionId, Data);
 		EntryResult.Warnings.Append(ResolutionWarnings);
+		ReportTargetGraphSwitch(EntryResult);
 		return EntryResult;
 	}
 	else if (NodeType == TEXT("FunctionResult"))
 	{
-		// Find-or-create via engine helper (precedent: line 6257 FindOrCreateFunctionResultNode).
-		// The helper takes UK2Node_FunctionEntry*, NOT UEdGraph*, so locate the entry node first.
+		// The result-node helper requires the graph's function entry.
 		const UEdGraphSchema_K2* K2Schema = GetDefault<UEdGraphSchema_K2>();
 		const EGraphType GraphType = IsValid(K2Schema) ? K2Schema->GetGraphType(Graph) : GT_MAX;
 		if (GraphType != GT_Function)
@@ -526,12 +567,12 @@ FToolResult ClaireonBlueprintGraphTool_AddNode::AddNode_Impl(
 
 		FToolResult ResultResp = BuildStateResponse(SessionId, Data);
 		ResultResp.Warnings.Append(ResolutionWarnings);
+		ReportTargetGraphSwitch(ResultResp);
 		return ResultResp;
 	}
 	else if (NodeType == TEXT("Tunnel"))
 	{
-		// Find-or-return on the macro graph's two tunnel nodes (input + output).
-		// Creation-on-demand is explicitly out of scope; missing tunnels -> structured error.
+		// Return existing macro tunnels; missing tunnels are an error.
 		const UEdGraphSchema_K2* K2Schema = GetDefault<UEdGraphSchema_K2>();
 		const EGraphType GraphType = IsValid(K2Schema) ? K2Schema->GetGraphType(Graph) : GT_MAX;
 		if (GraphType != GT_Macro)
@@ -571,6 +612,7 @@ FToolResult ClaireonBlueprintGraphTool_AddNode::AddNode_Impl(
 
 		FToolResult TunnelResult = BuildStateResponse(SessionId, Data);
 		TunnelResult.Warnings.Append(ResolutionWarnings);
+		ReportTargetGraphSwitch(TunnelResult);
 		return TunnelResult;
 	}
 	else if (NodeType == TEXT("Timeline"))
@@ -1306,18 +1348,14 @@ FToolResult ClaireonBlueprintGraphTool_AddNode::AddNode_Impl(
 
 	FToolResult AddNodeResult = BuildStateResponse(SessionId, Data);
 	AddNodeResult.Warnings.Append(ResolutionWarnings);
-	// Surface the new node's GUID directly so callers can chain follow-up ops (connect_pins,
-	// set_node_property, ...) without regexing it out of the cursor/summary block.
 	if (AddNodeResult.Data.IsValid())
 	{
 		AddNodeResult.Data->SetStringField(TEXT("created_node_guid"), NewNode->NodeGuid.ToString());
 	}
+	ReportTargetGraphSwitch(AddNodeResult);
 	return AddNodeResult;
 }
 
-// ----------------------------------------------------------------------------
-// hot-path metadata enrichment
-// ----------------------------------------------------------------------------
 
 FString ClaireonBlueprintGraphTool_AddNode::GetFullDescription() const
 {

@@ -97,11 +97,11 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_MoveCursor::GetOperation() const { return TEXT("move_cursor"); }
+FString ClaireonBlueprintGraphTool_MoveCursor::GetOperation() const { return TEXT("cursor_move"); }
 
 FString ClaireonBlueprintGraphTool_MoveCursor::GetDescription() const
 {
-    return TEXT("Move the editing cursor to a specific graph/node/pin in the open Blueprint editing session. Requires open session_id from bp_open. Read-only with respect to graph contents (cursor is session state). The cursor drives auto_connect_from_cursor on bp_add_node. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+    return TEXT("Move the session cursor to a specific graph, node or pin in one call. The cursor is the session's single anchor: it drives placement and auto_connect_from_cursor on bp_add_node, and bp_cursor_back walks its history. It does NOT change the editor selection (see bp_selection_set) and does not modify the graph. Accepts session_id or asset_path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_MoveCursor::GetInputSchema() const
@@ -123,7 +123,7 @@ FToolResult ClaireonBlueprintGraphTool_MoveCursor::Execute(const TSharedPtr<FJso
     FString SessionId;
     FBlueprintEditToolData* Data = nullptr;
     FToolResult Error;
-    if (!BeginSessionOp(Arguments, TEXT("move_cursor"), Params, SessionId, Data, Error))
+    if (!BeginSessionOp(Arguments, TEXT("cursor_move"), Params, SessionId, Data, Error))
     {
         return Error;
     }
@@ -225,6 +225,7 @@ FToolResult ClaireonBlueprintGraphTool_MoveCursor::Execute(const TSharedPtr<FJso
 					Data->Cursor.FocusedPinName = Pin->PinName;
 					Data->Cursor.FocusedPinDirection = Pin->Direction;
 					Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Moved to next pin: %s"), *Pin->PinName.ToString());
+					MirrorCursorToView(*Data);
 					return BuildStateResponse(SessionId, Data);
 				}
 				if (Pin->PinName == Data->Cursor.FocusedPinName)
@@ -248,6 +249,7 @@ FToolResult ClaireonBlueprintGraphTool_MoveCursor::Execute(const TSharedPtr<FJso
 					Data->Cursor.FocusedPinName = PrevPin->PinName;
 					Data->Cursor.FocusedPinDirection = PrevPin->Direction;
 					Data->Cursor.LastOperationStatus = FString::Printf(TEXT("Moved to previous pin: %s"), *PrevPin->PinName.ToString());
+					MirrorCursorToView(*Data);
 					return BuildStateResponse(SessionId, Data);
 				}
 				if (Pin->Direction == EGPD_Output)
@@ -288,6 +290,9 @@ FToolResult ClaireonBlueprintGraphTool_MoveCursor::Execute(const TSharedPtr<FJso
 	Data->Cursor.LastOperationStatus = FString::Printf(
 		TEXT("Moved cursor %s to: %s"),
 		*MovementDescription, *TargetNodeTitle);
+
+	// Mirror the view without changing selection; a missing window is a no-op.
+	MirrorCursorToView(*Data);
 
 	return BuildStateResponse(SessionId, Data);
 }

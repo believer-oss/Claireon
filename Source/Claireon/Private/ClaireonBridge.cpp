@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 #include "ClaireonBridge.h"
+#include "Tools/ClaireonTool_TestRun.h"
+#include "ClaireonAdvisoryCoalesce.h"
+#include "ClaireonHintRateLimiter.h"
 #include "ClaireonJsonSanitize.h"
+#include "ClaireonAstralJsonGuard.h"
 #include "ClaireonLog.h"
 #include "ClaireonServer.h"
 #include "IClaireonToolProvider.h"
@@ -62,14 +66,27 @@ TSharedPtr<FJsonObject> FClaireonBridge::BuildResultEnvelope(
 		Envelope->SetObjectField(TEXT("data"), MakeShared<FJsonObject>());
 	}
 
-	FString HintShapeError;
-	if (Result.Hint.IsValid() && IClaireonTool::ValidateHint(Result.Hint, HintShapeError))
+	// Hints: `hints` carries every validated entry; the legacy `hint` field stays as an
+	// alias of the FIRST validated entry so scripts that branch on r.get("hint") keep
+	// working. Validation is per-element -- a malformed entry is dropped with a log line,
+	// never the whole array.
+	TArray<TSharedPtr<FJsonValue>> ValidHints;
+	for (const TSharedPtr<FJsonObject>& Hint : Result.Hints)
 	{
-		Envelope->SetObjectField(TEXT("hint"), Result.Hint);
+		FString HintShapeError;
+		if (Hint.IsValid() && IClaireonTool::ValidateHint(Hint, HintShapeError))
+		{
+			ValidHints.Add(MakeShared<FJsonValueObject>(Hint));
+		}
+		else if (Hint.IsValid())
+		{
+			UE_LOG(LogClaireon, Warning, TEXT("[MCP Bridge] Dropping malformed hint: %s"), *HintShapeError);
+		}
 	}
-	else if (Result.Hint.IsValid())
+	if (ValidHints.Num() > 0)
 	{
-		UE_LOG(LogClaireon, Warning, TEXT("[MCP Bridge] Dropping malformed hint: %s"), *HintShapeError);
+		Envelope->SetObjectField(TEXT("hint"), ValidHints[0]->AsObject());
+		Envelope->SetArrayField(TEXT("hints"), ValidHints);
 	}
 
 	Envelope->SetStringField(TEXT("summary"), Result.Summary);
@@ -79,9 +96,7 @@ TSharedPtr<FJsonObject> FClaireonBridge::BuildResultEnvelope(
 	{
 		WarningsArray.Add(MakeShared<FJsonValueString>(Warning));
 	}
-	// Result is const, so the sanitizer's disclosures are appended here rather
-	// than to Result.Warnings. A replaced value the caller is never told about
-	// is the same confident-wrong-data failure, just quieter.
+	// Append sanitizer disclosures here because Result is const.
 	for (const FString& FieldPath : PoisonedFieldPaths)
 	{
 		WarningsArray.Add(MakeShared<FJsonValueString>(ClaireonJsonSanitize::DescribeReplacement(FieldPath)));
@@ -101,11 +116,11 @@ TSharedPtr<FJsonObject> FClaireonBridge::BuildResultEnvelope(
 	return Envelope;
 }
 
-// Static member initialization
 bool FClaireonBridge::bIsRegistered = false;
 FClaireonServer* FClaireonBridge::GServerInstance = nullptr;
 TAtomic<int32> FClaireonBridge::GToolCallCount(0);
 TArray<FClaireonDeferredAction> FClaireonBridge::GDeferredActions;
+TArray<FClaireonAdvisory> FClaireonBridge::GInnerToolAdvisories;
 FDelegateHandle FClaireonBridge::ToolsChangedHandle;
 std::atomic<bool> FClaireonBridge::bClaireonModuleStale{false};
 FString FClaireonBridge::GCurrentConversationId = TEXT("default");
@@ -241,6 +256,116 @@ void FClaireonBridge::ResetToolCallCount()
 	GToolCallCount = 0;
 }
 
+void FClaireonBridge::ResetInnerToolAdvisories()
+{
+	GInnerToolAdvisories.Reset();
+}
+
+void FClaireonBridge::AppendInnerToolAdvisories(
+	const FString& ToolName,
+	const TSharedPtr<FJsonObject>& Arguments,
+	const IClaireonTool::FToolResult& Result,
+	const IClaireonTool* SourceToolInstance)
+{
+	FString Target = ClaireonAdvisoryCoalesce::ExtractTarget(Arguments);
+
+	// Resolve open sessions to asset paths so session- and path-addressed calls aggregate together.
+	if (Target.StartsWith(TEXT("session:")))
+	{
+		FString SessionId;
+		Arguments->TryGetStringField(TEXT("session_id"), SessionId);
+		if (const FMCPSession* Session = FClaireonSessionManager::Get().FindSession(SessionId))
+		{
+			FString GraphName;
+			Arguments->TryGetStringField(TEXT("graph_name"), GraphName);
+			Target = GraphName.IsEmpty()
+				? Session->AssetPath
+				: Session->AssetPath + TEXT(":") + GraphName;
+		}
+	}
+
+	// Retain Data only for Tier 1 aggregation; ErrorMessage is not a summary advisory.
+	if (!Result.Summary.IsEmpty())
+	{
+		FClaireonAdvisory Advisory;
+		Advisory.Kind = EClaireonAdvisoryKind::Summary;
+		Advisory.SourceTool = ToolName;
+		Advisory.Target = Target;
+		Advisory.Text = Result.Summary;
+		if (SourceToolInstance != nullptr
+			&& SourceToolInstance->GetSummaryAggregationSpec(Advisory.AggregationSpec)
+			&& Advisory.AggregationSpec.Num() > 0)
+		{
+			Advisory.Data = Result.Data;
+		}
+		else
+		{
+			Advisory.AggregationSpec.Reset();
+		}
+		GInnerToolAdvisories.Add(MoveTemp(Advisory));
+	}
+
+	for (const FString& Warning : Result.Warnings)
+	{
+		FClaireonAdvisory Advisory;
+		Advisory.Kind = EClaireonAdvisoryKind::Warning;
+		Advisory.SourceTool = ToolName;
+		Advisory.Target = Target;
+		Advisory.Text = Warning;
+		GInnerToolAdvisories.Add(MoveTemp(Advisory));
+	}
+
+	for (const TSharedPtr<FJsonObject>& Hint : Result.Hints)
+	{
+		FString HintShapeError;
+		if (Hint.IsValid() && IClaireonTool::ValidateHint(Hint, HintShapeError))
+		{
+			FClaireonAdvisory Advisory;
+			Advisory.Kind = EClaireonAdvisoryKind::Hint;
+			Advisory.SourceTool = ToolName;
+			Advisory.Target = Target;
+			Advisory.Payload = Hint;
+
+			FString Reason;
+			Hint->TryGetStringField(TEXT("reason"), Reason);
+			Advisory.Text = Reason;
+
+			FString Key;
+			if (Hint->TryGetStringField(TEXT("key"), Key) && !Key.IsEmpty())
+			{
+				Advisory.HintKey = FName(*Key);
+			}
+			GInnerToolAdvisories.Add(MoveTemp(Advisory));
+		}
+	}
+
+	// Nested advisories retain their original source tags; the Python envelope omits them.
+	GInnerToolAdvisories.Append(Result.InnerAdvisories);
+}
+
+TArray<FClaireonAdvisory> FClaireonBridge::DrainInnerToolAdvisories()
+{
+	TArray<FClaireonAdvisory> Drained = MoveTemp(GInnerToolAdvisories);
+	GInnerToolAdvisories.Reset();
+	return Drained;
+}
+
+FClaireonBridgeInvocationScope::FClaireonBridgeInvocationScope()
+{
+	SavedToolCallCount = FClaireonBridge::GToolCallCount;
+	FClaireonBridge::GToolCallCount = 0;
+	SavedInnerToolAdvisories = MoveTemp(FClaireonBridge::GInnerToolAdvisories);
+	FClaireonBridge::GInnerToolAdvisories.Reset();
+	SavedLimiterScopeState = ClaireonHintRateLimiter::ExchangeScopeState(TSet<FString>());
+}
+
+FClaireonBridgeInvocationScope::~FClaireonBridgeInvocationScope()
+{
+	FClaireonBridge::GToolCallCount = SavedToolCallCount;
+	FClaireonBridge::GInnerToolAdvisories = MoveTemp(SavedInnerToolAdvisories);
+	ClaireonHintRateLimiter::ExchangeScopeState(MoveTemp(SavedLimiterScopeState));
+}
+
 void FClaireonBridge::SetCurrentConversationId(const FString& InConversationId)
 {
 	GCurrentConversationId = InConversationId.IsEmpty() ? FString(TEXT("default")) : InConversationId;
@@ -251,16 +376,8 @@ const FString& FClaireonBridge::GetCurrentConversationId()
 	return GCurrentConversationId;
 }
 
-// WI-16: session-conflict errors must name EVERY blocker at once so a caller
-// can close them in a single pass instead of one retry per session.
-//
-// These two helpers carry external linkage (not static, not in an anonymous
-// namespace) so ClaireonSessionConflictReportTests.cpp can extern-declare and
-// unit-test the exact wire text without going through the Python entry point.
-//
-// Contract: the FIRST line keeps the legacy single-blocker format verbatim --
-// existing retry logic parses it. When more than one session blocks, the full
-// set (id + tool + asset path each) is appended, one per line.
+// Preserve the legacy first-line format for retry parsers; append every blocker when multiple sessions conflict.
+// External linkage allows wire-format tests without the Python entry point.
 FString ClaireonBridge_FormatSessionBlockedError(
 	const FString& ToolName,
 	const FMCPSession& FirstBlocker,
@@ -353,11 +470,12 @@ PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 	}
 
 	// Deserialize arguments JSON to FJsonObject
-	TSharedPtr<FJsonObject> Arguments;
-	TSharedRef<TJsonReader<>> JsonReader = TJsonReaderFactory<>::Create(ArgsJson);
-	if (!FJsonSerializer::Deserialize(JsonReader, Arguments) || !Arguments.IsValid())
+	const auto ParsedArguments = ClaireonAstralJsonGuard::DeserializeToolArguments(ToolName, ArgsJson);
+	TSharedPtr<FJsonObject> Arguments = ParsedArguments.Object;
+	if (!Arguments.IsValid())
 	{
-		PyErr_Format(PyExc_ValueError, "Invalid JSON arguments for tool '%s': %s", ToolNameUtf8, ArgsJsonUtf8);
+		PyErr_Format(PyExc_ValueError, "Invalid JSON arguments for tool '%s': %s", ToolNameUtf8,
+			ParsedArguments.bAmbiguousKeys ? TCHAR_TO_UTF8(*ParsedArguments.Error) : ArgsJsonUtf8);
 		return nullptr;
 	}
 
@@ -427,12 +545,37 @@ PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 	IClaireonTool::FToolResult Result;
 	bool bExecuted = false;
 
-	if (!bIsSessionRecoveryTool)
+	// During async tests, allow only named observation/recovery tools through the bridge.
+	// Session mode does not identify all mutators; tests call Execute directly and bypass this gate.
+	{
+		FString ActiveRunId;
+		const bool bTestRunActive = ClaireonTestRun_IsRunActive(ActiveRunId);
+		const bool bAllowedDuringRun =
+			bIsSessionRecoveryTool
+			|| (ToolName == TEXT("test_poll"))
+			|| (ToolName == TEXT("test_run"))
+			|| (ToolName == TEXT("tool_search"));
+
+		if (bTestRunActive && !bAllowedDuringRun)
+		{
+			Result = IClaireonTool::MakeErrorResult(FString::Printf(
+				TEXT("Automation run %s is in flight, so '%s' is refused: it could move assets "
+				     "underneath a running test. Call test_poll to wait for the run, or "
+				     "test_poll(cancel=true) to stop it. Only test_run, test_poll, tool_search "
+				     "and the session-recovery tools are permitted meanwhile."),
+				*ActiveRunId, *ToolName));
+			Result.Data = MakeShared<FJsonObject>();
+			Result.Data->SetStringField(TEXT("refusal_reason"), TEXT("test_run_in_flight"));
+			Result.Data->SetStringField(TEXT("run_id"), ActiveRunId);
+			bExecuted = true;
+		}
+	}
+
+	if (!bExecuted && !bIsSessionRecoveryTool)
 	{
 		switch (SessionMode)
 		{
 		case EClaireonToolSessionMode::ReadOnly:
-			// Forward unconditionally; no FClaireonSessionManager interaction.
 			break;
 
 		case EClaireonToolSessionMode::RequiresSession:
@@ -508,57 +651,29 @@ PyObject* FClaireonBridge::MCPCallTool(PyObject* /*Self*/, PyObject* Args)
 		Result = MoveTemp(SafeResult.ToolResult);
 	}
 
+	// Capture advisories out of band even for errors and gate refusals; scripts can discard returned envelopes.
+	AppendInnerToolAdvisories(ToolName, Arguments, Result, Tool.Get());
+
 	// If error, raise Python RuntimeError with a structured envelope matching
-	// the success-path shape at lines 256-278 so callers can read
-	// e.args[1]["data"], e.args[1]["summary"], and e.args[1]["warnings"].
+	// the success-path shape so callers can read e.args[1]["data"],
+	// e.args[1]["summary"], and e.args[1]["warnings"].
 	if (Result.bIsError)
 	{
 		FString ErrorStr = Result.ErrorMessage;
 
-		// Build error envelope matching the success-path shape.
-		TSharedPtr<FJsonObject> ErrorEnvelope = MakeShared<FJsonObject>();
+		// Use the shared sanitizer and envelope builder; invalid JSON would lose the structured error.
+		// Keep Data inline for in-process callers.
+		TSharedPtr<FJsonObject> ErrorEnvelope = BuildResultEnvelope(Result);
 
-		if (Result.Data.IsValid())
-		{
-			ErrorEnvelope->SetObjectField(TEXT("data"), Result.Data);
-		}
-		else
-		{
-			ErrorEnvelope->SetObjectField(TEXT("data"), MakeShared<FJsonObject>());
-		}
-
-		FString HintShapeError;
-		if (Result.Hint.IsValid() && IClaireonTool::ValidateHint(Result.Hint, HintShapeError))
-		{
-			ErrorEnvelope->SetObjectField(TEXT("hint"), Result.Hint);
-		}
-		else if (Result.Hint.IsValid())
-		{
-			UE_LOG(LogClaireon, Warning, TEXT("[MCP Bridge] Dropping malformed hint: %s"), *HintShapeError);
-		}
-
-		ErrorEnvelope->SetStringField(TEXT("summary"), Result.Summary);
-
-		TArray<TSharedPtr<FJsonValue>> ErrorWarningsArray;
-		for (const FString& Warning : Result.Warnings)
-		{
-			ErrorWarningsArray.Add(MakeShared<FJsonValueString>(Warning));
-		}
-		ErrorEnvelope->SetArrayField(TEXT("warnings"), ErrorWarningsArray);
-
-		// Serialize envelope to JSON string (same writer policy as success path).
 		FString ErrorEnvelopeJson;
 		TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> ErrorWriter =
 			TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&ErrorEnvelopeJson);
 		FJsonSerializer::Serialize(ErrorEnvelope.ToSharedRef(), ErrorWriter);
 		ErrorWriter->Close();
 
-		// Build the message string.
 		FString MessageStr = FString::Printf(
 			TEXT("Tool '%s' failed: %s"), *ToolName, *ErrorStr);
 
-		// Parse envelope JSON to a Python dict via json.loads so the object
-		// graph matches the success path exactly.
 		PyObject* JsonModule = PyImport_ImportModule("json");
 		PyObject* EnvelopePy = nullptr;
 		if (JsonModule)

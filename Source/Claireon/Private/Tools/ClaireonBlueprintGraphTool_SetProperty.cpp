@@ -116,7 +116,7 @@ TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SetProperty::GetInputSchema()
     Builder.AddString(TEXT("asset_path"), TEXT("Blueprint asset path (alternative to session_id)."), false);
     Builder.AddString(TEXT("property_name"), TEXT("Name of the property to set."), true);
     Builder.AddString(TEXT("property_value"), TEXT("New value as a string (ImportText_Direct format; for FGameplayTagContainer pass a JSON array of tag names)."), true);
-    Builder.AddString(TEXT("component_name"), TEXT("Optional component name; defaults to the Blueprint CDO."));
+    Builder.AddString(TEXT("component_name"), TEXT("Optional component name; defaults to the Blueprint CDO. Components inherited from a parent Blueprint are written through this Blueprint's override template, as the Details panel does."));
     Builder.AddBoolean(TEXT("allow_non_editable"), TEXT("Write a property the details panel would refuse (EditConst, or no EditAnywhere/EditDefaultsOnly specifier). Same flag and same rule as uobject_set_property."));
     Builder.AddString(TEXT("response_mode"), TEXT("Response verbosity: 'full' | 'changed' | 'status' (default 'changed')."));
     return Builder.Build();
@@ -157,22 +157,20 @@ FToolResult ClaireonBlueprintGraphTool_SetProperty::Execute(const TSharedPtr<FJs
 
 	if (Params->TryGetStringField(TEXT("component_name"), ComponentName))
 	{
-		// Find component in SCS
-		USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
-		if (!IsValid(SCS))
+		// Resolve in this Blueprint's SCS or an ancestor's. For an inherited component this
+		// creates the child's InheritableComponentHandler override template, so the write
+		// lands on this Blueprint and never on the parent's template.
+		ClaireonBlueprintHelpers::FResolvedComponentTemplate Resolved;
+		FString ResolveError;
+		if (!ClaireonBlueprintHelpers::ResolveComponentTemplate(Blueprint, FName(*ComponentName), /*bForWrite=*/true, Resolved, ResolveError))
 		{
-			return MakeErrorResult(TEXT("Blueprint does not have a SimpleConstructionScript"));
+			return MakeErrorResult(ResolveError);
 		}
 
-		USCS_Node* ComponentNode = SCS->FindSCSNode(FName(*ComponentName));
-
-		if (!IsValid(ComponentNode))
-		{
-			return MakeErrorResult(FString::Printf(TEXT("Component not found: %s"), *ComponentName));
-		}
-
-		TargetObject = ComponentNode->ComponentTemplate;
-		TargetDescription = FString::Printf(TEXT("Component '%s'"), *ComponentName);
+		TargetObject = Resolved.Template;
+		TargetDescription = Resolved.bInherited
+			? FString::Printf(TEXT("Inherited component '%s' (override template)"), *ComponentName)
+			: FString::Printf(TEXT("Component '%s'"), *ComponentName);
 	}
 	else
 	{

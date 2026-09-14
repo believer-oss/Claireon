@@ -7,6 +7,7 @@
 #include "ClaireonLog.h"
 
 #include "Materials/Material.h"
+#include "MaterialDomain.h"
 #include "Materials/MaterialExpression.h"
 #include "Materials/MaterialExpressionParameter.h"
 #include "Materials/MaterialExpressionScalarParameter.h"

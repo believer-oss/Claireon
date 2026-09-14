@@ -10,6 +10,9 @@
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
 #include "Engine/MemberReference.h"
+#include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphPin.h"       // FEdGraphPinType, for the inherited-row type conversion
+#include "Misc/Guid.h"
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SCS_Node.h"
 #include "EdGraphSchema_K2.h"
@@ -126,24 +129,23 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 		? Blueprint->GeneratedClass->GetName()
 		: FString(TEXT("Unknown"));
 
-	// Track inherited counts so the summary line can report (N inherited).
 	int32 InheritedVariableCount = 0;
 	int32 InheritedFunctionCount = 0;
 	int32 InheritedComponentCount = 0;
 
-	// Build variables array
 	TArray<TSharedPtr<FJsonValue>> VariablesArray;
 	TSet<FName> EmittedVariableNames;
 	for (const FBPVariableDescription& Var : Blueprint->NewVariables)
 	{
 		TSharedPtr<FJsonObject> VarObj = MakeShared<FJsonObject>();
+
+		ClaireonBlueprintHelpers::WriteVariableCoreJson(Var, VarObj, Blueprint);
+
+		// Keep name as a compatibility alias for variable_name.
 		VarObj->SetStringField(TEXT("name"), Var.VarName.ToString());
-		VarObj->SetStringField(TEXT("variable_name"), Var.VarName.ToString());
-		VarObj->SetStringField(TEXT("type"), FormatVariableType(Var.VarType));
 		VarObj->SetStringField(TEXT("default_value"), Var.DefaultValue);
 		VarObj->SetBoolField(TEXT("is_exposed"), (Var.PropertyFlags & CPF_BlueprintVisible) != 0);
 
-		// Raw K2 pin reflection for fixture assertions.
 		VarObj->SetStringField(TEXT("pin_category"), Var.VarType.PinCategory.ToString());
 		VarObj->SetStringField(TEXT("pin_sub_category"), Var.VarType.PinSubCategory.ToString());
 		if (UObject* SubObj = Var.VarType.PinSubCategoryObject.Get(); IsValid(SubObj))
@@ -151,55 +153,8 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 			VarObj->SetStringField(TEXT("pin_sub_category_object"), SubObj->GetPathName());
 		}
 
-		// Delegate signature function (multicast + single-cast delegate variables
-		// carry their UFunction signature in PinSubCategoryMemberReference, not in
-		// PinSubCategoryObject). Emitting signature_function closes the round-trip
-		// contract with bp_add_variable on the target side; see
-		// ClaireonBlueprintHelpers::ResolveSignatureFunction.
-		if (Var.VarType.PinCategory == UEdGraphSchema_K2::PC_MCDelegate ||
-			Var.VarType.PinCategory == UEdGraphSchema_K2::PC_Delegate)
+		if (ClaireonBlueprintHelpers::IsDelegateVariableType(Var.VarType))
 		{
-			UFunction* SignatureFn = FMemberReference::ResolveSimpleMemberReference<UFunction>(
-				Var.VarType.PinSubCategoryMemberReference, Blueprint->GeneratedClass);
-
-			// BP-authored event dispatchers commonly carry an empty/self member
-			// reference (the editor's own dispatcher creation leaves it default and
-			// the compiler synthesizes '<Var>__DelegateSignature' from the signature
-			// graph). Fall back to that generated function by name on the generated
-			// and skeleton classes before giving up.
-			if (!IsValid(SignatureFn))
-			{
-				const FString GeneratedSigName = Var.VarName.ToString() + TEXT("__DelegateSignature");
-				const FName MemberSigName = Var.VarType.PinSubCategoryMemberReference.MemberName;
-				UClass* const CandidateClasses[] = { Blueprint->GeneratedClass.Get(), Blueprint->SkeletonGeneratedClass.Get() };
-				for (UClass* Candidate : CandidateClasses)
-				{
-					if (!IsValid(Candidate)) continue;
-					SignatureFn = Candidate->FindFunctionByName(FName(*GeneratedSigName));
-					if (!IsValid(SignatureFn) && !MemberSigName.IsNone())
-					{
-						SignatureFn = Candidate->FindFunctionByName(MemberSigName);
-						if (!IsValid(SignatureFn))
-						{
-							SignatureFn = Candidate->FindFunctionByName(
-								FName(*(MemberSigName.ToString() + TEXT("__DelegateSignature"))));
-						}
-					}
-					if (IsValid(SignatureFn)) break;
-				}
-			}
-
-			if (IsValid(SignatureFn))
-			{
-				VarObj->SetStringField(TEXT("signature_function"), SignatureFn->GetPathName());
-			}
-			else
-			{
-				UE_LOG(LogClaireon, Warning,
-					TEXT("blueprint_get_properties: failed to resolve signature UFunction for delegate variable '%s' on Blueprint '%s'; omitting signature_function field"),
-					*Var.VarName.ToString(), *Blueprint->GetPathName());
-			}
-
 			// Dispatcher usability flags: CallDelegate/AddDelegate nodes require these.
 			VarObj->SetBoolField(TEXT("is_blueprint_assignable"), (Var.PropertyFlags & CPF_BlueprintAssignable) != 0);
 			VarObj->SetBoolField(TEXT("is_blueprint_callable"), (Var.PropertyFlags & CPF_BlueprintCallable) != 0);
@@ -267,7 +222,24 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 
 			TSharedPtr<FJsonObject> VarObj = MakeShared<FJsonObject>();
 			VarObj->SetStringField(TEXT("name"), Property->GetName());
-			VarObj->SetStringField(TEXT("type"), Property->GetClass()->GetName());
+			VarObj->SetStringField(TEXT("variable_name"), Property->GetName());
+
+			// Use the same type vocabulary as declared members; unsupported pin types remain empty.
+			// property_class retains the reflection class name.
+			VarObj->SetStringField(TEXT("property_class"), Property->GetClass()->GetName());
+			{
+				FEdGraphPinType PinType;
+				if (GetDefault<UEdGraphSchema_K2>()->ConvertPropertyToPinType(Property, PinType))
+				{
+					ClaireonBlueprintHelpers::WriteVariableTypeJson(PinType, VarObj);
+				}
+				else
+				{
+					VarObj->SetStringField(TEXT("type"), FString());
+					VarObj->SetBoolField(TEXT("type_round_trips"), false);
+				}
+			}
+
 			VarObj->SetBoolField(TEXT("is_exposed"), true);
 			VarObj->SetBoolField(TEXT("is_inherited"), true);
 			VarObj->SetStringField(TEXT("source_class"), OwnerClass->GetName());
@@ -278,11 +250,12 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 		}
 	}
 
-	// Build functions array
+	// Enumerate all top-level graph kinds. Graphs without a function entry retain generic signature defaults.
 	TArray<TSharedPtr<FJsonValue>> FunctionsArray;
 	TSet<FName> EmittedFunctionNames;
-	for (UEdGraph* Graph : Blueprint->FunctionGraphs)
+	for (const ClaireonBlueprintHelpers::FGraphEnumerationEntry& Entry : ClaireonBlueprintHelpers::EnumerateTopLevelGraphs(Blueprint))
 	{
+		UEdGraph* Graph = Entry.Graph;
 		if (!IsValid(Graph))
 		{
 			continue;
@@ -292,7 +265,20 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 		FuncObj->SetStringField(TEXT("name"), Graph->GetName());
 		FuncObj->SetStringField(TEXT("function_name"), Graph->GetName());
 
-		// Find function entry node for signature details
+		FuncObj->SetStringField(TEXT("graph_guid"), Graph->GraphGuid.ToString(EGuidFormats::DigitsWithHyphens));
+		// Graph kind comes from collection membership.
+		FuncObj->SetStringField(TEXT("graph_kind"),
+			ClaireonBlueprintHelpers::GraphKindToWireString(Entry.GraphKind));
+		if (Entry.GraphKind == ClaireonBlueprintHelpers::EClaireonGraphKind::InterfaceImplementation
+			&& !Entry.OwningInterface.IsEmpty())
+		{
+			FuncObj->SetStringField(TEXT("owning_interface"), Entry.OwningInterface);
+		}
+		else
+		{
+			FuncObj->SetField(TEXT("owning_interface"), MakeShared<FJsonValueNull>());
+		}
+
 		UK2Node_FunctionEntry* EntryNode = nullptr;
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
@@ -313,22 +299,18 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 		{
 			bIsPure = (EntryNode->GetFunctionFlags() & FUNC_BlueprintPure) != 0;
 
-			// Collect parameters (output pins on entry node, excluding exec)
 			for (UEdGraphPin* Pin : EntryNode->Pins)
 			{
 				if (Pin->Direction == EGPD_Output && Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
 				{
 					TSharedPtr<FJsonObject> ParamObj = MakeShared<FJsonObject>();
 					ParamObj->SetStringField(TEXT("name"), Pin->GetName());
-					ParamObj->SetStringField(TEXT("type"), FormatVariableType(Pin->PinType));
+					ParamObj->SetStringField(TEXT("type"), ClaireonBlueprintHelpers::FormatVariableTypeString(Pin->PinType));
 					ParamsArray.Add(MakeShared<FJsonValueObject>(ParamObj));
 				}
 			}
 
-			// Output parameters (incl. the return value) live as INPUT pins on the
-			// K2Node_FunctionResult node -- NOT on the entry node, whose input pins
-			// are exec only. The old entry-node scan left return_type at "void" for
-			// every function, so replayed copies lost their return pins entirely.
+			// Output parameters, including the return value, are input pins on FunctionResult.
 			UK2Node_FunctionResult* ResultNode = nullptr;
 			for (UEdGraphNode* Node : Graph->Nodes)
 			{
@@ -346,7 +328,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 					{
 						TSharedPtr<FJsonObject> OutObj = MakeShared<FJsonObject>();
 						OutObj->SetStringField(TEXT("name"), Pin->GetName());
-						OutObj->SetStringField(TEXT("type"), FormatVariableType(Pin->PinType));
+						OutObj->SetStringField(TEXT("type"), ClaireonBlueprintHelpers::FormatVariableTypeString(Pin->PinType));
 						OutputsArray.Add(MakeShared<FJsonValueObject>(OutObj));
 					}
 				}
@@ -360,8 +342,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 				}
 			}
 
-			// Function-local variables: replay needs these to re-declare locals via
-			// bp_add_local_variable and to bind member_scope VariableGet/Set nodes.
+			// Locals are needed to replay declarations and bind scoped variable nodes.
 			if (EntryNode->LocalVariables.Num() > 0)
 			{
 				TArray<TSharedPtr<FJsonValue>> LocalsArray;
@@ -369,7 +350,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintProperties::Execute(const TS
 				{
 					TSharedPtr<FJsonObject> LocalObj = MakeShared<FJsonObject>();
 					LocalObj->SetStringField(TEXT("name"), Local.VarName.ToString());
-					LocalObj->SetStringField(TEXT("type"), FormatVariableType(Local.VarType));
+					LocalObj->SetStringField(TEXT("type"), ClaireonBlueprintHelpers::FormatVariableTypeString(Local.VarType));
 					LocalObj->SetStringField(TEXT("pin_category"), Local.VarType.PinCategory.ToString());
 					if (UObject* SubObj = Local.VarType.PinSubCategoryObject.Get(); IsValid(SubObj))
 					{
@@ -1110,111 +1091,3 @@ FString ClaireonTool_GetBlueprintProperties::GetBlueprintTypeName(const UBluepri
 	}
 }
 
-FString ClaireonTool_GetBlueprintProperties::FormatVariableType(const FEdGraphPinType& PinType)
-{
-	// Format one terminal (category, sub-category, sub-object) triple. Used for the
-	// pin's own type and, for maps, the value terminal -- both must round-trip
-	// through ClaireonBlueprintHelpers::ParseVariableTypeChecked.
-	auto FormatBase = [](const FName& Category, const FName& SubCategory, const UObject* SubObj) -> FString
-	{
-		if (Category == UEdGraphSchema_K2::PC_Boolean)
-		{
-			return TEXT("Boolean");
-		}
-		if (Category == UEdGraphSchema_K2::PC_Byte)
-		{
-			// A byte pin with a bound UEnum is an enum variable; emit the enum name
-			// so the round trip restores the enum binding instead of a raw byte.
-			return IsValid(SubObj) ? SubObj->GetName() : TEXT("Byte");
-		}
-		if (Category == UEdGraphSchema_K2::PC_Int)
-		{
-			return TEXT("Int");
-		}
-		if (Category == UEdGraphSchema_K2::PC_Int64)
-		{
-			return TEXT("Int64");
-		}
-		if (Category == UEdGraphSchema_K2::PC_Real)
-		{
-			if (SubCategory == UEdGraphSchema_K2::PC_Float)
-			{
-				return TEXT("Float");
-			}
-			if (SubCategory == UEdGraphSchema_K2::PC_Double)
-			{
-				return TEXT("Double");
-			}
-			return TEXT("Real");
-		}
-		if (Category == UEdGraphSchema_K2::PC_String)
-		{
-			return TEXT("String");
-		}
-		if (Category == UEdGraphSchema_K2::PC_Name)
-		{
-			return TEXT("Name");
-		}
-		if (Category == UEdGraphSchema_K2::PC_Text)
-		{
-			return TEXT("Text");
-		}
-		if (Category == UEdGraphSchema_K2::PC_Object)
-		{
-			return IsValid(SubObj) ? SubObj->GetName() : TEXT("Object");
-		}
-		if (Category == UEdGraphSchema_K2::PC_Class)
-		{
-			return IsValid(SubObj) ? FString::Printf(TEXT("Class<%s>"), *SubObj->GetName()) : TEXT("Class");
-		}
-		if (Category == UEdGraphSchema_K2::PC_SoftObject)
-		{
-			return IsValid(SubObj) ? FString::Printf(TEXT("SoftObject<%s>"), *SubObj->GetName()) : TEXT("SoftObject");
-		}
-		if (Category == UEdGraphSchema_K2::PC_SoftClass)
-		{
-			return IsValid(SubObj) ? FString::Printf(TEXT("SoftClass<%s>"), *SubObj->GetName()) : TEXT("SoftClass");
-		}
-		if (Category == UEdGraphSchema_K2::PC_Struct || Category == UEdGraphSchema_K2::PC_Enum)
-		{
-			return IsValid(SubObj) ? SubObj->GetName() : Category.ToString();
-		}
-		return Category.ToString();
-	};
-
-	FString TypeStr;
-
-	// Container type
-	if (PinType.ContainerType == EPinContainerType::Array)
-	{
-		TypeStr += TEXT("Array<");
-	}
-	else if (PinType.ContainerType == EPinContainerType::Set)
-	{
-		TypeStr += TEXT("Set<");
-	}
-	else if (PinType.ContainerType == EPinContainerType::Map)
-	{
-		TypeStr += TEXT("Map<");
-	}
-
-	TypeStr += FormatBase(PinType.PinCategory, PinType.PinSubCategory, PinType.PinSubCategoryObject.Get());
-
-	// Map value terminal -- without it the emitted type is not reconstructable
-	// and map variables fail to replay.
-	if (PinType.ContainerType == EPinContainerType::Map)
-	{
-		TypeStr += TEXT(",");
-		TypeStr += FormatBase(PinType.PinValueType.TerminalCategory,
-			PinType.PinValueType.TerminalSubCategory,
-			PinType.PinValueType.TerminalSubCategoryObject.Get());
-	}
-
-	// Close container type
-	if (PinType.ContainerType != EPinContainerType::None)
-	{
-		TypeStr += TEXT(">");
-	}
-
-	return TypeStr;
-}

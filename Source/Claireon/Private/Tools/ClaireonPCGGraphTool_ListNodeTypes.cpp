@@ -19,22 +19,15 @@ FString ClaireonPCGGraphTool_ListNodeTypes::GetDescription() const
 
 TSharedPtr<FJsonObject> ClaireonPCGGraphTool_ListNodeTypes::GetInputSchema() const
 {
+	// Reflection needs no session. Accept session_id only for caller compatibility.
 	FToolSchemaBuilder Builder;
-	Builder.AddSessionParams();
+	Builder.AddString(TEXT("session_id"), TEXT("Ignored. Accepted so session-mode callers can pass it harmlessly."));
 	Builder.AddString(TEXT("filter"), TEXT("Optional case-insensitive substring to filter class names."));
 	return Builder.Build();
 }
 
 FToolResult ClaireonPCGGraphTool_ListNodeTypes::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	FString SessionId;
-	FPCGGraphEditToolData* Data = nullptr;
-	FString Error;
-	if (!RequireSession(Arguments, SessionId, Data, Error))
-	{
-		return MakeErrorResult(Error);
-	}
-
 	FString Filter;
 	Arguments->TryGetStringField(TEXT("filter"), Filter);
 

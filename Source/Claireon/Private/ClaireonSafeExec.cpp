@@ -90,13 +90,14 @@ FString ClaireonSafeExec::ValidateArgumentsAgainstSchema(
 	const TSharedPtr<FJsonObject>& Properties = *PropertiesPtr;
 
 	TArray<FString> Unknown;
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& Supplied : Arguments->Values)
+	for (const auto& Supplied : Arguments->Values)
 	{
-		if (Properties->HasField(Supplied.Key) || IsTransportLevelArgument(Supplied.Key))
+		const FString Key(Supplied.Key);
+		if (Properties->HasField(Supplied.Key) || IsTransportLevelArgument(Key))
 		{
 			continue;
 		}
-		Unknown.Add(Supplied.Key);
+		Unknown.Add(Key);
 	}
 
 	if (Unknown.Num() == 0)

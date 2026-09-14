@@ -93,6 +93,53 @@ FToolResult ClaireonBlueprintGraphTool_AddFunction::AddFunction_Impl(
 		}
 	}
 
+	// Also check parent and interface names, which are absent from FunctionGraphs.
+	{
+		const ClaireonBlueprintHelpers::FCustomEventNameConflict Conflict =
+			ClaireonBlueprintHelpers::FindCustomEventNameConflict(Blueprint, FunctionName);
+
+		FString Remedy;
+		switch (Conflict.Kind)
+		{
+		case ClaireonBlueprintHelpers::FCustomEventNameConflict::EKind::ParentBlueprintEvent:
+			Remedy = Conflict.bNativeEvent
+				? FString::Printf(
+					TEXT("Use the add_function_override operation with function_name='%s'. A new function of this name overrides nothing and will not compile."),
+					*Conflict.ResolvedFunctionName.ToString())
+				: FString::Printf(
+					TEXT("Implement the event instead: add_node with node_type='EventOverride' and function_name='%s'. A new function of this name overrides nothing and will not compile."),
+					*Conflict.ResolvedFunctionName.ToString());
+			break;
+		case ClaireonBlueprintHelpers::FCustomEventNameConflict::EKind::ParentFunction:
+			Remedy = FString::Printf(
+				TEXT("Use the add_function_override operation to override '%s', or pick a different name. A Blueprint function may not share a name with an inherited one."),
+				*Conflict.ResolvedFunctionName.ToString());
+			break;
+		case ClaireonBlueprintHelpers::FCustomEventNameConflict::EKind::InterfaceFunction:
+			Remedy = FString::Printf(
+				TEXT("Implement the interface function rather than adding a same-named function: the interface implementation is a separate graph, and a plain new function of this name is a different function that no interface call reaches. Interface '%s', function '%s'."),
+				*Conflict.OwnerName, *Conflict.ResolvedFunctionName.ToString());
+			break;
+		case ClaireonBlueprintHelpers::FCustomEventNameConflict::EKind::ExistingOverrideEvent:
+		case ClaireonBlueprintHelpers::FCustomEventNameConflict::EKind::ExistingCustomEvent:
+			Remedy = Conflict.Remedy;
+			break;
+		default:
+			break;
+		}
+
+		if (Conflict.IsConflict() && !Remedy.IsEmpty())
+		{
+			FString Message = FString::Printf(TEXT("add_function '%s': %s %s"),
+				*FunctionName, *Conflict.Explanation, *Remedy);
+			if (!Conflict.ResolutionNote.IsEmpty())
+			{
+				Message += FString::Printf(TEXT(" (%s)"), *Conflict.ResolutionNote);
+			}
+			return MakeErrorResult(Message);
+		}
+	}
+
 	// === 3. Read optional flag inputs up-front so we can validate enum strings before mutating ===
 	bool bIsPure = false;          Params->TryGetBoolField(TEXT("is_pure"), bIsPure);
 	bool bIsConst = false;         Params->TryGetBoolField(TEXT("is_const"), bIsConst);

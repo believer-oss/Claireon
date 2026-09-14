@@ -99,12 +99,13 @@ namespace ClaireonToolSearchContractTestsNS
 			TSharedPtr<FJsonObject> OutObj = MakeShared<FJsonObject>();
 			if (Obj.IsValid())
 			{
+				// Convert engine-dependent JSON keys to FString for sorting.
 				TArray<FString> Keys;
-				Obj->Values.GetKeys(Keys);
+				for (const auto& Pair : Obj->Values) { Keys.Add(FString(*Pair.Key)); }
 				Keys.Sort();
 				for (const FString& Key : Keys)
 				{
-					OutObj->SetField(Key, Canonicalize(Obj->Values[Key]));
+					OutObj->SetField(Key, Canonicalize(Obj->GetField<EJson::None>(Key)));
 				}
 			}
 			return MakeShared<FJsonValueObject>(OutObj);

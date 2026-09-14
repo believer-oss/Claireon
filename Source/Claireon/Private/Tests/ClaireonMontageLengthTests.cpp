@@ -40,8 +40,6 @@
 #include "ClaireonTestAssetDeletion.h"
 namespace ClaireonMontageLengthTestsInternal
 {
-	// All helpers carry the MontageLenTest discriminator prefix: anonymous
-	// namespaces are not isolation under unity batching (linux-build-server-v2).
 
 	// Creates a transient skeleton with a single root bone. A bone-less
 	// skeleton makes the async anim-compression path assert on an invalid
@@ -155,22 +153,8 @@ namespace ClaireonMontageLengthTestsInternal
 		}
 	}
 
-	// True only when Object's package actually has a .uasset on disk.
-	//
-	// Everything this suite builds is created with NewObject into a package from
-	// CreatePackage() and is never saved; the montage tools it drives
-	// (ClaireonAnimTools_Montage) have no save call, and the tests never open an
-	// anim session through a saving tool. So these fixtures live in memory only.
-	// Deleting an in-memory fixture buys nothing, and every
-	// ObjectTools::ForceDeleteObjects call runs a whole-object-graph referencer
-	// scan, which is the trigger for the nondeterministic Niagara-serialization
-	// crash documented in
-	// Docs/llm/todo/claireon-untest-harness-reliability.md item 1.
-	//
-	// The check is kept rather than dropping the delete outright because
-	// /Game/__MCPTests is deliberately NOT gitignored: a stale .uasset left by an
-	// older build or a crashed run must still be cleaned so `git status
-	// --porcelain -- Content/` stays empty.
+	// Delete only on-disk fixtures. In-memory deletion triggers a global referencer
+	// scan that can crash on resident Niagara objects; stale files still need cleanup.
 	bool MontageLenTestHasFileOnDisk(const UObject* Object)
 	{
 		const UPackage* Package = IsValid(Object) ? Object->GetPackage() : nullptr;

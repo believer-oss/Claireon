@@ -38,7 +38,6 @@
 // seam is not declared in the public header).
 extern TSharedPtr<FJsonObject> ClaireonPyExec_ComputeSessionHint(
 	const FString& Logs, const FString& Code, bool bQuiet);
-extern void ClaireonPyExec_ResetHintSessionStateForTests();
 
 namespace ClOGErrPathTestsHelpers
 {
@@ -321,15 +320,10 @@ UNTEST_UNIT_OPTS(Claireon, OutputGateErrorPath, ErrorSpillManifestSurfacesInXmlE
 	co_return;
 }
 
-// ===========================================================================
-// Hint policy: the get_editor_property script nudge fires at most once per
-// editor session.
-// ===========================================================================
+// Emit a keyed get_editor_property nudge on each invocation.
 
-UNTEST_UNIT_OPTS(Claireon, OutputGateErrorPath, ScriptHintFiresAtMostOncePerSession, UNTEST_TIMEOUTMS(10000))
+UNTEST_UNIT_OPTS(Claireon, OutputGateErrorPath, ScriptHintFiresPerInvocation, UNTEST_TIMEOUTMS(10000))
 {
-	ClaireonPyExec_ResetHintSessionStateForTests();
-
 	const FString Code = TEXT(
 		"import unreal\n"
 		"a = unreal.load_asset('/Game/Foo')\n"
@@ -337,26 +331,23 @@ UNTEST_UNIT_OPTS(Claireon, OutputGateErrorPath, ScriptHintFiresAtMostOncePerSess
 
 	TSharedPtr<FJsonObject> First = ClaireonPyExec_ComputeSessionHint(
 		FString(), Code, /*bQuiet=*/false);
-	UNTEST_EXPECT_TRUE(First.IsValid());
+	UNTEST_ASSERT_TRUE(First.IsValid());
+	UNTEST_EXPECT_STREQ(*First->GetStringField(TEXT("key")),
+		TEXT("claireon.pyexec.get-editor-property-nudge"));
 
+	// The next invocation gets it again -- there is no session latch to consume.
 	TSharedPtr<FJsonObject> Second = ClaireonPyExec_ComputeSessionHint(
 		FString(), Code, /*bQuiet=*/false);
-	UNTEST_EXPECT_FALSE(Second.IsValid());
-
-	// Leave the latch clear so unrelated tests are order-independent.
-	ClaireonPyExec_ResetHintSessionStateForTests();
+	UNTEST_EXPECT_TRUE(Second.IsValid());
 	co_return;
 }
 
 // ===========================================================================
-// Hint policy: quiet=true suppresses all hints and does NOT consume the
-// once-per-session latch.
+// Hint policy: quiet=true suppresses python_execute's OWN hint channels.
 // ===========================================================================
 
-UNTEST_UNIT_OPTS(Claireon, OutputGateErrorPath, QuietSuppressesAllHintsWithoutConsumingLatch, UNTEST_TIMEOUTMS(10000))
+UNTEST_UNIT_OPTS(Claireon, OutputGateErrorPath, QuietSuppressesOwnHintChannels, UNTEST_TIMEOUTMS(10000))
 {
-	ClaireonPyExec_ResetHintSessionStateForTests();
-
 	const FString Code = TEXT(
 		"import unreal\n"
 		"a = unreal.load_asset('/Game/Foo')\n"
@@ -377,13 +368,10 @@ UNTEST_UNIT_OPTS(Claireon, OutputGateErrorPath, QuietSuppressesAllHintsWithoutCo
 		ErrorLogs, FString(), /*bQuiet=*/true);
 	UNTEST_EXPECT_FALSE(QuietError.IsValid());
 
-	// The quiet calls did not burn the session latch: a later non-quiet
-	// invocation still gets its one script hint.
+	// A later non-quiet invocation is unaffected by earlier quiet ones.
 	TSharedPtr<FJsonObject> AfterQuiet = ClaireonPyExec_ComputeSessionHint(
 		FString(), Code, /*bQuiet=*/false);
 	UNTEST_EXPECT_TRUE(AfterQuiet.IsValid());
-
-	ClaireonPyExec_ResetHintSessionStateForTests();
 	co_return;
 }
 

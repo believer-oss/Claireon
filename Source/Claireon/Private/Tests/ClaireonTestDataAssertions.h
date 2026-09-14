@@ -2,66 +2,9 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
-// ============================================================================
-// READ THIS BEFORE ASSERTING ANYTHING ABOUT AN FToolResult.
-//
-// THE CONVENTION
-// --------------
-//   * Assert STRUCTURED FACTS against `Result.Data`, unconditionally.
-//     Row counts, ids, node guids, booleans, arrays, nested objects: all of it
-//     lives in `Data`. Use the UNTEST_CLAIREON_DATA_* macros below.
-//   * Reserve `Result.Summary` / `Result.GetContentAsString()` for asserting
-//     HUMAN-READABLE TEXT SHAPE -- "the error names the parameter", "the CSV
-//     header lists every column", "the warning names the remedy".
-//
-// WHY THIS IS A TRAP (the single ambiguity that killed ~170 assertions)
-// --------------------------------------------------------------------
-// `GetContentAsString()` is exactly `bIsError ? ErrorMessage : Summary`. It
-// NEVER reads `Data`. And the tool families disagree about what goes in
-// `Summary`, with no naming signal to tell them apart:
-//
-//   * WHOLE PAYLOAD IN Summary (Data is often null):
-//       - `BuildStateResponse` on the blueprint / widget / anim edit bases
-//       - the log tools, niagara-compile, datatable export_json / export_csv
-//     For these, `GetContentAsString().Contains(...)` genuinely works, which is
-//     what makes the wrong habit look correct.
-//
-//   * ONE-LINE COUNT IN Summary, EVERYTHING IN Data:
-//       - the inspect tools, and most decomposed per-operation tools
-//     For these, `GetContentAsString().Contains("some_id")` can NEVER match, so
-//     the assertion is vacuous -- it passes on an empty result, and it passes on
-//     a result that lost the field entirely.
-//
-// So: `Data` is the contract. `Summary` is prose. Never probe `Summary` for a
-// value you could read out of `Data`.
-//
-// HOW TO USE THE MACROS
-// ---------------------
-//   FString GraphName;
-//   UNTEST_CLAIREON_DATA_STR(R, "graph_name", GraphName);   // 1 line
-//
-// versus the shape it replaces, which is longer AND reports nothing useful when
-// it trips ("Assert failed: R.Data->TryGetStringField(...)false == true"):
-//
-//   FString GraphName;
-//   UNTEST_ASSERT_TRUE(R.Data.IsValid());
-//   UNTEST_ASSERT_TRUE(R.Data->TryGetStringField(TEXT("graph_name"), GraphName));
-//
-// On failure the macros record an error that names the field, says which of the
-// three things went wrong -- the tool errored / there is no `Data` at all /
-// the key is absent or the wrong JSON type -- and dumps the keys `Data`
-// actually carried. "You asserted against Summary but the payload is in Data"
-// is then readable straight off the failure line.
-//
-// CONSTRAINTS (both are load-bearing, do not work around them)
-// ------------------------------------------------------------
-//   * These macros expand to `co_return` (they are ASSERT-flavoured: the test
-//     stops on the first miss, because the next line would read an
-//     uninitialised out-param). Like every UNTEST_* macro they therefore CANNOT
-//     appear inside a lambda body. Assert at test scope.
-//   * `Field` must be a bare string literal, not an FString: it is passed
-//     through `TEXT()`.
-// ============================================================================
+// Read structured facts from Result.Data; GetContentAsString returns only error or summary text.
+// These assertion macros co_return on failure: use them at test scope, not inside lambdas.
+// Field arguments must be bare string literals because the macros wrap them in TEXT().
 
 #include "CoreMinimal.h"
 #include "Dom/JsonObject.h"
@@ -69,8 +12,6 @@
 #include "Serialization/JsonTypes.h"
 #include "Tools/IClaireonTool.h"
 
-// File-local named namespace: anonymous namespaces from separate .cpp files get
-// merged into one TU under linux-build-server-v2 unity batching and collide.
 namespace ClaireonTestDataAssertions
 {
 	inline const TCHAR* JsonTypeName(EJson Type)
@@ -101,7 +42,7 @@ namespace ClaireonTestDataAssertions
 		}
 		TArray<FString> Parts;
 		Parts.Reserve(Data->Values.Num());
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Data->Values)
+		for (const auto& Pair : Data->Values)
 		{
 			const TCHAR* TypeName = Pair.Value.IsValid()
 				? JsonTypeName(Pair.Value->Type)

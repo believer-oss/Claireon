@@ -26,6 +26,27 @@ namespace ClaireonAssetUtils
 	CLAIREON_API UObject* LoadAssetForEditing(const FString& AssetPath, FString& OutError);
 
 	/**
+	 * Resolve the on-disk filename a package should be saved to, choosing the extension from
+	 * the package rather than assuming.
+	 *
+	 * Every Claireon save path goes through this, so all of them inherit the map-awareness. A
+	 * package records no extension internally and name-based resolution searches .uasset before
+	 * .umap, so hardcoding the asset extension silently writes a level to a shadow .uasset that
+	 * then wins every later lookup -- see the implementation for the full mechanism.
+	 *
+	 * Refuses, rather than proceeding, when a file resolved by package name carries the wrong
+	 * extension for what the package is: that condition means a shadow already exists, and
+	 * saving into it deepens a corruption whose symptoms all read as success.
+	 *
+	 * Exposed for the specs, which need to exercise both branches without touching disk.
+	 *
+	 * @param Package     - The package about to be saved
+	 * @param OutFileName - Populated with the target filename on success; cleared on refusal
+	 * @param OutError    - Populated on failure
+	 */
+	CLAIREON_API bool ResolvePackageSaveFilename(const UPackage* Package, FString& OutFileName, FString& OutError);
+
+	/**
 	 * Find assets of a given class via AssetRegistry.
 	 * @param Class - The UClass to search for
 	 * @param NameFilter - Optional substring filter on asset name
@@ -81,35 +102,15 @@ namespace ClaireonAssetUtils
 	CLAIREON_API void RefreshAssetEditorIfOpen(UObject* Asset);
 
 	/**
-	 * Open the asset editor for the given asset if running in the editor and not in a commandlet.
-	 * Unconditionally calls OpenEditorForAsset -- call this when a session is first opened so the
-	 * human watching the editor sees the asset surface. Guards against null Asset and null GEditor.
-	 * @param Asset - The asset to open (e.g. the loaded UBlueprint, UBehaviorTree, etc.)
-	 */
-	CLAIREON_API void OpenAssetEditorIfHeadless(UObject* Asset);
-
-	/**
-	 * Emit a session-use hint when the caller has made too many consecutive asset_path calls
-	 * without reusing a session_id.
+	 * Emit a structured session-use hint at consecutive asset_path calls 6, 11, 16, and so on.
+	 * Otherwise reset OutHint and leave ResponseData unchanged. Do not append hints to JSON summaries.
 	 *
-	 * Fires when ConsecutiveAssetPathCalls > 5 AND ConsecutiveAssetPathCalls % 5 == 1
-	 * (first hint at call 6, then 11, 16, ...). On fire: populates ResponseData["session_hint"]
-	 * with a prose nudge and builds OutHint. On no-fire: OutHint is reset and ResponseData is
-	 * not modified.
-	 *
-	 * The hint travels on FToolResult::Hint, NOT appended to Summary. Every caller of this
-	 * helper is a BuildStateResponse whose Summary *is* serialized JSON, so concatenating a
-	 * "\n\n[hint] ..." suffix made the content channel unparseable. That failed the worst
-	 * possible way: the hint only fires from the sixth consecutive call, so the corruption
-	 * never showed up in testing.
-	 *
-	 * @param ResponseData              - JSON response object; receives "session_hint" field on fire
-	 * @param ConsecutiveAssetPathCalls - Counter tracking how many times asset_path was used without session_id
-	 * @param AssetPath                 - Human-readable asset path shown in the hint text
-	 * @param SessionId                 - Session ID shown in the hint text
-	 * @param ToolName                  - Emitting tool's registered name; becomes the hint's required 'tool' field
-	 * @param OutHint                   - Receives a hint object on fire, reset to null otherwise.
-	 *                                    Assign straight to FToolResult::Hint; the bridge skips a null hint.
+	 * @param ResponseData Receives session_hint when emitted
+	 * @param ConsecutiveAssetPathCalls Calls using asset_path without session_id
+	 * @param AssetPath Asset path shown in the hint
+	 * @param SessionId Session ID shown in the hint
+	 * @param ToolName Registered tool name for the hint
+	 * @param OutHint Receives the hint, or null when none is emitted
 	 */
 	CLAIREON_API void EmitSessionHintIfNeeded(
 		TSharedPtr<FJsonObject>& ResponseData,

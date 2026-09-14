@@ -181,7 +181,8 @@ public:
 	/**
 	 * POST /editor/ready to signal the proxy that the tool catalog is
 	 * populated and the Python bridge is initialized. Called once by the
-	 * module after FClaireonBridge::EnsureRegistered() completes.
+	 * module after FClaireonBridge::EnsureRegistered() completes; also
+	 * called by RegisterOnce to re-announce readiness after re-registration.
 	 *
 	 * Without this signal the proxy shows "build and launch editor first"
 	 * for the ~60s startup window where the editor is registered but Python
@@ -391,6 +392,8 @@ private:
 	 * RegisterAndReturnAccepted remains as a bool-returning helper for the
 	 * existing smoke tests; it forwards to RegisterOnce and returns true iff
 	 * Accepted.
+	 *
+	 * Re-announce readiness after an accepted re-registration if this process was ready.
 	 */
 	ERegisterResult RegisterOnce();
 
@@ -430,6 +433,12 @@ private:
 	int32 CachedEditorMCPPort = 0;
 	FString CachedEditorMCPToken;
 	FString CachedBuildId;
+
+	/**
+	 * Last successfully reported tool count; zero until ready. Reused after proxy
+	 * re-registration because Python initialization fires only once per process.
+	 */
+	int32 LastReportedToolCount = 0;
 
 	/**
 	 * This editor process's start_time_ns (D8 newest-wins discriminator).

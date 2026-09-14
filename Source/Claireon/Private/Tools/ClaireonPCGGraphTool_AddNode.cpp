@@ -61,6 +61,8 @@ FToolResult ClaireonPCGGraphTool_AddNode::Execute(const TSharedPtr<FJsonObject>&
 		return MakeErrorResult(FString::Printf(TEXT("Failed to add node of type: %s"), *SettingsClassName));
 	}
 
+	ClaireonPCGGraphHelpers::AssignDefaultNodePosition(Data->PCGGraph.Get(), NewNode);
+
 	// Set optional title
 	FString NodeTitle;
 	if (Arguments->TryGetStringField(TEXT("node_title"), NodeTitle) && !NodeTitle.IsEmpty())
@@ -68,7 +70,7 @@ FToolResult ClaireonPCGGraphTool_AddNode::Execute(const TSharedPtr<FJsonObject>&
 		NewNode->NodeTitle = *NodeTitle;
 	}
 
-	ClaireonPCGGraphHelpers::NotifyGraphChanged(Data->PCGGraph.Get());
+	ClaireonPCGGraphHelpers::NotifyGraphChanged(Data->PCGGraph.Get(), ClaireonPCGGraphHelpers::EPCGGraphEditOp::AddNode);
 
 	int32 NewIndex = Data->PCGGraph->GetNodes().IndexOfByKey(NewNode);
 	Data->LastOperationStatus = FString::Printf(TEXT("Added node [%d] %s (%s)"),

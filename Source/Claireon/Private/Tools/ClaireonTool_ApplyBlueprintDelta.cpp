@@ -184,15 +184,13 @@ TSharedPtr<FJsonObject> ClaireonTool_ApplyBlueprintDelta::GetInputSchema() const
 	S.AddArray(TEXT("remove_nodes"), TEXT("Array of node GUIDs (full, or a unique prefix of >= 8 hex chars) or titles to remove"));
 	S.AddArray(TEXT("nodes"), TEXT("Array of nodes to create. Each: {id (local ref), node_type, position?: {x,y}, ...typed params (function_name, struct_type, ...), node_properties?: {}, num_extra_pins?: int}"));
 	S.AddArray(TEXT("pin_defaults"), TEXT("Array of pin default values to write after nodes are created and before connections are made. Each: {node (local id/GUID/unique GUID prefix of >= 8 hex chars/title), pin, value}. Input pins only, and the pin must be unconnected. Any failing entry rolls back the WHOLE batch, like every other op here."));
+	S.AddBoolean(TEXT("prefer_local_gets"), TEXT("Default true. When a connection sources a function parameter from the entry node, or a variable read more than 512 units from the consumer, emit a get next to the consumer instead of a long wire. Set false for literal wiring, e.g. when deliberately sharing one source pin."));
 	S.AddArray(TEXT("connections"), TEXT("Array of connections. Each: {from (local id/GUID/unique GUID prefix of >= 8 hex chars/title), from_pin, to (same forms), to_pin}. Ambiguous GUID prefixes error naming every candidate. On abort the whole batch rolls back and the error's data carries a structured report: node_specs (per-spec status), id_map (rolled-back local-id -> GUID), and failing_connection_index. Deprecated dict form {connections:[...]} is accepted with a warning."));
 	return S.Build();
 }
 
 FToolResult ClaireonTool_ApplyBlueprintDelta::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	// Shared session prologue: session_id lookup, asset_path auto-open, nested-params
-	// unwrap, response_mode/suppress_output. Same entry shape as every sibling bp_*
-	// tool, and what makes this tool's long-standing asset_path claim true.
 	TSharedPtr<FJsonObject> Params;
 	FString SessionId;
 	FBlueprintEditToolData* Data = nullptr;
@@ -640,9 +638,16 @@ FToolResult ClaireonTool_ApplyBlueprintDelta::Execute(const TSharedPtr<FJsonObje
 	}
 	if (ConnArray)
 	{
-		// Index-based so every abort path can record which connections[] entry
-		// failed (indices count skipped entries too -- they match the caller's
-		// array positions).
+		// Connection indices include skipped entries so errors match caller array positions.
+		bool bPreferLocalGets = true;
+		if (Params.IsValid())
+		{
+			Params->TryGetBoolField(TEXT("prefer_local_gets"), bPreferLocalGets);
+		}
+
+		// Stagger several gets feeding one consumer so they do not stack.
+		TMap<UEdGraphNode*, int32> LocalGetStack;
+
 		for (int32 ConnIdx = 0; ConnIdx < ConnArray->Num(); ++ConnIdx)
 		{
 			const TSharedPtr<FJsonValue>& Entry = (*ConnArray)[ConnIdx];
@@ -686,6 +691,45 @@ FToolResult ClaireonTool_ApplyBlueprintDelta::Execute(const TSharedPtr<FJsonObje
 				return CancelAndError(FString::Printf(TEXT("connections[%d] %s.%s: %s"), ConnIdx, *ToRef, *ToPinName, *FindErr));
 			}
 
+			// Substitute only eligible parameter and variable reads; computed values must retain demand-time evaluation.
+			const bool bParameterSource = ClaireonBlueprintHelpers::IsFunctionParameterSource(FromPin);
+			const bool bDistantGetSource = !bParameterSource
+				&& ClaireonBlueprintHelpers::IsDistantVariableGetSource(
+					FromPin, ToPin, ClaireonBlueprintHelpers::LocalGetDistanceUnits);
+
+			// Journal a synthesized get only after its connection succeeds.
+			UEdGraphNode* SynthesizedGetNode = nullptr;
+
+			if (bPreferLocalGets && (bParameterSource || bDistantGetSource))
+			{
+				const int32 StackIndex = LocalGetStack.FindOrAdd(ToPin->GetOwningNode(), 0)++;
+				UEdGraphPin* LocalGet = bParameterSource
+					? ClaireonBlueprintHelpers::EmitLocalParameterGet(Graph, FromPin, ToPin, StackIndex)
+					: ClaireonBlueprintHelpers::EmitAdjacentVariableGet(Graph, FromPin, ToPin, StackIndex);
+				if (LocalGet)
+				{
+					if (Schema->CanCreateConnection(LocalGet, ToPin).Response != CONNECT_RESPONSE_DISALLOW)
+					{
+						SynthesizedGetNode = LocalGet->GetOwningNode();
+						FromPin = LocalGet;
+
+						Warnings.Add(FString::Printf(
+							TEXT("connections[%d]: sourced %s.%s from a new get placed next to '%s' (prefer_local_gets), node_guid=%s. Set prefer_local_gets=false for a literal wire."),
+							ConnIdx, *FromRef, *FromPinName,
+							*ToNode->GetNodeTitle(ENodeTitleType::ListView).ToString(),
+							IsValid(SynthesizedGetNode)
+								? *SynthesizedGetNode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens)
+								: TEXT("<unknown>")));
+					}
+					else
+					{
+						// Substitution would not connect; keep the literal wire rather
+						// than silently dropping the connection.
+						LocalGet->GetOwningNode()->DestroyNode();
+					}
+				}
+			}
+
 			const FPinConnectionResponse Resp = Schema->CanCreateConnection(FromPin, ToPin);
 			if (Resp.Response == CONNECT_RESPONSE_DISALLOW)
 			{
@@ -706,13 +750,16 @@ FToolResult ClaireonTool_ApplyBlueprintDelta::Execute(const TSharedPtr<FJsonObje
 
 			Data->LastOperationAffectedNodes.Add(FromNode->NodeGuid);
 			Data->LastOperationAffectedNodes.Add(ToNode->NodeGuid);
+
+			// Include synthesized nodes in the affected-node journal.
+			if (IsValid(SynthesizedGetNode))
+			{
+				Data->LastOperationAffectedNodes.Add(SynthesizedGetNode->NodeGuid);
+			}
 			++ConnectionsMade;
 		}
 	}
 
-	// ========================================================================
-	// Phase 5: Finalize
-	// ========================================================================
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 	Graph->NotifyGraphChanged();
 

@@ -26,11 +26,7 @@ void AppendTrace(FString& Trace, const TCHAR* Step)
 
 namespace ClaireonPathResolverInternal
 {
-	// Named file-local namespace (NOT a raw anonymous namespace): under
-	// linux-build-server-v2 unity batching, anonymous namespaces from separate
-	// .cpp merge into one TU and collide -- a named namespace is the isolation.
-	// Splits an object path into its package-prefix form (everything before the
-	// first '.' after the last '/').
+	// Return the package prefix before the first '.' after the last '/'.
 	FString ClaireonPathResolver_PackagePartOf(const FString& ObjectPath)
 	{
 		int32 DotIndex = INDEX_NONE;

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonStateTreeTool_Open.h"
+#include "ClaireonScopedAssetEditor.h"
 #include "Tools/ClaireonStateTreeEditInternal.h"
 #include "Tools/ClaireonStateTreeHelpers.h"
 #include "Tools/FToolSchemaBuilder.h"
@@ -100,7 +101,7 @@ FToolResult ClaireonStateTreeTool_Open::Execute(const TSharedPtr<FJsonObject>& A
 
 	ToolData.Add(SessionId, MoveTemp(NewData));
 
-	ClaireonAssetUtils::OpenAssetEditorIfHeadless(StateTree);
+	ClaireonAssetEditorWindow::OpenForSession(StateTree);
 
 	// Return full tree structure + session ID
 	FString StructureText = ClaireonStateTreeHelpers::FormatStateTreeStructure(EditorData);

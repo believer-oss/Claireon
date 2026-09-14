@@ -43,6 +43,12 @@ public:
 	static FString FormatSequenceStructure(const ULevelSequence* Sequence, bool bIncludeKeyframes, bool bIncludeSections);
 	static UClass* ResolveTrackClass(const FString& TypeName);
 	static FString FormatBinding(const FMovieSceneBinding& Binding, const UMovieScene* MovieScene);
+	/**
+	 * The user-facing name of a binding. FMovieSceneBinding::GetName() is deprecated from
+	 * UE 5.7 and returns an empty string there; the name lives on the possessable or
+	 * spawnable that owns the GUID on every engine version.
+	 */
+	static FString GetBindingName(const UMovieScene* MovieScene, const FGuid& BindingGuid);
 	static FString FormatTrack(const UMovieSceneTrack* Track, bool bIncludeSections);
 	static FString FormatSection(const UMovieSceneSection* Section);
 	static FString FormatKeyframe(const FKeyHandle& Handle, const FMovieSceneChannelProxy& Channels);

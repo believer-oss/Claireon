@@ -316,7 +316,7 @@ UNTEST_UNIT_OPTS(Claireon, AnthropicWire, HintFieldPresentOnSuccessWhenPopulated
 	TSharedPtr<FJsonObject> HintObj = MakeShared<FJsonObject>();
 	HintObj->SetStringField(TEXT("tool"), TEXT("tool_search"));
 	HintObj->SetStringField(TEXT("reason"), TEXT("unknown tool 'bp_open'"));
-	Result.Hint = HintObj;
+	Result.AddHint(HintObj);
 
 	TSharedPtr<FJsonObject> Envelope = FClaireonBridge::BuildResultEnvelope(Result);
 
@@ -359,7 +359,7 @@ UNTEST_UNIT_OPTS(Claireon, AnthropicWire, HintFieldPresentOnErrorWhenPopulated, 
 	TSharedPtr<FJsonObject> HintObj = MakeShared<FJsonObject>();
 	HintObj->SetStringField(TEXT("tool"), TEXT("tool_search"));
 	HintObj->SetStringField(TEXT("reason"), TEXT("signature mismatch on bp_compile"));
-	Result.Hint = HintObj;
+	Result.AddHint(HintObj);
 
 	TSharedPtr<FJsonObject> Envelope = FClaireonBridge::BuildResultEnvelope(Result);
 
@@ -400,7 +400,7 @@ UNTEST_UNIT_OPTS(Claireon, AnthropicWire, HintRenderedInExecuteResultXml, UNTEST
 	TSharedPtr<FJsonObject> HintObj = MakeShared<FJsonObject>();
 	HintObj->SetStringField(TEXT("tool"), TEXT("python_execute"));
 	HintObj->SetStringField(TEXT("reason"), TEXT("script uses get_editor_property; try claireon.uobject_inspect"));
-	Result.Hint = HintObj;
+	Result.AddHint(HintObj);
 
 	const FString Xml = FClaireonXmlFormatter::FormatExecuteResult(Result);
 
@@ -423,7 +423,7 @@ UNTEST_UNIT_OPTS(Claireon, AnthropicWire, HintRenderedInErrorXmlAndAbsentWhenNul
 	TSharedPtr<FJsonObject> HintObj = MakeShared<FJsonObject>();
 	HintObj->SetStringField(TEXT("tool"), TEXT("tool_search"));
 	HintObj->SetStringField(TEXT("reason"), TEXT("unknown tool 'bp_opn'"));
-	ErrResult.Hint = HintObj;
+	ErrResult.AddHint(HintObj);
 
 	const FString ErrXml = FClaireonXmlFormatter::FormatExecuteResult(ErrResult);
 	UNTEST_EXPECT_TRUE(ErrXml.Contains(TEXT("status=\"error\"")));

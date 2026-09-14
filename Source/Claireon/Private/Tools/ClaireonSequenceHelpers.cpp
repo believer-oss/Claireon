@@ -176,11 +176,29 @@ double FClaireonSequenceHelpers::FrameToSeconds(const ULevelSequence* Sequence, 
 // Formatting helpers
 // ---------------------------------------------------------------------------
 
+FString FClaireonSequenceHelpers::GetBindingName(const UMovieScene* MovieScene, const FGuid& BindingGuid)
+{
+	if (!IsValid(MovieScene))
+	{
+		return FString();
+	}
+	UMovieScene* MutableMS = const_cast<UMovieScene*>(MovieScene);
+	if (const FMovieScenePossessable* Poss = MutableMS->FindPossessable(BindingGuid))
+	{
+		return Poss->GetName();
+	}
+	if (const FMovieSceneSpawnable* Spawn = MutableMS->FindSpawnable(BindingGuid))
+	{
+		return Spawn->GetName();
+	}
+	return FString();
+}
+
 FString FClaireonSequenceHelpers::FormatBinding(const FMovieSceneBinding& Binding, const UMovieScene* MovieScene)
 {
 	FString Output;
 	const FGuid& Guid = Binding.GetObjectGuid();
-	const FString& Name = Binding.GetName();
+	const FString Name = GetBindingName(MovieScene, Guid);
 
 	const TCHAR* Kind = TEXT("Binding");
 	FString ClassName;

@@ -7,6 +7,8 @@
 #include "EdGraph/EdGraphPin.h"
 #include "Dom/JsonObject.h"
 #include "Engine/Blueprint.h" // EBlueprintType, for CreateBlueprint's kind parameter
+#include "Tools/ClaireonBPSnapshot.h" // FClaireonBPSnapshot, the per-session pre-op snapshot
+#include "ClaireonScopedAssetEditor.h" // the family-agnostic opener FScopedBlueprintEditor is built on
 
 class UBlueprint;
 class UClass;
@@ -15,51 +17,121 @@ class UEdGraphNode;
 class UPackage;
 class SGraphEditor;
 class FBlueprintEditor;
+class SDockTab;
 
-/**
- * Scoped helper that opens a Blueprint editor temporarily for operations requiring graph editors.
- * Automatically closes the editor on destruction if it wasn't already open.
- */
-class FScopedBlueprintEditor
+/** Blueprint-specific editor access, including graph widgets. */
+class CLAIREON_API FScopedBlueprintEditor : public FClaireonScopedAssetEditor
 {
 public:
 	/**
-	 * Opens a Blueprint editor for the specified Blueprint.
+	 * Open a Blueprint editor.
 	 *
 	 * @param InBlueprint The Blueprint to open
-	 * @param bInSilent If true, opens editor without UI (default: true)
-	 * @param bInCloseOnDestroy If true, closes editor on destruction (default: true)
+	 * @param bInSilent Ignored; retained for compatibility
+	 * @param bInCloseOnDestroy Close on destruction only if this object opened the editor
 	 */
 	explicit FScopedBlueprintEditor(UBlueprint* InBlueprint, bool bInSilent = true, bool bInCloseOnDestroy = true);
 
-	/** Destructor - closes the editor if we opened it */
-	~FScopedBlueprintEditor();
-
 	/**
-	 * Get the graph editor for a specific graph.
+	 * Get the graph editor, creating its document tab if absent.
 	 *
 	 * @param Graph The graph to get the editor for
-	 * @return Shared pointer to the graph editor, or nullptr if not available
+	 * @return The graph editor, or nullptr if unavailable
 	 */
 	TSharedPtr<SGraphEditor> GetGraphEditor(UEdGraph* Graph);
 
-	/** Check if the Blueprint editor was successfully opened */
-	bool IsValid() const { return BlueprintEditor.IsValid(); }
+	/** Whether the Blueprint editor is available. */
+	bool IsValid() const { return GetBlueprintEditor().IsValid(); }
 
 	/** Get the underlying Blueprint editor */
-	TSharedPtr<FBlueprintEditor> GetBlueprintEditor() const { return BlueprintEditor; }
-
-private:
-	TWeakObjectPtr<UBlueprint> Blueprint;
-	TSharedPtr<FBlueprintEditor> BlueprintEditor;
-	bool bWasAlreadyOpen;
-	bool bCloseOnDestroy;
+	TSharedPtr<FBlueprintEditor> GetBlueprintEditor() const;
 };
 
+/** Why a recorded editor binding no longer resolves. */
+enum class EClaireonEditorBindingStatus : uint8
+{
+	Valid,
+	NotBound,
+	BoundEditorClosed,
+	GraphTabClosed,
+	GraphRemoved,
+};
+
+CLAIREON_API const TCHAR* ClaireonEditorBindingStatusToWireString(EClaireonEditorBindingStatus Status);
+
 /**
- * Identifies a single cursor history entry: the graph name the cursor was on
- * and the node GUID within that graph.
+ * Weak binding to one editor instance, revalidated on every call.
+ * A dead instance requires a new session; it is never silently rebound.
+ * Switching graphs may open a tab in the bound instance, but a closed tab for the
+ * current graph is reported as graph_tab_closed rather than reopened.
  */
+struct CLAIREON_API FClaireonBlueprintEditorBinding
+{
+	TWeakObjectPtr<UBlueprint>   Blueprint;
+	TWeakObjectPtr<UEdGraph>     BoundGraph;
+	TWeakPtr<FBlueprintEditor>   Editor;
+	TWeakPtr<SGraphEditor>       GraphEditor;
+
+	/** Opaque identity of the bound instance. Invalid means this session bound to nothing. */
+	FGuid InstanceId;
+
+	bool IsBound() const { return InstanceId.IsValid(); }
+	void Clear();
+
+	/** Record the instance and widget a session open produced. */
+	void BindTo(UBlueprint* InBlueprint, UEdGraph* InGraph,
+		TSharedPtr<FBlueprintEditor> InEditor, TSharedPtr<SGraphEditor> InGraphEditor);
+
+	/** Resolve through the bound instance. Returns null on failure and always sets OutStatus. */
+	TSharedPtr<SGraphEditor> ResolveGraphEditor(UEdGraph* SessionGraph, EClaireonEditorBindingStatus& OutStatus);
+
+	/** Revalidation alone, for callers that only need the status. */
+	EClaireonEditorBindingStatus Revalidate(UEdGraph* SessionGraph) const;
+
+#if WITH_CLAIREON_TESTS
+	/** Bind to a registered test candidate; normal editor opening reuses the existing instance. */
+	void BindToSeamInstance(UBlueprint* InBlueprint, UEdGraph* InGraph, const FGuid& InInstanceId);
+#endif
+
+	/** True when InstanceId names a seam candidate rather than a live toolkit. */
+	bool bSeamBound = false;
+};
+
+#if WITH_CLAIREON_TESTS
+/** Test candidates for editor and widget identity binding. */
+namespace ClaireonBlueprintEditorBindingSeam
+{
+	/** Register a candidate instance hosting Widget for Graph. Returns its instance id. */
+	CLAIREON_API FGuid RegisterInstance(UEdGraph* Graph, TSharedPtr<SGraphEditor> Widget);
+
+	/** Drop the whole candidate -- the editor instance closed. */
+	CLAIREON_API void CloseInstance(const FGuid& InstanceId);
+
+	/** Drop only the widget -- the graph's document tab closed, the instance lives. */
+	CLAIREON_API void CloseGraphTab(const FGuid& InstanceId);
+
+	/** The widget a candidate hosts, or null when the id is unknown or its tab is closed. */
+	CLAIREON_API TSharedPtr<SGraphEditor> FindWidget(const FGuid& InstanceId);
+
+	/** True while the id names a registered candidate, tab open or not. */
+	CLAIREON_API bool IsInstanceRegistered(const FGuid& InstanceId);
+
+	/** Forget every candidate. */
+	CLAIREON_API void Reset();
+
+	/** Reset seam candidates on scope exit. */
+	struct CLAIREON_API FScopedSeam
+	{
+		FScopedSeam() = default;
+		~FScopedSeam();
+
+		FScopedSeam(const FScopedSeam&) = delete;
+		FScopedSeam& operator=(const FScopedSeam&) = delete;
+	};
+}
+#endif // WITH_CLAIREON_TESTS
+
+/** Graph and node identity for a cursor history entry. */
 struct FGraphCursorHistoryEntry
 {
 	FString GraphName;
@@ -161,30 +233,27 @@ struct FBlueprintEditToolData
 	/** Output verbosity mode for BuildStateResponse. "full", "changed" (default), or "status". */
 	FString ResponseMode = TEXT("changed");
 
-	// Nodes affected by the last mutation op — used by response_mode="changed"
-	// GUIDs of nodes whose pin connections changed in the last operation.
-	// Used by response_mode="changed" to compute the pin-level diff.
-	// Cleared at the start of each operation, then populated by mutation handlers.
+	// Nodes affected by the last mutation, used by response_mode="changed".
+	// Cleared at the start of each operation.
 	TSet<FGuid> LastOperationAffectedNodes;
 
-	// Pre-operation pin connections snapshot — [NodeGuid -> [PinName -> [connected node titles]]]
-	// Snapshotted before each mutation op; consumed by BuildStateResponse in "changed" mode.
-	TMap<FGuid, TMap<FName, TArray<FString>>> PreOpPinConnections;
+	// Pre-mutation snapshot for BuildStateResponse in "changed" mode.
+	FClaireonBPSnapshot PreOpSnapshot;
 
-	// GUID corrections from the current operation (stale GUID → current GUID).
-	// Populated by FindNodeByGuid's A-field fallback when a blueprint was recompiled
-	// between get and edit calls.  Surfaced in BuildStateResponse so the MCP client
-	// can update its references.
+	// Stale-to-current GUID corrections from FindNodeByGuid, returned so clients can update references.
 	TMap<FGuid, FGuid> GuidCorrections;
 
-	// Consecutive calls that resolved the session via asset_path (auto-open) rather
-	// than an explicit session_id. Resets to 0 whenever the caller passes session_id.
-	// BuildStateResponse emits a Data.session_hint nudge when this passes 5 (first
-	// at call 6, then every 5 past that: 11, 16, ...) to steer agents toward
-	// explicit open/close discipline.
+	// Consecutive asset_path calls; explicit session_id resets the count.
+	// Session hints fire at calls 6, 11, 16, and so on.
 	int32 ConsecutiveAssetPathCalls = 0;
 
-	/** Check if the session is still valid (Blueprint and Graph are still loaded) */
+	// Editor-opening outcome recorded at session creation and returned with every response.
+	FClaireonEditorOpenOutcome EditorWindow;
+
+	// The one editor instance this session drives. Unbound in a commandlet, where there is
+	// no window; every consumer revalidates it rather than trusting it.
+	FClaireonBlueprintEditorBinding EditorBinding;
+
 	bool IsValid() const
 	{
 		return Blueprint.IsValid() && Graph.IsValid();
@@ -194,6 +263,9 @@ struct FBlueprintEditToolData
 /**
  * Helper functions for Blueprint graph manipulation
  */
+class USCS_Node;
+class UActorComponent;
+
 namespace ClaireonBlueprintHelpers
 {
 	/**
@@ -422,14 +494,48 @@ namespace ClaireonBlueprintHelpers
 		const FString& DisambiguationParam = TEXT("node_guid"));
 
 	/**
-	 * Find a graph by name in a Blueprint.
-	 * Searches EventGraph, FunctionGraphs, and UbergraphPages.
+	 * Find a graph by name, including nested graphs through GetAllGraphs.
 	 *
 	 * @param Blueprint The Blueprint to search
-	 * @param GraphName The name of the graph to find
+	 * @param GraphName The graph name
 	 * @return The graph, or nullptr if not found
 	 */
 	UEdGraph* FindGraphByName(UBlueprint* Blueprint, const FString& GraphName);
+
+	/** Top-level graph kinds. */
+	enum class EClaireonGraphKind : uint8
+	{
+		Ubergraph,
+		Function,
+		Macro,
+		DelegateSignature,
+		InterfaceImplementation,
+		Extension,
+	};
+
+	/** The wire spelling: "ubergraph" | "function" | "macro" | "delegate_signature" | "interface_implementation" | "extension". */
+	const TCHAR* GraphKindToWireString(EClaireonGraphKind Kind);
+
+	/** Parse a wire spelling back. False for anything not in the set -- callers must error, not guess. */
+	bool ParseGraphKind(const FString& Wire, EClaireonGraphKind& OutKind);
+
+	struct FGraphEnumerationEntry
+	{
+		UEdGraph* Graph = nullptr;
+
+		EClaireonGraphKind GraphKind = EClaireonGraphKind::Ubergraph;
+
+		/** Populated only when GraphKind is InterfaceImplementation: the implemented interface's class path. Empty otherwise. */
+		FString OwningInterface;
+	};
+
+	/**
+	 * Enumerate ubergraph, function, macro, delegate-signature, interface-implementation,
+	 * and extension-owned graphs. Kind comes from collection membership, since
+	 * GetGraphType cannot distinguish interface implementations from functions.
+	 * Exclude nested composites: their names need not be unique for graph_name addressing.
+	 */
+	TArray<FGraphEnumerationEntry> EnumerateTopLevelGraphs(UBlueprint* Blueprint);
 
 	/**
 	 * Find all pins on a node that are compatible with the given pin.
@@ -440,11 +546,7 @@ namespace ClaireonBlueprintHelpers
 	 */
 	TArray<UEdGraphPin*> FindCompatiblePins(UEdGraphNode* Node, UEdGraphPin* Pin);
 
-	/**
-	 * Rich result carrier for variable-type parsing. Replaces the pre-existing
-	 * silent-fallback behavior of ParseVariableType so callers can surface
-	 * structured errors instead of quietly coercing unknown inputs to PC_String.
-	 */
+	/** Variable-type parsing result with structured failure details. */
 	struct FParseVariableTypeResult
 	{
 		/** True only when a concrete PinType was resolved from the input. */
@@ -515,6 +617,132 @@ namespace ClaireonBlueprintHelpers
 	 * @return Array of human-readable flag strings
 	 */
 	TArray<FString> FormatPropertyFlags(uint64 PropertyFlags);
+	/** Return DisplayName metadata when present, otherwise FriendlyName. */
+	FString ResolveVariableDisplayName(const struct FBPVariableDescription& Var);
+
+	/** Format a type for ParseVariableType, including containers, map values, and enum-bound bytes. */
+	FString FormatVariableTypeString(const struct FEdGraphPinType& PinType);
+
+	/** True when PinType is a single-cast or multicast delegate. */
+	bool IsDelegateVariableType(const struct FEdGraphPinType& PinType);
+
+	/**
+	 * Resolve the member reference first, then try dispatcher signature names on the
+	 * generated and skeleton classes. Blueprint dispatchers may have empty references.
+	 * Without OwningBlueprint, only member-reference resolution is available.
+	 */
+	class UFunction* ResolveDelegateSignatureFunction(const struct FEdGraphPinType& PinType,
+		class UBlueprint* OwningBlueprint = nullptr, FName VariableName = NAME_None);
+
+	/**
+	 * Return a replayable delegate signature path, or empty for non-delegates and
+	 * unresolved signatures. An unresolved delegate cannot round-trip through the parser.
+	 */
+	FString GetDelegateSignatureFunctionPath(const struct FEdGraphPinType& PinType,
+		class UBlueprint* OwningBlueprint = nullptr, FName VariableName = NAME_None);
+
+	/** Write type and round-trip status, plus signature_function and variable_type_spec for delegates. */
+	void WriteVariableTypeJson(const struct FEdGraphPinType& PinType, const TSharedPtr<FJsonObject>& Out,
+		class UBlueprint* OwningBlueprint = nullptr, FName VariableName = NAME_None);
+
+	/**
+	 * Write shared variable fields: name, type, display name, category, flags, replication,
+	 * tooltip, and metadata. Callers add envelope-specific fields.
+	 */
+	void WriteVariableCoreJson(const struct FBPVariableDescription& Var, const TSharedPtr<FJsonObject>& Out,
+		class UBlueprint* OwningBlueprint = nullptr);
+
+	/** True for a non-exec data output on a FunctionEntry. */
+	bool IsFunctionParameterSource(const UEdGraphPin* SourcePin);
+
+	/** Name conflicts that prevent creating a Custom Event. */
+	struct FCustomEventNameConflict
+	{
+		enum class EKind : uint8
+		{
+			/** No conflict: the name is free. */
+			None,
+			/** The parent chain already implements it as an override event in this Blueprint. */
+			ExistingOverrideEvent,
+			/** Another Custom Event in this Blueprint already has the name. */
+			ExistingCustomEvent,
+			/** A BlueprintImplementableEvent or BlueprintNativeEvent on the parent chain. */
+			ParentBlueprintEvent,
+			/** A parent-class function that is not an event, so the name is still taken. */
+			ParentFunction,
+			/** A function on an implemented interface. */
+			InterfaceFunction,
+			/** A function graph in this Blueprint. */
+			LocalFunctionGraph,
+		};
+
+		EKind Kind = EKind::None;
+
+		/** The real function the requested name resolves to. */
+		FName ResolvedFunctionName;
+
+		/** Class or interface declaring it, or the graph name for a local conflict. */
+		FString OwnerName;
+
+		/** Populated for ExistingOverrideEvent / ExistingCustomEvent. */
+		FString ExistingNodeGuid;
+		FString ExistingGraphName;
+
+		/** True for a BlueprintNativeEvent, which needs add_function_override rather than an event node. */
+		bool bNativeEvent = false;
+
+		/** How the requested name matched, when it was not an exact match. */
+		FString ResolutionNote;
+
+		FString Explanation;
+
+		/** The call to make instead. */
+		FString Remedy;
+
+		bool IsConflict() const { return Kind != EKind::None; }
+	};
+
+	/**
+	 * Find a Custom Event name conflict using the shared alias and function-name resolver,
+	 * without substring matching.
+	 *
+	 * @param IgnoreNode Exclude this node when auditing existing content; null when checking a new name.
+	 */
+	FCustomEventNameConflict FindCustomEventNameConflict(
+		UBlueprint* Blueprint,
+		const FString& EventName,
+		const UEdGraphNode* IgnoreNode = nullptr);
+
+	/** Stable wire name for a conflict kind. Part of bp_lint's evidence contract. */
+	const TCHAR* ToString(FCustomEventNameConflict::EKind Kind);
+
+	/**
+	 * Distance threshold shared with bp_lint's distant-get rule.
+	 * Keep inline constexpr: static constexpr at header scope fails the Linux v2 build.
+	 */
+	inline constexpr double LocalGetDistanceUnits = 512.0;
+
+	/**
+	 * True for a pure, receiver-less variable read beyond MaxDistance from its consumer.
+	 * Validated gets and reads with wired or default-object targets are ineligible.
+	 */
+	bool IsDistantVariableGetSource(const UEdGraphPin* SourcePin, const UEdGraphPin* TargetPin, double MaxDistance);
+
+	/**
+	 * Copy the variable reference beside TargetPin and return its data output, or null
+	 * with no node left in Graph. The caller owns keeping or destroying a returned node.
+	 * Copy the full reference to preserve scope, class, self-context, and GUID identity.
+	 */
+	class UEdGraphPin* EmitAdjacentVariableGet(class UEdGraph* Graph, class UEdGraphPin* SourcePin,
+	                                           class UEdGraphPin* TargetPin, int32 StackIndex);
+
+	/**
+	 * Emit a local parameter get beside TargetPin, staggered by StackIndex.
+	 * Return its output pin, or null with no node left in Graph. The caller owns the node.
+	 * Do not use this to store computed values; that changes demand-time evaluation.
+	 */
+	class UEdGraphPin* EmitLocalParameterGet(class UEdGraph* Graph, class UEdGraphPin* SourcePin,
+	                                         class UEdGraphPin* TargetPin, int32 StackIndex);
 
 	/**
 	 * Side-effect report for ApplyVariableProperties.
@@ -638,6 +866,41 @@ namespace ClaireonBlueprintHelpers
 	 * @return True if ClassName is one of the three allowlist values.
 	 */
 	bool IsBlueprintAssetClass(const FString& ClassName);
+
+	/**
+	 * Result of resolving a Blueprint component by variable name for inspection or edit.
+	 * A component can live in this Blueprint's own SCS, or be inherited from a parent
+	 * Blueprint's SCS. Inherited components are edited through this Blueprint's
+	 * InheritableComponentHandler override template, never through the parent's template.
+	 */
+	struct FResolvedComponentTemplate
+	{
+		/** The SCS node that defines the component (in this Blueprint or an ancestor). */
+		USCS_Node* Node = nullptr;
+		/** The template to inspect or edit for THIS Blueprint. */
+		UActorComponent* Template = nullptr;
+		/** True when the defining SCS node lives in an ancestor Blueprint. */
+		bool bInherited = false;
+		/** True when Template is this Blueprint's own override of an inherited component. */
+		bool bOverridden = false;
+	};
+
+	/**
+	 * Resolve a component by variable name, searching this Blueprint's SCS first and then
+	 * every ancestor Blueprint's SCS. For an inherited component, bForWrite=true creates
+	 * (or reuses) the override template in this Blueprint's InheritableComponentHandler,
+	 * matching what the Details panel does; bForWrite=false returns the existing override
+	 * if there is one, else the parent's template, without creating anything.
+	 * Native (C++) default subobjects are not SCS components and are not resolved here.
+	 *
+	 * @param Blueprint The Blueprint being inspected or edited
+	 * @param ComponentName SCS variable name of the component
+	 * @param bForWrite Create the child override template when the component is inherited
+	 * @param OutResolved Filled on success
+	 * @param OutError Human-readable reason on failure
+	 * @return True if a node and a usable template were found
+	 */
+	bool ResolveComponentTemplate(UBlueprint* Blueprint, FName ComponentName, bool bForWrite, FResolvedComponentTemplate& OutResolved, FString& OutError);
 
 	// Defined in ClaireonBlueprintGraphEditToolBase_Internal.cpp (file-local alias table).
 	// Returns the high-level add_node alias for a given node UClass (e.g. "CallFunction"

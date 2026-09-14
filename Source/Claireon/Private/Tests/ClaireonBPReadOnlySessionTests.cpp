@@ -37,22 +37,8 @@ namespace ClaireonBPReadOnlySessionTestsNS
 	// File-local named namespace (not anonymous): anonymous namespaces from separate
 	// .cpp merge and collide under unity batching on v2.
 
-	// True only when the fixture actually has a .uasset on disk.
-	//
-	// This suite's fixture is built by bp_create + bp_add_component; neither saves
-	// (ClaireonBlueprintHelpers::CreateBlueprint has no save call and
-	// ClaireonBlueprintGraphTool_AddComponent only saves via bp_save/bp_close_all,
-	// which these tests never call), so the fixture normally lives in an in-memory
-	// package only. Deleting an in-memory fixture buys nothing, and every
-	// ObjectTools::ForceDeleteObjects call runs a whole-object-graph referencer
-	// scan, which is the trigger for the nondeterministic Niagara-serialization
-	// crash documented in
-	// Docs/llm/todo/claireon-untest-harness-reliability.md item 1.
-	//
-	// The check is kept rather than dropping the delete outright because
-	// /Game/__MCPTests is deliberately NOT gitignored: a stale .uasset left by an
-	// older build or a crashed run must still be cleaned so `git status
-	// --porcelain -- Content/` stays empty.
+	// Delete only on-disk fixtures. In-memory deletion triggers a global referencer
+	// scan that can crash on resident Niagara objects; stale files still need cleanup.
 	static bool ROS_HasFileOnDisk(const FString& AssetOrPackagePath)
 	{
 		const FString PackageName = FPackageName::ObjectPathToPackageName(AssetOrPackagePath);

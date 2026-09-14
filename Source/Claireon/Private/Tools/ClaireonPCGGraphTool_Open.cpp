@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonPCGGraphTool_Open.h"
+#include "ClaireonScopedAssetEditor.h"
 #include "Tools/ClaireonPCGGraphHelpers.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "Tools/ClaireonAssetUtils.h"
@@ -86,7 +87,7 @@ FToolResult ClaireonPCGGraphTool_Open::Execute(const TSharedPtr<FJsonObject>& Ar
 	NewData.bSuppressOutput = false; // Always show full output on open
 	ToolData.Add(SessionId, MoveTemp(NewData));
 
-	ClaireonAssetUtils::OpenAssetEditorIfHeadless(Graph);
+	ClaireonAssetEditorWindow::OpenForSession(Graph);
 
 	FPCGGraphEditToolData* DataPtr = ToolData.Find(SessionId);
 	return BuildStateResponse(SessionId, DataPtr);

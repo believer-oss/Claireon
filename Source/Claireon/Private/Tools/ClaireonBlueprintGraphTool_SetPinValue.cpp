@@ -705,8 +705,8 @@ FToolResult ClaireonBlueprintGraphTool_SetPinValue::SetPinValue_Impl(
 
 	// Split pin. The engine stores authored defaults on the SUB-pins; a write
 	// to the parent serializes but the compiler reads the (unmodified)
-	// sub-pins, so the value silently never applies (Work #6704, split-pin
-	// report). Distribute the literal to the sub-pins instead: all leaf
+	// sub-pins, so the value silently never applies (see the split-pin
+	// feedback report). Distribute the literal to the sub-pins instead: all leaf
 	// values validate before anything is written, so a bad member errors
 	// with the graph untouched.
 	if (Pin->SubPins.Num() > 0)

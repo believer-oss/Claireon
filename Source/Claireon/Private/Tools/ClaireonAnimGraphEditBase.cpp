@@ -84,47 +84,8 @@ bool ClaireonAnimGraphEditToolBase::RequireSession(
 	OutData->LastOperationAffectedNodes.Empty();
 	OutData->GuidCorrections.Empty();
 
-	// Snapshot for "changed" mode
-	if (OutData->ResponseMode == TEXT("changed"))
-	{
-		SnapshotPinConnections(OutData);
-	}
 
 	return true;
-}
-
-// ============================================================================
-// SnapshotPinConnections
-// ============================================================================
-
-void ClaireonAnimGraphEditToolBase::SnapshotPinConnections(FAnimGraphEditToolData* Data)
-{
-	Data->PreOpPinConnections.Empty();
-	UEdGraph* Graph = Data->CurrentGraph.Get();
-	if (!IsValid(Graph)) return;
-
-	for (UEdGraphNode* Node : Graph->Nodes)
-	{
-		if (!IsValid(Node)) continue;
-		TMap<FName, TArray<FString>> NodePins;
-		for (UEdGraphPin* Pin : Node->Pins)
-		{
-			if (!Pin || Pin->LinkedTo.Num() == 0) continue;
-			TArray<FString> ConnectedTitles;
-			for (UEdGraphPin* Linked : Pin->LinkedTo)
-			{
-				if (Linked && IsValid(Linked->GetOwningNode()))
-				{
-					ConnectedTitles.Add(Linked->GetOwningNode()->GetNodeTitle(ENodeTitleType::ListView).ToString());
-				}
-			}
-			NodePins.Add(Pin->PinName, MoveTemp(ConnectedTitles));
-		}
-		if (NodePins.Num() > 0)
-		{
-			Data->PreOpPinConnections.Add(Node->NodeGuid, MoveTemp(NodePins));
-		}
-	}
 }
 
 // ============================================================================

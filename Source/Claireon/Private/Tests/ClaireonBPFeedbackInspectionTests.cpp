@@ -1,8 +1,8 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Baseline pinning tests for Workstream C (inspection ergonomics), Stage 001
-// of the Claireon BP feedback plan (Work #6704).
+// Baseline pinning tests for Workstream C (inspection ergonomics) of the
+// Claireon BP feedback plan.
 //
 // This file also carries the shared exec-chain + pure-feeder fixture used by
 // C-1/C-2/C-3's anchored-default tests (ws-c-inspection.md), built here so
@@ -395,9 +395,9 @@ UNTEST_UNIT_OPTS(Claireon, BPFeedbackInspection, GuidResolverSweep_GarbageAndAmb
 		[](FJsonObject& A, const FString& G){ A.SetStringField(TEXT("node_guid"), G); } });
 	Entries.Add({ MakeShared<ClaireonBlueprintGraphTool_RemovePin>(), TEXT("remove_pin"), TEXT("node_guid"),
 		[](FJsonObject& A, const FString& G){ A.SetStringField(TEXT("node_guid"), G); } });
-	Entries.Add({ MakeShared<ClaireonBlueprintGraphTool_SelectNode>(), TEXT("select_node"), TEXT("node_guid"),
+	Entries.Add({ MakeShared<ClaireonBlueprintGraphTool_SelectNode>(), TEXT("cursor_to_node"), TEXT("node_guid"),
 		[](FJsonObject& A, const FString& G){ A.SetStringField(TEXT("node_guid"), G); } });
-	Entries.Add({ MakeShared<ClaireonBlueprintGraphTool_SelectPin>(), TEXT("select_pin"), TEXT("node_guid"),
+	Entries.Add({ MakeShared<ClaireonBlueprintGraphTool_SelectPin>(), TEXT("cursor_to_pin"), TEXT("node_guid"),
 		[](FJsonObject& A, const FString& G){ A.SetStringField(TEXT("node_guid"), G); A.SetStringField(TEXT("pin_name"), TEXT("then")); } });
 	Entries.Add({ MakeShared<ClaireonBlueprintGraphTool_SetNodeProperty>(), TEXT("set_node_property"), TEXT("node_guid"),
 		[](FJsonObject& A, const FString& G){ A.SetStringField(TEXT("node_guid"), G); A.SetStringField(TEXT("property_name"), TEXT("NodePosX")); A.SetStringField(TEXT("property_value"), TEXT("0")); } });
@@ -493,7 +493,7 @@ UNTEST_UNIT_OPTS(Claireon, BPFeedbackInspection, GuidResolver_SharedBase_FullAnd
 }
 
 // ----------------------------------------------------------------------------
-// Success path, inline-parser shape (bp_select_node via FindNodeForOperationStr):
+// Success path, inline-parser shape (bp_cursor_to_node via FindNodeForOperationStr):
 // full GUID and a unique 8-hex prefix both resolve.
 // ----------------------------------------------------------------------------
 UNTEST_UNIT_OPTS(Claireon, BPFeedbackInspection, GuidResolver_Inline_FullAndUniquePrefixResolve, UNTEST_TIMEOUTMS(60000))
@@ -669,7 +669,7 @@ UNTEST_UNIT_OPTS(Claireon, BPFeedbackInspection, AnchorUniquePrefix_ResolvesSubg
 }
 
 // ============================================================================
-// C-1 (Stage 003): anchored pure-subgraph default flip + exec_only.
+// C-1: anchored pure-subgraph default flip + exec_only.
 // Precedence under test: exec_only=true > explicit include_pure_subgraph >
 // anchored default true > false.
 // ============================================================================
@@ -852,7 +852,7 @@ UNTEST_UNIT_OPTS(Claireon, BPFeedbackInspection, AnchoredConflicting_ExecOnlyWin
 }
 
 // ============================================================================
-// C-3 (Stage 003): server-side filter_class / filter_title_contains / offset,
+// C-3: server-side filter_class / filter_title_contains / offset,
 // plus the total_filtered response field.
 //
 // Expected counts are computed from the live graph rather than pinned to

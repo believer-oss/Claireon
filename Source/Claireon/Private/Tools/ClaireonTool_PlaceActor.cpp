@@ -11,6 +11,9 @@
 #include "Dom/JsonValue.h"
 #include "Editor.h"
 #include "Engine/Blueprint.h"
+#include "Engine/Brush.h"
+#include "Model.h"
+#include "GameFramework/Volume.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -152,6 +155,7 @@ FToolResult ClaireonTool_PlaceActor::Execute(const TSharedPtr<FJsonObject>& Argu
 	FScopedTransaction Transaction(FText::FromString(TEXT("[Claireon] Place Actor")));
 
 	TArray<TSharedPtr<FJsonValue>> ResultDetails;
+	TArray<FString> BrushlessVolumes;
 	int32 SuccessCount = 0;
 
 	// Track ISM actors by mesh path for reuse within this batch
@@ -365,6 +369,16 @@ FToolResult ClaireonTool_PlaceActor::Execute(const TSharedPtr<FJsonObject>& Argu
 			SpawnedActor->SetActorLabel(Label, /*bMarkDirty=*/true);
 		}
 
+		// Brushless volumes have zero-extent bounds. Capture the final actor label so
+		// the build-brush hint addresses the actor the caller named.
+		if (const ABrush* AsBrush = Cast<ABrush>(SpawnedActor))
+		{
+			if (SpawnedActor->IsA<AVolume>() && !IsValid(AsBrush->Brush.Get()))
+			{
+				BrushlessVolumes.Add(SpawnedActor->GetActorLabel());
+			}
+		}
+
 		// Apply optional properties via resolver (component-aware)
 		const TSharedPtr<FJsonObject>* PropertiesObj = nullptr;
 		if (Spec->TryGetObjectField(TEXT("properties"), PropertiesObj) && PropertiesObj)
@@ -427,5 +441,23 @@ FToolResult ClaireonTool_PlaceActor::Execute(const TSharedPtr<FJsonObject>& Argu
 	Data->SetArrayField(TEXT("results"), ResultDetails);
 
 	FString Summary = FString::Printf(TEXT("Placed %d/%d actors"), SuccessCount, ActorSpecs.Num());
+
+	if (BrushlessVolumes.Num() > 0)
+	{
+		Data->SetNumberField(TEXT("volumes_without_brush"), BrushlessVolumes.Num());
+
+		TSharedPtr<FJsonObject> HintArgs = MakeShared<FJsonObject>();
+		HintArgs->SetStringField(TEXT("actor_label"), BrushlessVolumes[0]);
+
+		return MakeSuccessResultWithHint(Data, Summary, MakeGuidanceHint(
+			TEXT("level_build_brush"),
+			FString::Printf(
+				TEXT("%d placed volume(s) have no brush, so their bounds are a zero-extent point "
+					 "and anything reading them (PCG generation domains, audio reverb, blocking) "
+					 "sees nothing. level_build_brush gives them real geometry: %s"),
+				BrushlessVolumes.Num(), *FString::Join(BrushlessVolumes, TEXT(", "))),
+			HintArgs));
+	}
+
 	return MakeSuccessResult(Data, Summary);
 }

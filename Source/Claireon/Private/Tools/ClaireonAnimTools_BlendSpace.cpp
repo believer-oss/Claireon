@@ -58,7 +58,13 @@ namespace ClaireonAnimTools_BlendSpace_Private
 		UPackage* Package = Asset->GetOutermost();
 		Package->FullyLoad();
 		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+		// Extension from the package, not assumed. These are AnimBPs today and cannot be map
+		// packages, but the hardcode is the same one that silently shadowed a level.
+		FString PackageFileName;
+		if (!ClaireonAssetUtils::ResolvePackageSaveFilename(Package, PackageFileName, OutError))
+		{
+			return false;
+		}
 		FSavePackageArgs SaveArgs;
 		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
 		FSavePackageResultStruct Result = UPackage::Save(Package, Asset, *PackageFileName, SaveArgs);

@@ -1,8 +1,8 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Baseline pinning tests for Workstream B (silent-failure elimination),
-// Stage 001 of the Claireon BP feedback plan (Work #6704):
+// Baseline pinning tests for Workstream B (silent-failure elimination) of the
+// Claireon BP feedback plan:
 //   - F7 (RESOLVED): setting a K2Node_SpawnActorFromClass 'Class' pin to a
 //     BP actor class with an ExposeOnSpawn variable makes that variable's
 //     pin exist on the SAME call (no bp_reconstruct_node needed), and a
@@ -404,12 +404,7 @@ UNTEST_UNIT_OPTS(Claireon, BPFeedbackWriteSafety, SpawnActorClassPin_DotlessBlue
 	co_return;
 }
 
-// ============================================================================
-// B-1 (Stage 004): writing a literal into an unconnected wildcard element pin
-// promotes the pin (and its container siblings + output pin) instead of
-// failing engine validation. This is the Stage 001 B3 pin, updated in place to
-// assert the post-fix behavior.
-// ============================================================================
+// An unconnected wildcard element literal promotes container siblings and output pins.
 UNTEST_UNIT_OPTS(Claireon, BPFeedbackWriteSafety, MakeArrayWildcardSet_PromotesToRealFromLiteral, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonWSTTestsInternal;
@@ -868,10 +863,7 @@ UNTEST_UNIT_OPTS(Claireon, BPFeedbackWriteSafety, NonContainerWildcardPin_Promot
 	co_return;
 }
 
-// ============================================================================
-// B-3 (Stage 004): a previous op's status must not be echoed as this op's
-// status, and move_node must report a status of its own.
-// ============================================================================
+// A cursor move reports its own status without leaking the previous operation's status.
 UNTEST_UNIT_OPTS(Claireon, BPFeedbackWriteSafety, MoveNodeAfterOtherOp_NoStaleStatusLeak, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonWSTTestsInternal;
@@ -914,12 +906,7 @@ UNTEST_UNIT_OPTS(Claireon, BPFeedbackWriteSafety, MoveNodeAfterOtherOp_NoStaleSt
 	co_return;
 }
 
-// ============================================================================
-// B-2 (Stage 005): object-reference leaf writes canonicalize a dotless /Game
-// path to Package.Object, or reject naming the canonical form. A dotless soft
-// path used to import "successfully" as a package-only reference that never
-// resolved -- the write reported success and produced a dangling pointer.
-// ============================================================================
+// Object-reference writes canonicalize dotless /Game paths or reject them with the canonical form.
 namespace ClaireonB2TestsInternal
 {
 	static const TCHAR* kB2TargetAsset = TEXT("/Game/__MCPTests/BP_B2RefTarget");
@@ -1087,7 +1074,7 @@ UNTEST_UNIT_OPTS(Claireon, BPFeedbackWriteSafety, HardObjectDotlessPath_StillRes
 }
 
 // ============================================================================
-// Split-pin defaults (Work #6704, split-pin report): a parent-pin write on a
+// Split-pin defaults (from the split-pin feedback report): a parent-pin write on a
 // pin that has been split into sub-pins used to "succeed" while the compiler
 // read the untouched sub-pin zeros. bp_set_pin_value now distributes the
 // struct literal onto the sub-pins.
@@ -1250,7 +1237,7 @@ UNTEST_UNIT_OPTS(Claireon, BPFeedbackWriteSafety, SplitParentWrite_UnknownMember
 
 // ============================================================================
 // F7 latent variant: the same class-pin -> spawn-param-pin refresh holds for
-// K2Node_LatentGameplayTaskCall (the node the #6704 sessions actually hit on
+// K2Node_LatentGameplayTaskCall (the node the feedback sessions actually hit on
 // 'Spawn Actor for Gameplay Task'), with no bp_reconstruct_node in between.
 // The node class is engine-editor-module territory, so it is located by class
 // NAME, never Cast<T> (same rule as the NodeCreation A1 tests).

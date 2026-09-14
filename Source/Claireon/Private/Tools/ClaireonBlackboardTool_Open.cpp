@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonBlackboardTool_Open.h"
+#include "ClaireonScopedAssetEditor.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "Tools/ClaireonBehaviorTreeHelpers.h"
 #include "Tools/ClaireonAssetUtils.h"
@@ -76,7 +77,7 @@ FToolResult ClaireonBlackboardTool_Open::Execute(const TSharedPtr<FJsonObject>& 
 	NewData.LastOperationStatus = TEXT("Session opened");
 	ToolData.Add(SessionId, MoveTemp(NewData));
 
-	ClaireonAssetUtils::OpenAssetEditorIfHeadless(BB);
+	ClaireonAssetEditorWindow::OpenForSession(BB);
 
 	FString StructureText = ClaireonBehaviorTreeHelpers::FormatBlackboardData(BB, false);
 

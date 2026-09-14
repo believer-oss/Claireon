@@ -28,6 +28,18 @@ TArray<FString> ClaireonTool_BlueprintCompileBatch::GetSearchKeywords() const
 	return {TEXT("bp"), TEXT("blueprint"), TEXT("compile"), TEXT("batch"), TEXT("build"), TEXT("validate"), TEXT("check"), TEXT("recompile")};
 }
 
+bool ClaireonTool_BlueprintCompileBatch::GetSummaryAggregationSpec(TArray<FClaireonFieldAggregation>& OutSpec) const
+{
+	// Use last-call totals to avoid double-counting retries; histogram status across calls.
+	OutSpec = {
+		{ FName(TEXT("total")), EClaireonAggregationKind::Last },
+		{ FName(TEXT("succeeded")), EClaireonAggregationKind::Last },
+		{ FName(TEXT("failed")), EClaireonAggregationKind::Last },
+		{ FName(TEXT("status")), EClaireonAggregationKind::Histogram },
+	};
+	return true;
+}
+
 FString ClaireonTool_BlueprintCompileBatch::GetDescription() const
 {
 	return TEXT("Compile multiple Blueprints by asset path or content folder: each paths entry auto-detects, a folder "
@@ -355,20 +367,14 @@ IClaireonTool::FToolResult ClaireonTool_BlueprintCompileBatch::Execute(const TSh
 		FToolResult Capped = MakeSuccessResult(Data,
 			FString::Printf(TEXT("Capped: %d blueprints found, max_count=%d. None compiled. Raise max_count or narrow paths."), Total, MaxCount));
 
-		// Migrated off the retired Data.hint string convention onto the structured channel.
-		// args echoes the original call with the correction applied, so it stays directly
-		// callable -- a bare {max_count} delta would re-issue without 'paths'.
-		//
-		// NOT latched: unlike the log-filter hints, this fires only when a cap was actually
-		// hit, which is a real per-call condition carrying a call-specific count.
 		TSharedPtr<FJsonObject> RetryArgs = CloneHintArgs(Arguments);
 		RetryArgs->SetNumberField(TEXT("max_count"), Total);
-		Capped.Hint = MakeGuidanceHint(GetName(),
+		Capped.AddHint(MakeGuidanceHint(GetName(),
 			FString::Printf(
 				TEXT("max_count=%d capped a set of %d blueprints, so none were compiled. ")
 				TEXT("Re-issue with max_count=%d to compile all of them, or narrow 'paths' to a smaller set."),
 				MaxCount, Total, Total),
-			RetryArgs);
+			RetryArgs));
 		return Capped;
 	}
 

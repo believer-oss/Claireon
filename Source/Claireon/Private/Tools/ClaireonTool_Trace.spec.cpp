@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonTool_TraceOpen.h"
+#include "Misc/EngineVersionComparison.h"
 #include "Tools/ClaireonTool_TraceClose.h"
 #include "Tools/ClaireonTool_TraceGetSessionInfo.h"
 #include "Tools/ClaireonTool_TraceGetFrameStats.h"
@@ -25,16 +26,7 @@ namespace TraceTestHelpers
 	 */
 	static FString GenerateTestTrace(FAutomationTestBase& Test)
 	{
-		// Absolute, deliberately. ProjectSavedDir() is relative
-		// ("../../../../<worktree>/Saved/"), and Trace.File does not resolve a relative path the
-		// way IFileManager does: FTraceAuxiliary runs it through
-		// ConvertToAbsolutePathForExternalAppForWrite, which landed this capture in
-		// D:/<worktree>/Saved/Profiling instead of D:/git/<worktree>/Saved/Profiling -- outside the
-		// repo. Two bugs fell out of that single mismatch. The capture littered a 29 MB
-		// .utrace in a stray directory, and because Delete() below resolved the path
-		// project-relative it never removed the real file, so every run after the first hit
-		// FTraceAuxiliary's "Trace file already exists" refusal and this test could not pass
-		// twice. Absolutizing once makes delete, write and FileExists agree.
+		// Use one absolute path so Trace.File, deletion, and existence checks resolve the same file.
 		const FString OutputPath = FPaths::ConvertRelativePathToFull(
 			FPaths::ProjectSavedDir() / TEXT("Profiling") / TEXT("MCPTestTrace.utrace"));
 
@@ -186,18 +178,7 @@ namespace TraceTestHelpers
 		return Elem.IsValid() && Elem->TryGetObject(Obj) && (*Obj)->TryGetStringField(Field, Out);
 	}
 
-	// -------------------------------------------------------------------------
-	// Finiteness invariant (P0-1).
-	//
-	// UE's JSON writer prints doubles with %.17g, so a non-finite number reaches
-	// the wire as the bare token `inf` / `nan` -- not legal JSON, and fatal to
-	// the whole result rather than one field. The engine seeds every open frame
-	// with EndTime = +inf, so a capture stopped mid-frame produces exactly that.
-	//
-	// A healthy capture should never contain one. This is cheap to assert and
-	// fails loudly if a real capture ever carries an open frame -- which is the
-	// condition the result-boundary guard exists for.
-	// -------------------------------------------------------------------------
+	// Open frames use an infinite EndTime; non-finite values must not reach the JSON writer.
 
 	static void CollectNonFinitePaths(const TSharedPtr<FJsonValue>& Value, const FString& Path,
 		int32 Depth, TArray<FString>& OutPaths);
@@ -209,9 +190,10 @@ namespace TraceTestHelpers
 		{
 			return;
 		}
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Object->Values)
+		for (const auto& Pair : Object->Values)
 		{
-			const FString FieldPath = Path.IsEmpty() ? Pair.Key : Path + TEXT(".") + Pair.Key;
+			const FString Key(Pair.Key);
+			const FString FieldPath = Path.IsEmpty() ? Key : Path + TEXT(".") + Key;
 			CollectNonFinitePaths(Pair.Value, FieldPath, Depth + 1, OutPaths);
 		}
 	}
@@ -595,6 +577,12 @@ bool FTraceToolTest_WithTraceFile::RunTest(const FString& Parameters)
 	}
 
 	AddInfo(FString::Printf(TEXT("Using trace file: %s"), *TracePath));
+#if !UE_VERSION_OLDER_THAN(5, 8, 0)
+	// UE 5.8 can emit allocation-tag errors when reading an in-process capture.
+	// Allow these diagnostics without requiring them; other errors still fail the test.
+	AddExpectedErrorPlain(TEXT("[MemAlloc] Invalid Tag on Thread"), EAutomationExpectedErrorFlags::Contains, /*Occurrences=*/-1);
+	AddExpectedErrorPlain(TEXT("TagTracker errors:"), EAutomationExpectedErrorFlags::Contains, /*Occurrences=*/-1);
+#endif
 
 	// =========================================================================
 	// Open session (the only heavyweight open for all single-session tests)
@@ -1648,16 +1636,7 @@ bool FTraceToolTest_WithTraceFile::RunTest(const FString& Parameters)
 		AddInfo(TEXT("CaptureManifestAndDisclosure passed"));
 	}
 
-	// =========================================================================
-	// Finiteness invariant (P0-1) -- every number every trace tool emits must
-	// be finite on a healthy capture.
-	//
-	// Cheap, and it is the tripwire for the defect that took out the whole
-	// family: one +inf duration makes the entire result unparseable, and
-	// because trace_open hands out the session_id every other trace_* tool
-	// needs, the blast radius is every tool here. Runs while the session is
-	// still open, so it must stay above the lifecycle block below.
-	// =========================================================================
+	// Check finite output while the session is still open, before lifecycle tests close it.
 	{
 		{
 			ClaireonTool_TraceGetFrameStats Tool;

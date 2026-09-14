@@ -3,6 +3,7 @@
 
 #include "Tools/ClaireonPCGGraphTool_Save.h"
 #include "Tools/ClaireonAssetUtils.h"
+#include "Tools/ClaireonPCGGraphHelpers.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "PCGGraph.h"
 #include "UObject/Package.h"
@@ -60,5 +61,26 @@ FToolResult ClaireonPCGGraphTool_Save::Execute(const TSharedPtr<FJsonObject>& Ar
 	}
 
 	Data->LastOperationStatus = FString::Printf(TEXT("Saved package %s to disk"), *Package->GetName());
-	return BuildStateResponse(SessionId, Data);
+	FToolResult Result = BuildStateResponse(SessionId, Data);
+
+	// Saving alone does not invalidate compiled graphs. Offer refresh when live components use this graph.
+	const int32 LiveComponents =
+		ClaireonPCGGraphHelpers::CountLiveComponentsUsingGraph(Data->PCGGraph.Get());
+	if (LiveComponents > 0)
+	{
+		TSharedPtr<FJsonObject> HintArgs = MakeShared<FJsonObject>();
+		HintArgs->SetStringField(TEXT("session_id"), SessionId);
+		HintArgs->SetBoolField(TEXT("regenerate_components"), true);
+
+		Result.AddHint(MakeGuidanceHint(
+			TEXT("pcg_refresh"),
+			FString::Printf(
+				TEXT("%d placed PCGComponent(s) use this graph and will regenerate from the cached ")
+				TEXT("compiled graph until it is evicted, producing output identical to before these ")
+				TEXT("edits. pcg_refresh evicts it and regenerates them."),
+				LiveComponents),
+			HintArgs));
+	}
+
+	return Result;
 }

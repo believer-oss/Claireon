@@ -16,9 +16,8 @@
  * cheap, which inverts conclusions.
  *
  * pie_trace_start and pie_trace_stop are separate translation units, so the
- * saved value lives here. Mirrors the project reference implementation in
- * FSPerfTraceDefaults / FSPerfTraceDebugSubsystem: save, force on, restore on
- * stop, roll back on a failed start.
+ * saved value lives here. Contract: save, force on, restore on stop, roll
+ * back on a failed start.
  */
 namespace ClaireonTraceNamedEvents
 {

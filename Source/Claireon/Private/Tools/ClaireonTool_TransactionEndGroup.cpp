@@ -38,6 +38,7 @@ FToolResult ClaireonTool_TransactionEndGroup::Execute(const TSharedPtr<FJsonObje
 	const FString EndedLabel = ClaireonTransactionGroupState::ActiveGroupLabel;
 	ClaireonTransactionGroupState::bGroupActive = false;
 	ClaireonTransactionGroupState::ActiveGroupLabel.Empty();
+	ClaireonTransactionGroupState::ActiveGroupTransactionId.Invalidate();
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("group_ended"), true);

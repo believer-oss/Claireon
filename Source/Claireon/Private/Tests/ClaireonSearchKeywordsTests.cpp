@@ -44,6 +44,8 @@
 #include "Tools/ClaireonTool_GetBlueprintGraph.h"
 #include "Tools/ClaireonTool_GetBlueprintProperties.h"
 #include "Tools/ClaireonTool_BlueprintDiff.h"
+#include "Tools/ClaireonTool_InstructionsList.h"
+#include "Tools/ClaireonTool_InstructionsRead.h"
 
 namespace SearchKeywordsTestHelpers
 {
@@ -125,7 +127,7 @@ UNTEST_UNIT_OPTS(Claireon, SearchKeywords, TierB_BlueprintGraphSlate, UNTEST_TIM
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_AddNode>(TEXT("bp_add_node")));
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_ConnectPins>(TEXT("bp_connect_pins")));
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_SetPinValue>(TEXT("bp_set_pin_value")));
-	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_SelectPin>(TEXT("bp_select_pin")));
+	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_SelectPin>(TEXT("bp_cursor_to_pin")));
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_AddVariable>(TEXT("bp_add_variable")));
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_Save>(TEXT("bp_save")));
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonBlueprintGraphTool_Format>(TEXT("bp_format")));
@@ -147,6 +149,8 @@ UNTEST_UNIT_OPTS(Claireon, SearchKeywords, TierC_ReadInspectDiscovery, UNTEST_TI
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_GetBlueprintGraph>(TEXT("bp_get_graph")));
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_GetBlueprintProperties>(TEXT("bp_get_properties")));
 	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_BlueprintDiff>(TEXT("bp_diff")));
+	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_InstructionsList>(TEXT("instructions_list")));
+	UNTEST_EXPECT_TRUE(ValidateMinimumKeywordCount<ClaireonTool_InstructionsRead>(TEXT("instructions_read")));
 	co_return;
 }
 

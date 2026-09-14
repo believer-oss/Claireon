@@ -8,7 +8,15 @@
 #include "ClaireonPathResolver.h"
 #include "ClaireonLog.h"
 #include "Engine/Blueprint.h"
+#include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/InheritableComponentHandler.h"
+#include "Engine/SCS_Node.h"
+#include "Engine/SimpleConstructionScript.h"
+#include "Components/ActorComponent.h"
+#include "Engine/EngineTypes.h"        // ELifetimeCondition, for the replication_condition field
 #include "Engine/MemberReference.h"
+#include "UObject/ReflectedTypeAccessors.h" // StaticEnum<>, same
+#include "Blueprint/BlueprintExtension.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
@@ -19,7 +27,9 @@
 #include "K2Node_CallDataTableFunction.h"
 #include "K2Node_CallMaterialParameterCollectionFunction.h"
 #include "K2Node_CommutativeAssociativeBinaryOperator.h"
+#include "K2Node_Event.h"
 #include "K2Node_FunctionEntry.h"
+#include "K2Node_VariableGet.h"
 #include "K2Node_MakeContainer.h"
 #include "GameplayTask.h"
 #include "Abilities/Tasks/AbilityTask.h"
@@ -29,6 +39,8 @@
 #include "Toolkits/AssetEditorToolkit.h"
 #include "Subsystems/AssetEditorSubsystem.h"
 #include "BlueprintEditor.h"
+#include "GraphEditor.h"
+#include "Widgets/Docking/SDockTab.h"
 #include "GameplayTagContainer.h"
 #include "StructUtils/InstancedStruct.h"
 #include "Tools/ClaireonBlueprintGraphEditToolBase_Internal.h"
@@ -39,91 +51,245 @@
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 
-// FScopedBlueprintEditor Implementation
 
-FScopedBlueprintEditor::FScopedBlueprintEditor(UBlueprint* InBlueprint, bool bInSilent, bool bInCloseOnDestroy)
-	: Blueprint(InBlueprint)
-	, bWasAlreadyOpen(false)
-	, bCloseOnDestroy(bInCloseOnDestroy)
+FScopedBlueprintEditor::FScopedBlueprintEditor(UBlueprint* InBlueprint, bool /*bInSilent*/, bool bInCloseOnDestroy)
+	: FClaireonScopedAssetEditor(InBlueprint, bInCloseOnDestroy)
 {
-	// ::IsValid is qualified throughout this type's members: FScopedBlueprintEditor declares its
-	// own 0-arg IsValid() (ClaireonBlueprintHelpers.h:47), which otherwise wins name lookup here.
-	if (!::IsValid(InBlueprint))
-	{
-		UE_LOG(LogClaireon, Warning, TEXT("[FScopedBlueprintEditor] Null Blueprint provided"));
-		return;
-	}
-
-	// Check if the Blueprint is already open
-	UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
-	if (!::IsValid(AssetEditorSubsystem))
-	{
-		UE_LOG(LogClaireon, Error, TEXT("[FScopedBlueprintEditor] Failed to get AssetEditorSubsystem"));
-		return;
-	}
-
-	IAssetEditorInstance* ExistingEditor = AssetEditorSubsystem->FindEditorForAsset(InBlueprint, false);
-	if (ExistingEditor)
-	{
-		bWasAlreadyOpen = true;
-		UE_LOG(LogClaireon, Verbose, TEXT("[FScopedBlueprintEditor] Blueprint %s already open"), *InBlueprint->GetPathName());
-	}
-	else
-	{
-		// Open the Blueprint editor
-		AssetEditorSubsystem->OpenEditorForAsset(InBlueprint);
-		ExistingEditor = AssetEditorSubsystem->FindEditorForAsset(InBlueprint, false);
-		if (ExistingEditor)
-		{
-			UE_LOG(LogClaireon, Verbose, TEXT("[FScopedBlueprintEditor] Opened Blueprint %s"), *InBlueprint->GetPathName());
-		}
-		else
-		{
-			UE_LOG(LogClaireon, Error, TEXT("[FScopedBlueprintEditor] Failed to open Blueprint %s"), *InBlueprint->GetPathName());
-		}
-	}
-
-	// Extract FBlueprintEditor from the IAssetEditorInstance
-	if (ExistingEditor)
-	{
-		FAssetEditorToolkit* Toolkit = static_cast<FAssetEditorToolkit*>(ExistingEditor);
-		TSharedRef<FAssetEditorToolkit> ToolkitRef = Toolkit->AsShared();
-		BlueprintEditor = StaticCastSharedRef<FBlueprintEditor>(ToolkitRef);
-	}
 }
 
-FScopedBlueprintEditor::~FScopedBlueprintEditor()
+TSharedPtr<FBlueprintEditor> FScopedBlueprintEditor::GetBlueprintEditor() const
 {
-	if (bCloseOnDestroy && !bWasAlreadyOpen && Blueprint.IsValid())
-	{
-		UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
-		if (::IsValid(AssetEditorSubsystem))
-		{
-			AssetEditorSubsystem->CloseAllEditorsForAsset(Blueprint.Get());
-			UE_LOG(LogClaireon, Verbose, TEXT("[FScopedBlueprintEditor] Closed Blueprint %s"), *Blueprint->GetPathName());
-		}
-	}
+	TSharedPtr<FAssetEditorToolkit> OpenToolkit = GetToolkit();
+	return OpenToolkit.IsValid() ? StaticCastSharedPtr<FBlueprintEditor>(OpenToolkit) : nullptr;
 }
 
 TSharedPtr<SGraphEditor> FScopedBlueprintEditor::GetGraphEditor(UEdGraph* Graph)
 {
+	TSharedPtr<FBlueprintEditor> BlueprintEditor = GetBlueprintEditor();
 	if (!BlueprintEditor.IsValid() || !::IsValid(Graph))
 	{
 		return nullptr;
 	}
 
-	// The Blueprint editor contains graph editors for each visible graph
-	// We need to find the one for our specific graph
-	// Note: This is a simplified implementation. In practice, you might need to
-	// navigate through the tab manager to find the specific graph editor widget.
-
-	// For now, return nullptr as we'd need more complex tab management
-	// This will be sufficient for operations that don't require the SGraphEditor widget
-	UE_LOG(LogClaireon, Warning, TEXT("[FScopedBlueprintEditor] GetGraphEditor not fully implemented - returning nullptr"));
-	return nullptr;
+	return BlueprintEditor->OpenGraphAndBringToFront(Graph, /*bSetFocus=*/false);
 }
 
-// ClaireonBlueprintHelpers Namespace Implementation
+
+const TCHAR* ClaireonEditorBindingStatusToWireString(EClaireonEditorBindingStatus Status)
+{
+	switch (Status)
+	{
+	case EClaireonEditorBindingStatus::Valid:             return TEXT("valid");
+	case EClaireonEditorBindingStatus::NotBound:          return TEXT("not_bound");
+	case EClaireonEditorBindingStatus::BoundEditorClosed: return TEXT("bound_editor_closed");
+	case EClaireonEditorBindingStatus::GraphTabClosed:    return TEXT("graph_tab_closed");
+	case EClaireonEditorBindingStatus::GraphRemoved:      return TEXT("graph_removed");
+	}
+	return TEXT("unknown");
+}
+
+#if WITH_CLAIREON_TESTS
+namespace ClaireonBlueprintEditorBindingSeam
+{
+	struct FSeamCandidate
+	{
+		TWeakObjectPtr<UEdGraph>  Graph;
+		TSharedPtr<SGraphEditor>  Widget;
+	};
+
+	// Prefix seam helpers to avoid collisions in unity builds.
+	inline TMap<FGuid, FSeamCandidate>& BindingSeam_Candidates()
+	{
+		static TMap<FGuid, FSeamCandidate> Candidates;
+		return Candidates;
+	}
+
+	FGuid RegisterInstance(UEdGraph* Graph, TSharedPtr<SGraphEditor> Widget)
+	{
+		const FGuid InstanceId = FGuid::NewGuid();
+		BindingSeam_Candidates().Add(InstanceId, FSeamCandidate{ Graph, Widget });
+		return InstanceId;
+	}
+
+	void CloseInstance(const FGuid& InstanceId)
+	{
+		BindingSeam_Candidates().Remove(InstanceId);
+	}
+
+	void CloseGraphTab(const FGuid& InstanceId)
+	{
+		if (FSeamCandidate* Candidate = BindingSeam_Candidates().Find(InstanceId))
+		{
+			Candidate->Widget.Reset();
+		}
+	}
+
+	TSharedPtr<SGraphEditor> FindWidget(const FGuid& InstanceId)
+	{
+		FSeamCandidate* Candidate = BindingSeam_Candidates().Find(InstanceId);
+		return Candidate ? Candidate->Widget : nullptr;
+	}
+
+	bool IsInstanceRegistered(const FGuid& InstanceId)
+	{
+		return BindingSeam_Candidates().Contains(InstanceId);
+	}
+
+	void Reset()
+	{
+		BindingSeam_Candidates().Empty();
+	}
+
+	FScopedSeam::~FScopedSeam()
+	{
+		Reset();
+	}
+}
+#endif // WITH_CLAIREON_TESTS
+
+void FClaireonBlueprintEditorBinding::Clear()
+{
+	Blueprint.Reset();
+	BoundGraph.Reset();
+	Editor.Reset();
+	GraphEditor.Reset();
+	InstanceId.Invalidate();
+	bSeamBound = false;
+}
+
+void FClaireonBlueprintEditorBinding::BindTo(UBlueprint* InBlueprint, UEdGraph* InGraph,
+	TSharedPtr<FBlueprintEditor> InEditor, TSharedPtr<SGraphEditor> InGraphEditor)
+{
+	Clear();
+	if (!InEditor.IsValid())
+	{
+		return;
+	}
+
+	Blueprint = InBlueprint;
+	BoundGraph = InGraph;
+	Editor = InEditor;
+	GraphEditor = InGraphEditor;
+	// Use a fresh ID so a reused toolkit address cannot revive a stale binding.
+	InstanceId = FGuid::NewGuid();
+}
+
+#if WITH_CLAIREON_TESTS
+void FClaireonBlueprintEditorBinding::BindToSeamInstance(UBlueprint* InBlueprint, UEdGraph* InGraph, const FGuid& InInstanceId)
+{
+	Clear();
+	Blueprint = InBlueprint;
+	BoundGraph = InGraph;
+	InstanceId = InInstanceId;
+	bSeamBound = true;
+}
+#endif
+
+EClaireonEditorBindingStatus FClaireonBlueprintEditorBinding::Revalidate(UEdGraph* SessionGraph) const
+{
+	if (!InstanceId.IsValid())
+	{
+		return EClaireonEditorBindingStatus::NotBound;
+	}
+
+	// Check instance and graph lifetime before tab state.
+#if WITH_CLAIREON_TESTS
+	if (bSeamBound)
+	{
+		if (!ClaireonBlueprintEditorBindingSeam::IsInstanceRegistered(InstanceId))
+		{
+			return EClaireonEditorBindingStatus::BoundEditorClosed;
+		}
+		if (!::IsValid(SessionGraph))
+		{
+			return EClaireonEditorBindingStatus::GraphRemoved;
+		}
+		if (!ClaireonBlueprintEditorBindingSeam::FindWidget(InstanceId).IsValid())
+		{
+			return EClaireonEditorBindingStatus::GraphTabClosed;
+		}
+		return EClaireonEditorBindingStatus::Valid;
+	}
+#endif
+
+	TSharedPtr<FBlueprintEditor> PinnedEditor = Editor.Pin();
+	UBlueprint* OwningBlueprint = Blueprint.Get();
+	if (!PinnedEditor.IsValid() || !::IsValid(OwningBlueprint)
+		|| !ClaireonAssetEditorWindow::IsInstanceRegistered(OwningBlueprint, PinnedEditor.Get()))
+	{
+		return EClaireonEditorBindingStatus::BoundEditorClosed;
+	}
+
+	if (!::IsValid(SessionGraph))
+	{
+		return EClaireonEditorBindingStatus::GraphRemoved;
+	}
+
+	// Match graph identity, including nested composites.
+	TArray<UEdGraph*> AllGraphs;
+	OwningBlueprint->GetAllGraphs(AllGraphs);
+	if (!AllGraphs.Contains(SessionGraph))
+	{
+		return EClaireonEditorBindingStatus::GraphRemoved;
+	}
+
+	// Only the originally bound graph requires an existing tab; retargeted graphs open during resolution.
+	if (SessionGraph != BoundGraph.Get())
+	{
+		return EClaireonEditorBindingStatus::Valid;
+	}
+
+	// Inspect tabs without opening one, so a closed tab remains detectable.
+	TArray<TSharedPtr<SDockTab>> OpenTabs;
+	if (!PinnedEditor->FindOpenTabsContainingDocument(SessionGraph, OpenTabs) || OpenTabs.Num() == 0)
+	{
+		return EClaireonEditorBindingStatus::GraphTabClosed;
+	}
+
+	return EClaireonEditorBindingStatus::Valid;
+}
+
+TSharedPtr<SGraphEditor> FClaireonBlueprintEditorBinding::ResolveGraphEditor(UEdGraph* SessionGraph, EClaireonEditorBindingStatus& OutStatus)
+{
+	OutStatus = Revalidate(SessionGraph);
+	if (OutStatus != EClaireonEditorBindingStatus::Valid)
+	{
+		return nullptr;
+	}
+
+#if WITH_CLAIREON_TESTS
+	if (bSeamBound)
+	{
+		return ClaireonBlueprintEditorBindingSeam::FindWidget(InstanceId);
+	}
+#endif
+
+	TSharedPtr<SGraphEditor> Cached = GraphEditor.Pin();
+	if (Cached.IsValid() && Cached->GetCurrentGraph() == SessionGraph)
+	{
+		return Cached;
+	}
+
+	// Resolve through the bound editor when the graph changes or its widget is rebuilt.
+	TSharedPtr<FBlueprintEditor> PinnedEditor = Editor.Pin();
+	if (!PinnedEditor.IsValid())
+	{
+		OutStatus = EClaireonEditorBindingStatus::BoundEditorClosed;
+		return nullptr;
+	}
+
+	TSharedPtr<SGraphEditor> Resolved = PinnedEditor->OpenGraphAndBringToFront(SessionGraph, /*bSetFocus=*/false);
+	if (!Resolved.IsValid())
+	{
+		OutStatus = EClaireonEditorBindingStatus::GraphTabClosed;
+		return nullptr;
+	}
+
+	BoundGraph = SessionGraph;
+	GraphEditor = Resolved;
+	return Resolved;
+}
+
 
 namespace ClaireonBlueprintHelpers
 {
@@ -638,7 +804,11 @@ namespace ClaireonBlueprintHelpers
 				}
 			}
 		}
-
+		// Friendly-name settings change title spacing. Normalize after an exact miss, retaining ambiguous matches.
+		if (bExactMatch && MatchingNodes.Num() == 0)
+		{
+			MatchingNodes = FindNodesByNormalizedTitle(Graph, NodeTitle, /*bAllowPartial=*/false);
+		}
 		return MatchingNodes;
 	}
 
@@ -837,6 +1007,112 @@ namespace ClaireonBlueprintHelpers
 		return nullptr;
 	}
 
+	const TCHAR* GraphKindToWireString(EClaireonGraphKind Kind)
+	{
+		// Omit default so new graph kinds require a wire spelling.
+		switch (Kind)
+		{
+		case EClaireonGraphKind::Ubergraph:               return TEXT("ubergraph");
+		case EClaireonGraphKind::Function:                return TEXT("function");
+		case EClaireonGraphKind::Macro:                   return TEXT("macro");
+		case EClaireonGraphKind::DelegateSignature:       return TEXT("delegate_signature");
+		case EClaireonGraphKind::InterfaceImplementation: return TEXT("interface_implementation");
+		case EClaireonGraphKind::Extension:               return TEXT("extension");
+		}
+		return TEXT("ubergraph");
+	}
+
+	bool ParseGraphKind(const FString& Wire, EClaireonGraphKind& OutKind)
+	{
+		static const EClaireonGraphKind AllKinds[] = {
+			EClaireonGraphKind::Ubergraph,
+			EClaireonGraphKind::Function,
+			EClaireonGraphKind::Macro,
+			EClaireonGraphKind::DelegateSignature,
+			EClaireonGraphKind::InterfaceImplementation,
+			EClaireonGraphKind::Extension,
+		};
+
+		for (const EClaireonGraphKind Kind : AllKinds)
+		{
+			if (Wire.Equals(GraphKindToWireString(Kind), ESearchCase::IgnoreCase))
+			{
+				OutKind = Kind;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	TArray<FGraphEnumerationEntry> EnumerateTopLevelGraphs(UBlueprint* Blueprint)
+	{
+		TArray<FGraphEnumerationEntry> Result;
+		if (!IsValid(Blueprint))
+		{
+			return Result;
+		}
+
+		for (UEdGraph* Graph : Blueprint->UbergraphPages)
+		{
+			if (IsValid(Graph))
+			{
+				Result.Add(FGraphEnumerationEntry{ Graph, EClaireonGraphKind::Ubergraph, FString() });
+			}
+		}
+		for (UEdGraph* Graph : Blueprint->FunctionGraphs)
+		{
+			if (IsValid(Graph))
+			{
+				Result.Add(FGraphEnumerationEntry{ Graph, EClaireonGraphKind::Function, FString() });
+			}
+		}
+		for (UEdGraph* Graph : Blueprint->MacroGraphs)
+		{
+			if (IsValid(Graph))
+			{
+				Result.Add(FGraphEnumerationEntry{ Graph, EClaireonGraphKind::Macro, FString() });
+			}
+		}
+		for (UEdGraph* Graph : Blueprint->DelegateSignatureGraphs)
+		{
+			if (IsValid(Graph))
+			{
+				Result.Add(FGraphEnumerationEntry{ Graph, EClaireonGraphKind::DelegateSignature, FString() });
+			}
+		}
+		for (const FBPInterfaceDescription& InterfaceDesc : Blueprint->ImplementedInterfaces)
+		{
+			const FString InterfacePath = IsValid(InterfaceDesc.Interface) ? InterfaceDesc.Interface->GetPathName() : FString();
+			for (UEdGraph* Graph : InterfaceDesc.Graphs)
+			{
+				if (IsValid(Graph))
+				{
+					Result.Add(FGraphEnumerationEntry{ Graph, EClaireonGraphKind::InterfaceImplementation, InterfacePath });
+				}
+			}
+		}
+
+		// Enumerate extension-owned top-level graphs without recursing into nested composites.
+		for (const UBlueprintExtension* Extension : Blueprint->GetExtensions())
+		{
+			if (!IsValid(Extension))
+			{
+				continue;
+			}
+			TArray<UEdGraph*> ExtensionGraphs;
+			Extension->GetAllGraphs(ExtensionGraphs);
+			for (UEdGraph* Graph : ExtensionGraphs)
+			{
+				if (IsValid(Graph))
+				{
+					Result.Add(FGraphEnumerationEntry{ Graph, EClaireonGraphKind::Extension, FString() });
+				}
+			}
+		}
+
+		return Result;
+	}
+
 	TArray<UEdGraphPin*> FindCompatiblePins(UEdGraphNode* Node, UEdGraphPin* Pin)
 	{
 		TArray<UEdGraphPin*> CompatiblePins;
@@ -977,7 +1253,6 @@ namespace ClaireonBlueprintHelpers
 			return LoadObject<UFunction>(nullptr, *Path);
 		}
 
-		// Populate delegate signature members on PinType from a resolved UFunction.
 		void SetDelegateSignature(FEdGraphPinType& PinType, UFunction* SignatureFn)
 		{
 			if (!IsValid(SignatureFn))
@@ -985,6 +1260,33 @@ namespace ClaireonBlueprintHelpers
 				return;
 			}
 			FMemberReference::FillSimpleMemberReference<UFunction>(SignatureFn, PinType.PinSubCategoryMemberReference);
+		}
+
+		/**
+		 * Return a signature path accepted by ResolveSignatureFunction.
+		 * An empty result means the reference cannot be resolved without an owning scope.
+		 */
+		FString GetDelegateSignaturePath(const FEdGraphPinType& PinType)
+		{
+			const FSimpleMemberReference& Ref = PinType.PinSubCategoryMemberReference;
+			if (Ref.MemberName.IsNone())
+			{
+				return FString();
+			}
+
+			// MemberParent can be a class or a package for a globally declared native delegate.
+			const UObject* Parent = Ref.MemberParent;
+			if (!IsValid(Parent))
+			{
+				return FString();
+			}
+			return FString::Printf(TEXT("%s.%s"), *Parent->GetPathName(), *Ref.MemberName.ToString());
+		}
+
+		bool IsDelegateCategory(const FName& Category)
+		{
+			return Category == UEdGraphSchema_K2::PC_Delegate
+				|| Category == UEdGraphSchema_K2::PC_MCDelegate;
 		}
 
 		// Parse a SoftClass<X> / SoftObject<X> generic-angle body. Inner is the contents
@@ -1269,11 +1571,58 @@ namespace ClaireonBlueprintHelpers
 			Result.bSucceeded = true;
 			return Result;
 		}
+		// Delegate angle forms carry the signature required for read/write round trips.
+		{
+			static const TCHAR* MultiAliases[] = {
+				TEXT("MCDelegate"), TEXT("Dispatcher"), TEXT("MulticastDelegate"), TEXT("MulticastInlineDelegate")};
+			static const TCHAR* SingleAliases[] = {TEXT("Delegate"), TEXT("SingleDelegate")};
+
+			bool bIsMulti = false;
+			bool bMatched = false;
+			for (const TCHAR* Alias : MultiAliases)
+			{
+				if (TryStripAngleForm(Alias, FCString::Strlen(Alias), GenericInner))
+				{
+					bIsMulti = true;
+					bMatched = true;
+					break;
+				}
+			}
+			if (!bMatched)
+			{
+				for (const TCHAR* Alias : SingleAliases)
+				{
+					if (TryStripAngleForm(Alias, FCString::Strlen(Alias), GenericInner))
+					{
+						bMatched = true;
+						break;
+					}
+				}
+			}
+
+			if (bMatched)
+			{
+				const FString SignaturePath = GenericInner.TrimStartAndEnd();
+				if (SignaturePath.IsEmpty())
+				{
+					Result.Error = TEXT("Delegate<Signature> requires a UFunction signature path inside the angle brackets, e.g. MCDelegate</Script/MyModule.MyClass.MyEvent__DelegateSignature>");
+					return Result;
+				}
+				UFunction* SigFn = ResolveSignatureFunction(SignaturePath);
+				if (!IsValid(SigFn))
+				{
+					Result.Error = FString::Printf(
+						TEXT("signature_function '%s' could not be resolved to a UFunction"), *SignaturePath);
+					return Result;
+				}
+				PinType.PinCategory = bIsMulti ? UEdGraphSchema_K2::PC_MCDelegate : UEdGraphSchema_K2::PC_Delegate;
+				SetDelegateSignature(PinType, SigFn);
+				Result.bSucceeded = true;
+				return Result;
+			}
+		}
 		if (TryStripAngleForm(TEXT("Class"), 5, GenericInner))
 		{
-			// Hard class reference: Class<X> -> PC_Class bound to the resolved class.
-			// bp_get_properties emits this form for class-typed variables (incl. map
-			// key/value terminals); without this branch the round trip fails.
 			ClaireonNameResolver::FNameResolveResult ClassResult;
 			UClass* MetaClass = ClaireonNameResolver::ResolveClassName(GenericInner.TrimStartAndEnd(), nullptr, ClassResult);
 			if (!IsValid(MetaClass))
@@ -1431,13 +1780,602 @@ namespace ClaireonBlueprintHelpers
 			UE_LOG(LogClaireon, Warning,
 				TEXT("[ParseVariableType] legacy-path parse failed for '%s': %s -- falling back to String."),
 				*TypeString, *Local.Error);
-			// Lenient contract: unknown types fall back to String (a default-constructed pin
-			// type is PC_None, which callers of this non-checked path shouldn't have to handle).
+			// The unchecked parser falls back to String for unknown types.
 			FEdGraphPinType Fallback;
 			Fallback.PinCategory = UEdGraphSchema_K2::PC_String;
 			return Fallback;
 		}
 		return Local.PinType;
+	}
+
+	FString FormatVariableTypeString(const FEdGraphPinType& PinType)
+	{
+		// Format both the main type and map value terminal for replay.
+		auto FormatBase = [](const FName& Category, const FName& SubCategory, const UObject* SubObj) -> FString
+		{
+			if (Category == UEdGraphSchema_K2::PC_Boolean)
+			{
+				return TEXT("Boolean");
+			}
+			if (Category == UEdGraphSchema_K2::PC_Byte)
+			{
+				// A byte pin with a bound UEnum is an enum variable; emit the enum name
+				// so the round trip restores the enum binding instead of a raw byte.
+				return IsValid(SubObj) ? SubObj->GetName() : TEXT("Byte");
+			}
+			if (Category == UEdGraphSchema_K2::PC_Int)
+			{
+				return TEXT("Int");
+			}
+			if (Category == UEdGraphSchema_K2::PC_Int64)
+			{
+				return TEXT("Int64");
+			}
+			if (Category == UEdGraphSchema_K2::PC_Real)
+			{
+				if (SubCategory == UEdGraphSchema_K2::PC_Float)
+				{
+					return TEXT("Float");
+				}
+				if (SubCategory == UEdGraphSchema_K2::PC_Double)
+				{
+					return TEXT("Double");
+				}
+				return TEXT("Real");
+			}
+			if (Category == UEdGraphSchema_K2::PC_String)
+			{
+				return TEXT("String");
+			}
+			if (Category == UEdGraphSchema_K2::PC_Name)
+			{
+				return TEXT("Name");
+			}
+			if (Category == UEdGraphSchema_K2::PC_Text)
+			{
+				return TEXT("Text");
+			}
+			if (Category == UEdGraphSchema_K2::PC_Object)
+			{
+				return IsValid(SubObj) ? SubObj->GetName() : TEXT("Object");
+			}
+			if (Category == UEdGraphSchema_K2::PC_Class)
+			{
+				return IsValid(SubObj) ? FString::Printf(TEXT("Class<%s>"), *SubObj->GetName()) : TEXT("Class");
+			}
+			if (Category == UEdGraphSchema_K2::PC_SoftObject)
+			{
+				return IsValid(SubObj) ? FString::Printf(TEXT("SoftObject<%s>"), *SubObj->GetName()) : TEXT("SoftObject");
+			}
+			if (Category == UEdGraphSchema_K2::PC_SoftClass)
+			{
+				return IsValid(SubObj) ? FString::Printf(TEXT("SoftClass<%s>"), *SubObj->GetName()) : TEXT("SoftClass");
+			}
+			if (Category == UEdGraphSchema_K2::PC_Struct || Category == UEdGraphSchema_K2::PC_Enum)
+			{
+				return IsValid(SubObj) ? SubObj->GetName() : Category.ToString();
+			}
+			return Category.ToString();
+		};
+
+		// Delegate signatures live on PinType, outside the terminal triple passed to FormatBase.
+		// Blueprint variables cannot contain delegates in containers.
+		if (IsDelegateCategory(PinType.PinCategory))
+		{
+			const FString Keyword = (PinType.PinCategory == UEdGraphSchema_K2::PC_MCDelegate)
+				? TEXT("MCDelegate")
+				: TEXT("Delegate");
+			const FString SignaturePath = GetDelegateSignaturePath(PinType);
+
+			// An unresolved signature produces a bare keyword and type_round_trips=false.
+			return SignaturePath.IsEmpty()
+				? Keyword
+				: FString::Printf(TEXT("%s<%s>"), *Keyword, *SignaturePath);
+		}
+
+		FString TypeStr;
+
+		if (PinType.ContainerType == EPinContainerType::Array)
+		{
+			TypeStr += TEXT("Array<");
+		}
+		else if (PinType.ContainerType == EPinContainerType::Set)
+		{
+			TypeStr += TEXT("Set<");
+		}
+		else if (PinType.ContainerType == EPinContainerType::Map)
+		{
+			TypeStr += TEXT("Map<");
+		}
+
+		TypeStr += FormatBase(PinType.PinCategory, PinType.PinSubCategory, PinType.PinSubCategoryObject.Get());
+
+		if (PinType.ContainerType == EPinContainerType::Map)
+		{
+			TypeStr += TEXT(",");
+			TypeStr += FormatBase(PinType.PinValueType.TerminalCategory,
+				PinType.PinValueType.TerminalSubCategory,
+				PinType.PinValueType.TerminalSubCategoryObject.Get());
+		}
+
+		if (PinType.ContainerType != EPinContainerType::None)
+		{
+			TypeStr += TEXT(">");
+		}
+
+		return TypeStr;
+	}
+
+	bool IsDelegateVariableType(const FEdGraphPinType& PinType)
+	{
+		return IsDelegateCategory(PinType.PinCategory);
+	}
+
+	UFunction* ResolveDelegateSignatureFunction(const FEdGraphPinType& PinType,
+		UBlueprint* OwningBlueprint, FName VariableName)
+	{
+		if (!IsDelegateCategory(PinType.PinCategory))
+		{
+			return nullptr;
+		}
+
+		UClass* GeneratedClass = IsValid(OwningBlueprint) ? OwningBlueprint->GeneratedClass.Get() : nullptr;
+
+		// Resolve the member reference in the owning generated class when available.
+		UFunction* SignatureFn = FMemberReference::ResolveSimpleMemberReference<UFunction>(
+			PinType.PinSubCategoryMemberReference, GeneratedClass);
+		if (IsValid(SignatureFn))
+		{
+			return SignatureFn;
+		}
+
+		// Blueprint dispatcher references can be empty or self-scoped; try the generated signature name.
+		if (!IsValid(OwningBlueprint))
+		{
+			return nullptr;
+		}
+
+		const FName MemberSigName = PinType.PinSubCategoryMemberReference.MemberName;
+		UClass* const CandidateClasses[] = { GeneratedClass, OwningBlueprint->SkeletonGeneratedClass.Get() };
+		for (UClass* Candidate : CandidateClasses)
+		{
+			if (!IsValid(Candidate))
+			{
+				continue;
+			}
+			if (!VariableName.IsNone())
+			{
+				SignatureFn = Candidate->FindFunctionByName(
+					FName(*(VariableName.ToString() + TEXT("__DelegateSignature"))));
+				if (IsValid(SignatureFn))
+				{
+					return SignatureFn;
+				}
+			}
+			if (!MemberSigName.IsNone())
+			{
+				SignatureFn = Candidate->FindFunctionByName(MemberSigName);
+				if (IsValid(SignatureFn))
+				{
+					return SignatureFn;
+				}
+				SignatureFn = Candidate->FindFunctionByName(
+					FName(*(MemberSigName.ToString() + TEXT("__DelegateSignature"))));
+				if (IsValid(SignatureFn))
+				{
+					return SignatureFn;
+				}
+			}
+		}
+		return nullptr;
+	}
+
+	FString GetDelegateSignatureFunctionPath(const FEdGraphPinType& PinType,
+		UBlueprint* OwningBlueprint, FName VariableName)
+	{
+		if (!IsDelegateCategory(PinType.PinCategory))
+		{
+			return FString();
+		}
+		if (const UFunction* Fn = ResolveDelegateSignatureFunction(PinType, OwningBlueprint, VariableName);
+			IsValid(Fn))
+		{
+			return Fn->GetPathName();
+		}
+
+		// Fall back to the recorded parent path when no Blueprint scope is available.
+		return GetDelegateSignaturePath(PinType);
+	}
+
+	void WriteVariableTypeJson(const FEdGraphPinType& PinType, const TSharedPtr<FJsonObject>& Out,
+		UBlueprint* OwningBlueprint, FName VariableName)
+	{
+		if (!Out.IsValid())
+		{
+			return;
+		}
+
+		Out->SetStringField(TEXT("type"), FormatVariableTypeString(PinType));
+
+		const bool bDelegate = IsDelegateCategory(PinType.PinCategory);
+		if (!bDelegate)
+		{
+			Out->SetBoolField(TEXT("type_round_trips"), true);
+			return;
+		}
+
+		const FString SignaturePath = GetDelegateSignatureFunctionPath(PinType, OwningBlueprint, VariableName);
+
+		// Both delegate representations require a resolvable signature.
+		Out->SetBoolField(TEXT("type_round_trips"), !SignaturePath.IsEmpty());
+
+		// Always emit signature_function for delegates; empty means unresolved.
+		Out->SetStringField(TEXT("signature_function"), SignaturePath);
+
+		// Emit a replayable structured spec only when the signature resolves.
+		if (!SignaturePath.IsEmpty())
+		{
+			TSharedPtr<FJsonObject> Spec = MakeShared<FJsonObject>();
+			Spec->SetStringField(TEXT("base"),
+				PinType.PinCategory == UEdGraphSchema_K2::PC_MCDelegate ? TEXT("mcdelegate") : TEXT("delegate"));
+			Spec->SetStringField(TEXT("signature_function"), SignaturePath);
+			Out->SetObjectField(TEXT("variable_type_spec"), Spec);
+		}
+		else
+		{
+			UE_LOG(LogClaireon, Warning,
+				TEXT("Variable '%s': could not resolve the signature UFunction for a %s variable; "
+				     "signature_function is empty and type_round_trips is false."),
+				*VariableName.ToString(),
+				PinType.PinCategory == UEdGraphSchema_K2::PC_MCDelegate ? TEXT("multicast delegate") : TEXT("delegate"));
+		}
+	}
+
+	void WriteVariableCoreJson(const FBPVariableDescription& Var, const TSharedPtr<FJsonObject>& Out,
+		UBlueprint* OwningBlueprint)
+	{
+		if (!Out.IsValid())
+		{
+			return;
+		}
+
+		Out->SetStringField(TEXT("variable_name"), Var.VarName.ToString());
+		WriteVariableTypeJson(Var.VarType, Out, OwningBlueprint, Var.VarName);
+		Out->SetStringField(TEXT("category"), Var.Category.ToString());
+		Out->SetStringField(TEXT("display_name"), ResolveVariableDisplayName(Var));
+
+		// Serialize effective flags, including the result of clear_flags.
+		TArray<TSharedPtr<FJsonValue>> FlagValues;
+		for (const FString& Flag : FormatPropertyFlags(Var.PropertyFlags))
+		{
+			FlagValues.Add(MakeShared<FJsonValueString>(Flag));
+		}
+		Out->SetArrayField(TEXT("flags"), FlagValues);
+
+		// Recompose the replication spelling accepted by the setter.
+		const bool bRepNotify = (Var.PropertyFlags & CPF_RepNotify) != 0;
+		const bool bNet = (Var.PropertyFlags & CPF_Net) != 0;
+		Out->SetStringField(TEXT("replication"),
+			bRepNotify ? TEXT("RepNotify") : (bNet ? TEXT("Replicated") : TEXT("None")));
+		Out->SetStringField(TEXT("rep_notify_func"),
+			Var.RepNotifyFunc.IsNone() ? FString() : Var.RepNotifyFunc.ToString());
+
+		Out->SetStringField(TEXT("replication_condition"),
+			IsValid(StaticEnum<ELifetimeCondition>())
+				? StaticEnum<ELifetimeCondition>()->GetNameStringByValue(static_cast<int64>(Var.ReplicationCondition))
+				: FString());
+
+		// Tooltip is also a first-class setter field.
+		TSharedPtr<FJsonObject> Meta = MakeShared<FJsonObject>();
+		FString Tooltip;
+		for (const FBPVariableMetaDataEntry& Entry : Var.MetaDataArray)
+		{
+			Meta->SetStringField(Entry.DataKey.ToString(), Entry.DataValue);
+			if (Entry.DataKey == FName(TEXT("tooltip")))
+			{
+				Tooltip = Entry.DataValue;
+			}
+		}
+		Out->SetStringField(TEXT("tooltip"), Tooltip);
+		Out->SetObjectField(TEXT("metadata"), Meta);
+	}
+
+	bool IsFunctionParameterSource(const UEdGraphPin* SourcePin)
+	{
+		if (!SourcePin || SourcePin->Direction != EGPD_Output)
+		{
+			return false;
+		}
+		if (SourcePin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec)
+		{
+			return false;
+		}
+		const UEdGraphNode* Owner = SourcePin->GetOwningNode();
+		return IsValid(Owner) && Owner->IsA<UK2Node_FunctionEntry>();
+	}
+
+	const TCHAR* ToString(FCustomEventNameConflict::EKind Kind)
+	{
+		switch (Kind)
+		{
+		case FCustomEventNameConflict::EKind::ExistingOverrideEvent: return TEXT("existing_override_event");
+		case FCustomEventNameConflict::EKind::ExistingCustomEvent:   return TEXT("existing_custom_event");
+		case FCustomEventNameConflict::EKind::ParentBlueprintEvent:  return TEXT("parent_blueprint_event");
+		case FCustomEventNameConflict::EKind::ParentFunction:        return TEXT("parent_function");
+		case FCustomEventNameConflict::EKind::InterfaceFunction:     return TEXT("interface_function");
+		case FCustomEventNameConflict::EKind::LocalFunctionGraph:    return TEXT("local_function_graph");
+		default:                                                    return TEXT("none");
+		}
+	}
+
+	FCustomEventNameConflict FindCustomEventNameConflict(
+		UBlueprint* Blueprint,
+		const FString& EventName,
+		const UEdGraphNode* IgnoreNode)
+	{
+		FCustomEventNameConflict Conflict;
+		if (!IsValid(Blueprint) || EventName.IsEmpty())
+		{
+			return Conflict;
+		}
+
+		// Check existing events across all graphs before creating a custom event.
+		TArray<UEdGraph*> AllGraphs;
+		Blueprint->GetAllGraphs(AllGraphs);
+		for (const UEdGraph* Graph : AllGraphs)
+		{
+			if (!IsValid(Graph))
+			{
+				continue;
+			}
+			for (const UEdGraphNode* Node : Graph->Nodes)
+			{
+				const UK2Node_Event* Event = Cast<UK2Node_Event>(Node);
+				if (!IsValid(Event) || Node == IgnoreNode)
+				{
+					continue;
+				}
+				if (!Event->GetFunctionName().ToString().Equals(EventName, ESearchCase::IgnoreCase))
+				{
+					continue;
+				}
+
+				Conflict.ResolvedFunctionName = Event->GetFunctionName();
+				Conflict.ExistingNodeGuid = Event->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens);
+				Conflict.ExistingGraphName = Graph->GetName();
+				if (Event->bOverrideFunction)
+				{
+					Conflict.Kind = FCustomEventNameConflict::EKind::ExistingOverrideEvent;
+					Conflict.OwnerName = IsValid(Event->EventReference.GetMemberParentClass())
+						? Event->EventReference.GetMemberParentClass()->GetName()
+						: FString();
+					Conflict.Explanation = FString::Printf(
+						TEXT("'%s' is already implemented in this Blueprint as the override event '%s' in graph '%s' (node %s)."),
+						*EventName, *Conflict.ResolvedFunctionName.ToString(),
+						*Conflict.ExistingGraphName, *Conflict.ExistingNodeGuid);
+					Conflict.Remedy = FString::Printf(
+						TEXT("Wire the new logic to that node -- reference it by GUID %s. A Custom Event of the same name is a second entry point that nothing calls, and the Blueprint will not compile."),
+						*Conflict.ExistingNodeGuid);
+				}
+				else
+				{
+					Conflict.Kind = FCustomEventNameConflict::EKind::ExistingCustomEvent;
+					Conflict.Explanation = FString::Printf(
+						TEXT("A Custom Event named '%s' already exists in graph '%s' (node %s)."),
+						*EventName, *Conflict.ExistingGraphName, *Conflict.ExistingNodeGuid);
+					Conflict.Remedy = FString::Printf(
+						TEXT("Reference the existing node by GUID %s instead of creating a second one; two Custom Events with one name do not compile."),
+						*Conflict.ExistingNodeGuid);
+				}
+				return Conflict;
+			}
+		}
+
+		// Parent Blueprint events require overrides, not custom events.
+		if (UClass* ParentClass = Blueprint->ParentClass; IsValid(ParentClass))
+		{
+			ClaireonNameResolver::FNameResolveResult Result;
+			if (UFunction* Found = ClaireonNameResolver::ResolveFunctionName(ParentClass, EventName, Result); IsValid(Found))
+			{
+				Conflict.ResolvedFunctionName = Found->GetFName();
+				Conflict.OwnerName = IsValid(Found->GetOwnerClass()) ? Found->GetOwnerClass()->GetName() : ParentClass->GetName();
+				Conflict.ResolutionNote = Result.ResolutionNote;
+				Conflict.bNativeEvent = Found->HasAnyFunctionFlags(FUNC_Native);
+
+				if (Found->HasAnyFunctionFlags(FUNC_BlueprintEvent))
+				{
+					Conflict.Kind = FCustomEventNameConflict::EKind::ParentBlueprintEvent;
+					Conflict.Explanation = FString::Printf(
+						TEXT("'%s' is a %s on %s, not a free name."),
+						*EventName,
+						Conflict.bNativeEvent ? TEXT("BlueprintNativeEvent") : TEXT("BlueprintImplementableEvent"),
+						*Conflict.OwnerName);
+					Conflict.Remedy = Conflict.bNativeEvent
+						? FString::Printf(
+							TEXT("Use the add_function_override operation with function_name='%s' so the graph implements the real event."),
+							*Conflict.ResolvedFunctionName.ToString())
+						: FString::Printf(
+							TEXT("Create the override instead: node_type='EventOverride' with function_name='%s'. A Custom Event of this name does not override it, never runs, and does not compile."),
+							*Conflict.ResolvedFunctionName.ToString());
+				}
+				else
+				{
+					Conflict.Kind = FCustomEventNameConflict::EKind::ParentFunction;
+					Conflict.Explanation = FString::Printf(
+						TEXT("'%s' is already a function on %s."),
+						*EventName, *Conflict.OwnerName);
+					Conflict.Remedy = FString::Printf(
+						TEXT("Pick a different Custom Event name, or call '%s' with node_type='CallFunction'. A Custom Event cannot share a name with an inherited function."),
+						*Conflict.ResolvedFunctionName.ToString());
+				}
+				return Conflict;
+			}
+		}
+
+		// Check interface functions as well.
+		for (const FBPInterfaceDescription& IfaceDesc : Blueprint->ImplementedInterfaces)
+		{
+			UClass* IfaceClass = IfaceDesc.Interface.Get();
+			if (!IsValid(IfaceClass))
+			{
+				continue;
+			}
+			ClaireonNameResolver::FNameResolveResult Result;
+			if (UFunction* Found = ClaireonNameResolver::ResolveFunctionName(IfaceClass, EventName, Result); IsValid(Found))
+			{
+				Conflict.Kind = FCustomEventNameConflict::EKind::InterfaceFunction;
+				Conflict.ResolvedFunctionName = Found->GetFName();
+				Conflict.OwnerName = IfaceClass->GetName();
+				Conflict.ResolutionNote = Result.ResolutionNote;
+				Conflict.Explanation = FString::Printf(
+					TEXT("'%s' is a function on implemented interface %s."),
+					*EventName, *Conflict.OwnerName);
+				Conflict.Remedy = FString::Printf(
+					TEXT("Implement the interface function rather than shadowing it: node_type='EventOverride' with function_name='%s' for an event-type interface function, or edit the interface function graph of that name. A Custom Event beside it is a different function that no interface call reaches."),
+					*Conflict.ResolvedFunctionName.ToString());
+				return Conflict;
+			}
+		}
+
+		// Use function graphs; the skeleton class also contains custom events.
+		for (const UEdGraph* FunctionGraph : Blueprint->FunctionGraphs)
+		{
+			if (IsValid(FunctionGraph) && FunctionGraph->GetName().Equals(EventName, ESearchCase::IgnoreCase))
+			{
+				Conflict.Kind = FCustomEventNameConflict::EKind::LocalFunctionGraph;
+				Conflict.ResolvedFunctionName = FunctionGraph->GetFName();
+				Conflict.OwnerName = FunctionGraph->GetName();
+				Conflict.Explanation = FString::Printf(
+					TEXT("This Blueprint already has a function graph named '%s'."), *EventName);
+				Conflict.Remedy = FString::Printf(
+					TEXT("Call it with node_type='CallFunction' and function_name='%s', or name the Custom Event something else."),
+					*EventName);
+				return Conflict;
+			}
+		}
+
+		return Conflict;
+	}
+
+	bool IsDistantVariableGetSource(const UEdGraphPin* SourcePin, const UEdGraphPin* TargetPin, double MaxDistance)
+	{
+		if (!SourcePin || !TargetPin || SourcePin->Direction != EGPD_Output)
+		{
+			return false;
+		}
+		if (SourcePin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec)
+		{
+			return false;
+		}
+
+		const UK2Node_VariableGet* Get = Cast<UK2Node_VariableGet>(SourcePin->GetOwningNode());
+		const UEdGraphNode* Consumer = TargetPin->GetOwningNode();
+		if (!IsValid(Get) || !IsValid(Consumer))
+		{
+			return false;
+		}
+
+		// Only pure, receiver-less reads can be copied beside a consumer.
+		// Wired/default targets and validated gets carry semantics the copy would lose.
+		for (const UEdGraphPin* Pin : Get->Pins)
+		{
+			if (!Pin)
+			{
+				continue;
+			}
+			if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec)
+			{
+				return false;
+			}
+			if (Pin->Direction == EGPD_Input
+				&& (Pin->LinkedTo.Num() > 0 || IsValid(Pin->DefaultObject)))
+			{
+				return false;
+			}
+		}
+
+		// Use anchor distance, as distant-get does.
+		const double DX = static_cast<double>(Consumer->NodePosX - Get->NodePosX);
+		const double DY = static_cast<double>(Consumer->NodePosY - Get->NodePosY);
+		return FMath::Sqrt(DX * DX + DY * DY) > MaxDistance;
+	}
+
+	UEdGraphPin* EmitAdjacentVariableGet(UEdGraph* Graph, UEdGraphPin* SourcePin,
+	                                     UEdGraphPin* TargetPin, int32 StackIndex)
+	{
+		UEdGraphNode* TargetNode = TargetPin ? TargetPin->GetOwningNode() : nullptr;
+		UK2Node_VariableGet* Source = SourcePin ? Cast<UK2Node_VariableGet>(SourcePin->GetOwningNode()) : nullptr;
+		if (!IsValid(Graph) || !IsValid(TargetNode) || !IsValid(Source))
+		{
+			return nullptr;
+		}
+
+		UK2Node_VariableGet* Get = NewObject<UK2Node_VariableGet>(Graph);
+		Graph->AddNode(Get, /*bFromUI=*/false, /*bSelectNewNode=*/false);
+		// Preserve scope, owning class, self-context, and member GUID.
+		Get->VariableReference = Source->VariableReference;
+		Get->SelfContextInfo = Source->SelfContextInfo;
+		Get->CreateNewGuid();
+		Get->PostPlacedNewNode();
+		Get->AllocateDefaultPins();
+
+		Get->NodePosX = TargetNode->NodePosX - 240;
+		Get->NodePosY = TargetNode->NodePosY + (StackIndex * 64);
+
+		// Match the requested output by name for struct getters with multiple outputs.
+		for (UEdGraphPin* Pin : Get->Pins)
+		{
+			if (Pin && Pin->Direction == EGPD_Output && Pin->PinName == SourcePin->PinName)
+			{
+				return Pin;
+			}
+		}
+		for (UEdGraphPin* Pin : Get->Pins)
+		{
+			if (Pin && Pin->Direction == EGPD_Output
+				&& Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
+			{
+				return Pin;
+			}
+		}
+
+		// Destroy an unresolved copy before returning failure so callers receive no orphan node.
+		Get->DestroyNode();
+		return nullptr;
+	}
+
+	UEdGraphPin* EmitLocalParameterGet(UEdGraph* Graph, UEdGraphPin* SourcePin,
+	                                   UEdGraphPin* TargetPin, int32 StackIndex)
+	{
+		UEdGraphNode* TargetNode = TargetPin ? TargetPin->GetOwningNode() : nullptr;
+		if (!IsValid(Graph) || !IsValid(TargetNode) || !SourcePin)
+		{
+			return nullptr;
+		}
+
+		UK2Node_VariableGet* Get = NewObject<UK2Node_VariableGet>(Graph);
+		Graph->AddNode(Get, /*bFromUI=*/false, /*bSelectNewNode=*/false);
+		Get->VariableReference.SetLocalMember(SourcePin->PinName, Graph->GetName(), FGuid());
+		Get->CreateNewGuid();
+		Get->PostPlacedNewNode();
+		Get->AllocateDefaultPins();
+
+		// Adjacent to the consumer, staggered so several gets do not stack.
+		Get->NodePosX = TargetNode->NodePosX - 240;
+		Get->NodePosY = TargetNode->NodePosY + (StackIndex * 64);
+
+		for (UEdGraphPin* Pin : Get->Pins)
+		{
+			if (Pin && Pin->Direction == EGPD_Output
+				&& Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
+			{
+				return Pin;
+			}
+		}
+
+		// An unresolved local reference has no value pin; remove the orphan before returning failure.
+		Get->DestroyNode();
+		return nullptr;
 	}
 
 	uint64 ParsePropertyFlags(const TArray<FString>& FlagStrings)
@@ -1520,6 +2458,18 @@ namespace ClaireonBlueprintHelpers
 		return Flags;
 	}
 
+	FString ResolveVariableDisplayName(const FBPVariableDescription& Var)
+	{
+		// Read display_name from the metadata key used by the setter.
+		for (const FBPVariableMetaDataEntry& Entry : Var.MetaDataArray)
+		{
+			if (Entry.DataKey == FBlueprintMetadata::MD_DisplayName && !Entry.DataValue.IsEmpty())
+			{
+				return Entry.DataValue;
+			}
+		}
+		return Var.FriendlyName;
+	}
 	TArray<FString> FormatPropertyFlags(uint64 PropertyFlags)
 	{
 		TArray<FString> Flags;
@@ -1879,6 +2829,12 @@ namespace ClaireonBlueprintHelpers
 					FBlueprintEditorUtils::SetBlueprintOnlyEditableFlag(Blueprint, VarName, true);
 					FBlueprintEditorUtils::SetBlueprintPropertyReadOnlyFlag(Blueprint, VarName, false);
 					VarDesc->PropertyFlags |= CPF_BlueprintVisible;
+				}
+				else if (Flag == TEXT("EditInstanceOnly"))
+				{
+					// EditInstanceOnly must clear CPF_DisableEditOnInstance; OR-ing parsed flags cannot clear it.
+					FBlueprintEditorUtils::SetBlueprintOnlyEditableFlag(Blueprint, VarName, false);
+					VarDesc->PropertyFlags |= CPF_Edit;
 				}
 				else if (bReplicationFieldProvided && (Flag == TEXT("Net") || Flag == TEXT("Replicated") || Flag == TEXT("RepNotify")))
 				{
@@ -2313,3 +3269,82 @@ namespace ClaireonBlueprintHelpers
 		return ::ClaireonNodeTypeAlias::GetAliasForNodeClass(NodeClass);
 	}
 } // namespace ClaireonBlueprintHelpers
+
+bool ClaireonBlueprintHelpers::ResolveComponentTemplate(UBlueprint* Blueprint, FName ComponentName, bool bForWrite, FResolvedComponentTemplate& OutResolved, FString& OutError)
+{
+	OutResolved = FResolvedComponentTemplate();
+	if (!IsValid(Blueprint))
+	{
+		OutError = TEXT("Blueprint is invalid");
+		return false;
+	}
+
+	// Own SCS first: the common case, and the only place a non-inherited component can be.
+	if (USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript)
+	{
+		if (USCS_Node* Node = SCS->FindSCSNode(ComponentName))
+		{
+			OutResolved.Node = Node;
+			OutResolved.Template = Node->ComponentTemplate;
+			if (!IsValid(OutResolved.Template))
+			{
+				OutError = FString::Printf(TEXT("Component '%s' has no template object"), *ComponentName.ToString());
+				return false;
+			}
+			return true;
+		}
+	}
+
+	// Then every ancestor Blueprint's SCS. An inherited component is edited through this
+	// Blueprint's InheritableComponentHandler override template (what the Details panel
+	// creates on first edit); writing to the parent's template would change the parent.
+	for (UClass* Class = Blueprint->ParentClass; Class; Class = Class->GetSuperClass())
+	{
+		UBlueprintGeneratedClass* ParentBPGC = Cast<UBlueprintGeneratedClass>(Class);
+		if (!ParentBPGC || !ParentBPGC->SimpleConstructionScript)
+		{
+			continue;
+		}
+		USCS_Node* ParentNode = ParentBPGC->SimpleConstructionScript->FindSCSNode(ComponentName);
+		if (!ParentNode)
+		{
+			continue;
+		}
+
+		OutResolved.Node = ParentNode;
+		OutResolved.bInherited = true;
+
+		const FComponentKey Key(ParentNode);
+		if (UInheritableComponentHandler* Handler = Blueprint->GetInheritableComponentHandler(/*bCreateIfNecessary=*/bForWrite))
+		{
+			UActorComponent* Override = Handler->GetOverridenComponentTemplate(Key);
+			if (!Override && bForWrite)
+			{
+				Override = Handler->CreateOverridenComponentTemplate(Key);
+			}
+			if (Override)
+			{
+				OutResolved.Template = Override;
+				OutResolved.bOverridden = true;
+				return true;
+			}
+		}
+
+		if (bForWrite)
+		{
+			OutError = FString::Printf(TEXT("Component '%s' is inherited from %s and no override template could be created"),
+				*ComponentName.ToString(), *ParentBPGC->GetName());
+			return false;
+		}
+		OutResolved.Template = ParentNode->ComponentTemplate;
+		if (!IsValid(OutResolved.Template))
+		{
+			OutError = FString::Printf(TEXT("Inherited component '%s' has no template object"), *ComponentName.ToString());
+			return false;
+		}
+		return true;
+	}
+
+	OutError = FString::Printf(TEXT("Component not found: %s (searched this Blueprint and its Blueprint ancestors; native C++ components are not SCS components)"), *ComponentName.ToString());
+	return false;
+}

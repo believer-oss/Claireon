@@ -6,43 +6,51 @@
 #include "CoreMinimal.h"
 
 /**
- * Shared process-wide transaction-group state.
- *
- * Two independently-tracked transaction scopes:
- *
- *   1. Auto-transaction (bAutoTransactionActive) - opened automatically by
- *      ClaireonTool_ExecutePython at the start of every python_execute call.
- *      Committed on success; cancelled (discarded) on error.  The LLM can
- *      discard it early by calling claireon.transaction_undo() from within the
- *      script; transaction_undo checks this flag before deciding whether to
- *      do a regular Ctrl+Z or discard the in-flight auto-transaction.
- *
- *   2. Explicit group (bGroupActive) - opened by ClaireonTool_TransactionBeginGroup
- *      (no longer registered as a Python-callable tool after the auto-transaction
- *      was introduced; kept for C++ callers and forward compatibility).
- *
- * FClaireonServer is single-instance and single-session, so a file-scope
- * namespace singleton is sufficient.  Module shutdown calls ResetGroupState()
- * to close any leaked open scopes.
+ * Process-wide explicit transaction group, opened and closed by transaction tools.
+ * The group combines all editor mutations into one undo entry, including user edits;
+ * keep it short. ResetGroupState closes leaked groups at shutdown or server reset.
  */
 namespace ClaireonTransactionGroupState
 {
-	// --- Explicit group (legacy; begin_group tool no longer registered) ---
+	/** True between transaction_begin_group and whichever tool closes the group. */
 	extern CLAIREON_API bool bGroupActive;
+
+	/** The caller's label, WITHOUT the [Claireon] prefix. Empty when no group is active. */
 	extern CLAIREON_API FString ActiveGroupLabel;
 
-	// --- Auto-transaction (python_execute wrapper) ---
-	/** True while a python_execute call has an open auto-transaction. */
-	extern CLAIREON_API bool bAutoTransactionActive;
-	/** Index returned by GEditor->BeginTransaction; used for CancelTransaction. */
-	extern CLAIREON_API int32 AutoTransactionIndex;
+	/**
+	 * TransactionId captured from GUndo when the group opens; invalid when inactive.
+	 * Rollback must match this identity, not a reusable label, to avoid undoing an older group.
+	 */
+	extern CLAIREON_API FGuid ActiveGroupTransactionId;
 
-	/** Close and discard any open auto-transaction then any open explicit group.
-	 *  Called at module shutdown and server reset. */
+	/** Display title: caller label with [Claireon] prefix. Use ActiveGroupTransactionId for identity. */
+	CLAIREON_API FString MakeGroupTitle(const FString& Label);
+
+	/**
+	 * Close an open group without undoing it at shutdown or server reset.
+	 * Its record may no longer be at the undo head.
+	 */
 	CLAIREON_API void ResetGroupState();
-
-	/** Discard the open auto-transaction via EndTransaction+UndoTransaction.
-	 *  No-op when no auto-transaction is active.  Called by transaction_undo
-	 *  when the LLM wants to roll back the current python_execute scope. */
-	CLAIREON_API void DiscardAutoTransaction();
 }
+
+// Test-only fault keys for rollback and indexed undo/redo attempts.
+#if WITH_CLAIREON_TESTS
+namespace ClaireonTransactionFaultSeam
+{
+	/** Arm to make transaction_rollback_group's UndoTransaction() report failure. */
+	inline constexpr TCHAR RollbackGroupUndo[] = TEXT("transaction_rollback_group:undo");
+
+	/** Arm to make the AttemptIndex'th (0-based) undo in transaction_undo report failure. */
+	inline FString UndoAttempt(int32 AttemptIndex)
+	{
+		return FString::Printf(TEXT("transaction_undo:%d"), AttemptIndex);
+	}
+
+	/** Arm to make the AttemptIndex'th (0-based) redo in transaction_redo report failure. */
+	inline FString RedoAttempt(int32 AttemptIndex)
+	{
+		return FString::Printf(TEXT("transaction_redo:%d"), AttemptIndex);
+	}
+}
+#endif // WITH_CLAIREON_TESTS

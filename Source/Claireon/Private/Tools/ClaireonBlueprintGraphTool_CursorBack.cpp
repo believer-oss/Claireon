@@ -195,6 +195,9 @@ FToolResult ClaireonBlueprintGraphTool_CursorBack::Execute(const TSharedPtr<FJso
 		TEXT("Navigated back to: %s (graph: %s)"),
 		*NodeTitle, *Data->Cursor.GraphName);
 
+	// Mirror the view without changing selection; a missing window is a no-op.
+	MirrorCursorToView(*Data);
+
 	return BuildStateResponse(SessionId, Data);
 }
 

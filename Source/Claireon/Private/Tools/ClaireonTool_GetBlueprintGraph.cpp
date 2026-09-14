@@ -5,6 +5,7 @@
 #include "Tools/ClaireonBlueprintGraphEditToolBase.h" // kBPCategory
 #include "ClaireonPathResolver.h"
 #include "ClaireonBlueprintHelpers.h"
+#include "ClaireonExecTopology.h"
 #include "ClaireonNameResolver.h"
 #include "ClaireonLog.h"
 #include "Engine/Blueprint.h"
@@ -13,7 +14,7 @@
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraphSchema_K2.h"
 #include "K2Node.h" // UK2Node cast at line 484 (N7 pure-call subgraph traversal)
-#include "K2Node_Knot.h" // resolve_knots collapsed edges (P2-13a)
+#include "K2Node_Knot.h" // resolve_knots collapsed edges
 #include "EdGraphUtilities.h"
 #include "ClaireonBlueprintNodeSerializer.h"
 #include "Animation/AnimBlueprint.h"
@@ -37,13 +38,13 @@ FString ClaireonTool_GetBlueprintGraph::GetDescription() const
 FString ClaireonTool_GetBlueprintGraph::GetFullDescription() const
 {
 	return TEXT("Read the internal graph structure of a Blueprint.\n"
-				"Default output: JSON summary at 'exec' detail level - node titles, classes, GUIDs, positions, exec-pin connections, and compact data-pin counts. Suitable for surveying large graphs without token overflow.\n\n"
+				"Default output: JSON summary at 'exec' detail level - node titles, classes, GUIDs, positions, member reference fields, exec-pin connections, and compact data-pin counts. Suitable for surveying large graphs without token overflow.\n\n"
 				"Parameters:\n"
 				"  asset_path (required): Unreal content path of the Blueprint (e.g., /Game/Characters/BP_PlayerCharacter).\n"
 				"  graph_name (optional): Name of a specific graph to export (e.g., 'EventGraph', 'TakeDamage'). Omit to export all graphs.\n"
 				"  format (optional, default='json'): 'json' for structured summary, 't3d' for Unreal text export (clipboard copy/paste), 'both' for both. T3D is opt-in.\n"
 				"  node_detail_level (optional, default='exec'):\n"
-				"    'exec' - compact view: title, class, GUID, position, exec-pin connections, and compact data-pin count. Best for large graphs.\n"
+				"    'exec' - compact view: title, class, GUID, position, member reference fields, exec-pin connections, and compact data-pin count. Best for large graphs.\n"
 				"    'full' - all pin details and defaults.\n"
 				"    'summary' - node types and connections only (no pin defaults).\n"
 				"    'outline' - one line per node, parseable by a single regex. No embedded newlines.\n"
@@ -66,6 +67,7 @@ FString ClaireonTool_GetBlueprintGraph::GetFullDescription() const
 				"Payload contracts:\n"
 				"- All node GUIDs in the payload (nodes[].node_id, connections[].from_node/to_node, pins[].linked_to[].node_id) use ONE format: digits with hyphens (e.g. A1B2C3D4-...). They string-match each other directly.\n"
 				"- At 'full' and 'exec' detail each connected pin carries linked_to: [{node_id, pin_name}] listing its actual endpoints.\n"
+				"- At 'full', 'summary', and 'exec' detail a node with a member reference (function/variable/macro/cast/proxy/delegate/...) carries its reference fields (function_reference, variable_reference, etc.); 'outline' has no per-node JSON object to carry them in.\n"
 				"- connections[] never drops edges: when max_nodes/anchor truncation leaves an edge's other node outside the returned set, the edge is kept and flagged target_in_set:false (outgoing) or source_in_set:false (incoming). Absence of the flag means both endpoints are in nodes[].\n"
 				"- Each graph object carries total_filtered: the number of nodes passing node_filter/filter_class/filter_title_contains BEFORE offset/max_nodes windowing. Page with offset until offset >= total_filtered.\n\n"
 				"Navigation workflow: Call with defaults to get a compact exec-level overview and node GUIDs. Then use anchor_node_guid=<guid> with node_detail_level='full' to inspect a specific subgraph.\n"
@@ -88,26 +90,17 @@ TSharedPtr<FJsonObject> ClaireonTool_GetBlueprintGraph::GetInputSchema() const
 
 	TSharedPtr<FJsonObject> Properties = MakeShared<FJsonObject>();
 
-	// asset_path - required
 	TSharedPtr<FJsonObject> PathProp = MakeShared<FJsonObject>();
 	PathProp->SetStringField(TEXT("type"), TEXT("string"));
 	PathProp->SetStringField(TEXT("description"), TEXT("Unreal content path of the Blueprint asset (e.g., /Game/Characters/BP_PlayerCharacter). Must start with /Game/."));
 	Properties->SetObjectField(TEXT("asset_path"), PathProp);
 
-	// session_id - accepted for call-shape parity with the session tools
-	// (P2-1). Inspection is immediate-mode either way: it reads the same live
-	// UObject graph an open session mutates, so holding a session changes
-	// nothing about the result -- but a caller mid-session should not have to
-	// strip the id from an otherwise-uniform argument dict. The P1-2 gate
-	// rejects anything undeclared, which turned this from silently-ignored
-	// into a hard error; declaring it (with this honest text) restores the
-	// ergonomic call without hiding behavior.
+	// session_id is accepted for call-shape parity; inspection reads the live graph without a session.
 	TSharedPtr<FJsonObject> SessionProp = MakeShared<FJsonObject>();
 	SessionProp->SetStringField(TEXT("type"), TEXT("string"));
 	SessionProp->SetStringField(TEXT("description"), TEXT("Accepted for parity with session tools and otherwise unused: bp_get_graph is sessionless by design and reads the same live graph a session would."));
 	Properties->SetObjectField(TEXT("session_id"), SessionProp);
 
-	// graph_name - optional
 	TSharedPtr<FJsonObject> GraphProp = MakeShared<FJsonObject>();
 	GraphProp->SetStringField(TEXT("type"), TEXT("string"));
 	GraphProp->SetStringField(TEXT("description"), TEXT("Name of the specific graph to export (e.g., 'EventGraph', 'TakeDamage'). If omitted, exports all graphs."));
@@ -124,20 +117,17 @@ TSharedPtr<FJsonObject> ClaireonTool_GetBlueprintGraph::GetInputSchema() const
 	FormatProp->SetStringField(TEXT("description"), TEXT("Output format: 'json' for structured summary (default), 't3d' for Unreal text export, 'both' for both (includes T3D, opt-in for clipboard copy/paste use cases). Default: 'json'."));
 	Properties->SetObjectField(TEXT("format"), FormatProp);
 
-	// include_pin_defaults - optional
 	TSharedPtr<FJsonObject> DefaultsProp = MakeShared<FJsonObject>();
 	DefaultsProp->SetStringField(TEXT("type"), TEXT("boolean"));
 	DefaultsProp->SetStringField(TEXT("description"), TEXT("Include default values for unconnected pins in JSON output. Default: true. Applies at 'full' and 'summary' node_detail_level (both emit defaults unless this is explicitly false). At 'exec' and 'outline' detail no pin defaults are emitted regardless of this flag."));
 	Properties->SetObjectField(TEXT("include_pin_defaults"), DefaultsProp);
 
-	// resolve_knots - optional (P2-13a)
 	TSharedPtr<FJsonObject> KnotsProp = MakeShared<FJsonObject>();
 	KnotsProp->SetStringField(TEXT("type"), TEXT("boolean"));
 	KnotsProp->SetBoolField(TEXT("default"), false);
 	KnotsProp->SetStringField(TEXT("description"), TEXT("Also emit knot-transparent edges: for every A -> reroute-knot(s) -> B path, an extra connections[] entry from A to B carrying via_knots (the traversed knot GUIDs in order). Raw knot edges stay in the list. Default: false."));
 	Properties->SetObjectField(TEXT("resolve_knots"), KnotsProp);
 
-	// node_detail_level - optional
 	TSharedPtr<FJsonObject> DetailProp = MakeShared<FJsonObject>();
 	DetailProp->SetStringField(TEXT("type"), TEXT("string"));
 	TArray<TSharedPtr<FJsonValue>> DetailEnum;
@@ -451,7 +441,6 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 		return true;
 	};
 
-	// Load Blueprint
 	FString LoadError;
 	UBlueprint* Blueprint = LoadBlueprintFromPath(AssetPath, LoadError);
 	if (!IsValid(Blueprint))
@@ -459,7 +448,19 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 		return MakeErrorResult(LoadError);
 	}
 
-	// Collect graphs to process
+	// Use top-level collection membership for graph metadata. Nested graphs found by name have no entry.
+	TArray<ClaireonBlueprintHelpers::FGraphEnumerationEntry> EnumeratedEntries =
+		ClaireonBlueprintHelpers::EnumerateTopLevelGraphs(Blueprint);
+	TMap<UEdGraph*, const ClaireonBlueprintHelpers::FGraphEnumerationEntry*> GraphKindLookup;
+	GraphKindLookup.Reserve(EnumeratedEntries.Num());
+	for (const ClaireonBlueprintHelpers::FGraphEnumerationEntry& Entry : EnumeratedEntries)
+	{
+		if (IsValid(Entry.Graph))
+		{
+			GraphKindLookup.Add(Entry.Graph, &Entry);
+		}
+	}
+
 	TArray<UEdGraph*> GraphsToProcess;
 	if (!GraphName.IsEmpty())
 	{
@@ -473,20 +474,9 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 	}
 	else
 	{
-		// All graphs: event graphs + function graphs
-		for (UEdGraph* Graph : Blueprint->UbergraphPages)
+		for (const ClaireonBlueprintHelpers::FGraphEnumerationEntry& Entry : EnumeratedEntries)
 		{
-			if (IsValid(Graph))
-			{
-				GraphsToProcess.Add(Graph);
-			}
-		}
-		for (UEdGraph* Graph : Blueprint->FunctionGraphs)
-		{
-			if (IsValid(Graph))
-			{
-				GraphsToProcess.Add(Graph);
-			}
+			GraphsToProcess.Add(Entry.Graph);
 		}
 	}
 
@@ -495,10 +485,7 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 		return MakeErrorResult(TEXT("No graphs found in Blueprint"));
 	}
 
-	// Resolve the anchor node up front via the shared >=8-hex prefix resolver.
-	// An unresolvable, ambiguous, or malformed anchor is now a structured error
-	// instead of a silent node_count=0 (WS-B B-4 / WS-C C-2). The anchor lives in
-	// exactly one of the graphs being processed; find it there.
+	// Resolve the anchor within the requested graphs; reject malformed, ambiguous, or missing references.
 	UEdGraphNode* ResolvedAnchorNode = nullptr;
 	if (!AnchorGuid.IsEmpty())
 	{
@@ -538,18 +525,26 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 		}
 
 		TSharedPtr<FJsonObject> GraphObj = MakeShared<FJsonObject>();
-		// Emit the prefixed graph_name form only (no short-form `name` alias),
-		// to align with the rest of the BP output surface (node_title,
-		// node_class, node_id, etc.).
 		GraphObj->SetStringField(TEXT("graph_name"), Graph->GetName());
 
-		// P2-13d: 'outline' produces the documented one-line-per-node text.
-		// The grammar promised since the format shipped was produced only by
-		// BuildGraphJsonSummary, which Execute never called -- real outline
-		// output was full node objects, unreachable from its own description.
-		// The CODE side was chosen deliberately: nobody can depend on the
-		// documented shape (it was unreachable), and anyone asking for
-		// 'outline' asked for the compact form its description sells.
+		GraphObj->SetStringField(TEXT("graph_guid"), Graph->GraphGuid.ToString(EGuidFormats::DigitsWithHyphens));
+
+		if (const ClaireonBlueprintHelpers::FGraphEnumerationEntry* const* FoundEntry = GraphKindLookup.Find(Graph))
+		{
+			const ClaireonBlueprintHelpers::FGraphEnumerationEntry* Entry = *FoundEntry;
+			GraphObj->SetStringField(TEXT("graph_kind"),
+				ClaireonBlueprintHelpers::GraphKindToWireString(Entry->GraphKind));
+			if (Entry->GraphKind == ClaireonBlueprintHelpers::EClaireonGraphKind::InterfaceImplementation
+				&& !Entry->OwningInterface.IsEmpty())
+			{
+				GraphObj->SetStringField(TEXT("owning_interface"), Entry->OwningInterface);
+			}
+			else
+			{
+				GraphObj->SetField(TEXT("owning_interface"), MakeShared<FJsonValueNull>());
+			}
+		}
+
 		if (DetailLevel == TEXT("outline"))
 		{
 			GraphObj->SetStringField(TEXT("outline"),
@@ -777,19 +772,14 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 			PosObj->SetNumberField(TEXT("y"), Node->NodePosY);
 			NodeObj->SetObjectField(TEXT("position"), PosObj);
 
-			// Member references (function/variable/macro/cast/proxy/delegate/...)
-			// carry the node's replayable identity; without them callers had to
-			// regex-harvest T3D exports. Emitted at 'full' and 'summary' detail.
-			if (DetailLevel == TEXT("full") || DetailLevel == TEXT("summary"))
+			// Member references preserve replayable node identity at every JSON detail level.
+			if (DetailLevel == TEXT("full") || DetailLevel == TEXT("summary") || DetailLevel == TEXT("exec"))
 			{
 				ClaireonBlueprintNodeSerializer::AppendMemberReferenceFields(Node, NodeObj);
 			}
 
-			// linked_to is emitted at 'full' and 'exec' detail so pin-level payloads carry
-			// actual endpoints (node GUID + pin name), not just a connection_count.
 			const bool bEmitLinkedTo = (DetailLevel == TEXT("full") || DetailLevel == TEXT("exec"));
 
-			// Build pins array
 			TArray<TSharedPtr<FJsonValue>> PinsArray;
 			for (UEdGraphPin* Pin : Node->Pins)
 			{
@@ -965,102 +955,44 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 			}
 		}
 
-		// P2-13a: knot-transparent collapsed edges, ADDED alongside the raw
-		// ones (marked by a via_knots array of the traversed knot GUIDs) so
-		// callers looking for the direct A -> B edge find it without losing
-		// the physical wiring. Chains may branch (a knot output fans out);
-		// every terminal non-knot input gets its own collapsed edge. Cycles
-		// of knots are guarded by the visited set and simply emit nothing.
+		// Add knot-transparent edges alongside raw wiring; direct edges were already emitted.
 		if (bResolveKnots)
 		{
-			for (UEdGraphNode* Node : NodesToProcess)
+			for (const FClaireonCollapsedEdge& Edge : ClaireonExecTopology::CollapseEdges(Graph, /*bIncludeDirect=*/false))
 			{
-				if (!IsValid(Node) || Node->IsA<UK2Node_Knot>())
+				// Match the raw pass: include an edge when either endpoint is in the requested set.
+				const bool bFromInSet = ProcessedSet.Contains(Edge.FromNode);
+				const bool bToInSet = ProcessedSet.Contains(Edge.ToNode);
+				if (!bFromInSet && !bToInSet)
 				{
 					continue;
 				}
-				for (UEdGraphPin* Pin : Node->Pins)
+
+				TSharedPtr<FJsonObject> ConnObj = MakeShared<FJsonObject>();
+				ConnObj->SetStringField(TEXT("from_node"), Edge.FromNode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+				ConnObj->SetStringField(TEXT("from_pin"), Edge.FromPin->PinName.ToString());
+				ConnObj->SetStringField(TEXT("to_node"), Edge.ToNode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+				ConnObj->SetStringField(TEXT("to_pin"), Edge.ToPin->PinName.ToString());
+
+				TArray<TSharedPtr<FJsonValue>> ViaArr;
+				for (const FGuid& KnotGuid : Edge.ViaKnots)
 				{
-					if (!Pin || Pin->Direction != EGPD_Output)
-					{
-						continue;
-					}
-					for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
-					{
-						UEdGraphNode* FirstTarget = LinkedPin ? LinkedPin->GetOwningNode() : nullptr;
-						if (!IsValid(FirstTarget) || !FirstTarget->IsA<UK2Node_Knot>())
-						{
-							continue;  // direct edges are already in connections[]
-						}
-
-						// Walk the knot chain breadth-first, tracking the knot
-						// path per frontier pin so via_knots stays exact even
-						// when the chain branches.
-						struct FKnotWalkEntry
-						{
-							UEdGraphPin* InputPin = nullptr;  // the knot input we arrived at
-							TArray<FString> ViaKnots;
-						};
-						TArray<FKnotWalkEntry> Frontier;
-						TSet<UEdGraphNode*> VisitedKnots;
-						Frontier.Add({ LinkedPin, {} });
-
-						while (Frontier.Num() > 0)
-						{
-							const FKnotWalkEntry Entry = Frontier.Pop(EAllowShrinking::No);
-							UEdGraphNode* KnotNode = Entry.InputPin->GetOwningNode();
-							if (!IsValid(KnotNode) || VisitedKnots.Contains(KnotNode))
-							{
-								continue;
-							}
-							VisitedKnots.Add(KnotNode);
-
-							TArray<FString> Via = Entry.ViaKnots;
-							Via.Add(KnotNode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
-
-							for (UEdGraphPin* KnotPin : KnotNode->Pins)
-							{
-								if (!KnotPin || KnotPin->Direction != EGPD_Output)
-								{
-									continue;
-								}
-								for (UEdGraphPin* NextPin : KnotPin->LinkedTo)
-								{
-									UEdGraphNode* NextNode = NextPin ? NextPin->GetOwningNode() : nullptr;
-									if (!IsValid(NextNode))
-									{
-										continue;
-									}
-									if (NextNode->IsA<UK2Node_Knot>())
-									{
-										Frontier.Add({ NextPin, Via });
-										continue;
-									}
-
-									TSharedPtr<FJsonObject> ConnObj = MakeShared<FJsonObject>();
-									ConnObj->SetStringField(TEXT("from_node"), Node->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
-									ConnObj->SetStringField(TEXT("from_pin"), Pin->PinName.ToString());
-									ConnObj->SetStringField(TEXT("to_node"), NextNode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
-									ConnObj->SetStringField(TEXT("to_pin"), NextPin->PinName.ToString());
-									TArray<TSharedPtr<FJsonValue>> ViaArr;
-									for (const FString& KnotGuid : Via)
-									{
-										ViaArr.Add(MakeShared<FJsonValueString>(KnotGuid));
-									}
-									ConnObj->SetArrayField(TEXT("via_knots"), ViaArr);
-									if (!ProcessedSet.Contains(NextNode))
-									{
-										ConnObj->SetBoolField(TEXT("target_in_set"), false);
-									}
-									ConnectionsArray.Add(MakeShared<FJsonValueObject>(ConnObj));
-								}
-							}
-						}
-					}
+					ViaArr.Add(MakeShared<FJsonValueString>(KnotGuid.ToString(EGuidFormats::DigitsWithHyphens)));
 				}
+				ConnObj->SetArrayField(TEXT("via_knots"), ViaArr);
+
+				// Emit boundary markers only for endpoints outside the requested set.
+				if (!bFromInSet)
+				{
+					ConnObj->SetBoolField(TEXT("source_in_set"), false);
+				}
+				if (!bToInSet)
+				{
+					ConnObj->SetBoolField(TEXT("target_in_set"), false);
+				}
+				ConnectionsArray.Add(MakeShared<FJsonValueObject>(ConnObj));
 			}
 		}
-
 		GraphObj->SetArrayField(TEXT("nodes"), NodesArray);
 		GraphObj->SetNumberField(TEXT("node_count"), NodesArray.Num());
 		GraphObj->SetArrayField(TEXT("connections"), ConnectionsArray);
@@ -1108,29 +1040,17 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 
 	FToolResult Result = MakeSuccessResult(Data, Summary);
 
-	// Success-path guidance. The reported friction was a caller concluding that connectivity
-	// was unavailable when it was simply not emitted at the detail level they asked for --
-	// nothing in the payload said so, and the field they guessed at ('links') never existed.
-	// This makes the omission self-describing.
-	//
-	// Mirrors the emission conditions above exactly: linked_to at 'full'/'exec' (line ~740),
-	// pin defaults at 'full'/'summary' gated on include_pin_defaults (~786).
+	// Keep omission hints aligned with the three independent field-emission conditions above.
 	{
 		const bool bConnectivityOmitted = !(DetailLevel == TEXT("full") || DetailLevel == TEXT("exec"));
 		const bool bPinDefaultsOmitted =
 			!(bIncludePinDefaults && (DetailLevel == TEXT("full") || DetailLevel == TEXT("summary")));
+		const bool bMemberReferenceOmitted =
+			!(DetailLevel == TEXT("full") || DetailLevel == TEXT("summary") || DetailLevel == TEXT("exec"));
 
-		// LATCHED per session by code: this teaches a PARAMETER, and that lesson transfers the
-		// moment it lands, so repeating it on every call of a sweep is the bulk-loop noise that
-		// forced a latch onto the get_editor_property nudge.
-		if ((bConnectivityOmitted || bPinDefaultsOmitted)
-			&& ShouldEmitLatchedHint(TEXT("bp_get_graph_detail_omissions")))
+		if (bConnectivityOmitted || bPinDefaultsOmitted || bMemberReferenceOmitted)
 		{
-			// ONE hint, not two. Both omissions share a single remedy -- one corrected re-call
-			// -- and two reasons with one action is one hint. The reason enumerates each
-			// omission with its OWN flag so a caller who only wants connectivity can take half
-			// the advice, rather than maxing every detail on a large graph and spilling through
-			// the Output Gate.
+			// Combine omissions into one hint, with individual flags so callers can request only what they need.
 			TArray<FString> Omissions;
 			if (bConnectivityOmitted)
 			{
@@ -1148,14 +1068,21 @@ IClaireonTool::FToolResult ClaireonTool_GetBlueprintGraph::Execute(const TShared
 					bIncludePinDefaults ? TEXT("") : TEXT(" when include_pin_defaults=false"),
 					*DetailLevel));
 			}
+			if (bMemberReferenceOmitted)
+			{
+				Omissions.Add(FString::Printf(
+					TEXT("member reference fields (function_reference, variable_reference, etc.) are not ")
+					TEXT("emitted at node_detail_level='%s'; use 'full', 'summary', or 'exec' for them"),
+					*DetailLevel));
+			}
 
-			// args echoes the original call with every correction applied, so it stays directly
-			// callable -- a bare {node_detail_level} delta would re-issue without asset_path.
+			// Hint args must retain the original call fields, including asset_path.
 			TSharedPtr<FJsonObject> FullArgs = CloneHintArgs(Arguments);
 			FullArgs->SetStringField(TEXT("node_detail_level"), TEXT("full"));
 			FullArgs->SetBoolField(TEXT("include_pin_defaults"), true);
 
-			Result.Hint = MakeGuidanceHint(GetName(), FString::Join(Omissions, TEXT(". ")), FullArgs);
+			Result.AddHint(MakeGuidanceHint(GetName(), FString::Join(Omissions, TEXT(". ")), FullArgs,
+				FName(TEXT("bp_get_graph_detail_omissions"))));
 		}
 	}
 	return Result;

@@ -94,7 +94,7 @@ static const TCHAR* const kFixturePathBase          = TEXT("/Game/__MCPTests/BP_
 // synthetic fixture's. See the block comment on that test for why this asset and why
 // nothing is written to it.
 //
-// CM_FSThirdPerson_Default is parented to UFSCameraMode_ThirdPerson, which inherits
+// CM_FSThirdPerson_Default is parented to a project camera-mode class, which inherits
 // ULyraCameraMode_ThirdPerson, whose constructor unconditionally Add()s seven
 // FLyraPenetrationAvoidanceFeeler entries -- so PenetrationAvoidanceFeelers is populated
 // on the CDO by C++, not by designer-authored defaults that could be edited away.
@@ -641,61 +641,9 @@ UNTEST_UNIT_OPTS(Claireon, SetBlueprintCDOProperty, Write_ArrayElementValueLands
 	co_return;
 }
 
-// ---------------------------------------------------------------------------
-// Test 5 -- TransactionUndo_RestoresArrayElement
-//
-// The old body wrote back the value it had just read
-// (`NewValue = Original.IsEmpty() ? TEXT("1") : Original`), so the final
-// "Restored == Original" assertion held with GEditor->UndoTransaction()
-// completely broken -- the value never changed in the first place. It also
-// skipped on `if (R.bIsError)` and on `if (!GEditor)`, so a tool failure or a
-// missing editor turned a test whose name promises undo coverage into a green
-// no-op. Sequence now is: write a DIFFERENT value -> assert the read-back
-// changed -> undo -> assert restoration.
-// ---------------------------------------------------------------------------
-// STILL DISABLED, deliberately and visibly -- see
-// Docs/llm/todo/claireon-test-suite-debt.md item 6 and
-// Docs/llm/todo/claireon-product-defects.md.
-//
-// History: this test never verified undo in any recorded run. Its
-// FindBlueprintWithStructArray call used to scan project Blueprints, and when that scan
-// came up empty the test warn-and-co_return'd, which Untest scores as a PASS. That is
-// exactly what happened in run 20260729_162120, where SchemaPlumbing_PathConcatenation
-// failed with "StructBP is nullptr" from the SAME helper while this test "passed".
-// Pointed at the deterministic plugin-owned fixture it runs for real and FAILS: after
-// GEditor->UndoTransaction() the array element still holds the written value. That
-// reproduces with a dedicated fixture (so not cross-test transaction history) and after
-// FKismetEditorUtilities::CompileBlueprint (so not an unrealised GeneratedClass/CDO).
-//
-// It stays disabled because it asserts a capability the product does not have, and one
-// this harness could not observe even if it did. Both halves were settled by reading
-// engine source; TransactionUndo_SubstrateProbe below is the runnable form:
-//
-//   1. PRODUCT. bp_set_cdo_property opens an FScopedTransaction and calls
-//      CDO->Modify(), but a Blueprint CDO is allocated with only
-//      RF_Public|RF_ClassDefaultObject|RF_ArchetypeObject (UClass::CreateDefaultObject,
-//      Class.cpp), and SaveToTransactionBuffer() refuses any object without
-//      RF_Transactional (UObjectGlobals.cpp). So Modify() marks the package dirty and
-//      records nothing. Epic hits the same wall and works around it explicitly --
-//      WidgetBlueprintEditorUtils.cpp does `WidgetCDO->SetFlags(RF_Transactional);
-//      WidgetCDO->Modify();` before mutating a Widget Blueprint CDO. The tool is
-//      missing that SetFlags. The substrate is irrelevant: the flag is absent on every
-//      Blueprint CDO, in-memory fixture or fully loaded on-disk asset alike, so
-//      possibility (b) from the debt doc is refuted.
-//   2. HARNESS. UEditorEngine::UndoTransaction() is `return Trans && Trans->Undo(...)`,
-//      and GEditor->Trans is only created in UEditorEngine::Init -- which an editor
-//      commandlet never reaches, because LaunchEngineLoop.cpp:4089 calls
-//      GEditor->InitEditor(this) instead. CanTransact() is `Trans != nullptr && ...`,
-//      so under -run=UntestRunTests FScopedTransaction is a no-op and no undo of any
-//      kind happens. Two other tests in this plugin
-//      (PropertyUtils_Write.PrimitiveAndUndo, PropertyResolver_Actor.WriteReadRoundTrip)
-//      already gate on UndoTransaction()'s return value for exactly this reason.
-//
-// Consequence for anyone re-running the experiment: "undo did not restore" is NOT
-// evidence of (1) on its own, because (2) produces the same observation for any
-// substrate. Re-enable this test only after the tool sets RF_Transactional AND the run
-// has a transaction buffer; until then it would be red for an environmental reason.
-// Do NOT "fix" it by reverting the helper to discovery -- that restores the vacuous pass.
+// Disabled: CDO capture requires RF_Transactional, and commandlets lack the editor
+// transaction buffer. Re-enable only when both prerequisites hold. See
+// TransactionUndo_SubstrateProbe for the independent flag check.
 UNTEST_UNIT_OPTS(Claireon, SetBlueprintCDOProperty, TransactionUndo_RestoresArrayElement, UNTEST_DISABLED())
 {
 	// The tool under test opens an FScopedTransaction, so GEditor is a hard
@@ -747,50 +695,10 @@ UNTEST_UNIT_OPTS(Claireon, SetBlueprintCDOProperty, TransactionUndo_RestoresArra
 	co_return;
 }
 
-// ---------------------------------------------------------------------------
-// Test 5b -- TransactionUndo_SubstrateProbe
-//
-// The runnable half of the question TransactionUndo_RestoresArrayElement is disabled
-// for (Docs/llm/todo/claireon-test-suite-debt.md item 6): when
-// bp_set_cdo_property's FScopedTransaction fails to roll back a CDO array-element
-// write, is that
-//   (a) a product defect -- the tool cannot get a CDO into the transaction buffer at
-//       all, or
-//   (b) an artefact of the synthetic in-memory fixture, with a fully loaded on-disk
-//       Blueprint behaving differently?
-//
-// The debt doc's prescribed discriminator was "point the test at a named on-disk
-// Blueprint and see whether undo restores". That experiment is CONFOUNDED in this
-// harness and must not be run as the deciding evidence: GEditor->Trans is null under
-// -run=UntestRunTests (LaunchEngineLoop.cpp:4089 calls GEditor->InitEditor, not
-// UEditorEngine::Init, and only Init calls CreateTrans), so no undo happens for ANY
-// substrate and "did not restore" would read as (a) whether or not (a) is true.
-//
-// What IS environment-independent is RF_Transactional on the CDO.
-// UObject::Modify() -> SaveToTransactionBuffer() refuses any object lacking that flag,
-// so a CDO without it can never enter the buffer -- commandlet or warm editor.
-// Comparing that one flag between a NAMED on-disk project Blueprint and the synthetic
-// fixture settles (a) vs (b) outright:
-//   equal              -> substrate is not the variable, so (b) is refuted
-//   both false         -> the tool's transaction cannot capture the CDO       -> (a)
-//   on-disk true only  -> only an on-disk CDO is a valid substrate            -> (b)
-//
-// The on-disk Blueprint is NAMED, never discovered -- a scan miss would
-// warn-and-co_return, which Untest scores as a PASS. If it stops loading, or its
-// struct array stops being populated, this test FAILS (which is also the guard debt
-// item 7 asks for: a fixture pinned to a shipping asset that rots silently).
-// Nothing is written to it: reading an object flag needs no mutation, which is also
-// what keeps this test out of the user's content. The write/undo half runs on the
-// plugin-owned fixture only.
-//
-// Chosen asset: /Game/BP/Camera/Default/CM_FSThirdPerson_Default, parented to
-// UFSCameraMode_ThirdPerson -> ULyraCameraMode_ThirdPerson, whose constructor
-// unconditionally Add()s seven FLyraPenetrationAvoidanceFeeler entries to
-// PenetrationAvoidanceFeelers (LyraCameraMode_ThirdPerson.cpp). So the CDO's
-// TArray<struct> is populated by C++, not by designer-authored defaults that could be
-// edited away, and FLyraPenetrationAvoidanceFeeler::TraceInterval is an int32 -- an
-// exact-comparable leaf, unlike the struct's four float members.
-// ---------------------------------------------------------------------------
+// Compare RF_Transactional on synthetic and named on-disk CDOs without writing
+// the project asset. Commandlet undo results cannot distinguish these substrates
+// because GEditor->Trans is null. The named camera CDO has C++-initialized
+// struct-array entries and an exactly comparable integer TraceInterval leaf.
 UNTEST_UNIT_OPTS(Claireon, SetBlueprintCDOProperty, TransactionUndo_SubstrateProbe, UNTEST_TIMEOUTMS(60000))
 {
 	// The tool under test opens an FScopedTransaction, so GEditor is a hard requirement.
@@ -1077,7 +985,7 @@ UNTEST_UNIT_OPTS(Claireon, SetBlueprintCDOProperty, PrimitiveArrayLeaf_WriteByIn
 // the first 100 scanned assets", so this test has covered nothing. The old comment
 // claimed transient parent/child creation was too unstable for the harness; that is
 // not borne out -- the plugin-owned struct-array fixture has been created and
-// compiled this way since PR #24587, and ClaireonMaterialTests does the same.
+// compiled this way for some time, and ClaireonMaterialTests does the same.
 // ---------------------------------------------------------------------------
 UNTEST_UNIT_OPTS(Claireon, SetBlueprintCDOProperty, ChildBlueprintInheritance_OverrideRecordedOnChild, UNTEST_TIMEOUTMS(60000))
 {

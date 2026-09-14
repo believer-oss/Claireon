@@ -10,6 +10,7 @@ class UWorld;
 class ULandscapeInfo;
 class ALandscapeProxy;
 class AInstancedFoliageActor;
+struct FLandscapeImportLayerInfo;
 
 /**
  * Brush mode for landscape sculpting operations.
@@ -29,6 +30,20 @@ enum class EClaireonBrushMode : uint8
  */
 namespace ClaireonLandscapeHelpers
 {
+	/**
+	 * Build a flat heightmap for a landscape without edit layers.
+	 * Import looks up the base layer under FGuid(), not the landscape GUID;
+	 * using the landscape GUID triggers FindChecked.
+	 *
+	 * @param Size            Vertex count per side; the heightmap is Size * Size.
+	 * @param OutHeightData   Receives midpoint samples keyed on FGuid().
+	 * @param OutLayerInfos   Receives an empty entry under the same key; map sizes must match.
+	 */
+	CLAIREON_API void BuildFlatLandscapeImportData(
+		int32 Size,
+		TMap<FGuid, TArray<uint16>>& OutHeightData,
+		TMap<FGuid, TArray<FLandscapeImportLayerInfo>>& OutLayerInfos);
+
 	/**
 	 * Find all landscapes in the world, optionally filtered by name substring (case-insensitive).
 	 * Returns pairs of (ULandscapeInfo*, ALandscapeProxy*).

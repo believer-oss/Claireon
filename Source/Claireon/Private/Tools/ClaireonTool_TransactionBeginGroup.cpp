@@ -5,6 +5,7 @@
 #include "Tools/FToolSchemaBuilder.h"
 #include "Tools/ClaireonTransactionGroupState.h"
 #include "Editor.h"
+#include "Misc/ITransaction.h"
 
 using FToolResult = IClaireonTool::FToolResult;
 
@@ -47,8 +48,13 @@ FToolResult ClaireonTool_TransactionBeginGroup::Execute(const TSharedPtr<FJsonOb
 		return MakeErrorResult(TEXT("Missing required parameter: label"));
 	}
 
-	const FString FullLabel = FString::Printf(TEXT("[Claireon] %s"), *Label);
+	const FString FullLabel = ClaireonTransactionGroupState::MakeGroupTitle(Label);
 	GEditor->BeginTransaction(FText::FromString(FullLabel));
+
+	// Capture the transaction ID while GUndo identifies the new group. Labels may
+	// repeat, and closing an empty group can expose a same-label predecessor.
+	ClaireonTransactionGroupState::ActiveGroupTransactionId =
+		GUndo ? GUndo->GetContext().TransactionId : FGuid();
 
 	ClaireonTransactionGroupState::bGroupActive = true;
 	ClaireonTransactionGroupState::ActiveGroupLabel = Label;

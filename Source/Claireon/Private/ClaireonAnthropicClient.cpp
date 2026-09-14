@@ -672,6 +672,70 @@ void FClaireonAnthropicClient::OnHTTPResponse(
 	FinalizeTurn();
 }
 
+FString FClaireonAnthropicClient::BuildREPLResultText(const IClaireonTool::FToolResult& Result)
+{
+	// Build plain text for the REPL path from structured FToolResult fields.
+	// No XML -- the Anthropic API's tool_result already provides the envelope.
+	FString ResultText;
+	if (Result.bIsError)
+	{
+		// Summary carries the spill path on this transport, including failures.
+		ResultText = Result.ErrorMessage;
+		if (!Result.Summary.IsEmpty())
+		{
+			ResultText += TEXT("\n\n") + Result.Summary;
+		}
+	}
+	else
+	{
+		ResultText = Result.Summary;
+	}
+
+	if (Result.Data.IsValid())
+	{
+		// Skip serializing Data for disk-spilled results -- the summary and
+		// per-stream manifest already carry the path + preview.  Dumping the
+		// envelope here would include the manifest a second time.
+		bool bIsSpilled = false;
+		Result.Data->TryGetBoolField(TEXT("__mcp_spilled__"), bIsSpilled);
+
+		if (!bIsSpilled)
+		{
+			FString DataJson;
+			auto Writer = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&DataJson);
+			FJsonSerializer::Serialize(Result.Data.ToSharedRef(), Writer);
+			Writer->Close();
+			ResultText += TEXT("\n\n") + DataJson;
+		}
+	}
+	if (!Result.Logs.IsEmpty())
+	{
+		ResultText += TEXT("\n\nLogs:\n") + Result.Logs;
+	}
+	for (const FString& Warning : Result.Warnings)
+	{
+		ResultText += TEXT("\n\nWarning: ") + Warning;
+	}
+
+	for (const TSharedPtr<FJsonObject>& Hint : Result.Hints)
+	{
+		FString HintError;
+		if (Hint.IsValid() && IClaireonTool::ValidateHint(Hint, HintError))
+		{
+			FString HintJson;
+			auto HintWriter = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&HintJson);
+			FJsonSerializer::Serialize(Hint.ToSharedRef(), HintWriter);
+			HintWriter->Close();
+			ResultText += TEXT("\n\nHint: ") + HintJson;
+		}
+		else if (Hint.IsValid())
+		{
+			UE_LOG(LogClaireon, Warning, TEXT("[REPLClient] Dropping malformed hint: %s"), *HintError);
+		}
+	}
+	return ResultText;
+}
+
 bool FClaireonAnthropicClient::ExecuteToolUses(
 	const TArray<TSharedPtr<FJsonValue>>& ContentArray,
 	TSharedPtr<FThreadSafeBool> CancelToken,
@@ -766,9 +830,8 @@ bool FClaireonAnthropicClient::ExecuteToolUses(
 				bFoundTool = true;
 				ToolResult = (*FoundTool)->Execute(ToolInput);
 
-				// Route generic-tool results through the disk-spill gate.
-				// python_execute routes its own stdout/uelog streams internally.
-				if (!ToolResult.bIsError && ToolName != TEXT("python_execute"))
+				// Gate success and error payloads. python_execute routes its own streams.
+				if (ToolName != TEXT("python_execute"))
 				{
 					// Forward args so the spill manifest carries originating context.
 					ToolResult = FClaireonOutputGate::RouteResult(
@@ -790,61 +853,8 @@ bool FClaireonAnthropicClient::ExecuteToolUses(
 		}
 
 		// Build plain text for the REPL path from structured FToolResult fields.
-		// No XML — the Anthropic API's tool_result already provides the envelope.
-		FString ResultText;
-		if (ToolResult.bIsError)
-		{
-			ResultText = ToolResult.ErrorMessage;
-		}
-		else
-		{
-			ResultText = ToolResult.Summary;
-			if (ToolResult.Data.IsValid())
-			{
-				// Skip serializing Data for disk-spilled results — the summary and
-				// per-stream manifest already carry the path + preview.  Dumping the
-				// envelope here would include the manifest a second time.
-				bool bIsSpilled = false;
-				ToolResult.Data->TryGetBoolField(TEXT("__mcp_spilled__"), bIsSpilled);
-
-				if (!bIsSpilled)
-				{
-					FString DataJson;
-					auto Writer = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&DataJson);
-					FJsonSerializer::Serialize(ToolResult.Data.ToSharedRef(), Writer);
-					Writer->Close();
-					ResultText += TEXT("\n\n") + DataJson;
-				}
-			}
-		}
-		if (!ToolResult.Logs.IsEmpty())
-		{
-			ResultText += TEXT("\n\nLogs:\n") + ToolResult.Logs;
-		}
-		for (const FString& Warning : ToolResult.Warnings)
-		{
-			ResultText += TEXT("\n\nWarning: ") + Warning;
-		}
-
-		// Hint, on BOTH the success and error paths. The REPL previously dropped this field
-		// entirely, so no hint had ever reached a REPL user -- including python_execute's
-		// long-standing nudges, which become visible here for the first time.
-		if (ToolResult.Hint.IsValid())
-		{
-			FString HintError;
-			if (IClaireonTool::ValidateHint(ToolResult.Hint, HintError))
-			{
-				FString HintJson;
-				auto HintWriter = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&HintJson);
-				FJsonSerializer::Serialize(ToolResult.Hint.ToSharedRef(), HintWriter);
-				HintWriter->Close();
-				ResultText += TEXT("\n\nHint: ") + HintJson;
-			}
-			else
-			{
-				UE_LOG(LogClaireon, Warning, TEXT("[REPLClient] Dropping malformed hint: %s"), *HintError);
-			}
-		}
+		// No XML -- the Anthropic API's tool_result already provides the envelope.
+		const FString ResultText = BuildREPLResultText(ToolResult);
 
 		if (Settings->bLogAllToolCalls)
 		{

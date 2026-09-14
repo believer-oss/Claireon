@@ -206,7 +206,8 @@ UNTEST_UNIT_OPTS(Claireon, PropertyUtils_GetAll, FilterNarrows, UNTEST_TIMEOUTMS
 	UNTEST_EXPECT_TRUE(Filtered->Values.Num() <= All->Values.Num());
 	for (auto& Pair : Filtered->Values)
 	{
-		UNTEST_EXPECT_TRUE(Pair.Key.Contains(TEXT("Duration")));
+		const FString Key(Pair.Key);
+		UNTEST_EXPECT_TRUE(Key.Contains(TEXT("Duration")));
 	}
 	co_return;
 }

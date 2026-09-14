@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonAnimGraphTools_Session.h"
+#include "ClaireonScopedAssetEditor.h"
 #include "Tools/ClaireonAnimEditToolBase.h"
 #include "Tools/ClaireonAnimGraphHelpers.h"
 #include "Tools/ClaireonAssetUtils.h"
@@ -156,7 +157,7 @@ FToolResult ClaireonAnimGraphTool_Open::Execute(const TSharedPtr<FJsonObject>& A
 	ToolData.Add(SessionId, MoveTemp(NewData));
 	FAnimGraphEditToolData* Data = ToolData.Find(SessionId);
 
-	ClaireonAssetUtils::OpenAssetEditorIfHeadless(AnimBP);
+	ClaireonAssetEditorWindow::OpenForSession(AnimBP);
 
 	UE_LOG(LogClaireon, Log, TEXT("[AnimGraphEdit] Opened session %s for %s"), *SessionId, *AnimBP->GetPathName());
 
@@ -240,11 +241,14 @@ FToolResult ClaireonAnimGraphTool_Save::Execute(const TSharedPtr<FJsonObject>& A
 	// Save — use direct UPackage::SavePackage for AnimBPs (ClaireonAssetUtils::SaveAsset
 	// uses the CDO lookup path which fails for newly created AnimBPs)
 	UPackage* Package = AnimBP->GetOutermost();
+	// The shared resolver already handles both cases -- existing file, or a new package whose
+	// filename has to be synthesized -- and picks the extension from the package rather than
+	// assuming the asset one.
 	FString PackageFileName;
-	if (!FPackageName::DoesPackageExist(Package->GetName(), &PackageFileName))
+	FString ResolveError;
+	if (!ClaireonAssetUtils::ResolvePackageSaveFilename(Package, PackageFileName, ResolveError))
 	{
-		// New package — compute the filename from the package name
-		PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+		return MakeErrorResult(ResolveError);
 	}
 
 	Package->SetIsExternallyReferenceable(true);

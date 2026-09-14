@@ -349,7 +349,7 @@ UWidget* ClaireonWidgetHelpers::CreateWidget(UWidgetTree* Tree, TSubclassOf<UWid
 
 void ClaireonWidgetHelpers::NotifyVariableAdded(UWidgetBlueprint* WidgetBP, FName VariableName)
 {
-#if !UE_VERSION_OLDER_THAN(5, 8, 0)
+#if !UE_VERSION_OLDER_THAN(5, 6, 0)
 	if (WidgetBP && !VariableName.IsNone() && !WidgetBP->WidgetVariableNameToGuidMap.Contains(VariableName))
 	{
 		WidgetBP->OnVariableAdded(VariableName);
@@ -359,7 +359,7 @@ void ClaireonWidgetHelpers::NotifyVariableAdded(UWidgetBlueprint* WidgetBP, FNam
 
 void ClaireonWidgetHelpers::NotifyVariableRemoved(UWidgetBlueprint* WidgetBP, FName VariableName)
 {
-#if !UE_VERSION_OLDER_THAN(5, 8, 0)
+#if !UE_VERSION_OLDER_THAN(5, 6, 0)
 	if (WidgetBP && !VariableName.IsNone())
 	{
 		WidgetBP->OnVariableRemoved(VariableName);
@@ -369,7 +369,7 @@ void ClaireonWidgetHelpers::NotifyVariableRemoved(UWidgetBlueprint* WidgetBP, FN
 
 void ClaireonWidgetHelpers::NotifyVariableRenamed(UWidgetBlueprint* WidgetBP, FName OldName, FName NewName)
 {
-#if !UE_VERSION_OLDER_THAN(5, 8, 0)
+#if !UE_VERSION_OLDER_THAN(5, 6, 0)
 	if (!WidgetBP || NewName.IsNone() || OldName == NewName)
 	{
 		return;
@@ -929,10 +929,6 @@ TSharedPtr<FJsonObject> ClaireonWidgetHelpers::SerializeMVVMBinding(const UWidge
 
 	const UMVVMBlueprintView* View = GetMVVMBlueprintView(WidgetBP);
 
-	// Binding ID. Field is `binding_id` (not `id`) to match the argument name every
-	// MVVM binding tool already accepts (edit_mvvm_binding, remove_mvvm_binding), so a
-	// returned id round-trips into the next call without renaming. See C7 in
-	// Docs/llm/todo/claireon-product-defects.md.
 	BindingObj->SetStringField(TEXT("binding_id"), Binding.BindingId.ToString());
 
 	// Source path

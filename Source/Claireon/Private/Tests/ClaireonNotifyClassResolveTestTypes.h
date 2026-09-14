@@ -9,8 +9,8 @@
 #include "ClaireonNotifyClassResolveTestTypes.generated.h"
 
 // Native notify-state fixture whose name deliberately contains neither the
-// "State" substring nor the "ANS_" prefix, mirroring game classes like
-// FSANS_ApplyGameplayEffects that the legacy name heuristic misclassified as
+// "State" substring nor the "ANS_" prefix, mirroring game notify-state classes
+// that the legacy name heuristic misclassified as
 // instant notifies (and therefore failed to resolve under every spelling).
 // Kept game-module-free so the tests stay inside Claireon's dependency surface.
 UCLASS()

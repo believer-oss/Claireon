@@ -4,6 +4,7 @@
 #pragma once
 
 #include "Tools/FClaireonDeltaApplicatorBase.h"
+#include "Tools/ClaireonPCGGraphHelpers.h"
 #include "UObject/WeakObjectPtr.h"
 
 class UPCGGraph;
@@ -38,6 +39,13 @@ private:
 	/** Resolve a node ref via id_map -> identifier (index or name). Returns nullptr and sets error on failure. */
 	UPCGNode* ResolveNodeRef(UPCGGraph* Graph, const FString& Ref, FString& OutError) const;
 
+	/**
+	 * Batch notifications across all four phases. Release after the final summary
+	 * notification or on destruction if the call fails.
+	 */
+	void BeginNotifyBatch(UPCGGraph* Graph);
+
 	TArray<TWeakObjectPtr<UPCGNode>> CreatedNodesThisCall;
 	TWeakObjectPtr<UPCGGraph> CachedGraph;
+	TUniquePtr<ClaireonPCGGraphHelpers::FPCGGraphNotifyPauseScope> NotifyPause;
 };

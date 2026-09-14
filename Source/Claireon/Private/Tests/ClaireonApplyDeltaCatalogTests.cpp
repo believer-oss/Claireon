@@ -96,18 +96,7 @@ namespace ClaireonApplyDeltaCatalogTestsNS
 		return Pairs;
 	}
 
-	// Families that register an <family>_apply_delta tool but have NO catalog
-	// row at all -- not even an apply_delta_only one. Empty today: animbp used
-	// to be the one example (see Docs/llm/todo/claireon-product-defects.md item 3),
-	// but ApplySpecCatalog.json's schema was extended (schema_version 4) to let a
-	// row omit the top-level `tool` field for exactly this shape, so animbp now
-	// has a proper apply_delta_only row and is covered by the ordinary
-	// catalog-lookup path in AdCat_GetExpectedDeltaPairs() above instead.
-	//
-	// Kept as a safety valve so the registered->catalog direction below still
-	// fails loudly if a *new* apply_delta tool ships with no catalog row at all
-	// (neither a normal row nor an apply_delta_only one); it is not a licence to
-	// skip the check by adding entries here instead of a catalog row.
+	// Registered apply_delta families without catalog entries.
 	static const TSet<FString>& AdCat_ApplyDeltaOnlyFamilies()
 	{
 		static const TSet<FString> Families = {};
@@ -141,9 +130,10 @@ UNTEST_UNIT_OPTS(Claireon, ApplyDeltaCatalog, EveryEntryHasApplyDeltaShape, UNTE
 	const TSet<FString>& ValidPhases = AdCat_ValidPhases();
 
 	int32 EntriesChecked = 0;
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& KV : Catalog->Values)
+	for (const auto& KV : Catalog->Values)
 	{
-		if (KV.Key.StartsWith(TEXT("_"))) { continue; }
+		const FString Key(KV.Key);
+		if (Key.StartsWith(TEXT("_"))) { continue; }
 		const TSharedPtr<FJsonObject>* EntryObj = nullptr;
 		UNTEST_ASSERT_TRUE(KV.Value->TryGetObject(EntryObj));
 		UNTEST_ASSERT_TRUE(EntryObj && (*EntryObj).IsValid());
@@ -220,9 +210,10 @@ UNTEST_UNIT_OPTS(Claireon, ApplyDeltaCatalog, CatalogMatchesRegisteredApplyDelta
 
 	// Walk the catalog and collect every entry with apply_delta.supported==true.
 	TMap<FString, FString> CatalogDeltaTools; // catalog_key -> apply_delta.tool
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& KV : Catalog->Values)
+	for (const auto& KV : Catalog->Values)
 	{
-		if (KV.Key.StartsWith(TEXT("_"))) { continue; }
+		const FString Key(KV.Key);
+		if (Key.StartsWith(TEXT("_"))) { continue; }
 		const TSharedPtr<FJsonObject>* EntryObj = nullptr;
 		if (!KV.Value->TryGetObject(EntryObj) || !EntryObj || !(*EntryObj).IsValid()) { continue; }
 
@@ -238,7 +229,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyDeltaCatalog, CatalogMatchesRegisteredApplyDelta
 		FString ToolName;
 		if ((*ApplyDeltaObj)->TryGetStringField(TEXT("tool"), ToolName))
 		{
-			CatalogDeltaTools.Add(KV.Key, ToolName);
+			CatalogDeltaTools.Add(Key, ToolName);
 		}
 	}
 
@@ -324,9 +315,10 @@ UNTEST_UNIT_OPTS(Claireon, ApplyDeltaCatalog, ApplySpecAndApplyDeltaAgreeOnFamil
 	TSharedPtr<FJsonObject> Catalog = AdCat_LoadCatalogForTests();
 	UNTEST_ASSERT_TRUE(Catalog.IsValid());
 
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& KV : Catalog->Values)
+	for (const auto& KV : Catalog->Values)
 	{
-		if (KV.Key.StartsWith(TEXT("_"))) { continue; }
+		const FString Key(KV.Key);
+		if (Key.StartsWith(TEXT("_"))) { continue; }
 		const TSharedPtr<FJsonObject>* EntryObj = nullptr;
 		UNTEST_ASSERT_TRUE(KV.Value->TryGetObject(EntryObj));
 		UNTEST_ASSERT_TRUE(EntryObj && (*EntryObj).IsValid());
@@ -334,7 +326,7 @@ UNTEST_UNIT_OPTS(Claireon, ApplyDeltaCatalog, ApplySpecAndApplyDeltaAgreeOnFamil
 		const TSharedPtr<FJsonObject>* ApplyDeltaObj = nullptr;
 		UNTEST_ASSERT_TRUE((*EntryObj)->TryGetObjectField(TEXT("apply_delta"), ApplyDeltaObj));
 
-		const FString ExpectedPrefix = KV.Key + TEXT("_");
+		const FString ExpectedPrefix = Key + TEXT("_");
 
 		bool bSupported = false;
 		(*ApplyDeltaObj)->TryGetBoolField(TEXT("supported"), bSupported);
@@ -395,9 +387,10 @@ UNTEST_UNIT_OPTS(Claireon, ApplyDeltaCatalog, MetaBookkeepingIsConsistent, UNTES
 	UNTEST_ASSERT_TRUE(Catalog.IsValid());
 
 	int32 NonMetaCount = 0;
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& KV : Catalog->Values)
+	for (const auto& KV : Catalog->Values)
 	{
-		if (KV.Key.StartsWith(TEXT("_"))) { continue; }
+		const FString Key(KV.Key);
+		if (Key.StartsWith(TEXT("_"))) { continue; }
 		++NonMetaCount;
 	}
 

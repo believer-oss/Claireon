@@ -41,8 +41,6 @@
 
 namespace ClaireonActorIdentityTestsInternal
 {
-	// File-local discriminator prefix (ClaireonActorIdentityTests_) per
-	// linux-build-server-v2 unity-batching rules.
 
 	struct FClaireonActorIdentityTests_ScopedPIEWorldOverride
 	{

@@ -97,16 +97,16 @@
 using FToolResult = IClaireonTool::FToolResult;
 
 
-FString ClaireonBlueprintGraphTool_SelectPin::GetOperation() const { return TEXT("select_pin"); }
+FString ClaireonBlueprintGraphTool_SelectPin::GetOperation() const { return TEXT("cursor_to_pin"); }
 
 TArray<FString> ClaireonBlueprintGraphTool_SelectPin::GetSearchKeywords() const
 {
-    return {TEXT("bp"), TEXT("pin"), TEXT("select"), TEXT("cursor"), TEXT("target"), TEXT("graph")};
+    return {TEXT("bp"), TEXT("pin"), TEXT("cursor"), TEXT("anchor"), TEXT("target"), TEXT("graph")};
 }
 
 FString ClaireonBlueprintGraphTool_SelectPin::GetDescription() const
 {
-    return TEXT("Move the session cursor to a specific pin on a node. Subsequent bp_add_node calls with auto_connect_from_cursor=true will wire to this pin if compatible. Most-common pitfall: the cursor is per-session, so re-running select_pin between sessions is a no-op for any session you already closed. Accepts either session_id or asset_path; auto-opens a session when asset_path is supplied.");
+    return TEXT("Move the session cursor to a specific pin. bp_add_node with auto_connect_from_cursor=true then wires to this pin if compatible -- a focused pin is the one thing the cursor carries that an editor selection cannot, since Slate selects nodes only. Does NOT change the editor selection (see bp_selection_set). The cursor is per-session. Accepts session_id or asset_path.");
 }
 
 TSharedPtr<FJsonObject> ClaireonBlueprintGraphTool_SelectPin::GetInputSchema() const
@@ -126,7 +126,7 @@ FToolResult ClaireonBlueprintGraphTool_SelectPin::Execute(const TSharedPtr<FJson
     FString SessionId;
     FBlueprintEditToolData* Data = nullptr;
     FToolResult Error;
-    if (!BeginSessionOp(Arguments, TEXT("select_pin"), Params, SessionId, Data, Error))
+    if (!BeginSessionOp(Arguments, TEXT("cursor_to_pin"), Params, SessionId, Data, Error))
     {
         return Error;
     }
@@ -181,6 +181,9 @@ FToolResult ClaireonBlueprintGraphTool_SelectPin::Execute(const TSharedPtr<FJson
 		TEXT("Selected pin: [%s].%s (%s)"),
 		*NodeTitle, *PinName, *PinDir);
 
+	// Mirror the view without changing selection; a missing window is a no-op.
+	MirrorCursorToView(*Data);
+
 	FToolResult SelectPinFinalResult = BuildStateResponse(SessionId, Data);
 	SelectPinFinalResult.Warnings.Append(ResolutionWarnings);
 	return SelectPinFinalResult;
@@ -195,7 +198,7 @@ FString ClaireonBlueprintGraphTool_SelectPin::GetFullDescription() const
     return TEXT(
         "Moves the session cursor to a specific pin on a node. The cursor is "
         "the anchor that auto_connect_from_cursor on bp_add_node "
-        "uses to decide where to wire each new node. Use select_pin when you "
+        "uses to decide where to wire each new node. Use bp_cursor_to_pin when you "
         "are about to chain a sequence of add_node calls and want them to "
         "auto-wire from a known starting point (e.g. the 'then' output of a "
         "Branch's True pin), or when the cursor has drifted onto a node where "
@@ -206,7 +209,7 @@ FString ClaireonBlueprintGraphTool_SelectPin::GetFullDescription() const
 FString ClaireonBlueprintGraphTool_SelectPin::GetExampleUsage() const
 {
     return TEXT(
-        "bp_select_pin session_id=\"...\" "
+        "bp_cursor_to_pin session_id=\"...\" "
         "node=\"Branch_0\" pin=\"True\"");
 }
 

@@ -102,8 +102,8 @@ IClaireonTool::FToolResult ClaireonAnimTool_AddNotify::Execute(const TSharedPtr<
 		// helper classify state-vs-instant from the RESOLVED class
 		// (IsChildOf(UAnimNotifyState) inside AddClassNotify). The old name
 		// heuristic ("State" substring / "ANS_" prefix) picked a single base up
-		// front, so native notify-state classes matching neither spelling (e.g.
-		// FSANS_ApplyGameplayEffects) failed to resolve under every spelling.
+		// front, so native notify-state classes matching neither spelling failed
+		// to resolve under every spelling.
 		// The heuristic is kept ONLY as a tiebreaker: it orders which scope the
 		// Blueprint asset-registry fallback tries first, and it breaks the tie
 		// when the same name resolves to different classes in both scopes.

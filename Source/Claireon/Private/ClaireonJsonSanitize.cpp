@@ -60,7 +60,7 @@ bool JsonSanitize_ObjectHasNonFinite(const TSharedPtr<FJsonObject>& Object, int3
 		return false;
 	}
 
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Object->Values)
+	for (const auto& Pair : Object->Values)
 	{
 		if (JsonSanitize_ValueHasNonFinite(Pair.Value, Depth + 1))
 		{
@@ -141,16 +141,8 @@ bool JsonSanitize_SanitizeObject(const TSharedPtr<FJsonObject>& Object, const FS
 	}
 
 	bool bChanged = false;
-	// auto&, and FString(*Pair.Key), because FJsonObject's key type is not FString on
-	// every engine version: 5.8 keys the map with UE::FSharedString unless
-	// UE_JSONOBJECT_LEGACY_STRING_KEYS=1. Note that a spelled-out
-	// `const TPair<FString, TSharedPtr<FJsonValue>>&` DOES still compile on 5.8 --
-	// TTuple's converting constructor makes a temporary and a const reference binds to
-	// it -- so do not carry that idiom into a loop that writes: an assignment through
-	// the temporary's TSharedPtr would be dropped. auto& keeps the reference on the
-	// real element, which is what this loop needs.
-	// `*Key` is `const TCHAR*` for both FString and FSharedString, so the FString
-	// round-trip is one spelling that works on all four engines.
+	// JSON map keys vary by engine version. auto& preserves writes to the real element;
+	// FString(*Key) handles both FString and FSharedString keys.
 	for (auto& Pair : Object->Values)
 	{
 		const FString FieldPath = JsonSanitize_JoinField(Path, FString(*Pair.Key));

@@ -35,21 +35,8 @@
 // ---------------------------------------------------------------------------
 static const TCHAR* SourceNiagaraSystemPath = TEXT("/Game/Art_Lib/VOL/NS_LocalVolumeFog");
 
-// True only when Path actually has a .uasset on disk.
-//
-// The duplicate below is never saved: UEditorAssetLibrary::DuplicateAsset does not
-// write to disk, niagara_close only saves when save_first is set (this suite never
-// sets it), and the suite never calls niagara_save or niagara_create. So the
-// duplicate normally lives in an in-memory package only.
-//
-// UEditorAssetLibrary::DoesAssetExist answers from the asset registry, which
-// includes in-memory assets. DeleteAsset checks referencers first, and that
-// whole-object-graph referencer scan is the trigger for the nondeterministic
-// Niagara-serialization crash documented in
-// Docs/llm/todo/claireon-untest-harness-reliability.md item 1 -- a scan that is
-// especially dangerous here because this suite is precisely what makes a Niagara
-// object graph resident for the rest of the process. Gate the delete on real disk
-// state so it fires only when there is genuinely a stale file to remove.
+// Delete only on-disk fixtures. In-memory deletion triggers a global referencer
+// scan that can crash on resident Niagara objects; stale files still need cleanup.
 static bool NiagaraTests_HasFileOnDisk(const FString& AssetOrPackagePath)
 {
 	const FString PackageName = FPackageName::ObjectPathToPackageName(AssetOrPackagePath);

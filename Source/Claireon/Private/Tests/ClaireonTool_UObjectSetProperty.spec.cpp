@@ -89,18 +89,18 @@ UNTEST_UNIT_OPTS(Claireon, UObjectSetProperty, RefusalHintIsACompleteCallableArg
 		RunSet(BuildArgs(Fixture->GetPathName(), TEXT("Plain"), TEXT("77")));
 
 	UNTEST_ASSERT_TRUE(Result.bIsError);
-	UNTEST_ASSERT_TRUE(Result.Hint.IsValid());
+	UNTEST_ASSERT_TRUE(Result.Hints.Num() > 0);
 
 	FString HintError;
-	UNTEST_EXPECT_TRUE(IClaireonTool::ValidateHint(Result.Hint, HintError));
+	UNTEST_EXPECT_TRUE(IClaireonTool::ValidateHint(Result.Hints[0], HintError));
 
 	// Self-reference: "re-issue this call, corrected".
-	UNTEST_EXPECT_EQ(Result.Hint->GetStringField(TEXT("tool")), FString(TEXT("uobject_set_property")));
+	UNTEST_EXPECT_EQ(Result.Hints[0]->GetStringField(TEXT("tool")), FString(TEXT("uobject_set_property")));
 
 	// args must be COMPLETE and directly callable -- never a delta. Every required
 	// field of the original call has to be present alongside the correction.
 	const TSharedPtr<FJsonObject>* HintArgs = nullptr;
-	UNTEST_ASSERT_TRUE(Result.Hint->TryGetObjectField(TEXT("args"), HintArgs));
+	UNTEST_ASSERT_TRUE(Result.Hints[0]->TryGetObjectField(TEXT("args"), HintArgs));
 	UNTEST_EXPECT_EQ((*HintArgs)->GetStringField(TEXT("object_path")), Fixture->GetPathName());
 	UNTEST_EXPECT_EQ((*HintArgs)->GetStringField(TEXT("property_path")), FString(TEXT("Plain")));
 	UNTEST_EXPECT_EQ((*HintArgs)->GetStringField(TEXT("value")), FString(TEXT("77")));

@@ -127,13 +127,13 @@ IClaireonTool::FToolResult ClaireonTool_ReleaseSessions::Execute(const TSharedPt
 		{
 			TSharedPtr<FJsonObject> HintArgs = CloneHintArgs(Arguments);
 			HintArgs->SetStringField(TEXT("session_id"), Open[0].SessionId);
-			Result.Hint = MakeGuidanceHint(
+			Result.AddHint(MakeGuidanceHint(
 				GetName(),
 				FString::Printf(
 					TEXT("One session is open ('%s' on %s); re-issue with that session_id to release it."),
 					*Open[0].SessionId,
 					Open[0].AssetPath.IsEmpty() ? TEXT("<none>") : *Open[0].AssetPath),
-				HintArgs);
+				HintArgs));
 		}
 		return Result;
 	}

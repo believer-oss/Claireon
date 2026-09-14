@@ -418,14 +418,9 @@ bool ClaireonEnhancedInputHelpers::SetObjectProperty(UObject* Object, const FStr
 
 TArray<FEnhancedActionKeyMapping>& ClaireonEnhancedInputHelpers::GetMappingsMutable(UInputMappingContext* IMC)
 {
-	static FArrayProperty* MappingsProp = nullptr;
-	if (!MappingsProp)
-	{
-		MappingsProp = CastField<FArrayProperty>(
-			FindFProperty<FProperty>(UInputMappingContext::StaticClass(), TEXT("Mappings")));
-	}
-	check(MappingsProp);
-	return *MappingsProp->ContainerPtrToValuePtr<TArray<FEnhancedActionKeyMapping>>(IMC);
+	// GetMappings accesses the active array across engine versions; from 5.7, the
+	// reflected Mappings property is a deprecated mirror.
+	return const_cast<TArray<FEnhancedActionKeyMapping>&>(IMC->GetMappings());
 }
 
 void ClaireonEnhancedInputHelpers::NotifyMappingContextModified(UInputMappingContext* IMC)

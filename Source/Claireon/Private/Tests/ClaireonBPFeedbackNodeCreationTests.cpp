@@ -1,8 +1,8 @@
 // Copyright (c) 2026 The Claireon Contributors
 // SPDX-License-Identifier: MIT
 
-// Baseline pinning tests for Workstream A (node creation), Stage 001 of the
-// Claireon BP feedback plan (Work #6704). These pin behaviors that are
+// Baseline pinning tests for Workstream A (node creation) of the Claireon BP
+// feedback plan. These pin behaviors that are
 // ALREADY correct today so later fix stages (010/011) run against a suite
 // that locks the pre-fix baseline:
 //   - B1 core: the designer report's "plausible working call" (Generic +
@@ -138,16 +138,7 @@ namespace ClaireonNCTTestsInternal
 	}
 }
 
-// ============================================================================
-// B1 core (resolved, pinning only): Generic + class_name=
-// 'K2Node_LatentGameplayTaskCall' + a full proxy node_properties bag
-// (mirroring the async-task ProxyFactoryClass/ProxyClass/
-// ProxyFactoryFunctionName reflection fields UK2Node_BaseAsyncTask needs)
-// already produces a node with the exec 'then' pin and the proxy class's
-// delegate output pin ('OnComplete', from the ClaireonTestAsyncAction
-// fixture). Pinned BEFORE the WS-A alias work (Stage 010) lands so that work
-// cannot regress this already-working path.
-// ============================================================================
+// A generic latent-task node with full proxy properties must expose then and OnComplete pins.
 UNTEST_UNIT_OPTS(Claireon, BPFeedbackNodeCreation, GenericLatentGameplayTaskCall_HasThenAndDelegatePins, UNTEST_TIMEOUTMS(60000))
 {
 	using namespace ClaireonNCTTestsInternal;
@@ -306,7 +297,7 @@ UNTEST_UNIT_OPTS(Claireon, BPFeedbackNodeCreation, Create_NoBlueprintType_StaysN
 }
 
 // ============================================================================
-// A2 (Stage 011): bp_add_macro creates a macro graph with its tunnel pair and
+// A2: bp_add_macro creates a macro graph with its tunnel pair and
 // the requested pins, and works on a MacroLibrary that has no graphs at all.
 // ============================================================================
 UNTEST_UNIT_OPTS(Claireon, BPFeedbackNodeCreation, AddMacro_CreatesGraphWithTunnelsAndPins, UNTEST_TIMEOUTMS(60000))
@@ -492,7 +483,7 @@ UNTEST_UNIT_OPTS(Claireon, BPFeedbackNodeCreation, AddMacro_OnGraphlessMacroLibr
 }
 
 // ============================================================================
-// A1 (Stage 010): the LatentAbilityCall / LatentGameplayTaskCall spellings
+// A1: the LatentAbilityCall / LatentGameplayTaskCall spellings
 // resolve, CallFunction on a UGameplayTask factory promotes to the dedicated
 // latent node instead of a plain CallFunction, and the AsyncAction rejection
 // names the route that works.
@@ -687,7 +678,7 @@ UNTEST_UNIT_OPTS(Claireon, BPFeedbackNodeCreation, ResolveNodeTypeAlias_Rewrites
 }
 
 // ============================================================================
-// A3 (Stage 012): bp_list_node_types returns the shared registry as structured
+// A3: bp_list_node_types returns the shared registry as structured
 // data, and the registry is the same table bp_add_node dispatches on.
 // ============================================================================
 UNTEST_UNIT_OPTS(Claireon, BPFeedbackNodeCreation, ListNodeTypes_ReturnsStructuredArrayCoveringRegistry, UNTEST_TIMEOUTMS(30000))

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tools/ClaireonLevelSequenceTool_FocusBinding.h"
+#include "Tools/ClaireonSequenceHelpers.h"
 #include "Tools/FToolSchemaBuilder.h"
 #include "ClaireonLevelSequenceEditInternal.h"
 #include "LevelSequence.h"
@@ -58,6 +59,6 @@ FToolResult ClaireonLevelSequenceTool_FocusBinding::Execute(const TSharedPtr<FJs
 	Data->FocusedBindingIndex = Index;
 	Data->FocusedTrackIndex = INDEX_NONE;
 	Data->LastOperationStatus = FString::Printf(TEXT("Focused binding [%d] %s"),
-		Index, *MovieScene->GetBindings()[Index].GetName());
+		Index, *FClaireonSequenceHelpers::GetBindingName(MovieScene, MovieScene->GetBindings()[Index].GetObjectGuid()));
 	return BuildStateResponse(SessionId, Data);
 }

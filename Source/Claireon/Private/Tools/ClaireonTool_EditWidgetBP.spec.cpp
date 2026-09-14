@@ -61,7 +61,7 @@ namespace ClaireonTool_EditWidgetBP_spec_Private
 			return Result;
 		}
 
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Kv : Envelope->Values)
+		for (const auto& Kv : Envelope->Values)
 		{
 			if (Kv.Key == TEXT("operation") || Kv.Key == TEXT("params"))
 			{
@@ -73,7 +73,7 @@ namespace ClaireonTool_EditWidgetBP_spec_Private
 		const TSharedPtr<FJsonObject>* ParamsObj = nullptr;
 		if (Envelope->TryGetObjectField(TEXT("params"), ParamsObj) && ParamsObj && ParamsObj->IsValid())
 		{
-			for (const TPair<FString, TSharedPtr<FJsonValue>>& Kv : (*ParamsObj)->Values)
+			for (const auto& Kv : (*ParamsObj)->Values)
 			{
 				Result->SetField(Kv.Key, Kv.Value);
 			}
@@ -1512,7 +1512,7 @@ bool FEditWidgetBPTest_MVVMBindingErrorHandling::RunTest(const FString& Paramete
 	// --- Step 2b: add_mvvm_viewmodel with abstract/property-less class -- verify error ---
 	// UMVVMViewModelBase itself resolves fine (it IS a UMVVMViewModelBase subclass of
 	// itself) but is abstract and has zero UPROPERTYs, so no binding source path could
-	// ever resolve against it (C7 in Docs/llm/todo/claireon-product-defects.md).
+	// ever resolve against it (C7 in Docs/llm/archive/claireon-todo-baseline-2026-09-06/claireon-product-defects.md).
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("viewmodel_name"), TEXT("AbstractVM"));

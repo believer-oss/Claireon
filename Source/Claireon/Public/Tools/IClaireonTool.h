@@ -4,6 +4,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "ClaireonAdvisory.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
@@ -111,39 +112,31 @@ public:
 		FString ErrorMessage;
 
 		/**
-		 * Optional structured next-action nudge. Emitted on every transport that carries a
-		 * result: the Python envelope (ClaireonBridge), the MCP wire as a <hint> block
-		 * (ClaireonXmlFormatter), and the REPL (ClaireonAnthropicClient).
+		 * Validated next-action hints. The Python envelope emits hints plus a legacy first-entry
+		 * hint alias; MCP emits repeated <hint> blocks. Invalid entries are dropped individually.
 		 *
-		 * Shape: `{tool, reason}` with an optional `args` OR `options` -- never both.
-		 *  - `tool` names the tool to call next. SELF-REFERENCE (tool == the tool that just
-		 *    ran) is the encoding for "re-issue this call, corrected"; a different name means
-		 *    "call that tool instead". No separate discriminator exists, because comparing
-		 *    `tool` against what you just called already distinguishes the two.
-		 *  - `args`, when present, MUST be a complete, directly-callable argument set -- the
-		 *    original call echoed with the correction applied. NEVER a delta: a consumer
-		 *    cannot tell a delta from a complete one-argument call, and would re-issue with
-		 *    required fields missing.
-		 *  - `options` is a candidate set (each entry a complete `args`) meaning "call with
-		 *    exactly one of these", for ambiguous-target errors.
-		 *
-		 * Cardinality: ONE object. Multiple reasons that share a single remedy merge into one
-		 * hint with an enumerated `reason` -- two reasons with one action is one hint.
-		 *
-		 * Two classes with DIFFERENT firing policies -- pick correctly when adding an emitter:
-		 *  - Error-derived (the failure itself is the signal): fires per occurrence, carries
-		 *    call-specific payload, NOT latched.
-		 *  - Success-path guidance (a result was capped, filtered, or omitted by a detail
-		 *    level): MUST be latched, keyed by hint code, or it becomes noise on bulk loops --
-		 *    the exact complaint that forced a latch onto the get_editor_property nudge.
-		 *    `quiet` suppresses without consuming the latch.
-		 *
-		 * Emitters: ClaireonTool_ExecutePython (error-derived + one script-content channel),
-		 * plus the guidance emitters that replaced the former ad-hoc `Data.hint` string
-		 * convention (bp_compile_batch, log_search, log_tail). `Data.hint` is retired -- do
-		 * not add new ones; this field is the single channel.
+		 * Emit at each tool call. Request-scoped rate limiting and coalescing handle repetition;
+		 * use a stable key for guidance and leave error-derived hints keyless. See ValidateHint
+		 * for the schema. Keep hints out of Data and Summary.
 		 */
-		TSharedPtr<FJsonObject> Hint;
+		TArray<TSharedPtr<FJsonObject>> Hints;
+
+		/** Append a hint; null is skipped so call sites can pass possibly-null builders. */
+		void AddHint(TSharedPtr<FJsonObject> InHint)
+		{
+			if (InHint.IsValid())
+			{
+				Hints.Add(MoveTemp(InHint));
+			}
+		}
+
+		/**
+		 * Nested-call advisories collected by python_execute. Warnings and hints reach the
+		 * MCP formatter; summary records become the summary rollup. Omit these from the
+		 * Python result envelope so script data handling cannot swallow them. Nested capture
+		 * propagates them directly, outside the output spill gate.
+		 */
+		TArray<FClaireonAdvisory> InnerAdvisories;
 
 		/** Returns ErrorMessage (if error) or Summary (if success) as a single string. */
 		FString GetContentAsString() const
@@ -155,67 +148,38 @@ public:
 		static FString BuildLogString(const TArray<FPythonLogOutputEntry>& LogOutput);
 	};
 
-	/**
-	 * Deep-copy an argument object so a hint can echo the original call.
-	 *
-	 * Use this to satisfy the `args` invariant: clone what the caller passed, then apply the
-	 * correction (or remove the offending field), so the result stays directly callable.
-	 * Returns an empty object when Arguments is invalid.
-	 */
+	/** Deep-copy arguments before applying a hint correction. Invalid input yields an empty object. */
 	static TSharedPtr<FJsonObject> CloneHintArgs(const TSharedPtr<FJsonObject>& Arguments);
 
 	/**
-	 * Build a guidance hint of the form `{tool, reason}` plus an optional complete `args` set.
-	 *
-	 * CompleteArgs must be a full callable argument set (see CloneHintArgs), not a delta. Pass
-	 * nullptr for prose-only guidance, which is a legitimate and already-shipped shape.
+	 * Build {tool, reason} with optional complete callable arguments, never a delta.
+	 * Pass nullptr when no concrete argument set is available.
 	 */
 	static TSharedPtr<FJsonObject> MakeGuidanceHint(
 		const FString& ToolName,
 		const FString& Reason,
-		const TSharedPtr<FJsonObject>& CompleteArgs = nullptr);
+		const TSharedPtr<FJsonObject>& CompleteArgs = nullptr,
+		FName Key = NAME_None);
 
 	/**
-	 * Validate hint shape before it reaches a transport.
-	 *
-	 * Checks that `tool` is present and non-empty and that `args`/`options` are mutually
-	 * exclusive. Exists because there were three shapes in the wild with no schema, which is
-	 * where drift starts. Returns false and fills OutError when malformed.
+	 * Build {resource, reason} with a scheme-qualified MCP URI. Resource hints take
+	 * neither args nor options.
+	 */
+	static TSharedPtr<FJsonObject> MakeResourceHint(
+		const FString& ResourceUri,
+		const FString& Reason,
+		FName Key = NAME_None);
+
+	/**
+	 * Validate hint shape; return false with OutError on malformed input.
+	 * Exactly one non-empty tool or resource is required, plus a non-empty reason.
+	 * Resources must be scheme-qualified URIs. Tool hints may carry either a complete
+	 * args object or options containing alternative complete argument objects.
+	 * An optional non-empty key identifies rate-limited guidance. Reject unknown keys.
 	 */
 	static bool ValidateHint(const TSharedPtr<FJsonObject>& Hint, FString& OutError);
 
-	/**
-	 * Session-scoped latch for SUCCESS-PATH guidance hints, keyed by hint code.
-	 *
-	 * Returns true the first time a given code is seen this editor session and false after,
-	 * so a lesson about a parameter is taught once rather than on every call in a bulk loop.
-	 * That noise profile is what forced a latch onto the get_editor_property nudge after three
-	 * feedback reports, and a success-path hint has the identical risk.
-	 *
-	 * Keyed per code (not one bool) because there are several independent lessons; each gets
-	 * its own shot. Session-scoped rather than per-asset deliberately: these hints teach a
-	 * PARAMETER, and that transfers the moment it is delivered, so a per-asset key would just
-	 * lower the repeat count without addressing the complaint. Widening later is a one-line
-	 * change to the key; narrowing costs another round of feedback.
-	 *
-	 * Do NOT use for error-derived hints -- those fire per occurrence, because the failure
-	 * itself is the signal and the payload is call-specific.
-	 *
-	 * CALL ORDER MATTERS: if the tool has a quiet/suppression argument, check it FIRST and
-	 * return without calling this, so a suppressed call does not burn a lesson that was never
-	 * delivered. Game-thread only.
-	 */
-	static bool ShouldEmitLatchedHint(FName HintCode);
 
-	/** Clear the latch so tests can exercise second-firing. Mirrors ClaireonPyExec_ResetHintSessionStateForTests. */
-	static void ResetHintLatchForTests();
-
-	/**
-	 * Execute the tool with the given arguments.
-	 * Called on the game thread.
-	 * @param Arguments - The parsed arguments from the tools/call request
-	 * @return The tool result with structured data and error status
-	 */
 	/** Whether this tool requires that PIE is NOT running. Default: false (most tools are read-only). */
 	virtual bool RequiresNoPIE() const { return false; }
 
@@ -224,6 +188,12 @@ public:
 	/** Session-acquisition contract for this tool. Default: ReadOnly. Override on mutating tools. */
 	virtual EClaireonToolSessionMode GetSessionMode() const { return EClaireonToolSessionMode::ReadOnly; }
 
+	/**
+	 * Execute the tool with the given arguments.
+	 * Called on the game thread.
+	 * @param Arguments - The parsed arguments from the tools/call request
+	 * @return The tool result with structured data and error status
+	 */
 	virtual FToolResult Execute(const TSharedPtr<FJsonObject>& Arguments) = 0;
 
 	/** Optional example usage string shown in deep-inspect / search output. Default: empty. */
@@ -239,6 +209,15 @@ public:
 	/** Optional search-keyword list used to boost fuzzy-search matches for this tool. Default: empty. */
 	virtual TArray<FString> GetSearchKeywords() const { return {}; }
 
+	/**
+	 * Opt into field-specific summary aggregation. Returning true also makes the bridge
+	 * capture Data for summary advisories; the default uses unstructured summaries.
+	 */
+	virtual bool GetSummaryAggregationSpec(TArray<FClaireonFieldAggregation>& OutSpec) const
+	{
+		return false;
+	}
+
 	/** Helper to create a success result with structured data and summary */
 	static FToolResult MakeSuccessResult(TSharedPtr<FJsonObject> InData, const FString& InSummary)
 	{
@@ -250,16 +229,13 @@ public:
 	}
 
 	/**
-	 * MakeSuccessResult plus a hint, as one expression.
-	 *
-	 * Exists so a hint-carrying return stays a single statement. Hints must ride on
-	 * Result.Hint; appending them to Summary corrupts the families whose Summary is
-	 * serialized JSON. A null InHint is fine -- the bridge skips it.
+	 * Create success with an optional hint. Keep hints separate from Summary, which
+	 * some families serialize as JSON. Null hints are skipped.
 	 */
 	static FToolResult MakeSuccessResultWithHint(TSharedPtr<FJsonObject> InData, const FString& InSummary, TSharedPtr<FJsonObject> InHint)
 	{
 		FToolResult Result = MakeSuccessResult(MoveTemp(InData), InSummary);
-		Result.Hint = MoveTemp(InHint);
+		Result.AddHint(MoveTemp(InHint));
 		return Result;
 	}
 

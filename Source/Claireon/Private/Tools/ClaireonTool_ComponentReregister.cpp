@@ -254,18 +254,16 @@ IClaireonTool::FToolResult ClaireonTool_ComponentReregister::Execute(const TShar
 			*Component->GetName()));
 	}
 
-	// The nav handlers are dispatched by property name -- a full re-register does not
-	// reach them. Point at the argument that does. Success-path guidance, so LATCHED:
-	// this teaches a parameter, and a bulk repair loop over many components would
-	// otherwise repeat the same lesson on every call.
-	if (ChangedPropertyName.IsEmpty() &&
-		ShouldEmitLatchedHint(FName(TEXT("component_reregister_no_changed_property"))))
+	// A full re-register does not invoke property-name-dispatched navigation handlers.
+	if (ChangedPropertyName.IsEmpty())
 	{
-		Result.Hint = MakeGuidanceHint(
+		Result.AddHint(MakeGuidanceHint(
 			GetName(),
 			TEXT("Ran a full re-register with no changed_property, so UActorComponent's "
 				 "name-dispatched handlers did not run. To resync the navigation octree after a raw "
-				 "write, re-issue with changed_property='bCanEverAffectNavigation'."));
+				 "write, re-issue with changed_property='bCanEverAffectNavigation'."),
+			nullptr,
+			FName(TEXT("component_reregister_no_changed_property"))));
 	}
 
 	return Result;
